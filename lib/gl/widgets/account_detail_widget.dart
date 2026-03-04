@@ -1,0 +1,631 @@
+// widgets/user_detail_form.dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../cd/models/currency.dart';
+import '../../cd/services/currency_service.dart';
+import '../../sa/models/anan_module.dart';
+import '../models/account.dart';
+
+class AccountDetailWidget extends StatefulWidget {
+  final AccountMode mode;
+  final Account? selected;
+  final Function(Account) onSubmit;
+  final VoidCallback onCancel;
+  final bool isPlaceholder;
+
+  const AccountDetailWidget({
+    super.key,
+    required this.mode,
+    this.selected,
+    required this.onSubmit,
+    required this.onCancel,
+    this.isPlaceholder = false,
+  });
+
+  @override
+  State<AccountDetailWidget> createState() => AccountDetailWidgetState();
+}
+
+class AccountDetailWidgetState extends State<AccountDetailWidget> {
+  Account? _selected;
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _accountCodeController;
+  late TextEditingController _accountNameThaiController;
+  late TextEditingController _accountNameEngController;
+  late String _accountType;
+  late String
+      _accountSubType; // เลือกจาก parent_id != null และ !isControlAccount
+  late String _normalBalance;
+  late bool _isControlAccount;
+  late bool _isReconcilable;
+  late String _currencyCode; // เลือกจาก cd_currency
+  late String _moduleLinkCode; // เลือกจาก sa_module_link
+  late bool _costCenterRequired; // เลือกจาก cd_organization
+  late bool _projectRequired;
+  late bool _branchRequired;
+  late bool _isActive;
+
+  bool _isSaving = false;
+
+  // final List<String> _accountTypes = [
+  //   'ASSET',
+  //   'LIABILITY',
+  //   'EQUITY',
+  //   'REVENUE',
+  //   'EXPENSE',
+  // ];
+
+  final List<String> _normalBalances = [
+    'DR',
+    'CR',
+  ];
+
+  List<Currency> _currencyLists = [];
+  // List<String> _moduleLinkCodes = []; // ควรโหลดจาก sa_module_link
+  bool _isLoading = false;
+  String _error = '';
+
+  String _baseCurrencyCode() {
+    // หาสกุลเงินที่มี baseCurrencyFlag เป็น true หรือคืนค่า 'THB' เป็นค่าเริ่มต้น
+    return _currencyLists
+        .firstWhere((c) => c.baseCurrencyFlag,
+            orElse: () => Currency(
+                id: 0,
+                currencyCode: 'THB',
+                currencyNameThai: 'ไม่พบสกุลเงินหลัก',
+                currencyNameEng: '',
+                baseRate: 1.0,
+                baseCurrencyFlag: true,
+                numOfDecimal: 2,
+                isActive: true))
+        .currencyCode;
+  }
+
+  Future<void> _fetchCurrencyLists() async {
+    setState(() {
+      _isLoading = true;
+      _error = '';
+    });
+    try {
+      final dataService = Provider.of<CurrencyService>(context, listen: false);
+      final fetched = await dataService.fetchActiveRows();
+      setState(() {
+        _currencyLists = fetched;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_error)),
+        );
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCurrencyLists();
+
+    _selected = widget.selected;
+    _accountCodeController =
+        TextEditingController(text: _selected?.accountCode ?? '');
+    _accountType = _selected?.accountType ?? 'ASSET';
+    _accountSubType = _selected?.accountSubType ?? '';
+    _normalBalance = _selected?.normalBalance ?? 'DR';
+    _currencyCode = _selected?.currencyCode ?? _baseCurrencyCode();
+    _isActive = _selected?.isActive ?? true;
+    if (widget.mode == AccountMode.addChild) {
+      _accountNameThaiController.clear();
+      _accountNameEngController.clear();
+      _isControlAccount = true;
+      _isReconcilable = false;
+      _moduleLinkCode = '';
+      _costCenterRequired = false;
+      _projectRequired = false;
+      _branchRequired = false;
+    } else {
+      _accountNameThaiController =
+          TextEditingController(text: _selected?.accountNameThai ?? '');
+      _accountNameEngController =
+          TextEditingController(text: _selected?.accountNameEng ?? '');
+      _isControlAccount = _selected?.isControlAccount ?? true;
+      _isReconcilable = _selected?.isReconcilable ?? false;
+      _moduleLinkCode = _selected?.moduleLinkCode ?? '';
+      _costCenterRequired = _selected?.costCenterRequired ?? false;
+      _projectRequired = _selected?.projectRequired ?? false;
+      _branchRequired = _selected?.branchRequired ?? false;
+    }
+
+    // โหลดข้อมูลสกุลเงินจาก backend หรือกำหนดค่าเริ่มต้น
+  }
+
+  @override
+  void didUpdateWidget(covariant AccountDetailWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // if (oldWidget.selected != null) {
+    if (widget.selected != oldWidget.selected) {
+      _selected = widget.selected;
+
+      _accountCodeController =
+          TextEditingController(text: _selected?.accountCode ?? '');
+      _accountType = _selected?.accountType ?? 'ASSET';
+      _accountSubType = _selected?.accountSubType ?? '';
+      _normalBalance = _selected?.normalBalance ?? 'DR';
+      _currencyCode = _selected?.currencyCode ?? 'THB';
+      _isActive = _selected?.isActive ?? true;
+
+      if (widget.mode == AccountMode.addChild) {
+        _accountNameThaiController.clear();
+        _accountNameEngController.clear();
+        _isControlAccount = true;
+        _isReconcilable = false;
+        _moduleLinkCode = '';
+        _costCenterRequired = false;
+        _projectRequired = false;
+        _branchRequired = false;
+      } else {
+        _accountNameThaiController =
+            TextEditingController(text: _selected?.accountNameThai ?? '');
+        _accountNameEngController =
+            TextEditingController(text: _selected?.accountNameEng ?? '');
+        _isControlAccount = _selected?.isControlAccount ?? false;
+        _isReconcilable = _selected?.isReconcilable ?? false;
+        _moduleLinkCode = _selected?.moduleLinkCode ?? '';
+        _costCenterRequired = _selected?.costCenterRequired ?? false;
+        _projectRequired = _selected?.projectRequired ?? false;
+        _branchRequired = _selected?.branchRequired ?? false;
+      }
+    } else if (widget.mode == AccountMode.addRoot &&
+        oldWidget.mode != AccountMode.addRoot) {
+      // กรณีเปลี่ยนเป็นโหมดเพิ่มข้อมูลใหม่
+      _selected = null;
+      _accountCodeController.clear();
+      _accountNameThaiController.clear();
+      _accountNameEngController.clear();
+      _accountType = 'ASSET';
+      _accountSubType = '';
+      _normalBalance = 'DR';
+      _isControlAccount = false;
+      _isReconcilable = false;
+      _currencyCode = 'THB';
+      _moduleLinkCode = '';
+      _costCenterRequired = false;
+      _projectRequired = false;
+      _branchRequired = false;
+      _isActive = true;
+    } else if (widget.mode == AccountMode.addChild &&
+        oldWidget.mode != AccountMode.addChild) {
+      // กรณีเปลี่ยนเป็นโหมดเพิ่มข้อมูลใหม่
+      _selected = widget.selected;
+      _accountCodeController =
+          TextEditingController(text: _selected?.accountCode ?? '');
+      _accountNameThaiController.clear();
+      _accountNameEngController.clear();
+      _accountType = _selected?.accountType ?? 'ASSET';
+      _accountSubType = '';
+      _normalBalance = _selected?.normalBalance ?? 'DR';
+      _isControlAccount = true;
+      _isReconcilable = false;
+      _currencyCode = 'THB';
+      _moduleLinkCode = '';
+      _costCenterRequired = false;
+      _projectRequired = false;
+      _branchRequired = false;
+      _isActive = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    _accountCodeController.dispose();
+    _accountNameThaiController.dispose();
+    _accountNameEngController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitForm() async {
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isSaving = true;
+      });
+      try {
+        final newDetail = Account(
+          id: widget.mode == AccountMode.edit ? widget.selected!.id : 0,
+          parentId: widget.mode == AccountMode.addRoot
+              ? null
+              : widget.mode == AccountMode.addChild
+                  ? widget.selected!.id
+                  : widget.selected!.parentId,
+          accountCode: _accountCodeController.text,
+          accountNameThai: _accountNameThaiController.text,
+          accountNameEng: _accountNameEngController.text,
+          accountType: _accountType,
+          accountSubType: _accountSubType,
+          normalBalance: _normalBalance,
+          isControlAccount: _isControlAccount,
+          isReconcilable: _isReconcilable,
+          currencyCode: _currencyCode,
+          moduleLinkCode: _moduleLinkCode,
+          costCenterRequired: _costCenterRequired,
+          projectRequired: _projectRequired,
+          branchRequired: _branchRequired,
+          isActive: _isActive,
+        );
+        await widget.onSubmit(newDetail);
+        // if (mounted) {
+        //   ScaffoldMessenger.of(context).showSnackBar(
+        //     SnackBar(
+        //       content: Text(widget.mode == AccountMode.edit
+        //           ? 'บันทึกข้อมูลเรียบร้อย: ${_accountCodeController.text} ${_accountNameThaiController.text}'
+        //           : 'เพิ่มข้อมูลเรียบร้อย: ${_accountCodeController.text} ${_accountNameThaiController.text}'),
+        //       backgroundColor: Colors.green,
+        //     ),
+        //   );
+        // }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('เกิดข้อผิดพลาด: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+          });
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.isPlaceholder) {
+      return const Center(
+        child: Text(
+            'เลือกรายการผังบัญชีเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มรหัสบัญชีใหม่'),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.mode == AccountMode.view
+                  ? 'ดูข้อมูล'
+                  : widget.mode == AccountMode.edit
+                      ? 'แก้ไขข้อมูล'
+                      : widget.mode == AccountMode.addChild
+                          ? 'เพิ่มข้อมูลย่อย: ${_selected?.accountCode} ${_selected?.accountNameThai}'
+                          : 'เพิ่มข้อมูลหมวดหลัก',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              enabled: widget.mode != AccountMode.edit,
+              controller: _accountCodeController,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+              textAlign: TextAlign.center,
+              decoration: const InputDecoration(
+                labelText: 'รหัสบัญชี',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'กรุณาป้อนรหัสบัญชี';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _accountNameThaiController,
+                    decoration: const InputDecoration(
+                      labelText: 'ชื่อบัญชี (ภาษาไทย)',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'กรุณาป้อนชื่อบัญชี (ภาษาไทย)';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _accountNameEngController,
+                    decoration: const InputDecoration(
+                      labelText: 'ชื่อบัญชี (ภาษาอังกฤษ)',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'กรุณาป้อนชื่อบัญชี (ภาษาอังกฤษ)';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                      value: _accountType,
+                      decoration: const InputDecoration(
+                        labelText:
+                            'หมวดบัญชี (สินทรัพย์, หนี้สิน, ส่วนของเจ้าของ, รายได้, ค่าใช้จ่าย)',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: accountTypeOptions.entries.map((e) {
+                        return DropdownMenuItem<String>(
+                          value: e.key,
+                          child: Text('${e.key} - ${e.value}'),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            _accountType = value;
+                            if (value == 'ASSET' || value == 'EXPENSE') {
+                              _normalBalance = 'DR';
+                            } else {
+                              _normalBalance = 'CR';
+                            }
+                          });
+                        }
+                      },
+                    ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _normalBalance,
+                    decoration: const InputDecoration(
+                      labelText: 'ดุลบัญชีปกติ (เดบิต/เครดิต)',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _normalBalances.map((val) {
+                      return DropdownMenuItem(
+                        value: val,
+                        child: Text(val),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _normalBalance = value;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('สถานะ: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
+                ),
+                Switch(
+                  value: _isActive,
+                  onChanged: (bool value) {
+                    setState(() {
+                      _isActive = value;
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                      'การลงรายการบัญชี: ${_isControlAccount ? 'ใช้ลงรายการบัญชี' : 'เป็นหัวบัญชี/สะสมยอด'}'),
+                ),
+                Switch(
+                  value: _isControlAccount,
+                  onChanged: (bool value) {
+                    setState(() {
+                      _isControlAccount = value;
+                    });
+                  },
+                ),
+              ],
+            ),
+            _isControlAccount
+                ? Column(children: [
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _currencyCode,
+                      decoration: const InputDecoration(
+                        labelText: 'สกุลเงินหลัก',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _currencyLists.map((val) {
+                        return DropdownMenuItem(
+                          value: val.currencyCode,
+                          child: Text(
+                              '${val.currencyCode} - ${val.currencyNameThai}'),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            _currencyCode = value;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _moduleLinkCode,
+                      decoration: const InputDecoration(
+                        labelText: 'โมดูลที่เชื่อมโยง',
+                        border: OutlineInputBorder(),
+                      ),
+                      // items: _moduleLinkCodes.map((val) {
+                      //   return DropdownMenuItem(
+                      //     value: val,
+                      //     child: Text(val),
+                      //   );
+                      // }).toList(),
+                      items: sysModules.entries.map((e) {
+                        return DropdownMenuItem<String>(
+                          value: e.key,
+                          child: Text('${e.key} - ${e.value}'),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            _moduleLinkCode = value;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                              'การกระทบยอดบัญชี: ${_isReconcilable ? 'ต้องกระทบยอดบัญชี' : 'ไม่ต้องกระทบยอดบัญชี'}'),
+                        ),
+                        Switch(
+                          value: _isReconcilable,
+                          onChanged: (bool value) {
+                            setState(() {
+                              _isReconcilable = value;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                              'ศูนย์ต้นทุน: ${_costCenterRequired ? 'ต้องระบุเมื่อทำรายการ' : 'ไม่ต้องระบุเมื่อทำรายการ'}'),
+                        ),
+                        Switch(
+                          value: _costCenterRequired,
+                          onChanged: (bool value) {
+                            setState(() {
+                              _costCenterRequired = value;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    // --- สิ้นสุดการเพิ่ม cost center ---
+                    const SizedBox(height: 16),
+                    // --- เพิ่ม Switch สำหรับ project ---
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                              'รหัสโครงการ: ${_projectRequired ? 'ต้องระบุเมื่อทำรายการ' : 'ไม่ต้องระบุเมื่อทำรายการ'}'),
+                        ),
+                        Switch(
+                          value: _projectRequired,
+                          onChanged: (bool value) {
+                            setState(() {
+                              _projectRequired = value;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    // --- สิ้นสุดการเพิ่ม project ---
+                    const SizedBox(height: 16),
+                    // --- เพิ่ม Switch สำหรับ branch ---
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                              'รหัสสาขา: ${_branchRequired ? 'ต้องระบุเมื่อทำรายการ' : 'ไม่ต้องระบุเมื่อทำรายการ'}'),
+                        ),
+                        Switch(
+                          value: _branchRequired,
+                          onChanged: (bool value) {
+                            setState(() {
+                              _branchRequired = value;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ])
+                : const SizedBox.shrink(),
+            const SizedBox(height: 32),
+            // --- Buttons ---
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                widget.mode == AccountMode.view
+                    ? Container() // ไม่แสดงปุ่มใดๆ หากเป็นโหมดดูอย่างเดียว
+                    : Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isSaving ? null : _submitForm,
+                          icon: _isSaving
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.save),
+                          label: Text(_isSaving
+                              ? 'กำลังบันทึก...'
+                              : widget.mode == AccountMode.edit
+                                  ? 'บันทึก'
+                                  : 'เพิ่ม'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: widget.onCancel,
+                    icon: const Icon(Icons.cancel),
+                    label: const Text('ยกเลิก'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

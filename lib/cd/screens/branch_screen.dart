@@ -1,0 +1,391 @@
+// screens/branch_screen.dart
+
+// import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_resizable_container/flutter_resizable_container.dart';
+// import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:provider/provider.dart';
+import '../../sa/models/anan_module.dart';
+import '../models/branch.dart';
+import '../services/branch_service.dart';
+import '../widgets/branch_list_widget.dart';
+import '../widgets/branch_detail_widget.dart';
+
+class BranchScreen extends StatefulWidget {
+  final VoidCallback onFieldsChanged;
+  final VoidCallback? onExit;
+
+  const BranchScreen({
+    super.key,
+    required this.onFieldsChanged,
+    this.onExit,
+  });
+
+  @override
+  State<BranchScreen> createState() => _BranchScreenState();
+}
+
+class _BranchScreenState extends State<BranchScreen>
+    with AutomaticKeepAliveClientMixin {
+  final GlobalKey<BranchListWidgetState> _listWidgetKey = GlobalKey();
+  final GlobalKey<BranchDetailWidgetState> _detailWidgetKey = GlobalKey();
+  bool _isImportOrExport = false;
+  Mode _mode = Mode.none;
+  Branch? _selectedData;
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  @override
+  // TODO: implement wantKeepAlive
+  // bool get wantKeepAlive => throw UnimplementedError();
+  bool get wantKeepAlive => true;
+
+  // Future<void> _importData() async {
+  //   setState(() {
+  //     _isImportOrExport = true;
+  //   });
+  //   try {
+  //     FilePickerResult? result = await FilePicker.platform.pickFiles(
+  //       type: FileType.custom,
+  //       allowedExtensions: ['xlsx'],
+  //       // สำหรับเว็บ, ต้องตั้งค่า bytes ให้เป็น true เพื่อให้ได้ข้อมูลไฟล์มาเลย
+  //       // เนื่องจากไม่สามารถเข้าถึง path ได้
+  //       withData: kIsWeb,
+  //     );
+
+  //     if (result != null && result.files.single.bytes != null ||
+  //         result?.files.single.path != null) {
+  //       // ตรวจสอบ bytes หรือ path
+  //       PlatformFile platformFile = result!.files.single;
+
+  //       // ส่ง PlatformFile เข้าไปใน service
+  //       await Provider.of<BranchService>(context, listen: false)
+  //           .importDataExcel(platformFile);
+  //       _listWidgetKey.currentState?.refresh();
+  //       _onCancel();
+  //       widget.onFieldsChanged(); // แจ้ง Home Screen ด้วย
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           const SnackBar(content: Text('Import สำเร็จ!')),
+  //         );
+  //       }
+  //     } else {
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           const SnackBar(content: Text('ยกเลิกการเลือกไฟล์')),
+  //         );
+  //       }
+  //     }
+  //   } catch (e) {
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //             content: Text('เกิดข้อผิดพลาดในการ Import: ${e.toString()}')),
+  //       );
+  //     }
+  //   } finally {
+  //     setState(() {
+  //       _isImportOrExport = false;
+  //     });
+  //   }
+  // }
+
+  Future<void> _exportData() async {
+    setState(() {
+      _isImportOrExport = true;
+    });
+    try {
+      await Provider.of<BranchService>(context, listen: false)
+          .exportDataExcel();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('เกิดข้อผิดพลาดในการ Export: ${e.toString()}')),
+        );
+      }
+    } finally {
+      setState(() {
+        _isImportOrExport = false;
+      });
+    }
+  }
+
+  Future<void> _deleteRows() async {
+    final bool? confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ยืนยันการลบ'),
+        content: const Text('คุณแน่ใจหรือไม่ที่จะลบทั้งหมด ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('ยกเลิก'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('ลบ'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final dataService = Provider.of<BranchService>(context, listen: false);
+        await dataService.deleteRows();
+        _listWidgetKey.currentState?.refresh();
+        _onCancel();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ลบทั้งหมด สำเร็จ')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')),
+          );
+        }
+      }
+    }
+  }
+
+  void _onAdd() {
+    setState(() {
+      _mode = Mode.add;
+      _selectedData = null;
+    });
+  }
+
+  void _onEdit(Branch row) {
+    setState(() {
+      _mode = Mode.edit;
+      _selectedData = row;
+    });
+  }
+
+  void _onView(Branch row) {
+    setState(() {
+      _mode = Mode.view;
+      _selectedData = row;
+    });
+  }
+
+  Future<void> _onDelete(Branch row) async {
+    final bool? confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ยืนยันการลบ'),
+        content: Text(
+            'คุณแน่ใจหรือไม่ที่จะลบ "${row.branchCode} (${row.branchNameThai})" ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('ยกเลิก'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('ลบ'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final dataService = Provider.of<BranchService>(context, listen: false);
+        await dataService.deleteRow(row.id!);
+        _listWidgetKey.currentState?.refresh();
+        _onCancel();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ลบสำเร็จ')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _onSubmit(Branch row) async {
+    try {
+      final dataService = Provider.of<BranchService>(context, listen: false);
+      if (_selectedData == null) {
+        await dataService.addRow(row);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('เพิ่มสำเร็จ')),
+          );
+        }
+      } else {
+        await dataService.updateRow(row);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('บันทึกสำเร็จ')),
+          );
+        }
+      }
+      _listWidgetKey.currentState?.refresh();
+      _onCancel();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  void _onCancel() {
+    setState(() {
+      _mode = Mode.none;
+      _selectedData = null;
+    });
+  }
+
+  void _onCallback(Branch row) {
+    setState(() {
+      _mode = Mode.none;
+      _selectedData = row;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('สาขา'),
+        backgroundColor: Colors.deepOrange[900],
+        foregroundColor: Colors.white,
+        // actions: [
+        //   // ปุ่ม Import/Export
+        //   if (_isImportOrExport)
+        //     const Padding(
+        //       padding: EdgeInsets.symmetric(horizontal: 16.0),
+        //       child:
+        //           Center(child: CircularProgressIndicator(color: Colors.white)),
+        //     )
+        //   else ...[
+        //     IconButton(
+        //       icon: const Icon(Icons.upload_file),
+        //       tooltip: 'นำข้อมูลเข้าจาก Spredsheet',
+        //       onPressed: _importData,
+        //     ),
+        //     IconButton(
+        //       icon: const Icon(Icons.download),
+        //       tooltip: 'นำข้อมูลออกไป Spredsheet',
+        //       onPressed: _exportData,
+        //     ),
+        //   ],
+        //   IconButton(
+        //     icon: const Icon(Icons.delete_sweep),
+        //     tooltip: 'ลบรหัสไปรษณีย์ทั้งหมด',
+        //     onPressed: _deleteRows,
+        //   ),
+        //   const SizedBox(width: 8),
+        // ],
+      ),
+      body:
+          ResizableContainer(
+            controller: ResizableController(),
+            direction: Axis.horizontal,
+            children: [
+              ResizableChild(
+                divider: ResizableDivider(
+                  color: Colors.blueGrey[200]!,
+                  thickness: 5,
+                ),
+                size: const ResizableSize.ratio(0.40), // 25% สำหรับ panel ซ้าย
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: BranchListWidget(
+                        key: _listWidgetKey,
+                        enableAddButton: true,
+                        enableEditButton: true,
+                        enableViewButton: true,
+                        enableDeleteButton: true,
+                        enableSortButton: true,
+                        enableCardSelect: false,
+                        onAdd: _onAdd,
+                        onEdit: _onEdit,
+                        onView: _onView,
+                        onDelete: _onDelete,
+                        onCallback: _onCallback,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ResizableChild(
+                size: const ResizableSize.ratio(0.60), // 75% สำหรับ panel ขวา
+                child: _buildRightPanel(),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Widget _buildRightPanel() {
+    switch (_mode) {
+      case Mode.none:
+        return BranchDetailWidget(
+          key: _detailWidgetKey,
+          mode: Mode.none,
+          selected: null,
+          onSubmit: _onSubmit,
+          onCancel: _onCancel,
+          isPlaceholder: true,
+        );
+      case Mode.add:
+        return BranchDetailWidget(
+          key: _detailWidgetKey,
+          mode: Mode.add,
+          selected: null,
+          onSubmit: _onSubmit,
+          onCancel: _onCancel,
+        );
+      case Mode.edit:
+        return BranchDetailWidget(
+          key: _detailWidgetKey,
+          mode: Mode.edit,
+          selected: _selectedData,
+          onSubmit: _onSubmit,
+          onCancel: _onCancel,
+        );
+      case Mode.view:
+        return BranchDetailWidget(
+          key: _detailWidgetKey,
+          mode: Mode.view,
+          selected: _selectedData,
+          onSubmit: (branch) {},
+          onCancel: _onCancel,
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+}
