@@ -19,6 +19,7 @@ import '../../cd/screens/project_screen.dart';
 import '../../cd/screens/zipcode_screen.dart';
 
 import '../../gl/screens/account_screen.dart';
+import '../../gl/screens/financial_report_builder_screen.dart';
 import '../../gl/screens/gl_beginning_balance_screen.dart';
 import '../../gl/screens/gl_entry_screen.dart';
 import '../../gl/screens/financial_report_screen.dart';
@@ -86,6 +87,7 @@ class Menu {
           onFieldsChanged: () {},
         ),
     'TrialBalanceReportScreen': (context) => const TrialBalanceReportScreen(),
+    'FinancialReportBuilderScreen': (context) => const FinancialReportBuilderScreen(),
     // 'PeriodScreen': (context) => const PeriodScreen(),
     // Add all your custom widgets here
     // 'YourCustomWidget1': (context) => const YourCustomWidget1(),
