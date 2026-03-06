@@ -8,14 +8,16 @@ class GeneralLedgerReportService {
   final AuthService authService = AuthService();
 
   Future<List<Map<String, dynamic>>> getGlTransactions({
-    required int periodId,
+    int? periodId,
+    required int fiscalYearId,
     String? accountFrom,
     String? accountTo,
   }) async {
     final headers = await authService.getAuthHeader();
-    
+
     // สร้าง Query Parameters
-    List<String> queryParams = ['period_id=$periodId'];
+    List<String> queryParams = ['fiscal_year_id=$fiscalYearId'];
+    if (periodId != null) queryParams.add('period_id=$periodId');
     if (accountFrom != null && accountFrom.isNotEmpty) {
       queryParams.add('account_from=$accountFrom');
     }

@@ -1,7 +1,6 @@
 // import 'dart:ffi';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
 import 'package:provider/provider.dart';
 import '../models/menu.dart';
 import '../models/password_status.dart';
@@ -28,25 +27,23 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ตัวแปรสำหรับจัดการ Tab
   late TabController _tabController;
   final List<Menu> _openTabs = []; // รายการของ Menu ที่เปิดเป็น Tab
+  final Map<int, Widget> _cachedTabWidgets = {}; // cache widget ของแต่ละ tab
   int _currentIndex = 0; // Index ของ Tab ที่กำลัง Active
 
   List<Menu> _allMenus = [];
+  final Map<int, bool> _menuExpandedState = {};
   bool _isLoading = true;
   String _error = '';
   MenuContent? _currentMenuContent;
   User? _currentUser; // เพิ่มตัวแปรเก็บข้อมูลผู้ใช้
   String? _currentDatabase;
 
-  late final ResizableController _resizableController = ResizableController();
   bool _isMenuExpanded = true;
+  double _menuPanelCurrentWidth = 280.0;
+  bool _isDraggingDivider = false;
 
   // เพิ่ม TextEditingController สำหรับ Search Bar
   final TextEditingController _searchController = TextEditingController();
-  static const double initLeftPanelWidth =
-      0.33; // กำหนดค่าเริ่มต้นของ panel ซ้าย
-  double leftPanelWidth = initLeftPanelWidth; // กำหนดค่าเริ่มต้นของ panel ซ้าย
-  double togglePanelWidth = 0.02; // กำหนดค่าเริ่มต้นของ toggle panel ซ้าย
-  double collapsedMenuWidth = 0.00; //0.05; // ความกว้างของเมนูเมื่อย่อ
 
   PasswordStatus? _currentPasswordStatus;
 
@@ -111,6 +108,8 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (index < 0 || index >= _openTabs.length) return;
 
     setState(() {
+      final menuId = _openTabs[index].id;
+      if (menuId != null) _cachedTabWidgets.remove(menuId);
       _openTabs.removeAt(index);
 
       if (_openTabs.isEmpty) {
@@ -170,10 +169,16 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       });
       final menus =
           await MenuService().fetchMenuByUserId(_currentUser?.id ?? 0);
+      // Initialize top-level folders ให้ expand เป็น default (เฉพาะครั้งแรก)
+      for (var menu in menus) {
+        if (menu.menuType == 'folder' && menu.parentId == null) {
+          _menuExpandedState.putIfAbsent(menu.id, () => true);
+        }
+      }
       setState(() {
         _allMenus = menus;
         _isLoading = false;
-        _currentMenuContent = null; // เคลียร์ content เมื่อ refresh เมนู
+        _currentMenuContent = null;
       });
     } catch (e) {
       setState(() {
@@ -228,8 +233,6 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _toggleMenuSize() {
     setState(() {
-      leftPanelWidth =
-          _isMenuExpanded ? collapsedMenuWidth : initLeftPanelWidth;
       _isMenuExpanded = !_isMenuExpanded;
     });
   }
@@ -514,155 +517,155 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               _fetchMenus, // Callback ให้ HomeScreen โหลดเมนูใหม่
                           onExit: _onExitContent, // <-- ส่ง Callback นี้ไป
                         )
-                      : ResizableContainer(
-                          controller: _resizableController,
-                          direction: Axis.horizontal,
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                              ResizableChild(
-                                  size: ResizableSize.ratio(togglePanelWidth),
-                                  child: Container(
-                                    // color: Colors.blueGrey[900],
-                                    color: Colors.green.shade900,
-                                    child: IconButton(
-                                      icon: Icon(
-                                        _isMenuExpanded
-                                            ? Icons.arrow_back_ios_new_rounded
-                                            : Icons.arrow_forward_ios_rounded,
-                                        color: Colors.orange,
-                                      ),
-                                      onPressed: _toggleMenuSize,
-                                      tooltip: _isMenuExpanded
-                                          ? 'ย่อช่องเมนู'
-                                          : 'ขยายช่องเมนู',
-                                    ),
-                                    // AnimatedBuilder(
-                                    //   animation: _resizableController,
-                                    //   builder: (context, child) {
-                                    //     // final currentSize = _resizableController.childSizes.isNotEmpty ? _resizableController.childSizes[0] : null;
-                                    //     // final isExpanded = currentSize != null && currentSize > _initialMenuSize + 10;
-                                    //     return
-                                    //     IconButton(
-                                    //       icon: Icon(
-                                    //         _isMenuExpanded ? Icons.arrow_back_ios_new_rounded : Icons.arrow_forward_ios_rounded,
-                                    //         color: Colors.orange,
-                                    //       ),
-                                    //       onPressed: _toggleMenuSize,
-                                    //       tooltip: _isMenuExpanded ? 'ย่อช่องเมนู' : 'ขยายช่องเมนู',
-                                    //     );
-                                    //   },
-                                    // ),
-                                  )),
-                              ResizableChild(
-                                divider: _isMenuExpanded
-                                    ? ResizableDivider(
-                                        color: Colors.blueGrey[400]!,
-                                        thickness: 5,
-                                      )
-                                    : ResizableDivider(
-                                        color: Colors.transparent,
-                                        thickness: 0,
-                                      ),
-                                size: ResizableSize.ratio(leftPanelWidth),
-                                child: _isMenuExpanded
-                                    ?
-                                    Container(
-                                      color: Colors.blueGrey[200],
-                                      child: MenuTreeView(
-                                        menus: _allMenus,
-                                        onMenuSelected: _onMenuSelected,
-                                        onSearchSubmitted: _onSearchSubmitted,
-                                        onRefreshMenus: _fetchMenus,
-                                        searchController: _searchController,
-                                      ),
-                                    )
-                                    : 
-                                    Container(), // Empty container when collapsed
+                            // Toggle button — fixed width, always same element
+                            Container(
+                              width: 40,
+                              color: Colors.green.shade900,
+                              child: IconButton(
+                                icon: Icon(
+                                  _isMenuExpanded
+                                      ? Icons.arrow_back_ios_new_rounded
+                                      : Icons.arrow_forward_ios_rounded,
+                                  color: Colors.orange,
+                                ),
+                                onPressed: _toggleMenuSize,
+                                tooltip: _isMenuExpanded
+                                    ? 'ย่อช่องเมนู'
+                                    : 'ขยายช่องเมนู',
                               ),
-                              ResizableChild(
-                                size: ResizableSize.ratio(1.00 -
-                                    togglePanelWidth -
-                                    leftPanelWidth), // 75% สำหรับ panel ซ้าย
-                                child: Column(
-                                  children: [
-                                    // TabBar สำหรับแสดงหัวข้อ Tab
-                                    // ต้องมี controller เดียวกันกับ TabBarView
-                                    _openTabs.isEmpty
-                                        ? Container() // ไม่แสดง TabBar ถ้าไม่มี Tab
-                                        : TabBar(
-                                            onTap: (int index) {
-                                              setState(() {
-                                                _currentIndex = index;
-                                              });
-                                            },
-                                            controller: _tabController,
-                                            isScrollable:
-                                                true, // ทำให้ Tab เลื่อนได้ถ้ามีเยอะ
-                                            indicatorColor: Colors
-                                                .deepOrange, // สี Indicator
-                                            labelColor: Colors.deepOrange[
-                                                900], // สีชื่อ Tab ที่เลือก
-                                            unselectedLabelColor: Colors
-                                                .black54, // สีชื่อ Tab ที่ไม่ได้เลือก
-                                            tabs: _openTabs
-                                                .asMap()
-                                                .entries
-                                                .map((entry) {
-                                              int idx = entry.key;
-                                              Menu tabMenu = entry.value;
-                                              // setState(() {
-                                              //   _searchController.text =
-                                              //       tabMenu.targetPath ?? ''; // แสดงชื่อ widget ในช่องค้นหา
-                                              // });
-                                              return Tab(
-                                                child: Row(
-                                                  children: [
-                                                    Text(tabMenu.menuName),
-                                                    // Expanded(child: Text(tabMenu.menuName, overflow: TextOverflow.ellipsis)),
-                                                    const SizedBox(width: 8),
-                                                    InkWell(
-                                                      onTap: () {
-                                                        _closeTab(
-                                                            idx); // คลิกที่ X เพื่อปิด Tab
-                                                      },
-                                                      child: const Icon(
-                                                          Icons.close,
-                                                          size: 18),
-                                                    ),
-                                                  ],
+                            ),
+                            // Menu panel — animated width, always mounted
+                            AnimatedContainer(
+                              duration: _isDraggingDivider
+                                  ? Duration.zero
+                                  : const Duration(milliseconds: 200),
+                              width: _isMenuExpanded ? _menuPanelCurrentWidth : 0,
+                              child: ClipRect(
+                                child: OverflowBox(
+                                  // Always give MenuTreeView at least 280px so nested
+                                  // items never overflow regardless of panel width
+                                  maxWidth: _menuPanelCurrentWidth < 280.0
+                                      ? 280.0
+                                      : _menuPanelCurrentWidth,
+                                  minWidth: _menuPanelCurrentWidth < 280.0
+                                      ? 280.0
+                                      : _menuPanelCurrentWidth,
+                                  alignment: Alignment.topLeft,
+                                  child: Container(
+                                    color: Colors.blueGrey[200],
+                                    child: MenuTreeView(
+                                      menus: _allMenus,
+                                      onMenuSelected: _onMenuSelected,
+                                      onSearchSubmitted: _onSearchSubmitted,
+                                      onRefreshMenus: _fetchMenus,
+                                      searchController: _searchController,
+                                      expandedState: _menuExpandedState,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Draggable divider
+                            if (_isMenuExpanded)
+                              MouseRegion(
+                                cursor: SystemMouseCursors.resizeColumn,
+                                child: GestureDetector(
+                                  onHorizontalDragStart: (_) =>
+                                      setState(() => _isDraggingDivider = true),
+                                  onHorizontalDragUpdate: (details) {
+                                    setState(() {
+                                      _menuPanelCurrentWidth =
+                                          (_menuPanelCurrentWidth +
+                                                  details.delta.dx)
+                                              .clamp(100.0, 800.0);
+                                    });
+                                  },
+                                  onHorizontalDragEnd: (_) =>
+                                      setState(() => _isDraggingDivider = false),
+                                  child: Container(
+                                    width: 5,
+                                    color: Colors.blueGrey[400],
+                                  ),
+                                ),
+                              ),
+                            // Right panel — always Expanded, element is never recreated
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  _openTabs.isEmpty
+                                      ? Container()
+                                      : TabBar(
+                                          onTap: (int index) {
+                                            setState(() {
+                                              _currentIndex = index;
+                                            });
+                                          },
+                                          controller: _tabController,
+                                          isScrollable: true,
+                                          indicatorColor: Colors.deepOrange,
+                                          labelColor: Colors.deepOrange[900],
+                                          unselectedLabelColor: Colors.black54,
+                                          tabs: _openTabs
+                                              .asMap()
+                                              .entries
+                                              .map((entry) {
+                                            int idx = entry.key;
+                                            Menu tabMenu = entry.value;
+                                            return Tab(
+                                              child: Row(
+                                                children: [
+                                                  Text(tabMenu.menuName),
+                                                  const SizedBox(width: 8),
+                                                  InkWell(
+                                                    onTap: () => _closeTab(idx),
+                                                    child: const Icon(
+                                                        Icons.close,
+                                                        size: 18),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
+                                  Expanded(
+                                    child: _openTabs.isEmpty
+                                        ? const Center(
+                                            child: Text(
+                                              'กรุณาเลือกเมนูจากด้านซ้ายเพื่อเปิดหน้าจอ',
+                                              style: TextStyle(
+                                                  fontSize: 20,
+                                                  color: Colors.grey),
+                                            ),
+                                          )
+                                        : IndexedStack(
+                                            index: _currentIndex,
+                                            children:
+                                                _openTabs.map((menu) {
+                                              final id = menu.id ?? 0;
+                                              return _cachedTabWidgets
+                                                  .putIfAbsent(
+                                                id,
+                                                () => KeyedSubtree(
+                                                  key: ValueKey(id),
+                                                  child:
+                                                      menu.builder(context),
                                                 ),
                                               );
                                             }).toList(),
                                           ),
-                                    // TabBarView สำหรับแสดงเนื้อหาของแต่ละ Tab
-                                    Expanded(
-                                      child: _openTabs.isEmpty
-                                          ? const Center(
-                                              child: Text(
-                                                'กรุณาเลือกเมนูจากด้านซ้ายเพื่อเปิดหน้าจอ',
-                                                style: TextStyle(
-                                                    fontSize: 20,
-                                                    color: Colors.grey),
-                                              ),
-                                            )
-                                          : TabBarView(
-                                              controller: _tabController,
-                                              children: _openTabs.map((menu) {
-                                                return menu.builder(context);
-                                                // return KeyedSubtree(
-                                                //   key: ValueKey(menu
-                                                //       .id), // ใช้ ID ของเมนูเป็น Key ที่ไม่ซ้ำกัน
-                                                //   child: menu.builder(context),
-                                                // );
-                                              }).toList(),
-                                            ),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                            ]),
+                            ),
+                          ],
+                        ),
         );
       },
     );
   }
-  
+
 }
+

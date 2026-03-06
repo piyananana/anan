@@ -5,8 +5,9 @@ class MenuTreeView extends StatefulWidget {
   final List<Menu> menus;
   final ValueChanged<Menu> onMenuSelected;
   final ValueChanged<String> onSearchSubmitted;
-  final VoidCallback onRefreshMenus; // เพิ่ม callback สำหรับ refresh
-  final TextEditingController searchController; // <-- เพิ่มตรงนี้
+  final VoidCallback onRefreshMenus;
+  final TextEditingController searchController;
+  final Map<int, bool> expandedState; // สถานะขยาย/ยุบ จาก HomeScreen
 
   const MenuTreeView({
     super.key,
@@ -15,6 +16,7 @@ class MenuTreeView extends StatefulWidget {
     required this.onSearchSubmitted,
     required this.onRefreshMenus,
     required this.searchController,
+    required this.expandedState,
   });
 
   @override
@@ -23,8 +25,6 @@ class MenuTreeView extends StatefulWidget {
 
 class MenuTreeViewState extends State<MenuTreeView>
     with AutomaticKeepAliveClientMixin {
-  final Map<int, bool> _expandedState = {}; // เก็บสถานะการขยายของแต่ละโหนด
-  // final TextEditingController _searchController = TextEditingController();
 
   List<Menu> _buildTree(List<Menu> menus, int? parentId) {
     return menus.where((menu) => menu.parentId == parentId).toList()
@@ -35,7 +35,7 @@ class MenuTreeViewState extends State<MenuTreeView>
     final bool isFolder = menu.menuType == 'folder';
     final List<Menu> children = _buildTree(allMenus, menu.id);
     final bool hasChildren = children.isNotEmpty;
-    final bool isExpanded = _expandedState[menu.id] ?? false;
+    final bool isExpanded = widget.expandedState[menu.id] ?? false;
 
     return
         // KeyedSubtree(
@@ -50,7 +50,7 @@ class MenuTreeViewState extends State<MenuTreeView>
           onTap: () {
             if (isFolder && hasChildren) {
               setState(() {
-                _expandedState[menu.id] = !isExpanded;
+                widget.expandedState[menu.id] = !isExpanded;
               });
             } else {
               setState(() {
@@ -158,21 +158,6 @@ class MenuTreeViewState extends State<MenuTreeView>
 
   @override
   bool get wantKeepAlive => true;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeExpansionState();
-  }
-
-  void _initializeExpansionState() {
-    for (var menu in widget.menus) {
-      // ขยายเมนูย่อยของเมนูหลัก (level 0) ทั้งหมด
-      if (menu.menuType == 'folder' && menu.parentId == null) {
-        _expandedState[menu.id] = true;
-      }
-    }
-  }
 
   @override
   void dispose() {

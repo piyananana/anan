@@ -52,6 +52,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   Map<int, String> _branchMap = {};
   Map<int, String> _buMap = {};
   Map<int, String> _projectMap = {};
+  Map<int, Account> _accountMap = {};
 
   // Filter States
   FiscalYear? _selectedYear;
@@ -60,7 +61,9 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   Account? _accountTo;
   
   bool _pageBreakPerAccount = false;
+  bool _hideZero = true;
   bool _isLoading = false;
+  bool _reportGenerated = false;
 
   // Report Data
   List<GlBeginningBalance> _beginningBalances = [];
@@ -97,6 +100,9 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
       // โหลดเฉพาะบัญชีคุม (Control Account) สำหรับตัวกรอง
       _controlAccounts = await _accountService.fetchRowsControlAccount();
 
+      final allAccounts = await _accountService.fetchRows();
+      _accountMap = {for (var a in allAccounts) a.id!: a};
+
       _branchMap = {for (var e in branches) e.id!: e.branchCode};
       _buMap = {for (var e in bus) e.id!: e.buCode};
       _projectMap = {for (var e in projects) e.id!: e.projectCode};
@@ -112,6 +118,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
     setState(() {
       _periods = ps;
       _selectedPeriod = null;
+      _reportGenerated = false;
     });
   }
 
@@ -181,24 +188,25 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   }
 
   Future<void> _generateReport() async {
-    if (_selectedPeriod == null || _selectedYear == null) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกปีและงวดบัญชี')));
+    if (_selectedYear == null) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกปีบัญชี')));
        return;
     }
     setState(() => _isLoading = true);
 
     try {
-      // 1. ดึงยอดยกมา
-      _beginningBalances = await _begBalService.fetchByPeriodId(_selectedPeriod!.id);
+      // 1. ดึงยอดยกมา (งวดยกยอด + งวดก่อนหน้าสะสม) จาก gl_balance_accum
+      _beginningBalances = await _begBalService.fetchFromAccum(_selectedYear!.id, _selectedPeriod?.id);
 
       // 2. ดึงรายการเคลื่อนไหวจาก API
       _transactions = await _reportService.getGlTransactions(
-        periodId: _selectedPeriod!.id,
+        periodId: _selectedPeriod?.id,
+        fiscalYearId: _selectedYear!.id,
         accountFrom: _accountFrom?.accountCode,
         accountTo: _accountTo?.accountCode,
       );
 
-      setState(() {});
+      setState(() { _reportGenerated = true; });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
@@ -336,6 +344,11 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         String pjStr = pjId != null ? "โครงการ: ${_projectMap[pjId] ?? ''}" : "";
         String dims = [branchStr, buStr, pjStr].where((e) => e.isNotEmpty).join(' / ');
 
+        // กรอง: ซ่อนบัญชีที่ยอดยกมาเป็น0 และไม่มีรายการเคลื่อนไหวเลย
+        if (_hideZero && begDr.abs() < 0.001 && begCr.abs() < 0.001 && transactions.isEmpty) {
+          return;
+        }
+
         // [ส่วนที่ 1] บรรทัดยอดยกมา
         blocks.add(pw.Table(
           columnWidths: const { 0: pw.FlexColumnWidth(13.9), 1: pw.FlexColumnWidth(1.5) },
@@ -413,6 +426,59 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         blocks.add(pw.SizedBox(height: 15)); // เว้นบรรทัดขึ้นบัญชีใหม่
       });
 
+      // loop ที่ 2: accounts ที่มีแต่ยอดยกมา ไม่มี transaction ในงวดนี้
+      for (var b in _beginningBalances) {
+        final String key = "${b.accountId}_${b.branchId ?? 0}_${b.businessUnitId ?? 0}_${b.projectId ?? 0}";
+        if (groupedData.containsKey(key)) continue; // มี transaction แล้ว ข้ามไป
+
+        final double begDr = b.amountDr;
+        final double begCr = b.amountCr;
+        // accounts ที่อยู่ใน _beginningBalances คือมี transaction ในงวดก่อนๆแน่นอน
+        // ไม่กรองด้วยยอด เพราะยอดสุทธิอาจเป็น 0 ได้ (Dr=Cr) แต่ก็ยังต้องพิมพ์
+
+        final acc = _accountMap[b.accountId];
+        final String accName = acc != null
+            ? "${acc.accountCode} ${acc.accountNameThai}"
+            : "Account ${b.accountId}";
+        final String branchStr = b.branchId != null ? "สาขา: ${_branchMap[b.branchId] ?? ''}" : "";
+        final String buStr = b.businessUnitId != null ? "หน่วยงาน: ${_buMap[b.businessUnitId] ?? ''}" : "";
+        final String pjStr = b.projectId != null ? "โครงการ: ${_projectMap[b.projectId] ?? ''}" : "";
+        final String dims = [branchStr, buStr, pjStr].where((e) => e.isNotEmpty).join(' / ');
+        final double runningBal = begDr - begCr;
+
+        blocks.add(pw.Table(
+          columnWidths: const { 0: pw.FlexColumnWidth(13.9), 1: pw.FlexColumnWidth(1.5) },
+          border: const pw.TableBorder(left: pw.BorderSide(), right: pw.BorderSide()),
+          children: [
+            pw.TableRow(
+              decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+              children: [
+                pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("รหัส/ชื่อบัญชี: $accName ${dims.isNotEmpty ? '($dims)' : ''}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(fmt.format(runningBal), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+              ]
+            )
+          ]
+        ));
+        // ไม่มี transaction rows — เพิ่ม table ว่างเพื่อให้ block count = 4 เหมือน accounts ที่มี transaction
+        blocks.add(pw.Table(
+          columnWidths: const { 0: pw.FlexColumnWidth(15.4) },
+          children: [],
+        ));
+        blocks.add(pw.Table(
+          columnWidths: const { 0: pw.FlexColumnWidth(10.9), 1: pw.FlexColumnWidth(1.5), 2: pw.FlexColumnWidth(1.5), 3: pw.FlexColumnWidth(1.5) },
+          border: pw.TableBorder.all(width: 0.5),
+          children: [
+            pw.TableRow(children: [
+              pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("ยอดรวมเดบิต / เครดิต / ยกไป", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+              pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+              pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+              pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(fmt.format(runningBal), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+            ])
+          ]
+        ));
+        blocks.add(pw.SizedBox(height: 15));
+      }
+
       return blocks;
     }
 
@@ -484,12 +550,14 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                     const SizedBox(height: 16),
                     DropdownButtonFormField<PostingPeriod>(
                       value: _selectedPeriod,
-                      items: _periods.map((p) => DropdownMenuItem(value: p, child: Text("${p.periodNumber} - ${p.periodName}"))).toList(),
+                      items: [
+                        const DropdownMenuItem<PostingPeriod>(value: null, child: Text('ทุกงวด (ตั้งแต่ต้นปี)')),
+                        ..._periods.skip(1).map((p) => DropdownMenuItem(value: p, child: Text("${p.periodNumber} - ${p.periodName}"))),
+                      ],
                       decoration: const InputDecoration(labelText: 'งวดเดือน', border: OutlineInputBorder()),
                       onChanged: (val) => setState(() => _selectedPeriod = val),
                     ),
                     const SizedBox(height: 16),
-                    
                     InkWell(
                       onTap: () => _showAccountSearchDialog(true),
                       child: InputDecorator(
@@ -515,6 +583,13 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    SwitchListTile(
+                      title: const Text('พิมพ์เฉพาะที่มียอดยกมาหรือมีรายการเคลื่อนไหว'),
+                      value: _hideZero,
+                      onChanged: (v) => setState(() => _hideZero = v),
+                      contentPadding: EdgeInsets.zero,
+                    ),
 
                     SwitchListTile(
                       title: const Text('ขึ้นหน้าใหม่ทุกรหัสบัญชี'),
@@ -544,7 +619,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
           ResizableChild(
             child: Container(
               color: Colors.grey[200],
-              child: _transactions.isEmpty
+              child: !_reportGenerated
                   ? const Center(child: Text("กรุณาเลือกเงื่อนไขและกดประมวลผล"))
                   : PdfPreview(
                       build: (format) => _generatePdf(format),

@@ -821,7 +821,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       value: _selectedPeriod,
                       items: [
                         const DropdownMenuItem<PostingPeriod>(value: null, child: Text("ทุกงวด (ตั้งแต่ต้นปี)")),
-                        ..._periods.map((p) => DropdownMenuItem(value: p, child: Text("${p.periodNumber} - ${p.periodName}"))),
+                        ..._periods.skip(1).map((p) => DropdownMenuItem(value: p, child: Text("${p.periodNumber} - ${p.periodName}"))),
                       ],
                       decoration: const InputDecoration(labelText: 'งวดเดือน', border: OutlineInputBorder()),
                       onChanged: (val) => setState(() => _selectedPeriod = val),

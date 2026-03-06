@@ -37,6 +37,23 @@ class GlBeginningBalanceService {
     }
   }
 
+  Future<List<GlBeginningBalance>> fetchFromAccum(int fiscalYearId, int? periodId) async {
+    final headers = await authService.getAuthHeader();
+    final String query = periodId != null
+        ? 'fiscal_year_id=$fiscalYearId&period_id=$periodId'
+        : 'fiscal_year_id=$fiscalYearId';
+    final response = await http.get(
+      Uri.parse('$baseUrl/gl_beginning_balance/accum?$query'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data.map((e) => GlBeginningBalance.fromJson(e)).toList();
+    } else {
+      throw Exception('Failed to load balances from accum');
+    }
+  }
+
   Future<void> saveBeginningBalances(int postingPeriodId, List<GlBeginningBalance> balances) async {
     final headers = await authService.getAuthHeader();
     final body = json.encode({

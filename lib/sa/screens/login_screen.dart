@@ -197,6 +197,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 10),
                             TextField(
                               controller: _usernameController,
+                              autofocus: true,
+                              textInputAction: TextInputAction.next,
                               decoration: const InputDecoration(
                                 labelText: 'ชื่อผู้ใช้งาน',
                                 border: OutlineInputBorder(),
@@ -207,6 +209,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             TextField(
                               controller: _passwordController,
                               obscureText: true,
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _login(),
                               decoration: const InputDecoration(
                                 labelText: 'รหัสผ่าน',
                                 border: OutlineInputBorder(),
