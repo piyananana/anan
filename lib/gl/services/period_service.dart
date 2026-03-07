@@ -200,7 +200,8 @@ class PeriodService {
     if (response.statusCode == 200) {
       return PostingPeriod.fromJson(json.decode(response.body));
     } else {
-      throw Exception('Failed to update status: ${json.decode(response.body)['message']}');
+      final body = json.decode(response.body);
+      throw Exception(body['error'] ?? body['message'] ?? 'Failed to update status');
     }
   }
 }

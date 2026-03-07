@@ -241,11 +241,9 @@ class PeriodListWidgetState extends State<PeriodListWidget>
                       margin: const EdgeInsets.symmetric(
                           horizontal: 8.0, vertical: 4.0),
                       child: ListTile(
-                        // leading: Text('${(index + 1).toString()}.'),
-                        // // CircleAvatar(
-                        // //   child: Text((index + 1).toString()),
-                        // // ),
-                        // // title: Text(item.item),
+                        onTap: widget.enableCardSelect
+                            ? null
+                            : () => widget.onCallback(item),
                         title: Text(
                             '${item.fyCode} - ${item.description ?? ''}',),
                         // subtitle: Text(

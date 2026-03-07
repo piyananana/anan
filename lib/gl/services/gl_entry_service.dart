@@ -12,14 +12,12 @@ class GlEntryService {
 
   // ดึงรายการ (Search Tab)
   Future<List<GlEntryHeader>> fetchEntries({
-    String? fiscalYear, 
-    String? periodNo, 
-    String? search
+    int? periodId,
+    int? fiscalYearId,
   }) async {
     String query = '?';
-    if (fiscalYear != null) query += 'fiscal_year=$fiscalYear&';
-    if (periodNo != null) query += 'period_number=$periodNo&';
-    if (search != null && search.isNotEmpty) query += 'search=$search&';
+    if (periodId != null) query += 'period_id=$periodId&';
+    else if (fiscalYearId != null) query += 'fiscal_year_id=$fiscalYearId&';
 
     final headers = await authService.getAuthHeader();
     final res = await http.get(

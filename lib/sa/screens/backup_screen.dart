@@ -704,11 +704,18 @@ class _BackupScreenState extends State<BackupScreen>
   Future<void> _fetchInstantBackupStatus() async {
     try {
       final status = await _backupService.checkInstantBackupStatus();
+      final wasRunning = _isInstantBackupRunning;
+      final isNowRunning = status['isRunning'] ?? false;
       setState(() {
-        _isInstantBackupRunning = status['isRunning'] ?? false;
+        _isInstantBackupRunning = isNowRunning;
         _instantStatus = status['status'];
         _instantLastBackup = status['lastBackup'];
       });
+      // เมื่อ backup เพิ่งเสร็จ ให้โหลดรายการไฟล์ใหม่
+      if (wasRunning && !isNowRunning) {
+        final files = await _backupService.getBackupFiles('instant');
+        if (mounted) setState(() => _instantFiles = files);
+      }
     } catch (e) {
       print('Error fetching instant backup status: $e');
     }
@@ -741,12 +748,24 @@ class _BackupScreenState extends State<BackupScreen>
   Future<void> _fetchStatus(int scheduleId) async {
     try {
       final schedules = await _backupService.getSchedules();
+      final wasRunning = _schedules.firstWhere((s) => s.id == scheduleId, orElse: () => schedules.firstWhere((s) => s.id == scheduleId)).isRunning;
       setState(() {
         _schedules = schedules;
       });
       final schedule = schedules.firstWhere((s) => s.id == scheduleId);
       if (!schedule.isRunning) {
         _stopPollingForSchedule(scheduleId);
+        // เมื่อ backup เพิ่งเสร็จ ให้โหลดรายการไฟล์ใหม่
+        if (wasRunning) {
+          final files = await _backupService.getBackupFiles(schedule.scheduleType);
+          if (mounted) {
+            setState(() {
+              if (schedule.scheduleType == 'daily') _dailyFiles = files;
+              else if (schedule.scheduleType == 'monthly') _monthlyFiles = files;
+              else if (schedule.scheduleType == 'yearly') _yearlyFiles = files;
+            });
+          }
+        }
       }
     } catch (e) {
       print('Failed to fetch status: $e');

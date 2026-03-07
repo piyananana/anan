@@ -56,9 +56,9 @@ class BusinessUnit {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'])
           : null,
-      createdBy: json['created_by'],
-      updatedBy: json['updated_by'],
-      lockedByUserId: json['locked_by_user_id'] ?? '',
+      createdBy: json['created_by']?.toString(),
+      updatedBy: json['updated_by']?.toString(),
+      lockedByUserId: json['locked_by_user_id'] ?? 0,
       lockedByUserName: json['locked_by_user_name'] ?? '',
     );
   }

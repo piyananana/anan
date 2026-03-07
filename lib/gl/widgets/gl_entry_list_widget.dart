@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/gl_entry.dart';
-import '../models/period.dart'; // Import Model Period
+import '../models/period.dart';
 import '../services/gl_entry_service.dart';
-import '../services/period_service.dart'; // Import Service ใหม่
+import '../services/period_service.dart';
 
 class GlEntryListWidget extends StatefulWidget {
   final VoidCallback onAddPressed;
@@ -26,93 +26,62 @@ class GlEntryListWidget extends StatefulWidget {
 }
 
 class _GlEntryListWidgetState extends State<GlEntryListWidget> {
-  // final GlEntryService _service = GlEntryService();
   final GlEntryService _entryService = GlEntryService();
-  final PeriodService _periodService = PeriodService(); // เรียกใช้ Service
+  final PeriodService _periodService = PeriodService();
+
   List<GlEntryHeader> _entries = [];
+  List<GlEntryHeader> _filteredEntries = [];
   bool _isLoading = false;
 
-  // Master Data สำหรับ Dropdown
   List<FiscalYear> _fiscalYears = [];
   List<PostingPeriod> _periods = [];
 
-  // Filter States (เก็บค่าที่เลือก)
   FiscalYear? _selectedFiscalYear;
   PostingPeriod? _selectedPeriod;
   final TextEditingController _searchCtrl = TextEditingController();
 
-  // // Filter States
-  // String? _selectedFiscalYear;
-  // String? _selectedPeriod;
-  // final TextEditingController _searchCtrl = TextEditingController();
-
-  // // Mock Dropdown Data (ควรดึงจาก DB จริง)
-  // final List<String> _fiscalYears = ['2024', '2025'];
-  // final List<String> _periods = List.generate(12, (index) => (index + 1).toString());
-
-  // @override
-  // void initState() {
-  //   super.initState();
-  //   // Default Values
-  //   _selectedFiscalYear = '2025';
-  //   _selectedPeriod = DateTime.now().month.toString();
-  //   _fetchData();
-  // }
-
   @override
   void initState() {
     super.initState();
-    _initialLoad(); // โหลดข้อมูล Master Data ก่อน
+    _initialLoad();
   }
 
-  // @override
-  // void didUpdateWidget(covariant GlEntryListWidget oldWidget) {
-  //   super.didUpdateWidget(oldWidget);
-  //   if (widget.shouldRefresh) {
-  //     _fetchData();
-  //     widget.onRefreshComplete();
-  //   }
-  // }
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   void didUpdateWidget(covariant GlEntryListWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.shouldRefresh) {
-      _fetchEntries(); // รีเฟรชรายการเมื่อมีการบันทึกเสร็จ
-      widget.onRefreshComplete();
+      _fetchEntries();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onRefreshComplete();
+      });
     }
   }
 
-  // โหลดปีบัญชี -> ตั้งค่าเริ่มต้น -> โหลดงวด -> ตั้งค่าเริ่มต้น -> โหลดรายการ
   Future<void> _initialLoad() async {
     setState(() => _isLoading = true);
     try {
-      // 1. ดึงปีบัญชีทั้งหมด
       final fys = await _periodService.fetchFiscalYears();
-      setState(() {
-        _fiscalYears = fys;
-      });
+      setState(() => _fiscalYears = fys);
 
       if (fys.isNotEmpty) {
-        // 2. หาปีปัจจุบัน หรือใช้ปีล่าสุด
         final now = DateTime.now();
-        // ลองหาปีที่ครอบคลุมวันที่ปัจจุบัน
         try {
           _selectedFiscalYear = fys.firstWhere((fy) =>
               now.isAfter(fy.yearStartDate.subtract(const Duration(days: 1))) &&
               now.isBefore(fy.yearEndDate.add(const Duration(days: 1))));
         } catch (_) {
-          // ถ้าไม่เจอ ให้เอาตัวแรก (ล่าสุด ตาม Order DESC ใน Controller)
           _selectedFiscalYear = fys.first;
         }
-
-        // 3. ดึงงวดบัญชีของปีที่เลือก
         if (_selectedFiscalYear != null) {
           await _fetchPeriods(_selectedFiscalYear!.id);
         }
       }
-
-      // 4. ดึงรายการบัญชี
       await _fetchEntries();
     } catch (e) {
       if (mounted) {
@@ -124,14 +93,12 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
     }
   }
 
-  // ฟังก์ชันดึงงวดบัญชีตาม ID ปี
   Future<void> _fetchPeriods(int fyId) async {
     try {
-      final periods = await _periodService.fetchPostingPeriodsByFiscalYearId(fyId);
+      final periods =
+          await _periodService.fetchPostingPeriodsByFiscalYearId(fyId);
       setState(() {
         _periods = periods;
-
-        // หาเดือนปัจจุบันเพื่อตั้งเป็นค่าเริ่มต้น
         final now = DateTime.now();
         try {
           _selectedPeriod = periods.firstWhere((p) =>
@@ -139,83 +106,67 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                   p.periodStartDate.subtract(const Duration(days: 1))) &&
               now.isBefore(p.periodEndDate.add(const Duration(days: 1))));
         } catch (_) {
-          // ถ้าไม่เจอวันปัจจุบันในงวดใดเลย (เช่น ข้ามปี) ให้เลือกงวดแรก หรือ null
-          if (periods.isNotEmpty) {
-            _selectedPeriod = periods.first;
-          } else {
-            _selectedPeriod = null;
-          }
+          _selectedPeriod = periods.isNotEmpty ? periods.first : null;
         }
       });
     } catch (e) {
-      print('Error fetching periods: $e');
-    }
-  }
-
-  // Future<void> _fetchData() async {
-  //   setState(() => _isLoading = true);
-  //   try {
-  //     final data = await _service.fetchEntries(
-  //       fiscalYear: _selectedFiscalYear,
-  //       periodNo: _selectedPeriod,
-  //       search: _searchCtrl.text,
-  //     );
-  //     setState(() {
-  //       _entries = data;
-  //       _isLoading = false;
-  //     });
-  //   } catch (e) {
-  //     setState(() => _isLoading = false);
-  //     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-  //   }
-  // }
-
-  // ฟังก์ชันดึงรายการ GL (Transaction)
-  Future<void> _fetchEntries() async {
-    setState(() => _isLoading = true);
-    try {
-      final data = await _entryService.fetchEntries(
-        fiscalYear: _selectedFiscalYear?.fyCode, // ส่ง Code ไป Filter
-        periodNo:
-            _selectedPeriod?.periodNumber.toString(), // ส่ง Number ไป Filter
-        search: _searchCtrl.text,
-      );
-      setState(() {
-        _entries = data;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error fetching entries: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error fetching periods: $e')));
       }
     }
   }
 
-  // Future<void> _deleteEntry(int id) async {
-  //   final confirm = await showDialog<bool>(
-  //     context: context,
-  //     builder: (ctx) => AlertDialog(
-  //       title: const Text('ยืนยันการลบ'),
-  //       content: const Text('ต้องการลบรายการนี้ใช่หรือไม่?'),
-  //       actions: [
-  //         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-  //         TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ลบ', style: TextStyle(color: Colors.red))),
-  //       ],
-  //     ),
-  //   );
+  Future<void> _fetchEntries() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await _entryService.fetchEntries(
+        periodId: _selectedPeriod?.id,
+        fiscalYearId:
+            _selectedPeriod == null ? _selectedFiscalYear?.id : null,
+      );
+      setState(() {
+        _entries = data;
+        _applyFilter();
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error fetching entries: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
-  //   if (confirm == true) {
-  //     try {
-  //       await _service.deleteEntry(id);
-  //       _fetchData();
-  //       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ลบรายการสำเร็จ')));
-  //     } catch (e) {
-  //       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ลบไม่สำเร็จ: $e')));
-  //     }
-  //   }
-  // }
+  void _applyFilter() {
+    final query = _searchCtrl.text.trim();
+    if (query.isEmpty) {
+      _filteredEntries = List.from(_entries);
+      return;
+    }
+
+    final keywords = query.toLowerCase().split(RegExp(r'\s+'));
+    final dateFmt = DateFormat('dd/MM/yyyy');
+
+    _filteredEntries = _entries.where((item) {
+      final fields = [
+        item.docCode,
+        item.docName,
+        item.docNo,
+        dateFmt.format(item.docDate),
+        item.refDocCode ?? '',
+        item.refDocName ?? '',
+        item.refDocNo ?? '',
+        item.refDocDate != null ? dateFmt.format(item.refDocDate!) : '',
+        item.description,
+        item.status,
+      ].map((f) => f.toLowerCase()).toList();
+
+      // All keywords must match at least one field
+      return keywords.every((kw) => fields.any((f) => f.contains(kw)));
+    }).toList();
+  }
 
   Future<void> _deleteEntry(int id) async {
     final confirm = await showDialog<bool>(
@@ -233,7 +184,6 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
         ],
       ),
     );
-
     if (confirm == true) {
       try {
         await _entryService.deleteEntry(id);
@@ -264,53 +214,38 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
     }
   }
 
+  String _formatPeriodLabel(PostingPeriod p) {
+    final fmt = DateFormat('dd/MM/yyyy');
+    return '${p.periodName} (${fmt.format(p.periodStartDate)} - ${fmt.format(p.periodEndDate)})';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // --- Header Filters ---
         Container(
           padding: const EdgeInsets.all(8.0),
-          // color: Colors.grey[100],
           child: Row(
             children: [
-              // // Fiscal Year
-              // SizedBox(
-              //   width: 100,
-              //   child: DropdownButtonFormField<String>(
-              //     value: _selectedFiscalYear,
-              //     items: _fiscalYears.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              //     onChanged: (val) {
-              //       setState(() => _selectedFiscalYear = val);
-              //       _fetchData();
-              //     },
-              //     decoration: const InputDecoration(
-              //       labelText: 'รหัสปีบัญชี',
-              //       border: OutlineInputBorder(),
-              //       contentPadding: EdgeInsets.all(8)),
-              //   ),
-              // ),
-              // const SizedBox(width: 8),
-              // Fiscal Year Dropdown
+              // Fiscal Year
               SizedBox(
-                width: 120, // ขยายความกว้างนิดหน่อยเผื่อชื่อยาว
+                width: 120,
                 child: DropdownButtonFormField<FiscalYear>(
                   value: _selectedFiscalYear,
-                  isExpanded: true, // ให้ข้อความไม่ล้น
+                  isExpanded: true,
                   items: _fiscalYears
                       .map((fy) => DropdownMenuItem(
                           value: fy,
-                          child:
-                              Text(fy.fyCode, overflow: TextOverflow.ellipsis)))
+                          child: Text(fy.fyCode,
+                              overflow: TextOverflow.ellipsis)))
                       .toList(),
                   onChanged: (val) {
                     if (val != null) {
                       setState(() {
                         _selectedFiscalYear = val;
-                        _selectedPeriod = null; // เคลียร์งวดเก่าก่อน
-                        _periods = []; // เคลียร์ List งวดเก่า
+                        _selectedPeriod = null;
+                        _periods = [];
                       });
-                      // โหลดงวดใหม่ แล้วโหลดรายการ
                       _fetchPeriods(val.id).then((_) => _fetchEntries());
                     }
                   },
@@ -323,38 +258,21 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                 ),
               ),
               const SizedBox(width: 8),
-              // // Period
-              // SizedBox(
-              //   width: 80,
-              //   child: DropdownButtonFormField<String>(
-              //     value: _selectedPeriod,
-              //     items: _periods.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              //     onChanged: (val) {
-              //       setState(() => _selectedPeriod = val);
-              //       _fetchData();
-              //     },
-              //     decoration: const InputDecoration(
-              //       labelText: 'งวด',
-              //       border: OutlineInputBorder(),
-              //       contentPadding: EdgeInsets.all(8)),
-              //   ),
-              // ),
-              // const SizedBox(width: 8),
-              // Period Dropdown
+              // Period
               SizedBox(
-                width: 250,
+                width: 280,
                 child: DropdownButtonFormField<PostingPeriod>(
                   value: _selectedPeriod,
                   isExpanded: true,
                   items: _periods
                       .map((p) => DropdownMenuItem(
                           value: p,
-                          child: Text('${p.periodNumber.toString()} (${p.periodStartDate.toLocal().day}/${p.periodStartDate.toLocal().month}/${p.periodStartDate.toLocal().year} - ${p.periodEndDate.toLocal().day}/${p.periodEndDate.toLocal().month}/${p.periodEndDate.toLocal().year})', 
-                            overflow: TextOverflow.ellipsis)))
+                          child: Text(_formatPeriodLabel(p),
+                              overflow: TextOverflow.ellipsis)))
                       .toList(),
                   onChanged: (val) {
                     setState(() => _selectedPeriod = val);
-                    _fetchEntries(); // โหลดรายการใหม่ทันทีเมื่อเปลี่ยนงวด
+                    _fetchEntries();
                   },
                   decoration: const InputDecoration(
                     labelText: 'งวด',
@@ -365,293 +283,150 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                 ),
               ),
               const SizedBox(width: 8),
-              // // Search
-              // Expanded(
-              //   child: TextFormField(
-              //     controller: _searchCtrl,
-              //     decoration: InputDecoration(
-              //       labelText: 'ค้นหา (เลขที่, รายละเอียด)',
-              //       border: const OutlineInputBorder(),
-              //       suffixIcon: IconButton(
-              //         icon: const Icon(Icons.search),
-              //         onPressed: _fetchData,
-              //       ),
-              //       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-              //     ),
-              //     onFieldSubmitted: (_) => _fetchData(),
-              //   ),
-              // ),
-              // const SizedBox(width: 8),
               // Search
               Expanded(
                 child: TextFormField(
                   controller: _searchCtrl,
                   decoration: InputDecoration(
-                    labelText: 'ค้นหา (เลขที่, รายละเอียด)',
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.search),
-                      onPressed: _fetchEntries,
+                    labelText: 'ค้นหา (คั่นหลายคำด้วยวรรค)',
+                    hintText: 'เช่น: JV draft 2024',
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_searchCtrl.text.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            tooltip: 'ล้างคำค้น',
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _applyFilter());
+                            },
+                          ),
+                        const Icon(Icons.search),
+                        const SizedBox(width: 4),
+                      ],
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8),
                     border: const OutlineInputBorder(),
                   ),
-                  onFieldSubmitted: (_) => _fetchEntries(),
+                  onChanged: (_) => setState(() => _applyFilter()),
                 ),
               ),
               const SizedBox(width: 8),
               // Add Button
               IconButton(
-                icon:
-                    const Icon(Icons.add_circle, size: 32, color: Colors.green),
+                icon: const Icon(Icons.add_circle,
+                    size: 32, color: Colors.green),
                 tooltip: 'เพิ่มรายการใหม่',
                 onPressed: widget.onAddPressed,
               ),
             ],
           ),
         ),
+        // Result count
+        if (!_isLoading)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _searchCtrl.text.trim().isEmpty
+                    ? '${_filteredEntries.length} รายการ'
+                    : 'พบ ${_filteredEntries.length} รายการ จาก ${_entries.length} รายการ',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+            ),
+          ),
         const Divider(height: 1),
-        // --- Data Table /List ---
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : _entries.isEmpty
-                  ? const Center(child: Text('ไม่พบรายการบัญชีตามเงื่อนไข'))
+              : _filteredEntries.isEmpty
+                  ? Center(
+                      child: Text(_entries.isEmpty
+                          ? 'ไม่พบรายการบัญชีตามเงื่อนไข'
+                          : 'ไม่พบรายการที่ตรงกับคำค้น'))
                   : ListView.separated(
                       padding: const EdgeInsets.all(8),
-                      itemCount: _entries.length,
-                      // separatorBuilder: (ctx, i) => const Divider(),
-                      separatorBuilder: (ctx, i) => const SizedBox(height: 2),
+                      itemCount: _filteredEntries.length,
+                      separatorBuilder: (ctx, i) =>
+                          const SizedBox(height: 2),
                       itemBuilder: (ctx, index) {
-                        final item = _entries[index];
+                        final item = _filteredEntries[index];
                         final textColor = _getStatusColor(item.status);
-
-                        return Card(child: 
-                          ListTile(
+                        return Card(
+                          child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: _getStatusColor(item.status),
-                              child: Text(item.status[0], style: const TextStyle(color: Colors.white)),
+                              backgroundColor:
+                                  _getStatusColor(item.status),
+                              child: Text(item.status[0],
+                                  style: const TextStyle(
+                                      color: Colors.white)),
                             ),
                             title: Text('${item.docCode} ${item.docNo}',
                                 style: TextStyle(
                                     color: textColor,
                                     fontWeight: FontWeight.bold)),
                             subtitle: Text(
-                              // 'วันที่: ${item.docDate.toString().split(' ')[0]} | ${item.description}\nสถานะ: ${item.status}',
                               'วันที่: ${item.docDate.toString().split(' ')[0]} | ${item.description}',
-                              style: TextStyle(color: textColor.withOpacity(0.8)),
+                              style: TextStyle(
+                                  color: textColor.withOpacity(0.8)),
                             ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.end,
                                   children: [
-                                    Text(NumberFormat("#,##0.00").format(item.totalDebitLc), style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    Text(item.status, style: TextStyle(fontSize: 10, color: _getStatusColor(item.status))),
+                                    Text(
+                                        NumberFormat("#,##0.00")
+                                            .format(item.totalDebitLc),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold)),
+                                    Text(item.status,
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: _getStatusColor(
+                                                item.status))),
                                   ],
                                 ),
                                 const SizedBox(width: 8),
-                                // IconButton(
-                                //   icon: const Icon(Icons.visibility,
-                                //       color: Colors.blue),
-                                //   tooltip: 'ดู',
-                                //   onPressed: () => widget.onEditPressed(item.id),
-                                // ),
                                 IconButton(
-                                  icon: const Icon(Icons.visibility, 
+                                  icon: const Icon(Icons.visibility,
                                       color: Colors.blue),
                                   tooltip: 'ดูรายละเอียด',
-                                  onPressed: () => widget.onViewPressed(item.id),
+                                  onPressed: () =>
+                                      widget.onViewPressed(item.id),
                                 ),
-                                // IconButton(
-                                //   icon: const Icon(Icons.edit,
-                                //       color: Colors.orange),
-                                //   tooltip: 'แก้ไข',
-                                //   onPressed: item.status == 'Draft'
-                                //       ? () => widget.onEditPressed(item.id)
-                                //       : null, // Disable if not Draft
-                                // ),
                                 if (item.status == 'Draft')
                                   IconButton(
-                                    icon: const Icon(Icons.edit, 
+                                    icon: const Icon(Icons.edit,
                                         color: Colors.orange),
                                     tooltip: 'แก้ไข',
-                                    onPressed: () => widget.onEditPressed(item.id),
+                                    onPressed: () =>
+                                        widget.onEditPressed(item.id),
                                   ),
                                 if (item.status == 'Draft')
                                   IconButton(
-                                    icon:
-                                        const Icon(Icons.delete, color: Colors.red),
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.red),
                                     tooltip: 'ลบทั้งใบ',
-                                    onPressed: () => _deleteEntry(item.id),
+                                    onPressed: () =>
+                                        _deleteEntry(item.id),
                                   ),
                               ],
                             ),
                             onTap: () => widget.onViewPressed(item.id),
-                          )
+                          ),
                         );
                       },
                     ),
-          // ListView.separated(
-          //   padding: const EdgeInsets.all(8),
-          //   itemCount: _entries.length,
-          //   separatorBuilder: (ctx, i) => const Divider(),
-          //   itemBuilder: (ctx, index) {
-          //     final item = _entries[index];
-          //     final textColor = _getStatusColor(item.status);
-
-          //     return ListTile(
-          //       title: Text('${item.docCode} ${item.docNo}', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-          //       subtitle: Text(
-          //         'วันที่: ${item.docDate.toString().split(' ')[0]} | ${item.description}\nสถานะ: ${item.status}',
-          //         style: TextStyle(color: textColor.withOpacity(0.8)),
-          //       ),
-          //       trailing: Row(
-          //         mainAxisSize: MainAxisSize.min,
-          //         children: [
-          //           IconButton(
-          //             icon: const Icon(Icons.visibility, color: Colors.blue),
-          //             tooltip: 'ดู',
-          //             onPressed: () => widget.onEditPressed(item.id),
-          //           ),
-          //           IconButton(
-          //             icon: const Icon(Icons.edit, color: Colors.orange),
-          //             tooltip: 'แก้ไข',
-          //             onPressed: item.status == 'Draft'
-          //                 ? () => widget.onEditPressed(item.id)
-          //                 : null, // Disable if not Draft
-          //           ),
-          //           IconButton(
-          //             icon: const Icon(Icons.delete, color: Colors.red),
-          //             tooltip: 'ลบทั้งใบ',
-          //             onPressed: item.status == 'Draft'
-          //                 ? () => _deleteEntry(item.id)
-          //                 : null,
-          //           ),
-          //         ],
-          //       ),
-          //     );
-          //   },
-          // ),
         ),
       ],
     );
   }
 }
-
-// import 'package:flutter/material.dart';
-// import 'package:http/http.dart' as http;
-// import 'dart:convert';
-// import '../models/gl_entry.dart';
-// import '../screens/gl_entry_screen.dart';
-
-// class GlEntryListScreen extends StatefulWidget {
-//   const GlEntryListScreen({super.key});
-
-//   @override
-//   State<GlEntryListScreen> createState() => _GlEntryListScreenState();
-// }
-
-// class _GlEntryListScreenState extends State<GlEntryListScreen> {
-//   List<GlEntryHeader> _transactions = [];
-//   bool _isLoading = true;
-//   final TextEditingController _searchCtrl = TextEditingController();
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _fetchTransactions();
-//   }
-
-//   Future<void> _fetchTransactions() async {
-//     setState(() => _isLoading = true);
-//     try {
-//       final res = await http.get(
-//         Uri.parse('http://localhost:3000/api/gl/transactions?search=${_searchCtrl.text}'),
-//         // Add Headers with Auth
-//       );
-//       if (res.statusCode == 200) {
-//         final List data = jsonDecode(res.body);
-//         setState(() {
-//           _transactions = data.map((e) => GlEntryHeader.fromJson(e)).toList();
-//           _isLoading = false;
-//         });
-//       }
-//     } catch (e) {
-//       print(e);
-//       setState(() => _isLoading = false);
-//     }
-//   }
-
-//   Color _getStatusColor(String status) {
-//     if (status == 'Draft') return Colors.orange;
-//     if (status == 'Posted') return Colors.green;
-//     return Colors.grey;
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: const Text('บันทึกรายการรายวัน (GL Journal)')),
-//       floatingActionButton: FloatingActionButton(
-//         onPressed: () async {
-//           await Navigator.push(context, MaterialPageRoute(builder: (_) => const GlEntryScreen()));
-//           _fetchTransactions();
-//         },
-//         child: const Icon(Icons.add),
-//       ),
-//       body: Column(
-//         children: [
-//           Padding(
-//             padding: const EdgeInsets.all(8.0),
-//             child: TextField(
-//               controller: _searchCtrl,
-//               decoration: InputDecoration(
-//                 labelText: 'ค้นหา (เลขที่, Ref)',
-//                 suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _fetchTransactions),
-//                 border: const OutlineInputBorder(),
-//               ),
-//               onSubmitted: (_) => _fetchTransactions(),
-//             ),
-//           ),
-//           Expanded(
-//             child: _isLoading
-//                 ? const Center(child: CircularProgressIndicator())
-//                 : ListView.builder(
-//                     itemCount: _transactions.length,
-//                     itemBuilder: (context, index) {
-//                       final item = _transactions[index];
-//                       return Card(
-//                         child: ListTile(
-//                           leading: CircleAvatar(
-//                             backgroundColor: _getStatusColor(item.status),
-//                             child: Text(item.status[0], style: const TextStyle(color: Colors.white)),
-//                           ),
-//                           title: Text('${item.docCode} : ${item.docNo}'),
-//                           subtitle: Text('วันที่: ${item.docDate.toString().split(' ')[0]}\nRef: ${item.refNo}'),
-//                           trailing: Column(
-//                             mainAxisAlignment: MainAxisAlignment.center,
-//                             crossAxisAlignment: CrossAxisAlignment.end,
-//                             children: [
-//                               Text(item.totalDebit.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.bold)),
-//                               const Icon(Icons.chevron_right),
-//                             ],
-//                           ),
-//                           onTap: () async {
-//                             await Navigator.push(
-//                               context,
-//                               MaterialPageRoute(builder: (_) => GlEntryScreen(transactionId: item.id))
-//                             );
-//                             _fetchTransactions();
-//                           },
-//                         ),
-//                       );
-//                     },
-//                   ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }

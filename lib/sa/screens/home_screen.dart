@@ -41,6 +41,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isMenuExpanded = true;
   double _menuPanelCurrentWidth = 280.0;
   bool _isDraggingDivider = false;
+  bool _menuWidthInitialized = false;
 
   // เพิ่ม TextEditingController สำหรับ Search Bar
   final TextEditingController _searchController = TextEditingController();
@@ -63,6 +64,15 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _loadUserAndMenus();
     _tabController = TabController(length: _openTabs.length, vsync: this);
     _tabController.addListener(_handleTabSelection);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_menuWidthInitialized) {
+      _menuPanelCurrentWidth = MediaQuery.of(context).size.width * 0.30;
+      _menuWidthInitialized = true;
+    }
   }
 
   @override

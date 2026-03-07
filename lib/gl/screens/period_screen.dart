@@ -29,6 +29,7 @@ class _PeriodScreenState extends State<PeriodScreen>
     with AutomaticKeepAliveClientMixin {
   final GlobalKey<PeriodListWidgetState> _listWidgetKey = GlobalKey();
   final GlobalKey<PeriodDetailWidgetState> _detailWidgetKey = GlobalKey();
+  final ResizableController _resizableController = ResizableController();
   // bool _isImportOrExport = false;
   Mode _mode = Mode.none;
   FiscalYear? _selectedData;
@@ -41,6 +42,7 @@ class _PeriodScreenState extends State<PeriodScreen>
 
   @override
   void dispose() {
+    _resizableController.dispose();
     super.dispose();
   }
 
@@ -177,6 +179,7 @@ class _PeriodScreenState extends State<PeriodScreen>
       _mode = Mode.edit;
       _selectedData = row;
     });
+    _fetchPeriods(row);
   }
 
   void _onView(FiscalYear row) {
@@ -184,6 +187,7 @@ class _PeriodScreenState extends State<PeriodScreen>
       _mode = Mode.view;
       _selectedData = row;
     });
+    _fetchPeriods(row);
   }
 
   Future<void> _onDelete(FiscalYear row) async {
@@ -265,9 +269,10 @@ class _PeriodScreenState extends State<PeriodScreen>
 
   void _onCallback(FiscalYear row) {
     setState(() {
-      _mode = Mode.none;
+      _mode = Mode.view;
       _selectedData = row;
     });
+    _fetchPeriods(row);
   }
 
   @override
@@ -309,7 +314,7 @@ class _PeriodScreenState extends State<PeriodScreen>
       ),
       body:
           ResizableContainer(
-            controller: ResizableController(),
+            controller: _resizableController,
             direction: Axis.horizontal,
             children: [
               ResizableChild(
@@ -349,9 +354,6 @@ class _PeriodScreenState extends State<PeriodScreen>
   }
 
   Widget _buildRightPanel() {
-
-    _reloadDetail();
-
     switch (_mode) {
       case Mode.none:
         return PeriodDetailWidget(

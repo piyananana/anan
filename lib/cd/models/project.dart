@@ -45,8 +45,8 @@ class Project {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'])
           : null,
-      createdBy: json['created_by'] ?? '',
-      updatedBy: json['updated_by'] ?? '',
+      createdBy: json['created_by']?.toString(),
+      updatedBy: json['updated_by']?.toString(),
     );
   }
 

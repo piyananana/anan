@@ -8,13 +8,11 @@ import 'package:anan/cd/services/project_service.dart';
 import 'package:anan/cd/services/currency_service.dart';
 import 'package:anan/gl/services/account_service.dart';
 import 'package:flutter/material.dart';
-// import 'package:flutter/rendering.dart';
-// import 'package:flutter/widgets.dart';
-import 'package:intl/intl.dart'; // Add intl package
+import 'package:intl/intl.dart';
 import '../models/account.dart';
 import '../models/gl_entry.dart';
 import '../services/gl_entry_service.dart';
-import '../../sa/models/module_document.dart'; // Import ModuleDocument
+import '../../sa/models/module_document.dart';
 
 class GlEntryDetailWidget extends StatefulWidget {
   final int? entryId;
@@ -41,7 +39,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   final BusinessUnitService _buService = BusinessUnitService();
   final ProjectService _projectService = ProjectService();
   final BranchService _branchService = BranchService();
-  final CurrencyService _currencyService = CurrencyService(); // Add Service
+  final CurrencyService _currencyService = CurrencyService();
   bool _isLoading = false;
 
   // Data
@@ -49,49 +47,65 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     docId: 0,
     docDate: DateTime.now(),
     postingDate: DateTime.now(),
-    currencyId: 1, // Default THB
+    currencyId: 1,
     exchangeRate: 1.0,
   );
   List<GlEntryDetail> _details = [];
   List<ModuleDocument> _allowedDocTypes = [];
-
-  List<ModuleDocument> _allDocTypes =
-      []; // โหลดเอกสารทั้งหมดมาเลือกเป็น Reference
+  List<ModuleDocument> _allDocTypes = [];
   ModuleDocument? _selectedRefDocType;
 
-  // Master Data สำหรับเลือก
-  List<Account> _accounts = []; // โหลดจากผังบัญชี
-  List<BusinessUnit> _businessUnits = []; // ตัวอย่างข้อมูล
+  // Master Data
+  List<Account> _accounts = [];
+  List<BusinessUnit> _businessUnits = [];
   List<Project> _projects = [];
   List<Branch> _branches = [];
-  List<Currency> _currencies = []; // Add Currencies List
-  String _baseCurrency = 'THB'; // Add Base Currency Code
+  List<Currency> _currencies = [];
+  String _baseCurrency = 'THB';
 
   // UI State
   ModuleDocument? _selectedDocType;
-  Currency? _selectedCurrency; // Add Selected Currency
-  bool _isReadOnly = false; // True if Posted/Deleted
+  Currency? _selectedCurrency;
+  bool _isReadOnly = false;
+
+  // Detail row controllers
+  List<TextEditingController> _debitCtrls = [];
+  List<TextEditingController> _creditCtrls = [];
+  List<TextEditingController> _descCtrls = [];
 
   @override
   void initState() {
     super.initState();
-    // _loadData();
     _initMasterData();
   }
 
-// เพิ่มฟังก์ชันนี้สำหรับโหลดข้อมูลหลักครั้งเดียว
+  @override
+  void dispose() {
+    for (final c in _debitCtrls) c.dispose();
+    for (final c in _creditCtrls) c.dispose();
+    for (final c in _descCtrls) c.dispose();
+    super.dispose();
+  }
+
   Future<void> _initMasterData() async {
     setState(() => _isLoading = true);
     try {
-      _allowedDocTypes = await _service.fetchRowsByModuleUserId();
-      _accounts = await _accountService.fetchRowsControlAccount();
-      _businessUnits = await _buService.fetchRows();
-      _projects = await _projectService.fetchRows();
-      _branches = await _branchService.fetchRows();
-      _currencies = await _currencyService.fetchActiveRows();
-      _allDocTypes = await _service.fetchRows();
-
-      // หลังจากโหลด Master Data เสร็จ ให้โหลดข้อมูลรายการต่อ
+      final results = await Future.wait([
+        _service.fetchRowsByModuleUserId(),
+        _accountService.fetchRowsControlAccount(),
+        _buService.fetchRows(),
+        _projectService.fetchRows(),
+        _branchService.fetchRows(),
+        _currencyService.fetchActiveRows(),
+        _service.fetchRows(),
+      ]);
+      _allowedDocTypes = results[0] as List<ModuleDocument>;
+      _accounts = results[1] as List<Account>;
+      _businessUnits = results[2] as List<BusinessUnit>;
+      _projects = results[3] as List<Project>;
+      _branches = results[4] as List<Branch>;
+      _currencies = results[5] as List<Currency>;
+      _allDocTypes = results[6] as List<ModuleDocument>;
       await _loadTransactionData();
     } catch (e) {
       if (mounted) {
@@ -106,16 +120,13 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   @override
   void didUpdateWidget(covariant GlEntryDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.entryId != oldWidget.entryId) {
+    if (widget.entryId != oldWidget.entryId ||
+        widget.viewOnly != oldWidget.viewOnly) {
       _loadTransactionData();
     }
   }
 
   Future<void> _loadTransactionData() async {
-    // ไม่ต้อง setState isLoading = true ที่นี่หากต้องการให้ Smooth
-    // หรือถ้าอยากให้ขึ้นหมุนๆ ก็ใส่ได้ แต่อย่าโหลด Master Data ซ้ำ
-
-    // Check ก่อนว่า Master Data พร้อมไหม ถ้าไม่พร้อมให้รอก่อน (กรณีเปิดมาแล้วกด Edit เลย)
     if (_allowedDocTypes.isEmpty && _accounts.isEmpty) return;
 
     setState(() => _isLoading = true);
@@ -125,8 +136,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       } else {
         final data = await _service.fetchEntryDetail(widget.entryId!);
 
-        // --- สำคัญ: ตรวจสอบว่า API ส่ง account_code กลับมาใน details หรือไม่ ---
-        // ถ้า API ส่งมาแต่ ID แต่ไม่ส่ง Code มา ให้ Map ข้อมูลจาก Master Data กลับเข้าไป
         List<GlEntryDetail> loadedDetails = data['details'];
         for (var detail in loadedDetails) {
           if (detail.accountCode.isEmpty && detail.accountId != 0) {
@@ -150,12 +159,10 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             detail.accountCode = match.accountCode;
             detail.accountName = match.accountNameThai;
           }
-          // ทำแบบเดียวกันกับ BusinessUnit, Branch, Project ถ้าจำเป็น
         }
 
         setState(() {
           _header = data['header'];
-          // Map Reference Doc Type
           if (_header.refDocId != null && _allDocTypes.isNotEmpty) {
             try {
               _selectedRefDocType =
@@ -165,7 +172,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
           _details = loadedDetails;
           _isReadOnly = widget.viewOnly || _header.status != 'Draft';
 
-          // Map DocType & Currency (Logic เดิม)
           if (_allowedDocTypes.isNotEmpty) {
             try {
               _selectedDocType =
@@ -186,6 +192,22 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             }
           }
         });
+
+        // Initialize controllers for loaded details
+        for (final c in _debitCtrls) c.dispose();
+        for (final c in _creditCtrls) c.dispose();
+        for (final c in _descCtrls) c.dispose();
+        _debitCtrls = _details
+            .map((d) => TextEditingController(
+                text: d.debitFc == 0 ? '' : d.debitFc.toString()))
+            .toList();
+        _creditCtrls = _details
+            .map((d) => TextEditingController(
+                text: d.creditFc == 0 ? '' : d.creditFc.toString()))
+            .toList();
+        _descCtrls = _details
+            .map((d) => TextEditingController(text: d.description))
+            .toList();
       }
     } catch (e) {
       if (mounted) {
@@ -198,7 +220,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   }
 
   void _resetForm() {
-    // หา Base Currency (THB)
     Currency baseCurrency = _currencies.firstWhere(
         (c) => c.baseCurrencyFlag == true,
         orElse: () => _currencies.isNotEmpty
@@ -223,34 +244,42 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     );
     _details = [];
     _selectedDocType = null;
-    _selectedCurrency = baseCurrency; // Set Default Currency
+    _selectedRefDocType = null;
+    _selectedCurrency = baseCurrency;
     _isReadOnly = false;
-    _addDetailRow(); // Add 1 empty row
+
+    for (final c in _debitCtrls) c.dispose();
+    for (final c in _creditCtrls) c.dispose();
+    for (final c in _descCtrls) c.dispose();
+    _debitCtrls = [];
+    _creditCtrls = [];
+    _descCtrls = [];
+
+    _addDetailRow();
   }
 
   void _addDetailRow() {
     setState(() {
       _details.add(GlEntryDetail(accountId: 0));
+      _debitCtrls.add(TextEditingController());
+      _creditCtrls.add(TextEditingController());
+      _descCtrls.add(TextEditingController());
     });
   }
 
-  // คำนวณยอดรวม (ทั้ง FC และ LC)
   void _calculateTotals() {
     double drFc = 0, crFc = 0;
     double drLc = 0, crLc = 0;
     for (var d in _details) {
-      // คำนวณ LC ระดับบรรทัด (FC * Rate)
       d.debitLc =
           double.parse((d.debitFc * _header.exchangeRate).toStringAsFixed(2));
       d.creditLc =
           double.parse((d.creditFc * _header.exchangeRate).toStringAsFixed(2));
-
       drFc += d.debitFc;
       crFc += d.creditFc;
       drLc += d.debitLc;
       crLc += d.creditLc;
     }
-
     setState(() {
       _header.totalDebitFc = drFc;
       _header.totalCreditFc = crFc;
@@ -259,90 +288,33 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     });
   }
 
-// เมื่อเปลี่ยน Currency Dropdown
   void _onCurrencyChanged(Currency? val) {
     if (val == null) return;
     setState(() {
       _selectedCurrency = val;
       _header.currencyId = val.id!;
-      // ถ้าเป็น Base Currency ให้ Rate = 1 เสมอ, ถ้าไม่ใช่ให้ใช้ Rate มาตรฐานของสกุลนั้นๆ
-      if (val.baseCurrencyFlag) {
-        _header.exchangeRate = 1.0;
-      } else {
-        _header.exchangeRate = val.baseRate;
-      }
-      _calculateTotals(); // Recalculate LC amounts
+      _header.exchangeRate = val.baseCurrencyFlag ? 1.0 : val.baseRate;
     });
+    _calculateTotals();
   }
 
-  // เมื่อเปลี่ยน Exchange Rate (Text Field)
   void _onExchangeRateChanged(String val) {
-    double newRate = double.tryParse(val) ?? 0.0;
-    setState(() {
-      _header.exchangeRate = newRate;
-      _calculateTotals();
-    });
+    _header.exchangeRate = double.tryParse(val) ?? 0.0;
+    _calculateTotals();
   }
-
-  // Widget สำหรับเลือกบัญชีแบบค้นหาได้
-  // Widget _buildAccountAutocomplete(int index) {
-  //   return Autocomplete<Account>(
-  //     optionsBuilder: (TextEditingValue textEditingValue) {
-  //       if (textEditingValue.text.isEmpty) {
-  //         return const Iterable<Account>.empty();
-  //       }
-  //       return _accounts.where((Account option) {
-  //         return option.accountCode.contains(textEditingValue.text) ||
-  //             option.accountNameThai
-  //                 .toLowerCase()
-  //                 .contains(textEditingValue.text.toLowerCase());
-  //       });
-  //     },
-  //     displayStringForOption: (Account option) =>
-  //         '${option.accountCode} - ${option.accountNameThai}',
-  //     onSelected: (Account selection) {
-  //       setState(() {
-  //         _details[index].accountId = selection.id;
-  //         _details[index].accountCode = selection.accountCode;
-  //         // ตรวจสอบเงื่อนไข Required ต่างๆ จากโมเดล Account
-  //         // และล้างค่าหากไม่จำเป็นต้องใช้ (หรือเก็บไว้ก็ได้)
-  //       });
-  //     },
-  //     fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-  //       // กำหนดค่าเริ่มต้นถ้ามีข้อมูลเก่า
-  //       if (controller.text.isEmpty && _details[index].accountCode.isNotEmpty) {
-  //         controller.text = _details[index].accountCode;
-  //       }
-  //       return TextFormField(
-  //         controller: controller,
-  //         focusNode: focusNode,
-  //         readOnly: _isReadOnly,
-  //         decoration: const InputDecoration(
-  //             border: OutlineInputBorder(),
-  //             labelText: 'บัญชี',
-  //             // hintText: 'รหัส/ชื่อบัญชี',
-  //             isDense: true),
-  //         validator: (v) => _details[index].accountId == 0 ? 'จำเป็น' : null,
-  //       );
-  //     },
-  //   );
-  // }
 
   Future<void> _save(String action) async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
-    // Calculate one last time to be sure
     _calculateTotals();
 
-    // Validations (Check FC balance)
     if (action == 'Post' &&
         (_header.totalDebitFc - _header.totalCreditFc).abs() > 0.01) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('ยอด Dr/Cr ($_baseCurrency) ไม่เท่ากัน')));
       return;
     }
-    // Optional: Check LC balance warnings (usually diff is from rounding)
 
     if (_details.isEmpty) {
       ScaffoldMessenger.of(context)
@@ -350,17 +322,72 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       return;
     }
 
+    if (_details.any((d) => d.accountId == 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('กรุณาเลือกบัญชีให้ครบทุกรายการ')));
+      return;
+    }
+
+    if (_details.any((d) => d.debitFc == 0 && d.creditFc == 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('กรุณาระบุยอดเดบิตหรือเครดิตในทุกรายการ')));
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       await _service.saveEntry(_header, _details, action);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
-      widget.onSaveSuccess();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.onSaveSuccess();
+        });
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('บันทึกไม่สำเร็จ: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('บันทึกไม่สำเร็จ: $e')));
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _reverse() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ยืนยันการถอยรายการ'),
+        content: const Text(
+            'ต้องการสร้างรายการถอย (Reverse) สำหรับเอกสารนี้ใช่หรือไม่?\nระบบจะสร้างรายการใหม่ที่มียอดตรงข้ามกัน'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('ยกเลิก')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('ยืนยันถอย',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      try {
+        await _service.reverseEntry(_header.id);
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.onSaveSuccess();
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('ถอยไม่สำเร็จ: $e')));
+        }
+      }
     }
   }
 
@@ -397,7 +424,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     return item.currencyCode;
   }
 
-  // Widget Helper สำหรับ Text สีเทาใต้ Field
   Widget _buildUnderlineText(String text) {
     return Padding(
       padding: const EdgeInsets.only(top: 2, left: 4),
@@ -412,9 +438,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
 
   Widget _buildDetailItem(int index) {
     final detail = _details[index];
-    // กำหนดรูปแบบตัวเลข
     final currencyFormat = NumberFormat("#,###,###,##0.00");
-    // ค้นหา Account Info เพื่อตรวจสอบเงื่อนไข Required
     final accountInfo = _accounts.firstWhere((a) => a.id == detail.accountId,
         orElse: () => Account(
             id: 0,
@@ -440,10 +464,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       child: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Column(
-          // เปลี่ยนเป็น Column เพื่อรองรับการขึ้นบรรทัดใหม่
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- บรรทัดที่ 1: Account, Dimensions, Amounts ---
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -455,7 +477,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                       style: const TextStyle(fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(width: 8),
-                // 1. Account (บัญชี)
+                // 1. Account
                 Expanded(
                   flex: 3,
                   child: Column(
@@ -502,12 +524,10 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                                 labelStyle: TextStyle(color: Colors.grey[400]),
                                 labelText: 'รหัสบัญชี',
                                 isDense: true),
-                            // enabled: !_isReadOnly,
                             readOnly: _isReadOnly,
                           );
                         },
                       ),
-                      // แสดงชื่อบัญชีใต้ Field
                       _buildUnderlineText(detail.accountName.isEmpty
                           ? '-'
                           : detail.accountName),
@@ -515,7 +535,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 2. Business Unit (หน่วยงาน)
+                // 2. Business Unit
                 Expanded(
                   flex: 2,
                   child: Column(
@@ -547,9 +567,13 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         },
                         fieldViewBuilder:
                             (context, controller, focusNode, onFieldSubmitted) {
-                          // ถ้า Controller ว่าง แต่ใน Model มีค่า ให้ใส่ค่ากลับเข้าไป (ป้องกันค่าหายตอน Scroll)
                           if (controller.text != detail.businessUnitCode) {
-                            controller.text = detail.businessUnitCode ?? '';
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted &&
+                                  controller.text != detail.businessUnitCode) {
+                                controller.text = detail.businessUnitCode ?? '';
+                              }
+                            });
                           }
                           return TextFormField(
                             controller: controller,
@@ -564,7 +588,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                           );
                         },
                       ),
-                      // แสดงชื่อหน่วยงานใต้ Field
                       _buildUnderlineText(
                           (detail.businessUnitName?.isEmpty ?? true)
                               ? '-'
@@ -573,7 +596,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 3. Branch (สาขา)
+                // 3. Branch
                 Expanded(
                   flex: 2,
                   child: Column(
@@ -605,9 +628,13 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         },
                         fieldViewBuilder:
                             (context, controller, focusNode, onFieldSubmitted) {
-                          // ถ้า Controller ว่าง แต่ใน Model มีค่า ให้ใส่ค่ากลับเข้าไป (ป้องกันค่าหายตอน Scroll)
                           if (controller.text != detail.branchCode) {
-                            controller.text = detail.branchCode ?? '';
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted &&
+                                  controller.text != detail.branchCode) {
+                                controller.text = detail.branchCode ?? '';
+                              }
+                            });
                           }
                           return TextFormField(
                             controller: controller,
@@ -621,7 +648,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                           );
                         },
                       ),
-                      // แสดงชื่อสาขาใต้ Field
                       _buildUnderlineText((detail.branchName?.isEmpty ?? true)
                           ? '-'
                           : detail.branchName ?? '-'),
@@ -629,7 +655,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 4. Project (โครงการ)
+                // 4. Project
                 Expanded(
                   flex: 2,
                   child: Column(
@@ -661,9 +687,13 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         },
                         fieldViewBuilder:
                             (context, controller, focusNode, onFieldSubmitted) {
-                          // ถ้า Controller ว่าง แต่ใน Model มีค่า ให้ใส่ค่ากลับเข้าไป (ป้องกันค่าหายตอน Scroll)
                           if (controller.text != detail.projectCode) {
-                            controller.text = detail.projectCode ?? '';
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted &&
+                                  controller.text != detail.projectCode) {
+                                controller.text = detail.projectCode ?? '';
+                              }
+                            });
                           }
                           return TextFormField(
                             controller: controller,
@@ -677,7 +707,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                           );
                         },
                       ),
-                      // แสดงชื่อโครงการใต้ Field
                       _buildUnderlineText((detail.projectName?.isEmpty ?? true)
                           ? '-'
                           : detail.projectName ?? '-'),
@@ -685,16 +714,14 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 5. Debit (FC / LC)
+                // 5. Debit (FC)
                 Expanded(
                   flex: 2,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       TextFormField(
-                        initialValue: detail.debitFc == 0
-                            ? ''
-                            : detail.debitFc.toString(),
+                        controller: _debitCtrls[index],
                         decoration: InputDecoration(
                             labelStyle: TextStyle(color: Colors.grey[400]),
                             labelText:
@@ -703,16 +730,16 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         textAlign: TextAlign.right,
-                        // enabled: !_isReadOnly,
                         readOnly: _isReadOnly,
                         onChanged: (val) {
-                          setState(() {
-                            detail.debitFc = double.tryParse(val) ?? 0;
-                            _calculateTotals();
-                          });
+                          detail.debitFc = double.tryParse(val) ?? 0;
+                          if (detail.debitFc != 0 && detail.creditFc != 0) {
+                            detail.creditFc = 0;
+                            _creditCtrls[index].clear();
+                          }
+                          _calculateTotals();
                         },
                       ),
-                      // คำนวณ LC Real-time
                       if (_baseCurrency != _selectedCurrency?.currencyCode)
                         Padding(
                           padding: const EdgeInsets.only(top: 2, right: 4),
@@ -729,16 +756,14 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 6. Credit (FC / LC)
+                // 6. Credit (FC)
                 Expanded(
                   flex: 2,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       TextFormField(
-                        initialValue: detail.creditFc == 0
-                            ? ''
-                            : detail.creditFc.toString(),
+                        controller: _creditCtrls[index],
                         decoration: InputDecoration(
                             labelStyle: TextStyle(color: Colors.grey[400]),
                             labelText:
@@ -747,16 +772,16 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         textAlign: TextAlign.right,
-                        // enabled: !_isReadOnly,
                         readOnly: _isReadOnly,
                         onChanged: (val) {
-                          setState(() {
-                            detail.creditFc = double.tryParse(val) ?? 0;
-                            _calculateTotals();
-                          });
+                          detail.creditFc = double.tryParse(val) ?? 0;
+                          if (detail.creditFc != 0 && detail.debitFc != 0) {
+                            detail.debitFc = 0;
+                            _debitCtrls[index].clear();
+                          }
+                          _calculateTotals();
                         },
                       ),
-                      // คำนวณ LC Real-time
                       if (_baseCurrency != _selectedCurrency?.currencyCode)
                         Padding(
                           padding: const EdgeInsets.only(top: 2, right: 4),
@@ -773,61 +798,43 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                // 7. Description
                 Expanded(
                   flex: 5,
                   child: TextFormField(
-                    initialValue: detail.description,
+                    controller: _descCtrls[index],
                     decoration: InputDecoration(
                       labelStyle: TextStyle(color: Colors.grey[400]),
                       labelText: 'รายละเอียด (Description)',
                       isDense: true,
-                      border:
-                          const OutlineInputBorder(), // ใส่กรอบให้ดูชัดขึ้นว่าเป็นคนละส่วน
+                      border: const OutlineInputBorder(),
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 12),
                     ),
-                    // enabled: !_isReadOnly,
                     readOnly: _isReadOnly,
                     onChanged: (val) {
                       detail.description = val;
-                      // ไม่ต้อง setState ใหญ่ แค่อัปเดตค่าในตัวแปร
                     },
                   ),
                 ),
 
-                // ปุ่มลบรายการ (แสดงเฉพาะตอนแก้ไข)
+                // Delete button
                 if (!_isReadOnly)
                   IconButton(
                     icon: const Icon(Icons.remove_circle, color: Colors.red),
                     onPressed: () {
-                      setState(() {
-                        _details.removeAt(index);
-                        _calculateTotals();
-                      });
+                      _debitCtrls[index].dispose();
+                      _creditCtrls[index].dispose();
+                      _descCtrls[index].dispose();
+                      _debitCtrls.removeAt(index);
+                      _creditCtrls.removeAt(index);
+                      _descCtrls.removeAt(index);
+                      _details.removeAt(index);
+                      _calculateTotals();
                     },
                   ),
               ],
             ),
-
-            // // --- บรรทัดที่ 2: รายละเอียด (Description) ---
-            // const SizedBox(height: 12), // เว้นระยะห่างบรรทัด
-            // TextFormField(
-            //   initialValue: detail.description,
-            //   decoration: InputDecoration(
-            //     labelStyle: TextStyle(color: Colors.grey[400]),
-            //     labelText: 'รายละเอียด (Description)',
-            //     isDense: true,
-            //     border:
-            //         const OutlineInputBorder(), // ใส่กรอบให้ดูชัดขึ้นว่าเป็นคนละส่วน
-            //     contentPadding:
-            //         const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            //   ),
-            //   enabled: !_isReadOnly,
-            //   onChanged: (val) {
-            //     detail.description = val;
-            //     // ไม่ต้อง setState ใหญ่ แค่อัปเดตค่าในตัวแปร
-            //   },
-            // ),
           ],
         ),
       ),
@@ -836,8 +843,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // ถ้าไม่ได้เลือกรายการและไม่ใช่โหมดเพิ่ม (กรณี Tab นี้ถูกเปิดแต่แรก)
-    // หรือกำลังโหลด
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
     return Form(
@@ -851,11 +856,10 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
               padding: const EdgeInsets.all(8),
               child: Column(
                 children: [
-                  // Row 1: DocType, DocNo, DocDate
+                  // Row 1: DocType, DocNo, DocDate, RefDocType, RefDocNo, RefDocDate
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Doc Type
                       Expanded(
                         flex: 4,
                         child: DropdownButtonFormField<ModuleDocument>(
@@ -889,7 +893,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Doc No
                       Expanded(
                         flex: 3,
                         child: TextFormField(
@@ -908,7 +911,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Doc Date
                       Expanded(
                         flex: 2,
                         child: InkWell(
@@ -951,7 +953,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // 2. Reference Doc No (Text)
                       Expanded(
                         flex: 3,
                         child: TextFormField(
@@ -963,12 +964,10 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                           ),
                           readOnly: _isReadOnly,
                           onSaved: (v) => _header.refDocNo = v,
-                          onChanged: (v) =>
-                              _header.refDocNo = v, // Update ทันที
+                          onChanged: (v) => _header.refDocNo = v,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // 3. Reference Doc Date (Date Picker)
                       Expanded(
                         flex: 2,
                         child: InkWell(
@@ -976,7 +975,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                             if (_isReadOnly) return;
                             final picked = await showDatePicker(
                               context: context,
-                              initialDate: _header.refDocDate ?? DateTime.now(),
+                              initialDate:
+                                  _header.refDocDate ?? DateTime.now(),
                               firstDate: DateTime(2000),
                               lastDate: DateTime(2100),
                             );
@@ -1002,95 +1002,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // --- New Section: Reference Document Info ---
-                  // Container(
-                  //   padding: const EdgeInsets.all(8),
-                  //   decoration: BoxDecoration(
-                  //     color: Colors.grey[50],
-                  //     border: Border.all(color: Colors.grey[300]!),
-                  //     borderRadius: BorderRadius.circular(4),
-                  //   ),
-                  //   child: Column(
-                  //     crossAxisAlignment: CrossAxisAlignment.start,
-                  //     children: [
-                  //       const Text('เอกสารอ้างอิง (Reference Document)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  //       const SizedBox(height: 8),
-                  //       Row(
-                  //         children: [
-                  //           // 1. Reference Doc Type (Dropdown)
-                  //           Expanded(
-                  //             flex: 2,
-                  //             child: DropdownButtonFormField<ModuleDocument>(
-                  //               value: _selectedRefDocType,
-                  //               items: _allDocTypes.map((e) => DropdownMenuItem(
-                  //                 value: e,
-                  //                 child: Text('${e.docCode} ${e.docNameThai}', overflow: TextOverflow.ellipsis)
-                  //               )).toList(),
-                  //               decoration: const InputDecoration(
-                  //                 labelText: 'ประเภทเอกสารอ้างอิง',
-                  //                 border: OutlineInputBorder(),
-                  //                 isDense: true,
-                  //               ),
-                  //               onChanged: _isReadOnly ? null : (val) {
-                  //                 setState(() {
-                  //                   _selectedRefDocType = val;
-                  //                   _header.refDocId = val?.id;
-                  //                 });
-                  //               },
-                  //             ),
-                  //           ),
-                  //           const SizedBox(width: 8),
-                  //           // 2. Reference Doc No (Text)
-                  //           Expanded(
-                  //             flex: 2,
-                  //             child: TextFormField(
-                  //               initialValue: _header.refDocNo,
-                  //               decoration: const InputDecoration(
-                  //                 labelText: 'เลขที่เอกสารอ้างอิง',
-                  //                 border: OutlineInputBorder(),
-                  //                 isDense: true,
-                  //               ),
-                  //               readOnly: _isReadOnly,
-                  //               onSaved: (v) => _header.refDocNo = v,
-                  //               onChanged: (v) => _header.refDocNo = v, // Update ทันที
-                  //             ),
-                  //           ),
-                  //           const SizedBox(width: 8),
-                  //           // 3. Reference Doc Date (Date Picker)
-                  //           Expanded(
-                  //             flex: 1,
-                  //             child: InkWell(
-                  //               onTap: () async {
-                  //                   if (_isReadOnly) return;
-                  //                   final picked = await showDatePicker(
-                  //                     context: context,
-                  //                     initialDate: _header.refDocDate ?? DateTime.now(),
-                  //                     firstDate: DateTime(2000),
-                  //                     lastDate: DateTime(2100),
-                  //                   );
-                  //                   if (picked != null) {
-                  //                     setState(() => _header.refDocDate = picked);
-                  //                   }
-                  //               },
-                  //               child: InputDecorator(
-                  //                 decoration: const InputDecoration(
-                  //                   labelText: 'วันที่เอกสารอ้างอิง',
-                  //                   border: OutlineInputBorder(),
-                  //                   isDense: true,
-                  //                 ),
-                  //                 child: Text(
-                  //                   _header.refDocDate == null
-                  //                     ? '-'
-                  //                     : DateFormat('dd/MM/yyyy').format(_header.refDocDate!),
-                  //                 ),
-                  //               ),
-                  //             ),
-                  //           ),
-                  //         ],
-                  //       ),
-                  //     ],
-                  //   ),
-                  // ),
                   // Row 2: Description, Currency, Exchange Rate
                   Row(
                     children: [
@@ -1109,7 +1020,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Currency Dropdown
                       Expanded(
                         flex: 2,
                         child: DropdownButtonFormField<Currency>(
@@ -1127,7 +1037,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Exchange Rate
                       Expanded(
                         flex: 3,
                         child: TextFormField(
@@ -1142,8 +1051,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
                           readOnly: _isReadOnly ||
-                              (_selectedCurrency?.baseCurrencyFlag ??
-                                  true), // Readonly if Base Currency
+                              (_selectedCurrency?.baseCurrencyFlag ?? true),
                           onChanged: _onExchangeRateChanged,
                         ),
                       ),
@@ -1169,7 +1077,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             ),
           ),
 
-          // --- Add Button (Footer) ---
+          // --- Add Row Button ---
           if (!_isReadOnly)
             Container(
               width: double.infinity,
@@ -1180,23 +1088,13 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
               ),
             ),
 
-          // --- Footer Totals & Actions ---
+          // --- Footer: Totals & Actions ---
           Container(
             padding: const EdgeInsets.all(16),
             color: Colors.deepOrange[50],
             child: Row(
-              // mainAxisAlignment: MainAxisAlignment.spaceBetween,
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
-                // Column(
-                //   crossAxisAlignment: CrossAxisAlignment.start,
-                //   children: [
-                //     Text(
-                //         'รวมเดบิต : ${NumberFormat("#,###,###,##0.00").format(_header.totalDebitFc)} $_baseCurrency  |  ${NumberFormat("#,###,###,##0.00").format(_header.totalDebitLc)} ${_selectedCurrency?.currencyCode ?? ''}',
-                //         style: const TextStyle(fontWeight: FontWeight.bold)),
-                //     Text(
-                //         'รวมเครดิต : ${NumberFormat("#,###,###,##0.00").format(_header.totalCreditFc)} $_baseCurrency  |  ${NumberFormat("#,###,###,##0.00").format(_header.totalCreditLc)} ${_selectedCurrency?.currencyCode ?? ''}',
-                //         style: const TextStyle(fontWeight: FontWeight.bold)),
                 Expanded(
                   flex: 9,
                   child: Text(
@@ -1229,20 +1127,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                               fontWeight: FontWeight.bold)),
                       if (_baseCurrency != _selectedCurrency?.currencyCode)
                         const Divider(),
-                      // TextFormField(
-                      //   style: const TextStyle(fontWeight: FontWeight.bold),
-                      //   initialValue: _header.totalDebitFc == 0
-                      //       ? ''
-                      //       : NumberFormat("##,###,###,##0.00").format(_header.totalDebitFc),
-                      //   decoration: InputDecoration(
-                      //       labelStyle: TextStyle(color: Colors.grey[400]),
-                      //       labelText: 'เดบิต ($_baseCurrency)',
-                      //       isDense: true),
-                      //   keyboardType: const TextInputType.numberWithOptions(
-                      //       decimal: true),
-                      //   textAlign: TextAlign.right,
-                      //   enabled: false,
-                      // ),
                       if (_baseCurrency != _selectedCurrency?.currencyCode)
                         Padding(
                           padding: const EdgeInsets.only(top: 0, right: 1),
@@ -1276,20 +1160,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                               fontWeight: FontWeight.bold)),
                       if (_baseCurrency != _selectedCurrency?.currencyCode)
                         const Divider(),
-                      // TextFormField(
-                      //   style: const TextStyle(fontWeight: FontWeight.bold),
-                      //   initialValue: _header.totalCreditFc == 0
-                      //       ? ''
-                      //       : NumberFormat("##,###,###,##0.00").format(_header.totalCreditFc),
-                      //   decoration: InputDecoration(
-                      //       labelStyle: TextStyle(color: Colors.grey[400]),
-                      //       labelText: 'เครดิต ($_baseCurrency)',
-                      //       isDense: true),
-                      //   keyboardType: const TextInputType.numberWithOptions(
-                      //       decimal: true),
-                      //   textAlign: TextAlign.right,
-                      //   enabled: false,
-                      // ),
                       if (_baseCurrency != _selectedCurrency?.currencyCode)
                         Padding(
                           padding: const EdgeInsets.only(top: 0, right: 1),
@@ -1305,44 +1175,33 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     ],
                   ),
                 ),
-                //   ],
-                // ),
                 const SizedBox(width: 8),
                 if (widget.viewOnly)
                   Expanded(
                       flex: 5,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.end,
-                        // crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           OutlinedButton(
                               onPressed: widget.onCancel,
                               child: const Text('ยกเลิก')),
-                          _header.status == 'Posted'
-                              ? const SizedBox(width: 8)
-                              : const SizedBox.shrink(),
-                          // Show Reverse button if Posted
-                          if (_header.status == 'Posted')
+                          if (_header.status == 'Posted') ...[
+                            const SizedBox(width: 8),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.red),
-                              onPressed: () async {
-                                // Call Reverse API
-                                await _service.reverseEntry(_header.id);
-                                widget.onSaveSuccess(); // Refresh List
-                              },
+                              onPressed: _reverse,
                               child: const Text('ถอย',
                                   style: TextStyle(color: Colors.white)),
                             ),
+                          ],
                         ],
                       ))
-                else if (_header.status ==
-                    'Draft') // Show Save/Post buttons if Draft
+                else if (_header.status == 'Draft')
                   Expanded(
                       flex: 5,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.end,
-                        // crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           OutlinedButton(
                               onPressed: widget.onCancel,
@@ -1365,7 +1224,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                       flex: 5,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.end,
-                        // crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           OutlinedButton(
                               onPressed: widget.onCancel,

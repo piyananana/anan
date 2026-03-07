@@ -50,7 +50,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 1, vsync: this);
     _selectedHead = widget.selectedHead;
 
     _fiscalYearCodeController =
@@ -161,263 +161,256 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.mode == Mode.view // _isViewing
-                  ? 'ดูข้อมูล'
-                  : widget.mode == Mode.edit // _isEditing
-                      ? 'แก้ไข'
-                      : 'เพิ่มข้อมูลใหม่',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 20),
-            Row(
+    return Column(
+      children: [
+        // ส่วน Form (scroll ได้)
+        SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _fiscalYearCodeController,
-                    enabled: widget.mode == Mode.add,
-                    decoration: const InputDecoration(
-                      labelText: 'รหัสปีบัญชี เช่น Y2568, FY2023, ...',
-                      border: OutlineInputBorder(),
-                      isDense: true
-                    ),
-                    maxLength: 10,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'กรุณาป้อนรหัสปีบัญชี';
-                      }
-                      return null;
-                    },
-                  ),
+                Text(
+                  widget.mode == Mode.view
+                      ? 'ดูข้อมูล'
+                      : widget.mode == Mode.edit
+                          ? 'แก้ไข'
+                          : 'เพิ่มข้อมูลใหม่',
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: _descriptionController,
-                    decoration: const InputDecoration(
-                      labelText: 'อธิบาย',
-                      border: OutlineInputBorder(),
-                      isDense: true
-                    ),
-                    maxLength: 255,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'กรุณาป้อนคำอธิบาย';
-                      }
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ListTile(
-                    dense: true,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4.0),
-                      side: BorderSide(
-                        color: Colors.grey.shade700,
+                const SizedBox(height: 20),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _fiscalYearCodeController,
+                        enabled: widget.mode == Mode.add,
+                        decoration: const InputDecoration(
+                          labelText: 'ปีพ.ศ. หรือ ค.ศ.',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        // maxLength: 10,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          // fontSize: 12,
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'กรุณาป้อนรหัสปีบัญชี';
+                          }
+                          return null;
+                        },
                       ),
                     ),
-                    title: Text('สถานะ: ${_isActive ? 'เปิด' : 'ปิด'}'),
-                    trailing: Switch(
-                      value: _isActive,
-                      onChanged: (bool value) {
-                        setState(() {
-                          _isActive = value;
-                        });
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'อธิบาย',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        // maxLength: 255,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'กรุณาป้อนคำอธิบาย';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ListTile(
+                        dense: true,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4.0),
+                          side: BorderSide(color: Colors.grey.shade700),
+                        ),
+                        title: Text('สถานะ: ${_isActive ? 'เปิด' : 'ปิด'}'),
+                        trailing: Switch(
+                          value: _isActive,
+                          onChanged: (bool value) {
+                            setState(() {
+                              _isActive = value;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (widget.mode == Mode.add || widget.selectedHead == null)
+                const SizedBox(height: 8),
+                if (widget.mode == Mode.add || widget.selectedHead == null)
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                    child: ListTile(
+                      dense: true,
+                      enabled: widget.mode == Mode.add || widget.selectedHead == null,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4.0),
+                        side: BorderSide(
+                          color: widget.mode == Mode.view
+                              ? Colors.grey.shade500
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                      title: Text('วันที่เริ่มต้น: ${_dateFormat.format(_yearStartDate)}'),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: widget.selectedHead == null
+                          ? () async {
+                              final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: _yearStartDate,
+                                  firstDate: DateTime(2000),
+                                  lastDate: DateTime(2100));
+                              if (picked != null) {
+                                setState(() {
+                                  _yearStartDate = picked;
+                                  if (widget.mode == Mode.add) {
+                                    _yearEndDate = DateTime(picked.year + 1,
+                                            picked.month, picked.day)
+                                        .subtract(const Duration(days: 1));
+                                    _numOfPeriodsController.text = '12';
+                                  }
+                                });
+                              }
+                            }
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ListTile(
+                      dense: true,
+                      enabled: widget.mode == Mode.add || widget.selectedHead == null,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4.0),
+                        side: BorderSide(
+                          color: widget.mode == Mode.view
+                              ? Colors.grey.shade500
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                      title: Text('วันที่สิ้นสุด: ${_dateFormat.format(_yearEndDate)}'),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: widget.selectedHead == null
+                          ? () async {
+                              final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: _yearEndDate,
+                                  firstDate: DateTime(2000),
+                                  lastDate: DateTime(2100));
+                              if (picked != null) {
+                                setState(() => _yearEndDate = picked);
+                              }
+                            }
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _numOfPeriodsController,
+                      enabled: widget.selectedHead == null,
+                      textAlign: TextAlign.right,
+                      decoration: const InputDecoration(
+                        labelText: 'จำนวนงวดเดือนบัญชี (12, 13, ...)',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(),
+                      validator: (value) {
+                        if (value == null ||
+                            int.tryParse(value) == null ||
+                            int.tryParse(value)! <= 0) {
+                          return 'โปรดระบุจำนวนงวดเดือนที่ถูกต้อง';
+                        }
+                        return null;
                       },
                     ),
                   ),
+                ]),
+                if (widget.mode == Mode.add || widget.selectedHead == null)
+                const SizedBox(height: 8),
+                if (widget.mode == Mode.add || widget.selectedHead == null)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8.0),
+                  child: Text(
+                      'หมายเหตุ: วันที่เริ่มต้น/สิ้นสุด และจำนวนงวดเดือนใช้สร้างงวดครั้งแรกเท่านั้น โปรดตรวจสอบให้แน่ใจก่อนบันทึก',
+                      style: TextStyle(fontSize: 12, color: Colors.red)),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(
-                child: ListTile(
-                  dense: true,
-                  enabled:
-                      widget.mode == Mode.add || widget.selectedHead == null,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4.0),
-                    side: BorderSide(
-                      color: widget.mode == Mode.view
-                          ? Colors.grey.shade500
-                          : Colors.grey.shade700,
-                    ),
-                  ),
-                  title: Text(
-                      // 'วันที่เริ่มต้น: ${_dateFormat.format(_yearStartDate.toLocal())}'),
-                      'วันที่เริ่มต้น: ${_dateFormat.format(_yearStartDate)}'),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: widget.selectedHead == null
-                      ? () async {
-                          final picked = await showDatePicker(
-                              context: context,
-                              initialDate: _yearStartDate,
-                              firstDate: DateTime(2000),
-                              lastDate: DateTime(2100));
-                          if (picked != null) {
-                            setState(() {
-                              _yearStartDate = picked;
-                              if (widget.mode == Mode.add) {
-                                // หากเป็นการเพิ่มปีบัญชีใหม่ ให้ตั้งวันที่สิ้นสุดอัตโนมัติ
-                                // _yearEndDate = DateTime(
-                                //     picked.year + 1, picked.month, picked.day).toLocal();
-                                // _yearEndDate = _yearEndDate.subtract(const Duration(days: 1)).toLocal();
-                                _yearEndDate = DateTime(picked.year + 1,
-                                        picked.month, picked.day)
-                                    .subtract(const Duration(days: 1));
-                                _numOfPeriodsController.text = '12';
-                              }
-                            });
-                          }
-                        }
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ListTile(
-                  dense: true,
-                  enabled:
-                      widget.mode == Mode.add || widget.selectedHead == null,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4.0),
-                    side: BorderSide(
-                      color: widget.mode == Mode.view
-                          ? Colors.grey.shade500
-                          : Colors.grey.shade700,
-                    ),
-                  ),
-                  title: Text(
-                      // 'วันที่สิ้นสุด: ${_dateFormat.format(_yearEndDate.toLocal())}'),
-                      'วันที่สิ้นสุด: ${_dateFormat.format(_yearEndDate)}'),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: widget.selectedHead == null
-                      ? () async {
-                          final picked = await showDatePicker(
-                              context: context,
-                              initialDate: _yearEndDate,
-                              firstDate: DateTime(2000),
-                              lastDate: DateTime(2100));
-                          if (picked != null) {
-                            setState(() => _yearEndDate = picked);
-                          }
-                        }
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  controller: _numOfPeriodsController,
-                  enabled: widget.selectedHead == null,
-                  textAlign: TextAlign.right,
-                  decoration: const InputDecoration(
-                    labelText: 'จำนวนงวดเดือนบัญชี (12, 13, ...)',
-                    border: OutlineInputBorder(),
-                    isDense: true
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(),
-                  validator: (value) {
-                    if (value == null ||
-                        int.tryParse(value) == null ||
-                        int.tryParse(value)! <= 0) {
-                      return 'โปรดระบุจำนวนงวดเดือนที่ถูกต้อง';
-                    }
-                    return null;
-                  },
-                ),
-              ),
-            ]),
-            const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.only(top: 8.0),
-              child: Text(
-                  'หมายเหตุ: วันที่เริ่มต้น/สิ้นสุด และจำนวนงวดเดือนบัญชีจะแก้ไขไม่ได้หลังจากสร้างครั้งแรก โปรดตรวจสอบให้แน่ใจก่อนบันทึก',
-                  style: TextStyle(fontSize: 12, color: Colors.red)),
-            ),
-            const SizedBox(height: 16),
-            // --- Buttons ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                widget.mode == Mode.view
-                    ? Container() // ไม่แสดงปุ่มเพิ่ม/บันทึก หากเป็นโหมดดูอย่างเดียว
-                    : Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _isSaving ? null : _submitForm,
-                          icon: _isSaving
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white))
-                              : const Icon(Icons.save),
-                          label: Text(_isSaving
-                              ? 'กำลังบันทึก...'
-                              : widget.mode == Mode.edit
-                                  ? 'บันทึก'
-                                  : 'เพิ่ม'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade700,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                const SizedBox(height: 16),
+                // --- Buttons ---
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    widget.mode == Mode.view
+                        ? Container()
+                        : Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _isSaving ? null : _submitForm,
+                              icon: _isSaving
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white))
+                                  : const Icon(Icons.save),
+                              label: Text(_isSaving
+                                  ? 'กำลังบันทึก...'
+                                  : widget.mode == Mode.edit
+                                      ? 'บันทึก'
+                                      : 'เพิ่ม'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade700,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
                           ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: widget.onCancel,
+                        icon: const Icon(Icons.cancel),
+                        label: const Text('ยกเลิก'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade600,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: widget.onCancel,
-                    // onPressed: () {},
-                    icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey.shade600,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
-            // Detail Tabs
-            const Divider(),
-            TabBar(
-              controller: _tabController,
-              tabAlignment: TabAlignment.start,
-              tabs: const [
-                Tab(text: 'รายละเอียดงวดเดือนบัญชี'),
-                // add more tabs here if needed
-              ],
-            ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildDetailList(), // Tab 1: รายละเอียดงวดเดือนบัญชี
-                  // Add more tab views here if needed
-                ],
-              ),
-            ),
+          ),
+        ),
+        // ส่วน Tab (Expanded ได้เพราะอยู่ใน Column โดยตรง)
+        const Divider(height: 1),
+        TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'รายละเอียดงวดเดือนบัญชี'),
           ],
         ),
-      ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildDetailList(),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -427,13 +420,15 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     return Column(
       children: [
         const SizedBox(height: 8),
-        const Divider(),
+        // const Divider(),
         Row(
           children: [
             Expanded(
               child: Text('จำนวนงวดเดือนบัญชี = ${_selectedDetail.length} งวด',
                   style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold)),
+                      fontWeight: FontWeight.bold,
+                      // fontSize: 16, 
+                      )),
             ),
             if (widget.mode != Mode.view)
               ElevatedButton.icon(
@@ -442,14 +437,17 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                   label: const Text('เพิ่มงวดเดือนพิเศษ')),
           ],
         ),
-        const Divider(),
+        // const Divider(),
         const SizedBox(height: 8),
-        Row(children: [
+        Expanded(
+          child: SingleChildScrollView(
+            child: Row(children: [
           Expanded(
             child: DataTable(
               border: TableBorder.all(width: 1, color: Colors.grey.shade500),
               columnSpacing: 10,
-              dataRowMinHeight: 40,
+              dataRowMinHeight: 72,
+              dataRowMaxHeight: 72,
               columns: const [
                 DataColumn(
                     label: Expanded(
@@ -503,7 +501,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                 ))),
               ],
               rows: _selectedDetail.map((period) {
-                final bool isClosed = period.glStatus == 'HARD_CLOSE';
+                final bool isClosed = period.glStatus == 'CLOSED';
                 return DataRow(cells: [
                   DataCell(
                     Row(
@@ -562,7 +560,8 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
               }).toList(),
             ),
           ),
-        ]),
+        ])),
+        ),
       ],
     );
   }
@@ -764,45 +763,90 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
   }
 
   Widget _buildStatusChip(String status, String module, PostingPeriod period) {
-    Color color;
-    String nextStatus;
-
+    Color chipColor;
     switch (status) {
       case 'OPEN':
-        color = Colors.green;
-        nextStatus = 'SOFT_CLOSE';
+        chipColor = Colors.green;
         break;
-      case 'SOFT_CLOSE':
-        color = Colors.orange;
-        nextStatus = 'HARD_CLOSE';
+      case 'LOCKED':
+        chipColor = Colors.orange;
         break;
-      case 'HARD_CLOSE':
-        color = Colors.red;
-        nextStatus = 'HARD_CLOSE'; // ไม่ควรเปลี่ยนกลับได้ง่ายๆ
+      case 'CLOSED':
+        chipColor = Colors.red;
         break;
       default:
-        color = Colors.grey;
-        nextStatus = 'OPEN';
+        chipColor = Colors.grey;
     }
-    if (widget.mode == Mode.view) {
-      color = Colors.grey;
+    if (widget.mode == Mode.view) chipColor = Colors.grey;
+
+    Widget? actionButton;
+    if (widget.mode != Mode.view) {
+      if (status == 'OPEN') {
+        // ปุ่มกลมสีแดง → HARD CLOSE
+        actionButton = Tooltip(
+          message: 'ปิด',
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: ElevatedButton(
+              onPressed: () => _confirmDirectClose(period, module),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                shape: const CircleBorder(),
+                padding: EdgeInsets.zero,
+              ),
+              child: const Icon(Icons.lock, size: 12, color: Colors.white),
+            ),
+          ),
+        );
+      } else if (status == 'LOCKED') {
+        // ปุ่มกลมสีเขียว → เปลี่ยนกลับเป็น OPEN
+        actionButton = Tooltip(
+          message: 'ปลดล็อค',
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: ElevatedButton(
+              onPressed: () => _updateStatus(period, module, 'OPEN'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                shape: const CircleBorder(),
+                padding: EdgeInsets.zero,
+              ),
+              child: const Icon(Icons.lock_open, size: 12, color: Colors.white),
+            ),
+          ),
+        );
+      }
     }
 
-    return GestureDetector(
-      onTap: widget.mode == Mode.view
-          ? null
-          : status != 'HARD_CLOSE'
-              ? () => _updateStatus(period, module, nextStatus)
-              : null,
-      child: Chip(
-        label: Text(
-          status.replaceAll('_', ' '),
-          style: const TextStyle(color: Colors.white, fontSize: 10),
+    // Chip คลิกได้: OPEN→SOFT_CLOSE (มี dialog), SOFT_CLOSE→HARD_CLOSE (มี dialog + ตรวจ Draft)
+    VoidCallback? chipOnTap;
+    if (widget.mode != Mode.view) {
+      if (status == 'OPEN') {
+        chipOnTap = () => _confirmSoftClose(period, module);
+      } else if (status == 'LOCKED') {
+        chipOnTap = () => _confirmHardClose(period, module);
+      }
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: chipOnTap,
+          child: Chip(
+            label: Text(
+              status.replaceAll('_', ' '),
+              style: const TextStyle(color: Colors.white, fontSize: 10),
+            ),
+            backgroundColor: chipColor,
+            padding: const EdgeInsets.all(2),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
         ),
-        backgroundColor: color,
-        padding: const EdgeInsets.all(2),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
+        if (actionButton != null) actionButton,
+      ],
     );
   }
 
@@ -849,6 +893,90 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     }
   }
 
+  Future<void> _confirmDirectClose(PostingPeriod period, String module) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ยืนยันการเปลี่ยนสถานะ'),
+        content: const Text(
+          'การเปลี่ยนสถานะ OPEN เป็น CLOSED '
+          'เพื่อป้องกันการแก้ไข/เพิ่มเติมรายการทุกกรณีของงวดและโมดูลนี้ '
+          'จะไม่สามารถย้อนกลับมาได้อีก',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('ยืนยัน', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      _updateStatus(period, module, 'CLOSED');
+    }
+  }
+
+  Future<void> _confirmSoftClose(PostingPeriod period, String module) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ยืนยันการเปลี่ยนสถานะ'),
+        content: const Text(
+          'การเปลี่ยนสถานะ OPEN เป็น LOCKED เพื่อการตรวจสอบข้อมูล '
+          'จะทำให้เพิ่มเติมรายการของงวดและโมดูลนี้ไม่ได้ '
+          'แต่ยังสามารถย้อนสถานะกลับมา OPEN ได้',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('ยืนยัน'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      _updateStatus(period, module, 'LOCKED');
+    }
+  }
+
+  Future<void> _confirmHardClose(PostingPeriod period, String module) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ยืนยันการเปลี่ยนสถานะ'),
+        content: const Text(
+          'การเปลี่ยนสถานะ LOCKED เป็น CLOSED '
+          'เพื่อป้องกันการแก้ไข/เพิ่มเติมรายการทุกกรณีของงวดและโมดูลนี้ '
+          'จะไม่สามารถย้อนกลับมาได้อีก',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child:
+                const Text('ยืนยัน', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      _updateStatus(period, module, 'CLOSED');
+    }
+  }
+
   void _updateStatus(
       PostingPeriod period, String module, String newStatus) async {
     try {
@@ -863,11 +991,10 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
       );
       widget.onDetailChange();
     } catch (e) {
-      // widget.onMessage('อัปเดตสถานะไม่สำเร็จ: ${e.toString()}',);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('อัปเดตสถานะไม่สำเร็จ: ${e.toString()}'),
-          backgroundColor: Colors.green,
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
         ),
       );
     }
