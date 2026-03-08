@@ -93,7 +93,7 @@ class _GlBeginningBalanceScreenState extends State<GlBeginningBalanceScreen>
       _currencies = await _currencyService.fetchActiveRows();
 
       // โหลด Fiscal Years
-      _fiscalYears = await periodService.fetchFiscalYears();
+      _fiscalYears = await periodService.fetchActiveFiscalYears();
       if (_fiscalYears.isNotEmpty) {
         final fy = _fiscalYears.firstWhere((fy) => fy.isActive == true,
             orElse: () => _fiscalYears[_fiscalYears.length - 1]);
@@ -146,7 +146,7 @@ class _GlBeginningBalanceScreenState extends State<GlBeginningBalanceScreen>
 
       // // 2. โหลด Fiscal Years & Posting Periods
       // final periodService = Provider.of<PeriodService>(context, listen: false);
-      // _fiscalYears = await periodService.fetchFiscalYears();
+      // _fiscalYears = await periodService.fetchActiveFiscalYears();
       // if (_fiscalYears.isNotEmpty) {
       //   final fy = _fiscalYears.firstWhere((fy) => fy.isActive == true, orElse: () => _fiscalYears[_fiscalYears.length - 1]);
       //   _fiscalYearId = fy.id;

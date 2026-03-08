@@ -11,7 +11,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/account.dart';
 import '../models/gl_entry.dart';
+import '../models/period.dart';
 import '../services/gl_entry_service.dart';
+import '../services/period_service.dart';
 import '../../sa/models/module_document.dart';
 
 class GlEntryDetailWidget extends StatefulWidget {
@@ -40,7 +42,11 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   final ProjectService _projectService = ProjectService();
   final BranchService _branchService = BranchService();
   final CurrencyService _currencyService = CurrencyService();
+  final PeriodService _periodService = PeriodService();
   bool _isLoading = false;
+
+  // งวดบัญชีที่ gl_status = OPEN
+  List<PostingPeriod> _openPeriods = [];
 
   // Data
   GlEntryHeader _header = GlEntryHeader(
@@ -98,6 +104,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
         _branchService.fetchRows(),
         _currencyService.fetchActiveRows(),
         _service.fetchRows(),
+        _periodService.fetchOpenGlPeriods(),
       ]);
       _allowedDocTypes = results[0] as List<ModuleDocument>;
       _accounts = results[1] as List<Account>;
@@ -106,6 +113,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       _branches = results[4] as List<Branch>;
       _currencies = results[5] as List<Currency>;
       _allDocTypes = results[6] as List<ModuleDocument>;
+      _openPeriods = results[7] as List<PostingPeriod>;
       await _loadTransactionData();
     } catch (e) {
       if (mounted) {
@@ -170,7 +178,9 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             } catch (_) {}
           }
           _details = loadedDetails;
-          _isReadOnly = widget.viewOnly || _header.status != 'Draft';
+          _isReadOnly = widget.viewOnly ||
+              _header.status != 'Draft' ||
+              _header.refDocId != null;
 
           if (_allowedDocTypes.isNotEmpty) {
             try {
@@ -393,6 +403,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
 
   Future<void> _selectDate(BuildContext context, bool isDocDate) async {
     if (_isReadOnly) return;
+    final messenger = ScaffoldMessenger.of(context);
     final picked = await showDatePicker(
       context: context,
       initialDate: isDocDate ? _header.docDate : _header.postingDate,
@@ -400,6 +411,21 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       lastDate: DateTime(2100),
     );
     if (picked != null) {
+      if (isDocDate) {
+        // ตรวจสอบว่าวันที่เอกสารอยู่ในงวดบัญชีที่ OPEN
+        final pickedDay = DateTime(picked.year, picked.month, picked.day);
+        final inOpenPeriod = _openPeriods.any((p) =>
+            !pickedDay.isBefore(p.periodStartDate) &&
+            !pickedDay.isAfter(p.periodEndDate));
+        if (!inOpenPeriod) {
+          messenger.showSnackBar(const SnackBar(
+            content: Text(
+                'วันที่เอกสารต้องอยู่ในงวดบัญชีที่เปิด (GL Status = OPEN)'),
+            backgroundColor: Colors.red,
+          ));
+          return;
+        }
+      }
       setState(() {
         if (isDocDate) {
           _header.docDate = picked;

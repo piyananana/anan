@@ -76,7 +76,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
     _company = await _companyService.fetchCompany();
 
     try {
-      _fiscalYears = await _periodService.fetchFiscalYears();
+      _fiscalYears = await _periodService.fetchActiveFiscalYears();
       if (_fiscalYears.isNotEmpty) {
         final now = DateTime.now();
         try {
@@ -115,7 +115,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 
   Future<void> _generateReport() async {
     if (_selectedYear == null) return;
-    setState(() => _isLoading = true);
+    setState(() { _isLoading = true; _reportData = []; });
     try {
       final data = await _reportService.getTrialBalance(
         fiscalYearId: _selectedYear!.id,
@@ -124,6 +124,15 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
         hideZero: _hideZero,
         showHeaderTotals: _showHeaderTotals,
       );
+
+      if (data.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ไม่พบข้อมูลในปีบัญชีที่เลือก')),
+          );
+        }
+        return;
+      }
 
       _calculateAccountLevels(data);
 
@@ -136,7 +145,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
             .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -986,7 +995,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 //     _company = await _companyService.fetchCompany();
 
 //     try {
-//       _fiscalYears = await _periodService.fetchFiscalYears();
+//       _fiscalYears = await _periodService.fetchActiveFiscalYears();
 //       if (_fiscalYears.isNotEmpty) {
 //         final now = DateTime.now();
 //         try {

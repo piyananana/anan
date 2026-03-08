@@ -9,6 +9,12 @@ class PeriodService {
   final String baseUrl = AppConfig.apiGl;
   final AuthService authService = AuthService();
 
+  // ดึงรายการปีบัญชีที่ is_active = true เท่านั้น (ใช้ใน dropdown transaction/report)
+  Future<List<FiscalYear>> fetchActiveFiscalYears() async {
+    final all = await fetchFiscalYears();
+    return all.where((fy) => fy.isActive).toList();
+  }
+
   // 1. ดึงรายการปีบัญชีทั้งหมด
   Future<List<FiscalYear>> fetchFiscalYears() async {
     try {
@@ -26,6 +32,25 @@ class PeriodService {
       }
     } catch (e) {
       throw Exception('Error fetching fiscal years: $e');
+    }
+  }
+
+  // ดึงงวดบัญชีที่ gl_status = 'OPEN' ทั้งหมด
+  Future<List<PostingPeriod>> fetchOpenGlPeriods() async {
+    try {
+      final headers = await authService.getAuthHeader();
+      final response = await http.get(
+        Uri.parse('$baseUrl/gl_posting_period/open'),
+        headers: headers,
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => PostingPeriod.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to load open GL periods: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching open GL periods: $e');
     }
   }
 
@@ -84,7 +109,7 @@ class PeriodService {
     }
   }
   
-  Future<PostingPeriod> updateHeaderRow(FiscalYear row) async {
+  Future<FiscalYear> updateHeaderRow(FiscalYear row) async {
     final body = {
       'description': row.description,
       'year_start_date': row.yearStartDate.toIso8601String().split('T')[0],
@@ -98,9 +123,9 @@ class PeriodService {
       headers: headers,
       body: json.encode(body),
     );
-    
+
     if (response.statusCode == 200) {
-      return PostingPeriod.fromJson(json.decode(response.body));
+      return FiscalYear.fromJson(json.decode(response.body));
     } else {
       throw Exception('Failed to update fiscal year: ${json.decode(response.body)['message']}');
     }

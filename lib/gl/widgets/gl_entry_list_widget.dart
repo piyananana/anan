@@ -66,7 +66,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   Future<void> _initialLoad() async {
     setState(() => _isLoading = true);
     try {
-      final fys = await _periodService.fetchFiscalYears();
+      final fys = await _periodService.fetchActiveFiscalYears();
       setState(() => _fiscalYears = fys);
 
       if (fys.isNotEmpty) {

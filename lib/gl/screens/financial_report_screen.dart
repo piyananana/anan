@@ -59,7 +59,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         _selectedReport = _reportMasters.first;
       }
 
-      _fiscalYears = await _periodService.fetchFiscalYears();
+      _fiscalYears = await _periodService.fetchActiveFiscalYears();
       if (_fiscalYears.isNotEmpty) {
         final now = DateTime.now();
         try {

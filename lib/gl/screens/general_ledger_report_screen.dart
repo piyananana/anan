@@ -81,7 +81,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
     _company = await _companyService.fetchCompany();
 
     try {
-      _fiscalYears = await _periodService.fetchFiscalYears();
+      _fiscalYears = await _periodService.fetchActiveFiscalYears();
       if (_fiscalYears.isNotEmpty) {
         final now = DateTime.now();
         try {
@@ -192,7 +192,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกปีบัญชี')));
        return;
     }
-    setState(() => _isLoading = true);
+    setState(() { _isLoading = true; _reportGenerated = false; });
 
     try {
       // 1. ดึงยอดยกมา (งวดยกยอด + งวดก่อนหน้าสะสม) จาก gl_balance_accum
@@ -206,11 +206,20 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         accountTo: _accountTo?.accountCode,
       );
 
+      if (_beginningBalances.isEmpty && _transactions.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ไม่พบข้อมูลในปีบัญชีที่เลือก')),
+          );
+        }
+        return;
+      }
+
       setState(() { _reportGenerated = true; });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

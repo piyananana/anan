@@ -721,10 +721,10 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         periodName: periodName,
                         periodStartDate: startDate,
                         periodEndDate: endDate,
-                        glStatus: period?.glStatus ?? 'OPEN',
-                        apStatus: period?.apStatus ?? 'OPEN',
-                        arStatus: period?.arStatus ?? 'OPEN',
-                        imStatus: period?.imStatus ?? 'OPEN',
+                        glStatus: period?.glStatus ?? 'LOCKED',
+                        apStatus: period?.apStatus ?? 'LOCKED',
+                        arStatus: period?.arStatus ?? 'LOCKED',
+                        imStatus: period?.imStatus ?? 'LOCKED',
                       );
 
                       try {
