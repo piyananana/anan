@@ -142,7 +142,7 @@ class PasswordPolicyService {
   Future<void> updatePasswordPolicy(PasswordPolicy policy) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
-      Uri.parse('$baseUrl/sa_password_policy/$policy'),
+      Uri.parse('$baseUrl/sa_password_policy/1'),
       headers: headers,
       body: json.encode(policy.toJson()),
     );

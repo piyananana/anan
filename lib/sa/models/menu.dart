@@ -20,12 +20,13 @@ import '../../cd/screens/zipcode_screen.dart';
 
 import '../../gl/screens/account_screen.dart';
 import '../../gl/screens/financial_report_builder_screen.dart';
-import '../../gl/screens/gl_beginning_balance_screen.dart';
 import '../../gl/screens/gl_entry_screen.dart';
 import '../../gl/screens/financial_report_screen.dart';
 import '../../gl/screens/general_ledger_report_screen.dart';
 import '../../gl/screens/period_screen.dart';
 import '../../gl/screens/trial_balance_report_screen.dart';
+import '../../gl/screens/year_end_closing_screen.dart';
+import '../../gl/screens/year_end_closing_config_screen.dart';
 
 class Menu {
   final int id;
@@ -79,7 +80,6 @@ class Menu {
     'AccountScreen': (context) => AccountScreen(
           onFieldsChanged: () {},
         ),
-    'GlBeginningBalanceScreen': (context) => const GlBeginningBalanceScreen(),
     'GlEntryScreen': (context) => const GlEntryScreen(),
     'FinancialReportScreen': (context) => const FinancialReportScreen(),
     'GeneralLedgerReportScreen': (context) => const GeneralLedgerReportScreen(),
@@ -88,6 +88,8 @@ class Menu {
         ),
     'TrialBalanceReportScreen': (context) => const TrialBalanceReportScreen(),
     'FinancialReportBuilderScreen': (context) => const FinancialReportBuilderScreen(),
+    'YearEndClosingScreen': (context) => const YearEndClosingScreen(),
+    'YearEndClosingConfigScreen': (context) => const YearEndClosingConfigScreen(),
     // 'PeriodScreen': (context) => const PeriodScreen(),
     // Add all your custom widgets here
     // 'YourCustomWidget1': (context) => const YourCustomWidget1(),

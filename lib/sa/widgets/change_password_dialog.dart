@@ -159,19 +159,9 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
           Navigator.of(context).pop(); // กลับไปหน้าเดิม
         }
       } catch (e) {
-        AlertDialog(
-          title: const Text('เปลี่ยนรหัสผ่านไม่สำเร็จ'),
-          content: Text('เกิดข้อผิดพลาดในการเปลี่ยนรหัสผ่าน: ${e.toString().replaceFirst('Exception: ', '')} '),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(), // ปิด dialog
-              child: const Text('ตกลง'),
-            ),
-          ],
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('เกิดข้อผิดพลาด: ${e.toString().replaceFirst('Exception: ', '')}')),
         );
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   SnackBar(content: Text('เกิดข้อผิดพลาด: ${e.toString().replaceFirst('Exception: ', '')}')),
-        // );
       }
     }
   }

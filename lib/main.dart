@@ -24,7 +24,6 @@ import 'cd/services/project_service.dart';
 import 'cd/services/zipcode_service.dart';
 
 import 'gl/services/account_service.dart';
-import 'gl/services/gl_beginning_balance_service.dart';
 import 'gl/services/gl_entry_service.dart';
 import 'gl/services/financial_report_service.dart';
 import 'gl/services/general_ledger_report_service.dart';
@@ -63,7 +62,6 @@ class MyApp extends StatelessWidget {
         Provider<ZipcodeService>(create: (_) => ZipcodeService()),
 
         Provider<AccountService>(create: (_) => AccountService()),
-        Provider<GlBeginningBalanceService>(create: (_) => GlBeginningBalanceService()),
         Provider<GlEntryService>(create: (_) => GlEntryService()),
         Provider<FinancialReportService>(create: (_) => FinancialReportService()),
         Provider<GeneralLedgerReportService>(create: (_) => GeneralLedgerReportService()),

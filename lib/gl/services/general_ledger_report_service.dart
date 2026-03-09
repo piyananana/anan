@@ -38,4 +38,24 @@ class GeneralLedgerReportService {
       throw Exception('Failed to load GL transactions: ${response.body}');
     }
   }
+
+  /// ยอดยกมา = สะสม gl_balance_accum ทุกงวดที่มี period_number < งวดที่เลือก
+  Future<List<Map<String, dynamic>>> fetchBeginningBalance({
+    required int fiscalYearId,
+    int? periodId,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final params = ['fiscal_year_id=$fiscalYearId'];
+    if (periodId != null) params.add('period_id=$periodId');
+    final response = await http.get(
+      Uri.parse('$baseUrl/gl_report_beginning_balance?${params.join('&')}'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    } else {
+      throw Exception('Failed to load beginning balance: ${response.body}');
+    }
+  }
 }

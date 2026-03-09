@@ -10,8 +10,6 @@ import 'package:intl/intl.dart';
 
 import '../../gl/models/period.dart';
 import '../../gl/services/period_service.dart';
-import '../../gl/models/gl_beginning_balance.dart';
-import '../../gl/services/gl_beginning_balance_service.dart';
 import '../../gl/models/account.dart';
 import '../../gl/services/account_service.dart';
 import '../../gl/services/general_ledger_report_service.dart';
@@ -32,7 +30,6 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   // Services
   final CompanyService _companyService = CompanyService();
   final PeriodService _periodService = PeriodService();
-  final GlBeginningBalanceService _begBalService = GlBeginningBalanceService();
   final AccountService _accountService = AccountService();
   final GeneralLedgerReportService _reportService = GeneralLedgerReportService();
   final BranchService _branchService = BranchService();
@@ -66,7 +63,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   bool _reportGenerated = false;
 
   // Report Data
-  List<GlBeginningBalance> _beginningBalances = [];
+  List<Map<String, dynamic>> _beginningBalances = [];
   List<Map<String, dynamic>> _transactions = [];
 
   @override
@@ -195,8 +192,11 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
     setState(() { _isLoading = true; _reportGenerated = false; });
 
     try {
-      // 1. ดึงยอดยกมา (งวดยกยอด + งวดก่อนหน้าสะสม) จาก gl_balance_accum
-      _beginningBalances = await _begBalService.fetchFromAccum(_selectedYear!.id, _selectedPeriod?.id);
+      // 1. ดึงยอดยกมา (สะสมตั้งแต่ต้นปีถึงก่อนหน้างวดที่เลือก)
+      _beginningBalances = await _reportService.fetchBeginningBalance(
+        fiscalYearId: _selectedYear!.id,
+        periodId: _selectedPeriod?.id,
+      );
 
       // 2. ดึงรายการเคลื่อนไหวจาก API
       _transactions = await _reportService.getGlTransactions(
@@ -248,8 +248,8 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
     final String printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     
     String periodLine = _selectedPeriod != null
-        ? "งวดเดือน ${_selectedPeriod!.periodName} ปีบัญชี ${_selectedYear!.fyCode}"
-        : "ปีบัญชี ${_selectedYear?.fyCode}";
+        ? "วันที่ ${_selectedPeriod!.periodEndDate.day} ${_selectedPeriod!.periodName} ${_selectedYear!.fyCode}"
+        : "ปี ${_selectedYear?.fyCode}";
 
     String conditionLine = "* บัญชี: ${_accountFrom?.accountCode ?? 'ทั้งหมด'} - ${_accountTo?.accountCode ?? 'ทั้งหมด'}";
     final fmt = NumberFormat("#,##0.00");
@@ -327,36 +327,102 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
     List<pw.Widget> buildAccountBlocks() {
       List<pw.Widget> blocks = [];
 
+      // รวม 2 sources: transaction groups + beginning-balance-only accounts
+      final txKeys = groupedData.keys.toSet();
+
+      // สร้าง entries รวม พร้อมข้อมูลที่ต้องใช้ sort
+      List<Map<String, dynamic>> entries = [];
+
       groupedData.forEach((key, transactions) {
         final firstTx = transactions.first;
-        int accId = firstTx['account_id'];
-        int? brId = firstTx['branch_id'];
-        int? buId = firstTx['business_unit_id'];
-        int? pjId = firstTx['project_id'];
+        entries.add({
+          'key': key,
+          'accId': firstTx['account_id'] as int,
+          'accCode': firstTx['account_code'] as String? ?? '',
+          'accName': "${firstTx['account_code']} ${firstTx['account_name_thai']}",
+          'brId': firstTx['branch_id'] as int?,
+          'buId': firstTx['business_unit_id'] as int?,
+          'pjId': firstTx['project_id'] as int?,
+          'transactions': transactions,
+          'begDr': null, // จะดึงในลูปหลัก
+          'begCr': null,
+        });
+      });
 
-        // 1. ดึงยอดยกมา
-        double begDr = 0, begCr = 0;
-        try {
-          var begRow = _beginningBalances.firstWhere((b) => 
-            b.accountId == accId && b.branchId == brId && b.businessUnitId == buId && b.projectId == pjId
-          );
-          begDr = begRow.amountDr;
-          begCr = begRow.amountCr;
-        } catch (_) {}
-        
-        // ยอดสะสมเริ่มต้น (Dr - Cr)
-        double runningBalance = begDr - begCr; 
+      for (var b in _beginningBalances) {
+        final int bAccId = b['account_id'] as int;
+        final int? bBrId = b['branch_id'] as int?;
+        final int? bBuId = b['business_unit_id'] as int?;
+        final int? bPjId = b['project_id'] as int?;
+        final String key = "${bAccId}_${bBrId ?? 0}_${bBuId ?? 0}_${bPjId ?? 0}";
+        if (txKeys.contains(key)) continue; // มี transaction แล้ว ข้ามไป
 
-        String accName = "${firstTx['account_code']} ${firstTx['account_name_thai']}";
-        String branchStr = brId != null ? "สาขา: ${_branchMap[brId] ?? ''}" : "";
-        String buStr = buId != null ? "หน่วยงาน: ${_buMap[buId] ?? ''}" : "";
-        String pjStr = pjId != null ? "โครงการ: ${_projectMap[pjId] ?? ''}" : "";
-        String dims = [branchStr, buStr, pjStr].where((e) => e.isNotEmpty).join(' / ');
+        final acc = _accountMap[bAccId];
+        entries.add({
+          'key': key,
+          'accId': bAccId,
+          'accCode': acc?.accountCode ?? '',
+          'accName': acc != null ? "${acc.accountCode} ${acc.accountNameThai}" : "Account $bAccId",
+          'brId': bBrId,
+          'buId': bBuId,
+          'pjId': bPjId,
+          'transactions': <Map<String, dynamic>>[],
+          'begDr': double.tryParse(b['amount_dr']?.toString() ?? '0') ?? 0,
+          'begCr': double.tryParse(b['amount_cr']?.toString() ?? '0') ?? 0,
+        });
+      }
 
-        // กรอง: ซ่อนบัญชีที่ยอดยกมาเป็น0 และไม่มีรายการเคลื่อนไหวเลย
-        if (_hideZero && begDr.abs() < 0.001 && begCr.abs() < 0.001 && transactions.isEmpty) {
-          return;
+      // เรียงตามรหัสบัญชี -> สาขา -> หน่วยงาน -> โครงการ
+      entries.sort((a, b) {
+        int cmp = (a['accCode'] as String).compareTo(b['accCode'] as String);
+        if (cmp != 0) return cmp;
+        cmp = (a['brId'] as int? ?? 0).compareTo(b['brId'] as int? ?? 0);
+        if (cmp != 0) return cmp;
+        cmp = (a['buId'] as int? ?? 0).compareTo(b['buId'] as int? ?? 0);
+        if (cmp != 0) return cmp;
+        return (a['pjId'] as int? ?? 0).compareTo(b['pjId'] as int? ?? 0);
+      });
+
+      for (var entry in entries) {
+        final int accId = entry['accId'] as int;
+        final int? brId = entry['brId'] as int?;
+        final int? buId = entry['buId'] as int?;
+        final int? pjId = entry['pjId'] as int?;
+        final String accName = entry['accName'] as String;
+        final List<Map<String, dynamic>> transactions = entry['transactions'] as List<Map<String, dynamic>>;
+
+        // ดึงยอดยกมา (transaction entries ดึงจาก _beginningBalances, balance-only entries มีค่าอยู่แล้ว)
+        double begDr = entry['begDr'] as double? ?? 0;
+        double begCr = entry['begCr'] as double? ?? 0;
+        if (entry['begDr'] == null) {
+          try {
+            var begRow = _beginningBalances.firstWhere((b) =>
+              b['account_id'] == accId &&
+              (b['branch_id'] == brId || (b['branch_id'] == null && brId == null)) &&
+              (b['business_unit_id'] == buId || (b['business_unit_id'] == null && buId == null)) &&
+              (b['project_id'] == pjId || (b['project_id'] == null && pjId == null))
+            );
+            begDr = double.tryParse(begRow['amount_dr']?.toString() ?? '0') ?? 0;
+            begCr = double.tryParse(begRow['amount_cr']?.toString() ?? '0') ?? 0;
+          } catch (_) {}
         }
+
+        // กรอง: ซ่อนบัญชีที่ยอดยกมาเป็น 0 และไม่มีรายการเคลื่อนไหว
+        if (_hideZero && begDr.abs() < 0.001 && begCr.abs() < 0.001 && transactions.isEmpty) {
+          continue;
+        }
+
+        double runningBalance = begDr - begCr;
+
+        // resolve code ก่อน แล้วค่อยตัดสินว่ามี dimension จริงหรือไม่
+        String brCode = brId != null ? (_branchMap[brId] ?? '') : '';
+        String buCode = buId != null ? (_buMap[buId] ?? '') : '';
+        String pjCode = pjId != null ? (_projectMap[pjId] ?? '') : '';
+        bool hasDim = brCode.isNotEmpty || buCode.isNotEmpty || pjCode.isNotEmpty;
+        String branchStr = "สาขา: ${brCode.isNotEmpty ? brCode : '-'}";
+        String buStr = "หน่วยงาน: ${buCode.isNotEmpty ? buCode : '-'}";
+        String pjStr = "โครงการ: ${pjCode.isNotEmpty ? pjCode : '-'}";
+        String dims = hasDim ? '$branchStr / $buStr / $pjStr' : '';
 
         // [ส่วนที่ 1] บรรทัดยอดยกมา
         blocks.add(pw.Table(
@@ -367,11 +433,11 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
               decoration: const pw.BoxDecoration(color: PdfColors.grey100),
               children: [
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(4), 
+                  padding: const pw.EdgeInsets.all(4),
                   child: pw.Text("รหัส/ชื่อบัญชี: $accName ${dims.isNotEmpty ? '($dims)' : ''}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))
                 ),
                 pw.Padding(
-                  padding: const pw.EdgeInsets.all(4), 
+                  padding: const pw.EdgeInsets.all(4),
                   child: pw.Text(fmt.format(runningBalance), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))
                 )
               ]
@@ -385,23 +451,23 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         for (var t in transactions) {
           double dr = double.tryParse(t['debit_lc'].toString()) ?? 0;
           double cr = double.tryParse(t['credit_lc'].toString()) ?? 0;
-          
-          runningBalance += (dr - cr); // คำนวณยอดสะสม
+
+          runningBalance += (dr - cr);
           sumDr += dr;
           sumCr += cr;
 
           String rawDate = t['doc_date']?.toString() ?? '';
           String fDate = rawDate.length >= 10 ? DateFormat('dd/MM/yyyy').format(DateTime.parse(rawDate)) : rawDate;
-          
+
           String refRawDate = t['ref_doc_date']?.toString() ?? '';
           String fRefDate = refRawDate.length >= 10 ? DateFormat('dd/MM/yyyy').format(DateTime.parse(refRawDate)) : refRawDate;
 
           txRows.add(buildTableRow([
             fDate, t['doc_code'] ?? '', t['doc_no'] ?? '', t['line_no']?.toString() ?? '',
             t['ref_doc_code'] ?? '', t['ref_doc_no'] ?? '', fRefDate,
-            t['description'] ?? '', 
-            dr == 0 ? '' : fmt.format(dr), 
-            cr == 0 ? '' : fmt.format(cr), 
+            t['description'] ?? '',
+            dr == 0 ? '' : fmt.format(dr),
+            cr == 0 ? '' : fmt.format(cr),
             fmt.format(runningBalance)
           ]));
         }
@@ -425,64 +491,11 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             pw.TableRow(
               children: [
                 pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("ยอดรวมเดบิต / เครดิต / ยกไป", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(fmt.format(sumDr), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(fmt.format(sumCr), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(transactions.isEmpty ? '' : fmt.format(sumDr), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(transactions.isEmpty ? '' : fmt.format(sumCr), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
                 pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(fmt.format(runningBalance), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
               ]
             )
-          ]
-        ));
-        blocks.add(pw.SizedBox(height: 15)); // เว้นบรรทัดขึ้นบัญชีใหม่
-      });
-
-      // loop ที่ 2: accounts ที่มีแต่ยอดยกมา ไม่มี transaction ในงวดนี้
-      for (var b in _beginningBalances) {
-        final String key = "${b.accountId}_${b.branchId ?? 0}_${b.businessUnitId ?? 0}_${b.projectId ?? 0}";
-        if (groupedData.containsKey(key)) continue; // มี transaction แล้ว ข้ามไป
-
-        final double begDr = b.amountDr;
-        final double begCr = b.amountCr;
-        // accounts ที่อยู่ใน _beginningBalances คือมี transaction ในงวดก่อนๆแน่นอน
-        // ไม่กรองด้วยยอด เพราะยอดสุทธิอาจเป็น 0 ได้ (Dr=Cr) แต่ก็ยังต้องพิมพ์
-
-        final acc = _accountMap[b.accountId];
-        final String accName = acc != null
-            ? "${acc.accountCode} ${acc.accountNameThai}"
-            : "Account ${b.accountId}";
-        final String branchStr = b.branchId != null ? "สาขา: ${_branchMap[b.branchId] ?? ''}" : "";
-        final String buStr = b.businessUnitId != null ? "หน่วยงาน: ${_buMap[b.businessUnitId] ?? ''}" : "";
-        final String pjStr = b.projectId != null ? "โครงการ: ${_projectMap[b.projectId] ?? ''}" : "";
-        final String dims = [branchStr, buStr, pjStr].where((e) => e.isNotEmpty).join(' / ');
-        final double runningBal = begDr - begCr;
-
-        blocks.add(pw.Table(
-          columnWidths: const { 0: pw.FlexColumnWidth(13.9), 1: pw.FlexColumnWidth(1.5) },
-          border: const pw.TableBorder(left: pw.BorderSide(), right: pw.BorderSide()),
-          children: [
-            pw.TableRow(
-              decoration: const pw.BoxDecoration(color: PdfColors.grey100),
-              children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text("รหัส/ชื่อบัญชี: $accName ${dims.isNotEmpty ? '($dims)' : ''}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(fmt.format(runningBal), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-              ]
-            )
-          ]
-        ));
-        // ไม่มี transaction rows — เพิ่ม table ว่างเพื่อให้ block count = 4 เหมือน accounts ที่มี transaction
-        blocks.add(pw.Table(
-          columnWidths: const { 0: pw.FlexColumnWidth(15.4) },
-          children: [],
-        ));
-        blocks.add(pw.Table(
-          columnWidths: const { 0: pw.FlexColumnWidth(10.9), 1: pw.FlexColumnWidth(1.5), 2: pw.FlexColumnWidth(1.5), 3: pw.FlexColumnWidth(1.5) },
-          border: pw.TableBorder.all(width: 0.5),
-          children: [
-            pw.TableRow(children: [
-              pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("ยอดรวมเดบิต / เครดิต / ยกไป", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-              pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-              pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-              pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(fmt.format(runningBal), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-            ])
           ]
         ));
         blocks.add(pw.SizedBox(height: 15));
