@@ -25,6 +25,9 @@ import '../../gl/screens/financial_report_screen.dart';
 import '../../gl/screens/general_ledger_report_screen.dart';
 import '../../gl/screens/period_screen.dart';
 import '../../gl/screens/trial_balance_report_screen.dart';
+import '../../gl/screens/balance_sheet_report_screen.dart';
+import '../../gl/screens/income_statement_report_screen.dart';
+import '../../gl/screens/daily_transaction_report_screen.dart';
 import '../../gl/screens/year_end_closing_screen.dart';
 import '../../gl/screens/year_end_closing_config_screen.dart';
 
@@ -87,6 +90,9 @@ class Menu {
           onFieldsChanged: () {},
         ),
     'TrialBalanceReportScreen': (context) => const TrialBalanceReportScreen(),
+    'DailyTransactionReportScreen': (context) => const DailyTransactionReportScreen(),
+    'BalanceSheetReportScreen': (context) => const BalanceSheetReportScreen(),
+    'IncomeStatementReportScreen': (context) => const IncomeStatementReportScreen(),
     'FinancialReportBuilderScreen': (context) => const FinancialReportBuilderScreen(),
     'YearEndClosingScreen': (context) => const YearEndClosingScreen(),
     'YearEndClosingConfigScreen': (context) => const YearEndClosingConfigScreen(),

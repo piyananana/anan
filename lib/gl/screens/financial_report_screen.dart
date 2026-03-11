@@ -670,6 +670,7 @@ Widget _buildTableTab() {
       color: Colors.grey[200],
       child: PdfPreview(
         build: (format) => _generatePdf(format),
+        initialPageFormat: PdfPageFormat.a4,
         canChangeOrientation: false,
         canDebug: false,
       ),

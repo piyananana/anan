@@ -206,7 +206,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 
     String conditionLine = "* ${conditions.join(", ")}";
 
-    final fmt = NumberFormat("#,##0.00");
+    final fmt = NumberFormat("#,##0.00", "en_US");
     String formatNum(dynamic val) {
       double v = double.tryParse(val.toString()) ?? 0.0;
       if (v == 0) return "";
@@ -909,6 +909,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                   ? const Center(child: Text("กรุณาเลือกเงื่อนไขและกดประมวลผล"))
                   : PdfPreview(
                       build: (format) => _generatePdf(format),
+                      initialPageFormat: PdfPageFormat.a4.landscape,
                       canChangeOrientation: false,
                       canDebug: false,
                     ),

@@ -252,7 +252,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         : "ปี ${_selectedYear?.fyCode}";
 
     String conditionLine = "* บัญชี: ${_accountFrom?.accountCode ?? 'ทั้งหมด'} - ${_accountTo?.accountCode ?? 'ทั้งหมด'}";
-    final fmt = NumberFormat("#,##0.00");
+    final fmt = NumberFormat("#,##0.00", "en_US");
 
     // ฟังก์ชันสร้าง Header ของหน้า
     pw.Widget buildPageHeader(pw.Context context) {
@@ -427,7 +427,6 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         // [ส่วนที่ 1] บรรทัดยอดยกมา
         blocks.add(pw.Table(
           columnWidths: const { 0: pw.FlexColumnWidth(13.9), 1: pw.FlexColumnWidth(1.5) },
-          border: const pw.TableBorder(left: pw.BorderSide(), right: pw.BorderSide()),
           children: [
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: PdfColors.grey100),
@@ -645,6 +644,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                   ? const Center(child: Text("กรุณาเลือกเงื่อนไขและกดประมวลผล"))
                   : PdfPreview(
                       build: (format) => _generatePdf(format),
+                      initialPageFormat: PdfPageFormat.a4.landscape,
                       canChangeOrientation: false,
                       canDebug: false,
                     ),
