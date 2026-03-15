@@ -170,6 +170,8 @@ class BusinessUnitDetailWidgetState extends State<BusinessUnitDetailWidget> {
       );
     }
 
+    final bool readOnly = widget.mode == Mode.view;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -189,7 +191,7 @@ class BusinessUnitDetailWidgetState extends State<BusinessUnitDetailWidget> {
             ),
             const SizedBox(height: 20),
             TextFormField(
-              enabled: widget.mode != Mode.edit,
+              readOnly: widget.mode != Mode.add && widget.mode != Mode.addChild,
               controller: _buCodeController,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
               textAlign: TextAlign.center,
@@ -209,6 +211,7 @@ class BusinessUnitDetailWidgetState extends State<BusinessUnitDetailWidget> {
               children: [
                 Expanded(
                   child: TextFormField(
+                    readOnly: readOnly,
                     controller: _buNameThaiController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อหน่วยงาน (ภาษาไทย)',
@@ -225,6 +228,7 @@ class BusinessUnitDetailWidgetState extends State<BusinessUnitDetailWidget> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextFormField(
+                    readOnly: readOnly,
                     controller: _buNameEngController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อหน่วยงาน (ภาษาอังกฤษ)',
@@ -248,7 +252,7 @@ class BusinessUnitDetailWidgetState extends State<BusinessUnitDetailWidget> {
                 ),
                 Switch(
                   value: _isActive,
-                  onChanged: (bool value) {
+                  onChanged: readOnly ? null : (bool value) {
                     setState(() {
                       _isActive = value;
                     });
@@ -265,7 +269,7 @@ class BusinessUnitDetailWidgetState extends State<BusinessUnitDetailWidget> {
                 ),
                 Switch(
                   value: _isControlBU,
-                  onChanged: (bool value) {
+                  onChanged: readOnly ? null : (bool value) {
                     setState(() {
                       _isControlBU = value;
                     });

@@ -1,7 +1,7 @@
 // screens/menu_management_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
+
 import 'package:provider/provider.dart';
 
 import '../models/group.dart';
@@ -48,6 +48,10 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
   List<User> _allUsers = []; // <-- เก็บผู้ใช้ทั้งหมดในระบบ
 
   bool _isLoading = true; // เพิ่มสถานะการโหลดกลุ่ม
+
+  bool _isLeftPanelExpanded = true;
+  double _leftPanelWidth = 360.0;
+  bool _isDraggingDivider = false;
   String _errorLoading = ''; // เพิ่มข้อความ error
   final Map<String?, bool> _expandedState = {};
   Group? _selectedNode; // กลุ่มที่ถูกเลือกใน TreeView
@@ -361,50 +365,88 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('จัดการผู้ใช้ตามกลุ่ม'),
+        title: const Row(children: [Icon(Icons.group_add, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการผู้ใช้ตามกลุ่ม')]),
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
       ),
-      body: ResizableContainer(
-        controller: ResizableController(),
-        direction: Axis.horizontal,
-        children: [
-          // TreeView Panel
-          ResizableChild(
-            divider: ResizableDivider(
-              color: Colors.blueGrey[200]!,
-              thickness: 5,
-            ),
-            size: const ResizableSize.ratio(0.4), // 30% สำหรับ panel ซ้าย
-            child: Container(
-              color: Colors.blueGrey[100],
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      'โครงสร้างกลุ่ม',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxLeftWidth =
+              (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 36,
+                color: Colors.deepOrange.shade900,
+                child: IconButton(
+                  icon: Icon(
+                    _isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list,
+                    color: Colors.white,
+                    size: 20,
                   ),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: topLevelData.length,
-                      itemBuilder: (context, index) {
-                        return _buildNode(topLevelData[index], 0);
-                      },
-                    ),
-                  ),
-                ],
+                  padding: EdgeInsets.zero,
+                  onPressed: () =>
+                      setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
+                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                ),
               ),
-            ),
-          ),
-          // Detail Form Panel
-          ResizableChild(
-            size: const ResizableSize.ratio(0.6), // 60% สำหรับ panel ขวา
-            child: _buildRightPanelContent(),
-          ),
-        ],
+              AnimatedContainer(
+                duration: _isDraggingDivider
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200),
+                width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
+                child: ClipRect(
+                  child: OverflowBox(
+                    maxWidth: _leftPanelWidth,
+                    minWidth: _leftPanelWidth,
+                    alignment: Alignment.topLeft,
+                    child: Container(
+                      color: Colors.blueGrey[100],
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              'โครงสร้างกลุ่ม',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: topLevelData.length,
+                              itemBuilder: (context, index) {
+                                return _buildNode(topLevelData[index], 0);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (_isLeftPanelExpanded)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) =>
+                        setState(() => _isDraggingDivider = true),
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx)
+                            .clamp(200.0, maxLeftWidth);
+                      });
+                    },
+                    onHorizontalDragEnd: (_) =>
+                        setState(() => _isDraggingDivider = false),
+                    child: Container(width: 5, color: Colors.grey[400]),
+                  ),
+                ),
+              Expanded(child: _buildRightPanelContent()),
+            ],
+          );
+        },
       ),
     );
   }

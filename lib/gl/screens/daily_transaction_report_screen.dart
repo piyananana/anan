@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -68,6 +67,9 @@ class _DailyTransactionReportScreenState
   List<Map<String, dynamic>> _reportData = [];
   bool _isLoading = false;
   bool _reportGenerated = false;
+  bool _isFilterExpanded = true;
+  double _filterPanelWidth = 360.0;
+  bool _isDraggingDivider = false;
 
   @override
   void initState() {
@@ -652,17 +654,42 @@ class _DailyTransactionReportScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('บันทึกรายการบัญชี (Daily Transaction)'),
+        title: const Row(children: [Icon(Icons.receipt_long, color: Colors.white, size: 20), SizedBox(width: 8), Text('บันทึกรายการบัญชี (Daily Transaction)')]),
         backgroundColor: Colors.indigo[800],
         foregroundColor: Colors.white,
       ),
-      body: ResizableContainer(
-        direction: Axis.horizontal,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxFilterWidth =
+              (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+          return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Filter panel ──
-          ResizableChild(
-            size: const ResizableSize.pixels(360),
-            child: Card(
+          Container(
+            width: 36,
+            color: Colors.indigo[800],
+            child: IconButton(
+              icon: Icon(
+                _isFilterExpanded ? Icons.filter_list_off : Icons.filter_list,
+                color: Colors.white,
+                size: 20,
+              ),
+              padding: EdgeInsets.zero,
+              onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
+              tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+            ),
+          ),
+          AnimatedContainer(
+            duration: _isDraggingDivider
+                ? Duration.zero
+                : const Duration(milliseconds: 200),
+            width: _isFilterExpanded ? _filterPanelWidth : 0.0,
+            child: ClipRect(
+              child: OverflowBox(
+                maxWidth: _filterPanelWidth,
+                minWidth: _filterPanelWidth,
+                alignment: Alignment.topLeft,
+                child: Card(
               margin: const EdgeInsets.all(8),
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -855,10 +882,35 @@ class _DailyTransactionReportScreenState
                 ),
               ),
             ),
-          ),
+                ),
+              ),
+            ),
+
+          // draggable divider
+          if (_isFilterExpanded)
+            MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: GestureDetector(
+                onHorizontalDragStart: (_) =>
+                    setState(() => _isDraggingDivider = true),
+                onHorizontalDragUpdate: (details) {
+                  setState(() {
+                    _filterPanelWidth =
+                        (_filterPanelWidth + details.delta.dx)
+                            .clamp(200.0, maxFilterWidth);
+                  });
+                },
+                onHorizontalDragEnd: (_) =>
+                    setState(() => _isDraggingDivider = false),
+                child: Container(
+                  width: 5,
+                  color: Colors.grey[400],
+                ),
+              ),
+            ),
 
           // ── PDF Preview panel ──
-          ResizableChild(
+          Expanded(
             child: Container(
               color: Colors.grey[200],
               child: !_reportGenerated
@@ -873,6 +925,8 @@ class _DailyTransactionReportScreenState
             ),
           ),
         ],
+      );
+        },
       ),
     );
   }

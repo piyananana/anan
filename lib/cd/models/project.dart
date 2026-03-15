@@ -1,4 +1,5 @@
-// Models
+import '../../../utils/date_utils.dart';
+
 class Project {
   final int? id;
   final String projectCode;
@@ -34,10 +35,10 @@ class Project {
       projectNameEng: json['project_name_eng'],
       isActive: json['is_active'] ?? false,
       startDate: json['start_date'] != null
-          ? DateTime.parse(json['start_date'])
+          ? parseLocalDate(json['start_date'])
           : null,
       endDate: json['end_date'] != null
-          ? DateTime.parse(json['end_date'])
+          ? parseLocalDate(json['end_date'])
           : null,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
@@ -57,8 +58,8 @@ class Project {
       'project_name_thai': projectNameThai,
       'project_name_eng': projectNameEng,
       'is_active': isActive,
-      'start_date': startDate?.toIso8601String(),
-      'end_date': endDate?.toIso8601String(),
+      'start_date': startDate != null ? formatLocalDate(startDate!) : null,
+      'end_date': endDate != null ? formatLocalDate(endDate!) : null,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'created_by': createdBy,

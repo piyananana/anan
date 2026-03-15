@@ -139,6 +139,8 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
       );
     }
 
+    final bool readOnly = widget.mode == Mode.view;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -157,9 +159,9 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
             const SizedBox(height: 20),
             Row(
               children: [
-                Expanded(child: 
+                Expanded(child:
                   TextFormField(
-                    enabled: widget.mode != Mode.edit,
+                    readOnly: widget.mode != Mode.add,
                     controller: _currencyCodeController,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     decoration: const InputDecoration(
@@ -176,8 +178,9 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: 
+                Expanded(child:
                   TextFormField(
+                    readOnly: readOnly,
                     controller: _symbolController,
                     style: const TextStyle(fontSize: 31, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
@@ -198,8 +201,9 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: 
+                Expanded(child:
                   TextFormField(
+                    readOnly: readOnly,
                     controller: _currencyNameThaiController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อสกุลเงิน (ไทย)',
@@ -214,8 +218,9 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: 
+                Expanded(child:
                   TextFormField(
+                    readOnly: readOnly,
                     controller: _currencyNameEngController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อสกุลเงิน (อังกฤษ)',
@@ -240,11 +245,11 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                 ),
                 Switch(
                   value: _isActive,
-                  onChanged: (bool value) {
+                  onChanged: readOnly ? null : (bool value) {
                     setState(() {
                       _isActive = value;
                       if (!_isActive) {
-                        _baseCurrencyFlag = false; // หากหยุดใช้ ให้ยกเลิกสกุลเงินหลักด้วย
+                        _baseCurrencyFlag = false;
                       }
                     });
                   },
@@ -260,7 +265,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                 ),
                 Switch(
                   value: _baseCurrencyFlag,
-                  onChanged: (bool value) {
+                  onChanged: readOnly ? null : (bool value) {
                     setState(() {
                       _baseCurrencyFlag = value;
                     });
@@ -270,6 +275,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              readOnly: readOnly,
               controller: _baseRateController,
               textAlign: TextAlign.right,
               style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
@@ -311,7 +317,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                       child: Text(val.toString()),
                     );
                   }).toList(),
-                  onChanged: (value) {
+                  onChanged: readOnly ? null : (value) {
                     if (value != null) {
                       setState(() {
                         _numOfDecimal = value;

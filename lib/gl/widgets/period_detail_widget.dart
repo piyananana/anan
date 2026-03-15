@@ -186,7 +186,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                     Expanded(
                       child: TextFormField(
                         controller: _fiscalYearCodeController,
-                        enabled: widget.mode == Mode.add,
+                        readOnly: widget.mode != Mode.add,
                         decoration: const InputDecoration(
                           labelText: 'ปีพ.ศ. หรือ ค.ศ.',
                           border: OutlineInputBorder(),
@@ -209,6 +209,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextFormField(
+                        readOnly: widget.mode == Mode.view,
                         controller: _descriptionController,
                         decoration: const InputDecoration(
                           labelText: 'อธิบาย',
@@ -235,7 +236,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         title: Text('สถานะ: ${_isActive ? 'เปิด' : 'ปิด'}'),
                         trailing: Switch(
                           value: _isActive,
-                          onChanged: (bool value) {
+                          onChanged: widget.mode == Mode.view ? null : (bool value) {
                             setState(() {
                               _isActive = value;
                             });

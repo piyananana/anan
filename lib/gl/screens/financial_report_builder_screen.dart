@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
 import '../services/financial_report_builder_service.dart';
 
 class FinancialReportBuilderScreen extends StatefulWidget {
@@ -17,6 +16,10 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   Map<String, dynamic>? _selectedReport;
   bool _isLoadingReports = false;
   bool _isLoadingRows = false;
+
+  bool _isLeftPanelExpanded = true;
+  double _leftPanelWidth = 400.0;
+  bool _isDraggingDivider = false;
 
   @override
   void initState() {
@@ -442,21 +445,67 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('สร้างแบบงบการเงิน (Financial Report Builder)'),
+        title: const Row(children: [Icon(Icons.design_services, color: Colors.white, size: 20), SizedBox(width: 8), Text('สร้างแบบงบการเงิน (Financial Report Builder)')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
       ),
-      body: ResizableContainer(
-        direction: Axis.horizontal,
-        children: [
-          ResizableChild(
-            size: const ResizableSize.ratio(0.35),
-            child: _buildLeftPanel(),
-          ),
-          ResizableChild(
-            child: _buildRightPanel(),
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxLeftWidth =
+              (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 36,
+                color: Colors.deepOrange[900],
+                child: IconButton(
+                  icon: Icon(
+                    _isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: () =>
+                      setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
+                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                ),
+              ),
+              AnimatedContainer(
+                duration: _isDraggingDivider
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200),
+                width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
+                child: ClipRect(
+                  child: OverflowBox(
+                    maxWidth: _leftPanelWidth,
+                    minWidth: _leftPanelWidth,
+                    alignment: Alignment.topLeft,
+                    child: _buildLeftPanel(),
+                  ),
+                ),
+              ),
+              if (_isLeftPanelExpanded)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) =>
+                        setState(() => _isDraggingDivider = true),
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx)
+                            .clamp(200.0, maxLeftWidth);
+                      });
+                    },
+                    onHorizontalDragEnd: (_) =>
+                        setState(() => _isDraggingDivider = false),
+                    child: Container(width: 5, color: Colors.grey[400]),
+                  ),
+                ),
+              Expanded(child: _buildRightPanel()),
+            ],
+          );
+        },
       ),
     );
   }

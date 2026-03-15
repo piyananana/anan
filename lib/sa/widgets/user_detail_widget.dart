@@ -128,12 +128,12 @@ class _UserDetailFormState extends State<UserDetailForm> {
             ),
             const SizedBox(height: 20),
             TextFormField(
+              readOnly: _isEditing || _isViewing,
               controller: _usernameController,
               decoration: const InputDecoration(
                 labelText: 'ผู้ใช้',
                 border: OutlineInputBorder(),
               ),
-              enabled: !_isEditing,
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'กรุณาป้อนผู้ใช้';
@@ -143,6 +143,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              readOnly: _isViewing,
               controller: _firstNameController,
               decoration: const InputDecoration(
                 labelText: 'ชื่อจริง',
@@ -157,6 +158,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              readOnly: _isViewing,
               controller: _lastNameController,
               decoration: const InputDecoration(
                 labelText: 'นามสกุล',
@@ -171,6 +173,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              readOnly: _isViewing,
               controller: _emailController,
               decoration: const InputDecoration(
                 labelText: 'อีเมล',
@@ -188,6 +191,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              readOnly: _isViewing,
               controller: _passwordController,
               decoration: InputDecoration(
                 labelText: _isEditing
@@ -224,7 +228,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
                 DropdownMenuItem(value: 'active', child: Text('active')),
                 DropdownMenuItem(value: 'inactive', child: Text('inactive')),
               ],
-              onChanged: (value) {
+              onChanged: _isViewing ? null : (value) {
                 if (value != null) {
                   setState(() {
                     _status = value;
@@ -246,7 +250,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
                   child: Text(type),
                 );
               }).toList(),
-              onChanged: (value) {
+              onChanged: _isViewing ? null : (value) {
                 if (value != null) {
                   setState(() {
                     _userType = value;

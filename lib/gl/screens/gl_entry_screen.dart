@@ -63,7 +63,7 @@ class _GlEntryScreenState extends State<GlEntryScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('บันทึกรายการบัญชี'),
+        title: const Row(children: [Icon(Icons.edit_note, color: Colors.white, size: 20), SizedBox(width: 8), Text('บันทึกรายการบัญชี')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
       ),

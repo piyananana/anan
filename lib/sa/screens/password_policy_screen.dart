@@ -119,7 +119,7 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
     return Scaffold(
       backgroundColor: Colors.blueGrey[50],
       appBar: AppBar(
-        title: const Text('ตั้งค่าความปลอดภัยรหัสผ่าน'),
+        title: const Row(children: [Icon(Icons.lock, color: Colors.white, size: 20), SizedBox(width: 8), Text('ตั้งค่าความปลอดภัยรหัสผ่าน')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

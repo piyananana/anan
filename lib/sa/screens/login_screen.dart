@@ -36,6 +36,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final authService = Provider.of<AuthService>(context, listen: false);
       final databases = await authService.fetchDatabases();
       final defaultDb = await authService.getDefaultDatabase();
+      if (!mounted) return;
       setState(() {
         _databases = databases;
         _selectedDatabase = defaultDb ?? (databases.isNotEmpty ? databases[0] : null);
@@ -44,6 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
       print('defaultDb = $defaultDb');
       print('_selectedDatabase = $_selectedDatabase');
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;

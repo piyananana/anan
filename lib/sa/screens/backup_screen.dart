@@ -1372,29 +1372,18 @@ class _BackupScreenState extends State<BackupScreen>
               const Text('ไม่มีไฟล์สำรองข้อมูลที่สามารถเรียกคืนได้')
             else
               ...files.map((file) {
-                final filenameParts = file.split('_');
                 String displayDate = file;
 
-                if (filenameParts.length > 2) {
-                  final timestampPart = filenameParts[2]
-                      .split('.')[0]; // เอาส่วนวันที่และเวลาออกมาก่อน
+                // ชื่อไฟล์รูปแบบ: prefix_dbname_YYYY-MM-DDTHH-MM-SS.ext
+                // ใช้ regex ดึง timestamp โดยตรงแทนการ split ด้วย index
+                final match = RegExp(r'(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})').firstMatch(file);
+                if (match != null) {
                   try {
-                    // สร้าง Date time string ที่ถูกต้อง (YYYY-MM-DDTHH:mm:ss)
-                    final correctDateTimeString = timestampPart
-                        .replaceFirst('T', ' ')
-                        .replaceAll('-', '.')
-                        .replaceFirst('.', '-', 1)
-                        .replaceFirst('.', '-', 1)
-                        .replaceFirst('.', ':', 1)
-                        .replaceFirst('.', ':', 1)
-                        .replaceFirst('Z', '');
-                    final dateTime =
-                        DateTime.parse(correctDateTimeString).toLocal();
-                    displayDate = DateFormat('EEE, dd MMM yyyy HH:mm:ss')
-                        .format(dateTime);
+                    final isoString = '${match.group(1)}T${match.group(2)}:${match.group(3)}:${match.group(4)}';
+                    final dateTime = DateTime.parse(isoString).toLocal();
+                    displayDate = DateFormat('EEE, dd MMM yyyy HH:mm:ss').format(dateTime);
                   } catch (e) {
                     print('Error parsing date from filename: $e');
-                    displayDate = file; // Fallback to filename if parsing fails
                   }
                 }
                 return RadioListTile<String>(

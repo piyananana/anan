@@ -2,7 +2,7 @@
 
 // import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
+
 // import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
@@ -29,9 +29,12 @@ class _PeriodScreenState extends State<PeriodScreen>
     with AutomaticKeepAliveClientMixin {
   final GlobalKey<PeriodListWidgetState> _listWidgetKey = GlobalKey();
   final GlobalKey<PeriodDetailWidgetState> _detailWidgetKey = GlobalKey();
-  final ResizableController _resizableController = ResizableController();
   // bool _isImportOrExport = false;
   Mode _mode = Mode.none;
+
+  bool _isLeftPanelExpanded = true;
+  double _leftPanelWidth = 300.0;
+  bool _isDraggingDivider = false;
   FiscalYear? _selectedData;
   List<PostingPeriod> _selectedDetail = [];
 
@@ -42,7 +45,6 @@ class _PeriodScreenState extends State<PeriodScreen>
 
   @override
   void dispose() {
-    _resizableController.dispose();
     super.dispose();
   }
 
@@ -281,7 +283,7 @@ class _PeriodScreenState extends State<PeriodScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ปีบัญชีและงวดเดือนบัญชี'),
+        title: const Row(children: [Icon(Icons.date_range, color: Colors.white, size: 20), SizedBox(width: 8), Text('ปีบัญชีและงวดเดือนบัญชี')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         // actions: [
@@ -312,44 +314,83 @@ class _PeriodScreenState extends State<PeriodScreen>
         //   const SizedBox(width: 8),
         // ],
       ),
-      body:
-          ResizableContainer(
-            controller: _resizableController,
-            direction: Axis.horizontal,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxLeftWidth =
+              (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ResizableChild(
-                divider: ResizableDivider(
-                  color: Colors.blueGrey[200]!,
-                  thickness: 5,
+              Container(
+                width: 36,
+                color: Colors.deepOrange[900],
+                child: IconButton(
+                  icon: Icon(
+                    _isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: () =>
+                      setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
+                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
                 ),
-                size: const ResizableSize.ratio(0.3), // 30% สำหรับ panel ซ้าย
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: PeriodListWidget(
-                        key: _listWidgetKey,
-                        enableAddButton: true,
-                        enableEditButton: true,
-                        enableViewButton: true,
-                        enableDeleteButton: true,
-                        enableSortButton: true,
-                        enableCardSelect: false,
-                        onAdd: _onAdd,
-                        onEdit: _onEdit,
-                        onView: _onView,
-                        onDelete: _onDelete,
-                        onCallback: _onCallback,
-                      ),
+              ),
+              AnimatedContainer(
+                duration: _isDraggingDivider
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200),
+                width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
+                child: ClipRect(
+                  child: OverflowBox(
+                    maxWidth: _leftPanelWidth,
+                    minWidth: _leftPanelWidth,
+                    alignment: Alignment.topLeft,
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: PeriodListWidget(
+                            key: _listWidgetKey,
+                            enableAddButton: true,
+                            enableEditButton: true,
+                            enableViewButton: true,
+                            enableDeleteButton: true,
+                            enableSortButton: true,
+                            enableCardSelect: false,
+                            onAdd: _onAdd,
+                            onEdit: _onEdit,
+                            onView: _onView,
+                            onDelete: _onDelete,
+                            onCallback: _onCallback,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-              ResizableChild(
-                size: const ResizableSize.ratio(0.7), // 70% สำหรับ panel ขวา
-                child: _buildRightPanel(),
-              ),
+              if (_isLeftPanelExpanded)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) =>
+                        setState(() => _isDraggingDivider = true),
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx)
+                            .clamp(200.0, maxLeftWidth);
+                      });
+                    },
+                    onHorizontalDragEnd: (_) =>
+                        setState(() => _isDraggingDivider = false),
+                    child: Container(width: 5, color: Colors.grey[400]),
+                  ),
+                ),
+              Expanded(child: _buildRightPanel()),
             ],
-          ),
+          );
+        },
+      ),
     );
   }
 

@@ -17,6 +17,7 @@ import '../../cd/screens/business_unit_screen.dart';
 import '../../cd/screens/currency_screen.dart';
 import '../../cd/screens/project_screen.dart';
 import '../../cd/screens/zipcode_screen.dart';
+import '../../cd/screens/vat_rate_screen.dart';
 
 import '../../gl/screens/account_screen.dart';
 import '../../gl/screens/financial_report_builder_screen.dart';
@@ -30,6 +31,8 @@ import '../../gl/screens/income_statement_report_screen.dart';
 import '../../gl/screens/daily_transaction_report_screen.dart';
 import '../../gl/screens/year_end_closing_screen.dart';
 import '../../gl/screens/year_end_closing_config_screen.dart';
+
+import '../../ar/screens/ar_customer_screen.dart';
 
 class Menu {
   final int id;
@@ -79,6 +82,9 @@ class Menu {
     'ZipcodeScreen': (context) => ZipcodeScreen(
           onFieldsChanged: () {},
         ),
+    'VatRateScreen': (context) => VatRateScreen(
+          onFieldsChanged: () {},
+        ),
 
     'AccountScreen': (context) => AccountScreen(
           onFieldsChanged: () {},
@@ -96,6 +102,10 @@ class Menu {
     'FinancialReportBuilderScreen': (context) => const FinancialReportBuilderScreen(),
     'YearEndClosingScreen': (context) => const YearEndClosingScreen(),
     'YearEndClosingConfigScreen': (context) => const YearEndClosingConfigScreen(),
+
+    'ArCustomerScreen': (context) => ArCustomerScreen(
+          onFieldsChanged: () {},
+        ),
     // 'PeriodScreen': (context) => const PeriodScreen(),
     // Add all your custom widgets here
     // 'YourCustomWidget1': (context) => const YourCustomWidget1(),

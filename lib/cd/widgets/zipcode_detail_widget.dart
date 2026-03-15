@@ -117,6 +117,8 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
       );
     }
 
+    final bool readOnly = widget.mode == Mode.view;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -134,12 +136,12 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
             ),
             const SizedBox(height: 20),
             TextFormField(
+              readOnly: readOnly,
               controller: _subDistrictController,
               decoration: const InputDecoration(
                 labelText: 'ตำบล/แขวง',
                 border: OutlineInputBorder(),
               ),
-              // enabled: !_isEditing,  // ถ้าเป็นโหมดแก้ไข ให้ปิดการแก้ไขฟีลด์คีย์
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'กรุณาป้อนชื่อตำบล/แขวง';
@@ -149,6 +151,7 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              readOnly: readOnly,
               controller: _districtController,
               decoration: const InputDecoration(
                 labelText: 'อำเภอ/เขต',
@@ -163,6 +166,7 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              readOnly: readOnly,
               controller: _provinceController,
               decoration: const InputDecoration(
                 labelText: 'จังหวัด',
@@ -177,6 +181,7 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              readOnly: readOnly,
               controller: _zipcodeController,
               decoration: const InputDecoration(
                 labelText: 'รหัสไปรษณีย์',

@@ -295,6 +295,8 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       );
     }
 
+    final bool readOnly = widget.mode == AccountMode.view;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -314,7 +316,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
             ),
             const SizedBox(height: 20),
             TextFormField(
-              enabled: widget.mode != AccountMode.edit,
+              readOnly: widget.mode != AccountMode.addRoot && widget.mode != AccountMode.addChild,
               controller: _accountCodeController,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
               textAlign: TextAlign.center,
@@ -334,6 +336,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
               children: [
                 Expanded(
                   child: TextFormField(
+                    readOnly: readOnly,
                     controller: _accountNameThaiController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อบัญชี (ภาษาไทย)',
@@ -350,6 +353,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextFormField(
+                    readOnly: readOnly,
                     controller: _accountNameEngController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อบัญชี (ภาษาอังกฤษ)',
@@ -382,7 +386,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                           child: Text('${e.key} - ${e.value}'),
                         );
                       }).toList(),
-                      onChanged: (value) {
+                      onChanged: readOnly ? null : (value) {
                         if (value != null) {
                           setState(() {
                             _accountType = value;
@@ -410,7 +414,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         child: Text(val),
                       );
                     }).toList(),
-                    onChanged: (value) {
+                    onChanged: readOnly ? null : (value) {
                       if (value != null) {
                         setState(() {
                           _normalBalance = value;
@@ -429,7 +433,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                 ),
                 Switch(
                   value: _isActive,
-                  onChanged: (bool value) {
+                  onChanged: readOnly ? null : (bool value) {
                     setState(() {
                       _isActive = value;
                     });
@@ -446,7 +450,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                 ),
                 Switch(
                   value: _isControlAccount,
-                  onChanged: (bool value) {
+                  onChanged: readOnly ? null : (bool value) {
                     setState(() {
                       _isControlAccount = value;
                     });
@@ -470,7 +474,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                               '${val.currencyCode} - ${val.currencyNameThai}'),
                         );
                       }).toList(),
-                      onChanged: (value) {
+                      onChanged: readOnly ? null : (value) {
                         if (value != null) {
                           setState(() {
                             _currencyCode = value;
@@ -497,7 +501,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                           child: Text('${e.key} - ${e.value}'),
                         );
                       }).toList(),
-                      onChanged: (value) {
+                      onChanged: readOnly ? null : (value) {
                         if (value != null) {
                           setState(() {
                             _moduleLinkCode = value;
@@ -514,7 +518,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         ),
                         Switch(
                           value: _isReconcilable,
-                          onChanged: (bool value) {
+                          onChanged: readOnly ? null : (bool value) {
                             setState(() {
                               _isReconcilable = value;
                             });
@@ -531,7 +535,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         ),
                         Switch(
                           value: _costCenterRequired,
-                          onChanged: (bool value) {
+                          onChanged: readOnly ? null : (bool value) {
                             setState(() {
                               _costCenterRequired = value;
                             });
@@ -539,9 +543,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         ),
                       ],
                     ),
-                    // --- สิ้นสุดการเพิ่ม cost center ---
                     const SizedBox(height: 16),
-                    // --- เพิ่ม Switch สำหรับ project ---
                     Row(
                       children: [
                         Expanded(
@@ -550,7 +552,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         ),
                         Switch(
                           value: _projectRequired,
-                          onChanged: (bool value) {
+                          onChanged: readOnly ? null : (bool value) {
                             setState(() {
                               _projectRequired = value;
                             });
@@ -558,9 +560,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         ),
                       ],
                     ),
-                    // --- สิ้นสุดการเพิ่ม project ---
                     const SizedBox(height: 16),
-                    // --- เพิ่ม Switch สำหรับ branch ---
                     Row(
                       children: [
                         Expanded(
@@ -569,7 +569,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         ),
                         Switch(
                           value: _branchRequired,
-                          onChanged: (bool value) {
+                          onChanged: readOnly ? null : (bool value) {
                             setState(() {
                               _branchRequired = value;
                             });

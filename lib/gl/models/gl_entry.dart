@@ -1,4 +1,5 @@
 // File: gl/models/gl_entry.dart
+import '../../../utils/date_utils.dart';
 
 class GlEntryHeader {
   final int id;
@@ -72,10 +73,10 @@ class GlEntryHeader {
       docCode: json['doc_code'] ?? '',
       docName: json['doc_name_thai'] ?? '',
       docDate: json['doc_date'] != null
-          ? DateTime.parse(json['doc_date'])
+          ? parseLocalDate(json['doc_date'])
           : DateTime.now(),
       postingDate: json['posting_date'] != null
-          ? DateTime.parse(json['posting_date'])
+          ? parseLocalDate(json['posting_date'])
           : DateTime.now(),
       refNo: json['ref_no'] ?? '',
       description: json['description'] ?? '',
@@ -96,7 +97,7 @@ class GlEntryHeader {
       refDocCode: json['ref_doc_code'], // จากการ JOIN ใน Controller
       refDocName: json['ref_doc_name'], // จากการ JOIN ใน Controller
       refDocNo: json['ref_doc_no'],
-      refDocDate: json['ref_doc_date'] != null ? DateTime.parse(json['ref_doc_date']) : null,
+      refDocDate: json['ref_doc_date'] != null ? parseLocalDate(json['ref_doc_date']) : null,
       externalSourceId: json['external_source_id'],
     );
   }
@@ -105,8 +106,8 @@ class GlEntryHeader {
     return {
       'doc_id': docId,
       'doc_no': docNo,
-      'doc_date': docDate.toIso8601String(),
-      'posting_date': postingDate.toIso8601String(),
+      'doc_date': formatLocalDate(docDate),
+      'posting_date': formatLocalDate(postingDate),
       'ref_no': refNo,
       'description': description,
       'period_id': periodId,
@@ -122,7 +123,7 @@ class GlEntryHeader {
       'updated_by': 1,
       'ref_doc_id': refDocId,
       'ref_doc_no': refDocNo,
-      'ref_doc_date': refDocDate?.toIso8601String(),
+      'ref_doc_date': refDocDate != null ? formatLocalDate(refDocDate!) : null,
       'external_source_id': externalSourceId,
     };
   }

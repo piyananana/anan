@@ -131,6 +131,8 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
       );
     }
 
+    final bool readOnly = widget.mode == Mode.view;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -149,9 +151,9 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
             const SizedBox(height: 20),
             Row(
               children: [
-                Expanded(child: 
+                Expanded(child:
                   TextFormField(
-                    enabled: widget.mode != Mode.edit,
+                    readOnly: widget.mode != Mode.add,
                     controller: _projectCodeController,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
@@ -173,8 +175,9 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: 
+                Expanded(child:
                   TextFormField(
+                    readOnly: readOnly,
                     controller: _projectNameThaiController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อโครงการ (ไทย)',
@@ -190,8 +193,9 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: 
+                Expanded(child:
                   TextFormField(
+                    readOnly: readOnly,
                     controller: _projectNameEngController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อโครงการ (อังกฤษ)',
@@ -222,7 +226,7 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
                     title: Text('สถานะ: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
                     trailing: Switch(
                       value: _isActive,
-                      onChanged: (bool value) {
+                      onChanged: readOnly ? null : (bool value) {
                         setState(() {
                           _isActive = value;
                         });
@@ -247,7 +251,7 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
                   title: Text(
                       'วันที่เริ่มต้น: ${_dateFormat.format(_startDate.toLocal())}'),
                   trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
+                  onTap: readOnly ? null : () async {
                           final picked = await showDatePicker(
                               context: context,
                               initialDate: _startDate,
@@ -257,7 +261,6 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
                             setState(() {
                               _startDate = picked;
                               if (widget.mode == Mode.add) {
-                                // หากเป็นการเพิ่มปีบัญชีใหม่ ให้ตั้งวันที่สิ้นสุดอัตโนมัติ
                                 _endDate = DateTime(
                                     picked.year + 1, picked.month, picked.day).toLocal();
                                 _endDate = _endDate.subtract(const Duration(days: 1)).toLocal();
@@ -281,7 +284,7 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
                   title: Text(
                       'วันที่สิ้นสุด: ${_dateFormat.format(_endDate.toLocal())}'),
                   trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
+                  onTap: readOnly ? null : () async {
                           final picked = await showDatePicker(
                               context: context,
                               initialDate: _endDate,

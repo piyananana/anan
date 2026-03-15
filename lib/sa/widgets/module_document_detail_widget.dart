@@ -83,6 +83,7 @@ class ModuleDocumentDetailWidgetState
     _isActive = _selected?.isActive ?? true;
     _sysModule = _selected?.sysModule ?? '';
     _sysDocType = _selected?.sysDocType ?? '';
+    _sysDocTypes = getSysDocType(_sysModule);
     _sampleDocNoController = TextEditingController(text: generateDocNo());
     if (widget.mode == Mode.addChild) {
       _docCodeController.clear();
@@ -132,6 +133,7 @@ class ModuleDocumentDetailWidgetState
       _isActive = _selected?.isActive ?? true;
       _sysModule = _selected?.sysModule ?? '';
       _sysDocType = _selected?.sysDocType ?? '';
+      _sysDocTypes = getSysDocType(_sysModule);
       _sampleDocNoController = TextEditingController(text: generateDocNo());
       if (widget.mode == Mode.addChild) {
         // กรณีเลือก row ใหม่ เป็นโหมดเพิ่มประเภทเอกสารใหม่
@@ -229,7 +231,7 @@ class ModuleDocumentDetailWidgetState
       case '21':
         return apSysDocType;
       case '31':
-        return ivSysDocType;
+        return imSysDocType;
       case '81':
         return cqSysDocType;
       case '86':
@@ -314,6 +316,8 @@ class ModuleDocumentDetailWidgetState
       );
     }
 
+    final bool readOnly = widget.mode == Mode.view;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -333,7 +337,7 @@ class ModuleDocumentDetailWidgetState
             ),
             const SizedBox(height: 20),
             TextFormField(
-              enabled: widget.mode != Mode.edit,
+              readOnly: widget.mode != Mode.add && widget.mode != Mode.addChild,
               controller: _docCodeController,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
               textAlign: TextAlign.center,
@@ -355,6 +359,7 @@ class ModuleDocumentDetailWidgetState
               children: [
                 Expanded(
                   child: TextFormField(
+                    readOnly: readOnly,
                     controller: _docNameThaiController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อ (ภาษาไทย)',
@@ -372,6 +377,7 @@ class ModuleDocumentDetailWidgetState
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextFormField(
+                    readOnly: readOnly,
                     controller: _docNameEngController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อ (ภาษาอังกฤษ)',
@@ -394,6 +400,7 @@ class ModuleDocumentDetailWidgetState
               children: [
                 Expanded(
                   child: TextFormField(
+                    readOnly: readOnly,
                     controller: _sortOrderController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
@@ -423,7 +430,7 @@ class ModuleDocumentDetailWidgetState
                     title: Text('สถานะ: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
                     trailing: Switch(
                       value: _isActive,
-                      onChanged: (bool value) {
+                      onChanged: readOnly ? null : (bool value) {
                         setState(() {
                           _isActive = value;
                         });
@@ -450,7 +457,7 @@ class ModuleDocumentDetailWidgetState
                         child: Text(entry),
                       );
                     }).toList(),
-                    onChanged: (value) {
+                    onChanged: readOnly ? null : (value) {
                       if (value != null) {
                         setState(() {
                           _isDocType = value == 'ประเภทเอกสาร';
@@ -471,12 +478,11 @@ class ModuleDocumentDetailWidgetState
                     ),
                     items: sysModules.entries.map((entry) {
                       return DropdownMenuItem(
-                        // value: entry.value,
                         value: entry.key,
                         child: Text('${entry.key} - ${entry.value}'),
                       );
                     }).toList(),
-                    onChanged: (value) {
+                    onChanged: readOnly ? null : (value) {
                       if (value != null) {
                         setState(() {
                           _sysModule = value;
@@ -499,26 +505,28 @@ class ModuleDocumentDetailWidgetState
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _sysDocType,
+                            value: _sysDocTypes.containsKey(_sysDocType)
+                                ? _sysDocType
+                                : '',
                             decoration: InputDecoration(
                               labelText: _sysDocTypes.isNotEmpty
                                   ? 'ประเภทเอกสารหลักของ ${sysModules[_sysModule]}'
-                                  : 'ไม่มีประเภทเอกสารหลัก',
+                                  : 'ประเภทเอกสารหลัก',
                               border: const OutlineInputBorder(),
                             ),
-                            items: _sysDocTypes.entries.map((entry) {
-                              return DropdownMenuItem(
-                                value: entry.key,
-                                child: Text('${entry.key} - ${entry.value}'),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
+                            items: [
+                              const DropdownMenuItem(
+                                  value: '', child: Text('- ไม่ระบุ -')),
+                              ..._sysDocTypes.entries.map((entry) {
+                                return DropdownMenuItem(
+                                  value: entry.key,
+                                  child: Text('${entry.key} - ${entry.value}'),
+                                );
+                              }),
+                            ],
+                            onChanged: readOnly ? null : (value) {
                               if (value != null) {
                                 setState(() {
-                                  // _sysDocType = _sysDocTypes.keys.firstWhere(
-                                  //     (k) =>
-                                  //         _sysDocTypes[k] ==
-                                  //         value); //, orElse: () => '');
                                   _sysDocType = value;
                                 });
                               }
@@ -540,7 +548,7 @@ class ModuleDocumentDetailWidgetState
                                 'เลขที่เอกสารอัตโนมัติ: ${_isAutoNumbering ? 'ใช่' : 'ไม่'}'),
                             trailing: Switch(
                               value: _isAutoNumbering,
-                              onChanged: (bool value) {
+                              onChanged: readOnly ? null : (bool value) {
                                 setState(() {
                                   _isAutoNumbering = value;
                                 });
@@ -562,6 +570,7 @@ class ModuleDocumentDetailWidgetState
                                   children: [
                                     Expanded(
                                       child: TextFormField(
+                                        readOnly: readOnly,
                                         controller: _formatPrefixController,
                                         decoration: const InputDecoration(
                                           labelText: 'คำนำหน้า',
@@ -603,7 +612,7 @@ class ModuleDocumentDetailWidgetState
                                             child: Text(val),
                                           );
                                         }).toList(),
-                                        onChanged: (value) {
+                                        onChanged: readOnly ? null : (value) {
                                           if (value != null) {
                                             setState(() {
                                               _formatSuffixDate = value;
@@ -617,6 +626,7 @@ class ModuleDocumentDetailWidgetState
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: TextFormField(
+                                        readOnly: readOnly,
                                         controller: _formatSeparatorController,
                                         decoration: const InputDecoration(
                                           labelText: 'อักษรคั่น',
@@ -653,7 +663,7 @@ class ModuleDocumentDetailWidgetState
                                             child: Text(val.toString()),
                                           );
                                         }).toList(),
-                                        onChanged: (value) {
+                                        onChanged: readOnly ? null : (value) {
                                           if (value != null) {
                                             setState(() {
                                               _runningLength = value;
@@ -688,6 +698,7 @@ class ModuleDocumentDetailWidgetState
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: TextFormField(
+                                        readOnly: readOnly,
                                         controller:
                                             _nextRunningNumberController,
                                         textAlign: TextAlign.right,

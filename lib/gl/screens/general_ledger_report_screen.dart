@@ -2,7 +2,6 @@ import 'dart:typed_data';
 import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -61,6 +60,9 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   bool _hideZero = true;
   bool _isLoading = false;
   bool _reportGenerated = false;
+  bool _isFilterExpanded = true;
+  double _filterPanelWidth = 350.0;
+  bool _isDraggingDivider = false;
 
   // Report Data
   List<Map<String, dynamic>> _beginningBalances = [];
@@ -538,17 +540,42 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('บัญชีแยกประเภท (General Ledger)'),
+        title: const Row(children: [Icon(Icons.menu_book, color: Colors.white, size: 20), SizedBox(width: 8), Text('บัญชีแยกประเภท (General Ledger)')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
       ),
-      body: ResizableContainer(
-        direction: Axis.horizontal,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxFilterWidth =
+              (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+          return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ส่วนเงื่อนไข
-          ResizableChild(
-            size: const ResizableSize.pixels(350),
-            child: Card(
+          Container(
+            width: 36,
+            color: Colors.deepOrange[900],
+            child: IconButton(
+              icon: Icon(
+                _isFilterExpanded ? Icons.filter_list_off : Icons.filter_list,
+                color: Colors.white,
+                size: 20,
+              ),
+              padding: EdgeInsets.zero,
+              onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
+              tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+            ),
+          ),
+          AnimatedContainer(
+            duration: _isDraggingDivider
+                ? Duration.zero
+                : const Duration(milliseconds: 200),
+            width: _isFilterExpanded ? _filterPanelWidth : 0.0,
+            child: ClipRect(
+              child: OverflowBox(
+                maxWidth: _filterPanelWidth,
+                minWidth: _filterPanelWidth,
+                alignment: Alignment.topLeft,
+                child: Card(
               margin: const EdgeInsets.all(8),
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -635,9 +662,33 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                 ),
               ),
             ),
-          ),
+                ),
+              ),
+            ),
+          // draggable divider
+          if (_isFilterExpanded)
+            MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: GestureDetector(
+                onHorizontalDragStart: (_) =>
+                    setState(() => _isDraggingDivider = true),
+                onHorizontalDragUpdate: (details) {
+                  setState(() {
+                    _filterPanelWidth =
+                        (_filterPanelWidth + details.delta.dx)
+                            .clamp(200.0, maxFilterWidth);
+                  });
+                },
+                onHorizontalDragEnd: (_) =>
+                    setState(() => _isDraggingDivider = false),
+                child: Container(
+                  width: 5,
+                  color: Colors.grey[400],
+                ),
+              ),
+            ),
           // ส่วน Preview
-          ResizableChild(
+          Expanded(
             child: Container(
               color: Colors.grey[200],
               child: !_reportGenerated
@@ -651,6 +702,8 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             ),
           ),
         ],
+      );
+        },
       ),
     );
   }

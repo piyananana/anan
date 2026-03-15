@@ -464,7 +464,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
 
   Widget _buildDetailItem(int index) {
     final detail = _details[index];
-    final currencyFormat = NumberFormat("#,###,###,##0.00");
+    final currencyFormat = NumberFormat("#,##0.00", "en_US");
     final accountInfo = _accounts.firstWhere((a) => a.id == detail.accountId,
         orElse: () => Account(
             id: 0,
@@ -1142,7 +1142,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                          NumberFormat("##,###,###,##0.00")
+                          NumberFormat("#,##0.00", "en_US")
                               .format(_header.totalDebitFc),
                           textAlign: TextAlign.right,
                           style: TextStyle(
@@ -1159,7 +1159,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                           child: Text(
                             _header.totalDebitLc == 0
                                 ? ''
-                                : '${NumberFormat("##,###,###,##0.00").format(_header.totalDebitLc)} $_baseCurrency',
+                                : '${NumberFormat("#,##0.00", "en_US").format(_header.totalDebitLc)} $_baseCurrency',
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey[600]),
                             textAlign: TextAlign.right,
@@ -1175,7 +1175,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                          NumberFormat("##,###,###,##0.00")
+                          NumberFormat("#,##0.00", "en_US")
                               .format(_header.totalCreditFc),
                           textAlign: TextAlign.right,
                           style: TextStyle(
@@ -1192,7 +1192,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                           child: Text(
                             _header.totalCreditLc == 0
                                 ? ''
-                                : '${NumberFormat("##,###,###,##0.00").format(_header.totalCreditLc)} $_baseCurrency',
+                                : '${NumberFormat("#,##0.00", "en_US").format(_header.totalCreditLc)} $_baseCurrency',
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey[600]),
                             textAlign: TextAlign.right,

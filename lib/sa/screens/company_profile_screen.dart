@@ -39,7 +39,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
   final TextEditingController _addressNoController = TextEditingController();
   final TextEditingController _addressBuildingVillageController =
       TextEditingController();
-  final TextEditingController _addressSoiController = TextEditingController();
+  final TextEditingController _addressAlleyController = TextEditingController();
   final TextEditingController _addressRoadController = TextEditingController();
   final TextEditingController _addressSubDistrictController =
       TextEditingController();
@@ -75,7 +75,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
     _englishNameController.dispose();
     _addressNoController.dispose();
     _addressBuildingVillageController.dispose();
-    _addressSoiController.dispose();
+    _addressAlleyController.dispose();
     _addressRoadController.dispose();
     _addressSubDistrictController.dispose();
     _addressDistrictController.dispose();
@@ -112,7 +112,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
           _addressNoController.text = _company!.addressNo ?? '';
           _addressBuildingVillageController.text =
               _company!.addressBuildingVillage ?? '';
-          _addressSoiController.text = _company!.addressSoi ?? '';
+          _addressAlleyController.text = _company!.addressAlley ?? '';
           _addressRoadController.text = _company!.addressRoad ?? '';
           _addressSubDistrictController.text =
               _company!.addressSubDistrict ?? '';
@@ -204,9 +204,9 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
         addressBuildingVillage: _addressBuildingVillageController.text.isEmpty
             ? null
             : _addressBuildingVillageController.text,
-        addressSoi: _addressSoiController.text.isEmpty
+        addressAlley: _addressAlleyController.text.isEmpty
             ? null
-            : _addressSoiController.text,
+            : _addressAlleyController.text,
         addressRoad: _addressRoadController.text.isEmpty
             ? null
             : _addressRoadController.text,
@@ -327,7 +327,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
           maxLength: 100,
         ),
         _buildTextFormField(
-          controller: _addressSoiController,
+          controller: _addressAlleyController,
           labelText: 'ซอย',
           maxLength: 100,
         ),
@@ -480,7 +480,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
     return Scaffold(
       backgroundColor: Colors.blueGrey[50],
       appBar: AppBar(
-        title: const Text('ข้อมูลองค์กร/บริษัท'),
+        title: const Row(children: [Icon(Icons.business, color: Colors.white, size: 20), SizedBox(width: 8), Text('ข้อมูลองค์กร/บริษัท')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         // leading: IconButton(
@@ -627,7 +627,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
                     // ),
                     // const SizedBox(height: 15),
                     // TextFormField(
-                    //   controller: _addressSoiController,
+                    //   controller: _addressAlleyController,
                     //   decoration: const InputDecoration(
                     //     labelText: 'ซอย',
                     //     border: OutlineInputBorder(),
@@ -821,7 +821,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
                               _englishNameController.clear();
                               _addressNoController.clear();
                               _addressBuildingVillageController.clear();
-                              _addressSoiController.clear();
+                              _addressAlleyController.clear();
                               _addressRoadController.clear();
                               _addressSubDistrictController.clear();
                               _addressDistrictController.clear();

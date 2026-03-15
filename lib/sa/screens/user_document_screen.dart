@@ -1,7 +1,7 @@
 // screens/user_document_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
+
 import 'package:provider/provider.dart';
 import 'dart:collection'; // สำหรับ HashSet
 
@@ -41,6 +41,10 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
 
   // ชุดของ ModuleDocument ID ที่ถูกเลือกในโหมด Edit (ยังไม่บันทึก)
   Set<int> _stagedGrantedIds = HashSet();
+
+  bool _isLeftPanelExpanded = true;
+  double _leftPanelWidth = 360.0;
+  bool _isDraggingDivider = false;
 
   UserSortBy _sortBy = UserSortBy.userName;
   final TextEditingController _searchController = TextEditingController();
@@ -306,7 +310,7 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('จัดการสิทธิ์ประเภทเอกสารของผู้ใช้'),
+        title: const Row(children: [Icon(Icons.folder_shared, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการสิทธิ์ประเภทเอกสารของผู้ใช้')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         // leading: IconButton(
@@ -363,41 +367,82 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error.isNotEmpty
-            ? Center(child: Text(_error))
-            : 
-              ResizableContainer(
-                controller: ResizableController(),
-                direction: Axis.horizontal,
-                children: [
-                  ResizableChild(
-                    divider: ResizableDivider(
-                      color: Colors.blueGrey[200]!,
-                      thickness: 5,
-                    ),
-                    size: const ResizableSize.ratio(0.4), // 30% สำหรับ panel ซ้าย
-                    child: Container(
-                        color: Colors.blueGrey[100],
-                        child: 
-                          UserListPanel(
-                            users: _headers,
-                            onViewPermissions: _onView,
-                            onEditPermissions: _onEdit,
-                            onDeletePermissions: _onDelete,
-                            onEdit: _onEdit,
-                            onView: _onView,
-                            onDelete: _onDelete,
-                            searchController: _searchController,
-                            sortBy: _sortBy,
-                            searchQuery: _searchQuery,
+              ? Center(child: Text(_error))
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final double maxLeftWidth =
+                        (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          width: 36,
+                          color: Colors.deepOrange[900],
+                          child: IconButton(
+                            icon: Icon(
+                              _isLeftPanelExpanded
+                                  ? Icons.filter_list_off
+                                  : Icons.filter_list,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            padding: EdgeInsets.zero,
+                            onPressed: () => setState(
+                                () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
+                            tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
                           ),
-                    )
-                  ),
-                  ResizableChild(
-                    size: const ResizableSize.ratio(0.6), // 60% สำหรับ panel ขวา
-                    child: _buildDetailRightPanel(),
-                  ),
-                ],
-              ),
+                        ),
+                        AnimatedContainer(
+                          duration: _isDraggingDivider
+                              ? Duration.zero
+                              : const Duration(milliseconds: 200),
+                          width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
+                          child: ClipRect(
+                            child: OverflowBox(
+                              maxWidth: _leftPanelWidth,
+                              minWidth: _leftPanelWidth,
+                              alignment: Alignment.topLeft,
+                              child: Container(
+                                color: Colors.blueGrey[100],
+                                child: UserListPanel(
+                                  users: _headers,
+                                  onViewPermissions: _onView,
+                                  onEditPermissions: _onEdit,
+                                  onDeletePermissions: _onDelete,
+                                  onEdit: _onEdit,
+                                  onView: _onView,
+                                  onDelete: _onDelete,
+                                  searchController: _searchController,
+                                  sortBy: _sortBy,
+                                  searchQuery: _searchQuery,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (_isLeftPanelExpanded)
+                          MouseRegion(
+                            cursor: SystemMouseCursors.resizeColumn,
+                            child: GestureDetector(
+                              onHorizontalDragStart: (_) =>
+                                  setState(() => _isDraggingDivider = true),
+                              onHorizontalDragUpdate: (details) {
+                                setState(() {
+                                  _leftPanelWidth =
+                                      (_leftPanelWidth + details.delta.dx)
+                                          .clamp(200.0, maxLeftWidth);
+                                });
+                              },
+                              onHorizontalDragEnd: (_) =>
+                                  setState(() => _isDraggingDivider = false),
+                              child: Container(width: 5, color: Colors.grey[400]),
+                            ),
+                          ),
+                        Expanded(child: _buildDetailRightPanel()),
+                      ],
+                    );
+                  },
+                ),
     );
   }
 

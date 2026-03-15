@@ -1,4 +1,5 @@
 // models/company.dart
+import '../../../utils/date_utils.dart';
 
 class Company {
   final int? id;
@@ -6,7 +7,7 @@ class Company {
   String? englishName;
   String? addressNo;
   String? addressBuildingVillage;
-  String? addressSoi;
+  String? addressAlley;
   String? addressRoad;
   String? addressSubDistrict;
   String? addressDistrict;
@@ -31,7 +32,7 @@ class Company {
     this.englishName,
     this.addressNo,
     this.addressBuildingVillage,
-    this.addressSoi,
+    this.addressAlley,
     this.addressRoad,
     this.addressSubDistrict,
     this.addressDistrict,
@@ -58,7 +59,7 @@ class Company {
       englishName: json['english_name'] as String?,
       addressNo: json['address_no'] as String?,
       addressBuildingVillage: json['address_building_village'] as String?,
-      addressSoi: json['address_soi'] as String?,
+      addressAlley: json['address_alley'] as String?,
       addressRoad: json['address_road'] as String?,
       addressSubDistrict: json['address_sub_district'] as String?,
       addressDistrict: json['address_district'] as String?,
@@ -67,8 +68,8 @@ class Company {
       addressZipCode: json['address_zip_code'] as String?,
       taxIdNumber: json['tax_id_number'] as String?,
       logoUrl: json['logo_url'] as String?,
-      startDate: json['start_date'] != null ? DateTime.parse(json['start_date']) : null,
-      maintenanceContractDate: json['maintenance_contract_date'] != null ? DateTime.parse(json['maintenance_contract_date']) : null,
+      startDate: json['start_date'] != null ? parseLocalDate(json['start_date']) : null,
+      maintenanceContractDate: json['maintenance_contract_date'] != null ? parseLocalDate(json['maintenance_contract_date']) : null,
       serialNumber: json['serial_number'] as String?,
       phoneNumber: json['phone_number'] as String?,
       faxNumber: json['fax_number'] as String?,
@@ -86,7 +87,7 @@ class Company {
       'english_name': englishName ?? '',
       'address_no': addressNo ?? '',
       'address_building_village': addressBuildingVillage ?? '',
-      'address_soi': addressSoi ?? '',
+      'address_alley': addressAlley ?? '',
       'address_road': addressRoad ?? '',
       'address_sub_district': addressSubDistrict ?? '',
       'address_district': addressDistrict ?? '',
@@ -94,8 +95,8 @@ class Company {
       'address_country': addressCountry ?? '',
       'address_zip_code': addressZipCode ?? '',
       'tax_id_number': taxIdNumber ?? '',
-      'start_date': startDate?.toIso8601String().split('T').first ?? 'null',
-      'maintenance_contract_date': maintenanceContractDate?.toIso8601String().split('T').first ?? 'null',
+      'start_date': startDate != null ? formatLocalDate(startDate!) : '',
+      'maintenance_contract_date': maintenanceContractDate != null ? formatLocalDate(maintenanceContractDate!) : '',
       'serial_number': serialNumber ?? '',
       'phone_number': phoneNumber ?? '',
       'fax_number': faxNumber ?? '',

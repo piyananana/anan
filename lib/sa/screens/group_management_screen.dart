@@ -1,6 +1,6 @@
 // screens/menu_management_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
+
 import 'package:provider/provider.dart';
 
 import '../models/group.dart';
@@ -46,6 +46,10 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
   bool _isActive = true;
   bool _haveSubGroup = true;
   final TextEditingController _descriptionController = TextEditingController();
+
+  bool _isLeftPanelExpanded = true;
+  double _leftPanelWidth = 360.0;
+  bool _isDraggingDivider = false;
   // final TextEditingController _contactPersonController = TextEditingController();
   // final TextEditingController _phoneNumberController = TextEditingController();
   // final TextEditingController _emailController = TextEditingController();
@@ -270,7 +274,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('จัดการกลุ่ม'),
+        title: const Row(children: [Icon(Icons.group_work, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการกลุ่ม')]),
         // leading: IconButton(
         //   icon: const Icon(Icons.arrow_back),
         //   onPressed: () {
@@ -284,55 +288,94 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
       ),
-      body: 
-        ResizableContainer(
-          controller: ResizableController(),
-          direction: Axis.horizontal,
-          children: [
-            ResizableChild(
-              divider: ResizableDivider(
-                color: Colors.blueGrey[200]!,
-                thickness: 5,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxLeftWidth =
+              (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 36,
+                color: Colors.deepOrange.shade900,
+                child: IconButton(
+                  icon: Icon(
+                    _isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: () =>
+                      setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
+                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                ),
               ),
-              size: const ResizableSize.ratio(0.4), // 30% สำหรับ panel ซ้าย
-              child: Container(
-                color: Colors.blueGrey[100],
-                child: Column(
-                  children: [
-                    // ปุ่มเพิ่มเมนูหลัก เมื่อมีเมนูอยู่แล้ว (ไม่ซ้ำกับ AppBar)
-                    // if (_currentList.isNotEmpty && _formMode == NodeMode.none)
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _setAddRootMode,
-                            icon: const Icon(Icons.add),
-                            label: const Text('เพิ่มรายกาารหลัก'),
+              AnimatedContainer(
+                duration: _isDraggingDivider
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200),
+                width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
+                child: ClipRect(
+                  child: OverflowBox(
+                    maxWidth: _leftPanelWidth,
+                    minWidth: _leftPanelWidth,
+                    alignment: Alignment.topLeft,
+                    child: Container(
+                      color: Colors.blueGrey[100],
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _setAddRootMode,
+                                icon: const Icon(Icons.add),
+                                label: const Text('เพิ่มรายกาารหลัก'),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: topLevelData.length,
-                        itemBuilder: (context, index) {
-                          return _buildNode(topLevelData[index], 0);
-                        },
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: topLevelData.length,
+                              itemBuilder: (context, index) {
+                                return _buildNode(topLevelData[index], 0);
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
                   ),
+                ),
               ),
-            ),
-            ResizableChild(
-              size: const ResizableSize.ratio(0.6), // 60% สำหรับ panel ซ้าย
-              child: _selectedNode == null && _formMode == NodeMode.none
-                ? const Center(
-                    child: Text('กรุณาเลือกกลุ่ม หรือ ปุ่มการทำงานจากด้านซ้าย'))
-                : _buildDetailForm(),
-            ),
-          ],
-        ),
+              if (_isLeftPanelExpanded)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) =>
+                        setState(() => _isDraggingDivider = true),
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx)
+                            .clamp(200.0, maxLeftWidth);
+                      });
+                    },
+                    onHorizontalDragEnd: (_) =>
+                        setState(() => _isDraggingDivider = false),
+                    child: Container(width: 5, color: Colors.grey[400]),
+                  ),
+                ),
+              Expanded(
+                child: _selectedNode == null && _formMode == NodeMode.none
+                    ? const Center(
+                        child: Text('กรุณาเลือกกลุ่ม หรือ ปุ่มการทำงานจากด้านซ้าย'))
+                    : _buildDetailForm(),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 

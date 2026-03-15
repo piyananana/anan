@@ -22,7 +22,14 @@ const Map<String, String> sysModules = {
   '96': 'ภาษีขาย',
 };
 // '01': 'บัญชีแยกประเภท'
-const Map<String, String> glSysDocType = {};
+const Map<String, String> glSysDocType = {
+  '10': 'ตั้งยอดบัญชียกมา',
+  '30': 'ใบสำคัญรับ',
+  '50': 'ใบสำคัญจ่าย',
+  '70': 'ใบสำคัญทั่วไป',
+  '80': 'ปรับปรุงบัญชี',
+  '90': 'ปิดบัญชี',
+};
 // '11': 'บัญชีลูกหนี้'
 const Map<String, String> arSysDocType = {
   '10': 'ตั้งยอดลูกหนี้',
@@ -38,7 +45,7 @@ const Map<String, String> apSysDocType = {
   '70': 'จ่ายชำระ',
 };
 // '31': 'สินค้าคงคลัง'
-const Map<String, String> ivSysDocType = {
+const Map<String, String> imSysDocType = {
   '10': 'Good Receive Note', // buy (stock+ ap+)
   '15': 'Return to Supplier', // return (stock- ap-)
   '20': 'Credit Note from Supplier', // cn (stock- ap-)

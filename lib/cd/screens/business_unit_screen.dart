@@ -1,6 +1,6 @@
 // screens/account_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
+
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -31,6 +31,10 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
   bool _isImportOrExport = false;
   Mode _mode = Mode.none;
   BusinessUnit? _selectedData;
+
+  bool _isLeftPanelExpanded = true;
+  double _leftPanelWidth = 360.0;
+  bool _isDraggingDivider = false;
 
   @override
   void initState() {
@@ -278,7 +282,7 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ผังหน่วยงาน'),
+        title: const Row(children: [Icon(Icons.corporate_fare, color: Colors.white, size: 20), SizedBox(width: 8), Text('ผังหน่วยงาน')]),
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
         // actions: [
@@ -309,48 +313,87 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
         //   const SizedBox(width: 8),
         // ],
       ),
-      body: 
-          ResizableContainer(
-            controller: ResizableController(),
-            direction: Axis.horizontal,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxLeftWidth =
+              (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ResizableChild(
-                divider: ResizableDivider(
-                  color: Colors.blueGrey[200]!,
-                  thickness: 5,
+              Container(
+                width: 36,
+                color: Colors.deepOrange.shade900,
+                child: IconButton(
+                  icon: Icon(
+                    _isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: () =>
+                      setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
+                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
                 ),
-                size: const ResizableSize.ratio(0.4), // 30% สำหรับ panel ซ้าย
-                child: Container(
-                  color: Colors.blueGrey[100],
-                  child: Column(
-                    children: [
-                    Expanded(
-                      child: BusinessUnitListTreeWidget(
-                        key: _listWidgetKey,
-                        enableAddRootButton: true,
-                        enableAddChildButton: true,
-                        enableEditButton: true,
-                        enableViewButton: true,
-                        enableDeleteButton: true,
-                        enableCardSelect: false,
-                        onAddRoot: _onAddRoot,
-                        onAddChild: _onAddChild,
-                        onEdit: _onEdit,
-                        onView: _onView,
-                        onDelete: _onDelete,
-                        onCallback: _onCallback,
+              ),
+              AnimatedContainer(
+                duration: _isDraggingDivider
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200),
+                width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
+                child: ClipRect(
+                  child: OverflowBox(
+                    maxWidth: _leftPanelWidth,
+                    minWidth: _leftPanelWidth,
+                    alignment: Alignment.topLeft,
+                    child: Container(
+                      color: Colors.blueGrey[100],
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: BusinessUnitListTreeWidget(
+                              key: _listWidgetKey,
+                              enableAddRootButton: true,
+                              enableAddChildButton: true,
+                              enableEditButton: true,
+                              enableViewButton: true,
+                              enableDeleteButton: true,
+                              enableCardSelect: false,
+                              onAddRoot: _onAddRoot,
+                              onAddChild: _onAddChild,
+                              onEdit: _onEdit,
+                              onView: _onView,
+                              onDelete: _onDelete,
+                              onCallback: _onCallback,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    ],
                   ),
                 ),
               ),
-              ResizableChild(
-                size: const ResizableSize.ratio(0.6), // 60% สำหรับ panel ขวา
-                child: _buildRightPanel(),
-              ),
+              if (_isLeftPanelExpanded)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) =>
+                        setState(() => _isDraggingDivider = true),
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx)
+                            .clamp(200.0, maxLeftWidth);
+                      });
+                    },
+                    onHorizontalDragEnd: (_) =>
+                        setState(() => _isDraggingDivider = false),
+                    child: Container(width: 5, color: Colors.grey[400]),
+                  ),
+                ),
+              Expanded(child: _buildRightPanel()),
             ],
-          ),
+          );
+        },
+      ),
     );
   }
 

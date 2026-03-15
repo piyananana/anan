@@ -138,7 +138,7 @@ class _YearEndClosingConfigScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ตั้งค่าการปิดบัญชีสิ้นปี'),
+        title: const Row(children: [Icon(Icons.tune, color: Colors.white, size: 20), SizedBox(width: 8), Text('ตั้งค่าการปิดบัญชีสิ้นปี')]),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),

@@ -192,6 +192,8 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
       );
     }
 
+    final bool readOnly = widget.mode == Mode.view;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -210,9 +212,9 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
             const SizedBox(height: 20),
             Row(
               children: [
-                Expanded(child: 
+                Expanded(child:
                   TextFormField(
-                    enabled: widget.mode != Mode.edit,
+                    readOnly: widget.mode != Mode.add,
                     controller: _branchCodeController,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
@@ -234,8 +236,9 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: 
+                Expanded(child:
                   TextFormField(
+                    readOnly: readOnly,
                     controller: _branchNameThaiController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อสาขา (ไทย)',
@@ -251,8 +254,9 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                   ),
                 ),
                 const SizedBox(width: 4),
-                Expanded(child: 
+                Expanded(child:
                   TextFormField(
+                    readOnly: readOnly,
                     controller: _branchNameEngController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อสาขา (อังกฤษ)',
@@ -283,7 +287,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                     title: Text('สถานะ: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
                     trailing: Switch(
                       value: _isActive,
-                      onChanged: (bool value) {
+                      onChanged: readOnly ? null : (bool value) {
                         setState(() {
                           _isActive = value;
                         });
@@ -357,41 +361,46 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
   }
 
   Widget _buildAddressFields() {
+    final bool readOnly = widget.mode == Mode.view;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ... (Address No, Building/Village, Soi, Road - ไม่มีการเปลี่ยนแปลง)
         Row(crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: 
+            Expanded(child:
               _buildTextFormField(
                 controller: _addressNoController,
                 labelText: 'บ้านเลขที่ / ห้อง',
                 maxLength: 50,
+                readOnly: readOnly,
               ),
             ),
             const SizedBox(width: 4,),
-            Expanded(child: 
+            Expanded(child:
               _buildTextFormField(
                 controller: _addressBuildingVillageController,
                 labelText: 'อาคาร / หมู่บ้าน',
                 maxLength: 100,
+                readOnly: readOnly,
               ),
             ),
             const SizedBox(width: 4,),
-            Expanded(child: 
+            Expanded(child:
               _buildTextFormField(
                 controller: _addressSoiController,
                 labelText: 'ซอย',
                 maxLength: 100,
+                readOnly: readOnly,
               ),
             ),
             const SizedBox(width: 4,),
-            Expanded(child: 
+            Expanded(child:
               _buildTextFormField(
                 controller: _addressRoadController,
                 labelText: 'ถนน',
                 maxLength: 100,
+                readOnly: readOnly,
               ),
             ),
           ],
@@ -403,51 +412,50 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
             IconButton(
               icon: const Icon(Icons.search, color: Colors.blue),
               tooltip: 'ค้นหา ตำบล/แขวง, อำเภอ/เขต, จังหวัด, รหัสไปรษณีย์',
-              onPressed: _showZipCodeSearchCard, // เรียก Card ค้นหา
+              onPressed: readOnly ? null : _showZipCodeSearchCard,
             ),
-            Expanded(child: 
+            Expanded(child:
               Column(children: [
                 Row(crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: 
+                    Expanded(child:
                       // แขวง / ตำบล
                       _buildTextFormField(
                         controller: _addressSubDistrictController,
                         labelText: 'ตำบล / แขวง',
                         maxLength: 100,
-                        // กำหนดให้เป็น ReadOnly ถ้าต้องการให้กรอกได้แค่จากการค้นหา
-                        // readOnly: true,
+                        readOnly: readOnly,
                       ),
                     ),
                     const SizedBox(width: 4,),
-                    Expanded(child: 
+                    Expanded(child:
                       // อำเภอ / เขต
                       _buildTextFormField(
                         controller: _addressDistrictController,
                         labelText: 'อำเภอ / เขต',
                         maxLength: 100,
-                        // readOnly: true,
+                        readOnly: readOnly,
                       ),
                     ),
                     const SizedBox(width: 4,),
-                    Expanded(child: 
+                    Expanded(child:
                       // จังหวัด
                       _buildTextFormField(
                         controller: _addressProvinceController,
                         labelText: 'จังหวัด',
                         maxLength: 100,
-                        // readOnly: true,
+                        readOnly: readOnly,
                       ),
                     ),
                     const SizedBox(width: 4,),
-                    Expanded(child: 
+                    Expanded(child:
                       // รหัสไปรษณีย์
                       _buildTextFormField(
                         controller: _addressZipCodeController,
                         labelText: 'รหัสไปรษณีย์',
                         maxLength: 10,
                         keyboardType: TextInputType.number,
-                        // readOnly: true,
+                        readOnly: readOnly,
                       ),
                     ),
                   ],
@@ -462,7 +470,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
           labelText: 'ประเทศ',
           maxLength: 100,
           keyboardType: TextInputType.text,
-          // readOnly: true,
+          readOnly: readOnly,
         ),
 
         // TextFormField(
@@ -484,36 +492,39 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
   }
 
   Widget _buildContactFields() {
+    final bool readOnly = widget.mode == Mode.view;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ... (Address No, Building/Village, Soi, Road - ไม่มีการเปลี่ยนแปลง)
         Row(crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: 
+            Expanded(child:
               _buildTextFormField(
                 controller: _phoneNumberController,
                 labelText: 'เบอร์โทรศัพท์',
                 keyboardType: TextInputType.phone,
                 maxLength: 50,
+                readOnly: readOnly,
               ),
             ),
             const SizedBox(width: 4,),
-            Expanded(child: 
+            Expanded(child:
               _buildTextFormField(
                 controller: _faxNumberController,
                 labelText: 'เบอร์แฟกซ์',
                 keyboardType: TextInputType.phone,
                 maxLength: 50,
+                readOnly: readOnly,
               ),
             ),
             const SizedBox(width: 4,),
-            Expanded(child: 
+            Expanded(child:
               _buildTextFormField(
                 controller: _primaryContactPersonController,
                 labelText: 'ผู้ติดต่อหลัก',
                 keyboardType: TextInputType.text,
                 maxLength: 100,
+                readOnly: readOnly,
               ),
             ),
           ],

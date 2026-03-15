@@ -22,6 +22,7 @@ import 'cd/services/business_unit_service.dart';
 import 'cd/services/currency_service.dart';
 import 'cd/services/project_service.dart';
 import 'cd/services/zipcode_service.dart';
+import 'cd/services/vat_rate_service.dart';
 
 import 'gl/services/account_service.dart';
 import 'gl/services/gl_entry_service.dart';
@@ -29,6 +30,8 @@ import 'gl/services/financial_report_service.dart';
 import 'gl/services/general_ledger_report_service.dart';
 import 'gl/services/period_service.dart';
 import 'gl/services/trial_balance_report_service.dart';
+
+import 'ar/services/ar_customer_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -60,6 +63,7 @@ class MyApp extends StatelessWidget {
         Provider<CurrencyService>(create: (_) => CurrencyService()),
         Provider<ProjectService>(create: (_) => ProjectService()),
         Provider<ZipcodeService>(create: (_) => ZipcodeService()),
+        Provider<VatRateService>(create: (_) => VatRateService()),
 
         Provider<AccountService>(create: (_) => AccountService()),
         Provider<GlEntryService>(create: (_) => GlEntryService()),
@@ -67,6 +71,8 @@ class MyApp extends StatelessWidget {
         Provider<GeneralLedgerReportService>(create: (_) => GeneralLedgerReportService()),
         Provider<PeriodService>(create: (_) => PeriodService()),
         Provider<TrialBalanceReportService>(create: (_) => TrialBalanceReportService()),
+
+        Provider<ArCustomerService>(create: (_) => ArCustomerService()),
         // Add other providers if needed
       ],
       child: MaterialApp(

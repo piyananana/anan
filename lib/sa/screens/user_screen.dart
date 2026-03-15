@@ -1,7 +1,7 @@
 // screens/user_management_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
+
 import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../services/user_service.dart';
@@ -39,6 +39,10 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
   UserSortBy _sortBy = UserSortBy.userName;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+
+  bool _isLeftPanelExpanded = true;
+  double _leftPanelWidth = 360.0;
+  bool _isDraggingDivider = false;
 
   @override
   void initState() {
@@ -201,7 +205,7 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('จัดการผู้ใช้'),
+        title: const Row(children: [Icon(Icons.manage_accounts, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการผู้ใช้')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [
@@ -244,55 +248,97 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
           ? const Center(child: CircularProgressIndicator())
           : _error.isNotEmpty
               ? Center(child: Text(_error))
-              : 
-                ResizableContainer(
-                  controller: ResizableController(),
-                  direction: Axis.horizontal,
-                  children: [
-                    ResizableChild(
-                      divider: ResizableDivider(
-                        color: Colors.blueGrey[200]!,
-                        thickness: 5,
-                      ),
-                      size: const ResizableSize.ratio(0.4), // 30% สำหรับ panel ซ้าย
-                      child: Container(
-                        color: Colors.blueGrey[100],
-                        child: Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: _onAddUser,
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('เพิ่มผู้ใช้ใหม่'),
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final double maxLeftWidth =
+                        (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          width: 36,
+                          color: Colors.deepOrange[900],
+                          child: IconButton(
+                            icon: Icon(
+                              _isLeftPanelExpanded
+                                  ? Icons.filter_list_off
+                                  : Icons.filter_list,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            padding: EdgeInsets.zero,
+                            onPressed: () => setState(
+                                () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
+                            tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                          ),
+                        ),
+                        AnimatedContainer(
+                          duration: _isDraggingDivider
+                              ? Duration.zero
+                              : const Duration(milliseconds: 200),
+                          width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
+                          child: ClipRect(
+                            child: OverflowBox(
+                              maxWidth: _leftPanelWidth,
+                              minWidth: _leftPanelWidth,
+                              alignment: Alignment.topLeft,
+                              child: Container(
+                                color: Colors.blueGrey[100],
+                                child: Column(
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton.icon(
+                                          onPressed: _onAddUser,
+                                          icon: const Icon(Icons.add),
+                                          label: const Text('เพิ่มผู้ใช้ใหม่'),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: UserListPanel(
+                                        users: _users,
+                                        onEdit: _onEditUser,
+                                        onView: _onViewUser,
+                                        onDelete: _onDeleteUser,
+                                        searchController: _searchController,
+                                        sortBy: _sortBy,
+                                        searchQuery: _searchQuery,
+                                        onViewPermissions: (user) {},
+                                        onEditPermissions: (user) {},
+                                        onDeletePermissions: (user) {},
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                            Expanded(child: 
-                              UserListPanel(
-                                users: _users,
-                                onEdit: _onEditUser,
-                                onView: _onViewUser,
-                                onDelete: _onDeleteUser,
-                                searchController: _searchController,
-                                sortBy: _sortBy,
-                                searchQuery: _searchQuery,
-                                onViewPermissions: (user) {},
-                                onEditPermissions: (user) {},
-                                onDeletePermissions: (user) {},
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    ResizableChild(
-                      size: const ResizableSize.ratio(0.6), // 30% สำหรับ panel ซ้าย
-                      child: _buildDetailForm(),
-                    ),
-                  ],
+                        if (_isLeftPanelExpanded)
+                          MouseRegion(
+                            cursor: SystemMouseCursors.resizeColumn,
+                            child: GestureDetector(
+                              onHorizontalDragStart: (_) =>
+                                  setState(() => _isDraggingDivider = true),
+                              onHorizontalDragUpdate: (details) {
+                                setState(() {
+                                  _leftPanelWidth =
+                                      (_leftPanelWidth + details.delta.dx)
+                                          .clamp(200.0, maxLeftWidth);
+                                });
+                              },
+                              onHorizontalDragEnd: (_) =>
+                                  setState(() => _isDraggingDivider = false),
+                              child: Container(width: 5, color: Colors.grey[400]),
+                            ),
+                          ),
+                        Expanded(child: _buildDetailForm()),
+                      ],
+                    );
+                  },
                 ),
     );
   }

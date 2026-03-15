@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../sa/models/module_document.dart';
 import '../models/gl_entry.dart';
 import '../models/period.dart';
 import '../services/gl_entry_service.dart';
@@ -32,6 +33,8 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   List<GlEntryHeader> _entries = [];
   List<GlEntryHeader> _filteredEntries = [];
   bool _isLoading = false;
+
+  Set<String> _allowedDocCodes = {};
 
   List<FiscalYear> _fiscalYears = [];
   List<PostingPeriod> _periods = [];
@@ -66,7 +69,16 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   Future<void> _initialLoad() async {
     setState(() => _isLoading = true);
     try {
-      final fys = await _periodService.fetchActiveFiscalYears();
+      final results = await Future.wait([
+        _periodService.fetchActiveFiscalYears(),
+        _entryService.fetchRowsByModuleUserId(),
+      ]);
+      final fys = results[0] as List<FiscalYear>;
+      final allowedDocs = results[1] as List<ModuleDocument>;
+      _allowedDocCodes = allowedDocs
+          .where((d) => d.isDocType)
+          .map((d) => d.docCode)
+          .toSet();
       setState(() => _fiscalYears = fys);
 
       if (fys.isNotEmpty) {
@@ -141,15 +153,22 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
 
   void _applyFilter() {
     final query = _searchCtrl.text.trim();
+    final allowed = _allowedDocCodes;
+
+    Iterable<GlEntryHeader> base = _entries;
+    if (allowed.isNotEmpty) {
+      base = base.where((item) => allowed.contains(item.docCode));
+    }
+
     if (query.isEmpty) {
-      _filteredEntries = List.from(_entries);
+      _filteredEntries = base.toList();
       return;
     }
 
     final keywords = query.toLowerCase().split(RegExp(r'\s+'));
     final dateFmt = DateFormat('dd/MM/yyyy');
 
-    _filteredEntries = _entries.where((item) {
+    _filteredEntries = base.where((item) {
       final fields = [
         item.docCode,
         item.docName,
@@ -383,7 +402,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                                       CrossAxisAlignment.end,
                                   children: [
                                     Text(
-                                        NumberFormat("#,##0.00")
+                                        NumberFormat("#,##0.00", "en_US")
                                             .format(item.totalDebitLc),
                                         style: const TextStyle(
                                             fontWeight: FontWeight.bold)),

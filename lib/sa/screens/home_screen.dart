@@ -1,5 +1,3 @@
-// import 'dart:ffi';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/menu.dart';
@@ -70,7 +68,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_menuWidthInitialized) {
-      _menuPanelCurrentWidth = MediaQuery.of(context).size.width * 0.30;
+      _menuPanelCurrentWidth = MediaQuery.of(context).size.width * 0.25;
       _menuWidthInitialized = true;
     }
   }
@@ -537,8 +535,8 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               child: IconButton(
                                 icon: Icon(
                                   _isMenuExpanded
-                                      ? Icons.arrow_back_ios_new_rounded
-                                      : Icons.arrow_forward_ios_rounded,
+                                      ? Icons.menu_open_rounded
+                                      : Icons.menu_rounded,
                                   color: Colors.orange,
                                 ),
                                 onPressed: _toggleMenuSize,
@@ -678,4 +676,5 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
 }
+
 
