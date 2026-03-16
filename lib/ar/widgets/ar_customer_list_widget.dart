@@ -82,15 +82,10 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
 
   void refresh() => _fetchLists();
 
-  static const Map<String, String> _bizTypeLabel = {
-    'trading': 'ซื้อมาขายไป',
-    'manufacturing': 'การผลิต',
-    'service': 'บริการ',
-    'mixed': 'หลายประเภท',
-  };
 
   Widget _buildHeader() {
-    return Padding(
+    return Container(
+      color: Colors.blueGrey[50],
       padding: const EdgeInsets.all(8.0),
       child: Row(
         children: [
@@ -158,8 +153,8 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
                               ),
                             ),
                             subtitle: Text(
-                              '${_bizTypeLabel[item.businessType] ?? item.businessType}'
-                              '  •  เครดิต ${item.creditDays} วัน'
+                              '${item.businessTypeNameThai ?? ''}${item.businessTypeNameThai != null ? '  •  ' : ''}เครดิต ${item.creditDays} วัน'
+                              '${item.customerGroupCode != null ? '  •  กลุ่ม: ${item.customerGroupCode}' : ''}'
                               '${item.customerNameEn != null ? '\n${item.customerNameEn}' : ''}',
                             ),
                             isThreeLine: item.customerNameEn != null,

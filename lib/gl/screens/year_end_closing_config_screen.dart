@@ -44,11 +44,13 @@ class _YearEndClosingConfigScreenState
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final accounts = await _accountService.fetchRows();
+      final accounts = await _accountService.fetchRowsControlAccount();
       final docs = await _docService.fetchRows();
-      // เฉพาะ isDocType=true และ isActive=true
-      final activeDocTypes =
-          docs.where((d) => d.isDocType && d.isActive).toList();
+      // เฉพาะ isDocType=true, isActive=true และ sysModule=01 (GL บัญชีแยกประเภท)
+      final activeDocTypes = docs
+          .where((d) => d.isDocType && d.isActive && d.sysModule == '01')
+          .toList()
+        ..sort((a, b) => a.docCode.compareTo(b.docCode));
 
       ClosingConfig? cfg;
       try {
@@ -207,9 +209,7 @@ class _YearEndClosingConfigScreenState
                         title: 'บัญชีที่ใช้ในการปิดบัญชี',
                         children: [
                           _AccountSearchField(
-                            label:
-                                'บัญชีสรุปกำไรขาดทุน (Income Summary)',
-                            hint: 'ค้นหาด้วยรหัสหรือชื่อบัญชี...',
+                            label: 'บัญชีสรุปกำไรขาดทุน (Income Summary)',
                             helperText:
                                 'บัญชีกลางที่รับโอนยอดรายได้และค่าใช้จ่ายทั้งหมด (เช่น 3-1000)',
                             accounts: _allAccounts,
@@ -220,7 +220,6 @@ class _YearEndClosingConfigScreenState
                           const SizedBox(height: 24),
                           _AccountSearchField(
                             label: 'บัญชีกำไรสะสม (Retained Earnings)',
-                            hint: 'ค้นหาด้วยรหัสหรือชื่อบัญชี...',
                             helperText:
                                 'บัญชีที่รับโอนกำไร/ขาดทุนสุทธิเข้าส่วนของผู้ถือหุ้น (เช่น 3-2000)',
                             accounts: _allAccounts,
@@ -236,7 +235,7 @@ class _YearEndClosingConfigScreenState
                       _SectionCard(
                         title: 'ประเภทเอกสารสำหรับรายการที่สร้างอัตโนมัติ',
                         children: [
-                          _DocTypeDropdown(
+                          _DocTypePickerField(
                             label: 'เอกสารปิดบัญชีรายได้/ค่าใช้จ่าย (ขั้นตอน 3 & 4)',
                             helperText:
                                 'ใช้สร้างรายการโอนบัญชีรายได้/ค่าใช้จ่าย และโอนกำไรสุทธิ',
@@ -246,7 +245,7 @@ class _YearEndClosingConfigScreenState
                                 setState(() => _selectedClosingDoc = d),
                           ),
                           const SizedBox(height: 20),
-                          _DocTypeDropdown(
+                          _DocTypePickerField(
                             label: 'เอกสารยกยอดงบดุล (ขั้นตอน 5)',
                             helperText:
                                 'ใช้สร้างรายการยกยอดสินทรัพย์/หนี้สิน/ทุนไปปีถัดไป',
@@ -324,22 +323,119 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-// ─── Doc Type Dropdown ─────────────────────────────────────────────────────────
+// ─── Doc Type Picker Field ─────────────────────────────────────────────────────
 
-class _DocTypeDropdown extends StatelessWidget {
+class _DocTypePickerField extends StatelessWidget {
   final String label;
   final String helperText;
   final List<ModuleDocument> docTypes;
   final ModuleDocument? selected;
   final ValueChanged<ModuleDocument?> onChanged;
 
-  const _DocTypeDropdown({
+  const _DocTypePickerField({
     required this.label,
     required this.helperText,
     required this.docTypes,
     required this.selected,
     required this.onChanged,
   });
+
+  Future<void> _openDialog(BuildContext context) async {
+    final searchCtrl = TextEditingController();
+    List<ModuleDocument> filtered = List.from(docTypes);
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        void doFilter(String q) {
+          setDlgState(() {
+            if (q.isEmpty) {
+              filtered = List.from(docTypes);
+            } else {
+              final lq = q.toLowerCase();
+              filtered = docTypes
+                  .where((d) =>
+                      d.docCode.toLowerCase().contains(lq) ||
+                      d.docNameThai.toLowerCase().contains(lq))
+                  .toList();
+            }
+          });
+        }
+
+        return AlertDialog(
+          title: Text('เลือก$label'),
+          content: SizedBox(
+            width: 520,
+            height: 420,
+            child: Column(
+              children: [
+                TextField(
+                  controller: searchCtrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'ค้นหา รหัส / ชื่อประเภทเอกสาร',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  onChanged: doFilter,
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: docTypes.isEmpty
+                      ? const Center(child: Text('ไม่พบประเภทเอกสาร GL'))
+                      : filtered.isEmpty
+                          ? const Center(child: Text('ไม่พบข้อมูล'))
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final d = filtered[i];
+                                final isSelected = selected?.id == d.id;
+                                return ListTile(
+                                  dense: true,
+                                  selected: isSelected,
+                                  selectedTileColor: Colors.indigo.shade50,
+                                  leading: isSelected
+                                      ? const Icon(Icons.check_circle,
+                                          color: Colors.indigo, size: 18)
+                                      : const SizedBox(width: 18),
+                                  title: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 90,
+                                        child: Text(
+                                          d.docCode,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.indigo),
+                                        ),
+                                      ),
+                                      Expanded(child: Text(d.docNameThai)),
+                                    ],
+                                  ),
+                                  onTap: () {
+                                    onChanged(d);
+                                    Navigator.of(ctx).pop();
+                                  },
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('ปิด'),
+            ),
+          ],
+        );
+      }),
+    );
+    searchCtrl.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -350,28 +446,53 @@ class _DocTypeDropdown extends StatelessWidget {
             style: const TextStyle(
                 fontWeight: FontWeight.w600, fontSize: 13)),
         const SizedBox(height: 6),
-        DropdownButtonFormField<ModuleDocument>(
-          value: selected,
+        InputDecorator(
           decoration: InputDecoration(
-            hintText: 'เลือกประเภทเอกสาร...',
-            helperText: helperText,
-            helperMaxLines: 2,
             border: const OutlineInputBorder(),
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            prefixIcon:
-                const Icon(Icons.description_outlined, size: 18),
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            helperText: helperText,
+            helperMaxLines: 2,
           ),
-          items: docTypes
-              .map((d) => DropdownMenuItem(
-                    value: d,
-                    child: Text(
-                      '${d.docCode} — ${d.docNameThai}',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ))
-              .toList(),
-          onChanged: onChanged,
+          child: Row(
+            children: [
+              Expanded(
+                child: selected != null
+                    ? Row(
+                        children: [
+                          const Icon(Icons.check_circle,
+                              color: Colors.green, size: 16),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '${selected!.docCode} — ${selected!.docNameThai}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      )
+                    : const Text('— ไม่ระบุ —',
+                        style: TextStyle(color: Colors.grey)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.search, color: Colors.blue),
+                tooltip: 'ค้นหาประเภทเอกสาร',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => _openDialog(context),
+              ),
+              if (selected != null)
+                IconButton(
+                  icon:
+                      const Icon(Icons.clear, color: Colors.red, size: 18),
+                  tooltip: 'ล้างการเลือก',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => onChanged(null),
+                ),
+            ],
+          ),
         ),
       ],
     );
@@ -380,9 +501,8 @@ class _DocTypeDropdown extends StatelessWidget {
 
 // ─── Account Search Field ──────────────────────────────────────────────────────
 
-class _AccountSearchField extends StatefulWidget {
+class _AccountSearchField extends StatelessWidget {
   final String label;
-  final String hint;
   final String helperText;
   final List<Account> accounts;
   final Account? selected;
@@ -390,172 +510,203 @@ class _AccountSearchField extends StatefulWidget {
 
   const _AccountSearchField({
     required this.label,
-    required this.hint,
     required this.helperText,
     required this.accounts,
     required this.selected,
     required this.onSelected,
   });
 
-  @override
-  State<_AccountSearchField> createState() => _AccountSearchFieldState();
-}
+  Future<void> _openDialog(BuildContext context) async {
+    final searchCtrl = TextEditingController();
+    final sorted = List<Account>.from(accounts)
+      ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
+    List<Account> filtered = List.from(sorted);
 
-class _AccountSearchFieldState extends State<_AccountSearchField> {
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        void doFilter(String q) {
+          setDlgState(() {
+            if (q.isEmpty) {
+              filtered = List.from(sorted);
+            } else {
+              final lq = q.toLowerCase();
+              filtered = sorted
+                  .where((a) =>
+                      a.accountCode.toLowerCase().contains(lq) ||
+                      a.accountNameThai.toLowerCase().contains(lq) ||
+                      a.accountNameEng.toLowerCase().contains(lq))
+                  .toList();
+            }
+          });
+        }
+
+        return AlertDialog(
+          title: Text('เลือก$label'),
+          content: SizedBox(
+            width: 520,
+            height: 420,
+            child: Column(
+              children: [
+                TextField(
+                  controller: searchCtrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'ค้นหา รหัส / ชื่อบัญชี',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  onChanged: doFilter,
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: accounts.isEmpty
+                      ? const Center(child: CircularProgressIndicator())
+                      : filtered.isEmpty
+                          ? const Center(child: Text('ไม่พบบัญชี'))
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final a = filtered[i];
+                                final isSelected = selected?.id == a.id;
+                                return ListTile(
+                                  dense: true,
+                                  selected: isSelected,
+                                  selectedTileColor:
+                                      Colors.indigo.shade50,
+                                  leading: isSelected
+                                      ? const Icon(Icons.check_circle,
+                                          color: Colors.indigo, size: 18)
+                                      : const SizedBox(width: 18),
+                                  title: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 90,
+                                        child: Text(
+                                          a.accountCode,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.indigo),
+                                        ),
+                                      ),
+                                      Expanded(
+                                          child: Text(a.accountNameThai)),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade200,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          accountTypeOptions[a.accountType] ??
+                                              a.accountType,
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  onTap: () {
+                                    onSelected(a);
+                                    Navigator.of(ctx).pop();
+                                  },
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('ปิด'),
+            ),
+          ],
+        );
+      }),
+    );
+    searchCtrl.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(widget.label,
+        Text(label,
             style: const TextStyle(
                 fontWeight: FontWeight.w600, fontSize: 13)),
         const SizedBox(height: 6),
-        Autocomplete<Account>(
-          displayStringForOption: (a) =>
-              '${a.accountCode} - ${a.accountNameThai}',
-          optionsBuilder: (textEditingValue) {
-            if (textEditingValue.text.isEmpty) {
-              return widget.accounts.take(50);
-            }
-            final q = textEditingValue.text.toLowerCase();
-            return widget.accounts
-                .where((a) =>
-                    a.accountCode.toLowerCase().contains(q) ||
-                    a.accountNameThai.toLowerCase().contains(q) ||
-                    a.accountNameEng.toLowerCase().contains(q))
-                .take(100);
-          },
-          onSelected: (acc) => widget.onSelected(acc),
-          initialValue: widget.selected != null
-              ? TextEditingValue(
-                  text:
-                      '${widget.selected!.accountCode} - ${widget.selected!.accountNameThai}')
-              : null,
-          fieldViewBuilder:
-              (context, textController, focusNode, onFieldSubmitted) {
-            return TextFormField(
-              controller: textController,
-              focusNode: focusNode,
-              decoration: InputDecoration(
-                hintText: widget.hint,
-                helperText: widget.helperText,
-                helperMaxLines: 2,
-                border: const OutlineInputBorder(),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 12),
-                prefixIcon: const Icon(Icons.search, size: 18),
-                suffixIcon: widget.selected != null
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        tooltip: 'ล้างการเลือก',
-                        onPressed: () {
-                          textController.clear();
-                          widget.onSelected(null);
-                        },
-                      )
-                    : null,
-              ),
-            );
-          },
-          optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                elevation: 4,
-                borderRadius: BorderRadius.circular(4),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 280),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      final acc = options.elementAt(index);
-                      final isSelected = widget.selected?.id == acc.id;
-                      return InkWell(
-                        onTap: () => onSelected(acc),
-                        child: Container(
-                          color: isSelected
-                              ? Colors.indigo.shade50
-                              : null,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 100,
-                                child: Text(
-                                  acc.accountCode,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.indigo),
-                                ),
-                              ),
-                              Expanded(
-                                  child: Text(acc.accountNameThai)),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
-                                  borderRadius:
-                                      BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  accountTypeOptions[
-                                          acc.accountType] ??
-                                      acc.accountType,
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        if (widget.selected != null) ...[
-          const SizedBox(height: 6),
-          Container(
-            padding:
+        InputDecorator(
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.green.shade200),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.check_circle,
-                    color: Colors.green, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${widget.selected!.accountCode} - ${widget.selected!.accountNameThai}',
-                    style: const TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.w500),
-                  ),
-                ),
-                Text(
-                  accountTypeOptions[widget.selected!.accountType] ??
-                      widget.selected!.accountType,
-                  style: TextStyle(
-                      fontSize: 11, color: Colors.green.shade700),
-                ),
-              ],
-            ),
+            helperText: helperText,
+            helperMaxLines: 2,
           ),
-        ],
+          child: Row(
+            children: [
+              Expanded(
+                child: selected != null
+                    ? Row(
+                        children: [
+                          const Icon(Icons.check_circle,
+                              color: Colors.green, size: 16),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '${selected!.accountCode} — ${selected!.accountNameThai}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              accountTypeOptions[selected!.accountType] ??
+                                  selected!.accountType,
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      )
+                    : const Text('— ไม่ระบุ —',
+                        style: TextStyle(color: Colors.grey)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.search, color: Colors.blue),
+                tooltip: 'ค้นหาบัญชี',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => _openDialog(context),
+              ),
+              if (selected != null)
+                IconButton(
+                  icon:
+                      const Icon(Icons.clear, color: Colors.red, size: 18),
+                  tooltip: 'ล้างการเลือก',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => onSelected(null),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }

@@ -297,7 +297,7 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
             children: [
               Container(
                 width: 36,
-                color: Colors.deepOrange.shade900,
+                color: Colors.deepOrange[900],
                 child: IconButton(
                   icon: Icon(
                     _isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list,

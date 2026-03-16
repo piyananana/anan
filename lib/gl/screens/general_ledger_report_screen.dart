@@ -97,7 +97,8 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
       final projects = await _projectService.fetchRows();
       
       // โหลดเฉพาะบัญชีคุม (Control Account) สำหรับตัวกรอง
-      _controlAccounts = await _accountService.fetchRowsControlAccount();
+      _controlAccounts = await _accountService.fetchRowsControlAccount()
+        ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
 
       final allAccounts = await _accountService.fetchRows();
       _accountMap = {for (var a in allAccounts) a.id!: a};
@@ -123,67 +124,118 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
   // --- Dialog ค้นหาบัญชี ---
   Future<void> _showAccountSearchDialog(bool isFrom) async {
-    showDialog(
-      context: context,
-      builder: (context) {
-        String searchQuery = '';
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            // กรองรายการตามคำค้นหา (ค้นได้ทั้ง Code และ Name)
-            final filteredAccounts = _controlAccounts.where((acc) {
-              final q = searchQuery.toLowerCase();
-              return acc.accountCode.toLowerCase().contains(q) || 
-                     acc.accountNameThai.toLowerCase().contains(q);
-            }).toList();
+    final searchCtrl = TextEditingController();
+    List<Account> filtered = List.from(_controlAccounts);
+    final current = isFrom ? _accountFrom : _accountTo;
 
-            return AlertDialog(
-              title: const Text('ค้นหารหัสบัญชี'),
-              content: SizedBox(
-                width: 400,
-                height: 400,
-                child: Column(
-                  children: [
-                    TextField(
-                      decoration: const InputDecoration(
-                        labelText: 'ค้นหารหัส หรือ ชื่อบัญชี',
-                        prefixIcon: Icon(Icons.search),
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (val) => setDialogState(() => searchQuery = val),
-                    ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: filteredAccounts.length,
-                        itemBuilder: (context, index) {
-                          final acc = filteredAccounts[index];
-                          return ListTile(
-                            title: Text('${acc.accountCode} - ${acc.accountNameThai}'),
-                            onTap: () {
-                              setState(() {
-                                if (isFrom) _accountFrom = acc;
-                                else _accountTo = acc;
-                              });
-                              Navigator.pop(context);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('ปิด'),
-                )
-              ],
-            );
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          void doFilter(String q) {
+            setDlgState(() {
+              if (q.isEmpty) {
+                filtered = List.from(_controlAccounts);
+              } else {
+                final lq = q.toLowerCase();
+                filtered = _controlAccounts
+                    .where((a) =>
+                        a.accountCode.toLowerCase().contains(lq) ||
+                        a.accountNameThai.toLowerCase().contains(lq))
+                    .toList();
+              }
+            });
           }
-        );
-      },
+
+          return AlertDialog(
+            title: Text(isFrom ? 'เลือกบัญชีเริ่มต้น' : 'เลือกบัญชีสิ้นสุด'),
+            content: SizedBox(
+              width: 520,
+              height: 420,
+              child: Column(
+                children: [
+                  TextField(
+                    controller: searchCtrl,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'ค้นหา รหัส / ชื่อบัญชี',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                    ),
+                    onChanged: doFilter,
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('ไม่พบบัญชี'))
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) {
+                              final a = filtered[i];
+                              final isSelected = current?.id == a.id;
+                              return ListTile(
+                                dense: true,
+                                selected: isSelected,
+                                selectedTileColor: Colors.deepOrange.shade50,
+                                leading: isSelected
+                                    ? Icon(Icons.check_circle,
+                                        color: Colors.deepOrange[900], size: 18)
+                                    : const SizedBox(width: 18),
+                                title: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 90,
+                                      child: Text(
+                                        a.accountCode,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.deepOrange[900]),
+                                      ),
+                                    ),
+                                    Expanded(child: Text(a.accountNameThai)),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade200,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        accountTypeOptions[a.accountType] ??
+                                            a.accountType,
+                                        style: const TextStyle(
+                                            fontSize: 11, color: Colors.grey),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () {
+                                  setState(() {
+                                    if (isFrom) _accountFrom = a;
+                                    else _accountTo = a;
+                                  });
+                                  Navigator.of(ctx).pop();
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('ปิด'),
+              ),
+            ],
+          );
+        },
+      ),
     );
+    searchCtrl.dispose();
   }
 
   Future<void> _generateReport() async {
@@ -606,28 +658,82 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                       onChanged: (val) => setState(() => _selectedPeriod = val),
                     ),
                     const SizedBox(height: 16),
-                    InkWell(
-                      onTap: () => _showAccountSearchDialog(true),
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'รหัสบัญชี (จาก)', 
-                          border: OutlineInputBorder(),
-                          suffixIcon: Icon(Icons.search),
-                        ),
-                        child: Text(_accountFrom != null ? '${_accountFrom!.accountCode} - ${_accountFrom!.accountNameThai}' : 'เลือกบัญชีเริ่มต้น'),
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'รหัสบัญชี (จาก)',
+                        border: OutlineInputBorder(),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _accountFrom != null
+                                ? Text(
+                                    '${_accountFrom!.accountCode} — ${_accountFrom!.accountNameThai}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  )
+                                : const Text('— ทั้งหมด —',
+                                    style: TextStyle(color: Colors.grey)),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.search, color: Colors.deepOrange[900]),
+                            tooltip: 'ค้นหาบัญชีเริ่มต้น',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () => _showAccountSearchDialog(true),
+                          ),
+                          if (_accountFrom != null)
+                            IconButton(
+                              icon: const Icon(Icons.clear,
+                                  color: Colors.red, size: 18),
+                              tooltip: 'ล้าง',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () =>
+                                  setState(() => _accountFrom = null),
+                            ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 16),
 
-                    InkWell(
-                      onTap: () => _showAccountSearchDialog(false),
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'รหัสบัญชี (ถึง)', 
-                          border: OutlineInputBorder(),
-                          suffixIcon: Icon(Icons.search),
-                        ),
-                        child: Text(_accountTo != null ? '${_accountTo!.accountCode} - ${_accountTo!.accountNameThai}' : 'เลือกบัญชีสิ้นสุด'),
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'รหัสบัญชี (ถึง)',
+                        border: OutlineInputBorder(),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _accountTo != null
+                                ? Text(
+                                    '${_accountTo!.accountCode} — ${_accountTo!.accountNameThai}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  )
+                                : const Text('— ทั้งหมด —',
+                                    style: TextStyle(color: Colors.grey)),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.search, color: Colors.deepOrange[900]),
+                            tooltip: 'ค้นหาบัญชีสิ้นสุด',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () => _showAccountSearchDialog(false),
+                          ),
+                          if (_accountTo != null)
+                            IconButton(
+                              icon: const Icon(Icons.clear,
+                                  color: Colors.red, size: 18),
+                              tooltip: 'ล้าง',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () =>
+                                  setState(() => _accountTo = null),
+                            ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 16),

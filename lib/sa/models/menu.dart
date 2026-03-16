@@ -13,6 +13,7 @@ import '../screens/user_menu_screen.dart';
 import '../screens/user_screen.dart';
 
 import '../../cd/screens/branch_screen.dart';
+import '../../cd/screens/business_type_screen.dart';
 import '../../cd/screens/business_unit_screen.dart';
 import '../../cd/screens/currency_screen.dart';
 import '../../cd/screens/project_screen.dart';
@@ -33,6 +34,7 @@ import '../../gl/screens/year_end_closing_screen.dart';
 import '../../gl/screens/year_end_closing_config_screen.dart';
 
 import '../../ar/screens/ar_customer_screen.dart';
+import '../../ar/screens/ar_customer_group_screen.dart';
 
 class Menu {
   final int id;
@@ -70,6 +72,9 @@ class Menu {
     'BranchScreen': (context) => BranchScreen(
           onFieldsChanged: () {},
         ),
+    'BusinessTypeScreen': (context) => BusinessTypeScreen(
+          onFieldsChanged: () {},
+        ),
     'BusinessUnitScreen': (context) => BusinessUnitScreen(
           onFieldsChanged: () {},
         ),
@@ -104,6 +109,9 @@ class Menu {
     'YearEndClosingConfigScreen': (context) => const YearEndClosingConfigScreen(),
 
     'ArCustomerScreen': (context) => ArCustomerScreen(
+          onFieldsChanged: () {},
+        ),
+    'ArCustomerGroupScreen': (context) => ArCustomerGroupScreen(
           onFieldsChanged: () {},
         ),
     // 'PeriodScreen': (context) => const PeriodScreen(),

@@ -233,9 +233,17 @@ class ArCustomer {
   final String customerNameTh;
   final String? customerNameEn;
   final String? taxId;
-  final String businessType; // trading, manufacturing, service, mixed
+  // FK → cd_business_type
+  final int? businessTypeId;
+  final String? businessTypeCode;
+  final String? businessTypeNameThai;
+  // FK → ar_customer_group
+  final int? customerGroupId;
+  final String? customerGroupCode;
+  final String? customerGroupName;
   final int creditDays;
   final double creditLimit;
+  final double discountPercent;
   final String currencyCode;
   final bool isActive;
   final String? remark;
@@ -249,9 +257,15 @@ class ArCustomer {
     required this.customerNameTh,
     this.customerNameEn,
     this.taxId,
-    this.businessType = 'trading',
+    this.businessTypeId,
+    this.businessTypeCode,
+    this.businessTypeNameThai,
+    this.customerGroupId,
+    this.customerGroupCode,
+    this.customerGroupName,
     this.creditDays = 30,
     this.creditLimit = 0,
+    this.discountPercent = 0,
     this.currencyCode = 'THB',
     this.isActive = true,
     this.remark,
@@ -266,10 +280,17 @@ class ArCustomer {
         customerNameTh: json['customer_name_th'] ?? '',
         customerNameEn: json['customer_name_en'],
         taxId: json['tax_id'],
-        businessType: json['business_type'] ?? 'trading',
+        businessTypeId: json['business_type_id'],
+        businessTypeCode: json['business_type_code'],
+        businessTypeNameThai: json['business_type_name_thai'],
+        customerGroupId: json['customer_group_id'],
+        customerGroupCode: json['customer_group_code'],
+        customerGroupName: json['customer_group_name'],
         creditDays: json['credit_days'] ?? 30,
         creditLimit:
             double.tryParse(json['credit_limit']?.toString() ?? '0') ?? 0,
+        discountPercent:
+            double.tryParse(json['discount_percent']?.toString() ?? '0') ?? 0,
         currencyCode: json['currency_code'] ?? 'THB',
         isActive: json['is_active'] ?? true,
         remark: json['remark'],
@@ -290,9 +311,11 @@ class ArCustomer {
         'customer_name_th': customerNameTh,
         'customer_name_en': customerNameEn,
         'tax_id': taxId,
-        'business_type': businessType,
+        'business_type_id': businessTypeId,
+        'customer_group_id': customerGroupId,
         'credit_days': creditDays,
         'credit_limit': creditLimit,
+        'discount_percent': discountPercent,
         'currency_code': currencyCode,
         'is_active': isActive,
         'remark': remark,

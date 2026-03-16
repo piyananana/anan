@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../models/account.dart';
+import '../services/account_service.dart';
 import '../services/financial_report_builder_service.dart';
 
 class FinancialReportBuilderScreen extends StatefulWidget {
@@ -10,7 +12,9 @@ class FinancialReportBuilderScreen extends StatefulWidget {
 
 class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScreen> {
   final FinancialReportBuilderService _service = FinancialReportBuilderService();
+  final AccountService _accountService = AccountService();
 
+  List<Account> _accounts = [];
   List<Map<String, dynamic>> _reports = [];
   List<Map<String, dynamic>> _rows = [];
   Map<String, dynamic>? _selectedReport;
@@ -30,8 +34,16 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   Future<void> _loadReports() async {
     setState(() => _isLoadingReports = true);
     try {
-      final reports = await _service.fetchReports();
-      setState(() => _reports = reports);
+      final results = await Future.wait([
+        _service.fetchReports(),
+        _accountService.fetchRows(),
+      ]);
+      final accounts = (results[1] as List<Account>)
+        ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
+      setState(() {
+        _reports = results[0] as List<Map<String, dynamic>>;
+        _accounts = accounts;
+      });
     } catch (e) {
       _showError('โหลดรายการล้มเหลว: $e');
     } finally {
@@ -178,13 +190,132 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   }
 
   // ===== ROW DIALOG =====
+  Future<Account?> _pickAccountInDialog(BuildContext ctx, Account? current) async {
+    final searchCtrl = TextEditingController();
+    List<Account> filtered = List.from(_accounts);
+    Account? picked;
+
+    await showDialog(
+      context: ctx,
+      builder: (ctx2) => StatefulBuilder(builder: (ctx2, setDlgState) {
+        void doFilter(String q) {
+          setDlgState(() {
+            if (q.isEmpty) {
+              filtered = List.from(_accounts);
+            } else {
+              final lq = q.toLowerCase();
+              filtered = _accounts
+                  .where((a) =>
+                      a.accountCode.toLowerCase().contains(lq) ||
+                      a.accountNameThai.toLowerCase().contains(lq))
+                  .toList();
+            }
+          });
+        }
+
+        return AlertDialog(
+          title: const Text('เลือกรหัสบัญชี'),
+          content: SizedBox(
+            width: 520,
+            height: 420,
+            child: Column(
+              children: [
+                TextField(
+                  controller: searchCtrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'ค้นหา รหัส / ชื่อบัญชี',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  onChanged: doFilter,
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? const Center(child: Text('ไม่พบบัญชี'))
+                      : ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final a = filtered[i];
+                            final isSelected = current?.id == a.id;
+                            return ListTile(
+                              dense: true,
+                              selected: isSelected,
+                              selectedTileColor: Colors.deepOrange.shade50,
+                              leading: isSelected
+                                  ? Icon(Icons.check_circle,
+                                      color: Colors.deepOrange[900], size: 18)
+                                  : const SizedBox(width: 18),
+                              title: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 90,
+                                    child: Text(
+                                      a.accountCode,
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.deepOrange[900]),
+                                    ),
+                                  ),
+                                  Expanded(child: Text(a.accountNameThai)),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade200,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      accountTypeOptions[a.accountType] ??
+                                          a.accountType,
+                                      style: const TextStyle(
+                                          fontSize: 11, color: Colors.grey),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              onTap: () {
+                                picked = a;
+                                Navigator.of(ctx2).pop();
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx2).pop(),
+              child: const Text('ปิด'),
+            ),
+          ],
+        );
+      }),
+    );
+    searchCtrl.dispose();
+    return picked;
+  }
+
   void _showRowDialog([Map<String, dynamic>? row]) {
     final isEdit = row != null;
     final seqCtrl = TextEditingController(text: isEdit ? (row['row_seq_no'] ?? '').toString() : '');
     String rowType = row?['row_type'] ?? 'BODY';
     String printControl = row?['print_control'] ?? 'SHOW';
-    final accFromCtrl = TextEditingController(text: row?['account_from'] ?? '');
-    final accToCtrl = TextEditingController(text: row?['account_to'] ?? '');
+    final String? initAccFrom = row?['account_from'];
+    final String? initAccTo = row?['account_to'];
+    Account? dlgAccFrom = initAccFrom != null
+        ? _accounts.cast<Account?>().firstWhere(
+            (a) => a?.accountCode == initAccFrom, orElse: () => null)
+        : null;
+    Account? dlgAccTo = initAccTo != null
+        ? _accounts.cast<Account?>().firstWhere(
+            (a) => a?.accountCode == initAccTo, orElse: () => null)
+        : null;
     String normalSign = row?['normal_sign'] ?? 'DEBIT';
     final branchCtrl = TextEditingController(text: (row?['branch_id'] ?? '').toString());
     final projectCtrl = TextEditingController(text: (row?['project_id'] ?? '').toString());
@@ -229,9 +360,75 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   ),
                   const SizedBox(height: 10),
                   Row(children: [
-                    Expanded(child: TextField(controller: accFromCtrl, decoration: const InputDecoration(labelText: 'รหัสบัญชีต้น (account_from)', border: OutlineInputBorder()))),
+                    Expanded(
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'รหัสบัญชีต้น (account_from)',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        child: Row(children: [
+                          Expanded(
+                            child: dlgAccFrom != null
+                                ? Text('${dlgAccFrom!.accountCode} — ${dlgAccFrom!.accountNameThai}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold))
+                                : const Text('— ไม่ระบุ —',
+                                    style: TextStyle(color: Colors.grey)),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.search, color: Colors.deepOrange[900]),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () async {
+                              final picked = await _pickAccountInDialog(ctx, dlgAccFrom);
+                              if (picked != null) setDialogState(() => dlgAccFrom = picked);
+                            },
+                          ),
+                          if (dlgAccFrom != null)
+                            IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.red, size: 18),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () => setDialogState(() => dlgAccFrom = null),
+                            ),
+                        ]),
+                      ),
+                    ),
                     const SizedBox(width: 8),
-                    Expanded(child: TextField(controller: accToCtrl, decoration: const InputDecoration(labelText: 'รหัสบัญชีปลาย (account_to)', border: OutlineInputBorder()))),
+                    Expanded(
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'รหัสบัญชีปลาย (account_to)',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        child: Row(children: [
+                          Expanded(
+                            child: dlgAccTo != null
+                                ? Text('${dlgAccTo!.accountCode} — ${dlgAccTo!.accountNameThai}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold))
+                                : const Text('— ไม่ระบุ —',
+                                    style: TextStyle(color: Colors.grey)),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.search, color: Colors.deepOrange[900]),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () async {
+                              final picked = await _pickAccountInDialog(ctx, dlgAccTo);
+                              if (picked != null) setDialogState(() => dlgAccTo = picked);
+                            },
+                          ),
+                          if (dlgAccTo != null)
+                            IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.red, size: 18),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () => setDialogState(() => dlgAccTo = null),
+                            ),
+                        ]),
+                      ),
+                    ),
                   ]),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
@@ -269,8 +466,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   'row_seq_no': int.tryParse(seqCtrl.text) ?? 0,
                   'row_type': rowType,
                   'print_control': printControl,
-                  'account_from': accFromCtrl.text.trim().isEmpty ? null : accFromCtrl.text.trim(),
-                  'account_to': accToCtrl.text.trim().isEmpty ? null : accToCtrl.text.trim(),
+                  'account_from': dlgAccFrom?.accountCode,
+                  'account_to': dlgAccTo?.accountCode,
                   'normal_sign': normalSign,
                   'branch_id': int.tryParse(branchCtrl.text),
                   'project_id': int.tryParse(projectCtrl.text),
@@ -516,7 +713,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          color: Colors.deepOrange[900],
+          color: Colors.blueGrey.shade800,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [

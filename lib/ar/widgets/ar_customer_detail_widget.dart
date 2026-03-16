@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
 import '../../cd/models/zipcode.dart';
+import '../../cd/models/business_type.dart';
+import '../../cd/services/business_type_service.dart';
 import '../../cd/widgets/zipcode_list_widget.dart';
 import '../models/ar_customer.dart';
+import '../models/ar_customer_group.dart';
+import 'ar_customer_group_list_widget.dart';
 
 // ---------------------------------------------------------------------------
 // Collapsible section widget
@@ -514,10 +519,21 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   late TextEditingController _taxIdCtrl;
   late TextEditingController _creditDaysCtrl;
   late TextEditingController _creditLimitCtrl;
+  late TextEditingController _discountPercentCtrl;
   late TextEditingController _currencyCtrl;
   late TextEditingController _remarkCtrl;
 
-  late String _businessType;
+  // ประเภทธุรกิจ (FK → cd_business_type)
+  int? _businessTypeId;
+  String? _businessTypeCode;
+  String? _businessTypeNameThai;
+  List<BusinessType> _businessTypes = [];
+
+  // กลุ่มลูกค้า (FK → ar_customer_group)
+  int? _customerGroupId;
+  String? _customerGroupCode;
+  String? _customerGroupName;
+
   late bool _isActive;
 
   List<ArCustomerAddress> _addresses = [];
@@ -530,24 +546,37 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   void initState() {
     super.initState();
     _initFromSelected(widget.selected);
+    _loadBusinessTypes();
+  }
+
+  Future<void> _loadBusinessTypes() async {
+    try {
+      final list = await Provider.of<BusinessTypeService>(context, listen: false)
+          .fetchActiveRows();
+      if (mounted) setState(() => _businessTypes = list);
+    } catch (_) {}
   }
 
   void _initFromSelected(ArCustomer? c) {
-    _codeCtrl = TextEditingController(text: c?.customerCode ?? '');
-    _nameThCtrl = TextEditingController(text: c?.customerNameTh ?? '');
-    _nameEnCtrl = TextEditingController(text: c?.customerNameEn ?? '');
-    _taxIdCtrl = TextEditingController(text: c?.taxId ?? '');
-    _creditDaysCtrl =
-        TextEditingController(text: (c?.creditDays ?? 30).toString());
-    _creditLimitCtrl =
-        TextEditingController(text: (c?.creditLimit ?? 0).toStringAsFixed(2));
-    _currencyCtrl = TextEditingController(text: c?.currencyCode ?? 'THB');
-    _remarkCtrl = TextEditingController(text: c?.remark ?? '');
-    _businessType = c?.businessType ?? 'trading';
-    _isActive = c?.isActive ?? true;
-    _addresses = List.from(c?.addresses ?? []);
-    _contacts = List.from(c?.contacts ?? []);
-    _bankAccounts = List.from(c?.bankAccounts ?? []);
+    _codeCtrl        = TextEditingController(text: c?.customerCode ?? '');
+    _nameThCtrl      = TextEditingController(text: c?.customerNameTh ?? '');
+    _nameEnCtrl      = TextEditingController(text: c?.customerNameEn ?? '');
+    _taxIdCtrl       = TextEditingController(text: c?.taxId ?? '');
+    _creditDaysCtrl  = TextEditingController(text: (c?.creditDays ?? 30).toString());
+    _creditLimitCtrl = TextEditingController(text: (c?.creditLimit ?? 0).toStringAsFixed(2));
+    _discountPercentCtrl = TextEditingController(text: (c?.discountPercent ?? 0).toStringAsFixed(2));
+    _currencyCtrl    = TextEditingController(text: c?.currencyCode ?? 'THB');
+    _remarkCtrl      = TextEditingController(text: c?.remark ?? '');
+    _businessTypeId        = c?.businessTypeId;
+    _businessTypeCode      = c?.businessTypeCode;
+    _businessTypeNameThai  = c?.businessTypeNameThai;
+    _customerGroupId   = c?.customerGroupId;
+    _customerGroupCode = c?.customerGroupCode;
+    _customerGroupName = c?.customerGroupName;
+    _isActive        = c?.isActive ?? true;
+    _addresses       = List.from(c?.addresses ?? []);
+    _contacts        = List.from(c?.contacts ?? []);
+    _bankAccounts    = List.from(c?.bankAccounts ?? []);
   }
 
   @override
@@ -567,7 +596,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   void _disposeControllers() {
     for (final c in [
       _codeCtrl, _nameThCtrl, _nameEnCtrl, _taxIdCtrl,
-      _creditDaysCtrl, _creditLimitCtrl, _currencyCtrl, _remarkCtrl,
+      _creditDaysCtrl, _creditLimitCtrl, _discountPercentCtrl,
+      _currencyCtrl, _remarkCtrl,
     ]) {
       c.dispose();
     }
@@ -577,6 +607,118 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   void dispose() {
     _disposeControllers();
     super.dispose();
+  }
+
+  // เลือกกลุ่มลูกค้า → auto-fill เงื่อนไขเครดิต
+  void _onGroupSelected(ArCustomerGroup group) {
+    setState(() {
+      _customerGroupId   = group.id;
+      _customerGroupCode = group.groupCode;
+      _customerGroupName = group.groupNameThai;
+      _creditDaysCtrl.text         = group.creditDays.toString();
+      _creditLimitCtrl.text        = group.creditLimit.toStringAsFixed(2);
+      _discountPercentCtrl.text    = group.discountPercent.toStringAsFixed(2);
+    });
+  }
+
+  void _clearGroup() {
+    setState(() {
+      _customerGroupId   = null;
+      _customerGroupCode = null;
+      _customerGroupName = null;
+    });
+  }
+
+  Future<void> _pickBusinessType() async {
+    // ใช้ list ที่โหลดไว้แล้ว; ถ้ายังว่างให้โหลดใหม่
+    if (_businessTypes.isEmpty) await _loadBusinessTypes();
+    if (!mounted) return;
+
+    final TextEditingController searchCtrl = TextEditingController();
+    List<BusinessType> filtered = List.from(_businessTypes);
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        void doFilter(String q) {
+          setDlgState(() {
+            if (q.isEmpty) {
+              filtered = List.from(_businessTypes);
+            } else {
+              final lq = q.toLowerCase();
+              filtered = _businessTypes
+                  .where((bt) =>
+                      bt.businessTypeCode.toLowerCase().contains(lq) ||
+                      bt.businessTypeNameThai.toLowerCase().contains(lq))
+                  .toList();
+            }
+          });
+        }
+
+        return AlertDialog(
+          title: const Text('เลือกประเภทธุรกิจ'),
+          content: SizedBox(
+            width: 480,
+            height: 380,
+            child: Column(
+              children: [
+                TextField(
+                  controller: searchCtrl,
+                  decoration: const InputDecoration(
+                    hintText: 'ค้นหา รหัส / ชื่อประเภทธุรกิจ',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  onChanged: doFilter,
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: _businessTypes.isEmpty
+                      ? const Center(child: CircularProgressIndicator())
+                      : filtered.isEmpty
+                          ? const Center(child: Text('ไม่พบข้อมูล'))
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final bt = filtered[i];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(
+                                      '${bt.businessTypeCode}  ${bt.businessTypeNameThai}'),
+                                  onTap: () {
+                                    setState(() {
+                                      _businessTypeId       = bt.id;
+                                      _businessTypeCode     = bt.businessTypeCode;
+                                      _businessTypeNameThai = bt.businessTypeNameThai;
+                                    });
+                                    Navigator.of(ctx).pop();
+                                  },
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('ปิด'),
+            ),
+          ],
+        );
+      }),
+    );
+    searchCtrl.dispose();
+  }
+
+  void _clearBusinessType() {
+    setState(() {
+      _businessTypeId       = null;
+      _businessTypeCode     = null;
+      _businessTypeNameThai = null;
+    });
   }
 
   Future<void> _submitForm() async {
@@ -590,18 +732,18 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         customerNameEn:
             _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
         taxId: _taxIdCtrl.text.trim().isEmpty ? null : _taxIdCtrl.text.trim(),
-        businessType: _businessType,
+        businessTypeId: _businessTypeId,
+        customerGroupId: _customerGroupId,
         creditDays: int.tryParse(_creditDaysCtrl.text) ?? 30,
         creditLimit: double.tryParse(_creditLimitCtrl.text) ?? 0,
+        discountPercent: double.tryParse(_discountPercentCtrl.text) ?? 0,
         currencyCode: _currencyCtrl.text.trim().isEmpty
             ? 'THB'
             : _currencyCtrl.text.trim().toUpperCase(),
         isActive: _isActive,
-        remark: _remarkCtrl.text.trim().isEmpty
-            ? null
-            : _remarkCtrl.text.trim(),
-        addresses: _addresses,
-        contacts: _contacts,
+        remark: _remarkCtrl.text.trim().isEmpty ? null : _remarkCtrl.text.trim(),
+        addresses:    _addresses,
+        contacts:     _contacts,
         bankAccounts: _bankAccounts,
       );
       await widget.onSubmit(customer);
@@ -652,27 +794,98 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             readOnly: readOnly, required: true),
         _buildField('ชื่อลูกหนี้ (อังกฤษ)', _nameEnCtrl, readOnly: readOnly),
         _buildField('เลขประจำตัวผู้เสียภาษี', _taxIdCtrl, readOnly: readOnly),
+
+        // ---- ประเภทธุรกิจ (search dialog) ----
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: DropdownButtonFormField<String>(
-            value: _businessType,
+          child: InputDecorator(
             decoration: const InputDecoration(
-                labelText: 'ประเภทธุรกิจของลูกหนี้',
-                border: OutlineInputBorder()),
-            items: const [
-              DropdownMenuItem(value: 'trading', child: Text('ซื้อมาขายไป')),
-              DropdownMenuItem(
-                  value: 'manufacturing', child: Text('การผลิต')),
-              DropdownMenuItem(value: 'service', child: Text('บริการ')),
-              DropdownMenuItem(value: 'mixed', child: Text('หลายประเภท')),
-            ],
-            onChanged: readOnly
-                ? null
-                : (v) {
-                    if (v != null) setState(() => _businessType = v);
-                  },
+              labelText: 'ประเภทธุรกิจ',
+              border: OutlineInputBorder(),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _businessTypeId == null
+                      ? const Text('— ไม่ระบุ —',
+                          style: TextStyle(color: Colors.grey))
+                      : Text(
+                          '$_businessTypeCode — $_businessTypeNameThai',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                ),
+                if (!readOnly) ...[
+                  IconButton(
+                    icon: const Icon(Icons.search, color: Colors.blue),
+                    tooltip: 'ค้นหาประเภทธุรกิจ',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: _pickBusinessType,
+                  ),
+                  if (_businessTypeId != null)
+                    IconButton(
+                      icon: const Icon(Icons.clear,
+                          color: Colors.red, size: 18),
+                      tooltip: 'ล้างประเภทธุรกิจ',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: _clearBusinessType,
+                    ),
+                ],
+              ],
+            ),
           ),
         ),
+
+        // ---- กลุ่มลูกค้า (search popup + auto-fill) ----
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: InputDecorator(
+            decoration: const InputDecoration(
+              labelText: 'กลุ่มลูกค้า',
+              border: OutlineInputBorder(),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _customerGroupId == null
+                      ? const Text('— ไม่ระบุ —',
+                          style: TextStyle(color: Colors.grey))
+                      : Text(
+                          '$_customerGroupCode — $_customerGroupName',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                ),
+                if (!readOnly) ...[
+                  IconButton(
+                    icon: const Icon(Icons.search, color: Colors.blue),
+                    tooltip: 'ค้นหากลุ่มลูกค้า',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => ArCustomerGroupListWidget.search(
+                      context,
+                      onSelected: _onGroupSelected,
+                    ),
+                  ),
+                  if (_customerGroupId != null)
+                    IconButton(
+                      icon: const Icon(Icons.clear, color: Colors.red, size: 18),
+                      tooltip: 'ล้างกลุ่มลูกค้า',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: _clearGroup,
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+
+        // ---- เงื่อนไขเครดิต ----
         Row(
           children: [
             Expanded(
@@ -682,6 +895,12 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             const SizedBox(width: 10),
             Expanded(
               child: _buildField('วงเงินเครดิต', _creditLimitCtrl,
+                  readOnly: readOnly,
+                  keyboard: const TextInputType.numberWithOptions(decimal: true)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildField('ส่วนลด (%)', _discountPercentCtrl,
                   readOnly: readOnly,
                   keyboard: const TextInputType.numberWithOptions(decimal: true)),
             ),
@@ -927,7 +1146,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         children: [
           // Header bar
           Container(
-            color: Colors.orange.shade700,
+            color: Colors.blueGrey[700],
             padding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
@@ -936,10 +1155,12 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 const SizedBox(width: 8),
                 Text(
                   title,
+                  // style: Theme.of(context).textTheme.headlineSmall,
                   style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold),
+                      fontSize: 24,
+                      // fontWeight: FontWeight.bold
+                  ),
                 ),
               ],
             ),
