@@ -24,6 +24,8 @@ import 'cd/services/currency_service.dart';
 import 'cd/services/project_service.dart';
 import 'cd/services/zipcode_service.dart';
 import 'cd/services/vat_rate_service.dart';
+import 'cd/services/bank_service.dart';
+import 'cd/services/bank_branch_service.dart';
 
 import 'gl/services/account_service.dart';
 import 'gl/services/gl_entry_service.dart';
@@ -34,6 +36,11 @@ import 'gl/services/trial_balance_report_service.dart';
 
 import 'ar/services/ar_customer_service.dart';
 import 'ar/services/ar_customer_group_service.dart';
+import 'ar/services/ar_customer_running_service.dart';
+import 'ar/services/ar_collector_service.dart';
+
+import 'cd/services/sales_territory_service.dart';
+import 'cd/services/salesperson_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -77,6 +84,12 @@ class MyApp extends StatelessWidget {
 
         Provider<ArCustomerService>(create: (_) => ArCustomerService()),
         Provider<ArCustomerGroupService>(create: (_) => ArCustomerGroupService()),
+        Provider<ArCustomerRunningService>(create: (_) => ArCustomerRunningService()),
+        Provider<BankService>(create: (_) => BankService()),
+        Provider<BankBranchService>(create: (_) => BankBranchService()),
+        Provider<SalesTerritoryService>(create: (_) => SalesTerritoryService()),
+        Provider<SalespersonService>(create: (_) => SalespersonService()),
+        Provider<ArCollectorService>(create: (_) => ArCollectorService()),
         // Add other providers if needed
       ],
       child: MaterialApp(

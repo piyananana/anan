@@ -155,7 +155,7 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
 
   // --- Build Methods ---
   Widget _buildNode(Account item, int level) {
-    final bool isHeader = item.isControlAccount == false;
+    final bool isHeader = item.isNormalAccount == false;
     final List<Account> children = _buildTree(_lists, item.id);
     final bool hasChildren = children.isNotEmpty;
     final bool isExpanded = _expandedState[item.id] ?? false;
@@ -215,7 +215,7 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                         tooltip: 'ลบ',
                         onPressed: () {
                           if (_buildTree(_lists, item.id).isNotEmpty &&
-                              item.isControlAccount == false) {
+                              item.isNormalAccount == false) {
                             // ป้องกันการลบหัวบัญชี
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -235,7 +235,7 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                         icon: const Icon(Icons.arrow_right_outlined,
                             color: Colors.black),
                         onPressed: () {
-                          if (item.isActive && item.isControlAccount) {
+                          if (item.isActive && item.isNormalAccount) {
                             widget.onCallback(item);
                             Navigator.of(context).pop();
                           } else {

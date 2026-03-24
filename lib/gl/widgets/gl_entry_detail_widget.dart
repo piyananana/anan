@@ -157,7 +157,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     accountType: '',
                     accountSubType: '',
                     normalBalance: '',
-                    isControlAccount: false,
+                    isNormalAccount: false,
                     isReconcilable: false,
                     currencyCode: '',
                     moduleLinkCode: '',
@@ -474,7 +474,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             accountType: '',
             accountSubType: '',
             normalBalance: '',
-            isControlAccount: false,
+            isNormalAccount: false,
             isReconcilable: false,
             currencyCode: '',
             moduleLinkCode: '',
@@ -514,19 +514,28 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                           if (textEditingValue.text.isEmpty) {
                             return const Iterable<Account>.empty();
                           }
+                          final q = textEditingValue.text.toLowerCase();
                           return _accounts.where((account) =>
-                              account.accountCode.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()) ||
-                              account.accountNameEng.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()) ||
-                              account.accountNameThai.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()));
+                              !account.isControlAccount &&
+                              (account.accountCode.toLowerCase().contains(q) ||
+                               account.accountNameEng.toLowerCase().contains(q) ||
+                               account.accountNameThai.toLowerCase().contains(q)));
                         },
                         displayStringForOption: (Account option) =>
                             '${option.accountCode} - ${option.accountNameThai}(${option.accountNameEng})',
                         initialValue:
                             TextEditingValue(text: detail.accountCode),
                         onSelected: (selection) {
+                          if (selection.isControlAccount) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'บัญชีนี้เป็น Control Account ไม่สามารถลงรายการในโมดูล GL ได้'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
                           setState(() {
                             detail.accountId = selection.id;
                             detail.accountCode = selection.accountCode;

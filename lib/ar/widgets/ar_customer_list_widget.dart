@@ -99,7 +99,7 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
             child: TextField(
               controller: _searchController,
               decoration: const InputDecoration(
-                hintText: 'ค้นหา (รหัส / ชื่อ)',
+                hintText: 'ค้นหา (รหัส / รหัสเก่า / ชื่อ)',
                 prefixIcon: Icon(Icons.search),
                 contentPadding: EdgeInsets.symmetric(horizontal: 10),
                 border: OutlineInputBorder(),

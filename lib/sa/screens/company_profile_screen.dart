@@ -315,71 +315,79 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ... (Address No, Building/Village, Soi, Road - ไม่มีการเปลี่ยนแปลง)
-        _buildTextFormField(
-          controller: _addressNoController,
-          labelText: 'บ้านเลขที่ / ห้อง',
-          maxLength: 50,
-        ),
-        _buildTextFormField(
-          controller: _addressBuildingVillageController,
-          labelText: 'อาคาร / หมู่บ้าน',
-          maxLength: 100,
-        ),
-        _buildTextFormField(
-          controller: _addressAlleyController,
-          labelText: 'ซอย',
-          maxLength: 100,
-        ),
-        _buildTextFormField(
-          controller: _addressRoadController,
-          labelText: 'ถนน',
-          maxLength: 100,
-        ),
-
-        // NEW: แถวที่มี IconButton สำหรับค้นหารหัสไปรษณีย์
+        // บ้านเลขที่ + อาคาร
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ปุ่มค้นหา
+            Expanded(child: _buildTextFormField(
+              controller: _addressNoController,
+              labelText: 'บ้านเลขที่ / ห้อง',
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: _buildTextFormField(
+              controller: _addressBuildingVillageController,
+              labelText: 'อาคาร / หมู่บ้าน',
+            )),
+          ],
+        ),
+        // ซอย + ถนน
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _buildTextFormField(
+              controller: _addressAlleyController,
+              labelText: 'ซอย',
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: _buildTextFormField(
+              controller: _addressRoadController,
+              labelText: 'ถนน',
+            )),
+          ],
+        ),
+        // แขวง + เขต + จังหวัด + รหัสไปรษณีย์ (ปุ่มค้นหากึ่งกลาง)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
             IconButton(
               icon: const Icon(Icons.search, color: Colors.blue),
               tooltip: 'ค้นหา ตำบล/แขวง, อำเภอ/เขต, จังหวัด, รหัสไปรษณีย์',
-              onPressed: _showZipcodeSearchCard, // เรียก Card ค้นหา
+              onPressed: _showZipcodeSearchCard,
             ),
-
             Expanded(
-              child: Column(children: [
-                // แขวง / ตำบล
-                _buildTextFormField(
-                  controller: _addressSubDistrictController,
-                  labelText: 'แขวง / ตำบล',
-                  maxLength: 100,
-                  // กำหนดให้เป็น ReadOnly ถ้าต้องการให้กรอกได้แค่จากการค้นหา
-                  // readOnly: true,
-                ),
-                // อำเภอ / เขต
-                _buildTextFormField(
-                  controller: _addressDistrictController,
-                  labelText: 'อำเภอ / เขต',
-                  maxLength: 100,
-                  // readOnly: true,
-                ),
-                // จังหวัด
-                _buildTextFormField(
-                  controller: _addressProvinceController,
-                  labelText: 'จังหวัด',
-                  maxLength: 100,
-                  // readOnly: true,
-                ),
-                // รหัสไปรษณีย์
-                _buildTextFormField(
-                  controller: _addressZipcodeController,
-                  labelText: 'รหัสไปรษณีย์',
-                  maxLength: 10,
-                  keyboardType: TextInputType.number,
-                  // readOnly: true,
-                ),
-              ]),
+              child: Column(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildTextFormField(
+                        controller: _addressSubDistrictController,
+                        labelText: 'แขวง / ตำบล',
+                      )),
+                      const SizedBox(width: 8),
+                      Expanded(child: _buildTextFormField(
+                        controller: _addressDistrictController,
+                        labelText: 'เขต / อำเภอ',
+                      )),
+                    ],
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildTextFormField(
+                        controller: _addressProvinceController,
+                        labelText: 'จังหวัด',
+                      )),
+                      const SizedBox(width: 8),
+                      Expanded(child: _buildTextFormField(
+                        controller: _addressZipcodeController,
+                        labelText: 'รหัสไปรษณีย์',
+                        keyboardType: TextInputType.number,
+                      )),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -387,9 +395,6 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
         _buildTextFormField(
           controller: _addressCountryController,
           labelText: 'ประเทศ',
-          maxLength: 100,
-          keyboardType: TextInputType.number,
-          // readOnly: true,
         ),
 
         // TextFormField(
@@ -433,6 +438,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
         keyboardType: keyboardType,
         onTap: onTap,
         decoration: InputDecoration(
+          isDense: true,
           labelText: required ? '$labelText *' : labelText,
           hintText: hintText,
           contentPadding:
@@ -562,33 +568,45 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
                     ),
                     const SizedBox(height: 20),
                     // --- Basic Info ---
-                    TextFormField(
-                      controller: _thaiNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'ชื่อภาษาไทย *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.language),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'กรุณาป้อนชื่อภาษาไทย';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 15),
-                    TextFormField(
-                      controller: _englishNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'ชื่อภาษาอังกฤษ',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.language),
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _thaiNameController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'ชื่อภาษาไทย *',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.language),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'กรุณาป้อนชื่อภาษาไทย';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _englishNameController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'ชื่อภาษาอังกฤษ',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.language),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 15),
                     TextFormField(
                       controller: _taxIdNumberController,
                       decoration: const InputDecoration(
+                        isDense: true,
                         labelText: 'เลขประจำตัวผู้เสียภาษี *',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.numbers),
@@ -608,93 +626,6 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
                             fontSize: 18, fontWeight: FontWeight.bold)),
                     const Divider(),
                     _buildAddressFields(),
-                    // TextFormField(
-                    //   controller: _addressNoController,
-                    //   decoration: const InputDecoration(
-                    //     labelText: 'เลขที่',
-                    //     border: OutlineInputBorder(),
-                    //     prefixIcon: Icon(Icons.home),
-                    //   ),
-                    // ),
-                    // const SizedBox(height: 15),
-                    // TextFormField(
-                    //   controller: _addressBuildingVillageController,
-                    //   decoration: const InputDecoration(
-                    //     labelText: 'อาคาร / หมู่บ้าน',
-                    //     border: OutlineInputBorder(),
-                    //     prefixIcon: Icon(Icons.apartment),
-                    //   ),
-                    // ),
-                    // const SizedBox(height: 15),
-                    // TextFormField(
-                    //   controller: _addressAlleyController,
-                    //   decoration: const InputDecoration(
-                    //     labelText: 'ซอย',
-                    //     border: OutlineInputBorder(),
-                    //     prefixIcon: Icon(Icons.alt_route),
-                    //   ),
-                    // ),
-                    // const SizedBox(height: 15),
-                    // TextFormField(
-                    //   controller: _addressRoadController,
-                    //   decoration: const InputDecoration(
-                    //     labelText: 'ถนน',
-                    //     border: OutlineInputBorder(),
-                    //     prefixIcon: Icon(Icons.streetview_outlined),
-                    //   ),
-                    // ),
-                    // const SizedBox(height: 15),
-                    // TextFormField(
-                    //   controller: _addressSubDistrictController,
-                    //   decoration: const InputDecoration(
-                    //     labelText: 'แขวง / ตำบล',
-                    //     border: OutlineInputBorder(),
-                    //     prefixIcon: Icon(Icons.location_city),
-                    //   ),
-                    // ),
-                    // const SizedBox(height: 15),
-                    // TextFormField(
-                    //   controller: _addressDistrictController,
-                    //   decoration: const InputDecoration(
-                    //     labelText: 'เขต / อำเภอ',
-                    //     border: OutlineInputBorder(),
-                    //     prefixIcon: Icon(Icons.area_chart),
-                    //   ),
-                    // ),
-                    // const SizedBox(height: 15),
-                    // TextFormField(
-                    //   controller: _addressProvinceController,
-                    //   decoration: const InputDecoration(
-                    //     labelText: 'จังหวัด',
-                    //     border: OutlineInputBorder(),
-                    //     prefixIcon: Icon(Icons.map),
-                    //   ),
-                    // ),
-                    // const SizedBox(height: 15),
-                    // TextFormField(
-                    //   controller: _addressCountryController,
-                    //   decoration: const InputDecoration(
-                    //     labelText: 'ประเทศ',
-                    //     border: OutlineInputBorder(),
-                    //     prefixIcon: Icon(Icons.public),
-                    //   ),
-                    //   // อาจมีค่าเริ่มต้นเป็น 'Thailand'
-                    //   onTap: () {
-                    //     if (_addressCountryController.text.isEmpty) {
-                    //       _addressCountryController.text = 'Thailand';
-                    //     }
-                    //   },
-                    // ),
-                    // const SizedBox(height: 15),
-                    // TextFormField(
-                    //   controller: _addressZipcodeController,
-                    //   decoration: const InputDecoration(
-                    //     labelText: 'รหัสไปรษณีย์',
-                    //     border: OutlineInputBorder(),
-                    //     prefixIcon: Icon(Icons.local_post_office),
-                    //   ),
-                    //   keyboardType: TextInputType.number,
-                    // ),
                     const SizedBox(height: 20),
 
                     // --- Contact Info ---
@@ -702,49 +633,72 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
                         style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold)),
                     const Divider(),
-                    TextFormField(
-                      controller: _phoneNumberController,
-                      decoration: const InputDecoration(
-                        labelText: 'เบอร์โทรศัพท์',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.phone),
-                      ),
-                      keyboardType: TextInputType.phone,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _phoneNumberController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'เบอร์โทรศัพท์',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.phone),
+                            ),
+                            keyboardType: TextInputType.phone,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _faxNumberController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'เบอร์แฟกซ์',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.fax),
+                            ),
+                            keyboardType: TextInputType.phone,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 15),
-                    TextFormField(
-                      controller: _faxNumberController,
-                      decoration: const InputDecoration(
-                        labelText: 'เบอร์แฟกซ์',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.fax),
-                      ),
-                      keyboardType: TextInputType.phone,
-                    ),
-                    const SizedBox(height: 15),
-                    TextFormField(
-                      controller: _emailController,
-                      decoration: const InputDecoration(
-                        labelText: 'อีเมล',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.email),
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 15),
-                    TextFormField(
-                      controller: _websiteController,
-                      decoration: const InputDecoration(
-                        labelText: 'เว็บไซต์',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.link),
-                      ),
-                      keyboardType: TextInputType.url,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _emailController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'อีเมล',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.email),
+                            ),
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _websiteController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'เว็บไซต์',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.link),
+                            ),
+                            keyboardType: TextInputType.url,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 15),
                     TextFormField(
                       controller: _primaryContactPersonController,
                       decoration: const InputDecoration(
+                        isDense: true,
                         labelText: 'ผู้ติดต่อหลัก',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.person),
@@ -757,31 +711,43 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
                         style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold)),
                     const Divider(),
-                    TextFormField(
-                      controller: _startDateController,
-                      decoration: const InputDecoration(
-                        labelText: 'วันที่เริ่มใช้',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.calendar_today),
-                      ),
-                      readOnly: true,
-                      onTap: () => _selectDate(_startDateController),
-                    ),
-                    const SizedBox(height: 15),
-                    TextFormField(
-                      controller: _maintenanceDateController,
-                      decoration: const InputDecoration(
-                        labelText: 'วันที่เริ่มสัญญาบำรุงรักษาล่าสุด',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.calendar_month),
-                      ),
-                      readOnly: true,
-                      onTap: () => _selectDate(_maintenanceDateController),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _startDateController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'วันที่เริ่มใช้',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.calendar_today),
+                            ),
+                            readOnly: true,
+                            onTap: () => _selectDate(_startDateController),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _maintenanceDateController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              labelText: 'วันที่เริ่มสัญญาบำรุงรักษาล่าสุด',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.calendar_month),
+                            ),
+                            readOnly: true,
+                            onTap: () => _selectDate(_maintenanceDateController),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 15),
                     TextFormField(
                       controller: _serialNumberController,
                       decoration: const InputDecoration(
+                        isDense: true,
                         labelText: 'หมายเลขอนุกรม',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.qr_code),

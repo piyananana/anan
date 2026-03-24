@@ -163,12 +163,13 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                   TextFormField(
                     readOnly: widget.mode != Mode.add,
                     controller: _currencyCodeController,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontSize: 31, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
                     decoration: const InputDecoration(
                       labelText: 'รหัสสกุลเงิน (ISO 3-letter code)',
                       border: OutlineInputBorder(),
                     ),
-                    maxLength: 3,
+                    // maxLength: 3,
                     validator: (value) {
                       if (value == null || value.isEmpty || value.length != 3) {
                         return 'โปรดระบุรหัส 3 ตัวอักษร';
@@ -241,7 +242,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
               children: [
                 Expanded(
                   child: Text(
-                      'สถานะการใช้: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
+                      'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                 ),
                 Switch(
                   value: _isActive,

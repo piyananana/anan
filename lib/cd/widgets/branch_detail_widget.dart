@@ -222,7 +222,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                       labelText: 'รหัสสาขา',
                       border: OutlineInputBorder(),
                     ),
-                    maxLength: 50,
+                    // maxLength: 50,
                     validator: (value) {
                       if (value == null || value.isEmpty || value.length > 50) {
                         return 'โปรดระบุรหัสไม่เกิน 50 ตัวอักษร';
@@ -244,7 +244,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                       labelText: 'ชื่อสาขา (ไทย)',
                       border: OutlineInputBorder(),
                     ),
-                    maxLength: 255,
+                    // maxLength: 255,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'โปรดระบุชื่อสาขาภาษาไทย';
@@ -262,7 +262,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                       labelText: 'ชื่อสาขา (อังกฤษ)',
                       border: OutlineInputBorder(),
                     ),
-                    maxLength: 255,
+                    // maxLength: 255,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'โปรดระบุชื่อสาขาภาษาอังกฤษ';
@@ -284,7 +284,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                         color: Colors.grey.shade700,
                       ),
                     ),
-                    title: Text('สถานะ: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
+                    title: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                     trailing: Switch(
                       value: _isActive,
                       onChanged: readOnly ? null : (bool value) {
@@ -372,7 +372,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
               _buildTextFormField(
                 controller: _addressNoController,
                 labelText: 'บ้านเลขที่ / ห้อง',
-                maxLength: 50,
+                // maxLength: 50,
                 readOnly: readOnly,
               ),
             ),
@@ -381,7 +381,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
               _buildTextFormField(
                 controller: _addressBuildingVillageController,
                 labelText: 'อาคาร / หมู่บ้าน',
-                maxLength: 100,
+                // maxLength: 100,
                 readOnly: readOnly,
               ),
             ),
@@ -390,7 +390,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
               _buildTextFormField(
                 controller: _addressSoiController,
                 labelText: 'ซอย',
-                maxLength: 100,
+                // maxLength: 100,
                 readOnly: readOnly,
               ),
             ),
@@ -399,7 +399,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
               _buildTextFormField(
                 controller: _addressRoadController,
                 labelText: 'ถนน',
-                maxLength: 100,
+                // maxLength: 100,
                 readOnly: readOnly,
               ),
             ),
@@ -423,7 +423,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                       _buildTextFormField(
                         controller: _addressSubDistrictController,
                         labelText: 'ตำบล / แขวง',
-                        maxLength: 100,
+                        // maxLength: 100,
                         readOnly: readOnly,
                       ),
                     ),
@@ -433,7 +433,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                       _buildTextFormField(
                         controller: _addressDistrictController,
                         labelText: 'อำเภอ / เขต',
-                        maxLength: 100,
+                        // maxLength: 100,
                         readOnly: readOnly,
                       ),
                     ),
@@ -443,7 +443,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                       _buildTextFormField(
                         controller: _addressProvinceController,
                         labelText: 'จังหวัด',
-                        maxLength: 100,
+                        // maxLength: 100,
                         readOnly: readOnly,
                       ),
                     ),
@@ -453,7 +453,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                       _buildTextFormField(
                         controller: _addressZipCodeController,
                         labelText: 'รหัสไปรษณีย์',
-                        maxLength: 10,
+                        // maxLength: 10,
                         keyboardType: TextInputType.number,
                         readOnly: readOnly,
                       ),
@@ -468,7 +468,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
         _buildTextFormField(
           controller: _addressCountryController,
           labelText: 'ประเทศ',
-          maxLength: 100,
+          // maxLength: 100,
           keyboardType: TextInputType.text,
           readOnly: readOnly,
         ),
@@ -503,7 +503,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                 controller: _phoneNumberController,
                 labelText: 'เบอร์โทรศัพท์',
                 keyboardType: TextInputType.phone,
-                maxLength: 50,
+                // maxLength: 50,
                 readOnly: readOnly,
               ),
             ),
@@ -513,7 +513,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                 controller: _faxNumberController,
                 labelText: 'เบอร์แฟกซ์',
                 keyboardType: TextInputType.phone,
-                maxLength: 50,
+                // maxLength: 50,
                 readOnly: readOnly,
               ),
             ),
@@ -523,7 +523,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                 controller: _primaryContactPersonController,
                 labelText: 'ผู้ติดต่อหลัก',
                 keyboardType: TextInputType.text,
-                maxLength: 100,
+                // maxLength: 100,
                 readOnly: readOnly,
               ),
             ),
@@ -552,7 +552,6 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
         controller: controller,
         readOnly: readOnly,
         maxLines: maxLines,
-        maxLength: maxLength,
         keyboardType: keyboardType,
         onTap: onTap,
         decoration: InputDecoration(

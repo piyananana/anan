@@ -144,7 +144,6 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
                 labelText: 'รหัสประเภทธุรกิจ *',
                 border: OutlineInputBorder(),
               ),
-              maxLength: 20,
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return 'โปรดระบุรหัสประเภทธุรกิจ';
@@ -205,7 +204,7 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
             Row(
               children: [
                 Expanded(
-                  child: Text('สถานะการใช้: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
+                  child: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                 ),
                 Switch(
                   value: _isActive,

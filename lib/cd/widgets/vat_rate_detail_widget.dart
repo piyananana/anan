@@ -319,7 +319,7 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
               children: [
                 Expanded(
                   child: Text(
-                      'สถานะการใช้งาน: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
+                      'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                 ),
                 Switch(
                   value: _isActive,

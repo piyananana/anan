@@ -19,6 +19,9 @@ import '../../cd/screens/currency_screen.dart';
 import '../../cd/screens/project_screen.dart';
 import '../../cd/screens/zipcode_screen.dart';
 import '../../cd/screens/vat_rate_screen.dart';
+import '../../cd/screens/bank_screen.dart';
+import '../../cd/screens/sales_territory_screen.dart';
+import '../../cd/screens/salesperson_screen.dart';
 
 import '../../gl/screens/account_screen.dart';
 import '../../gl/screens/financial_report_builder_screen.dart';
@@ -35,6 +38,9 @@ import '../../gl/screens/year_end_closing_config_screen.dart';
 
 import '../../ar/screens/ar_customer_screen.dart';
 import '../../ar/screens/ar_customer_group_screen.dart';
+import '../../ar/screens/ar_customer_running_screen.dart';
+import '../../ar/screens/ar_transaction_screen.dart';
+import '../../ar/screens/ar_collector_screen.dart';
 
 class Menu {
   final int id;
@@ -90,6 +96,12 @@ class Menu {
     'VatRateScreen': (context) => VatRateScreen(
           onFieldsChanged: () {},
         ),
+    'SalesTerritoryScreen': (context) => SalesTerritoryScreen(
+          onFieldsChanged: () {},
+        ),
+    'SalespersonScreen': (context) => SalespersonScreen(
+          onFieldsChanged: () {},
+        ),
 
     'AccountScreen': (context) => AccountScreen(
           onFieldsChanged: () {},
@@ -114,6 +126,10 @@ class Menu {
     'ArCustomerGroupScreen': (context) => ArCustomerGroupScreen(
           onFieldsChanged: () {},
         ),
+    'ArCustomerRunningScreen': (context) => const ArCustomerRunningScreen(),
+    'ArTransactionScreen': (context) => const ArTransactionScreen(),
+    'ArCollectorScreen': (context) => ArCollectorScreen(onFieldsChanged: () {}),
+    'BankScreen': (context) => BankScreen(onFieldsChanged: () {}),
     // 'PeriodScreen': (context) => const PeriodScreen(),
     // Add all your custom widgets here
     // 'YourCustomWidget1': (context) => const YourCustomWidget1(),

@@ -345,7 +345,7 @@ class ModuleDocumentDetailWidgetState
                 labelText: 'รหัสประเภทเอกสาร/รหัสโมดูล',
                 border: OutlineInputBorder(),
               ),
-              maxLength: 10,
+              // maxLength: 10,
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'กรุณาป้อนรหัสประเภทเอกสารหรือโมดูล';
@@ -365,7 +365,7 @@ class ModuleDocumentDetailWidgetState
                       labelText: 'ชื่อ (ภาษาไทย)',
                       border: OutlineInputBorder(),
                     ),
-                    maxLength: 100,
+                    // maxLength: 100,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'กรุณาป้อนชื่อ (ภาษาไทย)';
@@ -383,7 +383,7 @@ class ModuleDocumentDetailWidgetState
                       labelText: 'ชื่อ (ภาษาอังกฤษ)',
                       border: OutlineInputBorder(),
                     ),
-                    maxLength: 100,
+                    // maxLength: 100,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'กรุณาป้อนชื่อ (ภาษาอังกฤษ)';
@@ -427,7 +427,7 @@ class ModuleDocumentDetailWidgetState
                         color: Colors.grey.shade700,
                       ),
                     ),
-                    title: Text('สถานะ: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
+                    title: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                     trailing: Switch(
                       value: _isActive,
                       onChanged: readOnly ? null : (bool value) {
@@ -576,7 +576,7 @@ class ModuleDocumentDetailWidgetState
                                           labelText: 'คำนำหน้า',
                                           border: OutlineInputBorder(),
                                         ),
-                                        maxLength: 10,
+                                        // maxLength: 10,
                                         validator: (value) {
                                           if (value == null || value.isEmpty) {
                                             return 'กรุณาป้อนคำนำหน้า';
@@ -632,7 +632,7 @@ class ModuleDocumentDetailWidgetState
                                           labelText: 'อักษรคั่น',
                                           border: OutlineInputBorder(),
                                         ),
-                                        maxLength: 5,
+                                        // maxLength: 5,
                                         // validator: (value) {
                                         //   if (value == null || value.isEmpty) {
                                         //     return 'กรุณาป้อนคำนำหน้า';
@@ -707,7 +707,7 @@ class ModuleDocumentDetailWidgetState
                                           labelText: 'เลขที่ถัดไป',
                                           border: OutlineInputBorder(),
                                         ),
-                                        maxLength: _runningLength,
+                                        // maxLength: _runningLength,
                                         validator: (value) {
                                           if (value == null || value.isEmpty) {
                                             return 'กรุณาป้อนเลขที่อัตโนมัติถัดไป';

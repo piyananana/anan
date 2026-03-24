@@ -161,7 +161,7 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
                       labelText: 'รหัสโครงการ',
                       border: OutlineInputBorder(),
                     ),
-                    maxLength: 50,
+                    // maxLength: 50,
                     validator: (value) {
                       if (value == null || value.isEmpty || value.length > 50) {
                         return 'โปรดระบุรหัสไม่เกิน 50 ตัวอักษร';
@@ -183,7 +183,7 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
                       labelText: 'ชื่อโครงการ (ไทย)',
                       border: OutlineInputBorder(),
                     ),
-                    maxLength: 255,
+                    // maxLength: 255,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'โปรดระบุชื่อโครงการภาษาไทย';
@@ -201,7 +201,7 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
                       labelText: 'ชื่อโครงการ (อังกฤษ)',
                       border: OutlineInputBorder(),
                     ),
-                    maxLength: 255,
+                    // maxLength: 255,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'โปรดระบุชื่อโครงการภาษาอังกฤษ';
@@ -223,7 +223,7 @@ class ProjectDetailWidgetState extends State<ProjectDetailWidget> {
                         color: Colors.grey.shade700,
                       ),
                     ),
-                    title: Text('สถานะ: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
+                    title: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                     trailing: Switch(
                       value: _isActive,
                       onChanged: readOnly ? null : (bool value) {

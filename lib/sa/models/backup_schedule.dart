@@ -1,6 +1,7 @@
 // lib/models/backup_schedule.dart
 
 import 'package:flutter/material.dart';
+import '../../../utils/date_utils.dart';
 
 class BackupSchedule {
   final int id;
@@ -70,9 +71,7 @@ class BackupSchedule {
               minute: int.parse(json['monthly_time'].substring(3, 5)),
             )
           : null,
-      yearlyDate: json['yearly_date'] != null
-          ? DateTime.parse(json['yearly_date'])
-          : null,
+      yearlyDate: parseLocalDateNullable(json['yearly_date']),
       yearlyTime: json['yearly_time'] != null
           ? TimeOfDay(
               hour: int.parse(json['yearly_time'].substring(0, 2)),
@@ -90,7 +89,7 @@ class BackupSchedule {
       'monthly_months': monthlyMonths?.join(','),
       'monthly_day_of_month': monthlyDayOfMonth,
       'monthly_time': monthlyTime != null ? '${monthlyTime!.hour.toString().padLeft(2, '0')}:${monthlyTime!.minute.toString().padLeft(2, '0')}:00' : null,
-      'yearly_date': yearlyDate?.toIso8601String().split('T')[0],
+      'yearly_date': yearlyDate != null ? formatLocalDate(yearlyDate!) : null,
       'yearly_time': yearlyTime != null ? '${yearlyTime!.hour.toString().padLeft(2, '0')}:${yearlyTime!.minute.toString().padLeft(2, '0')}:00' : null,
     };
   }
@@ -177,7 +176,7 @@ class BackupSchedule {
 //       'monthly_months': monthlyMonths?.join(','),
 //       'monthly_day_of_month': monthlyDayOfMonth,
 //       'monthly_time': monthlyTime != null ? '${monthlyTime!.hour.toString().padLeft(2, '0')}:${monthlyTime!.minute.toString().padLeft(2, '0')}:00' : null,
-//       'yearly_date': yearlyDate?.toIso8601String().split('T')[0],
+//       'yearly_date': yearlyDate != null ? formatLocalDate(yearlyDate!) : null,
 //       'yearly_time': yearlyTime != null ? '${yearlyTime!.hour.toString().padLeft(2, '0')}:${yearlyTime!.minute.toString().padLeft(2, '0')}:00' : null,
 //     };
 //   }

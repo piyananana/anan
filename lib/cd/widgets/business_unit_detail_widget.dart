@@ -248,7 +248,7 @@ class BusinessUnitDetailWidgetState extends State<BusinessUnitDetailWidget> {
             Row(
               children: [
                 Expanded(
-                  child: Text('สถานะ: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
+                  child: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                 ),
                 Switch(
                   value: _isActive,

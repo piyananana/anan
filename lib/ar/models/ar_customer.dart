@@ -230,6 +230,7 @@ class ArCustomerBankAccount {
 class ArCustomer {
   final int? id;
   final String customerCode;
+  final String? oldCustomerCode;
   final String customerNameTh;
   final String? customerNameEn;
   final String? taxId;
@@ -247,6 +248,30 @@ class ArCustomer {
   final String currencyCode;
   final bool isActive;
   final String? remark;
+  // เงื่อนไขการวางบิล
+  final int? billingDayOfWeek;        // 0=อา,1=จ,2=อ,3=พ,4=พฤ,5=ศ,6=ส
+  final List<int>? billingWeekOfMonth; // 1=แรก,2=ที่2,3=ที่3,4=ที่4,-1=สุดท้าย
+  final int? billingDateFrom;
+  final int? billingDateTo;
+  final String? billingTimeFrom;      // 'HH:mm'
+  final String? billingTimeTo;        // 'HH:mm'
+  final bool billingExcludeHolidays;
+  final String? billingRemark;
+  final int? arAccountId; // FK -> gl_account.id (บัญชีลูกหนี้ของลูกค้า)
+  // เขตการขาย + พนักงานขาย
+  final int? salesTerritoryId;
+  final String? salesTerritoryCode;
+  final String? salesTerritoryNameThai;
+  final int? salespersonId;
+  final String? salespersonCode;
+  final String? salespersonNameThai;
+  // ผู้วางบิล + ผู้รับชำระ (FK -> ar_collector)
+  final int? billingCollectorId;
+  final String? billingCollectorCode;
+  final String? billingCollectorNameThai;
+  final int? collectionCollectorId;
+  final String? collectionCollectorCode;
+  final String? collectionCollectorNameThai;
   final List<ArCustomerAddress> addresses;
   final List<ArCustomerContact> contacts;
   final List<ArCustomerBankAccount> bankAccounts;
@@ -254,6 +279,7 @@ class ArCustomer {
   ArCustomer({
     this.id,
     required this.customerCode,
+    this.oldCustomerCode,
     required this.customerNameTh,
     this.customerNameEn,
     this.taxId,
@@ -269,6 +295,27 @@ class ArCustomer {
     this.currencyCode = 'THB',
     this.isActive = true,
     this.remark,
+    this.billingDayOfWeek,
+    this.billingWeekOfMonth,
+    this.billingDateFrom,
+    this.billingDateTo,
+    this.billingTimeFrom,
+    this.billingTimeTo,
+    this.billingExcludeHolidays = false,
+    this.billingRemark,
+    this.arAccountId,
+    this.salesTerritoryId,
+    this.salesTerritoryCode,
+    this.salesTerritoryNameThai,
+    this.salespersonId,
+    this.salespersonCode,
+    this.salespersonNameThai,
+    this.billingCollectorId,
+    this.billingCollectorCode,
+    this.billingCollectorNameThai,
+    this.collectionCollectorId,
+    this.collectionCollectorCode,
+    this.collectionCollectorNameThai,
     this.addresses = const [],
     this.contacts = const [],
     this.bankAccounts = const [],
@@ -277,6 +324,7 @@ class ArCustomer {
   factory ArCustomer.fromJson(Map<String, dynamic> json) => ArCustomer(
         id: json['id'],
         customerCode: json['customer_code'] ?? '',
+        oldCustomerCode: json['old_customer_code'] as String?,
         customerNameTh: json['customer_name_th'] ?? '',
         customerNameEn: json['customer_name_en'],
         taxId: json['tax_id'],
@@ -294,6 +342,32 @@ class ArCustomer {
         currencyCode: json['currency_code'] ?? 'THB',
         isActive: json['is_active'] ?? true,
         remark: json['remark'],
+        billingDayOfWeek: json['billing_day_of_week'],
+        billingWeekOfMonth: json['billing_week_of_month'] != null
+            ? (json['billing_week_of_month'] as List<dynamic>)
+                .map((e) => (e as num).toInt())
+                .toList()
+            : null,
+        billingDateFrom: json['billing_date_from'],
+        billingDateTo: json['billing_date_to'],
+        billingTimeFrom: json['billing_time_from'],
+        billingTimeTo: json['billing_time_to'],
+        billingExcludeHolidays: json['billing_exclude_holidays'] ?? false,
+        billingRemark: json['billing_remark'],
+        arAccountId: json['ar_account_id'] as int?,
+        salesTerritoryId: json['sales_territory_id'] as int?,
+        salesTerritoryCode: json['sales_territory_code'] as String?,
+        salesTerritoryNameThai: json['sales_territory_name_thai'] as String?,
+        salespersonId: json['salesperson_id'] as int?,
+        salespersonCode: json['salesperson_code'] as String?,
+        salespersonNameThai: json['salesperson_name_thai'] as String?,
+        billingCollectorId: json['billing_collector_id'] as int?,
+        billingCollectorCode: json['billing_collector_code'] as String?,
+        billingCollectorNameThai: json['billing_collector_name_thai'] as String?,
+        collectionCollectorId: json['collection_collector_id'] as int?,
+        collectionCollectorCode: json['collection_collector_code'] as String?,
+        collectionCollectorNameThai:
+            json['collection_collector_name_thai'] as String?,
         addresses: (json['addresses'] as List<dynamic>? ?? [])
             .map((e) => ArCustomerAddress.fromJson(e))
             .toList(),
@@ -308,6 +382,7 @@ class ArCustomer {
   Map<String, dynamic> toJson() => {
         if (id != null) 'id': id,
         'customer_code': customerCode,
+        'old_customer_code': oldCustomerCode,
         'customer_name_th': customerNameTh,
         'customer_name_en': customerNameEn,
         'tax_id': taxId,
@@ -319,6 +394,19 @@ class ArCustomer {
         'currency_code': currencyCode,
         'is_active': isActive,
         'remark': remark,
+        'billing_day_of_week': billingDayOfWeek,
+        'billing_week_of_month': billingWeekOfMonth,
+        'billing_date_from': billingDateFrom,
+        'billing_date_to': billingDateTo,
+        'billing_time_from': billingTimeFrom,
+        'billing_time_to': billingTimeTo,
+        'billing_exclude_holidays': billingExcludeHolidays,
+        'billing_remark': billingRemark,
+        'ar_account_id': arAccountId,
+        'sales_territory_id': salesTerritoryId,
+        'salesperson_id': salespersonId,
+        'billing_collector_id': billingCollectorId,
+        'collection_collector_id': collectionCollectorId,
         'addresses': addresses.map((e) => e.toJson()).toList(),
         'contacts': contacts.map((e) => e.toJson()).toList(),
         'bank_accounts': bankAccounts.map((e) => e.toJson()).toList(),

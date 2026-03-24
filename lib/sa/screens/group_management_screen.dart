@@ -485,7 +485,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
             ),
             const SizedBox(height: 16),
             SwitchListTile(
-              title: Text('สถานะ: ${_isActive ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}'),
+              title: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
               value: _isActive,
               onChanged: (bool value) {
                 setState(() {

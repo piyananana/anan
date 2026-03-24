@@ -108,7 +108,8 @@ class ArCustomerGroupDetailWidgetState
     final svc = Provider.of<AccountService>(context, listen: false);
     List<Account> accounts = [];
     try {
-      accounts = await svc.fetchRowsControlAccount()
+      final all = await svc.fetchRows();
+      accounts = all.where((a) => a.isControlAccount && a.isActive).toList()
         ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
     } catch (_) {}
 
@@ -319,7 +320,6 @@ class ArCustomerGroupDetailWidgetState
                 labelText: 'รหัสกลุ่มลูกค้า *',
                 border: OutlineInputBorder(),
               ),
-              maxLength: 20,
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return 'โปรดระบุรหัสกลุ่มลูกค้า';
@@ -461,7 +461,7 @@ class ArCustomerGroupDetailWidgetState
             // บัญชี GL (Control Account)
             InputDecorator(
               decoration: const InputDecoration(
-                labelText: 'รหัสบัญชี GL (Control Account)',
+                labelText: 'รหัสบัญชีลูกหนี้ (GL)',
                 border: OutlineInputBorder(),
                 contentPadding:
                     EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -509,7 +509,7 @@ class ArCustomerGroupDetailWidgetState
               children: [
                 Expanded(
                   child: Text(
-                      'สถานะการใช้: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
+                      'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                 ),
                 Switch(
                   value: _isActive,

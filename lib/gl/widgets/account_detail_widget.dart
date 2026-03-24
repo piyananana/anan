@@ -34,8 +34,9 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
   late TextEditingController _accountNameEngController;
   late String _accountType;
   late String
-      _accountSubType; // เลือกจาก parent_id != null และ !isControlAccount
+      _accountSubType; // เลือกจาก parent_id != null และ !isNormalAccount
   late String _normalBalance;
+  late bool _isNormalAccount;
   late bool _isControlAccount;
   late bool _isReconcilable;
   late String _currencyCode; // เลือกจาก cd_currency
@@ -122,7 +123,8 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
     if (widget.mode == AccountMode.addChild) {
       _accountNameThaiController.clear();
       _accountNameEngController.clear();
-      _isControlAccount = true;
+      _isNormalAccount = true;
+      _isControlAccount = false;
       _isReconcilable = false;
       _moduleLinkCode = '';
       _costCenterRequired = false;
@@ -133,7 +135,8 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
           TextEditingController(text: _selected?.accountNameThai ?? '');
       _accountNameEngController =
           TextEditingController(text: _selected?.accountNameEng ?? '');
-      _isControlAccount = _selected?.isControlAccount ?? true;
+      _isNormalAccount = _selected?.isNormalAccount ?? true;
+      _isControlAccount = _selected?.isControlAccount ?? false;
       _isReconcilable = _selected?.isReconcilable ?? false;
       _moduleLinkCode = _selected?.moduleLinkCode ?? '';
       _costCenterRequired = _selected?.costCenterRequired ?? false;
@@ -162,7 +165,8 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       if (widget.mode == AccountMode.addChild) {
         _accountNameThaiController.clear();
         _accountNameEngController.clear();
-        _isControlAccount = true;
+        _isNormalAccount = true;
+        _isControlAccount = false;
         _isReconcilable = false;
         _moduleLinkCode = '';
         _costCenterRequired = false;
@@ -173,6 +177,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
             TextEditingController(text: _selected?.accountNameThai ?? '');
         _accountNameEngController =
             TextEditingController(text: _selected?.accountNameEng ?? '');
+        _isNormalAccount = _selected?.isNormalAccount ?? false;
         _isControlAccount = _selected?.isControlAccount ?? false;
         _isReconcilable = _selected?.isReconcilable ?? false;
         _moduleLinkCode = _selected?.moduleLinkCode ?? '';
@@ -190,6 +195,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _accountType = 'ASSET';
       _accountSubType = '';
       _normalBalance = 'DR';
+      _isNormalAccount = false;
       _isControlAccount = false;
       _isReconcilable = false;
       _currencyCode = 'THB';
@@ -209,7 +215,8 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _accountType = _selected?.accountType ?? 'ASSET';
       _accountSubType = '';
       _normalBalance = _selected?.normalBalance ?? 'DR';
-      _isControlAccount = true;
+      _isNormalAccount = true;
+      _isControlAccount = false;
       _isReconcilable = false;
       _currencyCode = 'THB';
       _moduleLinkCode = '';
@@ -247,6 +254,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
           accountType: _accountType,
           accountSubType: _accountSubType,
           normalBalance: _normalBalance,
+          isNormalAccount: _isNormalAccount,
           isControlAccount: _isControlAccount,
           isReconcilable: _isReconcilable,
           currencyCode: _currencyCode,
@@ -429,7 +437,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
             Row(
               children: [
                 Expanded(
-                  child: Text('สถานะ: ${_isActive ? 'ใช้' : 'หยุดใช้'}'),
+                  child: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                 ),
                 Switch(
                   value: _isActive,
@@ -446,19 +454,19 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
               children: [
                 Expanded(
                   child: Text(
-                      'การลงรายการบัญชี: ${_isControlAccount ? 'ใช้ลงรายการบัญชี' : 'เป็นหัวบัญชี/สะสมยอด'}'),
+                      'การลงรายการบัญชี: ${_isNormalAccount ? 'บัญชีปกติ (ลงรายการได้)' : 'เป็นหัวบัญชี/สะสมยอด'}'),
                 ),
                 Switch(
-                  value: _isControlAccount,
+                  value: _isNormalAccount,
                   onChanged: readOnly ? null : (bool value) {
                     setState(() {
-                      _isControlAccount = value;
+                      _isNormalAccount = value;
                     });
                   },
                 ),
               ],
             ),
-            _isControlAccount
+            _isNormalAccount
                 ? Column(children: [
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
@@ -482,6 +490,24 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         }
                       },
                     ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                              'Control Account: ${_isControlAccount ? 'บันทึกได้เฉพาะจากโมดูลอื่น' : 'บันทึกในโมดูล GL ได้'}'),
+                        ),
+                        Switch(
+                          value: _isControlAccount,
+                          onChanged: readOnly ? null : (bool value) {
+                            setState(() {
+                              _isControlAccount = value;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    if (_isControlAccount) ...[
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       value: _moduleLinkCode,
@@ -509,6 +535,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         }
                       },
                     ),
+                    ], // end if (_isControlAccount)
                     const SizedBox(height: 16),
                     Row(
                       children: [

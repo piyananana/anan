@@ -510,10 +510,10 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
           sumCr += cr;
 
           String rawDate = t['doc_date']?.toString() ?? '';
-          String fDate = rawDate.length >= 10 ? DateFormat('dd/MM/yyyy').format(DateTime.parse(rawDate)) : rawDate;
+          String fDate = rawDate.length >= 10 ? DateFormat('dd/MM/yyyy').format(DateTime.parse(rawDate).toLocal()) : rawDate;
 
           String refRawDate = t['ref_doc_date']?.toString() ?? '';
-          String fRefDate = refRawDate.length >= 10 ? DateFormat('dd/MM/yyyy').format(DateTime.parse(refRawDate)) : refRawDate;
+          String fRefDate = refRawDate.length >= 10 ? DateFormat('dd/MM/yyyy').format(DateTime.parse(refRawDate).toLocal()) : refRawDate;
 
           txRows.add(buildTableRow([
             fDate, t['doc_code'] ?? '', t['doc_no'] ?? '', t['line_no']?.toString() ?? '',
