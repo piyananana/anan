@@ -227,12 +227,10 @@ Future<ArCustomerAddress?> showAddressDialog(
                 ]),
                 // แขวง/ตำบล + อำเภอ/เขต พร้อมปุ่มค้นหา zipcode
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     if (!readOnly)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: IconButton(
+                      IconButton(
                           icon: const Icon(Icons.search, color: Colors.blue),
                           tooltip:
                               'ค้นหา ตำบล/แขวง, อำเภอ/เขต, จังหวัด, รหัสไปรษณีย์',
@@ -247,7 +245,6 @@ Future<ArCustomerAddress?> showAddressDialog(
                               },
                             );
                           },
-                        ),
                       ),
                     Expanded(
                       child: Column(
@@ -431,6 +428,388 @@ Future<ArCustomerContact?> showContactDialog(
         ),
       ],
     ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Billing Condition Dialog
+// ---------------------------------------------------------------------------
+Future<ArCustomerBillingCondition?> showBillingConditionDialog(
+    BuildContext context, ArCustomerBillingCondition? existing, bool readOnly) {
+  const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  const weekOptions = <int, String>{1: 'แรก', 2: 'ที่ 2', 3: 'ที่ 3', 4: 'ที่ 4', -1: 'สุดท้าย'};
+
+  var billWithDelivery = existing?.billWithDelivery ?? false;
+  var dueFromBillingDate = existing?.dueFromBillingDate ?? false;
+  var dayOfMonth = List<int>.from(existing?.billingDayOfMonth ?? []);
+  var dayOfWeek = List<int>.from(existing?.billingDayOfWeek ?? []);
+  var weekOfMonth = List<int>.from(existing?.billingWeekOfMonth ?? []);
+  final timeFromCtrl = TextEditingController(text: existing?.billingTimeFrom ?? '');
+  final timeToCtrl = TextEditingController(text: existing?.billingTimeTo ?? '');
+  final remarkCtrl = TextEditingController(text: existing?.remark ?? '');
+
+  return showDialog<ArCustomerBillingCondition>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
+      Widget chipGroup(String label, List<int> values, List<int> selected,
+          String Function(int) labelFn) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: label,
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.fromLTRB(8, 14, 8, 8),
+            ),
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 2,
+              children: values.map((v) {
+                final sel = selected.contains(v);
+                return FilterChip(
+                  label: Text(labelFn(v), style: const TextStyle(fontSize: 12)),
+                  selected: sel,
+                  onSelected: readOnly
+                      ? null
+                      : (on) => setDlg(() {
+                            if (on) {
+                              selected.add(v);
+                            } else {
+                              selected.remove(v);
+                            }
+                          }),
+                  selectedColor: Colors.indigo.shade100,
+                  checkmarkColor: Colors.indigo,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      }
+
+      return AlertDialog(
+        title: Text(readOnly
+            ? 'ดูเงื่อนไขวางบิล'
+            : existing == null
+                ? 'เพิ่มเงื่อนไขวางบิล'
+                : 'แก้ไขเงื่อนไขวางบิล'),
+        content: SingleChildScrollView(
+          child: SizedBox(
+            width: 500,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('วางบิลพร้อมวันส่งของ (ไม่ต้องรอวันวางบิล)'),
+                  value: billWithDelivery,
+                  onChanged: readOnly ? null : (v) => setDlg(() => billWithDelivery = v ?? false),
+                ),
+                const Divider(),
+                // วันที่ในเดือน
+                chipGroup(
+                  'วันที่ในเดือน (31 = สิ้นเดือน)',
+                  [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],
+                  dayOfMonth,
+                  (d) => d == 31 ? 'สิ้นเดือน' : '$d',
+                ),
+                // วันในสัปดาห์
+                chipGroup(
+                  'วันในสัปดาห์',
+                  List.generate(7, (i) => i),
+                  dayOfWeek,
+                  (d) => dayNames[d],
+                ),
+                // สัปดาห์ที่
+                chipGroup(
+                  'สัปดาห์ที่',
+                  [1, 2, 3, 4, -1],
+                  weekOfMonth,
+                  (w) => weekOptions[w] ?? '$w',
+                ),
+                // เวลา
+                Row(children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10, right: 5),
+                      child: TextField(
+                        controller: timeFromCtrl,
+                        readOnly: readOnly,
+                        decoration: const InputDecoration(
+                          labelText: 'เวลาตั้งแต่',
+                          border: OutlineInputBorder(),
+                          hintText: '09:00',
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10, left: 5),
+                      child: TextField(
+                        controller: timeToCtrl,
+                        readOnly: readOnly,
+                        decoration: const InputDecoration(
+                          labelText: 'ถึงเวลา',
+                          border: OutlineInputBorder(),
+                          hintText: '17:00',
+                        ),
+                      ),
+                    ),
+                  ),
+                ]),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('คำนวณวันครบกำหนดชำระจากวันวางบิล (แทนวันส่งของ)'),
+                  value: dueFromBillingDate,
+                  onChanged: readOnly ? null : (v) => setDlg(() => dueFromBillingDate = v ?? false),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: TextField(
+                    controller: remarkCtrl,
+                    readOnly: readOnly,
+                    decoration: const InputDecoration(
+                      labelText: 'หมายเหตุ',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('ยกเลิก'),
+          ),
+          if (!readOnly)
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(ArCustomerBillingCondition(
+                id: existing?.id,
+                customerId: existing?.customerId,
+                sortOrder: existing?.sortOrder ?? 1,
+                billWithDelivery: billWithDelivery,
+                billingDayOfMonth: List.from(dayOfMonth),
+                billingDayOfWeek: List.from(dayOfWeek),
+                billingWeekOfMonth: List.from(weekOfMonth),
+                billingTimeFrom: timeFromCtrl.text.trim().isEmpty ? null : timeFromCtrl.text.trim(),
+                billingTimeTo: timeToCtrl.text.trim().isEmpty ? null : timeToCtrl.text.trim(),
+                dueFromBillingDate: dueFromBillingDate,
+                remark: remarkCtrl.text.trim().isEmpty ? null : remarkCtrl.text.trim(),
+              )),
+              child: const Text('บันทึก'),
+            ),
+        ],
+      );
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Payment Condition Dialog
+// ---------------------------------------------------------------------------
+Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
+    BuildContext context, ArCustomerPaymentCondition? existing, bool readOnly) {
+  const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  const weekOptions = <int, String>{1: 'แรก', 2: 'ที่ 2', 3: 'ที่ 3', 4: 'ที่ 4', -1: 'สุดท้าย'};
+
+  var dayOfMonth = List<int>.from(existing?.paymentDayOfMonth ?? []);
+  var dayOfWeek = List<int>.from(existing?.paymentDayOfWeek ?? []);
+  var weekOfMonth = List<int>.from(existing?.paymentWeekOfMonth ?? []);
+  final timeFromCtrl = TextEditingController(text: existing?.paymentTimeFrom ?? '');
+  final timeToCtrl = TextEditingController(text: existing?.paymentTimeTo ?? '');
+  final withinMonthsCtrl = TextEditingController(
+      text: (existing?.withinMonthsFromBilling ?? 0).toString());
+  final additionalDaysCtrl =
+      TextEditingController(text: (existing?.additionalDays ?? 0).toString());
+  final remarkCtrl = TextEditingController(text: existing?.remark ?? '');
+
+  return showDialog<ArCustomerPaymentCondition>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
+      Widget chipGroup(String label, List<int> values, List<int> selected,
+          String Function(int) labelFn) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: label,
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.fromLTRB(8, 14, 8, 8),
+            ),
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 2,
+              children: values.map((v) {
+                final sel = selected.contains(v);
+                return FilterChip(
+                  label: Text(labelFn(v), style: const TextStyle(fontSize: 12)),
+                  selected: sel,
+                  onSelected: readOnly
+                      ? null
+                      : (on) => setDlg(() {
+                            if (on) {
+                              selected.add(v);
+                            } else {
+                              selected.remove(v);
+                            }
+                          }),
+                  selectedColor: Colors.teal.shade100,
+                  checkmarkColor: Colors.teal,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      }
+
+      return AlertDialog(
+        title: Text(readOnly
+            ? 'ดูเงื่อนไขรับชำระ'
+            : existing == null
+                ? 'เพิ่มเงื่อนไขรับชำระ'
+                : 'แก้ไขเงื่อนไขรับชำระ'),
+        content: SingleChildScrollView(
+          child: SizedBox(
+            width: 500,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // วันที่ในเดือน
+                chipGroup(
+                  'วันที่ในเดือน (31 = สิ้นเดือน)',
+                  [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],
+                  dayOfMonth,
+                  (d) => d == 31 ? 'สิ้นเดือน' : '$d',
+                ),
+                // วันในสัปดาห์
+                chipGroup(
+                  'วันในสัปดาห์',
+                  List.generate(7, (i) => i),
+                  dayOfWeek,
+                  (d) => dayNames[d],
+                ),
+                // สัปดาห์ที่
+                chipGroup(
+                  'สัปดาห์ที่',
+                  [1, 2, 3, 4, -1],
+                  weekOfMonth,
+                  (w) => weekOptions[w] ?? '$w',
+                ),
+                // เวลา
+                Row(children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10, right: 5),
+                      child: TextField(
+                        controller: timeFromCtrl,
+                        readOnly: readOnly,
+                        decoration: const InputDecoration(
+                          labelText: 'เวลาตั้งแต่',
+                          border: OutlineInputBorder(),
+                          hintText: '09:00',
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10, left: 5),
+                      child: TextField(
+                        controller: timeToCtrl,
+                        readOnly: readOnly,
+                        decoration: const InputDecoration(
+                          labelText: 'ถึงเวลา',
+                          border: OutlineInputBorder(),
+                          hintText: '17:00',
+                        ),
+                      ),
+                    ),
+                  ),
+                ]),
+                const Divider(),
+                // เงื่อนไขพิเศษ
+                Row(children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10, right: 5),
+                      child: TextField(
+                        controller: withinMonthsCtrl,
+                        readOnly: readOnly,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'ชำระภายในกี่เดือนจากวางบิล',
+                          border: OutlineInputBorder(),
+                          hintText: '0 = ไม่จำกัด',
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10, left: 5),
+                      child: TextField(
+                        controller: additionalDaysCtrl,
+                        readOnly: readOnly,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'บวกเพิ่ม (วัน)',
+                          border: OutlineInputBorder(),
+                          hintText: '0',
+                        ),
+                      ),
+                    ),
+                  ),
+                ]),
+                TextField(
+                  controller: remarkCtrl,
+                  readOnly: readOnly,
+                  decoration: const InputDecoration(
+                    labelText: 'หมายเหตุ',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('ยกเลิก'),
+          ),
+          if (!readOnly)
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(ArCustomerPaymentCondition(
+                id: existing?.id,
+                customerId: existing?.customerId,
+                sortOrder: existing?.sortOrder ?? 1,
+                paymentDayOfMonth: List.from(dayOfMonth),
+                paymentDayOfWeek: List.from(dayOfWeek),
+                paymentWeekOfMonth: List.from(weekOfMonth),
+                paymentTimeFrom: timeFromCtrl.text.trim().isEmpty ? null : timeFromCtrl.text.trim(),
+                paymentTimeTo: timeToCtrl.text.trim().isEmpty ? null : timeToCtrl.text.trim(),
+                withinMonthsFromBilling: int.tryParse(withinMonthsCtrl.text) ?? 0,
+                additionalDays: int.tryParse(additionalDaysCtrl.text) ?? 0,
+                remark: remarkCtrl.text.trim().isEmpty ? null : remarkCtrl.text.trim(),
+              )),
+              child: const Text('บันทึก'),
+            ),
+        ],
+      );
+    }),
   );
 }
 
@@ -806,7 +1185,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   late TextEditingController _nameEnCtrl;
   late TextEditingController _taxIdCtrl;
   late TextEditingController _oldCustomerCodeCtrl;
-  late TextEditingController _creditDaysCtrl;
+  late TextEditingController _creditTermMonthsCtrl;
+  late TextEditingController _creditTermDaysCtrl;
   late TextEditingController _creditLimitCtrl;
   late TextEditingController _discountPercentCtrl;
   late TextEditingController _remarkCtrl;
@@ -826,8 +1206,18 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   List<Account> _controlAccounts = [];
 
   // รหัสอัตโนมัติ
-  bool _autoNumberingEnabled = false;
+  bool _autoNumberingEnabled = false; // จากตาราง ar_customer_running (global)
+  bool? _customerGroupIsAutoNumber; // null = ยังไม่รู้ / ไม่ได้เลือกกลุ่ม
   bool _autoCodeOverridden = false; // true = ผู้ใช้กดแก้ไขเอง
+
+  // effective auto-numbering:
+  //   1) เลือกกลุ่ม + กลุ่มตั้งค่าอัตโนมัติ → true (ใช้ running ของกลุ่ม)
+  //   2) ไม่เลือกกลุ่ม หรือ กลุ่มไม่ตั้งค่าอัตโนมัติ → ตรวจสอบ global ar_customer_running
+  //   3) global ตั้งค่าอัตโนมัติ → true, มิฉะนั้น → false (ให้ผู้ใช้ใส่เอง)
+  bool get _effectiveAutoNumbering {
+    if (_customerGroupId != null && (_customerGroupIsAutoNumber == true)) return true;
+    return _autoNumberingEnabled;
+  }
 
   // ประเภทธุรกิจ (FK → cd_business_type)
   int? _businessTypeId;
@@ -846,15 +1236,10 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   List<ArCustomerContact> _contacts = [];
   List<ArCustomerBankAccount> _bankAccounts = [];
 
-  // เงื่อนไขการวางบิล
-  int? _billingDayOfWeek;
-  List<int> _billingWeekOfMonth = [];
-  late TextEditingController _billingDateFromCtrl;
-  late TextEditingController _billingDateToCtrl;
-  late TextEditingController _billingTimeFromCtrl;
-  late TextEditingController _billingTimeToCtrl;
-  bool _billingExcludeHolidays = true;
-  late TextEditingController _billingRemarkCtrl;
+  // เงื่อนไขการวางบิล / ชำระเงิน
+  bool _requiresBilling = false;
+  List<ArCustomerBillingCondition> _billingConditions = [];
+  List<ArCustomerPaymentCondition> _paymentConditions = [];
 
   // เขตการขาย
   int? _salesTerritoryId;
@@ -890,6 +1275,14 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     if (widget.selected?.salesTerritoryId != null) {
       _loadTerritoryMembers(widget.selected!.salesTerritoryId!);
     }
+    // สำหรับ record ใหม่ ให้ default สกุลเงินหลักจาก cd_currency
+    if (widget.selected == null) _loadDefaultCurrency();
+  }
+
+  Future<void> _loadDefaultCurrency() async {
+    final code = await Provider.of<CurrencyService>(context, listen: false)
+        .getBaseCurrencyCode();
+    if (mounted) setState(() => _selectedCurrencyCode = code);
   }
 
   Future<void> _loadBusinessTypes() async {
@@ -904,7 +1297,18 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     try {
       final list = await Provider.of<ArCustomerGroupService>(context, listen: false)
           .fetchRows();
-      if (mounted) setState(() => _customerGroups = list);
+      if (mounted) {
+        setState(() {
+          _customerGroups = list;
+          // ถ้ามีกลุ่มเลือกอยู่แล้ว → resolve _customerGroupIsAutoNumber
+          if (_customerGroupId != null) {
+            final g = list.cast<ArCustomerGroup?>().firstWhere(
+                (g) => g?.id == _customerGroupId,
+                orElse: () => null);
+            _customerGroupIsAutoNumber = g?.isAutoNumber;
+          }
+        });
+      }
     } catch (_) {}
   }
 
@@ -944,9 +1348,10 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       if (mounted) {
         setState(() {
           _controlAccounts = list.where((a) => a.isControlAccount && a.isActive).toList();
-          // resolve name from loaded list if arAccountId is already set
-          if (_arAccountId != null) {
-            final match = _controlAccounts.where((a) => a.id == _arAccountId).firstOrNull;
+          // resolve name from full list (not just filtered) in case the stored account
+          // doesn't have isControlAccount=true or isActive=true
+          if (_arAccountId != null && _arAccountCode == null) {
+            final match = list.where((a) => a.id == _arAccountId).firstOrNull;
             if (match != null) {
               _arAccountCode     = match.accountCode;
               _arAccountNameThai = match.accountNameThai;
@@ -963,7 +1368,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     _nameEnCtrl      = TextEditingController(text: c?.customerNameEn ?? '');
     _taxIdCtrl           = TextEditingController(text: c?.taxId ?? '');
     _oldCustomerCodeCtrl = TextEditingController(text: c?.oldCustomerCode ?? '');
-    _creditDaysCtrl  = TextEditingController(text: (c?.creditDays ?? 30).toString());
+    _creditTermMonthsCtrl = TextEditingController(text: (c?.creditTermMonths ?? 0).toString());
+    _creditTermDaysCtrl   = TextEditingController(text: (c?.creditTermDays ?? 30).toString());
     _creditLimitCtrl = TextEditingController(text: (c?.creditLimit ?? 0).toStringAsFixed(2));
     _discountPercentCtrl = TextEditingController(text: (c?.discountPercent ?? 0).toStringAsFixed(2));
     _remarkCtrl      = TextEditingController(text: c?.remark ?? '');
@@ -975,13 +1381,14 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     _customerGroupId   = c?.customerGroupId;
     _customerGroupCode = c?.customerGroupCode;
     _customerGroupName = c?.customerGroupName;
+    _customerGroupIsAutoNumber = null; // will be resolved after _loadCustomerGroups
     _isActive        = c?.isActive ?? true;
     _addresses       = List.from(c?.addresses ?? []);
     _contacts        = List.from(c?.contacts ?? []);
     _bankAccounts    = List.from(c?.bankAccounts ?? []);
     _arAccountId       = c?.arAccountId;
-    _arAccountCode     = null;
-    _arAccountNameThai = null;
+    _arAccountCode     = c?.arAccountCode;
+    _arAccountNameThai = c?.arAccountNameThai;
     _salesTerritoryId       = c?.salesTerritoryId;
     _salesTerritoryCode     = c?.salesTerritoryCode;
     _salesTerritoryNameThai = c?.salesTerritoryNameThai;
@@ -996,15 +1403,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     _collectionCollectorId        = c?.collectionCollectorId;
     _collectionCollectorCode      = c?.collectionCollectorCode;
     _collectionCollectorNameThai  = c?.collectionCollectorNameThai;
-    // billing
-    _billingDayOfWeek       = c?.billingDayOfWeek;
-    _billingWeekOfMonth     = List.from(c?.billingWeekOfMonth ?? []);
-    _billingDateFromCtrl    = TextEditingController(text: c?.billingDateFrom?.toString() ?? '');
-    _billingDateToCtrl      = TextEditingController(text: c?.billingDateTo?.toString() ?? '');
-    _billingTimeFromCtrl    = TextEditingController(text: c?.billingTimeFrom ?? '');
-    _billingTimeToCtrl      = TextEditingController(text: c?.billingTimeTo ?? '');
-    _billingExcludeHolidays = c?.billingExcludeHolidays ?? true;
-    _billingRemarkCtrl      = TextEditingController(text: c?.billingRemark ?? '');
+    _requiresBilling    = c?.requiresBilling ?? false;
+    _billingConditions  = List.from(c?.billingConditions ?? []);
+    _paymentConditions  = List.from(c?.paymentConditions ?? []);
   }
 
   @override
@@ -1024,11 +1425,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   void _disposeControllers() {
     for (final c in [
       _codeCtrl, _nameThCtrl, _nameEnCtrl, _taxIdCtrl, _oldCustomerCodeCtrl,
-      _creditDaysCtrl, _creditLimitCtrl, _discountPercentCtrl,
+      _creditTermMonthsCtrl, _creditTermDaysCtrl,
+      _creditLimitCtrl, _discountPercentCtrl,
       _remarkCtrl,
-      _billingDateFromCtrl, _billingDateToCtrl,
-      _billingTimeFromCtrl, _billingTimeToCtrl,
-      _billingRemarkCtrl,
     ]) {
       c.dispose();
     }
@@ -1040,23 +1439,49 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     super.dispose();
   }
 
-  // เลือกกลุ่มลูกค้า → auto-fill เงื่อนไขเครดิต
-  void _onGroupSelected(ArCustomerGroup group) {
+  // เลือกกลุ่มลูกค้า → auto-fill เงื่อนไขเครดิต + เงื่อนไขการวางบิล/ชำระ + อัปเดต auto-number mode
+  Future<void> _onGroupSelected(ArCustomerGroup group) async {
+    // apply basic fields immediately
     setState(() {
-      _customerGroupId   = group.id;
-      _customerGroupCode = group.groupCode;
-      _customerGroupName = group.groupNameThai;
-      _creditDaysCtrl.text         = group.creditDays.toString();
+      _customerGroupId           = group.id;
+      _customerGroupCode         = group.groupCode;
+      _customerGroupName         = group.groupNameThai;
+      _customerGroupIsAutoNumber = group.isAutoNumber;
+      _autoCodeOverridden        = false;
+      _codeCtrl.clear();
+      _creditTermMonthsCtrl.text = group.creditTermMonths.toString();
+      _creditTermDaysCtrl.text   = group.creditTermDays.toString();
       _creditLimitCtrl.text        = group.creditLimit.toStringAsFixed(2);
       _discountPercentCtrl.text    = group.discountPercent.toStringAsFixed(2);
     });
+    // fetch full group (with billing/payment conditions) then apply
+    if (group.id == null) return;
+    try {
+      final full = await Provider.of<ArCustomerGroupService>(context, listen: false)
+          .fetchRow(group.id!);
+      if (!mounted) return;
+      setState(() {
+        _requiresBilling = full.requiresBilling;
+        _billingConditions = full.billingConditions
+            .map((bc) => bc.copyWith(id: null, customerId: null))
+            .toList();
+        _paymentConditions = full.paymentConditions
+            .map((pc) => pc.copyWith(id: null, customerId: null))
+            .toList();
+      });
+    } catch (_) {
+      // conditions remain empty if fetch fails — non-critical
+    }
   }
 
   void _clearGroup() {
     setState(() {
-      _customerGroupId   = null;
-      _customerGroupCode = null;
-      _customerGroupName = null;
+      _customerGroupId           = null;
+      _customerGroupCode         = null;
+      _customerGroupName         = null;
+      _customerGroupIsAutoNumber = null;
+      _autoCodeOverridden        = false; // reset เมื่อเคลียร์กลุ่ม
+      _codeCtrl.clear();
     });
   }
 
@@ -1738,7 +2163,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       final customer = ArCustomer(
         id: widget.selected?.id,
         // ถ้า auto-numbering เปิดและไม่ได้แก้ไขเอง → ส่งค่าว่าง ให้ backend generate
-        customerCode: (_autoNumberingEnabled && !_autoCodeOverridden)
+        customerCode: (_effectiveAutoNumbering && !_autoCodeOverridden)
             ? ''
             : _codeCtrl.text.trim(),
         customerNameTh: _nameThCtrl.text.trim(),
@@ -1748,20 +2173,16 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         oldCustomerCode: _oldCustomerCodeCtrl.text.trim().isEmpty ? null : _oldCustomerCodeCtrl.text.trim(),
         businessTypeId: _businessTypeId,
         customerGroupId: _customerGroupId,
-        creditDays: int.tryParse(_creditDaysCtrl.text) ?? 30,
+        creditTermMonths: int.tryParse(_creditTermMonthsCtrl.text) ?? 0,
+        creditTermDays: int.tryParse(_creditTermDaysCtrl.text) ?? 30,
         creditLimit: double.tryParse(_creditLimitCtrl.text) ?? 0,
         discountPercent: double.tryParse(_discountPercentCtrl.text) ?? 0,
         currencyCode: _selectedCurrencyCode ?? 'THB',
         isActive: _isActive,
         remark: _remarkCtrl.text.trim().isEmpty ? null : _remarkCtrl.text.trim(),
-        billingDayOfWeek: _billingDayOfWeek,
-        billingWeekOfMonth: _billingWeekOfMonth.isEmpty ? null : List.from(_billingWeekOfMonth),
-        billingDateFrom: int.tryParse(_billingDateFromCtrl.text),
-        billingDateTo: int.tryParse(_billingDateToCtrl.text),
-        billingTimeFrom: _billingTimeFromCtrl.text.trim().isEmpty ? null : _billingTimeFromCtrl.text.trim(),
-        billingTimeTo: _billingTimeToCtrl.text.trim().isEmpty ? null : _billingTimeToCtrl.text.trim(),
-        billingExcludeHolidays: _billingExcludeHolidays,
-        billingRemark: _billingRemarkCtrl.text.trim().isEmpty ? null : _billingRemarkCtrl.text.trim(),
+        requiresBilling: _requiresBilling,
+        billingConditions: List.from(_billingConditions),
+        paymentConditions: List.from(_paymentConditions),
         arAccountId: _arAccountId,
         salesTerritoryId: _salesTerritoryId,
         salespersonId: _salespersonId,
@@ -1813,8 +2234,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     final isAdd = widget.mode == Mode.add;
     final isLocked = readOnly || widget.mode == Mode.edit;
 
-    // โหมด add + auto-numbering เปิด + ยังไม่ได้กด "แก้ไขเอง"
-    if (isAdd && _autoNumberingEnabled && !_autoCodeOverridden) {
+    // โหมด add + effective auto-numbering เปิด + ยังไม่ได้กด "แก้ไขเอง"
+    if (isAdd && _effectiveAutoNumbering && !_autoCodeOverridden) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: InputDecorator(
@@ -1850,8 +2271,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       );
     }
 
-    // โหมด add + auto-numbering เปิด + ผู้ใช้กด "แก้ไขเอง"
-    if (isAdd && _autoNumberingEnabled && _autoCodeOverridden) {
+    // โหมด add + effective auto-numbering เปิด + ผู้ใช้กด "แก้ไขเอง"
+    if (isAdd && _effectiveAutoNumbering && _autoCodeOverridden) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
@@ -1885,7 +2306,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       );
     }
 
-    // โหมด edit / view / auto-numbering ปิด → ปกติ
+    // โหมด edit / view / effective auto-numbering ปิด → ปกติ
     return _buildField('รหัสลูกหนี้ *', _codeCtrl,
         readOnly: isLocked, required: !isLocked);
   }
@@ -2036,7 +2457,12 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         Row(
           children: [
             Expanded(
-              child: _buildField('เครดิต (วัน)', _creditDaysCtrl,
+              child: _buildField('ระยะเครดิต (เดือน)', _creditTermMonthsCtrl,
+                  readOnly: readOnly, keyboard: TextInputType.number),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildField('ระยะเครดิต (วัน)', _creditTermDaysCtrl,
                   readOnly: readOnly, keyboard: TextInputType.number),
             ),
             const SizedBox(width: 10),
@@ -2160,17 +2586,32 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                   : [addr.addressSubDistrict, addr.addressProvince]
                       .where((s) => s != null && s.isNotEmpty)
                       .join(', ');
+          const addrTypeLabel = {
+            'billing':      'ที่อยู่ใบแจ้งหนี้',
+            'shipping':     'ที่อยู่จัดส่ง',
+            'billing note': 'ที่อยู่วางบิล',
+          };
+          final typeLabel = addrTypeLabel[addr.addressType] ?? addr.addressType;
+          final subText = [
+            if (addr.addressSubDistrict != null) addr.addressSubDistrict!,
+            if (addr.addressDistrict != null) addr.addressDistrict!,
+            if (addr.addressProvince != null) addr.addressProvince!,
+            if (addr.addressZipCode != null) addr.addressZipCode!,
+          ].join('  ');
           return ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.location_on_outlined, size: 18),
             title: Text(displayLabel),
-            subtitle: Text([
-              addr.addressType,
-              if (addr.addressSubDistrict != null) addr.addressSubDistrict!,
-              if (addr.addressProvince != null) addr.addressProvince!,
-              if (addr.addressZipCode != null) addr.addressZipCode!,
-            ].join('  ')),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (subText.isNotEmpty) Text(subText),
+                Text(typeLabel,
+                    style: const TextStyle(
+                        fontSize: 11, color: Colors.blueGrey)),
+              ],
+            ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -2269,170 +2710,247 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   }
 
   // ---- Section: เงื่อนไขการวางบิล ----
-  Widget _buildBillingSection(bool readOnly) {
-    const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
-    const weekOptions = <int, String>{1: 'แรก', 2: 'ที่ 2', 3: 'ที่ 3', 4: 'ที่ 4', -1: 'สุดท้าย'};
-
+  Widget _buildBillingConditionsSection(bool readOnly) {
     return _Section(
-      title: 'เงื่อนไขการวางบิล',
+      title: 'เงื่อนไขการวางบิล (${_billingConditions.length})',
       initiallyExpanded: false,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // toggle: ต้องวางบิลหรือไม่
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('ต้องวางบิล',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: _requiresBilling
+                          ? Colors.indigo.shade700
+                          : Colors.grey)),
+              Switch(
+                value: _requiresBilling,
+                onChanged: readOnly
+                    ? null
+                    : (v) => setState(() => _requiresBilling = v),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ],
+          ),
+          if (!readOnly)
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, size: 20),
+              tooltip: 'เพิ่มเงื่อนไขวางบิล',
+              onPressed: () async {
+                final result =
+                    await showBillingConditionDialog(context, null, false);
+                if (result != null) {
+                  setState(() => _billingConditions.add(result.copyWith(
+                      sortOrder: _billingConditions.length + 1)));
+                }
+              },
+            ),
+        ],
+      ),
       children: [
-        // วันในสัปดาห์ + สัปดาห์ที่
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // วันในสัปดาห์
-            Expanded(
-              flex: 2,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'วันในสัปดาห์',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<int?>(
-                      value: _billingDayOfWeek,
-                      isDense: true,
-                      hint: const Text('— ไม่ระบุ —', style: TextStyle(color: Colors.grey)),
-                      onChanged: readOnly
-                          ? null
-                          : (v) => setState(() => _billingDayOfWeek = v),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('— ไม่ระบุ —')),
-                        ...List.generate(7, (i) => DropdownMenuItem(
-                          value: i,
-                          child: Text(dayNames[i]),
-                        )),
-                      ],
-                    ),
+        if (!_requiresBilling)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'ไม่ต้องวางบิล: วันครบกำหนดชำระนับจากวันส่งของ',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ),
+        if (_billingConditions.isEmpty)
+          const Text('ยังไม่มีเงื่อนไขการวางบิล',
+              style: TextStyle(color: Colors.grey)),
+        ..._billingConditions.asMap().entries.map((entry) {
+          final i = entry.key;
+          final b = entry.value;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: Colors.indigo.shade100,
+                  child: Text('${i + 1}',
+                      style: const TextStyle(fontSize: 11, color: Colors.indigo)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(_billingConditionSummary(b),
+                        style: const TextStyle(fontSize: 13)),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            // สัปดาห์ที่
-            Expanded(
-              flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'สัปดาห์ที่ (เลือกได้หลายค่า)',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  ),
-                  child: Wrap(
-                    spacing: 4,
-                    runSpacing: 2,
-                    children: weekOptions.entries.map((entry) {
-                      final selected = _billingWeekOfMonth.contains(entry.key);
-                      return FilterChip(
-                        label: Text(entry.value, style: const TextStyle(fontSize: 12)),
-                        selected: selected,
-                        onSelected: readOnly
-                            ? null
-                            : (v) => setState(() {
-                                  if (v) {
-                                    _billingWeekOfMonth = [..._billingWeekOfMonth, entry.key];
-                                  } else {
-                                    _billingWeekOfMonth = _billingWeekOfMonth
-                                        .where((w) => w != entry.key)
-                                        .toList();
-                                  }
-                                }),
-                        selectedColor: Colors.indigo.shade100,
-                        checkmarkColor: Colors.indigo,
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                      );
-                    }).toList(),
-                  ),
+                IconButton(
+                  icon: Icon(readOnly ? Icons.visibility : Icons.edit,
+                      size: 18,
+                      color: readOnly ? Colors.green : Colors.blue),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  onPressed: () async {
+                    final result = await showBillingConditionDialog(
+                        context, b, readOnly);
+                    if (result != null) {
+                      setState(() => _billingConditions[i] = result);
+                    }
+                  },
                 ),
-              ),
-            ),
-          ],
-        ),
-        // วันที่ตั้งแต่ / ถึง / เวลาตั้งแต่ / ถึง
-        Row(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: TextFormField(
-                  controller: _billingDateFromCtrl,
-                  readOnly: readOnly,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'วันที่ตั้งแต่',
-                    border: OutlineInputBorder(),
-                    hintText: '1–31',
+                if (!readOnly)
+                  IconButton(
+                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    onPressed: () => setState(() {
+                      _billingConditions.removeAt(i);
+                      for (var j = 0; j < _billingConditions.length; j++) {
+                        _billingConditions[j] =
+                            _billingConditions[j].copyWith(sortOrder: j + 1);
+                      }
+                    }),
                   ),
-                ),
-              ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: TextFormField(
-                  controller: _billingDateToCtrl,
-                  readOnly: readOnly,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'ถึงวันที่',
-                    border: OutlineInputBorder(),
-                    hintText: '1–31',
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: TextFormField(
-                  controller: _billingTimeFromCtrl,
-                  readOnly: readOnly,
-                  decoration: const InputDecoration(
-                    labelText: 'เวลาตั้งแต่',
-                    border: OutlineInputBorder(),
-                    hintText: '09:00',
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: TextFormField(
-                  controller: _billingTimeToCtrl,
-                  readOnly: readOnly,
-                  decoration: const InputDecoration(
-                    labelText: 'ถึงเวลา',
-                    border: OutlineInputBorder(),
-                    hintText: '12:00',
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        // ยกเว้นวันหยุด
-        SwitchListTile(
-          title: const Text('ยกเว้นวันเสาร์-อาทิตย์ และวันหยุดนักขัตฤกษ์'),
-          value: _billingExcludeHolidays,
-          onChanged: readOnly ? null : (v) => setState(() => _billingExcludeHolidays = v),
-          contentPadding: EdgeInsets.zero,
-        ),
-        // หมายเหตุ
-        _buildField('หมายเหตุการวางบิล', _billingRemarkCtrl, readOnly: readOnly),
+          );
+        }),
       ],
     );
+  }
+
+  String _billingConditionSummary(ArCustomerBillingCondition b) {
+    const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+    const weekNames = {1: 'แรก', 2: 'ที่2', 3: 'ที่3', 4: 'ที่4', -1: 'สุดท้าย'};
+    final parts = <String>[];
+    if (b.billWithDelivery) parts.add('วางบิลพร้อมส่งของ');
+    if (b.billingDayOfMonth.isNotEmpty) {
+      final days = b.billingDayOfMonth
+          .map((d) => d == 31 ? 'สิ้นเดือน' : 'วันที่ $d')
+          .join(', ');
+      parts.add(days);
+    }
+    if (b.billingDayOfWeek.isNotEmpty) {
+      parts.add('วัน${b.billingDayOfWeek.map((d) => dayNames[d]).join('-')}');
+    }
+    if (b.billingWeekOfMonth.isNotEmpty) {
+      parts.add(
+          'สัปดาห์${b.billingWeekOfMonth.map((w) => weekNames[w] ?? '$w').join('/')}');
+    }
+    if (b.billingTimeFrom != null || b.billingTimeTo != null) {
+      parts.add('${b.billingTimeFrom ?? ''}–${b.billingTimeTo ?? ''}');
+    }
+    if (b.dueFromBillingDate) parts.add('due นับจากวางบิล');
+    return parts.isEmpty ? '(ไม่ระบุเงื่อนไข)' : parts.join('  ·  ');
+  }
+
+  // ---- Section: เงื่อนไขการรับชำระเงิน ----
+  Widget _buildPaymentConditionsSection(bool readOnly) {
+    return _Section(
+      title: 'เงื่อนไขการรับชำระเงิน (${_paymentConditions.length})',
+      initiallyExpanded: false,
+      trailing: readOnly
+          ? null
+          : IconButton(
+              icon: const Icon(Icons.add_circle_outline, size: 20),
+              tooltip: 'เพิ่มเงื่อนไขรับชำระ',
+              onPressed: () async {
+                final result =
+                    await showPaymentConditionDialog(context, null, false);
+                if (result != null) {
+                  setState(() => _paymentConditions.add(result.copyWith(
+                      sortOrder: _paymentConditions.length + 1)));
+                }
+              },
+            ),
+      children: [
+        if (_paymentConditions.isEmpty)
+          const Text(
+              'ยังไม่มีเงื่อนไขรับชำระ — วันชำระเงินจะเท่ากับวันครบกำหนด',
+              style: TextStyle(color: Colors.grey)),
+        ..._paymentConditions.asMap().entries.map((entry) {
+          final i = entry.key;
+          final p = entry.value;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: Colors.teal.shade100,
+                  child: Text('${i + 1}',
+                      style: const TextStyle(fontSize: 11, color: Colors.teal)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(_paymentConditionSummary(p),
+                        style: const TextStyle(fontSize: 13)),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(readOnly ? Icons.visibility : Icons.edit,
+                      size: 18,
+                      color: readOnly ? Colors.green : Colors.blue),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  onPressed: () async {
+                    final result = await showPaymentConditionDialog(
+                        context, p, readOnly);
+                    if (result != null) {
+                      setState(() => _paymentConditions[i] = result);
+                    }
+                  },
+                ),
+                if (!readOnly)
+                  IconButton(
+                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    onPressed: () => setState(() {
+                      _paymentConditions.removeAt(i);
+                      for (var j = 0; j < _paymentConditions.length; j++) {
+                        _paymentConditions[j] =
+                            _paymentConditions[j].copyWith(sortOrder: j + 1);
+                      }
+                    }),
+                  ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  String _paymentConditionSummary(ArCustomerPaymentCondition p) {
+    const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+    const weekNames = {1: 'แรก', 2: 'ที่2', 3: 'ที่3', 4: 'ที่4', -1: 'สุดท้าย'};
+    final parts = <String>[];
+    if (p.paymentDayOfMonth.isNotEmpty) {
+      final days = p.paymentDayOfMonth
+          .map((d) => d == 31 ? 'สิ้นเดือน' : 'วันที่ $d')
+          .join(', ');
+      parts.add(days);
+    }
+    if (p.paymentDayOfWeek.isNotEmpty) {
+      parts.add('วัน${p.paymentDayOfWeek.map((d) => dayNames[d]).join('-')}');
+    }
+    if (p.paymentWeekOfMonth.isNotEmpty) {
+      parts.add(
+          'สัปดาห์${p.paymentWeekOfMonth.map((w) => weekNames[w] ?? '$w').join('/')}');
+    }
+    if (p.withinMonthsFromBilling > 0) {
+      parts.add('ภายใน ${p.withinMonthsFromBilling} เดือนจากวางบิล');
+    }
+    if (p.additionalDays != 0) parts.add('+${p.additionalDays} วัน');
+    if (p.paymentTimeFrom != null || p.paymentTimeTo != null) {
+      parts.add('${p.paymentTimeFrom ?? ''}–${p.paymentTimeTo ?? ''}');
+    }
+    return parts.isEmpty ? '(ไม่ระบุเงื่อนไข)' : parts.join('  ·  ');
   }
 
   // ---- Section: บัญชีธนาคาร ----
@@ -2795,7 +3313,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           const Padding(
             padding: EdgeInsets.only(bottom: 6),
             child: Text(
-              'หากไม่ระบุ ระบบจะใช้บัญชีลูกหนี้จากกลุ่มลูกค้าเป็นค่าเริ่มต้น',
+              'หากไม่ระบุ ระบบจะค้นหาบัญชีลูกหนี้จาก กลุ่มลูกค้า และ ประเภทเอกสาร ตามลำดับ พบที่ใดก่อนจะใช้บัญชีนั้นลงรายการบัญชี',
               style: TextStyle(fontSize: 11, color: Colors.grey),
             ),
           ),
@@ -2853,7 +3371,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 children: [
                   _buildGeneralSection(readOnly),
                   _buildSalesTerritorySection(readOnly),
-                  _buildBillingSection(readOnly),
+                  _buildBillingConditionsSection(readOnly),
+                  _buildPaymentConditionsSection(readOnly),
                   _buildAddressSection(readOnly),
                   _buildContactSection(readOnly),
                   _buildBankSection(readOnly),

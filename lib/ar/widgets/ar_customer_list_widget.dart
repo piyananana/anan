@@ -38,6 +38,7 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   List<ArCustomer> _lists = [];
+  int _totalCount = 0;
   bool _isLoading = false;
   String _error = '';
 
@@ -66,6 +67,7 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
       final fetched = await svc.fetchRows(search: _searchQuery.isEmpty ? null : _searchQuery);
       setState(() {
         _lists = fetched;
+        if (_searchQuery.isEmpty) _totalCount = fetched.length;
         _isLoading = false;
       });
     } catch (e) {
@@ -115,12 +117,27 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
     );
   }
 
+  Widget _buildRowCount() {
+    final text = _searchQuery.isEmpty
+        ? 'ทั้งหมด $_totalCount แถว'
+        : 'พบ ${_lists.length} จาก $_totalCount แถว';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(text,
+            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return Column(
       children: [
         _buildHeader(),
+        _buildRowCount(),
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -153,7 +170,8 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
                               ),
                             ),
                             subtitle: Text(
-                              '${item.businessTypeNameThai ?? ''}${item.businessTypeNameThai != null ? '  •  ' : ''}เครดิต ${item.creditDays} วัน'
+                              '${item.businessTypeNameThai ?? ''}${item.businessTypeNameThai != null ? '  •  ' : ''}'
+                              'เครดิต ${item.creditTermMonths > 0 ? '${item.creditTermMonths} เดือน ' : ''}${item.creditTermDays} วัน'
                               '${item.customerGroupCode != null ? '  •  กลุ่ม: ${item.customerGroupCode}' : ''}'
                               '${item.customerNameEn != null ? '\n${item.customerNameEn}' : ''}',
                             ),

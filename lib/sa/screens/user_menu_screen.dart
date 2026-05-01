@@ -328,6 +328,11 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
         // ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _fetchUsersAndMenus,
+          ),
+          IconButton(
             icon: const Icon(Icons.cleaning_services_outlined, color: Colors.white),
             onPressed: _onClearRightPanel,
             tooltip: 'เคลียร์ Panel ขวา',

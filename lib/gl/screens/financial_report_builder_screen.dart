@@ -645,6 +645,13 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
         title: const Row(children: [Icon(Icons.design_services, color: Colors.white, size: 20), SizedBox(width: 8), Text('สร้างแบบงบการเงิน (Financial Report Builder)')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _loadReports,
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

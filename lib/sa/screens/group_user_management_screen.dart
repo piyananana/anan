@@ -368,6 +368,13 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
         title: const Row(children: [Icon(Icons.group_add, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการผู้ใช้ตามกลุ่ม')]),
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _fetchData,
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

@@ -93,6 +93,8 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       setState(() {
         _currencyLists = fetched;
         _isLoading = false;
+        // ถ้าเป็น record ใหม่ ให้ set ค่า default เป็นสกุลเงินหลัก
+        if (_selected == null) _currencyCode = _baseCurrencyCode();
       });
     } catch (e) {
       setState(() {
@@ -159,7 +161,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _accountType = _selected?.accountType ?? 'ASSET';
       _accountSubType = _selected?.accountSubType ?? '';
       _normalBalance = _selected?.normalBalance ?? 'DR';
-      _currencyCode = _selected?.currencyCode ?? 'THB';
+      _currencyCode = _selected?.currencyCode ?? _baseCurrencyCode();
       _isActive = _selected?.isActive ?? true;
 
       if (widget.mode == AccountMode.addChild) {
@@ -198,7 +200,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _isNormalAccount = false;
       _isControlAccount = false;
       _isReconcilable = false;
-      _currencyCode = 'THB';
+      _currencyCode = _baseCurrencyCode();
       _moduleLinkCode = '';
       _costCenterRequired = false;
       _projectRequired = false;
@@ -218,7 +220,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _isNormalAccount = true;
       _isControlAccount = false;
       _isReconcilable = false;
-      _currencyCode = 'THB';
+      _currencyCode = _baseCurrencyCode();
       _moduleLinkCode = '';
       _costCenterRequired = false;
       _projectRequired = false;

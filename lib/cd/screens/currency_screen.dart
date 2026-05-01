@@ -284,6 +284,16 @@ class _CurrencyScreenState extends State<CurrencyScreen>
         title: const Row(children: [Icon(Icons.currency_exchange, color: Colors.white, size: 20), SizedBox(width: 8), Text('สกุลเงินและอัตราแลกเปลี่ยน')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listWidgetKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
+        ],
         // actions: [
         //   // ปุ่ม Import/Export
         //   if (_isImportOrExport)

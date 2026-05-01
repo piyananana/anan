@@ -248,6 +248,13 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
         title: const Row(children: [Icon(Icons.lock_clock, color: Colors.white, size: 20), SizedBox(width: 8), Text('ปิดบัญชีสิ้นปี')]),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _loadInitialData,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

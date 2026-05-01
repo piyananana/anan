@@ -1,0 +1,287 @@
+// lib/cm/widgets/cm_payment_method_list_widget.dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/cm_payment_method.dart';
+import '../services/cm_payment_method_service.dart';
+
+class CmPaymentMethodListWidget extends StatefulWidget {
+  final bool enableAddButton;
+  final bool enableEditButton;
+  final bool enableViewButton;
+  final bool enableDeleteButton;
+  final bool enableCardSelect;
+  final void Function() onAdd;
+  final Function(CmPaymentMethod) onEdit;
+  final Function(CmPaymentMethod) onView;
+  final Function(CmPaymentMethod) onDelete;
+  final void Function(CmPaymentMethod) onCallback;
+
+  const CmPaymentMethodListWidget({
+    super.key,
+    required this.enableAddButton,
+    required this.enableEditButton,
+    required this.enableViewButton,
+    required this.enableDeleteButton,
+    required this.enableCardSelect,
+    required this.onAdd,
+    required this.onEdit,
+    required this.onView,
+    required this.onDelete,
+    required this.onCallback,
+  });
+
+  @override
+  State<CmPaymentMethodListWidget> createState() =>
+      CmPaymentMethodListWidgetState();
+
+  static Future<void> search(BuildContext context,
+      {String? filterType,
+      required void Function(CmPaymentMethod) onSelected}) {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('ค้นหา ประเภทการชำระเงิน',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Container(
+          width: 540,
+          height: 580,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: CmPaymentMethodListWidget(
+            enableAddButton: false,
+            enableEditButton: false,
+            enableViewButton: false,
+            enableDeleteButton: false,
+            enableCardSelect: true,
+            onAdd: () {},
+            onEdit: (_) {},
+            onView: (_) {},
+            onDelete: (_) {},
+            onCallback: onSelected,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
+    with AutomaticKeepAliveClientMixin {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  List<CmPaymentMethod> _list = [];
+  bool _isLoading = false;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchList();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchList() async {
+    setState(() => _isLoading = true);
+    try {
+      final service = Provider.of<CmPaymentMethodService>(context, listen: false);
+      final data = await service.fetchRows();
+      setState(() {
+        _list = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('ไม่สามารถโหลดข้อมูลได้: $e')));
+      }
+    }
+  }
+
+  void refresh() => _fetchList();
+
+  List<CmPaymentMethod> get _filtered {
+    if (_searchQuery.isEmpty) return _list;
+    final q = _searchQuery.toUpperCase();
+    return _list.where((r) {
+      return r.methodCode.toUpperCase().contains(q) ||
+          r.methodNameTh.toUpperCase().contains(q) ||
+          (r.methodNameEn ?? '').toUpperCase().contains(q) ||
+          r.methodType.toUpperCase().contains(q);
+    }).toList();
+  }
+
+  IconData _typeIcon(String t) {
+    switch (t) {
+      case 'CHECK':
+        return Icons.receipt_long;
+      case 'TRANSFER':
+        return Icons.account_balance;
+      case 'BILL_OF_EXCHANGE':
+        return Icons.description;
+      default:
+        return Icons.payments;
+    }
+  }
+
+  Color _typeColor(String t) {
+    switch (t) {
+      case 'CHECK':
+        return Colors.orange.shade700;
+      case 'TRANSFER':
+        return Colors.indigo;
+      case 'BILL_OF_EXCHANGE':
+        return Colors.purple;
+      default:
+        return Colors.green.shade700;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final display = _filtered;
+    final countText = _searchQuery.isEmpty
+        ? 'ทั้งหมด ${_list.length} แถว'
+        : 'พบ ${display.length} จาก ${_list.length} แถว';
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              if (widget.enableAddButton)
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  tooltip: 'เพิ่มข้อมูลใหม่',
+                  onPressed: widget.onAdd,
+                ),
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    hintText: 'ค้นหา (รหัส / ชื่อ / ประเภท)',
+                    prefixIcon: Icon(Icons.search),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(countText,
+                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ),
+        ),
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : display.isEmpty
+                  ? const Center(child: Text('ไม่พบข้อมูล'))
+                  : ListView.builder(
+                      itemCount: display.length,
+                      itemBuilder: (ctx, i) {
+                        final item = display[i];
+                        final typeLabel = cmMethodTypeOptions[item.methodType] ??
+                            item.methodType;
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor:
+                                  _typeColor(item.methodType).withOpacity(0.15),
+                              child: Icon(_typeIcon(item.methodType),
+                                  color: _typeColor(item.methodType), size: 20),
+                            ),
+                            title: Text(
+                              '${item.methodCode} — ${item.methodNameTh}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: item.isActive ? null : Colors.grey,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(typeLabel,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: _typeColor(item.methodType))),
+                                if ((item.bankAccountCode ?? '').isNotEmpty)
+                                  Text(
+                                    '${item.bankShortName ?? item.bankNameTh ?? ''} — ${item.bankAccountCode}',
+                                    style: const TextStyle(
+                                        fontSize: 11, color: Colors.grey),
+                                  ),
+                              ],
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (!item.isActive)
+                                  const Chip(
+                                    label: Text('หยุดใช้',
+                                        style: TextStyle(fontSize: 11)),
+                                    backgroundColor: Color(0xFFEEEEEE),
+                                  ),
+                                if (widget.enableViewButton)
+                                  IconButton(
+                                    icon: const Icon(Icons.visibility,
+                                        color: Colors.green),
+                                    onPressed: () => widget.onView(item),
+                                  ),
+                                if (widget.enableEditButton)
+                                  IconButton(
+                                    icon: const Icon(Icons.edit,
+                                        color: Colors.blue),
+                                    onPressed: () => widget.onEdit(item),
+                                  ),
+                                if (widget.enableDeleteButton)
+                                  IconButton(
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.red),
+                                    onPressed: () => widget.onDelete(item),
+                                  ),
+                                if (widget.enableCardSelect)
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_right_outlined),
+                                    onPressed: () {
+                                      widget.onCallback(item);
+                                      Navigator.of(context).pop();
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+}

@@ -149,6 +149,16 @@ class _BankScreenState extends State<BankScreen>
         ]),
         backgroundColor: Colors.indigo[700],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

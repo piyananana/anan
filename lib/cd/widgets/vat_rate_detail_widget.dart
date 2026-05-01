@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../gl/models/account.dart';
+import '../../gl/services/account_service.dart';
 import '../models/vat_rate.dart';
 
 class VatRateDetailWidget extends StatefulWidget {
@@ -33,6 +36,9 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
   DateTime? _effectiveDate;
   DateTime? _endDate;
   late bool _isActive;
+  int?    _glAccountId;
+  String? _glAccountCode;
+  String? _glAccountName;
   bool _isSaving = false;
 
   static final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -53,6 +59,9 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
     _effectiveDate = row?.effectiveDate;
     _endDate = row?.endDate;
     _isActive = row?.isActive ?? true;
+    _glAccountId   = row?.glAccountId;
+    _glAccountCode = row?.glAccountCode;
+    _glAccountName = row?.glAccountName;
   }
 
   @override
@@ -102,6 +111,84 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
     }
   }
 
+  Future<void> _pickAccount() async {
+    final svc = Provider.of<AccountService>(context, listen: false);
+    List<Account> accounts = [];
+    try {
+      final all = await svc.fetchRows();
+      accounts = all.where((a) => a.isActive).toList()
+        ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
+    } catch (_) {}
+    if (!mounted) return;
+
+    final searchCtrl = TextEditingController();
+    List<Account> filtered = List.from(accounts);
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
+        void doFilter(String q) {
+          setDlg(() {
+            final lq = q.toLowerCase();
+            filtered = q.isEmpty
+                ? List.from(accounts)
+                : accounts.where((a) =>
+                    a.accountCode.toLowerCase().contains(lq) ||
+                    a.accountNameThai.toLowerCase().contains(lq)).toList();
+          });
+        }
+
+        return AlertDialog(
+          title: const Text('เลือกบัญชีภาษีมูลค่าเพิ่มจาก GL'),
+          content: SizedBox(
+            width: 520, height: 420,
+            child: Column(children: [
+              TextField(
+                controller: searchCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'ค้นหา รหัส / ชื่อบัญชี',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  isDense: true,
+                ),
+                onChanged: doFilter,
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final a = filtered[i];
+                    return ListTile(
+                      dense: true,
+                      title: Text('${a.accountCode}  ${a.accountNameThai}',
+                          style: const TextStyle(fontSize: 13)),
+                      onTap: () {
+                        setState(() {
+                          _glAccountId   = a.id;
+                          _glAccountCode = a.accountCode;
+                          _glAccountName = a.accountNameThai;
+                        });
+                        Navigator.of(ctx).pop();
+                      },
+                    );
+                  },
+                ),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+          ],
+        );
+      }),
+    );
+    searchCtrl.dispose();
+  }
+
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
       if (_effectiveDate == null) {
@@ -126,6 +213,7 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
           remark: _remarkController.text.trim().isEmpty
               ? null
               : _remarkController.text.trim(),
+          glAccountId: _glAccountId,
         );
         await widget.onSubmit(row);
       } catch (e) {
@@ -195,8 +283,8 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
                     controller: _rateController,
                     readOnly: readOnly,
                     textAlign: TextAlign.right,
-                    style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.bold),
+                    // style: const TextStyle(
+                    //     fontSize: 24, fontWeight: FontWeight.bold),
                     decoration: const InputDecoration(
                       labelText: 'อัตรา (%) *',
                       border: OutlineInputBorder(),
@@ -299,6 +387,39 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+
+            // บัญชี GL (VAT)
+            InkWell(
+              onTap: readOnly ? null : _pickAccount,
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'บัญชี GL (ภาษีมูลค่าเพิ่ม)',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+                    if (_glAccountId != null && !readOnly)
+                      IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => setState(() {
+                          _glAccountId = null;
+                          _glAccountCode = null;
+                          _glAccountName = null;
+                        }),
+                      ),
+                    const Icon(Icons.account_tree_outlined, size: 18),
+                  ]),
+                ),
+                child: Text(
+                  _glAccountId != null
+                      ? '$_glAccountCode  $_glAccountName'
+                      : '— ไม่ระบุ —',
+                  style: TextStyle(
+                      color: _glAccountId != null ? null : Colors.grey.shade600),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
 

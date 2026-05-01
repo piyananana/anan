@@ -44,18 +44,28 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
     });
   }
 
-  void _onEdit(ArCustomerGroup row) {
+  Future<void> _onEdit(ArCustomerGroup row) async {
     setState(() {
       _mode = Mode.edit;
-      _selectedData = row;
+      _selectedData = row; // show immediately, then replace with full data
     });
+    try {
+      final full = await Provider.of<ArCustomerGroupService>(context, listen: false)
+          .fetchRow(row.id!);
+      if (mounted) setState(() => _selectedData = full);
+    } catch (_) {}
   }
 
-  void _onView(ArCustomerGroup row) {
+  Future<void> _onView(ArCustomerGroup row) async {
     setState(() {
       _mode = Mode.view;
       _selectedData = row;
     });
+    try {
+      final full = await Provider.of<ArCustomerGroupService>(context, listen: false)
+          .fetchRow(row.id!);
+      if (mounted) setState(() => _selectedData = full);
+    } catch (_) {}
   }
 
   Future<void> _onDelete(ArCustomerGroup row) async {
@@ -157,6 +167,16 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
         ]),
         backgroundColor: Colors.teal[700],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listWidgetKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

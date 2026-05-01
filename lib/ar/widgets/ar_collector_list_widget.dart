@@ -77,6 +77,7 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   List<ArCollector> _list = [];
+  int _totalCount = 0;
   bool _isLoading = false;
 
   @override
@@ -102,6 +103,7 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
           search: _searchQuery.isEmpty ? null : _searchQuery);
       setState(() {
         _list = rows;
+        if (_searchQuery.isEmpty) _totalCount = rows.length;
         _isLoading = false;
       });
     } catch (e) {
@@ -129,6 +131,9 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
   Widget build(BuildContext context) {
     super.build(context);
     final display = _filtered;
+    final countText = _searchQuery.isEmpty
+        ? 'ทั้งหมด $_totalCount แถว'
+        : 'พบ ${display.length} จาก $_totalCount แถว';
     return Column(
       children: [
         Padding(
@@ -155,6 +160,14 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
                 ),
               ),
             ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(countText,
+                style: const TextStyle(fontSize: 12, color: Colors.grey)),
           ),
         ),
         Expanded(

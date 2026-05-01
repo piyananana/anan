@@ -143,6 +143,13 @@ class _YearEndClosingConfigScreenState
         title: const Row(children: [Icon(Icons.tune, color: Colors.white, size: 20), SizedBox(width: 8), Text('ตั้งค่าการปิดบัญชีสิ้นปี')]),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _loadData,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

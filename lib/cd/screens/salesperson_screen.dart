@@ -138,6 +138,16 @@ class _SalespersonScreenState extends State<SalespersonScreen>
         ]),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (ctx, constraints) {

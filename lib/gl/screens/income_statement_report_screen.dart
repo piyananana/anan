@@ -500,6 +500,13 @@ class _IncomeStatementReportScreenState
         title: const Row(children: [Icon(Icons.trending_up, color: Colors.white, size: 20), SizedBox(width: 8), Text('งบกำไรขาดทุน (Income Statement)')]),
         backgroundColor: Colors.green[800],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _loadMasterData,
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

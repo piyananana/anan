@@ -495,6 +495,13 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
         //     widget.onExit?.call(); // เรียก Callback ย้อนกลับไป HomeScreen
         //   },
         // ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _fetchCompanyInfo,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

@@ -209,6 +209,11 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _fetchUsers,
+          ),
           // IconButton(
           //   icon: const Icon(Icons.add, color: Colors.white),
           //   onPressed: _onAddUser,

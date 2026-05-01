@@ -49,22 +49,51 @@ class ArCustomerGroupService {
     }
   }
 
+  Future<ArCustomerGroup> fetchRow(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(
+      Uri.parse('$baseUrl/ar_customer_group/$id'),
+      headers: headers,
+    );
+
+    if (response.statusCode == 200) {
+      return ArCustomerGroup.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    } else {
+      throw Exception('การโหลดข้อมูลกลุ่มลูกค้าล้มเหลว: ${response.statusCode}');
+    }
+  }
+
+  Map<String, dynamic> _toJson(ArCustomerGroup row) => {
+        'group_code': row.groupCode,
+        'group_name_thai': row.groupNameThai,
+        'group_name_eng': row.groupNameEng,
+        'description': row.description,
+        'credit_term_months': row.creditTermMonths,
+        'credit_term_days': row.creditTermDays,
+        'credit_limit': row.creditLimit,
+        'discount_percent': row.discountPercent,
+        'gl_account_id': row.glAccountId,
+        'is_auto_number': row.isAutoNumber,
+        'running_prefix': row.runningPrefix,
+        'running_separator': row.runningSeparator,
+        'running_suffix_date': row.runningSuffixDate,
+        'running_length': row.runningLength,
+        'running_next_number': row.runningNextNumber,
+        'is_active': row.isActive,
+        'requires_billing': row.requiresBilling,
+        'billing_conditions': row.billingConditions.map((e) => e.toJson()).toList(),
+        'payment_conditions': row.paymentConditions.map((e) => e.toJson()).toList(),
+      };
+
   Future<ArCustomerGroup> addRow(ArCustomerGroup row) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(
       Uri.parse('$baseUrl/ar_customer_group'),
       headers: headers,
-      body: jsonEncode({
-        'group_code': row.groupCode,
-        'group_name_thai': row.groupNameThai,
-        'group_name_eng': row.groupNameEng,
-        'description': row.description,
-        'credit_days': row.creditDays,
-        'credit_limit': row.creditLimit,
-        'discount_percent': row.discountPercent,
-        'gl_account_id': row.glAccountId,
-        'is_active': row.isActive,
-      }),
+      body: jsonEncode(_toJson(row)),
     );
 
     if (response.statusCode == 201) {
@@ -82,17 +111,7 @@ class ArCustomerGroupService {
     final response = await http.put(
       Uri.parse('$baseUrl/ar_customer_group/${row.id}'),
       headers: headers,
-      body: jsonEncode({
-        'group_code': row.groupCode,
-        'group_name_thai': row.groupNameThai,
-        'group_name_eng': row.groupNameEng,
-        'description': row.description,
-        'credit_days': row.creditDays,
-        'credit_limit': row.creditLimit,
-        'discount_percent': row.discountPercent,
-        'gl_account_id': row.glAccountId,
-        'is_active': row.isActive,
-      }),
+      body: jsonEncode(_toJson(row)),
     );
 
     if (response.statusCode == 200) {

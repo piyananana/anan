@@ -134,6 +134,15 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget> {
       children: [
         _buildFilterRow(),
         const Divider(height: 1),
+        if (!_isLoading)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('พบ ${_rows.length} รายการ',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ),
+          ),
         Expanded(child: _isLoading ? const Center(child: CircularProgressIndicator()) : _buildTable()),
       ],
     );
@@ -141,95 +150,128 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget> {
 
   Widget _buildFilterRow() {
     return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Add button
-          ElevatedButton.icon(
-            onPressed: widget.onAddPressed,
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('เพิ่มเอกสาร'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
-          ),
-          // Doc type filter
-          SizedBox(
-            width: 160,
-            child: DropdownButtonFormField<String?>(
-              value: _selectedDocType,
-              decoration: const InputDecoration(labelText: 'ประเภทเอกสาร', isDense: true, border: OutlineInputBorder()),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('ทั้งหมด')),
-                ..._docTypes.map((d) => DropdownMenuItem(value: d.sysDocType, child: Text('${d.docCode} ${d.docNameThai}'))),
-              ],
-              onChanged: (v) => setState(() => _selectedDocType = v),
-            ),
-          ),
-          // Status filter
-          SizedBox(
-            width: 130,
-            child: DropdownButtonFormField<String?>(
-              value: _selectedStatus,
-              decoration: const InputDecoration(labelText: 'สถานะ', isDense: true, border: OutlineInputBorder()),
-              items: const [
-                DropdownMenuItem(value: null, child: Text('ทั้งหมด')),
-                DropdownMenuItem(value: 'Draft', child: Text('Draft')),
-                DropdownMenuItem(value: 'Posted', child: Text('Posted')),
-                DropdownMenuItem(value: 'Void', child: Text('Void')),
-              ],
-              onChanged: (v) => setState(() => _selectedStatus = v),
-            ),
-          ),
-          // Date from
-          InkWell(
-            onTap: () => _pickDate(true),
-            child: InputDecorator(
-              decoration: const InputDecoration(labelText: 'จากวันที่', isDense: true, border: OutlineInputBorder()),
-              child: Text(_dateFrom != null ? _dateFmt.format(_dateFrom!) : '-', style: const TextStyle(fontSize: 13)),
-            ),
-          ),
-          // Date to
-          InkWell(
-            onTap: () => _pickDate(false),
-            child: InputDecorator(
-              decoration: const InputDecoration(labelText: 'ถึงวันที่', isDense: true, border: OutlineInputBorder()),
-              child: Text(_dateTo != null ? _dateFmt.format(_dateTo!) : '-', style: const TextStyle(fontSize: 13)),
-            ),
-          ),
-          // Search
-          SizedBox(
-            width: 200,
-            child: TextField(
-              controller: _searchCtrl,
-              decoration: const InputDecoration(
-                labelText: 'ค้นหา (เลขที่/ลูกค้า/อ้างอิง)',
-                isDense: true, border: OutlineInputBorder(),
-                suffixIcon: Icon(Icons.search, size: 16),
+          // Row 1: Doc type + Status + Date from + Date to
+          Row(
+            children: [
+              // Doc type filter
+              Expanded(
+                child: DropdownButtonFormField<String?>(
+                  value: _selectedDocType,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                      labelText: 'ประเภทเอกสาร', isDense: true, border: OutlineInputBorder()),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('ทั้งหมด')),
+                    ..._docTypes.map((d) => DropdownMenuItem(
+                        value: d.sysDocType,
+                        child: Text('${d.docCode} ${d.docNameThai}',
+                            overflow: TextOverflow.ellipsis))),
+                  ],
+                  onChanged: (v) => setState(() => _selectedDocType = v),
+                ),
               ),
-              onSubmitted: (_) => _fetchRows(),
-            ),
+              const SizedBox(width: 8),
+              // Status filter
+              Expanded(
+                child: DropdownButtonFormField<String?>(
+                  value: _selectedStatus,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                      labelText: 'สถานะ', isDense: true, border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('ทั้งหมด')),
+                    DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                    DropdownMenuItem(value: 'Posted', child: Text('Posted')),
+                    DropdownMenuItem(value: 'Void', child: Text('Void')),
+                  ],
+                  onChanged: (v) => setState(() => _selectedStatus = v),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Date from
+              Expanded(
+                child: InkWell(
+                  onTap: () => _pickDate(true),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                        labelText: 'จากวันที่', isDense: true, border: OutlineInputBorder()),
+                    child: Text(
+                        _dateFrom != null ? _dateFmt.format(_dateFrom!) : '-',
+                        style: const TextStyle(fontSize: 13)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Date to
+              Expanded(
+                child: InkWell(
+                  onTap: () => _pickDate(false),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                        labelText: 'ถึงวันที่', isDense: true, border: OutlineInputBorder()),
+                    child: Text(
+                        _dateTo != null ? _dateFmt.format(_dateTo!) : '-',
+                        style: const TextStyle(fontSize: 13)),
+                  ),
+                ),
+              ),
+            ],
           ),
-          // Search button
-          ElevatedButton(
-            onPressed: _fetchRows,
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700], foregroundColor: Colors.white),
-            child: const Text('ค้นหา'),
+          const SizedBox(height: 6),
+          // Row 2: Search (flexible) + ค้นหา button + ล้าง button
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'ค้นหา (เลขที่เอกสาร / ลูกค้า / เลขที่อ้างอิง)',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.search, size: 16),
+                  ),
+                  onSubmitted: (_) => _fetchRows(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _fetchRows,
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey[700], foregroundColor: Colors.white),
+                child: const Text('ค้นหา'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: widget.onAddPressed,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('เพิ่มเอกสาร'),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
+              ),
+              if (_dateFrom != null || _dateTo != null ||
+                  _selectedStatus != null || _selectedDocType != null ||
+                  _searchCtrl.text.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _dateFrom = null;
+                      _dateTo = null;
+                      _selectedStatus = null;
+                      _selectedDocType = null;
+                      _searchCtrl.clear();
+                    });
+                    _fetchRows();
+                  },
+                  child: const Text('ล้าง'),
+                ),
+              ],
+            ],
           ),
-          // Clear filter
-          if (_dateFrom != null || _dateTo != null || _selectedStatus != null || _selectedDocType != null)
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _dateFrom = null; _dateTo = null;
-                  _selectedStatus = null; _selectedDocType = null;
-                  _searchCtrl.clear();
-                });
-                _fetchRows();
-              },
-              child: const Text('ล้าง'),
-            ),
         ],
       ),
     );
@@ -239,8 +281,11 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget> {
     if (_rows.isEmpty) {
       return const Center(child: Text('ไม่พบรายการ'));
     }
-    return SingleChildScrollView(
-      child: DataTable(
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+          child: DataTable(
         headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
         columnSpacing: 12,
         dataRowMinHeight: 32,
@@ -296,6 +341,8 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget> {
             ],
           );
         }).toList(),
+          ),
+        ),
       ),
     );
   }

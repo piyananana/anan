@@ -800,6 +800,13 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
         title: const Row(children: [Icon(Icons.fact_check, color: Colors.white, size: 20), SizedBox(width: 8), Text('งบทดลอง (Trial Balance)')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _loadMasterData,
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

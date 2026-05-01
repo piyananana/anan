@@ -657,6 +657,13 @@ class _DailyTransactionReportScreenState
         title: const Row(children: [Icon(Icons.receipt_long, color: Colors.white, size: 20), SizedBox(width: 8), Text('บันทึกรายการบัญชี (Daily Transaction)')]),
         backgroundColor: Colors.indigo[800],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _loadMasterData,
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

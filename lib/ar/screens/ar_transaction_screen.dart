@@ -66,10 +66,22 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
         title: const Row(children: [
           Icon(Icons.receipt_long, color: Colors.white, size: 20),
           SizedBox(width: 8),
-          Text('รายการลูกหนี้การค้า'),
+          Text('ธุรกรรมลูกหนี้การค้า'),
         ]),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () => setState(() {
+              _shouldRefreshList = true;
+              _selectedTransactionId = null;
+              _currentTabIndex = 0;
+              _tabController.animateTo(0);
+            }),
+          ),
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -81,8 +93,8 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: const [
-              Tab(text: 'ค้นหา/รายการ'),
-              Tab(text: 'บันทึกเอกสาร'),
+              Tab(text: 'ค้นหา/เพิ่มธุรกรรม'),
+              Tab(text: 'รายละเอียดธุรกรรม'),
             ],
           ),
           Expanded(

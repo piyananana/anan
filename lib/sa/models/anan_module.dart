@@ -11,38 +11,43 @@ enum Mode {
 }
 
 const Map<String, String> sysModules = {
-  '': 'ไม่ระบุ',
-  '01': 'บัญชีแยกประเภท',
-  '11': 'บัญชีลูกหนี้',
-  '21': 'บัญชีเจ้าหนี้',
-  '31': 'สินค้าคงคลัง',
-  '81': 'เงินสดและเช็ค',
-  '86': 'เงินมัดจำ',
-  '91': 'ภาษีซื้อ',
-  '96': 'ภาษีขาย',
+  '': 'ไม่ระบุ (Unspecified)',
+  '01': 'บัญชีแยกประเภท - General Ledger (GL)',
+  '11': 'บัญชีลูกหนี้ - Accounts Receivable (AR)',
+  '21': 'บัญชีเจ้าหนี้ - Accounts Payable (AP)',
+  '31': 'สินค้าคงคลัง - Inventory Management (IM)',
+  '81': 'เงินสดและเช็ค - Cash and Check (CQ)',
+  '86': 'เงินมัดจำ - Deposit Management (DS)',
+  '91': 'ภาษีซื้อ - VAT Purchase (VP)',
+  '96': 'ภาษีขาย - VAT Sales (VS)',
 };
 // '01': 'บัญชีแยกประเภท'
 const Map<String, String> glSysDocType = {
-  '10': 'ตั้งยอดบัญชียกมา',
-  '30': 'ใบสำคัญรับ',
-  '50': 'ใบสำคัญจ่าย',
-  '70': 'ใบสำคัญทั่วไป',
-  '80': 'ปรับปรุงบัญชี',
-  '90': 'ปิดบัญชี',
+  '10': 'ตั้งยอดบัญชียกมา - Opening Balance (OB)',
+  '30': 'ใบสำคัญรับ - Receive Voucher (RV)',
+  '50': 'ใบสำคัญจ่าย - Payment Voucher (PV)',
+  '70': 'ใบสำคัญทั่วไป - Journal Voucher (JV)',
+  '80': 'ปรับปรุงบัญชี - Adjusting Entry (ADJ)',
+  '90': 'ปิดบัญชี - Closing Entry (CL) ',
 };
 // '11': 'บัญชีลูกหนี้'
 const Map<String, String> arSysDocType = {
-  '10': 'ตั้งยอดลูกหนี้',
-  '30': 'เพิ่มยอดลูกหนี้',
-  '50': 'ลดยอดลูกหนี้',
-  '70': 'รับชำระ',
+  '10': 'ตั้งหนี้ - Billing (BL)',
+  '30': 'เพิ่มหนี้ - Debit Note to Customer (DN)',
+  '35': 'เพิ่มหนี้ใบแจ้งหนี้ - Debit Note to Customer Billing (DN)',
+  '50': 'ลดหนี้ - Credit Note to Customer (CN)',
+  '55': 'ลดหนี้ใบแจ้งหนี้ - Credit Note to Customer Billing (CN)',
+  '60': 'รับเงินมัดจำ - Deposit (DP)',
+  '65': 'คืนเงินมัดจำ - Return Deposit (RDP)',
+  '70': 'รับชำระ - Receipt (RC)',
 };
 // '21': 'บัญชีเจ้าหนี้'
 const Map<String, String> apSysDocType = {
-  '10': 'ตั้งยอดเจ้าหนี้',
-  '30': 'เพิ่มยอดเจ้าหนี้',
-  '50': 'ลดยอดเจ้าหนี้',
-  '70': 'จ่ายชำระ',
+  '10': 'ตั้งหนี้ - Billing (BL)',
+  '30': 'เพิ่มหนี้ - Debit Note from Supplier (DN)',
+  '50': 'ลดหนี้ - Credit Note from Supplier (CN)',
+  '60': 'เงินมัดจำ - Deposit (DP)',
+  '70': 'จ่ายชำระ - Payment (PY)',
 };
 // '31': 'สินค้าคงคลัง'
 const Map<String, String> imSysDocType = {
@@ -75,62 +80,62 @@ const Map<String, String> vsSysDocType = {
   '': 'ไม่ระบุ',
 };
 
-const Map<int, String> periodNameThai = {
-  1: 'มกราคม',
-  2: 'กุมภาพันธ์',
-  3: 'มีนาคม',
-  4: 'เมษายน',
-  5: 'พฤษภาคม',
-  6: 'มิถุนายน',
-  7: 'กรกฎาคม',
-  8: 'สิงหาคม',
-  9: 'กันยายน',
-  10: 'ตุลาคม',
-  11: 'พฤศจิกายน',
-  12: 'ธันวาคม',
-};
+// const Map<int, String> periodNameThai = {
+//   1: 'มกราคม',
+//   2: 'กุมภาพันธ์',
+//   3: 'มีนาคม',
+//   4: 'เมษายน',
+//   5: 'พฤษภาคม',
+//   6: 'มิถุนายน',
+//   7: 'กรกฎาคม',
+//   8: 'สิงหาคม',
+//   9: 'กันยายน',
+//   10: 'ตุลาคม',
+//   11: 'พฤศจิกายน',
+//   12: 'ธันวาคม',
+// };
 
-const Map<int, String> periodNameEng = {
-  1: 'January',
-  2: 'February',
-  3: 'March',
-  4: 'April',
-  5: 'May',
-  6: 'June',
-  7: 'July',
-  8: 'August',
-  9: 'September',
-  10: 'October',
-  11: 'November',
-  12: 'December',
-};
+// const Map<int, String> periodNameEng = {
+//   1: 'January',
+//   2: 'February',
+//   3: 'March',
+//   4: 'April',
+//   5: 'May',
+//   6: 'June',
+//   7: 'July',
+//   8: 'August',
+//   9: 'September',
+//   10: 'October',
+//   11: 'November',
+//   12: 'December',
+// };
 
-const Map<int, String> periodShortNameThai = {
-  1: 'ม.ค.',
-  2: 'ก.พ.',
-  3: 'มี.ค.',
-  4: 'เม.ย.',
-  5: 'พ.ค.',
-  6: 'มิ.ย.',
-  7: 'ก.ค.',
-  8: 'ส.ค.',
-  9: 'ก.ย.',
-  10: 'ต.ค.',
-  11: 'พ.ย.',
-  12: 'ธ.ค.',
-};
+// const Map<int, String> periodShortNameThai = {
+//   1: 'ม.ค.',
+//   2: 'ก.พ.',
+//   3: 'มี.ค.',
+//   4: 'เม.ย.',
+//   5: 'พ.ค.',
+//   6: 'มิ.ย.',
+//   7: 'ก.ค.',
+//   8: 'ส.ค.',
+//   9: 'ก.ย.',
+//   10: 'ต.ค.',
+//   11: 'พ.ย.',
+//   12: 'ธ.ค.',
+// };
 
-const Map<int, String> periodShortNameEng = {
-  1: 'Jan',
-  2: 'Feb',
-  3: 'Mar',
-  4: 'Apr',
-  5: 'May',
-  6: 'Jun',
-  7: 'Jul',
-  8: 'Aug',
-  9: 'Sep',
-  10: 'Oct',
-  11: 'Nov',
-  12: 'Dec',
-};
+// const Map<int, String> periodShortNameEng = {
+//   1: 'Jan',
+//   2: 'Feb',
+//   3: 'Mar',
+//   4: 'Apr',
+//   5: 'May',
+//   6: 'Jun',
+//   7: 'Jul',
+//   8: 'Aug',
+//   9: 'Sep',
+//   10: 'Oct',
+//   11: 'Nov',
+//   12: 'Dec',
+// };

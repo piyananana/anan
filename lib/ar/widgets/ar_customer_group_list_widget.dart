@@ -201,10 +201,21 @@ class ArCustomerGroupListWidgetState extends State<ArCustomerGroupListWidget>
   Widget build(BuildContext context) {
     super.build(context);
     final displayList = _filterAndSort();
+    final countText = _searchQuery.isEmpty
+        ? 'ทั้งหมด ${_lists.length} แถว'
+        : 'พบ ${displayList.length} จาก ${_lists.length} แถว';
 
     return Column(
       children: [
         _buildListHeader(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(countText,
+                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ),
+        ),
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -232,7 +243,7 @@ class ArCustomerGroupListWidgetState extends State<ArCustomerGroupListWidget>
                                   Text(item.groupNameEng,
                                       style: const TextStyle(fontSize: 12)),
                                 Text(
-                                  'เครดิต ${item.creditDays} วัน  |  วงเงิน ${item.creditLimit.toStringAsFixed(2)}  |  ส่วนลด ${item.discountPercent.toStringAsFixed(2)}%',
+                                  'เครดิต ${item.creditTermMonths > 0 ? '${item.creditTermMonths} เดือน ' : ''}${item.creditTermDays} วัน  |  วงเงิน ${item.creditLimit.toStringAsFixed(2)}  |  ส่วนลด ${item.discountPercent.toStringAsFixed(2)}%',
                                   style: TextStyle(
                                       fontSize: 11,
                                       color: Colors.grey.shade600),

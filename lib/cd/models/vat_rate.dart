@@ -10,6 +10,9 @@ class VatRate {
   final DateTime? endDate;
   final bool isActive;
   final String? remark;
+  final int?    glAccountId;
+  final String? glAccountCode;
+  final String? glAccountName;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final String? createdBy;
@@ -25,6 +28,9 @@ class VatRate {
     this.endDate,
     required this.isActive,
     this.remark,
+    this.glAccountId,
+    this.glAccountCode,
+    this.glAccountName,
     this.createdAt,
     this.updatedAt,
     this.createdBy,
@@ -42,6 +48,9 @@ class VatRate {
       endDate: json['end_date'] != null ? parseLocalDate(json['end_date']) : null,
       isActive: json['is_active'] ?? true,
       remark: json['remark'],
+      glAccountId: json['gl_account_id'],
+      glAccountCode: json['gl_account_code'],
+      glAccountName: json['gl_account_name'],
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
       createdBy: json['created_by']?.toString(),
@@ -60,6 +69,7 @@ class VatRate {
       'end_date': endDate != null ? formatLocalDate(endDate!) : null,
       'is_active': isActive,
       'remark': remark,
+      'gl_account_id': glAccountId,
     };
   }
 }

@@ -351,6 +351,18 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _searchQuery.isEmpty
+                  ? 'ทั้งหมด ${_list.length} แถว'
+                  : 'พบ ${displayList.length} จาก ${_list.length} แถว',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ),
+        ),
         // tree
         Expanded(
           child: _isLoading

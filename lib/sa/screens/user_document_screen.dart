@@ -321,6 +321,11 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
         // ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _fetchLists,
+          ),
+          IconButton(
             icon: const Icon(Icons.cleaning_services_outlined, color: Colors.white),
             onPressed: _onClearRightPanel,
             tooltip: 'เคลียร์ Panel ขวา',

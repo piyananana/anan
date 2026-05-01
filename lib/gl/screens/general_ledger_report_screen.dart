@@ -595,6 +595,13 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         title: const Row(children: [Icon(Icons.menu_book, color: Colors.white, size: 20), SizedBox(width: 8), Text('บัญชีแยกประเภท (General Ledger)')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _loadMasterData,
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

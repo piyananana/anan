@@ -239,10 +239,21 @@ class ZipcodeListWidgetState extends State<ZipcodeListWidget>
     super.build(context);
 
     _searchResult = _filterAndSort();
+    final countText = _searchQuery.isEmpty
+        ? 'ทั้งหมด ${_lists.length} แถว'
+        : 'พบ ${_searchResult.length} จาก ${_lists.length} แถว';
 
     return Column(
       children: [
         _buildListHeader(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(countText,
+                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ),
+        ),
         Expanded(
           child: _isLoading
             ? const Center(child: CircularProgressIndicator())

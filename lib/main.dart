@@ -41,6 +41,11 @@ import 'ar/services/ar_collector_service.dart';
 
 import 'cd/services/sales_territory_service.dart';
 import 'cd/services/salesperson_service.dart';
+import 'cd/services/cd_wht_type_service.dart';
+
+import 'cm/services/cm_bank_service.dart';
+import 'cm/services/cm_bank_account_service.dart';
+import 'cm/services/cm_payment_method_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -90,6 +95,11 @@ class MyApp extends StatelessWidget {
         Provider<SalesTerritoryService>(create: (_) => SalesTerritoryService()),
         Provider<SalespersonService>(create: (_) => SalespersonService()),
         Provider<ArCollectorService>(create: (_) => ArCollectorService()),
+        Provider<CdWhtTypeService>(create: (_) => CdWhtTypeService()),
+
+        Provider<CmBankService>(create: (_) => CmBankService()),
+        Provider<CmBankAccountService>(create: (_) => CmBankAccountService()),
+        Provider<CmPaymentMethodService>(create: (_) => CmPaymentMethodService()),
         // Add other providers if needed
       ],
       child: MaterialApp(

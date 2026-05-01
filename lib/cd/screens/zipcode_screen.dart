@@ -285,6 +285,14 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listWidgetKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
           // ปุ่ม Import/Export
           if (_isImportOrExport)
             const Padding(

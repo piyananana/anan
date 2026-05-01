@@ -284,6 +284,16 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
         title: const Row(children: [Icon(Icons.description, color: Colors.white, size: 20), SizedBox(width: 8), Text('ประเภทเอกสารและเลขที่')]),
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listWidgetKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
+        ],
         // actions: [
         //   // ปุ่ม Import/Export
         //   if (_isImportOrExport)

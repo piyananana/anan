@@ -360,6 +360,13 @@ String _replaceVars(String text, pw.Context? context) {
           title: const Row(children: [Icon(Icons.summarize, color: Colors.white, size: 20), SizedBox(width: 8), Text('รายงานงบการเงิน (Financial Report)')]),
           backgroundColor: Colors.deepOrange[900],
           foregroundColor: Colors.white,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'รีเฟรชรายการ',
+              onPressed: _loadMasterData,
+            ),
+          ],
         ),
         body: _isLoading && _reportMasters.isEmpty
             ? const Center(child: CircularProgressIndicator())

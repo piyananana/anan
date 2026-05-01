@@ -177,6 +177,16 @@ class _VatRateScreenState extends State<VatRateScreen>
         title: const Row(children: [Icon(Icons.percent, color: Colors.white, size: 20), SizedBox(width: 8), Text('อัตราภาษีมูลค่าเพิ่ม (VAT Rate)')]),
         backgroundColor: Colors.teal[700],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

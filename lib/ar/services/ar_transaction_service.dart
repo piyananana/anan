@@ -79,12 +79,14 @@ class ArTransactionService {
     required List<ArTransactionDetail> details,
     required List<ArTransactionApply> applies,
     required String action, // 'Draft' | 'Post'
+    List<ArTransactionPayment> payments = const [],
   }) async {
     final headers = await authService.getAuthHeader();
     final body = jsonEncode({
       'header': header.toJson(),
       'details': details.map((d) => d.toJson()).toList(),
       'applies': applies.map((a) => a.toJson()).toList(),
+      'payments': payments.map((p) => p.toJson()).toList(),
       'action': action,
     });
     final response = await http.post(
@@ -110,12 +112,14 @@ class ArTransactionService {
     required List<ArTransactionDetail> details,
     required List<ArTransactionApply> applies,
     required String action,
+    List<ArTransactionPayment> payments = const [],
   }) async {
     final authHeaders = await authService.getAuthHeader();
     final body = jsonEncode({
       'header': header.toJson(),
       'details': details.map((d) => d.toJson()).toList(),
       'applies': applies.map((a) => a.toJson()).toList(),
+      'payments': payments.map((p) => p.toJson()).toList(),
       'action': action,
     });
     final response = await http.put(
@@ -167,6 +171,60 @@ class ArTransactionService {
     }
     final err = jsonDecode(response.body);
     throw Exception(err['error'] ?? 'Failed to delete transaction');
+  }
+
+  // Fetch open advance receipts for a customer (for advance deduction in Receipt)
+  Future<List<ArTransactionHeader>> fetchOpenAdvances(int customerId) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(
+      Uri.parse('$baseUrl/ar_transaction/open_advances?customer_id=$customerId'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      final List json = jsonDecode(response.body);
+      return json.map((e) => ArTransactionHeader.fromJson(e as Map<String, dynamic>)).toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized');
+    } else {
+      throw Exception('Failed to load open advances: ${response.statusCode}');
+    }
+  }
+
+  // Fetch open credit notes for a customer (for CN deduction in Receipt)
+  Future<List<ArTransactionHeader>> fetchOpenCreditNotes(int customerId) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(
+      Uri.parse('$baseUrl/ar_transaction/open_credit_notes?customer_id=$customerId'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      final List json = jsonDecode(response.body);
+      return json.map((e) => ArTransactionHeader.fromJson(e as Map<String, dynamic>)).toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized');
+    } else {
+      throw Exception('Failed to load open credit notes: ${response.statusCode}');
+    }
+  }
+
+  // Fetch open advance receipts for refund (for RDP-65)
+  Future<List<ArTransactionHeader>> fetchOpenAdvancesForRefund(int customerId) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(
+      Uri.parse('$baseUrl/ar_transaction/open_advances_for_refund?customer_id=$customerId'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      final List json = jsonDecode(response.body);
+      return json.map((e) => ArTransactionHeader.fromJson(e as Map<String, dynamic>)).toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized');
+    } else {
+      throw Exception('Failed to load open advances for refund: ${response.statusCode}');
+    }
   }
 
   // Fetch open invoices for a customer (for Receipt application)

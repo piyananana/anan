@@ -227,6 +227,199 @@ class ArCustomerBankAccount {
       );
 }
 
+// ---------------------------------------------------------------------------
+// ArCustomerBillingCondition — เงื่อนไขการวางบิล (1 ลูกค้า : N เงื่อนไข)
+// ---------------------------------------------------------------------------
+class ArCustomerBillingCondition {
+  final int? id;
+  final int? customerId;
+  final int sortOrder;
+  final bool billWithDelivery;
+  // วันที่ในเดือน: [1–30, 31=สิ้นเดือน], [] = ไม่ระบุ
+  final List<int> billingDayOfMonth;
+  // วันในสัปดาห์: [0=อา, 1=จ, 2=อ, 3=พ, 4=พฤ, 5=ศ, 6=ส], [] = ไม่ระบุ
+  final List<int> billingDayOfWeek;
+  // สัปดาห์ที่: [1,2,3,4,-1=สุดท้าย], [] = ทุกสัปดาห์
+  final List<int> billingWeekOfMonth;
+  final String? billingTimeFrom; // 'HH:mm'
+  final String? billingTimeTo;   // 'HH:mm'
+  // ถ้า true: คำนวณ due_date ใหม่นับจากวันวางบิลแทนวันส่งของ
+  final bool dueFromBillingDate;
+  final String? remark;
+
+  ArCustomerBillingCondition({
+    this.id,
+    this.customerId,
+    this.sortOrder = 1,
+    this.billWithDelivery = false,
+    this.billingDayOfMonth = const [],
+    this.billingDayOfWeek = const [],
+    this.billingWeekOfMonth = const [],
+    this.billingTimeFrom,
+    this.billingTimeTo,
+    this.dueFromBillingDate = false,
+    this.remark,
+  });
+
+  factory ArCustomerBillingCondition.fromJson(Map<String, dynamic> json) =>
+      ArCustomerBillingCondition(
+        id: json['id'],
+        customerId: json['customer_id'],
+        sortOrder: json['sort_order'] ?? 1,
+        billWithDelivery: json['bill_with_delivery'] ?? false,
+        billingDayOfMonth: _toIntList(json['billing_day_of_month']),
+        billingDayOfWeek: _toIntList(json['billing_day_of_week']),
+        billingWeekOfMonth: _toIntList(json['billing_week_of_month']),
+        billingTimeFrom: json['billing_time_from'],
+        billingTimeTo: json['billing_time_to'],
+        dueFromBillingDate: json['due_from_billing_date'] ?? false,
+        remark: json['remark'],
+      );
+
+  Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
+        if (customerId != null) 'customer_id': customerId,
+        'sort_order': sortOrder,
+        'bill_with_delivery': billWithDelivery,
+        'billing_day_of_month': billingDayOfMonth,
+        'billing_day_of_week': billingDayOfWeek,
+        'billing_week_of_month': billingWeekOfMonth,
+        'billing_time_from': billingTimeFrom,
+        'billing_time_to': billingTimeTo,
+        'due_from_billing_date': dueFromBillingDate,
+        'remark': remark,
+      };
+
+  ArCustomerBillingCondition copyWith({
+    int? id,
+    int? customerId,
+    int? sortOrder,
+    bool? billWithDelivery,
+    List<int>? billingDayOfMonth,
+    List<int>? billingDayOfWeek,
+    List<int>? billingWeekOfMonth,
+    String? billingTimeFrom,
+    String? billingTimeTo,
+    bool? dueFromBillingDate,
+    String? remark,
+  }) =>
+      ArCustomerBillingCondition(
+        id: id ?? this.id,
+        customerId: customerId ?? this.customerId,
+        sortOrder: sortOrder ?? this.sortOrder,
+        billWithDelivery: billWithDelivery ?? this.billWithDelivery,
+        billingDayOfMonth: billingDayOfMonth ?? this.billingDayOfMonth,
+        billingDayOfWeek: billingDayOfWeek ?? this.billingDayOfWeek,
+        billingWeekOfMonth: billingWeekOfMonth ?? this.billingWeekOfMonth,
+        billingTimeFrom: billingTimeFrom ?? this.billingTimeFrom,
+        billingTimeTo: billingTimeTo ?? this.billingTimeTo,
+        dueFromBillingDate: dueFromBillingDate ?? this.dueFromBillingDate,
+        remark: remark ?? this.remark,
+      );
+}
+
+// ---------------------------------------------------------------------------
+// ArCustomerPaymentCondition — เงื่อนไขการรับชำระ (1 ลูกค้า : N เงื่อนไข)
+// ---------------------------------------------------------------------------
+class ArCustomerPaymentCondition {
+  final int? id;
+  final int? customerId;
+  final int sortOrder;
+  // วันที่ในเดือน: [1–30, 31=สิ้นเดือน], [] = ไม่ระบุ
+  final List<int> paymentDayOfMonth;
+  // วันในสัปดาห์: [0–6], [] = ไม่ระบุ
+  final List<int> paymentDayOfWeek;
+  // สัปดาห์ที่: [1,2,3,4,-1=สุดท้าย], [] = ทุกสัปดาห์
+  final List<int> paymentWeekOfMonth;
+  final String? paymentTimeFrom; // 'HH:mm'
+  final String? paymentTimeTo;   // 'HH:mm'
+  // ชำระภายในกี่เดือนจากเดือนที่วางบิล (0 = ไม่จำกัดเดือน)
+  final int withinMonthsFromBilling;
+  // จำนวนวันที่บวกเพิ่มจากวันที่คำนวณได้
+  final int additionalDays;
+  final String? remark;
+
+  ArCustomerPaymentCondition({
+    this.id,
+    this.customerId,
+    this.sortOrder = 1,
+    this.paymentDayOfMonth = const [],
+    this.paymentDayOfWeek = const [],
+    this.paymentWeekOfMonth = const [],
+    this.paymentTimeFrom,
+    this.paymentTimeTo,
+    this.withinMonthsFromBilling = 0,
+    this.additionalDays = 0,
+    this.remark,
+  });
+
+  factory ArCustomerPaymentCondition.fromJson(Map<String, dynamic> json) =>
+      ArCustomerPaymentCondition(
+        id: json['id'],
+        customerId: json['customer_id'],
+        sortOrder: json['sort_order'] ?? 1,
+        paymentDayOfMonth: _toIntList(json['payment_day_of_month']),
+        paymentDayOfWeek: _toIntList(json['payment_day_of_week']),
+        paymentWeekOfMonth: _toIntList(json['payment_week_of_month']),
+        paymentTimeFrom: json['payment_time_from'],
+        paymentTimeTo: json['payment_time_to'],
+        withinMonthsFromBilling: json['within_months_from_billing'] ?? 0,
+        additionalDays: json['additional_days'] ?? 0,
+        remark: json['remark'],
+      );
+
+  Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
+        if (customerId != null) 'customer_id': customerId,
+        'sort_order': sortOrder,
+        'payment_day_of_month': paymentDayOfMonth,
+        'payment_day_of_week': paymentDayOfWeek,
+        'payment_week_of_month': paymentWeekOfMonth,
+        'payment_time_from': paymentTimeFrom,
+        'payment_time_to': paymentTimeTo,
+        'within_months_from_billing': withinMonthsFromBilling,
+        'additional_days': additionalDays,
+        'remark': remark,
+      };
+
+  ArCustomerPaymentCondition copyWith({
+    int? id,
+    int? customerId,
+    int? sortOrder,
+    List<int>? paymentDayOfMonth,
+    List<int>? paymentDayOfWeek,
+    List<int>? paymentWeekOfMonth,
+    String? paymentTimeFrom,
+    String? paymentTimeTo,
+    int? withinMonthsFromBilling,
+    int? additionalDays,
+    String? remark,
+  }) =>
+      ArCustomerPaymentCondition(
+        id: id ?? this.id,
+        customerId: customerId ?? this.customerId,
+        sortOrder: sortOrder ?? this.sortOrder,
+        paymentDayOfMonth: paymentDayOfMonth ?? this.paymentDayOfMonth,
+        paymentDayOfWeek: paymentDayOfWeek ?? this.paymentDayOfWeek,
+        paymentWeekOfMonth: paymentWeekOfMonth ?? this.paymentWeekOfMonth,
+        paymentTimeFrom: paymentTimeFrom ?? this.paymentTimeFrom,
+        paymentTimeTo: paymentTimeTo ?? this.paymentTimeTo,
+        withinMonthsFromBilling:
+            withinMonthsFromBilling ?? this.withinMonthsFromBilling,
+        additionalDays: additionalDays ?? this.additionalDays,
+        remark: remark ?? this.remark,
+      );
+}
+
+List<int> _toIntList(dynamic v) {
+  if (v == null) return [];
+  if (v is List) return v.map((e) => (e as num).toInt()).toList();
+  return [];
+}
+
+// ---------------------------------------------------------------------------
+// ArCustomer
+// ---------------------------------------------------------------------------
 class ArCustomer {
   final int? id;
   final String customerCode;
@@ -242,22 +435,23 @@ class ArCustomer {
   final int? customerGroupId;
   final String? customerGroupCode;
   final String? customerGroupName;
-  final int creditDays;
+  // เงื่อนไขเครดิต: due_date = delivery_date + creditTermMonths เดือน + creditTermDays วัน
+  final int creditTermMonths;
+  final int creditTermDays;
   final double creditLimit;
   final double discountPercent;
   final String currencyCode;
   final bool isActive;
   final String? remark;
-  // เงื่อนไขการวางบิล
-  final int? billingDayOfWeek;        // 0=อา,1=จ,2=อ,3=พ,4=พฤ,5=ศ,6=ส
-  final List<int>? billingWeekOfMonth; // 1=แรก,2=ที่2,3=ที่3,4=ที่4,-1=สุดท้าย
-  final int? billingDateFrom;
-  final int? billingDateTo;
-  final String? billingTimeFrom;      // 'HH:mm'
-  final String? billingTimeTo;        // 'HH:mm'
-  final bool billingExcludeHolidays;
-  final String? billingRemark;
-  final int? arAccountId; // FK -> gl_account.id (บัญชีลูกหนี้ของลูกค้า)
+  // ต้องวางบิลก่อนหรือไม่
+  final bool requiresBilling;
+  final int? arAccountId;        // FK -> gl_account.id
+  final String? arAccountCode;
+  final String? arAccountNameThai;
+  // บัญชี GL ของกลุ่มลูกหนี้ (override ลำดับสูงกว่าลูกหนี้ แต่ต่ำกว่า setup)
+  final int? groupArAccountId;
+  final String? groupArAccountCode;
+  final String? groupArAccountNameThai;
   // เขตการขาย + พนักงานขาย
   final int? salesTerritoryId;
   final String? salesTerritoryCode;
@@ -275,6 +469,8 @@ class ArCustomer {
   final List<ArCustomerAddress> addresses;
   final List<ArCustomerContact> contacts;
   final List<ArCustomerBankAccount> bankAccounts;
+  final List<ArCustomerBillingCondition> billingConditions;
+  final List<ArCustomerPaymentCondition> paymentConditions;
 
   ArCustomer({
     this.id,
@@ -289,21 +485,20 @@ class ArCustomer {
     this.customerGroupId,
     this.customerGroupCode,
     this.customerGroupName,
-    this.creditDays = 30,
+    this.creditTermMonths = 0,
+    this.creditTermDays = 30,
     this.creditLimit = 0,
     this.discountPercent = 0,
     this.currencyCode = 'THB',
     this.isActive = true,
     this.remark,
-    this.billingDayOfWeek,
-    this.billingWeekOfMonth,
-    this.billingDateFrom,
-    this.billingDateTo,
-    this.billingTimeFrom,
-    this.billingTimeTo,
-    this.billingExcludeHolidays = false,
-    this.billingRemark,
+    this.requiresBilling = false,
     this.arAccountId,
+    this.arAccountCode,
+    this.arAccountNameThai,
+    this.groupArAccountId,
+    this.groupArAccountCode,
+    this.groupArAccountNameThai,
     this.salesTerritoryId,
     this.salesTerritoryCode,
     this.salesTerritoryNameThai,
@@ -319,6 +514,8 @@ class ArCustomer {
     this.addresses = const [],
     this.contacts = const [],
     this.bankAccounts = const [],
+    this.billingConditions = const [],
+    this.paymentConditions = const [],
   });
 
   factory ArCustomer.fromJson(Map<String, dynamic> json) => ArCustomer(
@@ -334,7 +531,8 @@ class ArCustomer {
         customerGroupId: json['customer_group_id'],
         customerGroupCode: json['customer_group_code'],
         customerGroupName: json['customer_group_name'],
-        creditDays: json['credit_days'] ?? 30,
+        creditTermMonths: json['credit_term_months'] ?? 0,
+        creditTermDays: json['credit_term_days'] ?? 30,
         creditLimit:
             double.tryParse(json['credit_limit']?.toString() ?? '0') ?? 0,
         discountPercent:
@@ -342,19 +540,13 @@ class ArCustomer {
         currencyCode: json['currency_code'] ?? 'THB',
         isActive: json['is_active'] ?? true,
         remark: json['remark'],
-        billingDayOfWeek: json['billing_day_of_week'],
-        billingWeekOfMonth: json['billing_week_of_month'] != null
-            ? (json['billing_week_of_month'] as List<dynamic>)
-                .map((e) => (e as num).toInt())
-                .toList()
-            : null,
-        billingDateFrom: json['billing_date_from'],
-        billingDateTo: json['billing_date_to'],
-        billingTimeFrom: json['billing_time_from'],
-        billingTimeTo: json['billing_time_to'],
-        billingExcludeHolidays: json['billing_exclude_holidays'] ?? false,
-        billingRemark: json['billing_remark'],
+        requiresBilling: json['requires_billing'] ?? false,
         arAccountId: json['ar_account_id'] as int?,
+        arAccountCode: json['ar_account_code'] as String?,
+        arAccountNameThai: json['ar_account_name_thai'] as String?,
+        groupArAccountId: json['group_ar_account_id'] as int?,
+        groupArAccountCode: json['group_ar_account_code'] as String?,
+        groupArAccountNameThai: json['group_ar_account_name_thai'] as String?,
         salesTerritoryId: json['sales_territory_id'] as int?,
         salesTerritoryCode: json['sales_territory_code'] as String?,
         salesTerritoryNameThai: json['sales_territory_name_thai'] as String?,
@@ -363,7 +555,8 @@ class ArCustomer {
         salespersonNameThai: json['salesperson_name_thai'] as String?,
         billingCollectorId: json['billing_collector_id'] as int?,
         billingCollectorCode: json['billing_collector_code'] as String?,
-        billingCollectorNameThai: json['billing_collector_name_thai'] as String?,
+        billingCollectorNameThai:
+            json['billing_collector_name_thai'] as String?,
         collectionCollectorId: json['collection_collector_id'] as int?,
         collectionCollectorCode: json['collection_collector_code'] as String?,
         collectionCollectorNameThai:
@@ -377,6 +570,14 @@ class ArCustomer {
         bankAccounts: (json['bank_accounts'] as List<dynamic>? ?? [])
             .map((e) => ArCustomerBankAccount.fromJson(e))
             .toList(),
+        billingConditions:
+            (json['billing_conditions'] as List<dynamic>? ?? [])
+                .map((e) => ArCustomerBillingCondition.fromJson(e))
+                .toList(),
+        paymentConditions:
+            (json['payment_conditions'] as List<dynamic>? ?? [])
+                .map((e) => ArCustomerPaymentCondition.fromJson(e))
+                .toList(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -388,21 +589,16 @@ class ArCustomer {
         'tax_id': taxId,
         'business_type_id': businessTypeId,
         'customer_group_id': customerGroupId,
-        'credit_days': creditDays,
+        'credit_term_months': creditTermMonths,
+        'credit_term_days': creditTermDays,
         'credit_limit': creditLimit,
         'discount_percent': discountPercent,
         'currency_code': currencyCode,
         'is_active': isActive,
         'remark': remark,
-        'billing_day_of_week': billingDayOfWeek,
-        'billing_week_of_month': billingWeekOfMonth,
-        'billing_date_from': billingDateFrom,
-        'billing_date_to': billingDateTo,
-        'billing_time_from': billingTimeFrom,
-        'billing_time_to': billingTimeTo,
-        'billing_exclude_holidays': billingExcludeHolidays,
-        'billing_remark': billingRemark,
+        'requires_billing': requiresBilling,
         'ar_account_id': arAccountId,
+        'group_ar_account_id': groupArAccountId,
         'sales_territory_id': salesTerritoryId,
         'salesperson_id': salespersonId,
         'billing_collector_id': billingCollectorId,
@@ -410,5 +606,9 @@ class ArCustomer {
         'addresses': addresses.map((e) => e.toJson()).toList(),
         'contacts': contacts.map((e) => e.toJson()).toList(),
         'bank_accounts': bankAccounts.map((e) => e.toJson()).toList(),
+        'billing_conditions':
+            billingConditions.map((e) => e.toJson()).toList(),
+        'payment_conditions':
+            paymentConditions.map((e) => e.toJson()).toList(),
       };
 }

@@ -287,6 +287,13 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
         // ),
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _refreshAllData,
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

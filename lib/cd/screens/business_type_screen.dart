@@ -155,6 +155,16 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
         ]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listWidgetKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

@@ -165,9 +165,20 @@ class VatRateListWidgetState extends State<VatRateListWidget>
   Widget build(BuildContext context) {
     super.build(context);
     final items = _filtered();
+    final countText = _searchQuery.isEmpty
+        ? 'ทั้งหมด ${_lists.length} แถว'
+        : 'พบ ${items.length} จาก ${_lists.length} แถว';
     return Column(
       children: [
         _buildHeader(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(countText,
+                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ),
+        ),
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -207,11 +218,16 @@ class VatRateListWidgetState extends State<VatRateListWidget>
                               ),
                             ),
                             subtitle: Text(
-                              'ใช้งาน: ${_dateFmt.format(item.effectiveDate)} – $endLabel'
-                              '${item.remark != null && item.remark!.isNotEmpty ? '\n${item.remark}' : ''}',
+                              [
+                                'ใช้งาน: ${_dateFmt.format(item.effectiveDate)} – $endLabel',
+                                if (item.glAccountCode != null)
+                                  'บัญชี: ${item.glAccountCode}  ${item.glAccountName ?? ''}',
+                                if (item.remark != null && item.remark!.isNotEmpty)
+                                  item.remark!,
+                              ].join('\n'),
                             ),
-                            isThreeLine: item.remark != null &&
-                                item.remark!.isNotEmpty,
+                            isThreeLine: item.glAccountCode != null ||
+                                (item.remark != null && item.remark!.isNotEmpty),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [

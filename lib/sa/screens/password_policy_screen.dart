@@ -124,6 +124,11 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _fetchPasswordPolicy,
+          ),
+          IconButton(
             icon: const Icon(Icons.save),
             onPressed: _isLoading ? null : _savePolicy,
             tooltip: 'บันทึกการตั้งค่า',

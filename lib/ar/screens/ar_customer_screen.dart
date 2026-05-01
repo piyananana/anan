@@ -40,15 +40,30 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
         _selectedData = null;
       });
 
-  void _onEdit(ArCustomer row) => setState(() {
-        _mode = Mode.edit;
-        _selectedData = row;
-      });
+  void _onEdit(ArCustomer row) {
+    setState(() {
+      _mode = Mode.edit;
+      _selectedData = row;
+    });
+    _fetchFull(row);
+  }
 
-  void _onView(ArCustomer row) => setState(() {
-        _mode = Mode.view;
-        _selectedData = row;
-      });
+  void _onView(ArCustomer row) {
+    setState(() {
+      _mode = Mode.view;
+      _selectedData = row;
+    });
+    _fetchFull(row);
+  }
+
+  Future<void> _fetchFull(ArCustomer row) async {
+    if (row.id == null) return;
+    final svc = Provider.of<ArCustomerService>(context, listen: false);
+    try {
+      final full = await svc.fetchRow(row.id!);
+      if (mounted) setState(() => _selectedData = full);
+    } catch (_) {}
+  }
 
   Future<void> _onDelete(ArCustomer row) async {
     final svc = Provider.of<ArCustomerService>(context, listen: false);
@@ -167,6 +182,16 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
         title: const Row(children: [Icon(Icons.people_alt, color: Colors.white, size: 20), SizedBox(width: 8), Text('ลูกหนี้การค้า (AR Customer)')]),
         backgroundColor: Colors.orange[700],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

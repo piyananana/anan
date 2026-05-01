@@ -1059,9 +1059,20 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                         flex: 2,
                         child: DropdownButtonFormField<Currency>(
                           value: _selectedCurrency,
+                          isExpanded: true,
                           items: _currencies
                               .map((c) => DropdownMenuItem(
-                                  value: c, child: Text(c.currencyCode)))
+                                    value: c,
+                                    child: Text(
+                                      c.currencyNameThai.isNotEmpty
+                                          ? '${c.currencyCode}  ${c.currencyNameThai}'
+                                          : c.currencyCode,
+                                    ),
+                                  ))
+                              .toList(),
+                          selectedItemBuilder: (_) => _currencies
+                              .map((c) => Text(c.currencyCode,
+                                  overflow: TextOverflow.ellipsis))
                               .toList(),
                           decoration: const InputDecoration(
                             labelText: 'สกุลเงิน',
@@ -1222,13 +1233,22 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                               child: const Text('ยกเลิก')),
                           if (_header.status == 'Posted') ...[
                             const SizedBox(width: 8),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red),
-                              onPressed: _reverse,
-                              child: const Text('ถอย',
-                                  style: TextStyle(color: Colors.white)),
-                            ),
+                            if (_header.externalSourceId != null)
+                              Tooltip(
+                                message: 'รายการนี้สร้างจากโมดูลอื่น\nกรุณายกเลิกจากโมดูลต้นทาง',
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[400]),
+                                  onPressed: null,
+                                  icon: const Icon(Icons.lock_outline, size: 14),
+                                  label: const Text('ถอย', style: TextStyle(color: Colors.white)),
+                                ),
+                              )
+                            else
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                onPressed: _reverse,
+                                child: const Text('ถอย', style: TextStyle(color: Colors.white)),
+                              ),
                           ],
                         ],
                       ))

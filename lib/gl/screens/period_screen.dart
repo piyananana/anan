@@ -286,33 +286,16 @@ class _PeriodScreenState extends State<PeriodScreen>
         title: const Row(children: [Icon(Icons.date_range, color: Colors.white, size: 20), SizedBox(width: 8), Text('ปีบัญชีและงวดเดือนบัญชี')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
-        // actions: [
-        //   // ปุ่ม Import/Export
-        //   if (_isImportOrExport)
-        //     const Padding(
-        //       padding: EdgeInsets.symmetric(horizontal: 16.0),
-        //       child:
-        //           Center(child: CircularProgressIndicator(color: Colors.white)),
-        //     )
-        //   else ...[
-        //     IconButton(
-        //       icon: const Icon(Icons.upload_file),
-        //       tooltip: 'นำข้อมูลเข้าจาก Spredsheet',
-        //       onPressed: _importData,
-        //     ),
-        //     IconButton(
-        //       icon: const Icon(Icons.download),
-        //       tooltip: 'นำข้อมูลออกไป Spredsheet',
-        //       onPressed: _exportData,
-        //     ),
-        //   ],
-        //   IconButton(
-        //     icon: const Icon(Icons.delete_sweep),
-        //     tooltip: 'ลบรหัสไปรษณีย์ทั้งหมด',
-        //     onPressed: _deleteRows,
-        //   ),
-        //   const SizedBox(width: 8),
-        // ],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listWidgetKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

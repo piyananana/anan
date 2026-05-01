@@ -717,6 +717,11 @@ class _MenuScreenState extends State<MenuScreen>
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _refreshAllMenus,
+          ),
           // ปุ่ม Import/Export
           if (_isImportingOrExporting)
             const Padding(

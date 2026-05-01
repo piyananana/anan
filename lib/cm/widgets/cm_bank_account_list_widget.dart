@@ -1,0 +1,261 @@
+// lib/cm/widgets/cm_bank_account_list_widget.dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/cm_bank_account.dart'; // includes cmAccountTypeOptions
+import '../services/cm_bank_account_service.dart';
+
+class CmBankAccountListWidget extends StatefulWidget {
+  final bool enableAddButton;
+  final bool enableEditButton;
+  final bool enableViewButton;
+  final bool enableDeleteButton;
+  final bool enableCardSelect;
+  final void Function() onAdd;
+  final Function(CmBankAccount) onEdit;
+  final Function(CmBankAccount) onView;
+  final Function(CmBankAccount) onDelete;
+  final void Function(CmBankAccount) onCallback;
+
+  const CmBankAccountListWidget({
+    super.key,
+    required this.enableAddButton,
+    required this.enableEditButton,
+    required this.enableViewButton,
+    required this.enableDeleteButton,
+    required this.enableCardSelect,
+    required this.onAdd,
+    required this.onEdit,
+    required this.onView,
+    required this.onDelete,
+    required this.onCallback,
+  });
+
+  @override
+  State<CmBankAccountListWidget> createState() => CmBankAccountListWidgetState();
+
+  static Future<void> search(BuildContext context,
+      {required void Function(CmBankAccount) onSelected}) {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('ค้นหา บัญชีธนาคาร',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Container(
+          width: 560,
+          height: 580,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: CmBankAccountListWidget(
+            enableAddButton: false,
+            enableEditButton: false,
+            enableViewButton: false,
+            enableDeleteButton: false,
+            enableCardSelect: true,
+            onAdd: () {},
+            onEdit: (_) {},
+            onView: (_) {},
+            onDelete: (_) {},
+            onCallback: onSelected,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CmBankAccountListWidgetState extends State<CmBankAccountListWidget>
+    with AutomaticKeepAliveClientMixin {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  List<CmBankAccount> _list = [];
+  bool _isLoading = false;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchList();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchList() async {
+    setState(() => _isLoading = true);
+    try {
+      final service = Provider.of<CmBankAccountService>(context, listen: false);
+      final data = await service.fetchRows();
+      setState(() {
+        _list = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('ไม่สามารถโหลดข้อมูลได้: $e')));
+      }
+    }
+  }
+
+  void refresh() => _fetchList();
+
+  List<CmBankAccount> get _filtered {
+    if (_searchQuery.isEmpty) return _list;
+    final q = _searchQuery.toUpperCase();
+    return _list.where((r) {
+      return r.accountCode.toUpperCase().contains(q) ||
+          r.accountNameTh.toUpperCase().contains(q) ||
+          (r.accountNameEn ?? '').toUpperCase().contains(q) ||
+          (r.accountNumber ?? '').toUpperCase().contains(q) ||
+          (r.bankNameTh ?? '').toUpperCase().contains(q);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final display = _filtered;
+    final countText = _searchQuery.isEmpty
+        ? 'ทั้งหมด ${_list.length} แถว'
+        : 'พบ ${display.length} จาก ${_list.length} แถว';
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              if (widget.enableAddButton)
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  tooltip: 'เพิ่มข้อมูลใหม่',
+                  onPressed: widget.onAdd,
+                ),
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    hintText: 'ค้นหา (รหัส / ชื่อ / เลขบัญชี / ธนาคาร)',
+                    prefixIcon: Icon(Icons.search),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(countText,
+                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ),
+        ),
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : display.isEmpty
+                  ? const Center(child: Text('ไม่พบข้อมูล'))
+                  : ListView.builder(
+                      itemCount: display.length,
+                      itemBuilder: (ctx, i) {
+                        final item = display[i];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.indigo.shade100,
+                              child: const Icon(Icons.savings, size: 18),
+                            ),
+                            title: Text(
+                              item.accountCode,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: item.isActive ? null : Colors.grey,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.accountNameTh,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: item.isActive ? Colors.black87 : Colors.grey,
+                                  ),
+                                ),
+                                Text(
+                                  [
+                                    if (item.bankDisplay.isNotEmpty) item.bankDisplay,
+                                    if ((item.accountNumber ?? '').isNotEmpty) item.accountNumber!,
+                                    cmAccountTypeOptions[item.accountType] ?? item.accountType,
+                                  ].join(' · '),
+                                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (!item.isActive)
+                                  const Chip(
+                                    label: Text('หยุดใช้',
+                                        style: TextStyle(fontSize: 11)),
+                                    backgroundColor: Color(0xFFEEEEEE),
+                                  ),
+                                if (widget.enableViewButton)
+                                  IconButton(
+                                    icon: const Icon(Icons.visibility,
+                                        color: Colors.green),
+                                    onPressed: () => widget.onView(item),
+                                  ),
+                                if (widget.enableEditButton)
+                                  IconButton(
+                                    icon: const Icon(Icons.edit,
+                                        color: Colors.blue),
+                                    onPressed: () => widget.onEdit(item),
+                                  ),
+                                if (widget.enableDeleteButton)
+                                  IconButton(
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.red),
+                                    onPressed: () => widget.onDelete(item),
+                                  ),
+                                if (widget.enableCardSelect)
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_right_outlined),
+                                    onPressed: () {
+                                      widget.onCallback(item);
+                                      Navigator.of(context).pop();
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+}

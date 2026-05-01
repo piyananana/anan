@@ -518,6 +518,13 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         title: const Row(children: [Icon(Icons.account_balance, color: Colors.white, size: 20), SizedBox(width: 8), Text('งบดุล (Balance Sheet)')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _loadMasterData,
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

@@ -276,6 +276,11 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: _fetchData,
+          ),
           _selectedNode != null && _nodeMode == NodeMode.edit 
             ? IconButton(
                 icon: const Icon(Icons.save_outlined, color: Colors.white),

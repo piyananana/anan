@@ -63,9 +63,21 @@ class _GlEntryScreenState extends State<GlEntryScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.edit_note, color: Colors.white, size: 20), SizedBox(width: 8), Text('บันทึกรายการบัญชี')]),
+        title: const Row(children: [Icon(Icons.edit_note, color: Colors.white, size: 20), SizedBox(width: 8), Text('ธุรกรรมบัญชีแยกประเภท')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () => setState(() {
+              _shouldRefreshList = true;
+              _selectedEntryId = null;
+              _currentTabIndex = 0;
+              _tabController.animateTo(0);
+            }),
+          ),
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,8 +89,8 @@ class _GlEntryScreenState extends State<GlEntryScreen>
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: const [
-              Tab(text: 'ค้นหา/แก้ไข/เพิ่ม'),
-              Tab(text: 'รายการบัญชี'),
+              Tab(text: 'ค้นหา/แก้ไข/เพิ่มธุรกรรม'),
+              Tab(text: 'รายละเอียดธุรกรรม'),
             ],
           ),
           Expanded(

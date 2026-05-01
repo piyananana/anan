@@ -2,16 +2,24 @@
 import '../../../utils/date_utils.dart';
 
 // AR document types (sys_doc_type in sa_module_document, sys_module=11)
-const int arDocTypeInvoice = 10;
-const int arDocTypeDebitNote = 30;
-const int arDocTypeCreditNote = 50;
-const int arDocTypeReceipt = 70;
+const int arDocTypeInvoice            = 10;
+const int arDocTypeDebitNote          = 30;
+const int arDocTypeDebitNoteWithBill  = 35;
+const int arDocTypeCreditNote         = 50;
+const int arDocTypeCreditNoteWithBill = 55;
+const int arDocTypeAdvanceReceipt     = 60;
+const int arDocTypeAdvanceRefund      = 65;
+const int arDocTypeReceipt            = 70;
 
 const Map<int, String> arDocTypeNames = {
-  arDocTypeInvoice: 'ใบแจ้งหนี้',
-  arDocTypeDebitNote: 'ใบเพิ่มหนี้',
-  arDocTypeCreditNote: 'ใบลดหนี้',
-  arDocTypeReceipt: 'ใบรับชำระ',
+  arDocTypeInvoice:            'ใบแจ้งหนี้',
+  arDocTypeDebitNote:          'ใบเพิ่มหนี้',
+  arDocTypeDebitNoteWithBill:  'ใบเพิ่มหนี้ (ระบุใบแจ้งหนี้)',
+  arDocTypeCreditNote:         'ใบลดหนี้',
+  arDocTypeCreditNoteWithBill: 'ใบลดหนี้ (ระบุใบแจ้งหนี้)',
+  arDocTypeAdvanceReceipt:     'รับเงินมัดจำ',
+  arDocTypeAdvanceRefund:      'คืนเงินมัดจำ',
+  arDocTypeReceipt:            'ใบรับชำระ',
 };
 
 const List<String> vatTypeOptions = ['VAT7', 'VAT0', 'NOVAT'];
@@ -33,6 +41,8 @@ class ArTransactionHeader {
   final String? customerCode;
   final String? customerNameTh;
   final int? arAccountId;
+  final int? vatAccountId;   // from ar_gl_account_setup.vat_output_account_id
+  final int? glDocId;        // from ar_gl_account_setup.gl_doc_id
   final int? currencyId;
   final String currencyCode;
   final double exchangeRate;
@@ -50,6 +60,9 @@ class ArTransactionHeader {
   final double totalAmountLc;
   final double paidAmountLc;
   final double balanceAmountLc;
+  // WHT + Advance summary
+  final double whtAmountLc;
+  final double advanceAmountLc;
   // References
   final String? refNo;
   final int? refDocId;
@@ -79,6 +92,8 @@ class ArTransactionHeader {
     this.customerCode,
     this.customerNameTh,
     this.arAccountId,
+    this.vatAccountId,
+    this.glDocId,
     this.currencyId,
     this.currencyCode = 'THB',
     this.exchangeRate = 1.0,
@@ -94,6 +109,8 @@ class ArTransactionHeader {
     this.totalAmountLc = 0,
     this.paidAmountLc = 0,
     this.balanceAmountLc = 0,
+    this.whtAmountLc = 0,
+    this.advanceAmountLc = 0,
     this.refNo,
     this.refDocId,
     this.refDocNo,
@@ -122,6 +139,8 @@ class ArTransactionHeader {
       customerCode: j['customer_code'],
       customerNameTh: j['customer_name_th'],
       arAccountId: j['ar_account_id'] as int?,
+      vatAccountId: j['vat_account_id'] as int?,
+      glDocId: j['gl_doc_id'] as int?,
       currencyId: j['currency_id'] as int?,
       currencyCode: j['currency_code'] as String? ?? 'THB',
       exchangeRate: _toDouble(j['exchange_rate']) ?? 1.0,
@@ -137,6 +156,8 @@ class ArTransactionHeader {
       totalAmountLc: _toDouble(j['total_amount_lc']) ?? 0,
       paidAmountLc: _toDouble(j['paid_amount_lc']) ?? 0,
       balanceAmountLc: _toDouble(j['balance_amount_lc']) ?? 0,
+      whtAmountLc: _toDouble(j['wht_amount_lc']) ?? 0,
+      advanceAmountLc: _toDouble(j['advance_amount_lc']) ?? 0,
       refNo: j['ref_no'],
       refDocId: j['ref_doc_id'] as int?,
       refDocNo: j['ref_doc_no'],
@@ -145,7 +166,7 @@ class ArTransactionHeader {
       glEntryId: j['gl_entry_id'] as int?,
       docCode: j['doc_code'],
       docNameThai: j['doc_name_thai'],
-      sysDocType: j['sys_doc_type'] as int?,
+      sysDocType: j['sys_doc_type'] != null ? int.tryParse(j['sys_doc_type'].toString()) : null,
       isAutoNumbering: j['is_auto_numbering'] as bool?,
       createdAt: j['created_at'] != null ? DateTime.parse(j['created_at']) : null,
       updatedAt: j['updated_at'] != null ? DateTime.parse(j['updated_at']) : null,
@@ -165,6 +186,8 @@ class ArTransactionHeader {
         'customer_code': customerCode,
         'customer_name_th': customerNameTh,
         'ar_account_id': arAccountId,
+        'vat_account_id': vatAccountId,
+        'gl_doc_id': glDocId,
         'currency_id': currencyId,
         'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
@@ -210,6 +233,7 @@ class ArTransactionDetail {
   final double subtotalLc;
   final double vatAmountLc;
   final double totalAmountLc;
+  final bool isDeferredVat;  // true = VAT รอตัด (บันทึก VAT ตอนรับชำระ ไม่ใช่ตอนตั้งหนี้)
 
   const ArTransactionDetail({
     this.id = 0,
@@ -232,6 +256,7 @@ class ArTransactionDetail {
     this.subtotalLc = 0,
     this.vatAmountLc = 0,
     this.totalAmountLc = 0,
+    this.isDeferredVat = false,
   });
 
   factory ArTransactionDetail.fromJson(Map<String, dynamic> j) {
@@ -256,6 +281,7 @@ class ArTransactionDetail {
       subtotalLc: _toDouble(j['subtotal_lc']) ?? 0,
       vatAmountLc: _toDouble(j['vat_amount_lc']) ?? 0,
       totalAmountLc: _toDouble(j['total_amount_lc']) ?? 0,
+      isDeferredVat: j['is_deferred_vat'] as bool? ?? false,
     );
   }
 
@@ -280,6 +306,7 @@ class ArTransactionDetail {
         'subtotal_lc': subtotalLc,
         'vat_amount_lc': vatAmountLc,
         'total_amount_lc': totalAmountLc,
+        'is_deferred_vat': isDeferredVat,
       };
 
   ArTransactionDetail copyWith({
@@ -303,6 +330,7 @@ class ArTransactionDetail {
     double? subtotalLc,
     double? vatAmountLc,
     double? totalAmountLc,
+    bool? isDeferredVat,
   }) {
     return ArTransactionDetail(
       id: id ?? this.id,
@@ -325,11 +353,87 @@ class ArTransactionDetail {
       subtotalLc: subtotalLc ?? this.subtotalLc,
       vatAmountLc: vatAmountLc ?? this.vatAmountLc,
       totalAmountLc: totalAmountLc ?? this.totalAmountLc,
+      isDeferredVat: isDeferredVat ?? this.isDeferredVat,
     );
   }
 }
 
-// ---- Apply (payment application) ----
+// ---- WHT Line ----
+class ArTransactionWht {
+  final int    id;
+  final int    headerId;
+  final int    lineNo;
+  final int?   whtTypeId;       // FK → cd_wht_type
+  // Snapshot
+  final String? whtCode;
+  final String? whtName;
+  final String? incomeType;
+  final double  whtRate;
+  final double  baseAmountLc;   // ฐานภาษี (LC)
+  final double  whtAmountLc;    // จำนวนภาษีที่ถูกหัก (LC)
+
+  const ArTransactionWht({
+    this.id = 0,
+    this.headerId = 0,
+    this.lineNo = 1,
+    this.whtTypeId,
+    this.whtCode,
+    this.whtName,
+    this.incomeType,
+    this.whtRate = 0,
+    this.baseAmountLc = 0,
+    this.whtAmountLc = 0,
+  });
+
+  factory ArTransactionWht.fromJson(Map<String, dynamic> j) {
+    return ArTransactionWht(
+      id:           j['id'] as int? ?? 0,
+      headerId:     j['header_id'] as int? ?? 0,
+      lineNo:       j['line_no'] as int? ?? 1,
+      whtTypeId:    j['wht_type_id'] as int?,
+      whtCode:      j['wht_code'] as String?,
+      whtName:      j['wht_name'] as String?,
+      incomeType:   j['income_type'] as String?,
+      whtRate:      _toDouble(j['wht_rate']) ?? 0,
+      baseAmountLc: _toDouble(j['base_amount_lc']) ?? 0,
+      whtAmountLc:  _toDouble(j['wht_amount_lc']) ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id':             id,
+    'header_id':      headerId,
+    'line_no':        lineNo,
+    'wht_type_id':    whtTypeId,
+    'wht_code':       whtCode,
+    'wht_name':       whtName,
+    'income_type':    incomeType,
+    'wht_rate':       whtRate,
+    'base_amount_lc': baseAmountLc,
+    'wht_amount_lc':  whtAmountLc,
+  };
+
+  ArTransactionWht copyWith({
+    int? id, int? headerId, int? lineNo,
+    int? whtTypeId, String? whtCode, String? whtName, String? incomeType,
+    double? whtRate, double? baseAmountLc, double? whtAmountLc,
+  }) {
+    return ArTransactionWht(
+      id:           id ?? this.id,
+      headerId:     headerId ?? this.headerId,
+      lineNo:       lineNo ?? this.lineNo,
+      whtTypeId:    whtTypeId ?? this.whtTypeId,
+      whtCode:      whtCode ?? this.whtCode,
+      whtName:      whtName ?? this.whtName,
+      incomeType:   incomeType ?? this.incomeType,
+      whtRate:      whtRate ?? this.whtRate,
+      baseAmountLc: baseAmountLc ?? this.baseAmountLc,
+      whtAmountLc:  whtAmountLc ?? this.whtAmountLc,
+    );
+  }
+}
+
+// ---- Apply (payment application / advance deduction) ----
 class ArTransactionApply {
   final int id;
   final int transactionId;
@@ -337,6 +441,7 @@ class ArTransactionApply {
   final double appliedAmountLc;
   final double appliedAmountFc;
   final DateTime? appliedDate;
+  final String applyType; // 'invoice' | 'advance'
   // From join
   final String? appliedToDocNo;
   final DateTime? appliedToDocDate;
@@ -349,6 +454,7 @@ class ArTransactionApply {
     this.appliedAmountLc = 0,
     this.appliedAmountFc = 0,
     this.appliedDate,
+    this.applyType = 'invoice',
     this.appliedToDocNo,
     this.appliedToDocDate,
     this.appliedToTotal,
@@ -362,6 +468,7 @@ class ArTransactionApply {
       appliedAmountLc: _toDouble(j['applied_amount_lc']) ?? 0,
       appliedAmountFc: _toDouble(j['applied_amount_fc']) ?? 0,
       appliedDate: parseLocalDateNullable(j['applied_date']),
+      applyType: j['apply_type'] as String? ?? 'invoice',
       appliedToDocNo: j['applied_to_doc_no'],
       appliedToDocDate: parseLocalDateNullable(j['applied_to_doc_date']),
       appliedToTotal: _toDouble(j['applied_to_total']),
@@ -374,19 +481,148 @@ class ArTransactionApply {
         'applied_to_id': appliedToId,
         'applied_amount_lc': appliedAmountLc,
         'applied_amount_fc': appliedAmountFc,
+        'apply_type': applyType,
       };
 }
 
-// ---- Full Transaction (header + details + applies) ----
+// ---- Payment row (วิธีรับชำระ สำหรับ Receipt / Advance Receipt) ----
+class ArTransactionPayment {
+  final int id;
+  final int headerId;
+  final int lineNo;
+  final int? paymentMethodId;
+  final String? paymentMethodCode;
+  final String? paymentMethodName;
+  final String paymentMethodType;
+  //  CASH / CHECK / TRANSFER / CREDIT_CARD / DEBIT_CARD /
+  //  QR_CODE / MOBILE_BANKING / BILL_OF_EXCHANGE / OTHER
+  final int? cmBankAccountId;
+  final int? glAccountId;       // resolved GL account (snapshot)
+  final double amountLc;
+  final double amountFc;
+  // ── ข้อมูลทั่วไป ──
+  final String? refNo;          // เลขอ้างอิง / เลขที่เช็ค / เลขตั๋ว
+  final DateTime? paymentDate;  // วันที่ชำระ / วันที่บนเช็ค / วันครบกำหนด
+  final String? remark;
+  // ── เช็ค / โอน / ตั๋ว ──
+  final String? drawerBankName;     // ธนาคารผู้ออกเช็ค / ต้นทาง
+  final String? drawerBankBranch;   // สาขา
+  final String? drawerAccountNo;    // เลขที่บัญชี (เจ้าของเช็ค/ต้นทาง)
+  // ── บัตรเครดิต / เดบิต ──
+  final String? cardType;           // VISA/MASTERCARD/AMEX/JCB/UNIONPAY/OTHER
+  final String? cardLast4;          // 4 หลักท้าย
+  final String? approvalCode;       // รหัสอนุมัติ (Authorization Code)
+  final String? terminalId;         // รหัสเครื่อง EDC
+  final String? batchNo;            // เลขที่ Batch
+  // ── from join ──
+  final String? glAccountCode;
+  final String? glAccountName;
+  final String? bankAccountCode;
+  final String? bankAccountNameTh;
+  final String? bankNameTh;
+
+  const ArTransactionPayment({
+    this.id = 0,
+    this.headerId = 0,
+    this.lineNo = 1,
+    this.paymentMethodId,
+    this.paymentMethodCode,
+    this.paymentMethodName,
+    this.paymentMethodType = 'CASH',
+    this.cmBankAccountId,
+    this.glAccountId,
+    this.amountLc = 0,
+    this.amountFc = 0,
+    this.refNo,
+    this.paymentDate,
+    this.remark,
+    this.drawerBankName,
+    this.drawerBankBranch,
+    this.drawerAccountNo,
+    this.cardType,
+    this.cardLast4,
+    this.approvalCode,
+    this.terminalId,
+    this.batchNo,
+    this.glAccountCode,
+    this.glAccountName,
+    this.bankAccountCode,
+    this.bankAccountNameTh,
+    this.bankNameTh,
+  });
+
+  factory ArTransactionPayment.fromJson(Map<String, dynamic> j) {
+    return ArTransactionPayment(
+      id: j['id'] as int? ?? 0,
+      headerId: j['header_id'] as int? ?? 0,
+      lineNo: j['line_no'] as int? ?? 1,
+      paymentMethodId: j['payment_method_id'] as int?,
+      paymentMethodCode: j['payment_method_code'],
+      paymentMethodName: j['payment_method_name'],
+      paymentMethodType: j['payment_method_type'] as String? ?? 'CASH',
+      cmBankAccountId: j['cm_bank_account_id'] as int?,
+      glAccountId: j['gl_account_id'] as int?,
+      amountLc: _toDouble(j['amount_lc']) ?? 0,
+      amountFc: _toDouble(j['amount_fc']) ?? 0,
+      refNo: j['ref_no'],
+      paymentDate: j['payment_date'] != null ? DateTime.tryParse(j['payment_date'].toString()) : null,
+      remark: j['remark'],
+      drawerBankName: j['drawer_bank_name'],
+      drawerBankBranch: j['drawer_bank_branch'],
+      drawerAccountNo: j['drawer_account_no'],
+      cardType: j['card_type'],
+      cardLast4: j['card_last4'],
+      approvalCode: j['approval_code'],
+      terminalId: j['terminal_id'],
+      batchNo: j['batch_no'],
+      glAccountCode: j['gl_account_code'],
+      glAccountName: j['gl_account_name'],
+      bankAccountCode: j['bank_account_code'],
+      bankAccountNameTh: j['bank_account_name_th'],
+      bankNameTh: j['bank_name_th'],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'header_id': headerId,
+        'line_no': lineNo,
+        'payment_method_id': paymentMethodId,
+        'payment_method_code': paymentMethodCode,
+        'payment_method_name': paymentMethodName,
+        'payment_method_type': paymentMethodType,
+        'cm_bank_account_id': cmBankAccountId,
+        'gl_account_id': glAccountId,
+        'amount_lc': amountLc,
+        'amount_fc': amountFc,
+        'ref_no': refNo,
+        'payment_date': paymentDate?.toIso8601String().substring(0, 10),
+        'remark': remark,
+        'drawer_bank_name': drawerBankName,
+        'drawer_bank_branch': drawerBankBranch,
+        'drawer_account_no': drawerAccountNo,
+        'card_type': cardType,
+        'card_last4': cardLast4,
+        'approval_code': approvalCode,
+        'terminal_id': terminalId,
+        'batch_no': batchNo,
+      };
+}
+
+// ---- Full Transaction (header + details + applies + whts + payments) ----
 class ArTransaction {
   final ArTransactionHeader header;
   final List<ArTransactionDetail> details;
   final List<ArTransactionApply> applies;
+  final List<ArTransactionWht> whts;
+  final List<ArTransactionPayment> payments;
 
   const ArTransaction({
     required this.header,
     this.details = const [],
     this.applies = const [],
+    this.whts = const [],
+    this.payments = const [],
   });
 
   factory ArTransaction.fromJson(Map<String, dynamic> j) {
@@ -397,6 +633,12 @@ class ArTransaction {
           .toList(),
       applies: (j['applies'] as List<dynamic>? ?? [])
           .map((a) => ArTransactionApply.fromJson(a as Map<String, dynamic>))
+          .toList(),
+      whts: (j['whts'] as List<dynamic>? ?? [])
+          .map((w) => ArTransactionWht.fromJson(w as Map<String, dynamic>))
+          .toList(),
+      payments: (j['payments'] as List<dynamic>? ?? [])
+          .map((p) => ArTransactionPayment.fromJson(p as Map<String, dynamic>))
           .toList(),
     );
   }

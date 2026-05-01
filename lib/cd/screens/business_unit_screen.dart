@@ -285,6 +285,16 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
         title: const Row(children: [Icon(Icons.corporate_fare, color: Colors.white, size: 20), SizedBox(width: 8), Text('ผังหน่วยงาน')]),
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listWidgetKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
+        ],
         // actions: [
         //   // ปุ่ม Import/Export
         //   if (_isImportOrExport)

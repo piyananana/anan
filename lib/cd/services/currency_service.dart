@@ -17,6 +17,25 @@ class CurrencyService {
   final String baseUrl = AppConfig.apiCd;
   final AuthService authService = AuthService();
 
+  // Cache สกุลเงินหลัก (base currency) — โหลดครั้งเดียว
+  String? _cachedBaseCurrencyCode;
+
+  /// คืนรหัสสกุลเงินหลัก (baseCurrencyFlag = true) พร้อม cache
+  Future<String> getBaseCurrencyCode() async {
+    if (_cachedBaseCurrencyCode != null) return _cachedBaseCurrencyCode!;
+    try {
+      final currencies = await fetchActiveRows();
+      _cachedBaseCurrencyCode = currencies
+          .cast<Currency?>()
+          .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)
+          ?.currencyCode;
+    } catch (_) {}
+    return _cachedBaseCurrencyCode ?? 'THB';
+  }
+
+  /// ล้าง cache เมื่อมีการแก้ไขข้อมูลสกุลเงิน
+  void clearBaseCurrencyCache() => _cachedBaseCurrencyCode = null;
+
   Future<List<Currency>> fetchRows() async {
     final headers = await authService.getAuthHeader();
     final response = await http.get(
@@ -76,6 +95,7 @@ class CurrencyService {
     );
 
     if (response.statusCode == 201) {
+      clearBaseCurrencyCache();
       return Currency.fromJson(json.decode(response.body));
     } else if (response.statusCode == 401 || response.statusCode == 403) {
       authService.logout();
@@ -104,6 +124,7 @@ class CurrencyService {
     );
 
     if (response.statusCode == 200) {
+      clearBaseCurrencyCache();
       return Currency.fromJson(json.decode(response.body));
     } else if (response.statusCode == 401 || response.statusCode == 403) {
       authService.logout();
