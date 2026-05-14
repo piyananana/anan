@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../gl/models/period.dart';
 import '../../gl/services/period_service.dart';
 import '../../gl/services/balance_sheet_report_service.dart';
+import '../../sa/models/user_branch.dart';
 import '../../sa/services/auth_service.dart';
 
 class BalanceSheetReportScreen extends StatefulWidget {
@@ -35,6 +37,8 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
 
   FiscalYear? _selectedYear;
   PostingPeriod? _selectedPeriod;
+  List<UserBranch> _allowedBranches = [];
+  int? _selectedBranchId;
   bool _pageBreakPerType = false;
   bool _isLoading = false;
   bool _isFilterExpanded = true;
@@ -44,6 +48,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
   @override
   void initState() {
     super.initState();
+    _allowedBranches = authService.allowedBranches;
     _loadMasterData();
   }
 
@@ -93,6 +98,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
       final data = await _reportService.getBalanceSheet(
         fiscalYearId: _selectedYear!.id,
         periodId: _selectedPeriod?.id,
+        branchId: _selectedBranchId,
       );
       if (data.isEmpty) {
         if (mounted) {
@@ -196,8 +202,10 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final doc = pw.Document();
-    final font = await PdfGoogleFonts.sarabunRegular();
-    final fontBold = await PdfGoogleFonts.sarabunBold();
+    final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
+    final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
+    final font = pw.Font.ttf(fontData);
+    final fontBold = pw.Font.ttf(fontBoldData);
 
     final companyName = _company?.thaiName ?? "(ไม่ระบุชื่อบริษัท)";
     final userName = headers['UserName'] ?? "(ไม่ระบุชื่อ)";
@@ -265,7 +273,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         final level = _accountLevels[id] ?? 0;
         final indent = level * 12.0;
         final showAmt = showAmountIds.contains(id);
-        const textStyle = pw.TextStyle(fontSize: 10);
+        const textStyle = pw.TextStyle(fontSize: 12);
 
         final displayVal = showAmt ? endBal(row) : 0.0;
         String amtStr = "";
@@ -318,7 +326,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         color: PdfColors.grey300,
         child: pw.Text(
           title,
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
         ),
       );
     }
@@ -344,7 +352,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text(label,
                       style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                          fontWeight: pw.FontWeight.bold, fontSize: 12)),
                 ),
               ),
               pw.Container(
@@ -357,7 +365,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text(fmtTotal(total),
                       style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                          fontWeight: pw.FontWeight.bold, fontSize: 12)),
                 ),
               ),
             ]),
@@ -388,7 +396,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text("รวมหนี้สินและส่วนของเจ้าของ",
                       style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                          fontWeight: pw.FontWeight.bold, fontSize: 12)),
                 ),
               ),
               pw.Container(
@@ -402,7 +410,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text(fmtTotal(total),
                       style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                          fontWeight: pw.FontWeight.bold, fontSize: 12)),
                 ),
               ),
             ]),
@@ -420,21 +428,21 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
           pw.Expanded(
               flex: 3,
               child:
-                  pw.Text(companyName, style: const pw.TextStyle(fontSize: 10))),
+                  pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
           pw.Expanded(
               flex: 7,
               child: pw.Text(
                 "งบดุล (Balance Sheet)",
                 textAlign: pw.TextAlign.center,
                 style:
-                    pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                    pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
               )),
           pw.Expanded(
               flex: 3,
               child: pw.Text(
                 "หน้า ${context.pageNumber}/${context.pagesCount}",
                 textAlign: pw.TextAlign.right,
-                style: const pw.TextStyle(fontSize: 10),
+                style: const pw.TextStyle(fontSize: 12),
               )),
         ]),
         pw.SizedBox(height: 4),
@@ -444,24 +452,24 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
               flex: 7,
               child: pw.Text(asOfLabel,
                   textAlign: pw.TextAlign.center,
-                  style: const pw.TextStyle(fontSize: 10))),
+                  style: const pw.TextStyle(fontSize: 12))),
           pw.Expanded(
               flex: 3,
               child: pw.Text("พิมพ์โดย $userName",
                   textAlign: pw.TextAlign.right,
-                  style: const pw.TextStyle(fontSize: 10))),
+                  style: const pw.TextStyle(fontSize: 12))),
         ]),
         pw.SizedBox(height: 4),
         pw.Row(children: [
           pw.Expanded(
               flex: 10,
               child: pw.Text("ปีบัญชี: ${_selectedYear?.fyCode ?? ''}",
-                  style: const pw.TextStyle(fontSize: 8))),
+                  style: const pw.TextStyle(fontSize: 10))),
           pw.Expanded(
               flex: 3,
               child: pw.Text("พิมพ์เมื่อ $printDateStr",
                   textAlign: pw.TextAlign.right,
-                  style: const pw.TextStyle(fontSize: 10))),
+                  style: const pw.TextStyle(fontSize: 12))),
         ]),
         pw.SizedBox(height: 6),
         pw.Divider(thickness: 0.5),
@@ -603,6 +611,23 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                       onChanged: (val) =>
                           setState(() => _selectedPeriod = val),
                     ),
+                    if (_allowedBranches.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<int?>(
+                        value: _selectedBranchId,
+                        decoration: const InputDecoration(
+                            labelText: 'สาขา',
+                            border: OutlineInputBorder()),
+                        items: [
+                          const DropdownMenuItem<int?>(value: null, child: Text('— ทุกสาขา —')),
+                          ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
+                              value: b.branchId,
+                              child: Text('${b.branchCode}  ${b.branchNameThai}',
+                                  overflow: TextOverflow.ellipsis))),
+                        ],
+                        onChanged: (val) => setState(() => _selectedBranchId = val),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     const Divider(),
                     // Switch: ขึ้นหน้าใหม่ทุกหมวด

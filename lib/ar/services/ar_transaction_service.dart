@@ -5,6 +5,31 @@ import '../../sa/services/auth_service.dart';
 import '../../sa/models/module_document.dart';
 import '../models/ar_transaction.dart';
 
+class BcAlreadyPaidException implements Exception {
+  final String receiptDocNo;
+  const BcAlreadyPaidException(this.receiptDocNo);
+}
+
+// แปลง error message แบบ multiline → single line
+String _formatApiError(String rawBody) {
+  try {
+    final err = jsonDecode(rawBody) as Map<String, dynamic>;
+    final raw = (err['error'] as String? ?? '').trim();
+    if (raw.isEmpty) return rawBody;
+    if (raw.contains('\n')) {
+      final parts = raw.split('\n');
+      final head = parts.first.replaceFirst(RegExp(r':$'), '').trim();
+      final detail = parts.skip(1)
+          .map((l) => l.replaceAll(': ต้องระบุ', ' ต้องระบุ').replaceAll(RegExp(r':$'), '').trim())
+          .join(', ');
+      return detail.isNotEmpty ? '$head: $detail' : head;
+    }
+    return raw;
+  } catch (_) {
+    return rawBody;
+  }
+}
+
 class ArTransactionService {
   final String baseUrl = AppConfig.apiAr;
   final AuthService authService = AuthService();
@@ -33,6 +58,12 @@ class ArTransactionService {
     int? customerId,
     String? dateFrom,
     String? dateTo,
+    int? branchId,
+    int? dim1Id,
+    int? dim2Id,
+    int? dim3Id,
+    int? dim4Id,
+    int? dim5Id,
   }) async {
     final headers = await authService.getAuthHeader();
     final queryParams = <String, String>{};
@@ -42,6 +73,12 @@ class ArTransactionService {
     if (customerId != null) queryParams['customer_id'] = customerId.toString();
     if (dateFrom != null) queryParams['date_from'] = dateFrom;
     if (dateTo != null) queryParams['date_to'] = dateTo;
+    if (branchId != null) queryParams['branch_id'] = branchId.toString();
+    if (dim1Id != null) queryParams['dim1_id'] = dim1Id.toString();
+    if (dim2Id != null) queryParams['dim2_id'] = dim2Id.toString();
+    if (dim3Id != null) queryParams['dim3_id'] = dim3Id.toString();
+    if (dim4Id != null) queryParams['dim4_id'] = dim4Id.toString();
+    if (dim5Id != null) queryParams['dim5_id'] = dim5Id.toString();
 
     final uri = Uri.parse('$baseUrl/ar_transaction').replace(queryParameters: queryParams);
     final response = await http.get(uri, headers: headers);
@@ -100,8 +137,7 @@ class ArTransactionService {
       authService.logout();
       throw Exception('Unauthorized');
     } else {
-      final err = jsonDecode(response.body);
-      throw Exception(err['error'] ?? 'Failed to create transaction');
+      throw Exception(_formatApiError(response.body));
     }
   }
 
@@ -132,8 +168,7 @@ class ArTransactionService {
       authService.logout();
       throw Exception('Unauthorized');
     }
-    final err = jsonDecode(response.body);
-    throw Exception(err['error'] ?? 'Failed to update transaction');
+    throw Exception(_formatApiError(response.body));
   }
 
   // Void transaction
@@ -224,6 +259,50 @@ class ArTransactionService {
       throw Exception('Unauthorized');
     } else {
       throw Exception('Failed to load open advances for refund: ${response.statusCode}');
+    }
+  }
+
+  // ดึงข้อมูลวางบิลของแต่ละ invoice สำหรับลูกค้า (invoice_id → bc info)
+  Future<Map<int, Map<String, dynamic>>> fetchInvoiceBillingSummary(int customerId) async {
+    final headers = await authService.getAuthHeader();
+    final uri = Uri.parse('$baseUrl/ar_transaction/invoice_billing_summary')
+        .replace(queryParameters: {'customer_id': customerId.toString()});
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      final List rows = jsonDecode(response.body);
+      return {
+        for (final r in rows)
+          (r['invoice_id'] as num).toInt(): Map<String, dynamic>.from(r as Map)
+      };
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized');
+    } else {
+      throw Exception('Failed to load billing summary: ${response.statusCode}');
+    }
+  }
+
+  // Fetch Bill Collection document by doc_no (for Receipt auto-fill)
+  // throws BcAlreadyPaidException (409) ถ้า BC ถูกชำระแล้ว
+  Future<ArTransaction?> fetchBillCollectionByDocNo(String docNo) async {
+    final headers = await authService.getAuthHeader();
+    final uri = Uri.parse('$baseUrl/ar_transaction/bill_collection_by_doc_no')
+        .replace(queryParameters: {'doc_no': docNo});
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      if (json == null) return null;
+      return ArTransaction.fromJson(json as Map<String, dynamic>);
+    } else if (response.statusCode == 404) {
+      return null;
+    } else if (response.statusCode == 409) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      throw BcAlreadyPaidException(body['receipt_doc_no'] as String? ?? '');
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized');
+    } else {
+      throw Exception('Failed to fetch bill collection: ${response.statusCode}');
     }
   }
 

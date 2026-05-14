@@ -10,10 +10,12 @@ class IncomeStatementReportService {
   Future<List<Map<String, dynamic>>> getIncomeStatement({
     required int fiscalYearId,
     int? periodId,
+    int? branchId,
   }) async {
     final headers = await _authService.getAuthHeader();
     String query = 'fiscal_year_id=$fiscalYearId';
     if (periodId != null) query += '&period_id=$periodId';
+    if (branchId != null) query += '&branch_id=$branchId';
 
     final response = await http.get(
       Uri.parse('$baseUrl/gl_income_statement?$query'),

@@ -22,16 +22,31 @@ class FinancialReportService {
     }
   }
 
-  Future<Map<String, dynamic>> generateReport(int reportId, int basePeriodId) async {
+  Future<Map<String, dynamic>> generateReport(
+    int reportId,
+    int basePeriodId, {
+    int? branchId,
+    int? dim1Id,
+    int? dim2Id,
+    int? dim3Id,
+    int? dim4Id,
+    int? dim5Id,
+  }) async {
     final headers = await authService.getAuthHeader();
     headers['Content-Type'] = 'application/json';
 
     final res = await http.post(
-      Uri.parse('$baseUrl/gl_financial_report_engine'), // ผูก Route นี้เข้ากับ Controller ด้วยนะครับ
+      Uri.parse('$baseUrl/gl_financial_report_engine'),
       headers: headers,
       body: jsonEncode(<String, dynamic>{
         'report_id': reportId,
         'base_period_id': basePeriodId,
+        if (branchId != null) 'branch_id': branchId,
+        if (dim1Id != null) 'dim1_id': dim1Id,
+        if (dim2Id != null) 'dim2_id': dim2Id,
+        if (dim3Id != null) 'dim3_id': dim3Id,
+        if (dim4Id != null) 'dim4_id': dim4Id,
+        if (dim5Id != null) 'dim5_id': dim5Id,
       }),
     );
 

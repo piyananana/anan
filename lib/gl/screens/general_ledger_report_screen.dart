@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import '../../gl/services/general_ledger_report_service.dart';
 import '../../cd/services/branch_service.dart';
 import '../../cd/services/business_unit_service.dart';
 import '../../cd/services/project_service.dart';
+import '../../sa/models/user_branch.dart';
 import '../../sa/services/auth_service.dart';
 
 class GeneralLedgerReportScreen extends StatefulWidget {
@@ -42,6 +44,9 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   Company? _company;
   List<FiscalYear> _fiscalYears = [];
   List<PostingPeriod> _periods = [];
+  List<dynamic> _branchList = []; // [{id, branchCode, branchNameThai}]
+  List<UserBranch> _allowedBranches = [];
+  int? _selectedBranchId;
   List<Account> _controlAccounts = [];
   
   // Master Data Maps
@@ -71,6 +76,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   @override
   void initState() {
     super.initState();
+    _allowedBranches = authService.allowedBranches;
     _loadMasterData();
   }
 
@@ -95,7 +101,12 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
       final branches = await _branchService.fetchRows();
       final bus = await _buService.fetchRows();
       final projects = await _projectService.fetchRows();
-      
+
+      _branchList = branches
+          .map((b) => {'id': b.id, 'code': b.branchCode, 'name': b.branchNameThai})
+          .toList()
+        ..sort((a, b) => (a['code'] as String).compareTo(b['code'] as String));
+
       // โหลดเฉพาะบัญชีคุม (Control Account) สำหรับตัวกรอง
       _controlAccounts = await _accountService.fetchRowsControlAccount()
         ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
@@ -250,6 +261,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
       _beginningBalances = await _reportService.fetchBeginningBalance(
         fiscalYearId: _selectedYear!.id,
         periodId: _selectedPeriod?.id,
+        branchId: _selectedBranchId,
       );
 
       // 2. ดึงรายการเคลื่อนไหวจาก API
@@ -258,6 +270,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         fiscalYearId: _selectedYear!.id,
         accountFrom: _accountFrom?.accountCode,
         accountTo: _accountTo?.accountCode,
+        branchId: _selectedBranchId,
       );
 
       if (_beginningBalances.isEmpty && _transactions.isEmpty) {
@@ -294,8 +307,10 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   // --- สร้าง PDF ---
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final doc = pw.Document();
-    final font = await PdfGoogleFonts.sarabunRegular();
-    final fontBold = await PdfGoogleFonts.sarabunBold();
+    final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
+    final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
+    final font = pw.Font.ttf(fontData);
+    final fontBold = pw.Font.ttf(fontBoldData);
 
     String companyName = _company != null ? _company!.thaiName : "(ไม่ระบุชื่อบริษัท)";
     final String userName = headers['UserName'] ?? "(ไม่ระบุชื่อ)";
@@ -315,26 +330,26 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
-              pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 10))),
-              pw.Expanded(flex: 7, child: pw.Text("บัญชีแยกประเภท (General Ledger)", textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold))),
-              pw.Expanded(flex: 3, child: pw.Text("หน้า ${context.pageNumber}/${context.pagesCount}", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10)))
+              pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
+              pw.Expanded(flex: 7, child: pw.Text("บัญชีแยกประเภท (General Ledger)", textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
+              pw.Expanded(flex: 3, child: pw.Text("หน้า ${context.pageNumber}/${context.pagesCount}", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12)))
             ],
           ),
           pw.SizedBox(height: 4),
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
-              pw.Expanded(flex: 3, child: pw.Text("", style: const pw.TextStyle(fontSize: 10))),
-              pw.Expanded(flex: 7, child: pw.Text(periodLine, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10))),
-              pw.Expanded(flex: 3, child: pw.Text("พิมพ์โดย $userName", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10)))
+              pw.Expanded(flex: 3, child: pw.Text("", style: const pw.TextStyle(fontSize: 12))),
+              pw.Expanded(flex: 7, child: pw.Text(periodLine, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 12))),
+              pw.Expanded(flex: 3, child: pw.Text("พิมพ์โดย $userName", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12)))
             ],
           ),
           pw.SizedBox(height: 4),
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
-              pw.Expanded(flex: 10, child: pw.Text(conditionLine, textAlign: pw.TextAlign.left, style: const pw.TextStyle(fontSize: 8))),
-              pw.Expanded(flex: 3, child: pw.Text("พิมพ์เมื่อ $printDateStr", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10)))
+              pw.Expanded(flex: 10, child: pw.Text(conditionLine, textAlign: pw.TextAlign.left, style: const pw.TextStyle(fontSize: 10))),
+              pw.Expanded(flex: 3, child: pw.Text("พิมพ์เมื่อ $printDateStr", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12)))
             ],
           ),
           pw.SizedBox(height: 4),
@@ -351,7 +366,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
               pw.TableRow(
                 decoration: const pw.BoxDecoration(color: PdfColors.grey200),
                 children: ["วันที่เอกสาร", "ประเภท\nเอกสาร", "เลขที่ใบสำคัญ", "ลำดับ", "ประเภท\nอ้างอิง", "เลขที่อ้างอิง", "วันที่อ้างอิง", "อธิบายรายการ", "เดบิต", "เครดิต", "ยกมา/สะสม\n/ยกไป"]
-                    .map((t) => pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Text(t, textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))))
+                    .map((t) => pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Text(t, textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))))
                     .toList(),
               ),
             ]
@@ -371,7 +386,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
           if ([0, 1, 3, 4, 6].contains(idx)) align = pw.TextAlign.center;
           return pw.Padding(
             padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-            child: pw.Text(entry.value, textAlign: align, style: pw.TextStyle(fontSize: 8, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+            child: pw.Text(entry.value, textAlign: align, style: pw.TextStyle(fontSize: 10, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
           );
         }).toList(),
       );
@@ -426,7 +441,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         });
       }
 
-      // เรียงตามรหัสบัญชี -> สาขา -> หน่วยงาน -> โครงการ
+      // เรียงตามรหัสบัญชี -> สาขา -> มิติ
       entries.sort((a, b) {
         int cmp = (a['accCode'] as String).compareTo(b['accCode'] as String);
         if (cmp != 0) return cmp;
@@ -487,11 +502,11 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
               children: [
                 pw.Padding(
                   padding: const pw.EdgeInsets.all(4),
-                  child: pw.Text("รหัส/ชื่อบัญชี: $accName ${dims.isNotEmpty ? '($dims)' : ''}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))
+                  child: pw.Text("รหัส/ชื่อบัญชี: $accName ${dims.isNotEmpty ? '($dims)' : ''}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))
                 ),
                 pw.Padding(
                   padding: const pw.EdgeInsets.all(4),
-                  child: pw.Text(fmt.format(runningBalance), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))
+                  child: pw.Text(fmt.format(runningBalance), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))
                 )
               ]
             )
@@ -543,10 +558,10 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("ยอดรวมเดบิต / เครดิต / ยกไป", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(transactions.isEmpty ? '' : fmt.format(sumDr), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(transactions.isEmpty ? '' : fmt.format(sumCr), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(fmt.format(runningBalance), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("ยอดรวมเดบิต / เครดิต / ยกไป", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(transactions.isEmpty ? '' : fmt.format(sumDr), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(transactions.isEmpty ? '' : fmt.format(sumCr), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(fmt.format(runningBalance), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
               ]
             )
           ]
@@ -664,6 +679,23 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                       decoration: const InputDecoration(labelText: 'งวดเดือน', border: OutlineInputBorder()),
                       onChanged: (val) => setState(() => _selectedPeriod = val),
                     ),
+                    const SizedBox(height: 16),
+                    if (_allowedBranches.isNotEmpty) ...[
+                      DropdownButtonFormField<int?>(
+                        value: _selectedBranchId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'สาขา', border: OutlineInputBorder()),
+                        items: [
+                          const DropdownMenuItem<int?>(value: null, child: Text('— ทุกสาขา —')),
+                          ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
+                            value: b.branchId,
+                            child: Text('${b.branchCode}  ${b.branchNameThai}', overflow: TextOverflow.ellipsis),
+                          )),
+                        ],
+                        onChanged: (val) => setState(() => _selectedBranchId = val),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     const SizedBox(height: 16),
                     InputDecorator(
                       decoration: const InputDecoration(

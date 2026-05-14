@@ -36,6 +36,11 @@ class GlEntryHeader {
   DateTime? refDocDate; // วันที่เอกสารอ้างอิง
   int? externalSourceId; // ID จากระบบต้นทาง
 
+  // สาขา — ระดับ document ทั้งใบ (ย้ายมาจาก detail เพราะสาขาเป็น structural entity)
+  int? branchId;
+  String? branchCode;
+  String? branchName;
+
   GlEntryHeader({
     this.id = 0,
     required this.docId,
@@ -63,6 +68,9 @@ class GlEntryHeader {
     this.refDocNo,
     this.refDocDate,
     this.externalSourceId,
+    this.branchId,
+    this.branchCode,
+    this.branchName,
   });
 
   factory GlEntryHeader.fromJson(Map<String, dynamic> json) {
@@ -94,11 +102,14 @@ class GlEntryHeader {
       exchangeRate: double.tryParse(json['exchange_rate'].toString()) ?? 1.0,
       isAutoNumbering: json['is_auto_numbering'] ?? false,
       refDocId: json['ref_doc_id'],
-      refDocCode: json['ref_doc_code'], // จากการ JOIN ใน Controller
-      refDocName: json['ref_doc_name'], // จากการ JOIN ใน Controller
+      refDocCode: json['ref_doc_code'],
+      refDocName: json['ref_doc_name'],
       refDocNo: json['ref_doc_no'],
       refDocDate: json['ref_doc_date'] != null ? parseLocalDate(json['ref_doc_date']) : null,
       externalSourceId: json['external_source_id'],
+      branchId: json['branch_id'] as int?,
+      branchCode: json['branch_code'] as String?,
+      branchName: json['branch_name_thai'] as String?,
     );
   }
 
@@ -125,6 +136,7 @@ class GlEntryHeader {
       'ref_doc_no': refDocNo,
       'ref_doc_date': refDocDate != null ? formatLocalDate(refDocDate!) : null,
       'external_source_id': externalSourceId,
+      'branch_id': branchId,
     };
   }
 }
@@ -143,15 +155,12 @@ class GlEntryDetail {
   double debitLc; // Calculated (FC * Rate)
   double creditLc; // Calculated (FC * Rate)
 
-  int? branchId;
-  String? branchCode; // Display
-  String? branchName; // Display
-  int? projectId;
-  String? projectCode; // Display
-  String? projectName; // Display
-  int? businessUnitId;
-  String? businessUnitCode; // Display
-  String? businessUnitName; // Display
+  // Configurable dimensions (dim1–dim5)
+  int? dim1Id; String? dim1Code; String? dim1Name;
+  int? dim2Id; String? dim2Code; String? dim2Name;
+  int? dim3Id; String? dim3Code; String? dim3Name;
+  int? dim4Id; String? dim4Code; String? dim4Name;
+  int? dim5Id; String? dim5Code; String? dim5Name;
 
   GlEntryDetail({
     this.id = 0,
@@ -159,48 +168,49 @@ class GlEntryDetail {
     this.accountCode = '',
     this.accountName = '',
     this.description = '',
-    // this.debit = 0.0,
-    // this.credit = 0.0,
     this.debitFc = 0.0,
     this.creditFc = 0.0,
     this.debitLc = 0.0,
     this.creditLc = 0.0,
-    this.branchId,
-    this.branchCode = '',
-    this.branchName = '',
-    this.projectId,
-    this.projectCode = '',
-    this.projectName = '',
-    this.businessUnitId,
-    this.businessUnitCode = '',
-    this.businessUnitName = '',
+    this.dim1Id, this.dim1Code, this.dim1Name,
+    this.dim2Id, this.dim2Code, this.dim2Name,
+    this.dim3Id, this.dim3Code, this.dim3Name,
+    this.dim4Id, this.dim4Code, this.dim4Name,
+    this.dim5Id, this.dim5Code, this.dim5Name,
   });
 
   factory GlEntryDetail.fromJson(Map<String, dynamic> json) {
     return GlEntryDetail(
-      id: json['id'] ?? 0,
-      accountId: json['account_id'] ?? 0,
+      id:          json['id'] ?? 0,
+      accountId:   json['account_id'] ?? 0,
       accountCode: json['account_code'] ?? '',
       accountName: json['account_name_thai'] ?? '',
       description: json['description'] ?? '',
-      // debit: double.tryParse(json['debit_lc'].toString()) ?? 0.0,
-      // credit: double.tryParse(json['credit_lc'].toString()) ?? 0.0,
-      // Map FC & LC
-      debitFc: double.tryParse(json['debit_fc'].toString()) ?? 0.0,
-      creditFc: double.tryParse(json['credit_fc'].toString()) ?? 0.0,
-      debitLc: double.tryParse(json['debit_lc'].toString()) ?? 0.0,
-      creditLc: double.tryParse(json['credit_lc'].toString()) ?? 0.0,
-      branchId: json['branch_id'],
-      branchCode: json['branch_code'] ?? '',
-      branchName: json['branch_name_thai'] ?? '',
-      projectId: json['project_id'],
-      projectCode: json['project_code'] ?? '',
-      projectName: json['project_name_thai'] ?? '',
-      businessUnitId: json['business_unit_id'],
-      businessUnitCode: json['bu_code'] ?? '',
-      businessUnitName: json['bu_name_thai'] ?? '',
+      debitFc:     double.tryParse(json['debit_fc'].toString()) ?? 0.0,
+      creditFc:    double.tryParse(json['credit_fc'].toString()) ?? 0.0,
+      debitLc:     double.tryParse(json['debit_lc'].toString()) ?? 0.0,
+      creditLc:    double.tryParse(json['credit_lc'].toString()) ?? 0.0,
+      dim1Id:   json['dim1_id'] as int?,   dim1Code: json['dim1_code'] as String?, dim1Name: json['dim1_name'] as String?,
+      dim2Id:   json['dim2_id'] as int?,   dim2Code: json['dim2_code'] as String?, dim2Name: json['dim2_name'] as String?,
+      dim3Id:   json['dim3_id'] as int?,   dim3Code: json['dim3_code'] as String?, dim3Name: json['dim3_name'] as String?,
+      dim4Id:   json['dim4_id'] as int?,   dim4Code: json['dim4_code'] as String?, dim4Name: json['dim4_name'] as String?,
+      dim5Id:   json['dim5_id'] as int?,   dim5Code: json['dim5_code'] as String?, dim5Name: json['dim5_name'] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'account_id':  accountId,
+        'description': description,
+        'debit_fc':    debitFc,
+        'credit_fc':   creditFc,
+        'debit_lc':    debitLc,
+        'credit_lc':   creditLc,
+        'dim1_id':     dim1Id,
+        'dim2_id':     dim2Id,
+        'dim3_id':     dim3Id,
+        'dim4_id':     dim4Id,
+        'dim5_id':     dim5Id,
+      };
 }
 
 // class GlEntryHeader {

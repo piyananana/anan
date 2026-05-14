@@ -5,6 +5,8 @@ import '../../cd/models/currency.dart';
 import '../../cd/services/currency_service.dart';
 import '../../sa/models/anan_module.dart';
 import '../models/account.dart';
+import '../models/gl_dimension.dart';
+import '../services/gl_dimension_service.dart';
 
 class AccountDetailWidget extends StatefulWidget {
   final AccountMode mode;
@@ -41,10 +43,13 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
   late bool _isReconcilable;
   late String _currencyCode; // เลือกจาก cd_currency
   late String _moduleLinkCode; // เลือกจาก sa_module_link
-  late bool _costCenterRequired; // เลือกจาก cd_organization
+  late bool _costCenterRequired;
   late bool _projectRequired;
   late bool _branchRequired;
   late bool _isActive;
+
+  List<GlDimensionType> _dimTypes = [];
+  Map<String, bool> _dimRules = {};
 
   bool _isSaving = false;
 
@@ -82,6 +87,15 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
         .currencyCode;
   }
 
+  void _initDimRules(Account? account) {
+    _dimRules = {for (final r in account?.dimRules ?? []) r.typeCode: r.isRequired};
+  }
+
+  Future<void> _loadDimTypes() async {
+    final types = await GlDimensionService().fetchActiveTypes();
+    if (mounted) setState(() => _dimTypes = types);
+  }
+
   Future<void> _fetchCurrencyLists() async {
     setState(() {
       _isLoading = true;
@@ -113,6 +127,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
   void initState() {
     super.initState();
     _fetchCurrencyLists();
+    _loadDimTypes();
 
     _selected = widget.selected;
     _accountCodeController =
@@ -132,6 +147,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _costCenterRequired = false;
       _projectRequired = false;
       _branchRequired = false;
+      _initDimRules(null);
     } else {
       _accountNameThaiController =
           TextEditingController(text: _selected?.accountNameThai ?? '');
@@ -144,9 +160,8 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _costCenterRequired = _selected?.costCenterRequired ?? false;
       _projectRequired = _selected?.projectRequired ?? false;
       _branchRequired = _selected?.branchRequired ?? false;
+      _initDimRules(_selected);
     }
-
-    // โหลดข้อมูลสกุลเงินจาก backend หรือกำหนดค่าเริ่มต้น
   }
 
   @override
@@ -174,6 +189,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
         _costCenterRequired = false;
         _projectRequired = false;
         _branchRequired = false;
+        _initDimRules(null);
       } else {
         _accountNameThaiController =
             TextEditingController(text: _selected?.accountNameThai ?? '');
@@ -186,10 +202,10 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
         _costCenterRequired = _selected?.costCenterRequired ?? false;
         _projectRequired = _selected?.projectRequired ?? false;
         _branchRequired = _selected?.branchRequired ?? false;
+        _initDimRules(_selected);
       }
     } else if (widget.mode == AccountMode.addRoot &&
         oldWidget.mode != AccountMode.addRoot) {
-      // กรณีเปลี่ยนเป็นโหมดเพิ่มข้อมูลใหม่
       _selected = null;
       _accountCodeController.clear();
       _accountNameThaiController.clear();
@@ -206,9 +222,9 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _projectRequired = false;
       _branchRequired = false;
       _isActive = true;
+      _initDimRules(null);
     } else if (widget.mode == AccountMode.addChild &&
         oldWidget.mode != AccountMode.addChild) {
-      // กรณีเปลี่ยนเป็นโหมดเพิ่มข้อมูลใหม่
       _selected = widget.selected;
       _accountCodeController =
           TextEditingController(text: _selected?.accountCode ?? '');
@@ -226,6 +242,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _projectRequired = false;
       _branchRequired = false;
       _isActive = true;
+      _initDimRules(null);
     }
   }
 
@@ -265,6 +282,10 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
           projectRequired: _projectRequired,
           branchRequired: _branchRequired,
           isActive: _isActive,
+          dimRules: _dimRules.entries
+              .where((e) => e.value)
+              .map((e) => GlAccountDimRule(typeCode: e.key, isRequired: true))
+              .toList(),
         );
         await widget.onSubmit(newDetail);
         // if (mounted) {
@@ -555,57 +576,24 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                              'ศูนย์ต้นทุน: ${_costCenterRequired ? 'ต้องระบุเมื่อทำรายการ' : 'ไม่ต้องระบุเมื่อทำรายการ'}'),
-                        ),
-                        Switch(
-                          value: _costCenterRequired,
-                          onChanged: readOnly ? null : (bool value) {
-                            setState(() {
-                              _costCenterRequired = value;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                              'รหัสโครงการ: ${_projectRequired ? 'ต้องระบุเมื่อทำรายการ' : 'ไม่ต้องระบุเมื่อทำรายการ'}'),
-                        ),
-                        Switch(
-                          value: _projectRequired,
-                          onChanged: readOnly ? null : (bool value) {
-                            setState(() {
-                              _projectRequired = value;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                              'รหัสสาขา: ${_branchRequired ? 'ต้องระบุเมื่อทำรายการ' : 'ไม่ต้องระบุเมื่อทำรายการ'}'),
-                        ),
-                        Switch(
-                          value: _branchRequired,
-                          onChanged: readOnly ? null : (bool value) {
-                            setState(() {
-                              _branchRequired = value;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
+                    ..._dimTypes.expand((t) {
+                      final enabled = _dimRules[t.typeCode] ?? false;
+                      return [
+                        const SizedBox(height: 16),
+                        Row(children: [
+                          Expanded(
+                            child: Text(
+                                '${t.nameThai}: ${enabled ? 'ต้องระบุเมื่อทำรายการ' : 'ไม่ต้องระบุเมื่อทำรายการ'}'),
+                          ),
+                          Switch(
+                            value: enabled,
+                            onChanged: readOnly
+                                ? null
+                                : (v) => setState(() => _dimRules[t.typeCode] = v),
+                          ),
+                        ]),
+                      ];
+                    }),
                   ])
                 : const SizedBox.shrink(),
             const SizedBox(height: 32),

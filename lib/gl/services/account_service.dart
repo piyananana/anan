@@ -122,6 +122,7 @@ class AccountService {
         'project_required': data.projectRequired,
         'branch_required': data.branchRequired,
         'is_active': data.isActive,
+        'dim_rules': data.dimRules.map((r) => r.toJson()).toList(),
       }),
     );
 
@@ -158,6 +159,7 @@ class AccountService {
         'project_required': data.projectRequired,
         'branch_required': data.branchRequired,
         'is_active': data.isActive,
+        'dim_rules': data.dimRules.map((r) => r.toJson()).toList(),
       }),
     );
 

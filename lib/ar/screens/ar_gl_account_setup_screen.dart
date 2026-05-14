@@ -434,10 +434,10 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
   bool get _showRevenue  => ['10','30','35','50','55'].contains(_sdt);        // Invoice, DN, DN+Bill, CN, CN+Bill
   bool get _showVat      => _sdt != '';                                       // ทุก doc type
   bool get _showDiscount => ['10','30','35'].contains(_sdt);                  // Invoice, DN, DN+Bill
-  bool get _showAdvance  => ['60','65','70'].contains(_sdt);                  // Advance, Refund, Receipt
-  bool get _showCash     => ['60','65','70'].contains(_sdt);                  // Advance, Refund, Receipt
-  bool get _showWht      => _sdt == '70';                                     // Receipt เท่านั้น
-  bool get _showFx       => _sdt == '70';                                     // Receipt เท่านั้น
+  bool get _showAdvance  => ['60','65','80'].contains(_sdt);                  // Advance, Refund, Receipt
+  bool get _showCash     => ['60','65','80'].contains(_sdt);                  // Advance, Refund, Receipt
+  bool get _showWht      => _sdt == '80';                                     // Receipt เท่านั้น
+  bool get _showFx       => _sdt == '80';                                     // Receipt เท่านั้น
 
   // ── Account picker helper ─────────────────────────────────────────────────
   Future<void> _pick(String title, void Function(Account) onPicked) async {
@@ -520,7 +520,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
         if (_advanceAccountId != null)  lines.add(_JournalLine('Dr', _advanceAccountCode!, _advanceAccountName!));
         if (_cashAccountId != null)     lines.add(_JournalLine('  Cr', _cashAccountCode!, _cashAccountName!));
         break;
-      case '70':
+      case '80':
         if (_cashAccountId != null)              lines.add(_JournalLine('Dr', _cashAccountCode!, _cashAccountName!));
         if (_whtAccountId != null)               lines.add(_JournalLine('Dr', _whtAccountCode!, '$_whtAccountName (WHT)'));
         if (_advanceAccountId != null)           lines.add(_JournalLine('Dr', _advanceAccountCode!, '$_advanceAccountName (ตัดมัดจำ)'));

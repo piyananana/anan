@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -10,6 +11,7 @@ import '../../gl/services/period_service.dart';
 import '../../gl/services/daily_transaction_report_service.dart';
 import '../../cd/services/branch_service.dart';
 import '../../cd/services/business_unit_service.dart';
+import '../../sa/models/user_branch.dart';
 import '../../cd/services/project_service.dart';
 import '../../sa/models/company.dart';
 import '../../sa/services/auth_service.dart';
@@ -47,6 +49,9 @@ class _DailyTransactionReportScreenState
   Map<int, String> _branchMap = {};
   Map<int, String> _buMap = {};
   Map<int, String> _projectMap = {};
+  List<dynamic> _branchList = [];
+  List<UserBranch> _allowedBranches = [];
+  int? _selectedBranchId;
 
   // Filter state
   FiscalYear? _selectedYear;
@@ -74,6 +79,7 @@ class _DailyTransactionReportScreenState
   @override
   void initState() {
     super.initState();
+    _allowedBranches = _authService.allowedBranches;
     _loadMasterData();
   }
 
@@ -111,6 +117,10 @@ class _DailyTransactionReportScreenState
       final branches = await _branchService.fetchRows();
       final bus = await _buService.fetchRows();
       final projects = await _projectService.fetchRows();
+      _branchList = branches
+          .map((b) => {'id': b.id, 'code': b.branchCode, 'name': b.branchNameThai})
+          .toList()
+        ..sort((a, b) => (a['code'] as String).compareTo(b['code'] as String));
       _branchMap = {for (var e in branches) e.id!: e.branchCode};
       _buMap = {for (var e in bus) e.id!: e.buCode};
       _projectMap = {for (var e in projects) e.id!: e.projectCode};
@@ -177,6 +187,7 @@ class _DailyTransactionReportScreenState
         refDocNoTo: _useRefDocFilter && _refDocNoToCtrl.text.trim().isNotEmpty ? _refDocNoToCtrl.text.trim() : null,
         refDocDateFrom: _useRefDocFilter && _refDocDateFrom != null ? dateFormat.format(_refDocDateFrom!) : null,
         refDocDateTo: _useRefDocFilter && _refDocDateTo != null ? dateFormat.format(_refDocDateTo!) : null,
+        branchId: _selectedBranchId,
       );
       setState(() {
         _reportData = data;
@@ -326,8 +337,10 @@ class _DailyTransactionReportScreenState
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final doc = pw.Document();
-    final font = await PdfGoogleFonts.sarabunRegular();
-    final fontBold = await PdfGoogleFonts.sarabunBold();
+    final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
+    final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
+    final font = pw.Font.ttf(fontData);
+    final fontBold = pw.Font.ttf(fontBoldData);
     final fmt = NumberFormat('#,##0.00', 'en_US');
     final dfmt = DateFormat('dd/MM/yyyy');
 
@@ -366,19 +379,19 @@ class _DailyTransactionReportScreenState
           pw.Expanded(
               flex: 3,
               child: pw.Text(companyName,
-                  style: const pw.TextStyle(fontSize: 10))),
+                  style: const pw.TextStyle(fontSize: 12))),
           pw.Expanded(
               flex: 7,
               child: pw.Text('บันทึกรายการบัญชี (Daily Transaction)',
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(
-                      fontSize: 14, fontWeight: pw.FontWeight.bold))),
+                      fontSize: 16, fontWeight: pw.FontWeight.bold))),
           pw.Expanded(
               flex: 3,
               child: pw.Text(
                   'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
                   textAlign: pw.TextAlign.right,
-                  style: const pw.TextStyle(fontSize: 10))),
+                  style: const pw.TextStyle(fontSize: 12))),
         ]),
         pw.SizedBox(height: 4),
         pw.Row(children: [
@@ -387,12 +400,12 @@ class _DailyTransactionReportScreenState
               flex: 7,
               child: pw.Text('$periodLabel $dateRangeLabel',
                   textAlign: pw.TextAlign.center,
-                  style: const pw.TextStyle(fontSize: 10))),
+                  style: const pw.TextStyle(fontSize: 12))),
           pw.Expanded(
               flex: 3,
               child: pw.Text('พิมพ์โดย $userName',
                   textAlign: pw.TextAlign.right,
-                  style: const pw.TextStyle(fontSize: 10))),
+                  style: const pw.TextStyle(fontSize: 12))),
         ]),
         pw.SizedBox(height: 4),
         pw.Row(children: [
@@ -401,7 +414,7 @@ class _DailyTransactionReportScreenState
               flex: 3,
               child: pw.Text('พิมพ์เมื่อ $printDateStr',
                   textAlign: pw.TextAlign.right,
-                  style: const pw.TextStyle(fontSize: 10))),
+                  style: const pw.TextStyle(fontSize: 12))),
         ]),
         pw.SizedBox(height: 6),
         pw.Divider(thickness: 0.5),
@@ -417,7 +430,7 @@ class _DailyTransactionReportScreenState
               children: [
                 'รหัสบัญชี',
                 'ชื่อบัญชี',
-                'สาขา/หน่วยงาน\n/โครงการ',
+                'สาขา/มิติ',
                 'คำอธิบายรายการ',
                 'เดบิต',
                 'เครดิต',
@@ -432,7 +445,7 @@ class _DailyTransactionReportScreenState
                                 : pw.TextAlign.center,
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 8)),
+                                fontSize: 10)),
                       ))
                   .toList(),
             ),
@@ -484,7 +497,7 @@ class _DailyTransactionReportScreenState
                   '${docNo.isNotEmpty ? '$docNo  ' : ''}'
                   '${description.isNotEmpty ? '| $description' : ''}',
                   style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold, fontSize: 9),
+                      fontWeight: pw.FontWeight.bold, fontSize: 11),
                 ),
               ),
               pw.Padding(
@@ -496,7 +509,7 @@ class _DailyTransactionReportScreenState
                     if (refDocDate.isNotEmpty) refDocDate,
                   ].join('  '),
                   textAlign: pw.TextAlign.right,
-                  style: const pw.TextStyle(fontSize: 9),
+                  style: const pw.TextStyle(fontSize: 11),
                 ),
               ),
             ],
@@ -530,33 +543,33 @@ class _DailyTransactionReportScreenState
           pw.Padding(
               padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
               child: pw.Text(accCode,
-                  style: const pw.TextStyle(fontSize: 8))),
+                  style: const pw.TextStyle(fontSize: 10))),
           pw.Padding(
               padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
               child: pw.Text(accName,
-                  style: const pw.TextStyle(fontSize: 8))),
+                  style: const pw.TextStyle(fontSize: 10))),
           pw.Padding(
               padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
               child: pw.Text(dimStr,
-                  style: const pw.TextStyle(fontSize: 8))),
+                  style: const pw.TextStyle(fontSize: 10))),
           pw.Padding(
               padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
               child: pw.Text(desc,
-                  style: const pw.TextStyle(fontSize: 8))),
+                  style: const pw.TextStyle(fontSize: 10))),
           pw.Padding(
               padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
               child: pw.Align(
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text(
                       dr == 0 ? '' : fmt.format(dr),
-                      style: const pw.TextStyle(fontSize: 8)))),
+                      style: const pw.TextStyle(fontSize: 10)))),
           pw.Padding(
               padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
               child: pw.Align(
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text(
                       cr == 0 ? '' : fmt.format(cr),
-                      style: const pw.TextStyle(fontSize: 8)))),
+                      style: const pw.TextStyle(fontSize: 10)))),
         ]);
       }).toList();
 
@@ -594,7 +607,7 @@ class _DailyTransactionReportScreenState
                     ? pw.SizedBox()
                     : pw.Text('⚠ ไม่ดุล!',
                         style: pw.TextStyle(
-                            fontSize: 8,
+                            fontSize: 10,
                             fontWeight: pw.FontWeight.bold,
                             color: PdfColors.red900)),
               ),
@@ -605,7 +618,7 @@ class _DailyTransactionReportScreenState
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text('ยอดรวมเดบิต / เครดิต',
                       style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                          fontWeight: pw.FontWeight.bold, fontSize: 10)),
                 ),
               ),
               // Total debit
@@ -615,7 +628,7 @@ class _DailyTransactionReportScreenState
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text(fmt.format(sumDr),
                       style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                          fontWeight: pw.FontWeight.bold, fontSize: 10)),
                 ),
               ),
               // Total credit
@@ -625,7 +638,7 @@ class _DailyTransactionReportScreenState
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text(fmt.format(sumCr),
                       style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                          fontWeight: pw.FontWeight.bold, fontSize: 10)),
                 ),
               ),
             ],
@@ -753,6 +766,27 @@ class _DailyTransactionReportScreenState
                                 setState(() => _selectedPeriod = v);
                                 _applyPeriodDefaults(v);
                               },
+                            ),
+                            const SizedBox(height: 12),
+
+                            // ── สาขา ──
+                            if (_allowedBranches.isNotEmpty) DropdownButtonFormField<int?>(
+                              value: _selectedBranchId,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                  labelText: 'สาขา',
+                                  border: OutlineInputBorder()),
+                              items: [
+                                const DropdownMenuItem<int?>(
+                                    value: null, child: Text('— ทุกสาขา —')),
+                                ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
+                                      value: b.branchId,
+                                      child: Text(
+                                          '${b.branchCode}  ${b.branchNameThai}',
+                                          overflow: TextOverflow.ellipsis),
+                                    )),
+                              ],
+                              onChanged: (v) => setState(() => _selectedBranchId = v),
                             ),
                             const SizedBox(height: 14),
 

@@ -8,6 +8,8 @@ import '../screens/group_user_management_screen.dart';
 import '../screens/menu_screen.dart';
 import '../screens/module_document_screen.dart';
 import '../screens/password_policy_screen.dart';
+import '../screens/doc_number_branch_setup_screen.dart';
+import '../screens/doc_number_reset_screen.dart';
 import '../screens/user_document_screen.dart';
 import '../screens/user_menu_screen.dart';
 import '../screens/user_screen.dart';
@@ -36,12 +38,15 @@ import '../../gl/screens/income_statement_report_screen.dart';
 import '../../gl/screens/daily_transaction_report_screen.dart';
 import '../../gl/screens/year_end_closing_screen.dart';
 import '../../gl/screens/year_end_closing_config_screen.dart';
+import '../../gl/screens/gl_dimension_type_screen.dart';
+import '../../gl/screens/gl_dimension_value_screen.dart';
 
 import '../../ar/screens/ar_customer_screen.dart';
 import '../../ar/screens/ar_customer_group_screen.dart';
 import '../../ar/screens/ar_customer_import_screen.dart';
 import '../../ar/screens/ar_customer_running_screen.dart';
 import '../../ar/screens/ar_transaction_screen.dart';
+import '../../ar/screens/ar_aging_report_screen.dart';
 import '../../ar/screens/ar_collector_screen.dart';
 import '../../ar/screens/ar_gl_account_setup_screen.dart';
 
@@ -78,6 +83,8 @@ class Menu {
           onFieldsChanged: () {},
         ),
     'PasswordPolicyScreen': (context) => const PasswordPolicyScreen(),
+    'DocNumberBranchSetupScreen': (context) => const DocNumberBranchSetupScreen(),
+    'DocNumberResetScreen': (context) => const DocNumberResetScreen(),
     'UserDocumentScreen': (context) => const UserDocumentScreen(),
     'UserMenuScreen': (context) => const UserMenuScreen(),
     'UserScreen': (context) => const UserScreen(),
@@ -114,6 +121,8 @@ class Menu {
           onFieldsChanged: () {},
         ),
     'GlEntryScreen': (context) => const GlEntryScreen(),
+    'GlDimensionTypeScreen': (context) => const GlDimensionTypeScreen(),
+    'GlDimensionValueScreen': (context) => const GlDimensionValueScreen(),
     'FinancialReportScreen': (context) => const FinancialReportScreen(),
     'GeneralLedgerReportScreen': (context) => const GeneralLedgerReportScreen(),
     'PeriodScreen': (context) => PeriodScreen(
@@ -136,6 +145,7 @@ class Menu {
     'ArCustomerImportScreen': (context) => ArCustomerImportScreen(onFieldsChanged: () {}),
     'ArCustomerRunningScreen': (context) => const ArCustomerRunningScreen(),
     'ArTransactionScreen': (context) => const ArTransactionScreen(),
+    'ArAgingReportScreen': (context) => const ArAgingReportScreen(),
     'ArCollectorScreen': (context) => ArCollectorScreen(onFieldsChanged: () {}),
     'BankScreen': (context) => BankScreen(onFieldsChanged: () {}),
     'CdWhtTypeScreen': (context) => CdWhtTypeScreen(onFieldsChanged: () {}),

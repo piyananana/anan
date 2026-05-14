@@ -17,6 +17,7 @@ class _GlEntryScreenState extends State<GlEntryScreen>
   int? _selectedEntryId;
   bool _isViewOnly = false;
   bool _shouldRefreshList = false;
+  int _detailResetKey = 0;
 
   @override
   void initState() {
@@ -41,6 +42,7 @@ class _GlEntryScreenState extends State<GlEntryScreen>
 
   void _openDetailTab({int? id, bool viewOnly = false}) {
     setState(() {
+      if (id == null) _detailResetKey++;
       _selectedEntryId = id;
       _isViewOnly = viewOnly;
       _currentTabIndex = 1;
@@ -111,6 +113,7 @@ class _GlEntryScreenState extends State<GlEntryScreen>
                 GlEntryDetailWidget(
                   entryId: _selectedEntryId,
                   viewOnly: _isViewOnly,
+                  resetKey: _detailResetKey,
                   onSaveSuccess: _onSaveSuccess,
                   onCancel: () {
                     setState(() => _currentTabIndex = 0);

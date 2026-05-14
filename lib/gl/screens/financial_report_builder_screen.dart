@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/account.dart';
+import '../models/gl_dimension.dart';
 import '../services/account_service.dart';
 import '../services/financial_report_builder_service.dart';
+import '../services/gl_dimension_service.dart';
+import '../widgets/gl_dimension_picker_field.dart';
 
 class FinancialReportBuilderScreen extends StatefulWidget {
   const FinancialReportBuilderScreen({super.key});
@@ -13,8 +16,11 @@ class FinancialReportBuilderScreen extends StatefulWidget {
 class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScreen> {
   final FinancialReportBuilderService _service = FinancialReportBuilderService();
   final AccountService _accountService = AccountService();
+  final GlDimensionService _dimService = GlDimensionService();
 
   List<Account> _accounts = [];
+  List<GlDimensionType> _dimTypes = [];
+  Map<String, List<GlDimensionValue>> _dimValues = {};
   List<Map<String, dynamic>> _reports = [];
   List<Map<String, dynamic>> _rows = [];
   Map<String, dynamic>? _selectedReport;
@@ -37,12 +43,22 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
       final results = await Future.wait([
         _service.fetchReports(),
         _accountService.fetchRows(),
+        _dimService.fetchActiveTypes(),
       ]);
       final accounts = (results[1] as List<Account>)
         ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
+      final types = results[2] as List<GlDimensionType>;
+      // โหลด dimension values ทุก type
+      final valResults = await Future.wait(
+        types.map((t) => _dimService.fetchValuesByType(t.typeCode)),
+      );
       setState(() {
-        _reports = results[0] as List<Map<String, dynamic>>;
-        _accounts = accounts;
+        _reports   = results[0] as List<Map<String, dynamic>>;
+        _accounts  = accounts;
+        _dimTypes  = types;
+        for (int i = 0; i < types.length; i++) {
+          _dimValues[types[i].typeCode] = valResults[i];
+        }
       });
     } catch (e) {
       _showError('โหลดรายการล้มเหลว: $e');
@@ -317,9 +333,19 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             (a) => a?.accountCode == initAccTo, orElse: () => null)
         : null;
     String normalSign = row?['normal_sign'] ?? 'DEBIT';
-    final branchCtrl = TextEditingController(text: (row?['branch_id'] ?? '').toString());
-    final projectCtrl = TextEditingController(text: (row?['project_id'] ?? '').toString());
-    final buCtrl = TextEditingController(text: (row?['business_unit_id'] ?? '').toString());
+    // Branch filter (ป้อน id ตรงๆ ยังคงไว้ก่อน เพราะ branch มักไม่ได้ filter ใน report)
+    final branchCtrl = TextEditingController(
+        text: row?['branch_id'] != null ? row!['branch_id'].toString() : '');
+    // Dimension filters — ใช้ GlDimensionPickerField
+    final Map<int, GlDimensionValue?> dimPicks = {};
+    for (final t in _dimTypes) {
+      final storedId = row?['dim${t.slotNo}_id'] as int?;
+      if (storedId != null) {
+        final vals = _dimValues[t.typeCode] ?? [];
+        dimPicks[t.slotNo] = vals.cast<GlDimensionValue?>()
+            .firstWhere((v) => v?.id == storedId, orElse: () => null);
+      }
+    }
 
     showDialog(
       context: context,
@@ -440,18 +466,32 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     ],
                     onChanged: (v) => setDialogState(() => normalSign = v!),
                   ),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(child: TextField(controller: branchCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'branch_id (ว่างได้)', border: OutlineInputBorder()))),
-                    const SizedBox(width: 8),
-                    Expanded(child: TextField(controller: projectCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'project_id (ว่างได้)', border: OutlineInputBorder()))),
-                  ]),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: buCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'business_unit_id (ว่างได้)', border: OutlineInputBorder()),
-                  ),
+                  if (_dimTypes.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('กรอง Dimension (เลือกเฉพาะที่ต้องการ)',
+                          style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ),
+                    const SizedBox(height: 6),
+                    ..._dimTypes.map((t) {
+                      final vals = _dimValues[t.typeCode] ?? [];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: StatefulBuilder(
+                          builder: (ctx2, setPickState) => GlDimensionPickerField(
+                            dimType:  t,
+                            values:   vals,
+                            selected: dimPicks[t.slotNo],
+                            isDense:  false,
+                            onSelected: (val) {
+                              setPickState(() => dimPicks[t.slotNo] = val);
+                            },
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
                 ],
               ),
             ),
@@ -469,9 +509,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   'account_from': dlgAccFrom?.accountCode,
                   'account_to': dlgAccTo?.accountCode,
                   'normal_sign': normalSign,
-                  'branch_id': int.tryParse(branchCtrl.text),
-                  'project_id': int.tryParse(projectCtrl.text),
-                  'business_unit_id': int.tryParse(buCtrl.text),
+                  'branch_id': int.tryParse(branchCtrl.text.trim()),
+                  for (final t in _dimTypes)
+                    'dim${t.slotNo}_id': dimPicks[t.slotNo]?.id,
                 };
                 try {
                   if (isEdit) {

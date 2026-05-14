@@ -135,7 +135,7 @@ class ArGlAccountSetup {
       case '30': return 'เพิ่มยอดลูกหนี้ (DN)';
       case '50': return 'ลดยอดลูกหนี้ (CN)';
       case '60': return 'รับมัดจำ (ADV)';
-      case '70': return 'รับชำระ (RC)';
+      case '80': return 'รับชำระ (RC)';
       default:   return sysDocType ?? '—';
     }
   }

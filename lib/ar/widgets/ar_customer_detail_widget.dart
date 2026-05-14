@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
 import '../../cd/models/zipcode.dart';
@@ -1240,6 +1241,10 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   bool _requiresBilling = false;
   List<ArCustomerBillingCondition> _billingConditions = [];
   List<ArCustomerPaymentCondition> _paymentConditions = [];
+
+  // ตัวอย่างการคำนวณวันที่
+  DateTime _previewInvoiceDate = DateTime.now();
+  final _previewDateFmt = DateFormat('dd/MM/yyyy');
 
   // เขตการขาย
   int? _salesTerritoryId;
@@ -2709,6 +2714,496 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     );
   }
 
+  // ─── Date Preview Helpers ──────────────────────────────────────────────────
+
+  static const _thWeekdaysFull = [
+    'อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'
+  ];
+
+  // หาวันที่ weekday ลำดับที่ weekOfMonth ของเดือน (weekOfMonth=-1 = สุดท้าย)
+  DateTime? _nthWeekdayOfMonth(int year, int month, int weekday, int weekOfMonth) {
+    if (weekOfMonth == -1) {
+      final last = DateTime(year, month + 1, 0).day;
+      for (int d = last; d >= 1; d--) {
+        if (DateTime(year, month, d).weekday % 7 == weekday) {
+          return DateTime(year, month, d);
+        }
+      }
+    } else {
+      int count = 0;
+      for (int d = 1; d <= 31; d++) {
+        final date = DateTime(year, month, d);
+        if (date.month != month) break;
+        if (date.weekday % 7 == weekday) {
+          count++;
+          if (count == weekOfMonth) return date;
+        }
+      }
+    }
+    return null;
+  }
+
+  // คำนวณวันวางบิลที่เหมาะสมที่สุดจากเงื่อนไขลำดับแรก
+  DateTime? _previewCalcBillingDate(DateTime invoiceDate) {
+    if (_billingConditions.isEmpty) return null;
+    final cond = _billingConditions.reduce(
+        (a, b) => a.sortOrder <= b.sortOrder ? a : b);
+
+    if (cond.billWithDelivery) return invoiceDate;
+
+    if (cond.billingDayOfMonth.isNotEmpty) {
+      final days = [...cond.billingDayOfMonth]..sort();
+      for (final day in days) {
+        final lastDay = DateTime(invoiceDate.year, invoiceDate.month + 1, 0).day;
+        final candidate = day == 31
+            ? DateTime(invoiceDate.year, invoiceDate.month + 1, 0)
+            : DateTime(invoiceDate.year, invoiceDate.month, day.clamp(1, lastDay));
+        if (!candidate.isBefore(invoiceDate)) return candidate;
+      }
+      final d = days.first;
+      return d == 31
+          ? DateTime(invoiceDate.year, invoiceDate.month + 2, 0)
+          : DateTime(invoiceDate.year, invoiceDate.month + 1, d.clamp(1, 28));
+    }
+
+    if (cond.billingDayOfWeek.isNotEmpty) {
+      if (cond.billingWeekOfMonth.isNotEmpty) {
+        for (int m = 0; m <= 2; m++) {
+          final totalMonth = invoiceDate.month + m;
+          final y = invoiceDate.year + (totalMonth - 1) ~/ 12;
+          final mo = ((totalMonth - 1) % 12) + 1;
+          for (final wd in cond.billingDayOfWeek) {
+            for (final wom in cond.billingWeekOfMonth) {
+              final d = _nthWeekdayOfMonth(y, mo, wd, wom);
+              if (d != null && !d.isBefore(invoiceDate)) return d;
+            }
+          }
+        }
+      } else {
+        for (int offset = 0; offset <= 13; offset++) {
+          final c = invoiceDate.add(Duration(days: offset));
+          if (cond.billingDayOfWeek.contains(c.weekday % 7)) return c;
+        }
+      }
+    }
+    return null;
+  }
+
+  // คำนวณวันครบกำหนดจากระยะเครดิต
+  DateTime _previewCalcDueDate(DateTime invoiceDate, DateTime? billingDate) {
+    final months = int.tryParse(_creditTermMonthsCtrl.text) ?? 0;
+    final days   = int.tryParse(_creditTermDaysCtrl.text) ?? 0;
+    final useFromBilling = billingDate != null &&
+        _billingConditions.any((c) => c.dueFromBillingDate);
+    var base = useFromBilling ? billingDate! : invoiceDate;
+    if (months > 0) base = DateTime(base.year, base.month + months, base.day);
+    if (days > 0)   base = base.add(Duration(days: days));
+    return base;
+  }
+
+  // สร้างรายการวันชำระที่เป็นไปได้ภายใน maxMonths เดือนจาก startDate
+  List<DateTime> _generatePaymentCandidates(
+      DateTime startDate, ArCustomerPaymentCondition cond, int maxMonths) {
+    final result = <DateTime>[];
+    for (int m = 0; m <= maxMonths; m++) {
+      final totalMonth = startDate.month + m;
+      final y  = startDate.year + (totalMonth - 1) ~/ 12;
+      final mo = ((totalMonth - 1) % 12) + 1;
+
+      if (cond.paymentDayOfMonth.isNotEmpty) {
+        for (final day in cond.paymentDayOfMonth) {
+          final lastDay = DateTime(y, mo + 1, 0).day;
+          final d = day == 31
+              ? DateTime(y, mo + 1, 0)
+              : DateTime(y, mo, day.clamp(1, lastDay));
+          if (!d.isBefore(startDate)) {
+            result.add(d.add(Duration(days: cond.additionalDays)));
+          }
+        }
+      } else if (cond.paymentDayOfWeek.isNotEmpty) {
+        if (cond.paymentWeekOfMonth.isNotEmpty) {
+          for (final wd in cond.paymentDayOfWeek) {
+            for (final wom in cond.paymentWeekOfMonth) {
+              final d = _nthWeekdayOfMonth(y, mo, wd, wom);
+              if (d != null && !d.isBefore(startDate)) {
+                result.add(d.add(Duration(days: cond.additionalDays)));
+              }
+            }
+          }
+        } else {
+          for (int day = 1; day <= 31; day++) {
+            final d = DateTime(y, mo, day);
+            if (d.month != mo) break;
+            if (!d.isBefore(startDate) &&
+                cond.paymentDayOfWeek.contains(d.weekday % 7)) {
+              result.add(d.add(Duration(days: cond.additionalDays)));
+            }
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  // วันรับชำระที่ใกล้วันครบกำหนดที่สุด (ก่อนหรือตรงกับ dueDate ก่อน)
+  DateTime _previewCalcPaymentDate(DateTime billingDate, DateTime dueDate) {
+    if (_paymentConditions.isEmpty) return dueDate;
+    final cond = _paymentConditions.reduce(
+        (a, b) => a.sortOrder <= b.sortOrder ? a : b);
+
+    final maxM = cond.withinMonthsFromBilling > 0
+        ? cond.withinMonthsFromBilling + 1
+        : 6;
+    var candidates = _generatePaymentCandidates(billingDate, cond, maxM);
+
+    if (cond.withinMonthsFromBilling > 0) {
+      final limit = DateTime(billingDate.year,
+          billingDate.month + cond.withinMonthsFromBilling, billingDate.day);
+      candidates = candidates.where((d) => !d.isAfter(limit)).toList();
+    }
+    if (candidates.isEmpty) return dueDate;
+
+    // วันรับชำระ ≥ dueDate ที่ใกล้ที่สุด
+    final onOrAfter = candidates.where((d) => !d.isBefore(dueDate)).toList();
+    if (onOrAfter.isNotEmpty) {
+      onOrAfter.sort();
+      return onOrAfter.first;
+    }
+    // ถ้าไม่มีเลย (ถูก withinMonthsFromBilling จำกัด) ให้ใช้วันสุดท้ายที่มี
+    candidates.sort((a, b) => b.compareTo(a));
+    return candidates.first;
+  }
+
+  static const _thMonths = [
+    'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+    'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+  ];
+
+  // แปลง list วันที่ → ช่วง เช่น [1,2,3,7,8] → "1-3, 7-8"
+  String _formatDayRanges(List<int> days) {
+    if (days.isEmpty) return '';
+    final sorted = [...days]..sort();
+    final ranges = <String>[];
+    int start = sorted[0], end = sorted[0];
+    for (int i = 1; i < sorted.length; i++) {
+      if (sorted[i] == end + 1) {
+        end = sorted[i];
+      } else {
+        ranges.add(start == end ? '$start' : '$start-$end');
+        start = end = sorted[i];
+      }
+    }
+    ranges.add(start == end ? '$start' : '$start-$end');
+    return 'วันที่ ${ranges.join(', ')}';
+  }
+
+  // คำนวณกลุ่มวันที่ invoice ทุกวันในเดือนเดียวกัน
+  // คืน list เรียงตามวันที่ billing แล้วตามวันที่ payment
+  List<Map<String, dynamic>> _calcInvoiceDateGroups() {
+    final year    = _previewInvoiceDate.year;
+    final month   = _previewInvoiceDate.month;
+    final lastDay = DateTime(year, month + 1, 0).day;
+
+    final Map<String, Map<String, dynamic>> groups = {};
+
+    for (int d = 1; d <= lastDay; d++) {
+      final invoice         = DateTime(year, month, d);
+      final billing         = _previewCalcBillingDate(invoice);
+      final effectiveBilling = billing ?? invoice;
+      final due             = _previewCalcDueDate(invoice, billing);
+      final payment         = _previewCalcPaymentDate(effectiveBilling, due);
+
+      // key = billingDate_paymentDate (จัดกลุ่มวันที่ให้ payment เดียวกัน)
+      String fmt(DateTime dt) =>
+          '${dt.year}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}';
+      final key = '${fmt(effectiveBilling)}_${fmt(payment)}';
+
+      if (!groups.containsKey(key)) {
+        groups[key] = {
+          'days':    <int>[],
+          'billing': effectiveBilling,
+          'minDue':  due,
+          'maxDue':  due,
+          'payment': payment,
+        };
+      }
+      (groups[key]!['days'] as List<int>).add(d);
+      if (due.isBefore(groups[key]!['minDue'] as DateTime)) {
+        groups[key]!['minDue'] = due;
+      }
+      if (due.isAfter(groups[key]!['maxDue'] as DateTime)) {
+        groups[key]!['maxDue'] = due;
+      }
+    }
+
+    final result = groups.values.toList();
+    for (final g in result) {
+      final minDue  = g['minDue']  as DateTime;
+      final maxDue  = g['maxDue']  as DateTime;
+      final payment = g['payment'] as DateTime;
+      // minDelay = ห่างน้อยที่สุด (invoice วันสุดท้ายของกลุ่ม → due ล่าช้าที่สุด → gap น้อยที่สุด)
+      g['minDelay'] = payment.difference(maxDue).inDays;
+      g['maxDelay'] = payment.difference(minDue).inDays;
+    }
+
+    result.sort((a, b) {
+      final bc = (a['billing'] as DateTime).compareTo(b['billing'] as DateTime);
+      return bc != 0 ? bc : (a['payment'] as DateTime).compareTo(b['payment'] as DateTime);
+    });
+    return result;
+  }
+
+  // ─── Section Widget ────────────────────────────────────────────────────────
+
+  Widget _buildDatePreviewSection() {
+    final invoice    = _previewInvoiceDate;
+    final billing    = _previewCalcBillingDate(invoice);
+    final due        = _previewCalcDueDate(invoice, billing);
+    final payment    = _previewCalcPaymentDate(billing ?? invoice, due);
+
+    final months = int.tryParse(_creditTermMonthsCtrl.text) ?? 0;
+    final days   = int.tryParse(_creditTermDaysCtrl.text) ?? 0;
+
+    final useFromBilling = billing != null &&
+        _billingConditions.any((c) => c.dueFromBillingDate);
+
+    // ── คำอธิบายสั้น ──
+    String billingDetail;
+    if (_billingConditions.isEmpty) {
+      billingDetail = 'ไม่มีเงื่อนไขวางบิล — ใช้วันที่ invoice';
+    } else {
+      final c = _billingConditions.reduce(
+          (a, b) => a.sortOrder <= b.sortOrder ? a : b);
+      billingDetail = _billingConditionSummary(c);
+    }
+
+    String dueDetail;
+    if (months == 0 && days == 0) {
+      dueDetail = 'ชำระทันที (ระยะเครดิต 0)';
+    } else {
+      final parts = <String>[];
+      if (months > 0) parts.add('$months เดือน');
+      if (days > 0)   parts.add('$days วัน');
+      final base = useFromBilling ? 'วันวางบิล' : 'วันที่ invoice';
+      dueDetail = 'นับจาก$base + ${parts.join(' ')}';
+    }
+
+    String paymentDetail;
+    if (_paymentConditions.isEmpty) {
+      paymentDetail = 'ไม่มีเงื่อนไขรับชำระ — ตามวันครบกำหนด';
+    } else {
+      final c = _paymentConditions.reduce(
+          (a, b) => a.sortOrder <= b.sortOrder ? a : b);
+      paymentDetail = _paymentConditionSummary(c);
+    }
+
+    // ── helper row ──
+    Widget resultRow(IconData icon, Color color, String label,
+        DateTime date, String detail) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Row(children: [
+                SizedBox(
+                  width: 130,
+                  child: Text(label,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w500)),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _previewDateFmt.format(date),
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: color),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 2),
+              Text(detail,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+            ]),
+          ),
+        ]),
+      );
+    }
+
+    return _Section(
+      title: 'ตัวอย่างการคำนวณวันที่',
+      initiallyExpanded: false,
+      children: [
+        // Input: วันที่ Invoice
+        Row(children: [
+          const Text('วันที่ Invoice', style: TextStyle(fontSize: 13)),
+          const SizedBox(width: 12),
+          InkWell(
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _previewInvoiceDate,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+              );
+              if (picked != null) {
+                setState(() => _previewInvoiceDate = picked);
+              }
+            },
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.teal),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(
+                  _previewDateFmt.format(_previewInvoiceDate),
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal),
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.calendar_today,
+                    size: 14, color: Colors.teal),
+              ]),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        const Divider(height: 1),
+        const SizedBox(height: 4),
+        resultRow(
+          Icons.event_available,
+          Colors.green[700]!,
+          'วันครบกำหนด',
+          due,
+          dueDetail,
+        ),
+        resultRow(
+          Icons.receipt_long,
+          Colors.blue[700]!,
+          'วันวางบิล',
+          billing ?? invoice,
+          billingDetail,
+        ),
+        resultRow(
+          Icons.payments_outlined,
+          Colors.orange[700]!,
+          'วันรับชำระ',
+          payment,
+          paymentDetail,
+        ),
+        // ── ช่วงวันที่ invoice ที่เหมาะสมในเดือนนี้ ──────────────────────
+        const SizedBox(height: 12),
+        const Divider(height: 1),
+        const SizedBox(height: 8),
+        Builder(builder: (_) {
+          final groups = _calcInvoiceDateGroups();
+          if (groups.isEmpty) return const SizedBox.shrink();
+
+          final minDelay = groups
+              .map((g) => g['minDelay'] as int)
+              .reduce((a, b) => a < b ? a : b);
+
+          final monthLabel =
+              '${_thMonths[invoice.month - 1]} ${invoice.year + 543}';
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'ช่วงวันที่ invoice ในเดือน $monthLabel',
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blueGrey),
+              ),
+              const SizedBox(height: 6),
+              ...groups.map((g) {
+                final days     = g['days']     as List<int>;
+                final billing  = g['billing']  as DateTime;
+                final pmt      = g['payment']  as DateTime;
+                final minD     = g['minDelay'] as int;
+                final maxD     = g['maxDelay'] as int;
+                final isBest   = minD == minDelay;
+
+                final delayText = minD == maxD
+                    ? 'ห่างครบกำหนด $minD วัน'
+                    : 'ห่างครบกำหนด $minD–$maxD วัน';
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isBest
+                        ? Colors.green[50]
+                        : Colors.grey[50],
+                    border: Border.all(
+                        color: isBest
+                            ? Colors.green[300]!
+                            : Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(children: [
+                    if (isBest) ...[
+                      Icon(Icons.star_rounded,
+                          color: Colors.green[600], size: 14),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(
+                      _formatDayRanges(days),
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isBest
+                              ? FontWeight.bold
+                              : FontWeight.normal),
+                    ),
+                    Text(
+                      '  →  วางบิล ${_previewDateFmt.format(billing)}'
+                      '  →  รับชำระ ${_previewDateFmt.format(pmt)}',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: isBest
+                              ? Colors.green[800]
+                              : Colors.grey[700]),
+                    ),
+                    const Spacer(),
+                    Text(
+                      delayText,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: isBest
+                              ? Colors.green[700]
+                              : Colors.grey[600],
+                          fontWeight: isBest
+                              ? FontWeight.w600
+                              : FontWeight.normal),
+                    ),
+                  ]),
+                );
+              }),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
   // ---- Section: เงื่อนไขการวางบิล ----
   Widget _buildBillingConditionsSection(bool readOnly) {
     return _Section(
@@ -3373,6 +3868,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                   _buildSalesTerritorySection(readOnly),
                   _buildBillingConditionsSection(readOnly),
                   _buildPaymentConditionsSection(readOnly),
+                  _buildDatePreviewSection(),
                   _buildAddressSection(readOnly),
                   _buildContactSection(readOnly),
                   _buildBankSection(readOnly),

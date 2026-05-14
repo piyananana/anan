@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../sa/models/module_document.dart';
+import '../../sa/models/user_branch.dart';
+import '../../sa/services/auth_service.dart';
+import '../models/gl_dimension.dart';
 import '../models/gl_entry.dart';
 import '../models/period.dart';
+import '../services/gl_dimension_service.dart';
 import '../services/gl_entry_service.dart';
 import '../services/period_service.dart';
+import '../widgets/gl_dimension_picker_field.dart';
 
 class GlEntryListWidget extends StatefulWidget {
   final VoidCallback onAddPressed;
@@ -29,6 +34,9 @@ class GlEntryListWidget extends StatefulWidget {
 class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   final GlEntryService _entryService = GlEntryService();
   final PeriodService _periodService = PeriodService();
+  final GlDimensionService _dimService = GlDimensionService();
+  final _fmt = NumberFormat('#,##0.00');
+  final _dateFmt = DateFormat('dd/MM/yyyy');
 
   List<GlEntryHeader> _entries = [];
   List<GlEntryHeader> _filteredEntries = [];
@@ -41,6 +49,12 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
 
   FiscalYear? _selectedFiscalYear;
   PostingPeriod? _selectedPeriod;
+  String? _selectedStatus;
+  List<UserBranch> _allowedBranches = [];
+  UserBranch? _selectedBranchFilter;
+  List<GlDimensionType> _dimTypes = [];
+  Map<String, List<GlDimensionValue>> _dimValues = {};
+  Map<int, int?> _dimSelections = {}; // slotNo → selected dimValueId
   final TextEditingController _searchCtrl = TextEditingController();
 
   @override
@@ -68,18 +82,31 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
 
   Future<void> _initialLoad() async {
     setState(() => _isLoading = true);
+    _allowedBranches = AuthService().allowedBranches;
     try {
       final results = await Future.wait([
         _periodService.fetchActiveFiscalYears(),
         _entryService.fetchRowsByModuleUserId(),
+        _dimService.fetchActiveTypes(),
       ]);
       final fys = results[0] as List<FiscalYear>;
       final allowedDocs = results[1] as List<ModuleDocument>;
+      final types = results[2] as List<GlDimensionType>;
       _allowedDocCodes = allowedDocs
           .where((d) => d.isDocType)
           .map((d) => d.docCode)
           .toSet();
-      setState(() => _fiscalYears = fys);
+      // โหลด dimension values
+      final valResults = await Future.wait(
+        types.map((t) => _dimService.fetchValuesByType(t.typeCode)),
+      );
+      setState(() {
+        _fiscalYears = fys;
+        _dimTypes = types;
+        for (int i = 0; i < types.length; i++) {
+          _dimValues[types[i].typeCode] = valResults[i];
+        }
+      });
 
       if (fys.isNotEmpty) {
         final now = DateTime.now();
@@ -97,8 +124,8 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
       await _fetchEntries();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error loading master data: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error loading master data: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -107,15 +134,13 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
 
   Future<void> _fetchPeriods(int fyId) async {
     try {
-      final periods =
-          await _periodService.fetchPostingPeriodsByFiscalYearId(fyId);
+      final periods = await _periodService.fetchPostingPeriodsByFiscalYearId(fyId);
       setState(() {
         _periods = periods;
         final now = DateTime.now();
         try {
           _selectedPeriod = periods.firstWhere((p) =>
-              now.isAfter(
-                  p.periodStartDate.subtract(const Duration(days: 1))) &&
+              now.isAfter(p.periodStartDate.subtract(const Duration(days: 1))) &&
               now.isBefore(p.periodEndDate.add(const Duration(days: 1))));
         } catch (_) {
           _selectedPeriod = periods.isNotEmpty ? periods.first : null;
@@ -134,8 +159,12 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
     try {
       final data = await _entryService.fetchEntries(
         periodId: _selectedPeriod?.id,
-        fiscalYearId:
-            _selectedPeriod == null ? _selectedFiscalYear?.id : null,
+        fiscalYearId: _selectedPeriod == null ? _selectedFiscalYear?.id : null,
+        dim1Id: _dimSelections[1],
+        dim2Id: _dimSelections[2],
+        dim3Id: _dimSelections[3],
+        dim4Id: _dimSelections[4],
+        dim5Id: _dimSelections[5],
       );
       setState(() {
         _entries = data;
@@ -153,11 +182,16 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
 
   void _applyFilter() {
     final query = _searchCtrl.text.trim();
-    final allowed = _allowedDocCodes;
-
     Iterable<GlEntryHeader> base = _entries;
-    if (allowed.isNotEmpty) {
-      base = base.where((item) => allowed.contains(item.docCode));
+
+    if (_allowedDocCodes.isNotEmpty) {
+      base = base.where((item) => _allowedDocCodes.contains(item.docCode));
+    }
+    if (_selectedStatus != null) {
+      base = base.where((item) => item.status == _selectedStatus);
+    }
+    if (_selectedBranchFilter != null) {
+      base = base.where((item) => item.branchId == _selectedBranchFilter!.branchId);
     }
 
     if (query.isEmpty) {
@@ -166,23 +200,19 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
     }
 
     final keywords = query.toLowerCase().split(RegExp(r'\s+'));
-    final dateFmt = DateFormat('dd/MM/yyyy');
-
     _filteredEntries = base.where((item) {
       final fields = [
         item.docCode,
         item.docName,
         item.docNo,
-        dateFmt.format(item.docDate),
+        _dateFmt.format(item.docDate),
         item.refDocCode ?? '',
         item.refDocName ?? '',
         item.refDocNo ?? '',
-        item.refDocDate != null ? dateFmt.format(item.refDocDate!) : '',
+        item.refDocDate != null ? _dateFmt.format(item.refDocDate!) : '',
         item.description,
         item.status,
       ].map((f) => f.toLowerCase()).toList();
-
-      // All keywords must match at least one field
       return keywords.every((kw) => fields.any((f) => f.contains(kw)));
     }).toList();
   }
@@ -220,43 +250,76 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
     }
   }
 
-  Color _getStatusColor(String status) {
+  Color _statusColor(String status) {
     switch (status) {
       case 'Draft':
-        return Colors.red;
-      case 'Deleted':
-        return Colors.grey;
+        return Colors.orange;
       case 'Posted':
-        return Colors.black;
+        return Colors.green;
+      case 'Void':
+        return Colors.red;
       default:
-        return Colors.black;
+        return Colors.grey;
     }
   }
 
-  String _formatPeriodLabel(PostingPeriod p) {
-    final fmt = DateFormat('dd/MM/yyyy');
-    return '${p.periodName} (${fmt.format(p.periodStartDate)} - ${fmt.format(p.periodEndDate)})';
-  }
+  String _formatPeriodLabel(PostingPeriod p) =>
+      '${p.periodName} (${_dateFmt.format(p.periodStartDate)} - ${_dateFmt.format(p.periodEndDate)})';
+
+  bool get _hasActiveFilters =>
+      _selectedStatus != null ||
+      _selectedBranchFilter != null ||
+      _dimSelections.values.any((v) => v != null) ||
+      _searchCtrl.text.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
+        _buildFilterRow(),
+        const Divider(height: 1),
+        if (!_isLoading)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _hasActiveFilters
+                    ? 'พบ ${_filteredEntries.length} รายการ จาก ${_entries.length} รายการ'
+                    : '${_filteredEntries.length} รายการ',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+            ),
+          ),
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _buildTable(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterRow() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Row 1: ปีบัญชี | งวด | สถานะ
+          Row(
             children: [
-              // Fiscal Year
               SizedBox(
-                width: 120,
+                width: 110,
                 child: DropdownButtonFormField<FiscalYear>(
                   value: _selectedFiscalYear,
                   isExpanded: true,
+                  decoration: const InputDecoration(
+                      labelText: 'ปีบัญชี', isDense: true, border: OutlineInputBorder()),
                   items: _fiscalYears
                       .map((fy) => DropdownMenuItem(
                           value: fy,
-                          child: Text(fy.fyCode,
-                              overflow: TextOverflow.ellipsis)))
+                          child: Text(fy.fyCode, overflow: TextOverflow.ellipsis)))
                       .toList(),
                   onChanged: (val) {
                     if (val != null) {
@@ -268,184 +331,239 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                       _fetchPeriods(val.id).then((_) => _fetchEntries());
                     }
                   },
-                  decoration: const InputDecoration(
-                    labelText: 'ปีบัญชี',
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                    border: OutlineInputBorder(),
-                  ),
                 ),
               ),
               const SizedBox(width: 8),
-              // Period
-              SizedBox(
-                width: 280,
+              Expanded(
+                flex: 3,
                 child: DropdownButtonFormField<PostingPeriod>(
                   value: _selectedPeriod,
                   isExpanded: true,
+                  decoration: const InputDecoration(
+                      labelText: 'งวด', isDense: true, border: OutlineInputBorder()),
                   items: _periods
                       .map((p) => DropdownMenuItem(
                           value: p,
-                          child: Text(_formatPeriodLabel(p),
-                              overflow: TextOverflow.ellipsis)))
+                          child: Text(_formatPeriodLabel(p), overflow: TextOverflow.ellipsis)))
                       .toList(),
                   onChanged: (val) {
                     setState(() => _selectedPeriod = val);
                     _fetchEntries();
                   },
-                  decoration: const InputDecoration(
-                    labelText: 'งวด',
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                    border: OutlineInputBorder(),
-                  ),
                 ),
               ),
               const SizedBox(width: 8),
-              // Search
               Expanded(
-                child: TextFormField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'ค้นหา (คั่นหลายคำด้วยวรรค)',
-                    hintText: 'เช่น: JV draft 2024',
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_searchCtrl.text.isNotEmpty)
-                          IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            tooltip: 'ล้างคำค้น',
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              setState(() => _applyFilter());
-                            },
-                          ),
-                        const Icon(Icons.search),
-                        const SizedBox(width: 4),
-                      ],
-                    ),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8),
-                    border: const OutlineInputBorder(),
-                  ),
-                  onChanged: (_) => setState(() => _applyFilter()),
+                flex: 1,
+                child: DropdownButtonFormField<String?>(
+                  value: _selectedStatus,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                      labelText: 'สถานะ', isDense: true, border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('ทั้งหมด')),
+                    DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                    DropdownMenuItem(value: 'Posted', child: Text('Posted')),
+                    DropdownMenuItem(value: 'Deleted', child: Text('Deleted')),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _selectedStatus = v;
+                    _applyFilter();
+                  }),
                 ),
               ),
-              const SizedBox(width: 8),
-              // Add Button
-              IconButton(
-                icon: const Icon(Icons.add_circle,
-                    size: 32, color: Colors.green),
-                tooltip: 'เพิ่มรายการใหม่',
-                onPressed: widget.onAddPressed,
-              ),
+              if (_allowedBranches.length > 1) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<UserBranch?>(
+                    value: _selectedBranchFilter,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                        labelText: 'สาขา', isDense: true, border: OutlineInputBorder()),
+                    items: [
+                      const DropdownMenuItem<UserBranch?>(value: null, child: Text('ทุกสาขา')),
+                      ..._allowedBranches.map((b) => DropdownMenuItem(
+                            value: b,
+                            child: Text('${b.branchCode} ${b.branchNameThai}',
+                                overflow: TextOverflow.ellipsis),
+                          )),
+                    ],
+                    onChanged: (v) => setState(() {
+                      _selectedBranchFilter = v;
+                      _applyFilter();
+                    }),
+                  ),
+                ),
+              ],
             ],
           ),
-        ),
-        // Result count
-        if (!_isLoading)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _searchCtrl.text.trim().isEmpty
-                    ? '${_filteredEntries.length} รายการ'
-                    : 'พบ ${_filteredEntries.length} รายการ จาก ${_entries.length} รายการ',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
-            ),
-          ),
-        const Divider(height: 1),
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _filteredEntries.isEmpty
-                  ? Center(
-                      child: Text(_entries.isEmpty
-                          ? 'ไม่พบรายการบัญชีตามเงื่อนไข'
-                          : 'ไม่พบรายการที่ตรงกับคำค้น'))
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: _filteredEntries.length,
-                      separatorBuilder: (ctx, i) =>
-                          const SizedBox(height: 2),
-                      itemBuilder: (ctx, index) {
-                        final item = _filteredEntries[index];
-                        final textColor = _getStatusColor(item.status);
-                        return Card(
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor:
-                                  _getStatusColor(item.status),
-                              child: Text(item.status[0],
-                                  style: const TextStyle(
-                                      color: Colors.white)),
-                            ),
-                            title: Text('${item.docCode} ${item.docNo}',
-                                style: TextStyle(
-                                    color: textColor,
-                                    fontWeight: FontWeight.bold)),
-                            subtitle: Text(
-                              'วันที่: ${item.docDate.toString().split(' ')[0]} | ${item.description}',
-                              style: TextStyle(
-                                  color: textColor.withOpacity(0.8)),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Column(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.center,
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                        NumberFormat("#,##0.00", "en_US")
-                                            .format(item.totalDebitLc),
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold)),
-                                    Text(item.status,
-                                        style: TextStyle(
-                                            fontSize: 10,
-                                            color: _getStatusColor(
-                                                item.status))),
-                                  ],
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(Icons.visibility,
-                                      color: Colors.blue),
-                                  tooltip: 'ดูรายละเอียด',
-                                  onPressed: () =>
-                                      widget.onViewPressed(item.id),
-                                ),
-                                if (item.status == 'Draft')
-                                  IconButton(
-                                    icon: const Icon(Icons.edit,
-                                        color: Colors.orange),
-                                    tooltip: 'แก้ไข',
-                                    onPressed: () =>
-                                        widget.onEditPressed(item.id),
-                                  ),
-                                if (item.status == 'Draft')
-                                  IconButton(
-                                    icon: const Icon(Icons.delete,
-                                        color: Colors.red),
-                                    tooltip: 'ลบทั้งใบ',
-                                    onPressed: () =>
-                                        _deleteEntry(item.id),
-                                  ),
-                              ],
-                            ),
-                            onTap: () => widget.onViewPressed(item.id),
-                          ),
-                        );
+          if (_dimTypes.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: _dimTypes.expand((t) {
+                final vals = _dimValues[t.typeCode] ?? [];
+                final selId = _dimSelections[t.slotNo];
+                final selVal = vals.cast<GlDimensionValue?>()
+                    .firstWhere((v) => v?.id == selId, orElse: () => null);
+                return [
+                  if (_dimTypes.first != t) const SizedBox(width: 8),
+                  Expanded(
+                    child: GlDimensionPickerField(
+                      dimType: t,
+                      values: vals,
+                      selected: selVal,
+                      isDense: false,
+                      onSelected: (val) {
+                        setState(() => _dimSelections[t.slotNo] = val?.id);
+                        _fetchEntries();
                       },
                     ),
+                  ),
+                ];
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: 6),
+          // Row 2: ค้นหา | เพิ่มรายการ | ล้าง
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'ค้นหา (เลขที่เอกสาร / คำอธิบาย / เลขที่อ้างอิง)',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.search, size: 16),
+                  ),
+                  onChanged: (_) => setState(() => _applyFilter()),
+                  onSubmitted: (_) => setState(() => _applyFilter()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: widget.onAddPressed,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('เพิ่มรายการ'),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
+              ),
+              if (_hasActiveFilters) ...[
+                const SizedBox(width: 4),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedStatus = null;
+                      _selectedBranchFilter = null;
+                      _dimSelections.clear();
+                      _searchCtrl.clear();
+                    });
+                    _fetchEntries();
+                  },
+                  child: const Text('ล้าง'),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTable() {
+    if (_filteredEntries.isEmpty) {
+      return Center(
+        child: Text(_entries.isEmpty
+            ? 'ไม่พบรายการบัญชีตามเงื่อนไข'
+            : 'ไม่พบรายการที่ตรงกับคำค้น'),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+          child: DataTable(
+            headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
+            columnSpacing: 12,
+            dataRowMinHeight: 32,
+            dataRowMaxHeight: 42,
+            columns: const [
+              DataColumn(label: Text('เลขที่เอกสาร', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('ประเภท', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('อ้างอิง', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('คำอธิบาย', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('ยอดเดบิต', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+              DataColumn(label: Text('สถานะ', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('จัดการ', style: TextStyle(fontWeight: FontWeight.bold))),
+            ],
+            rows: _filteredEntries.map((item) {
+              final isDraft = item.status == 'Draft';
+              return DataRow(
+                cells: [
+                  DataCell(
+                    Text(item.docNo,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                    onTap: () => widget.onViewPressed(item.id),
+                  ),
+                  DataCell(Text('${item.docCode} ${item.docName}', style: const TextStyle(fontSize: 12))),
+                  DataCell(Text(_dateFmt.format(item.docDate), style: const TextStyle(fontSize: 12))),
+                  DataCell(Text(
+                    item.refDocNo != null
+                        ? '${item.refDocCode ?? ''} ${item.refDocNo}'.trim()
+                        : '-',
+                    style: const TextStyle(fontSize: 12),
+                  )),
+                  DataCell(SizedBox(
+                    width: 200,
+                    child: Text(item.description,
+                        style: const TextStyle(fontSize: 12),
+                        overflow: TextOverflow.ellipsis),
+                  )),
+                  DataCell(Text(_fmt.format(item.totalDebitLc),
+                      style: const TextStyle(fontSize: 12))),
+                  DataCell(Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _statusColor(item.status).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(item.status,
+                        style: TextStyle(
+                            color: _statusColor(item.status),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
+                  )),
+                  DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+                    if (isDraft)
+                      IconButton(
+                        icon: const Icon(Icons.edit, size: 16),
+                        tooltip: 'แก้ไข',
+                        onPressed: () => widget.onEditPressed(item.id),
+                        visualDensity: VisualDensity.compact,
+                      )
+                    else
+                      IconButton(
+                        icon: const Icon(Icons.visibility, size: 16),
+                        tooltip: 'ดู',
+                        onPressed: () => widget.onViewPressed(item.id),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    if (isDraft)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                        tooltip: 'ลบ',
+                        onPressed: () => _deleteEntry(item.id),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                  ])),
+                ],
+              );
+            }).toList(),
+          ),
         ),
-      ],
+      ),
     );
   }
 }

@@ -12,14 +12,16 @@ class TrialBalanceReportService {
     int? periodId,
     bool showDimensions = false,
     bool hideZero = false,
-    bool showHeaderTotals = false, // เพิ่ม parameter
+    bool showHeaderTotals = false,
+    int? branchId,
   }) async {
     final headers = await authService.getAuthHeader();
     String query = 'fiscal_year_id=$fiscalYearId';
     if (periodId != null) query += '&period_id=$periodId';
     query += '&show_dimensions=$showDimensions';
     query += '&hide_zero=$hideZero';
-    query += '&show_header_totals=$showHeaderTotals'; // ส่งไป Backend
+    query += '&show_header_totals=$showHeaderTotals';
+    if (branchId != null) query += '&branch_id=$branchId';
 
     final response = await http.get(
       Uri.parse('$baseUrl/gl_trial_balance?$query'),

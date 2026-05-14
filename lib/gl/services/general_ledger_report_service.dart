@@ -12,6 +12,7 @@ class GeneralLedgerReportService {
     required int fiscalYearId,
     String? accountFrom,
     String? accountTo,
+    int? branchId,
   }) async {
     final headers = await authService.getAuthHeader();
 
@@ -24,6 +25,7 @@ class GeneralLedgerReportService {
     if (accountTo != null && accountTo.isNotEmpty) {
       queryParams.add('account_to=$accountTo');
     }
+    if (branchId != null) queryParams.add('branch_id=$branchId');
     
     final String queryString = queryParams.join('&');
     final response = await http.get(
@@ -43,10 +45,12 @@ class GeneralLedgerReportService {
   Future<List<Map<String, dynamic>>> fetchBeginningBalance({
     required int fiscalYearId,
     int? periodId,
+    int? branchId,
   }) async {
     final headers = await authService.getAuthHeader();
     final params = ['fiscal_year_id=$fiscalYearId'];
     if (periodId != null) params.add('period_id=$periodId');
+    if (branchId != null) params.add('branch_id=$branchId');
     final response = await http.get(
       Uri.parse('$baseUrl/gl_report_beginning_balance?${params.join('&')}'),
       headers: headers,

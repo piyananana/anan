@@ -657,7 +657,7 @@ class ModuleDocumentDetailWidgetState
                                           labelText: 'ความยาวเลขที่',
                                           border: OutlineInputBorder(),
                                         ),
-                                        items: [3, 4, 5, 6].map((val) {
+                                        items: [3, 4, 5, 6, 7, 8, 9].map((val) {
                                           return DropdownMenuItem(
                                             value: val,
                                             child: Text(val.toString()),

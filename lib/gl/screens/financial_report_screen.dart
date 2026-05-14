@@ -1,5 +1,6 @@
 // File: screens/gl/financial_report_screen.dart
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -7,9 +8,13 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../gl/models/period.dart';
+import '../../gl/models/gl_dimension.dart';
 import '../../gl/services/period_service.dart';
+import '../../gl/services/gl_dimension_service.dart';
+import '../../gl/widgets/gl_dimension_picker_field.dart';
 import '../services/financial_report_service.dart';
 import '../../sa/models/company.dart';
+import '../../sa/models/user_branch.dart';
 import '../../sa/services/company_service.dart';
 import '../../sa/services/auth_service.dart';
 
@@ -25,6 +30,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   final PeriodService _periodService = PeriodService();
   final CompanyService _companyService = CompanyService();
   final AuthService _authService = AuthService();
+  final GlDimensionService _dimService = GlDimensionService();
 
   bool _isLoading = false;
   bool _isFilterExpanded = true;
@@ -37,6 +43,13 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   List<FiscalYear> _fiscalYears = [];
   List<PostingPeriod> _periods = [];
 
+  // Branch + Dimension filters
+  List<UserBranch> _allowedBranches = [];
+  int? _selectedBranchId;
+  List<GlDimensionType> _dimTypes = [];
+  Map<String, List<GlDimensionValue>> _dimValues = {};
+  Map<int, int?> _dimSelections = {}; // slotNo → selected dimValueId
+
   Map<String, dynamic>? _selectedReport;
   FiscalYear? _selectedYear;
   PostingPeriod? _selectedPeriod;
@@ -47,6 +60,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   @override
   void initState() {
     super.initState();
+    _allowedBranches = _authService.allowedBranches;
     _loadMasterData();
   }
 
@@ -57,6 +71,18 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       _company = await _companyService.fetchCompany();
 
       _reportMasters = await _reportService.fetchReportMasters();
+
+      // โหลด dimension types + values
+      final types = await _dimService.fetchActiveTypes();
+      final valResults = await Future.wait(
+        types.map((t) => _dimService.fetchValuesByType(t.typeCode)),
+      );
+      setState(() {
+        _dimTypes = types;
+        for (int i = 0; i < types.length; i++) {
+          _dimValues[types[i].typeCode] = valResults[i];
+        }
+      });
       if (_reportMasters.isNotEmpty) {
         _selectedReport = _reportMasters.first;
       }
@@ -95,7 +121,15 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     setState(() => _isLoading = true);
     try {
       final data = await _reportService.generateReport(
-          _selectedReport!['id'], _selectedPeriod!.id);
+        _selectedReport!['id'],
+        _selectedPeriod!.id,
+        branchId: _selectedBranchId,
+        dim1Id: _dimSelections[1],
+        dim2Id: _dimSelections[2],
+        dim3Id: _dimSelections[3],
+        dim4Id: _dimSelections[4],
+        dim5Id: _dimSelections[5],
+      );
       setState(() => _reportData = data);
     } catch (e) {
       ScaffoldMessenger.of(context)
@@ -314,9 +348,12 @@ String _replaceVars(String text, pw.Context? context) {
   // ฟังก์ชันหลักสำหรับสร้างหน้า PDF
   Future<Uint8List> _generatePdf(PdfPageFormat baseFormat) async {
     final doc = pw.Document();
-    final fontNormal = await PdfGoogleFonts.sarabunRegular();
-    final fontBold = await PdfGoogleFonts.sarabunBold();
-    final fontItalic = await PdfGoogleFonts.sarabunItalic();
+    final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
+    final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
+    final fontItalicData = await rootBundle.load('assets/fonts/THSarabun Italic.ttf');
+    final fontNormal = pw.Font.ttf(fontData);
+    final fontBold = pw.Font.ttf(fontBoldData);
+    final fontItalic = pw.Font.ttf(fontItalicData);
 
     final config = _reportData!['page_config'] ?? {};
     final isLandscape = config['orientation'] == 'LANDSCAPE';
@@ -463,6 +500,42 @@ String _replaceVars(String text, pw.Context? context) {
                               onChanged: (val) =>
                                   setState(() => _selectedPeriod = val),
                             ),
+                            if (_allowedBranches.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              DropdownButtonFormField<int?>(
+                                value: _selectedBranchId,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                    labelText: 'สาขา',
+                                    border: OutlineInputBorder(),
+                                    isDense: true),
+                                items: [
+                                  const DropdownMenuItem<int?>(value: null, child: Text('— ทุกสาขา —')),
+                                  ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
+                                      value: b.branchId,
+                                      child: Text('${b.branchCode}  ${b.branchNameThai}',
+                                          overflow: TextOverflow.ellipsis))),
+                                ],
+                                onChanged: (val) => setState(() => _selectedBranchId = val),
+                              ),
+                            ],
+                            ..._dimTypes.map((t) {
+                              final vals = _dimValues[t.typeCode] ?? [];
+                              final selectedId = _dimSelections[t.slotNo];
+                              final selectedVal = vals.cast<GlDimensionValue?>()
+                                  .firstWhere((v) => v?.id == selectedId, orElse: () => null);
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: GlDimensionPickerField(
+                                  dimType: t,
+                                  values: vals,
+                                  selected: selectedVal,
+                                  isDense: false,
+                                  onSelected: (val) => setState(() =>
+                                      _dimSelections[t.slotNo] = val?.id),
+                                ),
+                              );
+                            }),
                             const Spacer(),
                             SizedBox(
                               width: double.infinity,

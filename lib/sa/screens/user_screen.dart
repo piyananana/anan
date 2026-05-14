@@ -109,11 +109,7 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
   }
 
   void _onViewUser(User user) {
-    setState(() {
-      _formState = UserFormState.viewing;
-      _selectedUserForEdit = null;
-      _selectedUserForView = user;
-    });
+    _onEditUser(user); // user_screen ใช้ edit mode เสมอ
   }
 
   Future<void> _onDeleteUser(User user) async {
@@ -356,21 +352,22 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
         );
       case UserFormState.adding:
         return UserDetailForm(
+          adminMode: true,
           onSubmit: _onFormSubmit,
           onCancel: _onFormCancel,
         );
       case UserFormState.editing:
         return UserDetailForm(
+          adminMode: true,
           editUser: _selectedUserForEdit,
-          viewUser: _selectedUserForView,
           onSubmit: _onFormSubmit,
           onCancel: _onFormCancel,
         );
       case UserFormState.viewing:
         return UserDetailForm(
-          editUser: _selectedUserForEdit,
-          viewUser: _selectedUserForView,
-          onSubmit: (user){},
+          adminMode: true,
+          editUser: _selectedUserForView,
+          onSubmit: _onFormSubmit,
           onCancel: _onFormCancel,
         );
       default:

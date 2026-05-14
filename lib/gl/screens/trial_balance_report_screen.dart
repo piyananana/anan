@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import '../../gl/services/trial_balance_report_service.dart';
 import '../../cd/services/branch_service.dart';
 import '../../cd/services/business_unit_service.dart';
 import '../../cd/services/project_service.dart';
+import '../../sa/models/user_branch.dart';
 import '../../sa/services/auth_service.dart';
 
 class TrialBalanceReportScreen extends StatefulWidget {
@@ -41,6 +43,9 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
   List<FiscalYear> _fiscalYears = [];
   List<PostingPeriod> _periods = [];
   List<Map<String, dynamic>> _reportData = [];
+  List<dynamic> _branchList = [];
+  List<UserBranch> _allowedBranches = [];
+  int? _selectedBranchId;
 
   // Master Data Maps
   Map<int, String> _branchMap = {};
@@ -68,6 +73,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
   @override
   void initState() {
     super.initState();
+    _allowedBranches = authService.allowedBranches;
     _loadMasterData();
   }
 
@@ -94,6 +100,10 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
       final bus = await _buService.fetchRows();
       final projects = await _projectService.fetchRows();
 
+      _branchList = branches
+          .map((b) => {'id': b.id, 'code': b.branchCode, 'name': b.branchNameThai})
+          .toList()
+        ..sort((a, b) => (a['code'] as String).compareTo(b['code'] as String));
       _branchMap = {for (var e in branches) e.id!: e.branchCode};
       _buMap = {for (var e in bus) e.id!: e.buCode};
       _projectMap = {for (var e in projects) e.id!: e.projectCode};
@@ -125,6 +135,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
         showDimensions: _showDimensions,
         hideZero: _hideZero,
         showHeaderTotals: _showHeaderTotals,
+        branchId: _selectedBranchId,
       );
 
       if (data.isEmpty) {
@@ -178,8 +189,12 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final doc = pw.Document();
 
-    final font = await PdfGoogleFonts.sarabunRegular();
-    final fontBold = await PdfGoogleFonts.sarabunBold();
+    final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
+    final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
+    final fontItalicData = await rootBundle.load('assets/fonts/THSarabun Italic.ttf');
+    final font = pw.Font.ttf(fontData);
+    final fontBold = pw.Font.ttf(fontBoldData);
+    final fontItalic = pw.Font.ttf(fontItalicData);
 
     String companyName =
         _company != null ? _company!.thaiName : "(ไม่ระบุชื่อบริษัท)";
@@ -193,7 +208,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 
     List<String> conditions = [];
     if (!_showDimensions) {
-      conditions.add("ไม่แสดงสาขา/หน่วยงาน/โครงการ");
+      conditions.add("ไม่แสดงสาขา/มิติ");
     }
     if (_hideZero) {
       conditions.add("ซ่อนบัญชีที่ยอดเป็นศูนย์");
@@ -270,7 +285,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 
     doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4.landscape,
-      theme: pw.ThemeData.withFont(base: font, bold: fontBold),
+      theme: pw.ThemeData.withFont(base: font, bold: fontBold, italic: fontItalic),
       margin: const pw.EdgeInsets.all(20),
       header: (context) {
         return pw.Column(
@@ -282,19 +297,19 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                 pw.Expanded(
                     flex: 3,
                     child: pw.Text(companyName,
-                        style: const pw.TextStyle(fontSize: 10))),
+                        style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 7,
                     child: pw.Text("งบทดลอง (Trial Balance)",
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(
-                            fontSize: 14, fontWeight: pw.FontWeight.bold))),
+                            fontSize: 16, fontWeight: pw.FontWeight.bold))),
                 pw.Expanded(
                     flex: 3,
                     child: pw.Text(
                         "หน้า ${context.pageNumber}/${context.pagesCount}",
                         textAlign: pw.TextAlign.right,
-                        style: const pw.TextStyle(fontSize: 10)))
+                        style: const pw.TextStyle(fontSize: 12)))
               ],
             ),
             pw.SizedBox(height: 4),
@@ -304,17 +319,17 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                 pw.Expanded(
                     flex: 3,
                     child:
-                        pw.Text("", style: const pw.TextStyle(fontSize: 10))),
+                        pw.Text("", style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 7,
                     child: pw.Text(periodLine,
                         textAlign: pw.TextAlign.center,
-                        style: const pw.TextStyle(fontSize: 10))),
+                        style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 3,
                     child: pw.Text("พิมพ์โดย $userName",
                         textAlign: pw.TextAlign.right,
-                        style: const pw.TextStyle(fontSize: 10)))
+                        style: const pw.TextStyle(fontSize: 12)))
               ],
             ),
             pw.SizedBox(height: 4),
@@ -325,12 +340,12 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                     flex: 10,
                     child: pw.Text(conditionLine,
                         textAlign: pw.TextAlign.left,
-                        style: const pw.TextStyle(fontSize: 8))),
+                        style: const pw.TextStyle(fontSize: 10))),
                 pw.Expanded(
                     flex: 3,
                     child: pw.Text("พิมพ์เมื่อ $printDateStr",
                         textAlign: pw.TextAlign.right,
-                        style: const pw.TextStyle(fontSize: 10)))
+                        style: const pw.TextStyle(fontSize: 12)))
               ],
             ),
             pw.SizedBox(height: 4),
@@ -355,7 +370,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         child: pw.Text("รหัส/ชื่อบัญชี",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
                 pw.Expanded(
                     child: pw.Container(
                         padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -368,7 +383,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         child: pw.Text("ยอดยกมา",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
                 pw.Expanded(
                     child: pw.Container(
                         padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -381,7 +396,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         child: pw.Text("ยอดในงวด",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
                 pw.Expanded(
                     child: pw.Container(
                         padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -395,7 +410,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         child: pw.Text("ยอดยกไป",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
               ]),
             ]),
 
@@ -420,10 +435,10 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         )),
                         alignment: pw.Alignment.center,
                         child: pw.Text(
-                            _showDimensions ? "สาขา/หน่วยงาน/โครงการ" : "-",
+                            _showDimensions ? "สาขา/มิติ" : "-",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
                 pw.Expanded(
                     child: pw.Container(
                         padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -437,7 +452,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         child: pw.Text("เดบิต",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
                 pw.Expanded(
                     child: pw.Container(
                         padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -451,7 +466,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         child: pw.Text("เครดิต",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
                 pw.Expanded(
                     child: pw.Container(
                         padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -465,7 +480,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         child: pw.Text("เดบิต",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
                 pw.Expanded(
                     child: pw.Container(
                         padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -479,7 +494,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         child: pw.Text("เครดิต",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
                 pw.Expanded(
                     child: pw.Container(
                         padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -493,7 +508,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         child: pw.Text("เดบิต",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
                 pw.Expanded(
                     child: pw.Container(
                         padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -508,7 +523,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         child: pw.Text("เครดิต",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 10)))),
+                                fontSize: 12)))),
               ]),
             ]),
             pw.SizedBox(height: 8),
@@ -530,8 +545,8 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
           final isHeader = row['is_header'] == true;
           final showValue = !isHeader || _showHeaderTotals || _showOnlyHeaders;
           final textStyle = isHeader
-              ? pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)
-              : const pw.TextStyle(fontSize: 10);
+              ? pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)
+              : const pw.TextStyle(fontSize: 12);
           final int level = _accountLevels[row['account_id']] ?? 0;
           final double indent = level * 12.0;
 
@@ -624,39 +639,38 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       pw.Padding(
                         padding: pw.EdgeInsets.only(left: indent + 20),
                         child: pw.Text(dimText,
-                            style: pw.TextStyle(fontStyle: pw.FontStyle.italic,
-                                fontSize: 8, color: PdfColors.grey700)),
+                            style: pw.TextStyle(fontStyle: pw.FontStyle.italic, fontSize: 12)),
                       ),
                       pw.Align(
                           alignment: pw.Alignment.centerRight,
                           child: pw.Text(formatNum(d['beg_dr']),
                               style: pw.TextStyle(fontStyle: pw.FontStyle.italic,
-                                  fontSize: 8, color: PdfColors.grey700))),
+                                  fontSize: 10, color: PdfColors.grey700))),
                       pw.Align(
                           alignment: pw.Alignment.centerRight,
                           child: pw.Text(formatNum(d['beg_cr']),
                               style: pw.TextStyle(fontStyle: pw.FontStyle.italic,
-                                  fontSize: 8, color: PdfColors.grey700))),
+                                  fontSize: 10, color: PdfColors.grey700))),
                       pw.Align(
                           alignment: pw.Alignment.centerRight,
                           child: pw.Text(formatNum(d['mvmt_dr']),
                               style: pw.TextStyle(fontStyle: pw.FontStyle.italic,
-                                  fontSize: 8, color: PdfColors.grey700))),
+                                  fontSize: 10, color: PdfColors.grey700))),
                       pw.Align(
                           alignment: pw.Alignment.centerRight,
                           child: pw.Text(formatNum(d['mvmt_cr']),
                               style: pw.TextStyle(fontStyle: pw.FontStyle.italic,
-                                  fontSize: 8, color: PdfColors.grey700))),
+                                  fontSize: 10, color: PdfColors.grey700))),
                       pw.Align(
                           alignment: pw.Alignment.centerRight,
                           child: pw.Text(formatNum(dEndDr),
                               style: pw.TextStyle(fontStyle: pw.FontStyle.italic,
-                                  fontSize: 8, color: PdfColors.grey700))),
+                                  fontSize: 10, color: PdfColors.grey700))),
                       pw.Align(
                           alignment: pw.Alignment.centerRight,
                           child: pw.Text(formatNum(dEndCr),
                               style: pw.TextStyle(fontStyle: pw.FontStyle.italic,
-                                  fontSize: 8, color: PdfColors.grey700))),
+                                  fontSize: 10, color: PdfColors.grey700))),
                     ]));
               }
             }
@@ -702,7 +716,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       alignment: pw.Alignment.center,
                       child: pw.Text("ยอดรวม",
                           style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 10)))),
+                              fontWeight: pw.FontWeight.bold, fontSize: 12)))),
               pw.Expanded(
                   child: pw.Container(
                       padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -715,7 +729,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       alignment: pw.Alignment.centerRight,
                       child: pw.Text(fmt.format(sumBegDr),
                           style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 10)))),
+                              fontWeight: pw.FontWeight.bold, fontSize: 12)))),
               pw.Expanded(
                   child: pw.Container(
                       padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -728,7 +742,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       alignment: pw.Alignment.centerRight,
                       child: pw.Text(fmt.format(sumBegCr),
                           style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 10)))),
+                              fontWeight: pw.FontWeight.bold, fontSize: 12)))),
               pw.Expanded(
                   child: pw.Container(
                       padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -741,7 +755,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       alignment: pw.Alignment.centerRight,
                       child: pw.Text(fmt.format(sumMvmtDr),
                           style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 10)))),
+                              fontWeight: pw.FontWeight.bold, fontSize: 12)))),
               pw.Expanded(
                   child: pw.Container(
                       padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -754,7 +768,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       alignment: pw.Alignment.centerRight,
                       child: pw.Text(fmt.format(sumMvmtCr),
                           style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 10)))),
+                              fontWeight: pw.FontWeight.bold, fontSize: 12)))),
               pw.Expanded(
                   child: pw.Container(
                       padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -767,7 +781,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       alignment: pw.Alignment.centerRight,
                       child: pw.Text(fmt.format(sumEndDr),
                           style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 10)))),
+                              fontWeight: pw.FontWeight.bold, fontSize: 12)))),
               pw.Expanded(
                   child: pw.Container(
                       padding: const pw.EdgeInsets.fromLTRB(1, 3, 1, 3),
@@ -780,7 +794,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       alignment: pw.Alignment.centerRight,
                       child: pw.Text(fmt.format(sumEndCr),
                           style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 10)))),
+                              fontWeight: pw.FontWeight.bold, fontSize: 12)))),
             ])
           ]),
           // pw.Divider(thickness: 0.5),
@@ -869,9 +883,25 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       decoration: const InputDecoration(labelText: 'งวดเดือน', border: OutlineInputBorder()),
                       onChanged: (val) => setState(() => _selectedPeriod = val),
                     ),
+                    if (_allowedBranches.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<int?>(
+                        value: _selectedBranchId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'สาขา', border: OutlineInputBorder()),
+                        items: [
+                          const DropdownMenuItem<int?>(value: null, child: Text('— ทุกสาขา —')),
+                          ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
+                            value: b.branchId,
+                            child: Text('${b.branchCode}  ${b.branchNameThai}', overflow: TextOverflow.ellipsis),
+                          )),
+                        ],
+                        onChanged: (val) => setState(() => _selectedBranchId = val),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     SwitchListTile(
-                      title: const Text('แสดงสาขา/หน่วยงาน/โครงการ'),
+                      title: const Text('แสดงสาขา/มิติ'),
                       value: _showDimensions,
                       onChanged: (v) => setState(() => _showDimensions = v),
                       contentPadding: EdgeInsets.zero,

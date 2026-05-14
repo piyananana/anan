@@ -39,7 +39,8 @@ const Map<String, String> arSysDocType = {
   '55': 'ลดหนี้ใบแจ้งหนี้ - Credit Note to Customer Billing (CN)',
   '60': 'รับเงินมัดจำ - Deposit (DP)',
   '65': 'คืนเงินมัดจำ - Return Deposit (RDP)',
-  '70': 'รับชำระ - Receipt (RC)',
+  '70': 'วางบิล - Bill Collection (BC)',
+  '80': 'รับชำระ - Receipt (RC)',
 };
 // '21': 'บัญชีเจ้าหนี้'
 const Map<String, String> apSysDocType = {

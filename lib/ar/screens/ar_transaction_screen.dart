@@ -17,6 +17,7 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
   int? _selectedTransactionId;
   bool _isViewOnly = false;
   bool _shouldRefreshList = false;
+  int _detailResetKey = 0;
 
   @override
   void initState() {
@@ -41,6 +42,7 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
 
   void _openDetailTab({int? id, bool viewOnly = false}) {
     setState(() {
+      if (id == null) _detailResetKey++;
       _selectedTransactionId = id;
       _isViewOnly = viewOnly;
       _currentTabIndex = 1;
@@ -112,6 +114,7 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
                 ArTransactionDetailWidget(
                   transactionId: _selectedTransactionId,
                   viewOnly: _isViewOnly,
+                  resetKey: _detailResetKey,
                   onSaveSuccess: _onSaveSuccess,
                   onCancel: () {
                     setState(() => _currentTabIndex = 0);

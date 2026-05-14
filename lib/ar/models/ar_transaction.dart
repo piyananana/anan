@@ -9,7 +9,8 @@ const int arDocTypeCreditNote         = 50;
 const int arDocTypeCreditNoteWithBill = 55;
 const int arDocTypeAdvanceReceipt     = 60;
 const int arDocTypeAdvanceRefund      = 65;
-const int arDocTypeReceipt            = 70;
+const int arDocTypeBillCollection     = 70;
+const int arDocTypeReceipt            = 80;
 
 const Map<int, String> arDocTypeNames = {
   arDocTypeInvoice:            'ใบแจ้งหนี้',
@@ -19,6 +20,7 @@ const Map<int, String> arDocTypeNames = {
   arDocTypeCreditNoteWithBill: 'ใบลดหนี้ (ระบุใบแจ้งหนี้)',
   arDocTypeAdvanceReceipt:     'รับเงินมัดจำ',
   arDocTypeAdvanceRefund:      'คืนเงินมัดจำ',
+  arDocTypeBillCollection:     'ใบวางบิล',
   arDocTypeReceipt:            'ใบรับชำระ',
 };
 
@@ -75,6 +77,16 @@ class ArTransactionHeader {
   final String? docNameThai;
   final int? sysDocType;
   final bool? isAutoNumbering;
+  // GL Dimensions (configurable dim1–dim5)
+  final int? dim1Id; final String? dim1Name;
+  final int? dim2Id; final String? dim2Name;
+  final int? dim3Id; final String? dim3Name;
+  final int? dim4Id; final String? dim4Name;
+  final int? dim5Id; final String? dim5Name;
+  // Branch (header level)
+  final int? branchId;
+  final String? branchCode;
+  final String? branchNameThai;
   // Audit
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -123,6 +135,14 @@ class ArTransactionHeader {
     this.isAutoNumbering,
     this.createdAt,
     this.updatedAt,
+    this.dim1Id, this.dim1Name,
+    this.dim2Id, this.dim2Name,
+    this.dim3Id, this.dim3Name,
+    this.dim4Id, this.dim4Name,
+    this.dim5Id, this.dim5Name,
+    this.branchId,
+    this.branchCode,
+    this.branchNameThai,
     this.createdBy,
     this.updatedBy,
   });
@@ -172,6 +192,14 @@ class ArTransactionHeader {
       updatedAt: j['updated_at'] != null ? DateTime.parse(j['updated_at']) : null,
       createdBy: j['created_by']?.toString(),
       updatedBy: j['updated_by']?.toString(),
+      dim1Id: j['dim1_id'] as int?, dim1Name: j['dim1_name'] as String?,
+      dim2Id: j['dim2_id'] as int?, dim2Name: j['dim2_name'] as String?,
+      dim3Id: j['dim3_id'] as int?, dim3Name: j['dim3_name'] as String?,
+      dim4Id: j['dim4_id'] as int?, dim4Name: j['dim4_name'] as String?,
+      dim5Id: j['dim5_id'] as int?, dim5Name: j['dim5_name'] as String?,
+      branchId: j['branch_id'] as int?,
+      branchCode: j['branch_code'] as String?,
+      branchNameThai: j['branch_name_thai'] as String?,
     );
   }
 
@@ -206,6 +234,12 @@ class ArTransactionHeader {
         'ref_doc_no': refDocNo,
         'description': description,
         'status': status,
+        'dim1_id': dim1Id,
+        'dim2_id': dim2Id,
+        'dim3_id': dim3Id,
+        'dim4_id': dim4Id,
+        'dim5_id': dim5Id,
+        'branch_id': branchId,
         'created_by': createdBy,
         'updated_by': updatedBy,
       };

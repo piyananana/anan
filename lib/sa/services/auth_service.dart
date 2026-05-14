@@ -7,30 +7,34 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/company.dart';
 import '../models/menu.dart';
 import '../models/user.dart';
+import '../models/user_branch.dart';
 import 'company_service.dart';
 
 class AuthService with ChangeNotifier {
-  // static const String baseUrl = 'http://localhost:3000/api/sa'; // เปลี่ยนเป็น IP/Domain ของ Backend ของคุณ
   static const String baseUrl = AppConfig.apiSa;
 
   static const String _authTokenKey = 'authToken';
   static const String _userKey = 'currentUser';
   static const String _databaseKey = 'currentDatabase';
+  static const String _branchesKey = 'userBranches';
 
   String? _token;
-  String? _selectedDatabase; // <<< เพิ่มตัวแปรสำหรับเก็บ database name
-  User? _currentUser; // *** เพิ่มตัวแปรสำหรับเก็บข้อมูลผู้ใช้ ***
-  List<Menu> _userMenus = []; // *** เพิ่มตัวแปรสำหรับเก็บเมนู ***
-  Company? _company; // เพิ่มตัวแปรสำหรับเก็บข้อมูลบริษัท
+  String? _selectedDatabase;
+  User? _currentUser;
+  List<Menu> _userMenus = [];
+  Company? _company;
+  List<UserBranch> _allowedBranches = [];
+  UserBranch? _defaultBranch;
 
   User? get currentUser => _currentUser;
-  Company? get company => _company; // เพิ่ม getter สำหรับบริษัท
+  Company? get company => _company;
   List<Menu> get userMenus => _userMenus;
   String? get selectedDatabase => _selectedDatabase;
+  List<UserBranch> get allowedBranches => _allowedBranches;
+  UserBranch? get defaultBranch => _defaultBranch;
 
-  AuthService._internal(); // Private constructor with parameter
-  static final AuthService _instance =
-      AuthService._internal(); // Provide a default server address
+  AuthService._internal();
+  static final AuthService _instance = AuthService._internal();
 
   factory AuthService() {
     return _instance;
@@ -59,17 +63,6 @@ class AuthService with ChangeNotifier {
     _token = null;
   }
 
-  // Map<String, String> _getHeaders({bool includeAuth = true}) {
-  //   final Map<String, String> headers = {
-  //     'Content-Type': 'application/json',
-  //   };
-  //   if (includeAuth && _token != null) {
-  //     headers['Authorization'] = 'Bearer $_token';
-  //   }
-  //   return headers;
-  // }
-
-  // ฟังก์ชันสำหรับเรียกรายชื่อฐานข้อมูลจาก Backend
   Future<List<String>> fetchDatabases() async {
     final response = await http.get(Uri.parse('$baseUrl/databases'));
     if (response.statusCode == 200) {
@@ -80,7 +73,6 @@ class AuthService with ChangeNotifier {
     }
   }
 
-  // ฟังก์ชันสำหรับบันทึกและโหลดค่า database name ใน SharedPreferences
   Future<void> saveDefaultDatabase(String databaseName) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('default_database', databaseName);
@@ -106,20 +98,8 @@ class AuthService with ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(_authTokenKey);
-      // final databaseName = prefs.getString(_databaseKey);
+      if (token == null) return false;
 
-      // if (token == null || databaseName == null) {
-      //   return false;
-      // }
-      if (token == null) {
-        return false;
-      }
-
-      // final headers = {
-      //   'Content-Type': 'application/json',
-      //   'Authorization': 'Bearer $token',
-      //   'x-database-name': databaseName,
-      // };
       final headers = await getAuthHeader();
       final response = await http.post(
         Uri.parse('$baseUrl/auth/check_token'),
@@ -127,17 +107,27 @@ class AuthService with ChangeNotifier {
       );
 
       if (response.statusCode == 200) {
+        // Restore in-memory state from cache (needed after app restart)
+        if (_currentUser == null) {
+          final userJson = prefs.getString(_userKey);
+          if (userJson != null) {
+            _currentUser = User.fromJson(json.decode(userJson));
+          }
+        }
+        if (_selectedDatabase == null) {
+          await getSelectedDatabase();
+        }
+        if (_allowedBranches.isEmpty) {
+          await _loadBranchesFromCache(prefs);
+        }
         return true;
       } else {
-        // Token is invalid, remove it
         await prefs.remove(_authTokenKey);
         await prefs.remove(_databaseKey);
         return false;
       }
     } catch (e) {
-      // if (kDebugMode) {
-        print('Error checking login status: $e');
-      // }
+      print('Error checking login status: $e');
       return false;
     }
   }
@@ -145,8 +135,7 @@ class AuthService with ChangeNotifier {
   // --- Auth API ---
   Future<Map<String, dynamic>> login(
       String userName, String password, String databaseName) async {
-
-    _selectedDatabase = databaseName; // *** บันทึกชื่อฐานข้อมูล ***
+    _selectedDatabase = databaseName;
 
     final headers = await getAuthHeader();
     final response = await http.post(
@@ -162,26 +151,48 @@ class AuthService with ChangeNotifier {
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
       final String token = data['token'];
-      _currentUser = User.fromJson(data['user']); // *** บันทึกข้อมูลผู้ใช้ ***
-      // _selectedDatabase = databaseName; // *** บันทึกชื่อฐานข้อมูล ***
+      _currentUser = User.fromJson(data['user']);
 
       final CompanyService companyService = CompanyService();
       final company = await companyService.fetchCompany();
-      _company = company; // บันทึกข้อมูลบริษัท
-      
-      // _company = Company.fromJson(data['company']); // บันทึกข้อมูลบริษัท
-      // _userMenus = _buildMenuTree(data['menus']); // *** บันทึกเมนู ***
+      _company = company;
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_authTokenKey, token);
-      await prefs.setString(_userKey,json.encode(_currentUser!.toJson()));
+      await prefs.setString(_userKey, json.encode(_currentUser!.toJson()));
       await prefs.setString(_databaseKey, databaseName);
 
-      // setToken(data['accessToken']);
-      setToken(data['token']);
-      await saveDefaultDatabase(databaseName); // <<< บันทึก database ที่เลือก
-      await saveSelectedDatabase(databaseName); // <<< บันทึก database ที่เลือก
-      notifyListeners(); // *** แจ้งให้ Consumer ทราบว่าข้อมูลเปลี่ยนไป ***
+      setToken(token);
+      await saveDefaultDatabase(databaseName);
+      await saveSelectedDatabase(databaseName);
+
+      // Load user's allowed branches (use token directly to avoid SharedPreferences race)
+      try {
+        final authHeaders = {
+          'Content-Type': 'application/json; charset=UTF-8',
+          'Authorization': 'Bearer $token',
+          'X-Database-Name': databaseName,
+          'UserId': _currentUser!.id.toString(),
+          'UserName': _currentUser!.userName,
+        };
+        final branchRes = await http.get(
+          Uri.parse('$baseUrl/sa_user_branch/${_currentUser!.id}'),
+          headers: authHeaders,
+        );
+        if (branchRes.statusCode == 200) {
+          _allowedBranches = (json.decode(branchRes.body) as List)
+              .map((b) => UserBranch.fromJson(b))
+              .toList();
+          final defs = _allowedBranches.where((b) => b.isDefault);
+          _defaultBranch = defs.isEmpty ? null : defs.first;
+          await prefs.setString(_branchesKey,
+              json.encode(_allowedBranches.map((b) => b.toJson()).toList()));
+        }
+      } catch (_) {
+        // Branch loading failure is non-fatal; user can still log in
+      }
+
+      notifyListeners();
       return data;
     } else {
       final errorData = json.decode(response.body);
@@ -198,13 +209,7 @@ class AuthService with ChangeNotifier {
     final headers = await getAuthHeader();
     final response = await http.post(
       Uri.parse('$baseUrl/auth/change_password/$userId'),
-      // headers: _getHeaders(),
       headers: headers,
-      // headers: <String, String>{
-      //   'Content-Type': 'application/json; charset=UTF-8',
-      //   'X-Database-Name':
-      //       selectedDatabase!, // <<< ส่ง databaseName ไปใน header
-      // },
       body: json.encode({
         'userId': userId,
         'oldPassword': oldPassword,
@@ -239,13 +244,15 @@ class AuthService with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_authTokenKey);
     await prefs.remove(_userKey);
-
+    await prefs.remove(_branchesKey);
     await prefs.remove('jwt_token');
     await prefs.remove('selected_database');
     _token = null;
     _currentUser = null;
     _selectedDatabase = null;
     _userMenus = [];
+    _allowedBranches = [];
+    _defaultBranch = null;
     notifyListeners();
   }
 
@@ -260,45 +267,37 @@ class AuthService with ChangeNotifier {
     };
   }
 
-  // ... (คุณอาจมี API อื่นๆ เช่น สำหรับ User, Group, Menu)
-  // เมธอดส่วนตัวสำหรับดึงข้อมูลบริษัท
-  // Future<void> _fetchCompanyData(String databaseName) async {
-  //   try {
-  //     final response = await http.get(Uri.parse('$baseUrl/sa_company/profile'),
-  //         headers: <String, String>{
-  //           'Content-Type': 'application/json; charset=UTF-8',
-  //           'X-Database-Name': databaseName,
-  //         }
-  //     );
-  //     if (response.statusCode == 200) {
-  //       _company = Company.fromJson(json.decode(response.body));
-  //     } else {
-  //       // ดึงข้อมูลบริษัทไม่ได้ อาจไม่ต้อง logout แต่ต้องแจ้งเตือน
-  //       print('Failed to fetch company data');
-  //     }
-  //   } catch (e) {
-  //     print('Error fetching company data: $e');
-  //   }
-  // }
+  // Reload allowed branches from API (call after updating user branch assignments)
+  Future<void> reloadBranches() async {
+    if (_currentUser == null) return;
+    try {
+      final headers = await getAuthHeader();
+      final branchRes = await http.get(
+        Uri.parse('$baseUrl/sa_user_branch/${_currentUser!.id}'),
+        headers: headers,
+      );
+      if (branchRes.statusCode == 200) {
+        _allowedBranches = (json.decode(branchRes.body) as List)
+            .map((b) => UserBranch.fromJson(b))
+            .toList();
+        final defs = _allowedBranches.where((b) => b.isDefault);
+        _defaultBranch = defs.isEmpty ? null : defs.first;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_branchesKey,
+            json.encode(_allowedBranches.map((b) => b.toJson()).toList()));
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
 
-  // เมธอดสำหรับสร้าง Tree Structure ของเมนู
-  // List<Menu> _buildMenuTree(List<dynamic> jsonList) {
-  //   final List<Menu> menus =
-  //       jsonList.map((item) => Menu.fromJson(item)).toList();
-  //   final Map<int, Menu> menuMap = {for (var menu in menus) menu.id: menu};
-  //   final List<Menu> rootMenus = [];
-  //   for (var menu in menus) {
-  //     if (menu.parentId == null) {
-  //       rootMenus.add(menu);
-  //     } else {
-  //       menuMap[menu.parentId!]?.children.add(menu);
-  //     }
-  //   }
-  //   // เรียงลำดับเมนูตาม sort_order
-  //   for (var menu in menus) {
-  //     menu.children.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-  //   }
-  //   rootMenus.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-  //   return rootMenus;
-  // }
+  Future<void> _loadBranchesFromCache(SharedPreferences prefs) async {
+    final branchesJson = prefs.getString(_branchesKey);
+    if (branchesJson != null) {
+      _allowedBranches = (json.decode(branchesJson) as List)
+          .map((b) => UserBranch.fromJson(b))
+          .toList();
+      final defs = _allowedBranches.where((b) => b.isDefault);
+      _defaultBranch = defs.isEmpty ? null : defs.first;
+    }
+  }
 }

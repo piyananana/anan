@@ -20,6 +20,7 @@ class DailyTransactionReportService {
     String? refDocNoTo,
     String? refDocDateFrom,
     String? refDocDateTo,
+    int? branchId,
   }) async {
     final headers = await _authService.getAuthHeader();
     final params = <String, String>{'fiscal_year_id': fiscalYearId.toString()};
@@ -35,6 +36,7 @@ class DailyTransactionReportService {
     if (refDocNoTo != null && refDocNoTo.isNotEmpty) params['ref_doc_no_to'] = refDocNoTo;
     if (refDocDateFrom != null) params['ref_doc_date_from'] = refDocDateFrom;
     if (refDocDateTo != null) params['ref_doc_date_to'] = refDocDateTo;
+    if (branchId != null) params['branch_id'] = branchId.toString();
 
     final uri = Uri.parse('$baseUrl/gl_daily_transaction').replace(queryParameters: params);
     final response = await http.get(uri, headers: headers);

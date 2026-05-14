@@ -1,24 +1,25 @@
 import 'package:anan/cd/models/branch.dart';
-import 'package:anan/cd/models/business_unit.dart';
-import 'package:anan/cd/models/project.dart';
 import 'package:anan/cd/models/currency.dart';
 import 'package:anan/cd/services/branch_service.dart';
-import 'package:anan/cd/services/business_unit_service.dart';
-import 'package:anan/cd/services/project_service.dart';
 import 'package:anan/cd/services/currency_service.dart';
 import 'package:anan/gl/services/account_service.dart';
+import 'package:anan/sa/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/account.dart';
+import '../models/gl_dimension.dart';
 import '../models/gl_entry.dart';
 import '../models/period.dart';
+import '../services/gl_dimension_service.dart';
 import '../services/gl_entry_service.dart';
 import '../services/period_service.dart';
+import 'gl_dimension_picker_field.dart';
 import '../../sa/models/module_document.dart';
 
 class GlEntryDetailWidget extends StatefulWidget {
   final int? entryId;
   final bool viewOnly;
+  final int resetKey;
   final VoidCallback onSaveSuccess;
   final VoidCallback onCancel;
 
@@ -26,6 +27,7 @@ class GlEntryDetailWidget extends StatefulWidget {
     super.key,
     this.entryId,
     this.viewOnly = false,
+    this.resetKey = 0,
     required this.onSaveSuccess,
     required this.onCancel,
   });
@@ -38,17 +40,14 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   final _formKey = GlobalKey<FormState>();
   final GlEntryService _service = GlEntryService();
   final AccountService _accountService = AccountService();
-  final BusinessUnitService _buService = BusinessUnitService();
-  final ProjectService _projectService = ProjectService();
   final BranchService _branchService = BranchService();
   final CurrencyService _currencyService = CurrencyService();
   final PeriodService _periodService = PeriodService();
+  final GlDimensionService _dimService = GlDimensionService();
   bool _isLoading = false;
 
-  // งวดบัญชีที่ gl_status = OPEN
   List<PostingPeriod> _openPeriods = [];
 
-  // Data
   GlEntryHeader _header = GlEntryHeader(
     docId: 0,
     docDate: DateTime.now(),
@@ -61,20 +60,20 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   List<ModuleDocument> _allDocTypes = [];
   ModuleDocument? _selectedRefDocType;
 
-  // Master Data
   List<Account> _accounts = [];
-  List<BusinessUnit> _businessUnits = [];
-  List<Project> _projects = [];
   List<Branch> _branches = [];
   List<Currency> _currencies = [];
   String _baseCurrency = 'THB';
 
-  // UI State
+  List<GlDimensionType> _dimTypes = [];
+  final Map<String, List<GlDimensionValue>> _dimValues = {};
+
   ModuleDocument? _selectedDocType;
   Currency? _selectedCurrency;
   bool _isReadOnly = false;
+  bool _headerExpanded = true;
+  bool _detailExpanded = true;
 
-  // Detail row controllers
   List<TextEditingController> _debitCtrls = [];
   List<TextEditingController> _creditCtrls = [];
   List<TextEditingController> _descCtrls = [];
@@ -99,21 +98,27 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       final results = await Future.wait([
         _service.fetchRowsByModuleUserId(),
         _accountService.fetchRowsControlAccount(),
-        _buService.fetchRows(),
-        _projectService.fetchRows(),
         _branchService.fetchRows(),
         _currencyService.fetchActiveRows(),
         _service.fetchRows(),
         _periodService.fetchOpenGlPeriods(),
+        _dimService.fetchActiveTypes(),
       ]);
       _allowedDocTypes = results[0] as List<ModuleDocument>;
       _accounts = results[1] as List<Account>;
-      _businessUnits = results[2] as List<BusinessUnit>;
-      _projects = results[3] as List<Project>;
-      _branches = results[4] as List<Branch>;
-      _currencies = results[5] as List<Currency>;
-      _allDocTypes = results[6] as List<ModuleDocument>;
-      _openPeriods = results[7] as List<PostingPeriod>;
+      _branches = results[2] as List<Branch>;
+      _currencies = results[3] as List<Currency>;
+      _allDocTypes = results[4] as List<ModuleDocument>;
+      _openPeriods = results[5] as List<PostingPeriod>;
+      _dimTypes = results[6] as List<GlDimensionType>;
+
+      final dimValueResults = await Future.wait(
+        _dimTypes.map((t) => _dimService.fetchValuesByType(t.typeCode)),
+      );
+      for (int i = 0; i < _dimTypes.length; i++) {
+        _dimValues[_dimTypes[i].typeCode] = dimValueResults[i];
+      }
+
       await _loadTransactionData();
     } catch (e) {
       if (mounted) {
@@ -129,7 +134,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   void didUpdateWidget(covariant GlEntryDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.entryId != oldWidget.entryId ||
-        widget.viewOnly != oldWidget.viewOnly) {
+        widget.viewOnly != oldWidget.viewOnly ||
+        widget.resetKey != oldWidget.resetKey) {
       _loadTransactionData();
     }
   }
@@ -147,23 +153,15 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
         List<GlEntryDetail> loadedDetails = data['details'];
         for (var detail in loadedDetails) {
           if (detail.accountCode.isEmpty && detail.accountId != 0) {
-            final match = _accounts.firstWhere((a) => a.id == detail.accountId,
-                orElse: () => Account(
-                    id: 0,
-                    accountCode: '',
-                    accountNameThai: '',
-                    accountNameEng: '',
-                    isActive: true,
-                    accountType: '',
-                    accountSubType: '',
-                    normalBalance: '',
-                    isNormalAccount: false,
-                    isReconcilable: false,
-                    currencyCode: '',
-                    moduleLinkCode: '',
-                    costCenterRequired: false,
-                    projectRequired: false,
-                    branchRequired: false));
+            final match = _accounts.firstWhere(
+              (a) => a.id == detail.accountId,
+              orElse: () => Account(
+                  id: 0, accountCode: '', accountNameThai: '', accountNameEng: '',
+                  isActive: true, accountType: '', accountSubType: '',
+                  normalBalance: '', isNormalAccount: false, isReconcilable: false,
+                  currencyCode: '', moduleLinkCode: '', costCenterRequired: false,
+                  projectRequired: false, branchRequired: false, dimRules: const []),
+            );
             detail.accountCode = match.accountCode;
             detail.accountName = match.accountNameThai;
           }
@@ -203,7 +201,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
           }
         });
 
-        // Initialize controllers for loaded details
         for (final c in _debitCtrls) c.dispose();
         for (final c in _creditCtrls) c.dispose();
         for (final c in _descCtrls) c.dispose();
@@ -235,14 +232,9 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
         orElse: () => _currencies.isNotEmpty
             ? _currencies.first
             : Currency(
-                id: 1,
-                currencyCode: 'THB',
-                currencyNameThai: '',
-                currencyNameEng: '',
-                baseRate: 1,
-                baseCurrencyFlag: true,
-                numOfDecimal: 2,
-                isActive: true));
+                id: 1, currencyCode: 'THB', currencyNameThai: '',
+                currencyNameEng: '', baseRate: 1, baseCurrencyFlag: true,
+                numOfDecimal: 2, isActive: true));
 
     _header = GlEntryHeader(
       docId: 0,
@@ -251,6 +243,9 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       status: 'Draft',
       currencyId: baseCurrency.id ?? 1,
       exchangeRate: baseCurrency.baseRate,
+      branchId:   AuthService().defaultBranch?.branchId,
+      branchCode: AuthService().defaultBranch?.branchCode,
+      branchName: AuthService().defaultBranch?.branchNameThai,
     );
     _details = [];
     _selectedDocType = null;
@@ -278,23 +273,16 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   }
 
   void _calculateTotals() {
-    double drFc = 0, crFc = 0;
-    double drLc = 0, crLc = 0;
+    double drFc = 0, crFc = 0, drLc = 0, crLc = 0;
     for (var d in _details) {
-      d.debitLc =
-          double.parse((d.debitFc * _header.exchangeRate).toStringAsFixed(2));
-      d.creditLc =
-          double.parse((d.creditFc * _header.exchangeRate).toStringAsFixed(2));
-      drFc += d.debitFc;
-      crFc += d.creditFc;
-      drLc += d.debitLc;
-      crLc += d.creditLc;
+      d.debitLc  = double.parse((d.debitFc  * _header.exchangeRate).toStringAsFixed(2));
+      d.creditLc = double.parse((d.creditFc * _header.exchangeRate).toStringAsFixed(2));
+      drFc += d.debitFc;  crFc += d.creditFc;
+      drLc += d.debitLc;  crLc += d.creditLc;
     }
     setState(() {
-      _header.totalDebitFc = drFc;
-      _header.totalCreditFc = crFc;
-      _header.totalDebitLc = drLc;
-      _header.totalCreditLc = crLc;
+      _header.totalDebitFc  = drFc;  _header.totalCreditFc  = crFc;
+      _header.totalDebitLc  = drLc;  _header.totalCreditLc  = crLc;
     });
   }
 
@@ -316,7 +304,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   Future<void> _save(String action) async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
-
     _calculateTotals();
 
     if (action == 'Post' &&
@@ -325,19 +312,16 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
           SnackBar(content: Text('ยอด Dr/Cr ($_baseCurrency) ไม่เท่ากัน')));
       return;
     }
-
     if (_details.isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('กรุณาเพิ่มรายการบัญชี')));
       return;
     }
-
     if (_details.any((d) => d.accountId == 0)) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('กรุณาเลือกบัญชีให้ครบทุกรายการ')));
       return;
     }
-
     if (_details.any((d) => d.debitFc == 0 && d.creditFc == 0)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('กรุณาระบุยอดเดบิตหรือเครดิตในทุกรายการ')));
@@ -370,16 +354,13 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       builder: (ctx) => AlertDialog(
         title: const Text('ยืนยันการถอยรายการ'),
         content: const Text(
-            'ต้องการสร้างรายการถอย (Reverse) สำหรับเอกสารนี้ใช่หรือไม่?\nระบบจะสร้างรายการใหม่ที่มียอดตรงข้ามกัน'),
+            'ต้องการสร้างรายการถอย (Reverse) ใช่หรือไม่?\nระบบจะสร้างรายการใหม่ที่มียอดตรงข้ามกัน'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ยืนยันถอย',
-                style: TextStyle(color: Colors.white)),
+            child: const Text('ยืนยันถอย', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -407,31 +388,25 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     final picked = await showDatePicker(
       context: context,
       initialDate: isDocDate ? _header.docDate : _header.postingDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      firstDate: DateTime(2000), lastDate: DateTime(2100),
     );
     if (picked != null) {
       if (isDocDate) {
-        // ตรวจสอบว่าวันที่เอกสารอยู่ในงวดบัญชีที่ OPEN
         final pickedDay = DateTime(picked.year, picked.month, picked.day);
         final inOpenPeriod = _openPeriods.any((p) =>
             !pickedDay.isBefore(p.periodStartDate) &&
             !pickedDay.isAfter(p.periodEndDate));
         if (!inOpenPeriod) {
           messenger.showSnackBar(const SnackBar(
-            content: Text(
-                'วันที่เอกสารต้องอยู่ในงวดบัญชีที่เปิด (GL Status = OPEN)'),
+            content: Text('วันที่เอกสารต้องอยู่ในงวดบัญชีที่เปิด (GL Status = OPEN)'),
             backgroundColor: Colors.red,
           ));
           return;
         }
       }
       setState(() {
-        if (isDocDate) {
-          _header.docDate = picked;
-        } else {
-          _header.postingDate = picked;
-        }
+        if (isDocDate) _header.docDate = picked;
+        else _header.postingDate = picked;
       });
     }
   }
@@ -439,857 +414,802 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   String _getBaseCurrency() {
     final item = _currencies.firstWhere((e) => e.baseCurrencyFlag == true,
         orElse: () => Currency(
-            id: 0,
-            isActive: true,
-            currencyCode: 'THB',
-            currencyNameThai: '',
-            currencyNameEng: '',
-            baseRate: 1,
-            baseCurrencyFlag: true,
-            numOfDecimal: 2));
+            id: 0, isActive: true, currencyCode: 'THB', currencyNameThai: '',
+            currencyNameEng: '', baseRate: 1, baseCurrencyFlag: true, numOfDecimal: 2));
     return item.currencyCode;
   }
 
-  Widget _buildUnderlineText(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 2, left: 4),
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-        overflow: TextOverflow.ellipsis,
-        maxLines: 1,
+  // ── Dimension helpers ────────────────────────────────────────────────────
+
+  int? _getDimId(GlEntryDetail detail, int slotNo) {
+    switch (slotNo) {
+      case 1: return detail.dim1Id;
+      case 2: return detail.dim2Id;
+      case 3: return detail.dim3Id;
+      case 4: return detail.dim4Id;
+      case 5: return detail.dim5Id;
+      default: return null;
+    }
+  }
+
+  void _setDim(GlEntryDetail detail, int slotNo, GlDimensionValue? val) {
+    switch (slotNo) {
+      case 1: detail.dim1Id = val?.id; detail.dim1Code = val?.valueCode; detail.dim1Name = val?.valueNameThai; break;
+      case 2: detail.dim2Id = val?.id; detail.dim2Code = val?.valueCode; detail.dim2Name = val?.valueNameThai; break;
+      case 3: detail.dim3Id = val?.id; detail.dim3Code = val?.valueCode; detail.dim3Name = val?.valueNameThai; break;
+      case 4: detail.dim4Id = val?.id; detail.dim4Code = val?.valueCode; detail.dim4Name = val?.valueNameThai; break;
+      case 5: detail.dim5Id = val?.id; detail.dim5Code = val?.valueCode; detail.dim5Name = val?.valueNameThai; break;
+    }
+  }
+
+  // ── Decoration helper ────────────────────────────────────────────────────
+
+  // Editable = white fill + outline border
+  // Read-only = grey[100] fill + outline border (no cursor/icon → visually distinct)
+  InputDecoration _fieldDeco(String label, {bool forcedReadOnly = false}) {
+    final isRO = _isReadOnly || forcedReadOnly;
+    return InputDecoration(
+      labelText: label,
+      border: const OutlineInputBorder(),
+      isDense: true,
+      filled: true,
+      fillColor: isRO ? Colors.grey[100] : Colors.white,
+    );
+  }
+
+  // ── Picker dialogs ───────────────────────────────────────────────────────
+
+  Future<Account?> _showAccountDialog() async {
+    final searchCtrl = TextEditingController();
+    final available = _accounts.where((a) => !a.isControlAccount && a.isActive).toList();
+    List<Account> filtered = List.from(available);
+    final result = await showDialog<Account>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        void doFilter(String q) {
+          final lq = q.toLowerCase();
+          setS(() => filtered = q.isEmpty
+              ? available
+              : available.where((a) =>
+                  a.accountCode.toLowerCase().contains(lq) ||
+                  a.accountNameThai.toLowerCase().contains(lq)).toList());
+        }
+        return Dialog(
+          child: SizedBox(
+            width: 560, height: 540,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: searchCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'ค้นหาบัญชี (รหัส / ชื่อ)',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                  style: const TextStyle(fontSize: 15),
+                  onChanged: doFilter,
+                  autofocus: true,
+                ),
+              ),
+              Expanded(child: ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final a = filtered[i];
+                  return ListTile(
+                    dense: true,
+                    title: Text('${a.accountCode}  ${a.accountNameThai}',
+                        style: const TextStyle(fontSize: 14)),
+                    onTap: () => Navigator.pop(ctx, a),
+                  );
+                },
+              )),
+              const Divider(height: 1),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ปิด')),
+            ]),
+          ),
+        );
+      }),
+    );
+    searchCtrl.dispose();
+    return result;
+  }
+
+  Future<Branch?> _showBranchDialog() async {
+    // แสดงเฉพาะสาขาที่ user มีสิทธิ์ (ถ้ากำหนดไว้) มิฉะนั้นแสดงทั้งหมด
+    final allowedIds = AuthService().allowedBranches.map((b) => b.branchId).toSet();
+    final source = allowedIds.isEmpty
+        ? _branches
+        : _branches.where((b) => b.id != null && allowedIds.contains(b.id)).toList();
+    final searchCtrl = TextEditingController();
+    List<Branch> filtered = List.from(source);
+    final result = await showDialog<Branch>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        void doFilter(String q) {
+          final lq = q.toLowerCase();
+          setS(() => filtered = q.isEmpty
+              ? source
+              : source.where((b) =>
+                  b.branchCode.toLowerCase().contains(lq) ||
+                  b.branchNameThai.toLowerCase().contains(lq)).toList());
+        }
+        return Dialog(
+          child: SizedBox(
+            width: 480, height: 500,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: searchCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'ค้นหาสาขา (รหัส / ชื่อ)',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                  style: const TextStyle(fontSize: 15),
+                  onChanged: doFilter,
+                  autofocus: true,
+                ),
+              ),
+              Expanded(child: ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final b = filtered[i];
+                  return ListTile(
+                    dense: true,
+                    title: Text('${b.branchCode}  ${b.branchNameThai}',
+                        style: const TextStyle(fontSize: 14)),
+                    onTap: () => Navigator.pop(ctx, b),
+                  );
+                },
+              )),
+              const Divider(height: 1),
+              Row(children: [
+                const SizedBox(width: 8),
+                if (_header.branchId != null)
+                  TextButton.icon(
+                    icon: const Icon(Icons.clear, size: 16),
+                    label: const Text('ล้างค่า'),
+                    onPressed: () => Navigator.pop(ctx, null),
+                    style: TextButton.styleFrom(foregroundColor: Colors.grey),
+                  ),
+                const Spacer(),
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ปิด')),
+              ]),
+            ]),
+          ),
+        );
+      }),
+    );
+    searchCtrl.dispose();
+    return result;
+  }
+
+  // ── Header card (collapsible) ────────────────────────────────────────────
+  Widget _buildHeaderCard() {
+    return Card(
+      margin: const EdgeInsets.all(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(children: [
+          Row(children: [
+            const Icon(Icons.article_outlined, size: 18, color: Colors.teal),
+            const SizedBox(width: 6),
+            Text('ข้อมูลหัวเอกสาร',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            IconButton(
+              icon: Icon(_headerExpanded ? Icons.expand_less : Icons.expand_more, size: 18),
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              onPressed: () => setState(() => _headerExpanded = !_headerExpanded),
+            ),
+            const Spacer(),
+            if (_header.status != 'Draft')
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _header.status == 'Posted' ? Colors.green[50] : Colors.red[50],
+                  border: Border.all(color: _header.status == 'Posted' ? Colors.green : Colors.red),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(_header.status,
+                    style: TextStyle(
+                        color: _header.status == 'Posted' ? Colors.green[800] : Colors.red[800],
+                        fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+          ]),
+          if (_headerExpanded) ...[
+            const SizedBox(height: 8),
+            // Row 1
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                flex: 4,
+                child: DropdownButtonFormField<ModuleDocument>(
+                  value: _selectedDocType,
+                  items: _allowedDocTypes.map((e) => DropdownMenuItem(
+                      value: e, child: Text('${e.docCode} ${e.docNameThai}'))).toList(),
+                  decoration: _fieldDeco('ประเภทเอกสาร'),
+                  onChanged: _isReadOnly ? null : (val) => setState(() {
+                    _selectedDocType = val;
+                    _header.docId = val!.id;
+                    _header.isAutoNumbering = val.isAutoNumbering;
+                    _header.docNo = val.isAutoNumbering ? 'AUTO' : '';
+                  }),
+                  validator: (v) => v == null ? 'กรุณาเลือก' : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: TextFormField(
+                  key: ValueKey('docNo_${_header.docNo}'),
+                  initialValue: _header.docNo,
+                  decoration: _fieldDeco('เลขที่เอกสาร',
+                      forcedReadOnly: _selectedDocType?.isAutoNumbering ?? false),
+                  readOnly: _isReadOnly || (_selectedDocType?.isAutoNumbering ?? false),
+                  onSaved: (v) => _header.docNo = v ?? '',
+                  validator: (v) => (v == null || v.isEmpty) ? 'ระบุเลขที่' : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: InkWell(
+                  onTap: () => _selectDate(context, true),
+                  child: InputDecorator(
+                    decoration: _fieldDeco('วันที่เอกสาร'),
+                    child: Text(DateFormat('dd/MM/yyyy').format(_header.docDate)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 4,
+                child: DropdownButtonFormField<ModuleDocument>(
+                  value: _selectedRefDocType,
+                  items: _allDocTypes.map((e) => DropdownMenuItem(
+                      value: e, child: Text('${e.docCode} ${e.docNameThai}', overflow: TextOverflow.ellipsis))).toList(),
+                  decoration: _fieldDeco('ประเภทเอกสารอ้างอิง'),
+                  onChanged: _isReadOnly ? null : (val) => setState(() {
+                    _selectedRefDocType = val;
+                    _header.refDocId = val?.id;
+                  }),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: TextFormField(
+                  key: ValueKey('refDocNo_${widget.resetKey}_${_header.id}'),
+                  initialValue: _header.refDocNo,
+                  decoration: _fieldDeco('เลขที่เอกสารอ้างอิง'),
+                  readOnly: _isReadOnly,
+                  onSaved: (v) => _header.refDocNo = v,
+                  onChanged: (v) => _header.refDocNo = v,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: InkWell(
+                  onTap: () async {
+                    if (_isReadOnly) return;
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _header.refDocDate ?? DateTime.now(),
+                      firstDate: DateTime(2000), lastDate: DateTime(2100),
+                    );
+                    if (picked != null) setState(() => _header.refDocDate = picked);
+                  },
+                  child: InputDecorator(
+                    decoration: _fieldDeco('วันที่เอกสารอ้างอิง'),
+                    child: Text(_header.refDocDate == null
+                        ? '-'
+                        : DateFormat('dd/MM/yyyy').format(_header.refDocDate!)),
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            // Row 2
+            Row(children: [
+              Expanded(
+                flex: 10,
+                child: TextFormField(
+                  key: ValueKey('desc_${_header.id}'),
+                  initialValue: _header.description,
+                  decoration: _fieldDeco('คำอธิบายรายการ'),
+                  readOnly: _isReadOnly,
+                  onSaved: (v) => _header.description = v ?? '',
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Branch — dialog picker
+              Expanded(
+                flex: 3,
+                child: InkWell(
+                  onTap: _isReadOnly ? null : () async {
+                    final b = await _showBranchDialog();
+                    if (!mounted) return;
+                    if (b != null) {
+                      setState(() {
+                        _header.branchId   = b.id;
+                        _header.branchCode = b.branchCode;
+                        _header.branchName = b.branchNameThai;
+                      });
+                    } else if (_header.branchId != null) {
+                      setState(() {
+                        _header.branchId   = null;
+                        _header.branchCode = null;
+                        _header.branchName = null;
+                      });
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'สาขา',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      filled: true,
+                      fillColor: _isReadOnly ? Colors.grey[100] : Colors.white,
+                      suffixIcon: _isReadOnly
+                          ? null
+                          : const Icon(Icons.search, size: 16, color: Colors.teal),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: _header.branchCode?.isNotEmpty == true
+                          ? [
+                              Text(_header.branchCode!,
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal[700])),
+                              Text(_header.branchName ?? '',
+                                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            ]
+                          : [
+                              Text('— ไม่ระบุ —',
+                                  style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                            ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<Currency>(
+                  value: _selectedCurrency,
+                  isExpanded: true,
+                  items: _currencies.map((c) => DropdownMenuItem(
+                      value: c,
+                      child: Text(c.currencyNameThai.isNotEmpty
+                          ? '${c.currencyCode}  ${c.currencyNameThai}'
+                          : c.currencyCode))).toList(),
+                  selectedItemBuilder: (_) => _currencies
+                      .map((c) => Text(c.currencyCode, overflow: TextOverflow.ellipsis))
+                      .toList(),
+                  decoration: _fieldDeco('สกุลเงิน'),
+                  onChanged: _isReadOnly ? null : _onCurrencyChanged,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: TextFormField(
+                  key: ValueKey('rate_${_header.currencyId}_${_header.exchangeRate}'),
+                  initialValue: _header.exchangeRate.toString(),
+                  decoration: _fieldDeco('อัตราแลกเปลี่ยน',
+                      forcedReadOnly: _selectedCurrency?.baseCurrencyFlag ?? true),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  readOnly: _isReadOnly || (_selectedCurrency?.baseCurrencyFlag ?? true),
+                  onChanged: _onExchangeRateChanged,
+                ),
+              ),
+            ]),
+          ],
+        ]),
       ),
     );
   }
 
-  Widget _buildDetailItem(int index) {
-    final detail = _details[index];
-    final currencyFormat = NumberFormat("#,##0.00", "en_US");
-    final accountInfo = _accounts.firstWhere((a) => a.id == detail.accountId,
-        orElse: () => Account(
-            id: 0,
-            accountCode: '',
-            accountNameThai: '',
-            accountNameEng: '',
-            accountType: '',
-            accountSubType: '',
-            normalBalance: '',
-            isNormalAccount: false,
-            isReconcilable: false,
-            currencyCode: '',
-            moduleLinkCode: '',
-            costCenterRequired: false,
-            projectRequired: false,
-            branchRequired: false,
-            isActive: true));
-
+  // ── Detail section ───────────────────────────────────────────────────────
+  Widget _buildDetailSection() {
     return Card(
-      key: ObjectKey(detail),
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  backgroundColor: Colors.grey[400],
-                  radius: 20,
-                  child: Text('${index + 1}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 8),
-                // 1. Account
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Autocomplete<Account>(
-                        optionsBuilder: (textEditingValue) {
-                          if (textEditingValue.text.isEmpty) {
-                            return const Iterable<Account>.empty();
-                          }
-                          final q = textEditingValue.text.toLowerCase();
-                          return _accounts.where((account) =>
-                              !account.isControlAccount &&
-                              (account.accountCode.toLowerCase().contains(q) ||
-                               account.accountNameEng.toLowerCase().contains(q) ||
-                               account.accountNameThai.toLowerCase().contains(q)));
-                        },
-                        displayStringForOption: (Account option) =>
-                            '${option.accountCode} - ${option.accountNameThai}(${option.accountNameEng})',
-                        initialValue:
-                            TextEditingValue(text: detail.accountCode),
-                        onSelected: (selection) {
-                          if (selection.isControlAccount) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'บัญชีนี้เป็น Control Account ไม่สามารถลงรายการในโมดูล GL ได้'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                            return;
-                          }
-                          setState(() {
-                            detail.accountId = selection.id;
-                            detail.accountCode = selection.accountCode;
-                            detail.accountName = selection.accountNameThai;
-                          });
-                        },
-                        fieldViewBuilder:
-                            (context, controller, focusNode, onFieldSubmitted) {
-                          if (controller.text != detail.accountCode) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted &&
-                                  controller.text != detail.accountCode) {
-                                controller.text = detail.accountCode;
-                              }
-                            });
-                          }
-                          return TextFormField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            decoration: InputDecoration(
-                                labelStyle: TextStyle(color: Colors.grey[400]),
-                                labelText: 'รหัสบัญชี',
-                                isDense: true),
-                            readOnly: _isReadOnly,
-                          );
-                        },
-                      ),
-                      _buildUnderlineText(detail.accountName.isEmpty
-                          ? '-'
-                          : detail.accountName),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 2. Business Unit
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Autocomplete<BusinessUnit>(
-                        optionsBuilder: (textEditingValue) {
-                          if (textEditingValue.text.isEmpty) {
-                            return const Iterable<BusinessUnit>.empty();
-                          }
-                          return _businessUnits.where((businessUnit) =>
-                              businessUnit.buCode.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()) ||
-                              businessUnit.buNameEng.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()) ||
-                              businessUnit.buNameThai.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()));
-                        },
-                        displayStringForOption: (BusinessUnit option) =>
-                            '${option.buCode} - ${option.buNameThai}(${option.buNameEng})',
-                        initialValue: TextEditingValue(
-                            text: detail.businessUnitCode ?? ''),
-                        onSelected: (selection) {
-                          setState(() {
-                            detail.businessUnitId = selection.id;
-                            detail.businessUnitCode = selection.buCode;
-                            detail.businessUnitName = selection.buNameThai;
-                          });
-                        },
-                        fieldViewBuilder:
-                            (context, controller, focusNode, onFieldSubmitted) {
-                          if (controller.text != detail.businessUnitCode) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted &&
-                                  controller.text != detail.businessUnitCode) {
-                                controller.text = detail.businessUnitCode ?? '';
-                              }
-                            });
-                          }
-                          return TextFormField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            decoration: InputDecoration(
-                                labelStyle: TextStyle(color: Colors.grey[400]),
-                                labelText: 'รหัสหน่วยงาน',
-                                isDense: true),
-                            enabled:
-                                accountInfo.costCenterRequired ? true : false,
-                            readOnly: _isReadOnly,
-                          );
-                        },
-                      ),
-                      _buildUnderlineText(
-                          (detail.businessUnitName?.isEmpty ?? true)
-                              ? '-'
-                              : detail.businessUnitName ?? '-'),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 3. Branch
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Autocomplete<Branch>(
-                        optionsBuilder: (textEditingValue) {
-                          if (textEditingValue.text.isEmpty) {
-                            return const Iterable<Branch>.empty();
-                          }
-                          return _branches.where((branch) =>
-                              branch.branchCode.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()) ||
-                              branch.branchNameEng.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()) ||
-                              branch.branchNameThai.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()));
-                        },
-                        displayStringForOption: (Branch option) =>
-                            '${option.branchCode} - ${option.branchNameThai}(${option.branchNameEng})',
-                        initialValue:
-                            TextEditingValue(text: detail.branchCode ?? ''),
-                        onSelected: (selection) {
-                          setState(() {
-                            detail.branchId = selection.id;
-                            detail.branchCode = selection.branchCode;
-                            detail.branchName = selection.branchNameThai;
-                          });
-                        },
-                        fieldViewBuilder:
-                            (context, controller, focusNode, onFieldSubmitted) {
-                          if (controller.text != detail.branchCode) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted &&
-                                  controller.text != detail.branchCode) {
-                                controller.text = detail.branchCode ?? '';
-                              }
-                            });
-                          }
-                          return TextFormField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            decoration: InputDecoration(
-                                labelStyle: TextStyle(color: Colors.grey[400]),
-                                labelText: 'รหัสสาขา',
-                                isDense: true),
-                            enabled: accountInfo.branchRequired ? true : false,
-                            readOnly: _isReadOnly,
-                          );
-                        },
-                      ),
-                      _buildUnderlineText((detail.branchName?.isEmpty ?? true)
-                          ? '-'
-                          : detail.branchName ?? '-'),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 4. Project
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Autocomplete<Project>(
-                        optionsBuilder: (textEditingValue) {
-                          if (textEditingValue.text.isEmpty) {
-                            return const Iterable<Project>.empty();
-                          }
-                          return _projects.where((project) =>
-                              project.projectCode.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()) ||
-                              project.projectNameEng.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()) ||
-                              project.projectNameThai.toLowerCase().contains(
-                                  textEditingValue.text.toLowerCase()));
-                        },
-                        displayStringForOption: (Project option) =>
-                            '${option.projectCode} - ${option.projectNameThai}(${option.projectNameEng})',
-                        initialValue:
-                            TextEditingValue(text: detail.projectCode ?? ''),
-                        onSelected: (selection) {
-                          setState(() {
-                            detail.projectId = selection.id;
-                            detail.projectCode = selection.projectCode;
-                            detail.projectName = selection.projectNameThai;
-                          });
-                        },
-                        fieldViewBuilder:
-                            (context, controller, focusNode, onFieldSubmitted) {
-                          if (controller.text != detail.projectCode) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted &&
-                                  controller.text != detail.projectCode) {
-                                controller.text = detail.projectCode ?? '';
-                              }
-                            });
-                          }
-                          return TextFormField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            decoration: InputDecoration(
-                                labelStyle: TextStyle(color: Colors.grey[400]),
-                                labelText: 'รหัสโครงการ',
-                                isDense: true),
-                            enabled: accountInfo.projectRequired ? true : false,
-                            readOnly: _isReadOnly,
-                          );
-                        },
-                      ),
-                      _buildUnderlineText((detail.projectName?.isEmpty ?? true)
-                          ? '-'
-                          : detail.projectName ?? '-'),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 5. Debit (FC)
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextFormField(
-                        controller: _debitCtrls[index],
-                        decoration: InputDecoration(
-                            labelStyle: TextStyle(color: Colors.grey[400]),
-                            labelText:
-                                'เดบิต (${_selectedCurrency?.currencyCode ?? _baseCurrency})',
-                            isDense: true),
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        textAlign: TextAlign.right,
-                        readOnly: _isReadOnly,
-                        onChanged: (val) {
-                          detail.debitFc = double.tryParse(val) ?? 0;
-                          if (detail.debitFc != 0 && detail.creditFc != 0) {
-                            detail.creditFc = 0;
-                            _creditCtrls[index].clear();
-                          }
-                          _calculateTotals();
-                        },
-                      ),
-                      if (_baseCurrency != _selectedCurrency?.currencyCode)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2, right: 4),
-                          child: Text(
-                            detail.debitFc == 0
-                                ? ''
-                                : '${currencyFormat.format(detail.debitFc * _header.exchangeRate)} $_baseCurrency',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey[600]),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 6. Credit (FC)
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextFormField(
-                        controller: _creditCtrls[index],
-                        decoration: InputDecoration(
-                            labelStyle: TextStyle(color: Colors.grey[400]),
-                            labelText:
-                                'เครดิต (${_selectedCurrency?.currencyCode ?? _baseCurrency})',
-                            isDense: true),
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        textAlign: TextAlign.right,
-                        readOnly: _isReadOnly,
-                        onChanged: (val) {
-                          detail.creditFc = double.tryParse(val) ?? 0;
-                          if (detail.creditFc != 0 && detail.debitFc != 0) {
-                            detail.debitFc = 0;
-                            _debitCtrls[index].clear();
-                          }
-                          _calculateTotals();
-                        },
-                      ),
-                      if (_baseCurrency != _selectedCurrency?.currencyCode)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2, right: 4),
-                          child: Text(
-                            detail.creditFc == 0
-                                ? ''
-                                : '${currencyFormat.format(detail.creditFc * _header.exchangeRate)} $_baseCurrency',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey[600]),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 7. Description
-                Expanded(
-                  flex: 5,
-                  child: TextFormField(
-                    controller: _descCtrls[index],
-                    decoration: InputDecoration(
-                      labelStyle: TextStyle(color: Colors.grey[400]),
-                      labelText: 'รายละเอียด (Description)',
-                      isDense: true,
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
-                    ),
-                    readOnly: _isReadOnly,
-                    onChanged: (val) {
-                      detail.description = val;
-                    },
-                  ),
-                ),
-
-                // Delete button
-                if (!_isReadOnly)
-                  IconButton(
-                    icon: const Icon(Icons.remove_circle, color: Colors.red),
-                    onPressed: () {
-                      _debitCtrls[index].dispose();
-                      _creditCtrls[index].dispose();
-                      _descCtrls[index].dispose();
-                      _debitCtrls.removeAt(index);
-                      _creditCtrls.removeAt(index);
-                      _descCtrls.removeAt(index);
-                      _details.removeAt(index);
-                      _calculateTotals();
-                    },
-                  ),
-              ],
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        InkWell(
+          onTap: () => setState(() => _detailExpanded = !_detailExpanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(children: [
+              const Icon(Icons.table_rows_outlined, size: 18, color: Colors.teal),
+              const SizedBox(width: 6),
+              Text('รายการเดบิต/เครดิต',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 6),
+              Text('(${_details.length} รายการ)',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+              const Spacer(),
+              Icon(_detailExpanded ? Icons.expand_less : Icons.expand_more, size: 18, color: Colors.grey),
+            ]),
+          ),
+        ),
+        if (_detailExpanded) ...[
+          const Divider(height: 1),
+          _buildDetailTable(),
+          if (!_isReadOnly)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: TextButton.icon(
+                icon: const Icon(Icons.add_circle_outline, size: 16),
+                label: const Text('เพิ่มบรรทัด'),
+                onPressed: _addDetailRow,
+              ),
             ),
-          ],
+        ],
+      ]),
+    );
+  }
+
+  Widget _buildDetailTable() {
+    final currency = _selectedCurrency?.currencyCode ?? _baseCurrency;
+    final fmt = NumberFormat('#,##0.00', 'en_US');
+    final balanced = (_header.totalDebitFc - _header.totalCreditFc).abs() < 0.005;
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+          child: DataTable(
+            headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
+            headingTextStyle: const TextStyle(
+                fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+            dataTextStyle: const TextStyle(fontSize: 14, color: Colors.black87),
+            columnSpacing: 12,
+            dataRowMinHeight: 56,
+            dataRowMaxHeight: 76,
+            columns: [
+              const DataColumn(label: Text('#')),
+              const DataColumn(label: Text('รหัสบัญชี')),
+              ..._dimTypes.map((t) => DataColumn(label: Text(t.nameThai))),
+              DataColumn(label: Text('เดบิต ($currency)')),
+              DataColumn(label: Text('เครดิต ($currency)')),
+              const DataColumn(label: Text('รายละเอียด')),
+              if (!_isReadOnly) const DataColumn(label: SizedBox()),
+            ],
+            rows: [
+              ..._details.asMap().entries.map((entry) {
+              final i = entry.key;
+              final detail = entry.value;
+              final accountInfo = _accounts.firstWhere(
+                (a) => a.id == detail.accountId,
+                orElse: () => Account(
+                    id: 0, accountCode: '', accountNameThai: '', accountNameEng: '',
+                    accountType: '', accountSubType: '', normalBalance: '',
+                    isNormalAccount: false, isReconcilable: false, currencyCode: '',
+                    moduleLinkCode: '', costCenterRequired: false, projectRequired: false,
+                    branchRequired: false, isActive: true, dimRules: const []),
+              );
+              return DataRow(cells: [
+                DataCell(Text('${i + 1}')),
+                // Account cell — dialog picker, 2-line after select, × to clear
+                DataCell(SizedBox(
+                  width: 160,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: _isReadOnly ? null : () async {
+                            final a = await _showAccountDialog();
+                            if (a != null && mounted) {
+                              setState(() {
+                                detail.accountId   = a.id;
+                                detail.accountCode = a.accountCode;
+                                detail.accountName = a.accountNameThai;
+                                for (final t in _dimTypes) {
+                                  if (!a.dimRules.any((r) => r.typeCode == t.typeCode)) {
+                                    _setDim(detail, t.slotNo, null);
+                                  }
+                                }
+                              });
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: detail.accountCode.isEmpty
+                                ? Text('คลิกเพื่อเลือก',
+                                    style: TextStyle(fontSize: 14, color: Colors.grey[500]))
+                                : Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(detail.accountCode,
+                                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.teal[700])),
+                                      Text(detail.accountName,
+                                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                          overflow: TextOverflow.ellipsis),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      ),
+                      if (!_isReadOnly && detail.accountId != 0)
+                        InkWell(
+                          onTap: () => setState(() {
+                            detail.accountId   = 0;
+                            detail.accountCode = '';
+                            detail.accountName = '';
+                            for (final t in _dimTypes) _setDim(detail, t.slotNo, null);
+                          }),
+                          borderRadius: BorderRadius.circular(10),
+                          child: const Padding(
+                            padding: EdgeInsets.all(2),
+                            child: Icon(Icons.clear, size: 14, color: Colors.grey),
+                          ),
+                        ),
+                    ],
+                  ),
+                )),
+                // Dim cells
+                ..._dimTypes.map((dimType) {
+                  final hasDimRule = accountInfo.id != 0 &&
+                      accountInfo.dimRules.any((r) => r.typeCode == dimType.typeCode);
+                  if (!hasDimRule) {
+                    return const DataCell(Text('—', style: TextStyle(color: Colors.grey)));
+                  }
+                  final values = _dimValues[dimType.typeCode] ?? [];
+                  final selectedId = _getDimId(detail, dimType.slotNo);
+                  final selectedVal = values.cast<GlDimensionValue?>()
+                      .firstWhere((v) => v?.id == selectedId, orElse: () => null);
+                  return DataCell(SizedBox(
+                    width: 130,
+                    child: GlDimensionPickerField(
+                      dimType: dimType,
+                      values: values,
+                      selected: selectedVal,
+                      readOnly: _isReadOnly,
+                      isDense: true,
+                      onSelected: (val) => setState(() => _setDim(detail, dimType.slotNo, val)),
+                    ),
+                  ));
+                }),
+                // Debit
+                DataCell(SizedBox(width: 110, child: TextFormField(
+                  controller: _debitCtrls[i],
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: !_isReadOnly,
+                    fillColor: Colors.white,
+                    border: InputBorder.none,
+                    enabledBorder: _isReadOnly
+                        ? InputBorder.none
+                        : const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.teal, width: 1)),
+                    focusedBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.teal, width: 2)),
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                  textAlign: TextAlign.right,
+                  readOnly: _isReadOnly,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (val) {
+                    detail.debitFc = double.tryParse(val) ?? 0;
+                    if (detail.debitFc != 0 && detail.creditFc != 0) {
+                      detail.creditFc = 0;
+                      _creditCtrls[i].clear();
+                    }
+                    _calculateTotals();
+                  },
+                ))),
+                // Credit
+                DataCell(SizedBox(width: 110, child: TextFormField(
+                  controller: _creditCtrls[i],
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: !_isReadOnly,
+                    fillColor: Colors.white,
+                    border: InputBorder.none,
+                    enabledBorder: _isReadOnly
+                        ? InputBorder.none
+                        : const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.teal, width: 1)),
+                    focusedBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.teal, width: 2)),
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                  textAlign: TextAlign.right,
+                  readOnly: _isReadOnly,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (val) {
+                    detail.creditFc = double.tryParse(val) ?? 0;
+                    if (detail.creditFc != 0 && detail.debitFc != 0) {
+                      detail.debitFc = 0;
+                      _debitCtrls[i].clear();
+                    }
+                    _calculateTotals();
+                  },
+                ))),
+                // Description
+                DataCell(SizedBox(width: 220, child: TextFormField(
+                  controller: _descCtrls[i],
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: !_isReadOnly,
+                    fillColor: Colors.white,
+                    border: InputBorder.none,
+                    enabledBorder: _isReadOnly
+                        ? InputBorder.none
+                        : const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey, width: 0.8)),
+                    focusedBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.teal, width: 2)),
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                  readOnly: _isReadOnly,
+                  onChanged: (val) => detail.description = val,
+                ))),
+                // Delete
+                if (!_isReadOnly)
+                  DataCell(IconButton(
+                    icon: const Icon(Icons.remove_circle_outline, size: 18, color: Colors.red),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() {
+                      _debitCtrls[i].dispose();
+                      _creditCtrls[i].dispose();
+                      _descCtrls[i].dispose();
+                      _debitCtrls.removeAt(i);
+                      _creditCtrls.removeAt(i);
+                      _descCtrls.removeAt(i);
+                      _details.removeAt(i);
+                      _calculateTotals();
+                    }),
+                  )),
+              ]);
+              }),
+              // ── Totals row (align กับคอลัมน์เดบิต/เครดิต) ───────────────
+              if (_details.isNotEmpty)
+                DataRow(
+                  color: WidgetStateProperty.resolveWith((states) =>
+                      balanced ? Colors.teal[50] : Colors.red[50]),
+                  cells: [
+                    const DataCell(SizedBox()),
+                    DataCell(Text('รวม',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: balanced ? Colors.teal[700] : Colors.red))),
+                    ..._dimTypes.map((_) => const DataCell(SizedBox())),
+                    DataCell(SizedBox(
+                      width: 110,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(fmt.format(_header.totalDebitFc),
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: balanced ? Colors.teal[700] : Colors.red)),
+                          if (_baseCurrency != currency)
+                            Text(fmt.format(_header.totalDebitLc),
+                                textAlign: TextAlign.right,
+                                style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                        ],
+                      ),
+                    )),
+                    DataCell(SizedBox(
+                      width: 110,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(fmt.format(_header.totalCreditFc),
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: balanced ? Colors.teal[700] : Colors.red)),
+                          if (_baseCurrency != currency)
+                            Text(fmt.format(_header.totalCreditLc),
+                                textAlign: TextAlign.right,
+                                style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                        ],
+                      ),
+                    )),
+                    const DataCell(SizedBox()),
+                    if (!_isReadOnly) const DataCell(SizedBox()),
+                  ],
+                ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  // ── Balance indicator bar (fixed, shows only when unbalanced) ──────────────
+  Widget _buildTotalsRow() {
+    final balanced = (_header.totalDebitFc - _header.totalCreditFc).abs() < 0.005;
+    if (balanced) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: Colors.red[50],
+      child: Row(children: [
+        const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
+        const SizedBox(width: 6),
+        const Text('ยอดไม่ดุล — กรุณาตรวจสอบยอดรวมเดบิต/เครดิตในตาราง',
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
+      ]),
+    );
+  }
+
+  // ── Action buttons ───────────────────────────────────────────────────────
+  Widget _buildActionButtons() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey[300]!)),
+      ),
+      child: Row(children: [
+        if (!_isReadOnly && _header.status == 'Draft') ...[
+          OutlinedButton(onPressed: () => _save('Draft'), child: const Text('ดราฟท์')),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900]),
+            onPressed: () => _save('Post'),
+            child: const Text('โพสต์', style: TextStyle(color: Colors.white)),
+          ),
+        ] else if (_header.status == 'Posted') ...[
+          if (_header.externalSourceId != null)
+            Tooltip(
+              message: 'รายการนี้สร้างจากโมดูลอื่น\nกรุณายกเลิกจากโมดูลต้นทาง',
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[400]),
+                onPressed: null,
+                icon: const Icon(Icons.lock_outline, size: 14),
+                label: const Text('ถอย', style: TextStyle(color: Colors.white)),
+              ),
+            )
+          else
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: _reverse,
+              child: const Text('ถอย', style: TextStyle(color: Colors.white)),
+            ),
+        ],
+        const Spacer(),
+        TextButton(onPressed: widget.onCancel, child: const Text('กลับ')),
+      ]),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
-
     return Form(
       key: _formKey,
-      child: Column(
-        children: [
-          // --- Header Form ---
-          Card(
-            margin: const EdgeInsets.all(8),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                children: [
-                  // Row 1: DocType, DocNo, DocDate, RefDocType, RefDocNo, RefDocDate
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: DropdownButtonFormField<ModuleDocument>(
-                          value: _selectedDocType,
-                          items: _allowedDocTypes
-                              .map((e) => DropdownMenuItem(
-                                  value: e,
-                                  child: Text('${e.docCode} ${e.docNameThai}')))
-                              .toList(),
-                          decoration: const InputDecoration(
-                            labelText: 'ประเภทเอกสาร',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onChanged: _isReadOnly
-                              ? null
-                              : (val) {
-                                  setState(() {
-                                    _selectedDocType = val;
-                                    _header.docId = val!.id;
-                                    _header.isAutoNumbering =
-                                        val.isAutoNumbering;
-                                    if (val.isAutoNumbering) {
-                                      _header.docNo = 'AUTO';
-                                    } else {
-                                      _header.docNo = '';
-                                    }
-                                  });
-                                },
-                          validator: (v) => v == null ? 'กรุณาเลือก' : null,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 3,
-                        child: TextFormField(
-                          key: ValueKey('docNo_${_header.docNo}'),
-                          initialValue: _header.docNo,
-                          decoration: const InputDecoration(
-                            labelText: 'เลขที่เอกสาร',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          readOnly: _isReadOnly ||
-                              (_selectedDocType?.isAutoNumbering ?? false),
-                          onSaved: (v) => _header.docNo = v ?? '',
-                          validator: (v) =>
-                              (v == null || v.isEmpty) ? 'ระบุเลขที่' : null,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: InkWell(
-                          onTap: () => _selectDate(context, true),
-                          child: InputDecorator(
-                            decoration: const InputDecoration(
-                              labelText: 'วันที่เอกสาร',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            child: Text(DateFormat('dd/MM/yyyy')
-                                .format(_header.docDate)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 4,
-                        child: DropdownButtonFormField<ModuleDocument>(
-                          value: _selectedRefDocType,
-                          items: _allDocTypes
-                              .map((e) => DropdownMenuItem(
-                                  value: e,
-                                  child: Text('${e.docCode} ${e.docNameThai}',
-                                      overflow: TextOverflow.ellipsis)))
-                              .toList(),
-                          decoration: const InputDecoration(
-                            labelText: 'ประเภทเอกสารอ้างอิง',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onChanged: _isReadOnly
-                              ? null
-                              : (val) {
-                                  setState(() {
-                                    _selectedRefDocType = val;
-                                    _header.refDocId = val?.id;
-                                  });
-                                },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 3,
-                        child: TextFormField(
-                          initialValue: _header.refDocNo,
-                          decoration: const InputDecoration(
-                            labelText: 'เลขที่เอกสารอ้างอิง',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          readOnly: _isReadOnly,
-                          onSaved: (v) => _header.refDocNo = v,
-                          onChanged: (v) => _header.refDocNo = v,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: InkWell(
-                          onTap: () async {
-                            if (_isReadOnly) return;
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate:
-                                  _header.refDocDate ?? DateTime.now(),
-                              firstDate: DateTime(2000),
-                              lastDate: DateTime(2100),
-                            );
-                            if (picked != null) {
-                              setState(() => _header.refDocDate = picked);
-                            }
-                          },
-                          child: InputDecorator(
-                            decoration: const InputDecoration(
-                              labelText: 'วันที่เอกสารอ้างอิง',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            child: Text(
-                              _header.refDocDate == null
-                                  ? '-'
-                                  : DateFormat('dd/MM/yyyy')
-                                      .format(_header.refDocDate!),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // Row 2: Description, Currency, Exchange Rate
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 13,
-                        child: TextFormField(
-                          key: ValueKey('desc_${_header.id}'),
-                          initialValue: _header.description,
-                          decoration: const InputDecoration(
-                            labelText: 'คำอธิบายรายการ',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          readOnly: _isReadOnly,
-                          onSaved: (v) => _header.description = v ?? '',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: DropdownButtonFormField<Currency>(
-                          value: _selectedCurrency,
-                          isExpanded: true,
-                          items: _currencies
-                              .map((c) => DropdownMenuItem(
-                                    value: c,
-                                    child: Text(
-                                      c.currencyNameThai.isNotEmpty
-                                          ? '${c.currencyCode}  ${c.currencyNameThai}'
-                                          : c.currencyCode,
-                                    ),
-                                  ))
-                              .toList(),
-                          selectedItemBuilder: (_) => _currencies
-                              .map((c) => Text(c.currencyCode,
-                                  overflow: TextOverflow.ellipsis))
-                              .toList(),
-                          decoration: const InputDecoration(
-                            labelText: 'สกุลเงิน',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onChanged: _isReadOnly ? null : _onCurrencyChanged,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 3,
-                        child: TextFormField(
-                          key: ValueKey(
-                              'rate_${_header.currencyId}_${_header.exchangeRate}'),
-                          initialValue: _header.exchangeRate.toString(),
-                          decoration: const InputDecoration(
-                            labelText: 'อัตราแลกเปลี่ยน',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
-                          readOnly: _isReadOnly ||
-                              (_selectedCurrency?.baseCurrencyFlag ?? true),
-                          onChanged: _onExchangeRateChanged,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+      child: Column(children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _buildHeaderCard(),
+              const SizedBox(height: 4),
+              _buildDetailSection(),
+            ]),
           ),
-
-          // --- Detail Table ---
-          Expanded(
-            child: Card(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              child: ListView.separated(
-                padding: const EdgeInsets.all(8),
-                itemCount: _details.length,
-                separatorBuilder: (ctx, i) => const Divider(height: 1),
-                itemBuilder: (ctx, index) {
-                  return _buildDetailItem(index);
-                },
-              ),
-            ),
-          ),
-
-          // --- Add Row Button ---
-          if (!_isReadOnly)
-            Container(
-              width: double.infinity,
-              color: Colors.grey[200],
-              child: IconButton(
-                icon: const Icon(Icons.add, color: Colors.blue),
-                onPressed: _addDetailRow,
-              ),
-            ),
-
-          // --- Footer: Totals & Actions ---
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.deepOrange[50],
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 9,
-                  child: Text(
-                      _header.totalDebitFc == _header.totalCreditFc
-                          ? 'ยอดรวม   '
-                          : 'ยอดรวมไม่ดุล   ',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                          color: _header.totalDebitFc == _header.totalCreditFc
-                              ? Colors.black
-                              : Colors.red,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                          NumberFormat("#,##0.00", "en_US")
-                              .format(_header.totalDebitFc),
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                              color:
-                                  _header.totalDebitFc == _header.totalCreditFc
-                                      ? Colors.black
-                                      : Colors.red,
-                              fontWeight: FontWeight.bold)),
-                      if (_baseCurrency != _selectedCurrency?.currencyCode)
-                        const Divider(),
-                      if (_baseCurrency != _selectedCurrency?.currencyCode)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 0, right: 1),
-                          child: Text(
-                            _header.totalDebitLc == 0
-                                ? ''
-                                : '${NumberFormat("#,##0.00", "en_US").format(_header.totalDebitLc)} $_baseCurrency',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey[600]),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                          NumberFormat("#,##0.00", "en_US")
-                              .format(_header.totalCreditFc),
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                              color:
-                                  _header.totalDebitFc == _header.totalCreditFc
-                                      ? Colors.black
-                                      : Colors.red,
-                              fontWeight: FontWeight.bold)),
-                      if (_baseCurrency != _selectedCurrency?.currencyCode)
-                        const Divider(),
-                      if (_baseCurrency != _selectedCurrency?.currencyCode)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 0, right: 1),
-                          child: Text(
-                            _header.totalCreditLc == 0
-                                ? ''
-                                : '${NumberFormat("#,##0.00", "en_US").format(_header.totalCreditLc)} $_baseCurrency',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey[600]),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (widget.viewOnly)
-                  Expanded(
-                      flex: 5,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          OutlinedButton(
-                              onPressed: widget.onCancel,
-                              child: const Text('ยกเลิก')),
-                          if (_header.status == 'Posted') ...[
-                            const SizedBox(width: 8),
-                            if (_header.externalSourceId != null)
-                              Tooltip(
-                                message: 'รายการนี้สร้างจากโมดูลอื่น\nกรุณายกเลิกจากโมดูลต้นทาง',
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[400]),
-                                  onPressed: null,
-                                  icon: const Icon(Icons.lock_outline, size: 14),
-                                  label: const Text('ถอย', style: TextStyle(color: Colors.white)),
-                                ),
-                              )
-                            else
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                onPressed: _reverse,
-                                child: const Text('ถอย', style: TextStyle(color: Colors.white)),
-                              ),
-                          ],
-                        ],
-                      ))
-                else if (_header.status == 'Draft')
-                  Expanded(
-                      flex: 5,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          OutlinedButton(
-                              onPressed: widget.onCancel,
-                              child: const Text('ยกเลิก')),
-                          const SizedBox(width: 8),
-                          OutlinedButton(
-                              onPressed: () => _save('Draft'),
-                              child: const Text('ดราฟท์')),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.deepOrange[900]),
-                              onPressed: () => _save('Post'),
-                              child: const Text('โพสต์',
-                                  style: TextStyle(color: Colors.white))),
-                        ],
-                      ))
-                else
-                  Expanded(
-                      flex: 5,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          OutlinedButton(
-                              onPressed: widget.onCancel,
-                              child: const Text('ยกเลิก')),
-                        ],
-                      )),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+        _buildTotalsRow(),
+        _buildActionButtons(),
+      ]),
     );
   }
 }

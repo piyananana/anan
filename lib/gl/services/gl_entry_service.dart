@@ -14,10 +14,20 @@ class GlEntryService {
   Future<List<GlEntryHeader>> fetchEntries({
     int? periodId,
     int? fiscalYearId,
+    int? dim1Id,
+    int? dim2Id,
+    int? dim3Id,
+    int? dim4Id,
+    int? dim5Id,
   }) async {
     String query = '?';
     if (periodId != null) query += 'period_id=$periodId&';
     else if (fiscalYearId != null) query += 'fiscal_year_id=$fiscalYearId&';
+    if (dim1Id != null) query += 'dim1_id=$dim1Id&';
+    if (dim2Id != null) query += 'dim2_id=$dim2Id&';
+    if (dim3Id != null) query += 'dim3_id=$dim3Id&';
+    if (dim4Id != null) query += 'dim4_id=$dim4Id&';
+    if (dim5Id != null) query += 'dim5_id=$dim5Id&';
 
     final headers = await authService.getAuthHeader();
     final res = await http.get(
@@ -64,9 +74,11 @@ class GlEntryService {
         'credit_fc': e.creditFc,
         'debit_lc': e.debitLc,
         'credit_lc': e.creditLc,
-        'branch_id': e.branchId,
-        'project_id': e.projectId,
-        'business_unit_id': e.businessUnitId
+        'dim1_id': e.dim1Id,
+        'dim2_id': e.dim2Id,
+        'dim3_id': e.dim3Id,
+        'dim4_id': e.dim4Id,
+        'dim5_id': e.dim5Id,
       }).toList(),
       'action': action // 'Draft' or 'Post'
     });
@@ -84,7 +96,25 @@ class GlEntryService {
     );
 
     if (res.statusCode != 200 && res.statusCode != 201) {
-      throw Exception('Failed to save: ${res.body}');
+      String msg;
+      try {
+        final err = jsonDecode(res.body) as Map<String, dynamic>;
+        final raw = (err['error'] as String? ?? '').trim();
+        if (raw.contains('\n')) {
+          // "Dimension ไม่ครบ:\nบรรทัดที่ 1: ต้องระบุ X\n..." → "Dimension ไม่ครบ: บรรทัดที่ 1 ต้องระบุ X, ..."
+          final parts = raw.split('\n');
+          final head = parts.first.replaceFirst(RegExp(r':$'), '').trim();
+          final body = parts.skip(1)
+              .map((l) => l.replaceAll(': ต้องระบุ', ' ต้องระบุ').replaceFirst(RegExp(r':$'), '').trim())
+              .join(', ');
+          msg = body.isNotEmpty ? '$head: $body' : head;
+        } else {
+          msg = raw.isNotEmpty ? raw : res.body;
+        }
+      } catch (_) {
+        msg = res.body;
+      }
+      throw Exception(msg);
     }
   }
 

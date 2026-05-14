@@ -1,5 +1,19 @@
 // lib/gl/models/coa.dart
 
+class GlAccountDimRule {
+  final String typeCode;
+  final bool isRequired;
+  const GlAccountDimRule({required this.typeCode, required this.isRequired});
+
+  factory GlAccountDimRule.fromJson(Map<String, dynamic> j) =>
+      GlAccountDimRule(
+        typeCode: j['type_code'] as String,
+        isRequired: j['is_required'] as bool? ?? true,
+      );
+
+  Map<String, dynamic> toJson() => {'type_code': typeCode, 'is_required': isRequired};
+}
+
 // Enum เพื่อบอกสถานะของ Node ใน TreeView
 enum AccountMode {
   addRoot,
@@ -39,6 +53,7 @@ class Account {
   final bool projectRequired;
   final bool branchRequired;
   final bool isActive;
+  final List<GlAccountDimRule> dimRules;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final String? createdBy;
@@ -64,6 +79,7 @@ class Account {
     required this.projectRequired,
     required this.branchRequired,
     required this.isActive,
+    this.dimRules = const [],
     this.createdAt,
     this.updatedAt,
     this.createdBy,
@@ -88,10 +104,14 @@ class Account {
       isReconcilable: json['is_reconcilable'] as bool,
       currencyCode: json['currency_code'] as String,
       moduleLinkCode: json['module_link_code'] as String,
-      costCenterRequired: json['cost_center_required'] as bool,
-      projectRequired: json['project_required'] as bool,
-      branchRequired: json['branch_required'] as bool,
+      costCenterRequired: json['cost_center_required'] as bool? ?? false,
+      projectRequired: json['project_required'] as bool? ?? false,
+      branchRequired: json['branch_required'] as bool? ?? false,
       isActive: json['is_active'] as bool,
+      dimRules: (json['dim_rules'] as List?)
+              ?.map((r) => GlAccountDimRule.fromJson(r as Map<String, dynamic>))
+              .toList() ??
+          const [],
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,
@@ -125,6 +145,7 @@ class Account {
       'project_required': projectRequired,
       'branch_required': branchRequired,
       'is_active': isActive,
+      'dim_rules': dimRules.map((r) => r.toJson()).toList(),
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'created_by': createdBy,
