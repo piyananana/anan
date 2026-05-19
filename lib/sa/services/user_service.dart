@@ -66,8 +66,7 @@ class UserService {
       headers: headers,
       body: jsonEncode(<String, dynamic>{
         'userName': user.userName,
-        'password': user.password, // ถ้าต้องการเปลี่ยนรหัสผ่าน
-        // ถ้าไม่ต้องการเปลี่ยนรหัสผ่าน สามารถไม่ส่ง field นี้
+        'password': user.password,
         'first_name': user.firstName,
         'last_name': user.lastName,
         'user_type': user.userType,

@@ -728,6 +728,7 @@ class _DailyTransactionReportScreenState
 
                             // ── ปีบัญชี ──
                             DropdownButtonFormField<FiscalYear>(
+                              isExpanded: true,
                               value: _selectedYear,
                               items: _fiscalYears
                                   .map((fy) => DropdownMenuItem(
@@ -748,6 +749,7 @@ class _DailyTransactionReportScreenState
 
                             // ── งวด ──
                             DropdownButtonFormField<PostingPeriod?>(
+                              isExpanded: true,
                               value: _selectedPeriod,
                               items: [
                                 const DropdownMenuItem<PostingPeriod?>(

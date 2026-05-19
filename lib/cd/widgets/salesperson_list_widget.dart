@@ -76,6 +76,7 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _sortBy = 'code_asc';
   List<Salesperson> _list = [];
   int _totalCount = 0;
   bool _isLoading = false;
@@ -117,14 +118,25 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
 
   void refresh() => _fetch();
 
+  void _onSortSelected(String v) => setState(() => _sortBy = v);
+
   List<Salesperson> get _filtered {
-    if (_searchQuery.isEmpty) return _list;
-    final q = _searchQuery.toUpperCase();
-    return _list.where((s) {
-      return s.salespersonCode.toUpperCase().contains(q) ||
-          s.salespersonNameThai.toUpperCase().contains(q) ||
-          (s.salespersonNameEng?.toUpperCase().contains(q) ?? false);
-    }).toList();
+    List<Salesperson> items = List.from(_list);
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toUpperCase();
+      items = items.where((s) {
+        return s.salespersonCode.toUpperCase().contains(q) ||
+            s.salespersonNameThai.toUpperCase().contains(q) ||
+            (s.salespersonNameEng?.toUpperCase().contains(q) ?? false);
+      }).toList();
+    }
+    switch (_sortBy) {
+      case 'code_asc': items.sort((a, b) => a.salespersonCode.compareTo(b.salespersonCode)); break;
+      case 'code_desc': items.sort((a, b) => b.salespersonCode.compareTo(a.salespersonCode)); break;
+      case 'name_asc': items.sort((a, b) => a.salespersonNameThai.compareTo(b.salespersonNameThai)); break;
+      case 'name_desc': items.sort((a, b) => b.salespersonNameThai.compareTo(a.salespersonNameThai)); break;
+    }
+    return items;
   }
 
   @override
@@ -146,6 +158,17 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
                   tooltip: 'เพิ่มข้อมูลใหม่',
                   onPressed: widget.onAdd,
                 ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.sort),
+                tooltip: 'จัดเรียง',
+                onSelected: _onSortSelected,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
+                  PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+                ],
+              ),
               Expanded(
                 child: TextField(
                   controller: _searchController,
@@ -167,7 +190,7 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(countText,
-                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
           ),
         ),
         Expanded(

@@ -82,6 +82,7 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
   static final _dateFmt = DateFormat('dd/MM/yyyy');
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+  String _sortBy = 'code_asc';
   List<CdWhtType> _rows = [];
   bool _isLoading = false;
 
@@ -120,14 +121,25 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
 
   void refresh() => _fetchRows();
 
+  void _onSortSelected(String v) => setState(() => _sortBy = v);
+
   List<CdWhtType> get _filtered {
-    if (_searchQuery.isEmpty) return _rows;
-    final q = _searchQuery.toLowerCase();
-    return _rows.where((r) =>
-      r.whtCode.toLowerCase().contains(q) ||
-      r.whtName.toLowerCase().contains(q) ||
-      (r.incomeType?.toLowerCase().contains(q) ?? false)
-    ).toList();
+    List<CdWhtType> items = List.from(_rows);
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      items = items.where((r) =>
+        r.whtCode.toLowerCase().contains(q) ||
+        r.whtName.toLowerCase().contains(q) ||
+        (r.incomeType?.toLowerCase().contains(q) ?? false)
+      ).toList();
+    }
+    switch (_sortBy) {
+      case 'code_asc': items.sort((a, b) => a.whtCode.compareTo(b.whtCode)); break;
+      case 'code_desc': items.sort((a, b) => b.whtCode.compareTo(a.whtCode)); break;
+      case 'name_asc': items.sort((a, b) => a.whtName.compareTo(b.whtName)); break;
+      case 'name_desc': items.sort((a, b) => b.whtName.compareTo(a.whtName)); break;
+    }
+    return items;
   }
 
   @override
@@ -150,6 +162,17 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
                 tooltip: 'เพิ่มประเภท WHT ใหม่',
                 onPressed: widget.onAdd,
               ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.sort),
+              tooltip: 'จัดเรียง',
+              onSelected: _onSortSelected,
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
+                PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
+                PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
+                PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+              ],
+            ),
             Expanded(
               child: TextField(
                 controller: _searchCtrl,
@@ -171,7 +194,7 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(countText,
-                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
           ),
         ),
         // Card list

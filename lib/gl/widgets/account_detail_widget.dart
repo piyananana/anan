@@ -405,6 +405,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _accountType,
                       decoration: const InputDecoration(
                         labelText:
@@ -434,6 +435,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _normalBalance,
                     decoration: const InputDecoration(
                       labelText: 'ดุลบัญชีปกติ (เดบิต/เครดิต)',
@@ -493,6 +495,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                 ? Column(children: [
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _currencyCode,
                       decoration: const InputDecoration(
                         labelText: 'สกุลเงินหลัก',
@@ -533,6 +536,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                     if (_isControlAccount) ...[
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _moduleLinkCode,
                       decoration: const InputDecoration(
                         labelText: 'โมดูลที่เชื่อมโยง',

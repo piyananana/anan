@@ -12,6 +12,27 @@ class User {
   final String? email;
   bool isMember;
 
+  bool get isDeveloper => userType == 'developer';
+  bool get isAdmin => userType == 'administrator' || userType == 'developer';
+
+  static int typeRank(String type) {
+    switch (type) {
+      case 'developer': return 4;
+      case 'administrator': return 3;
+      case 'user': return 2;
+      case 'guest': return 1;
+      default: return 0;
+    }
+  }
+
+  // คืน list ประเภทผู้ใช้ที่ currentType สามารถมองเห็น/จัดการได้ (ตัวเองและต่ำกว่า)
+  static List<String> allowedTypesFor(String currentType) {
+    final rank = typeRank(currentType);
+    return ['developer', 'administrator', 'user', 'guest']
+        .where((t) => typeRank(t) <= rank)
+        .toList();
+  }
+
   User({
     required this.id,
     required this.userName,
@@ -23,7 +44,7 @@ class User {
     this.createdAt,
     this.updatedAt,
     this.email,
-    this.isMember = false,  
+    this.isMember = false,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {

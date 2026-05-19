@@ -12,6 +12,8 @@ class UserDetailForm extends StatefulWidget {
   final VoidCallback onCancel;
   /// true = หน้าจอจัดการผู้ใช้ (แก้ไขได้ทุกฟีลด์รวม username, โหลดทุกสาขา)
   final bool adminMode;
+  /// ประเภทผู้ใช้ที่ login อยู่ — ใช้กำหนด dropdown ประเภทผู้ใช้ที่มองเห็นได้
+  final String currentUserType;
 
   const UserDetailForm({
     super.key,
@@ -20,6 +22,7 @@ class UserDetailForm extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.adminMode = false,
+    this.currentUserType = 'user',
   });
 
   @override
@@ -39,7 +42,6 @@ class _UserDetailFormState extends State<UserDetailForm> {
   bool _isEditing = false;
   bool _isViewing = false;
   bool _showPassword = false;
-
   // Branch section
   List<UserBranch> _assignedBranches = [];
   bool _branchesLoading = false;
@@ -47,7 +49,14 @@ class _UserDetailFormState extends State<UserDetailForm> {
   int? _defaultBranchId;
   final UserBranchService _userBranchService = UserBranchService();
 
-  final List<String> _userTypes = ['guest', 'user', 'administrator', 'superadmin'];
+  // ประเภทที่ current user สามารถมองเห็น/กำหนดได้ (ตัวเองและต่ำกว่า)
+  List<String> get _allowedUserTypes => User.allowedTypesFor(widget.currentUserType);
+
+  // Clamps to available list (ถ้า value ไม่อยู่ใน list → เลือกตัวแรก)
+  String get _resolvedUserType {
+    final available = _allowedUserTypes;
+    return available.contains(_userType) ? _userType : (available.isNotEmpty ? available.first : 'user');
+  }
 
   @override
   void initState() {
@@ -445,7 +454,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
             ? _passwordController.text
             : null,
         status: _status,
-        userType: _userType,
+        userType: _resolvedUserType,
       );
       widget.onSubmit(newUser);
     }
@@ -542,6 +551,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _status,
               decoration: const InputDecoration(
                 labelText: 'สถานะ',
@@ -559,12 +569,13 @@ class _UserDetailFormState extends State<UserDetailForm> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _userType,
+              isExpanded: true,
+              value: _resolvedUserType,
               decoration: const InputDecoration(
                 labelText: 'ประเภทผู้ใช้',
                 border: OutlineInputBorder(),
               ),
-              items: _userTypes
+              items: _allowedUserTypes
                   .map((type) =>
                       DropdownMenuItem(value: type, child: Text(type)))
                   .toList(),
@@ -575,8 +586,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
                     },
             ),
 
-            // Branch section: แสดงเสมอสำหรับ superadmin, แสดงเมื่อมี id สำหรับ user ประเภทอื่น
-            if ((user != null && user!.id > 0) || _userType == 'superadmin') ...[
+            if (user != null && user!.id > 0) ...[
               const SizedBox(height: 24),
               _buildBranchSection(),
             ],

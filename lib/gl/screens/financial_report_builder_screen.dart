@@ -128,6 +128,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: orientation,
                     decoration: const InputDecoration(labelText: 'การวางแนวหน้ากระดาษ', border: OutlineInputBorder()),
                     items: const [
@@ -365,6 +366,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: rowType,
                     decoration: const InputDecoration(labelText: 'ประเภทบรรทัด (row_type)', border: OutlineInputBorder()),
                     items: const [
@@ -376,6 +378,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: printControl,
                     decoration: const InputDecoration(labelText: 'การแสดงผล (print_control)', border: OutlineInputBorder()),
                     items: const [
@@ -458,6 +461,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   ]),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: normalSign,
                     decoration: const InputDecoration(labelText: 'เครื่องหมายปกติ (normal_sign)', border: OutlineInputBorder()),
                     items: const [
@@ -567,6 +571,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   ]),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: colType,
                     decoration: const InputDecoration(labelText: 'ประเภทคอลัมน์ (column_type)', border: OutlineInputBorder()),
                     items: const [
@@ -598,6 +603,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   Row(children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
+                        isExpanded: true,
                         value: fontWeight,
                         decoration: const InputDecoration(labelText: 'font_weight', border: OutlineInputBorder()),
                         items: const [
@@ -611,6 +617,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     const SizedBox(width: 8),
                     Expanded(
                       child: DropdownButtonFormField<String>(
+                        isExpanded: true,
                         value: textAlign,
                         decoration: const InputDecoration(labelText: 'text_align', border: OutlineInputBorder()),
                         items: const [
@@ -764,7 +771,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [
-              const Text('รายการงบการเงิน', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text('รายการงบการเงิน', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
               const Spacer(),
               ElevatedButton.icon(
                 icon: const Icon(Icons.add, size: 18),
@@ -791,11 +798,11 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                           selectedTileColor: Colors.deepOrange[50],
                           title: Text(
                             '${r['report_code']} - ${r['report_name_thai']}',
-                            style: const TextStyle(fontSize: 13),
+                            style: const TextStyle(fontSize: 15),
                           ),
                           subtitle: Text(
                             r['is_active'] == true ? 'ใช้งาน' : 'ไม่ใช้งาน',
-                            style: TextStyle(fontSize: 11, color: r['is_active'] == true ? Colors.green : Colors.red),
+                            style: TextStyle(fontSize: 13, color: r['is_active'] == true ? Colors.green : Colors.red),
                           ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -847,7 +854,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
               Expanded(
                 child: Text(
                   'ออกแบบ: ${_selectedReport!['report_code']} - ${_selectedReport!['report_name_thai']}',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -942,7 +949,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                 side: BorderSide(color: Colors.deepOrange[900]!),
               ),
               onPressed: () => _showRowDialog(row),
-              child: Text('$seqNo', style: TextStyle(color: Colors.deepOrange[900], fontWeight: FontWeight.bold, fontSize: 12)),
+              child: Text('$seqNo', style: TextStyle(color: Colors.deepOrange[900], fontWeight: FontWeight.bold, fontSize: 14)),
             ),
             const SizedBox(width: 6),
             // Badge อักษรย่อ row_type
@@ -953,7 +960,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
               alignment: Alignment.center,
               child: Text(
                 rowType[0],
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ),
             const SizedBox(width: 8),
@@ -967,7 +974,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                         borderRadius: BorderRadius.circular(4),
                       ),
                       alignment: Alignment.center,
-                      child: const Text('(ยังไม่มีคอลัมน์)', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                      child: const Text('(ยังไม่มีคอลัมน์)', style: TextStyle(color: Colors.grey, fontSize: 13)),
                     )
                   : _buildColumnsPreview(row['id'], row['row_seq_no'] ?? 0, columns),
             ),
@@ -1059,13 +1066,13 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                 padding: EdgeInsets.only(left: indent * 8.0),
                 child: Text(
                   label,
-                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 2,
                   textAlign: textAlignVal,
                 ),
               ),
-              Text(ref, style: TextStyle(fontSize: 8, color: Colors.grey[600])),
+              Text(ref, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
             ],
           );
         }

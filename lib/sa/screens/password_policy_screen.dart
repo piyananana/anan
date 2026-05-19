@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../services/password_policy_service.dart';
+import '../services/inactivity_service.dart';
 import '../models/password_policy.dart';
 
 class PasswordPolicyScreen extends StatefulWidget {
@@ -19,6 +20,7 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
   final _historyCountController = TextEditingController();
   final _expiryDaysController = TextEditingController();
   final _notificationDaysController = TextEditingController();
+  final _sessionTimeoutController = TextEditingController();
 
   // Checkbox states
   bool _requireUppercase = false;
@@ -45,6 +47,7 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
     _historyCountController.dispose();
     _expiryDaysController.dispose();
     _notificationDaysController.dispose();
+    _sessionTimeoutController.dispose();
     super.dispose();
   }
 
@@ -60,6 +63,7 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
         _historyCountController.text = policy.passwordHistoryCount.toString();
         _expiryDaysController.text = policy.passwordExpiryDays.toString();
         _notificationDaysController.text = policy.passwordNotificationDays.toString();
+        _sessionTimeoutController.text = policy.sessionTimeoutMinutes.toString();
         _requireUppercase = policy.requireUppercase;
         _requireLowercase = policy.requireLowercase;
         _requireDigits = policy.requireDigits;
@@ -94,12 +98,17 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
           passwordExpiryDays: int.parse(_expiryDaysController.text),
           passwordNotificationDays: int.parse(_notificationDaysController.text),
           forcePasswordChangeOnExpiry: _forceChangeOnExpiry,
+          sessionTimeoutMinutes: int.parse(_sessionTimeoutController.text),
         );
 
         await PasswordPolicyService().updatePasswordPolicy(newPolicy);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('บันทึกการตั้งค่ารหัสผ่านสำเร็จ')),
-        );
+        // Reload InactivityService ทันทีโดยไม่ต้อง login ใหม่
+        InactivityService().configure(newPolicy.sessionTimeoutMinutes);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('บันทึกการตั้งค่ารหัสผ่านสำเร็จ')),
+          );
+        }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
@@ -156,7 +165,8 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
                           _buildNumberField(
                             controller: _minLengthController,
                             label: 'ความยาวรหัสผ่านขั้นต่ำ (ตัวอักษร)',
-                            tooltip: 'กำหนดจำนวนตัวอักษรขั้นต่ำของรหัสผ่าน',
+                            tooltip: 'กำหนดจำนวนตัวอักษรขั้นต่ำของรหัสผ่าน (1-128)',
+                            min: 1, max: 128,
                           ),
                           const SizedBox(height: 24),
                           const Divider(),
@@ -194,25 +204,50 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
                           _buildNumberField(
                             controller: _historyCountController,
                             label: 'รหัสผ่านต้องไม่ซ้ำกับจำนวนครั้งที่ผ่านมา',
-                            tooltip: 'กำหนดจำนวนครั้งของรหัสผ่านเก่าที่ไม่สามารถนำกลับมาใช้ได้',
+                            tooltip: 'กำหนดจำนวนครั้งของรหัสผ่านเก่าที่ไม่สามารถนำกลับมาใช้ได้ (0-24)',
+                            min: 0, max: 24,
                           ),
                           const SizedBox(height: 16),
                           _buildNumberField(
                             controller: _expiryDaysController,
                             label: 'อายุของรหัสผ่าน (วัน)',
-                            tooltip: 'กำหนดจำนวนวันก่อนที่รหัสผ่านจะหมดอายุ',
+                            tooltip: 'กำหนดจำนวนวันก่อนที่รหัสผ่านจะหมดอายุ (1-3650)',
+                            min: 1, max: 3650,
                           ),
                           const SizedBox(height: 16),
                           _buildNumberField(
                             controller: _notificationDaysController,
                             label: 'ระยะเวลาการแจ้งเตือน (วัน)',
-                            tooltip: 'กำหนดจำนวนวันที่ต้องแจ้งเตือนก่อนรหัสผ่านหมดอายุ',
+                            tooltip: 'กำหนดจำนวนวันที่ต้องแจ้งเตือนก่อนรหัสผ่านหมดอายุ (ต้องน้อยกว่าอายุรหัสผ่าน)',
+                            min: 0,
+                            extraValidator: (v) {
+                              final n = int.tryParse(v ?? '');
+                              final expiry = int.tryParse(_expiryDaysController.text);
+                              if (n != null && expiry != null && n >= expiry) {
+                                return 'ต้องน้อยกว่าอายุรหัสผ่าน ($expiry วัน)';
+                              }
+                              return null;
+                            },
                           ),
                           // const SizedBox(height: 8),
                           _buildCheckbox(
                             label: 'บังคับเปลี่ยนรหัสผ่านเมื่อหมดอายุ',
                             value: _forceChangeOnExpiry,
                             onChanged: (value) => setState(() => _forceChangeOnExpiry = value!),
+                          ),
+                          const SizedBox(height: 24),
+                          const Divider(),
+                          const Text(
+                            'ความปลอดภัยของ Session',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildNumberField(
+                            controller: _sessionTimeoutController,
+                            label: 'หมดเวลาอัตโนมัติเมื่อไม่มีการใช้งาน (นาที)',
+                            tooltip: 'ระบบจะออกจากระบบอัตโนมัติเมื่อไม่มีการใช้งานตามเวลาที่กำหนด (1-600 นาที)',
+                            min: 1,
+                            max: 600,
                           ),
                           const SizedBox(height: 24),
                           const Divider(),
@@ -236,6 +271,9 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
     required TextEditingController controller,
     required String label,
     required String tooltip,
+    int? min,
+    int? max,
+    String? Function(String?)? extraValidator,
   }) {
     return TextFormField(
       controller: controller,
@@ -249,13 +287,12 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
         ),
       ),
       validator: (value) {
-        if (value == null || value.isEmpty) {
-          return 'กรุณากรอกข้อมูล';
-        }
-        if (int.tryParse(value) == null) {
-          return 'กรุณากรอกเป็นตัวเลขเท่านั้น';
-        }
-        return null;
+        if (value == null || value.isEmpty) return 'กรุณากรอกข้อมูล';
+        final n = int.tryParse(value);
+        if (n == null) return 'กรุณากรอกเป็นตัวเลขเท่านั้น';
+        if (min != null && n < min) return 'ต้องไม่น้อยกว่า $min';
+        if (max != null && n > max) return 'ต้องไม่มากกว่า $max';
+        return extraValidator?.call(value);
       },
     );
   }

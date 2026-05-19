@@ -250,7 +250,7 @@ class CurrencyListWidgetState extends State<CurrencyListWidget>
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(countText,
-                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
           ),
         ),
         Expanded(

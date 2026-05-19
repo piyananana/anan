@@ -297,6 +297,7 @@ class _ArCustomerRunningScreenState extends State<ArCustomerRunningScreen> {
                                 _LabeledField(
                                   label: 'ส่วนท้ายวันที่ (Date Suffix)',
                                   child: DropdownButtonFormField<String>(
+                                    isExpanded: true,
                                     value: _formatSuffixDate,
                                     decoration: const InputDecoration(
                                         border: OutlineInputBorder()),
@@ -317,6 +318,7 @@ class _ArCustomerRunningScreenState extends State<ArCustomerRunningScreen> {
                                     child: _LabeledField(
                                       label: 'ความยาวเลขรัน',
                                       child: DropdownButtonFormField<int>(
+                                        isExpanded: true,
                                         value: _runningLength,
                                         decoration: const InputDecoration(
                                             border: OutlineInputBorder()),

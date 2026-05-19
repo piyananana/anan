@@ -160,6 +160,7 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen> {
           padding: const EdgeInsets.all(12),
           child: Row(children: [
             SizedBox(width: 220, child: DropdownButtonFormField<GlDimensionType>(
+              isExpanded: true,
               value: _selectedType,
               decoration: const InputDecoration(labelText: 'ประเภท Dimension', isDense: true, border: OutlineInputBorder()),
               items: _types.map((t) => DropdownMenuItem(value: t, child: Text('Slot ${t.slotNo}: ${t.nameThai}'))).toList(),
@@ -332,6 +333,7 @@ class _DimValueFormDialogState extends State<_DimValueFormDialog> {
         if (parents.isNotEmpty) ...[
           const SizedBox(height: 10),
           DropdownButtonFormField<int?>(
+            isExpanded: true,
             value: _parentId,
             decoration: const InputDecoration(labelText: 'ระดับบน (parent)', isDense: true, border: OutlineInputBorder()),
             items: [

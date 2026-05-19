@@ -38,6 +38,8 @@ class ArTransactionHeader {
   final String docNo;
   final DateTime docDate;
   final DateTime? dueDate;
+  final DateTime? billingDate;
+  final DateTime? expectedPaymentDate;
   final int periodId;
   final int customerId;
   final String? customerCode;
@@ -99,6 +101,8 @@ class ArTransactionHeader {
     this.docNo = 'AUTO',
     required this.docDate,
     this.dueDate,
+    this.billingDate,
+    this.expectedPaymentDate,
     this.periodId = 0,
     required this.customerId,
     this.customerCode,
@@ -154,6 +158,8 @@ class ArTransactionHeader {
       docNo: j['doc_no'] as String? ?? '',
       docDate: parseLocalDate(j['doc_date']),
       dueDate: parseLocalDateNullable(j['due_date']),
+      billingDate: parseLocalDateNullable(j['billing_date']),
+      expectedPaymentDate: parseLocalDateNullable(j['expected_payment_date']),
       periodId: j['period_id'] as int? ?? 0,
       customerId: j['customer_id'] as int? ?? 0,
       customerCode: j['customer_code'],
@@ -209,6 +215,8 @@ class ArTransactionHeader {
         'doc_no': docNo,
         'doc_date': formatLocalDate(docDate),
         'due_date': dueDate != null ? formatLocalDate(dueDate!) : null,
+        'billing_date': billingDate != null ? formatLocalDate(billingDate!) : null,
+        'expected_payment_date': expectedPaymentDate != null ? formatLocalDate(expectedPaymentDate!) : null,
         'period_id': periodId,
         'customer_id': customerId,
         'customer_code': customerCode,

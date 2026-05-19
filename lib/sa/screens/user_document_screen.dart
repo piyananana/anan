@@ -46,30 +46,13 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
   double _leftPanelWidth = 360.0;
   bool _isDraggingDivider = false;
 
-  UserSortBy _sortBy = UserSortBy.userName;
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-
   @override
   void initState() {
     super.initState();
     _fetchLists();
-
-    _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text;
-      });
-    });
   }
 
   @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  // TODO: implement wantKeepAlive
   bool get wantKeepAlive => true;
 
   Future<void> _fetchLists() async {
@@ -298,27 +281,15 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
     });
   }
 
-  void _onSortSelected(UserSortBy sortBy) {
-    setState(() {
-      _sortBy = sortBy;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Row(children: [Icon(Icons.folder_shared, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการสิทธิ์ประเภทเอกสารของผู้ใช้')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
-        // leading: IconButton(
-        //   icon: const Icon(Icons.arrow_back, color: Colors.white),
-        //   onPressed: () {
-        //     widget.onExit?.call(); // เรียก Callback ย้อนกลับไป HomeScreen
-        //   },
-        // ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -329,33 +300,6 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
             icon: const Icon(Icons.cleaning_services_outlined, color: Colors.white),
             onPressed: _onClearRightPanel,
             tooltip: 'เคลียร์ Panel ขวา',
-          ),
-          PopupMenuButton<UserSortBy>(
-            icon: const Icon(Icons.sort_outlined, color: Colors.white),
-            tooltip: 'จัดเรียงข้อมูล',
-            onSelected: _onSortSelected,
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<UserSortBy>>[
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.userName,
-                child: Text('เรียงตามผู้ใช้'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.firstName,
-                child: Text('เรียงตามชื่อจริง'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.lastName,
-                child: Text('เรียงตามนามสกุล'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.status,
-                child: Text('เรียงตามสถานะ'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.userType,
-                child: Text('เรียงตามประเภทผู้ใช้'),
-              ),
-            ],
           ),
           _selected != null ?
           IconButton(
@@ -407,19 +351,16 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
                               maxWidth: _leftPanelWidth,
                               minWidth: _leftPanelWidth,
                               alignment: Alignment.topLeft,
-                              child: Container(
-                                color: Colors.blueGrey[100],
+                              child: ColoredBox(
+                                color: Colors.blueGrey.shade100,
                                 child: UserListPanel(
                                   users: _headers,
-                                  onViewPermissions: _onView,
-                                  onEditPermissions: _onEdit,
-                                  onDeletePermissions: _onDelete,
+                                  enableAddButton: false,
+                                  enableSortButton: true,
+                                  onAdd: () {},
                                   onEdit: _onEdit,
                                   onView: _onView,
                                   onDelete: _onDelete,
-                                  searchController: _searchController,
-                                  sortBy: _sortBy,
-                                  searchQuery: _searchQuery,
                                 ),
                               ),
                             ),

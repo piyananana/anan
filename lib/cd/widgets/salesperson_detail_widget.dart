@@ -458,6 +458,7 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _salespersonType,
                     decoration: const InputDecoration(
                       labelText: 'ประเภท *',

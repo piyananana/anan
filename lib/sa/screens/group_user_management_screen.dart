@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../models/group.dart';
 import '../models/user.dart';
+import '../services/auth_service.dart';
 import '../services/user_service.dart';
 import '../services/group_service.dart';
 import '../services/group_user_service.dart';
@@ -62,11 +63,13 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
   SortOption _currentSortOption =
       SortOption.userName; // ตัวเลือกการจัดเรียงปัจจุบัน
 
+  String get _currentUserType => AuthService().currentUser?.userType ?? 'guest';
+  Set<String> get _allowedTypes => User.allowedTypesFor(_currentUserType).toSet();
+
   @override
   void initState() {
     super.initState();
-    // _currentList = List.from(widget.initialMenus); // ทำสำเนา
-    _fetchData(); // <-- เรียกเมธอด fetch เพื่อโหลดกลุ่มเมื่อ Widget ถูกสร้าง
+    _fetchData();
   }
 
   @override
@@ -89,8 +92,8 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
       final fetchedData = await service.fetchData();
       final userService = Provider.of<UserService>(context,
           listen: false); // <-- ใช้ UserMenuService
-      _allUsers =
-          await userService.fetchUsers(); // ดึงผู้ใช้ทั้งหมดจาก UserService
+      final fetched = await userService.fetchUsers();
+      _allUsers = fetched.where((u) => _allowedTypes.contains(u.userType)).toList();
       setState(() {
         _currentList = fetchedData;
         _isLoading = false;
@@ -143,14 +146,12 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
     try {
       List<User> fetchedUser;
       if (_nodeMode == NodeMode.edit) {
-        // โหมดแก้ไข: ดึงผู้ใช้ทั้งหมดที่เป็น active และระบุว่าใครเป็นสมาชิก
         fetchedUser = await _groupUserService.getGroupUser(_selectedNode!.id!);
       } else {
-        // โหมดดู: ดึงเฉพาะผู้ใช้ที่เป็นสมาชิกของกลุ่มนี้เท่านั้น
-        fetchedUser =
-            await _groupUserService.getGroupOnlyUsers(_selectedNode!.id!);
+        fetchedUser = await _groupUserService.getGroupOnlyUsers(_selectedNode!.id!);
       }
-      _detailInPanel = fetchedUser;
+      // กรองเฉพาะ type ที่ผู้ login มีสิทธิ์มองเห็น
+      _detailInPanel = fetchedUser.where((u) => _allowedTypes.contains(u.userType)).toList();
       _sortUser(); // จัดเรียงทันทีหลังจากโหลด
     } catch (e) {
       _showSnackBar('Failed to load users: $e', Colors.red);

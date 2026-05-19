@@ -383,6 +383,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _accountType,
                     decoration: const InputDecoration(
                       labelText: 'ประเภทบัญชี *',

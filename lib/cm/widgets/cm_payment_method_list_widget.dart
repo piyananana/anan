@@ -78,6 +78,7 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _sortBy = 'code_asc';
   List<CmPaymentMethod> _list = [];
   bool _isLoading = false;
 
@@ -116,15 +117,26 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
 
   void refresh() => _fetchList();
 
+  void _onSortSelected(String v) => setState(() => _sortBy = v);
+
   List<CmPaymentMethod> get _filtered {
-    if (_searchQuery.isEmpty) return _list;
-    final q = _searchQuery.toUpperCase();
-    return _list.where((r) {
-      return r.methodCode.toUpperCase().contains(q) ||
-          r.methodNameTh.toUpperCase().contains(q) ||
-          (r.methodNameEn ?? '').toUpperCase().contains(q) ||
-          r.methodType.toUpperCase().contains(q);
-    }).toList();
+    List<CmPaymentMethod> items = List.from(_list);
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toUpperCase();
+      items = items.where((r) {
+        return r.methodCode.toUpperCase().contains(q) ||
+            r.methodNameTh.toUpperCase().contains(q) ||
+            (r.methodNameEn ?? '').toUpperCase().contains(q) ||
+            r.methodType.toUpperCase().contains(q);
+      }).toList();
+    }
+    switch (_sortBy) {
+      case 'code_asc': items.sort((a, b) => a.methodCode.compareTo(b.methodCode)); break;
+      case 'code_desc': items.sort((a, b) => b.methodCode.compareTo(a.methodCode)); break;
+      case 'name_asc': items.sort((a, b) => a.methodNameTh.compareTo(b.methodNameTh)); break;
+      case 'name_desc': items.sort((a, b) => b.methodNameTh.compareTo(a.methodNameTh)); break;
+    }
+    return items;
   }
 
   IconData _typeIcon(String t) {
@@ -173,6 +185,17 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
                   tooltip: 'เพิ่มข้อมูลใหม่',
                   onPressed: widget.onAdd,
                 ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.sort),
+                tooltip: 'จัดเรียง',
+                onSelected: _onSortSelected,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
+                  PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+                ],
+              ),
               Expanded(
                 child: TextField(
                   controller: _searchController,
@@ -193,7 +216,7 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(countText,
-                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
           ),
         ),
         Expanded(

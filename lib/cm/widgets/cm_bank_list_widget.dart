@@ -76,6 +76,7 @@ class CmBankListWidgetState extends State<CmBankListWidget>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _sortBy = 'code_asc';
   List<CmBank> _list = [];
   bool _isLoading = false;
 
@@ -114,16 +115,27 @@ class CmBankListWidgetState extends State<CmBankListWidget>
 
   void refresh() => _fetchList();
 
+  void _onSortSelected(String v) => setState(() => _sortBy = v);
+
   List<CmBank> get _filtered {
-    if (_searchQuery.isEmpty) return _list;
-    final q = _searchQuery.toUpperCase();
-    return _list.where((r) {
-      return r.bankCode.toUpperCase().contains(q) ||
-          r.bankNameTh.toUpperCase().contains(q) ||
-          (r.bankNameEn ?? '').toUpperCase().contains(q) ||
-          (r.shortName ?? '').toUpperCase().contains(q) ||
-          (r.swiftCode ?? '').toUpperCase().contains(q);
-    }).toList();
+    List<CmBank> items = List.from(_list);
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toUpperCase();
+      items = items.where((r) {
+        return r.bankCode.toUpperCase().contains(q) ||
+            r.bankNameTh.toUpperCase().contains(q) ||
+            (r.bankNameEn ?? '').toUpperCase().contains(q) ||
+            (r.shortName ?? '').toUpperCase().contains(q) ||
+            (r.swiftCode ?? '').toUpperCase().contains(q);
+      }).toList();
+    }
+    switch (_sortBy) {
+      case 'code_asc': items.sort((a, b) => a.bankCode.compareTo(b.bankCode)); break;
+      case 'code_desc': items.sort((a, b) => b.bankCode.compareTo(a.bankCode)); break;
+      case 'name_asc': items.sort((a, b) => a.bankNameTh.compareTo(b.bankNameTh)); break;
+      case 'name_desc': items.sort((a, b) => b.bankNameTh.compareTo(a.bankNameTh)); break;
+    }
+    return items;
   }
 
   @override
@@ -146,6 +158,17 @@ class CmBankListWidgetState extends State<CmBankListWidget>
                   tooltip: 'เพิ่มข้อมูลใหม่',
                   onPressed: widget.onAdd,
                 ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.sort),
+                tooltip: 'จัดเรียง',
+                onSelected: _onSortSelected,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
+                  PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+                ],
+              ),
               Expanded(
                 child: TextField(
                   controller: _searchController,
@@ -166,7 +189,7 @@ class CmBankListWidgetState extends State<CmBankListWidget>
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(countText,
-                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
           ),
         ),
         Expanded(

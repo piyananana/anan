@@ -578,6 +578,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                     const SizedBox(height: 16),
                     // ปีบัญชี
                     DropdownButtonFormField<FiscalYear>(
+                      isExpanded: true,
                       value: _selectedYear,
                       items: _fiscalYears
                           .map((fy) => DropdownMenuItem(
@@ -596,6 +597,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                     const SizedBox(height: 16),
                     // งวด
                     DropdownButtonFormField<PostingPeriod>(
+                      isExpanded: true,
                       value: _selectedPeriod,
                       items: [
                         const DropdownMenuItem<PostingPeriod>(
@@ -614,6 +616,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                     if (_allowedBranches.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       DropdownButtonFormField<int?>(
+                        isExpanded: true,
                         value: _selectedBranchId,
                         decoration: const InputDecoration(
                             labelText: 'สาขา',

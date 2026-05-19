@@ -37,6 +37,7 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _sortBy = 'code_asc';
   List<ArCustomer> _lists = [];
   int _totalCount = 0;
   bool _isLoading = false;
@@ -84,10 +85,10 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
 
   void refresh() => _fetchLists();
 
+  void _onSortSelected(String v) => setState(() => _sortBy = v);
 
   Widget _buildHeader() {
-    return Container(
-      color: Colors.blueGrey[50],
+    return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
         children: [
@@ -97,6 +98,17 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
               tooltip: 'เพิ่มลูกหนี้ใหม่',
               onPressed: widget.onAdd,
             ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.sort),
+            tooltip: 'จัดเรียง',
+            onSelected: _onSortSelected,
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
+              PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
+              PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
+              PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+            ],
+          ),
           Expanded(
             child: TextField(
               controller: _searchController,
@@ -126,7 +138,7 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(text,
-            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            style: const TextStyle(fontSize: 12, color: Colors.black87)),
       ),
     );
   }
@@ -134,6 +146,13 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final display = List<ArCustomer>.from(_lists);
+    switch (_sortBy) {
+      case 'code_asc': display.sort((a, b) => a.customerCode.compareTo(b.customerCode)); break;
+      case 'code_desc': display.sort((a, b) => b.customerCode.compareTo(a.customerCode)); break;
+      case 'name_asc': display.sort((a, b) => a.customerNameTh.compareTo(b.customerNameTh)); break;
+      case 'name_desc': display.sort((a, b) => b.customerNameTh.compareTo(a.customerNameTh)); break;
+    }
     return Column(
       children: [
         _buildHeader(),
@@ -141,12 +160,12 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : _lists.isEmpty
+              : display.isEmpty
                   ? const Center(child: Text('ไม่พบข้อมูลลูกหนี้'))
                   : ListView.builder(
-                      itemCount: _lists.length,
+                      itemCount: display.length,
                       itemBuilder: (context, index) {
-                        final item = _lists[index];
+                        final item = display[index];
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8.0, vertical: 4.0),

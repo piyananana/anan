@@ -76,6 +76,7 @@ class VatRateListWidgetState extends State<VatRateListWidget>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _sortBy = 'code_asc';
   List<VatRate> _lists = [];
   bool _isLoading = false;
   String _error = '';
@@ -123,14 +124,25 @@ class VatRateListWidgetState extends State<VatRateListWidget>
 
   void refresh() => _fetchLists();
 
+  void _onSortSelected(String v) => setState(() => _sortBy = v);
+
   List<VatRate> _filtered() {
-    if (_searchQuery.isEmpty) return _lists;
-    final q = _searchQuery.toUpperCase();
-    return _lists.where((r) {
-      return r.vatCode.toUpperCase().contains(q) ||
-          r.vatNameTh.toUpperCase().contains(q) ||
-          (r.vatNameEn?.toUpperCase().contains(q) ?? false);
-    }).toList();
+    List<VatRate> items = List.from(_lists);
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toUpperCase();
+      items = items.where((r) {
+        return r.vatCode.toUpperCase().contains(q) ||
+            r.vatNameTh.toUpperCase().contains(q) ||
+            (r.vatNameEn?.toUpperCase().contains(q) ?? false);
+      }).toList();
+    }
+    switch (_sortBy) {
+      case 'code_asc': items.sort((a, b) => a.vatCode.compareTo(b.vatCode)); break;
+      case 'code_desc': items.sort((a, b) => b.vatCode.compareTo(a.vatCode)); break;
+      case 'name_asc': items.sort((a, b) => a.vatNameTh.compareTo(b.vatNameTh)); break;
+      case 'name_desc': items.sort((a, b) => b.vatNameTh.compareTo(a.vatNameTh)); break;
+    }
+    return items;
   }
 
   Widget _buildHeader() {
@@ -144,6 +156,17 @@ class VatRateListWidgetState extends State<VatRateListWidget>
               tooltip: 'เพิ่มอัตราภาษีใหม่',
               onPressed: widget.onAdd,
             ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.sort),
+            tooltip: 'จัดเรียง',
+            onSelected: _onSortSelected,
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
+              PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
+              PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
+              PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+            ],
+          ),
           Expanded(
             child: TextField(
               controller: _searchController,
@@ -176,7 +199,7 @@ class VatRateListWidgetState extends State<VatRateListWidget>
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(countText,
-                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
           ),
         ),
         Expanded(

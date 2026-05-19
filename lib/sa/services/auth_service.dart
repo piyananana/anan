@@ -27,6 +27,8 @@ class AuthService with ChangeNotifier {
   UserBranch? _defaultBranch;
 
   User? get currentUser => _currentUser;
+  bool get isDeveloper => _currentUser?.isDeveloper ?? false;
+  bool get isAdmin => _currentUser?.isAdmin ?? false;
   Company? get company => _company;
   List<Menu> get userMenus => _userMenus;
   String? get selectedDatabase => _selectedDatabase;

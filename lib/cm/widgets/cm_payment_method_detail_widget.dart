@@ -389,6 +389,7 @@ class CmPaymentMethodDetailWidgetState
 
             // ประเภท
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _methodType,
               decoration: const InputDecoration(
                 labelText: 'ประเภทการชำระ *',

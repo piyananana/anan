@@ -105,8 +105,9 @@ class MenuService {
     required String menuType,
     String? targetPath,
     int? sortOrder,
-    String? contentType, // สำหรับ menu_contents
-    String? contentData, // สำหรับ menu_contents
+    bool isSystem = false,
+    String? contentType,
+    String? contentData,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(
@@ -118,6 +119,7 @@ class MenuService {
         'menu_type': menuType,
         'target_path': targetPath,
         'sort_order': sortOrder,
+        'is_system': isSystem,
         'content_type': contentType,
         'content_data': contentData,
       }),
@@ -141,8 +143,9 @@ class MenuService {
     String? targetPath,
     required int sortOrder,
     required bool isActive,
-    String? contentType, // สำหรับ menu_contents
-    String? contentData, // สำหรับ menu_contents
+    bool isSystem = false,
+    String? contentType,
+    String? contentData,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -154,6 +157,7 @@ class MenuService {
         'target_path': targetPath,
         'sort_order': sortOrder,
         'is_active': isActive,
+        'is_system': isSystem,
         'content_type': contentType,
         'content_data': contentData,
       }),

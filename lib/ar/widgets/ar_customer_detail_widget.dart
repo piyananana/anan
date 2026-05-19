@@ -193,6 +193,7 @@ Future<ArCustomerAddress?> showAddressDialog(
                   builder: (_, v, __) => Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: v,
                       decoration: const InputDecoration(
                           labelText: 'ประเภทที่อยู่',
@@ -1106,6 +1107,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _accType,
                 decoration: const InputDecoration(
                     labelText: 'ประเภทบัญชี',
@@ -3087,18 +3089,18 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         const Divider(height: 1),
         const SizedBox(height: 4),
         resultRow(
-          Icons.event_available,
-          Colors.green[700]!,
-          'วันครบกำหนด',
-          due,
-          dueDetail,
-        ),
-        resultRow(
           Icons.receipt_long,
           Colors.blue[700]!,
           'วันวางบิล',
           billing ?? invoice,
           billingDetail,
+        ),
+        resultRow(
+          Icons.event_available,
+          Colors.green[700]!,
+          'วันครบกำหนด',
+          due,
+          dueDetail,
         ),
         resultRow(
           Icons.payments_outlined,

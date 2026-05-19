@@ -305,6 +305,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
             //   ],
             // ),
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   value: _numOfDecimal,
                   alignment: Alignment.centerRight,
                   decoration: const InputDecoration(

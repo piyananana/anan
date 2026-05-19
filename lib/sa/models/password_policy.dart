@@ -9,6 +9,7 @@ class PasswordPolicy {
   final int passwordExpiryDays;
   final int passwordNotificationDays;
   final bool forcePasswordChangeOnExpiry;
+  final int sessionTimeoutMinutes;
 
   PasswordPolicy({
     required this.minLength,
@@ -20,6 +21,7 @@ class PasswordPolicy {
     required this.passwordExpiryDays,
     required this.passwordNotificationDays,
     required this.forcePasswordChangeOnExpiry,
+    this.sessionTimeoutMinutes = 5,
   });
 
   factory PasswordPolicy.fromJson(Map<String, dynamic> json) {
@@ -33,6 +35,7 @@ class PasswordPolicy {
       passwordExpiryDays: json['password_expiry_days'] as int,
       passwordNotificationDays: json['password_notification_days'] as int,
       forcePasswordChangeOnExpiry: json['force_password_change_on_expiry'] as bool,
+      sessionTimeoutMinutes: (json['session_timeout_minutes'] as int?) ?? 5,
     );
   }
 
@@ -47,6 +50,7 @@ class PasswordPolicy {
       'password_expiry_days': passwordExpiryDays,
       'password_notification_days': passwordNotificationDays,
       'force_password_change_on_expiry': forcePasswordChangeOnExpiry,
+      'session_timeout_minutes': sessionTimeoutMinutes,
     };
   }
 }

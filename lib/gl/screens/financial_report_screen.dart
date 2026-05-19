@@ -450,6 +450,7 @@ String _replaceVars(String text, pw.Context? context) {
                                     fontWeight: FontWeight.bold, fontSize: 16)),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<Map<String, dynamic>>(
+                              isExpanded: true,
                               value: _selectedReport,
                               items: _reportMasters
                                   .map((r) => DropdownMenuItem(
@@ -462,12 +463,12 @@ String _replaceVars(String text, pw.Context? context) {
                                   labelText: 'งบการเงิน',
                                   border: OutlineInputBorder(),
                                   isDense: true),
-                              isExpanded: true,
                               onChanged: (val) =>
                                   setState(() => _selectedReport = val),
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<FiscalYear>(
+                              isExpanded: true,
                               value: _selectedYear,
                               items: _fiscalYears
                                   .map((fy) => DropdownMenuItem(
@@ -486,6 +487,7 @@ String _replaceVars(String text, pw.Context? context) {
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<PostingPeriod>(
+                              isExpanded: true,
                               value: _selectedPeriod,
                               items: _periods
                                   .map((p) => DropdownMenuItem(

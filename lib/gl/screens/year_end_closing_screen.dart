@@ -315,6 +315,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                           SizedBox(
                             width: 280,
                             child: DropdownButtonFormField<FiscalYear>(
+                              isExpanded: true,
                               value: _selectedYear,
                               decoration: const InputDecoration(
                                 border: OutlineInputBorder(),
@@ -524,6 +525,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                     SizedBox(
                       width: 260,
                       child: DropdownButtonFormField<FiscalYear>(
+                        isExpanded: true,
                         value: _selectedNextYear,
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),

@@ -297,6 +297,7 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
 
           // ประเภทเงินได้
           DropdownButtonFormField<String>(
+            isExpanded: true,
             value: _incomeType,
             decoration: const InputDecoration(
               labelText: 'ประเภทเงินได้ (มาตรา)',

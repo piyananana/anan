@@ -170,13 +170,16 @@ class _CdWhtTypeScreenState extends State<CdWhtTypeScreen>
               child: OverflowBox(
                 maxWidth: _leftPanelWidth, minWidth: _leftPanelWidth,
                 alignment: Alignment.topLeft,
-                child: CdWhtTypeListWidget(
-                  key: _listKey,
-                  enableAddButton: true, enableEditButton: true,
-                  enableViewButton: true, enableDeleteButton: true,
-                  enableCardSelect: false,
-                  onAdd: _onAdd, onEdit: _onEdit, onView: _onView,
-                  onDelete: _onDelete, onCallback: _onCallback,
+                child: ColoredBox(
+                  color: Colors.blueGrey.shade100,
+                  child: CdWhtTypeListWidget(
+                    key: _listKey,
+                    enableAddButton: true, enableEditButton: true,
+                    enableViewButton: true, enableDeleteButton: true,
+                    enableCardSelect: false,
+                    onAdd: _onAdd, onEdit: _onEdit, onView: _onView,
+                    onDelete: _onDelete, onCallback: _onCallback,
+                  ),
                 ),
               ),
             ),

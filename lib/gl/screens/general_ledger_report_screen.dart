@@ -659,6 +659,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                     const Text('เงื่อนไขรายงาน', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<FiscalYear>(
+                      isExpanded: true,
                       value: _selectedYear,
                       items: _fiscalYears.map((fy) => DropdownMenuItem(value: fy, child: Text(fy.fyCode))).toList(),
                       decoration: const InputDecoration(labelText: 'ปีบัญชี', border: OutlineInputBorder()),
@@ -671,6 +672,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<PostingPeriod>(
+                      isExpanded: true,
                       value: _selectedPeriod,
                       items: [
                         const DropdownMenuItem<PostingPeriod>(value: null, child: Text('ทุกงวด (ตั้งแต่ต้นปี)')),

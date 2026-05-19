@@ -48,6 +48,7 @@ class _MenuScreenState extends State<MenuScreen>
   String _contentType = 'widget'; // Default for content
   final TextEditingController _contentDataController = TextEditingController();
   bool _isActive = true;
+  bool _isSystem = false;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
@@ -132,6 +133,7 @@ class _MenuScreenState extends State<MenuScreen>
       _menuType = 'folder';
       _contentType = 'widget';
       _isActive = true;
+      _isSystem = false;
       _selectedNode = null;
       _nodeMode = NodeMode.none;
       _parentIdForNewNode = null;
@@ -185,8 +187,9 @@ class _MenuScreenState extends State<MenuScreen>
       // ถ้ามีการเก็บ content ใน model/db (ตอนนี้ Menu model ไม่มี field นี้โดยตรง)
       // คุณอาจจะต้อง fetch menu_contents แยก หรือให้ Menu model มี fields นี้
       // สำหรับตอนนี้ เราสมมติว่า content data จะถูกโหลดในฟอร์มเมื่อแก้ไข
-      _loadContentForEdit(menu.id); // โหลด content เพิ่มเติม
-      _isActive = true; // จาก DB
+      _loadContentForEdit(menu.id);
+      _isActive = true;
+      _isSystem = menu.isSystem;
     });
   }
 
@@ -219,14 +222,11 @@ class _MenuScreenState extends State<MenuScreen>
           parentId: _nodeMode == NodeMode.addChild ? _parentIdForNewNode : null,
           menuName: _menuNameController.text,
           menuType: _menuType,
-          targetPath: _targetPathController.text.isEmpty
-              ? null
-              : _targetPathController.text,
+          targetPath: _targetPathController.text.isEmpty ? null : _targetPathController.text,
           sortOrder: int.tryParse(_sortOrderController.text),
+          isSystem: _isSystem,
           contentType: _contentType,
-          contentData: _contentDataController.text.isEmpty
-              ? null
-              : _contentDataController.text,
+          contentData: _contentDataController.text.isEmpty ? null : _contentDataController.text,
         );
         message = 'เพิ่มเมนู "${newMenu.menuName}" สำเร็จ';
       } else if (_nodeMode == NodeMode.edit && _selectedNode != null) {
@@ -234,16 +234,12 @@ class _MenuScreenState extends State<MenuScreen>
           _selectedNode!.id,
           menuName: _menuNameController.text,
           menuType: _menuType,
-          targetPath: _targetPathController.text.isEmpty
-              ? null
-              : _targetPathController.text,
-          sortOrder: int.tryParse(_sortOrderController.text) ??
-              _selectedNode!.sortOrder,
-          isActive: _isActive, // ต้องมาจาก Form หรือ DB
+          targetPath: _targetPathController.text.isEmpty ? null : _targetPathController.text,
+          sortOrder: int.tryParse(_sortOrderController.text) ?? _selectedNode!.sortOrder,
+          isActive: _isActive,
+          isSystem: _isSystem,
           contentType: _contentType,
-          contentData: _contentDataController.text.isEmpty
-              ? null
-              : _contentDataController.text,
+          contentData: _contentDataController.text.isEmpty ? null : _contentDataController.text,
         );
         message = 'แก้ไขเมนู "${updatedMenu.menuName}" สำเร็จ';
       }
@@ -537,6 +533,7 @@ class _MenuScreenState extends State<MenuScreen>
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _menuType,
               decoration: const InputDecoration(
                 labelText: 'ประเภทเมนู',
@@ -579,6 +576,7 @@ class _MenuScreenState extends State<MenuScreen>
             // ส่วนสำหรับ Content (ถ้าเป็น link/widget)
             if (_menuType != 'folder')
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _contentType,
                 decoration: const InputDecoration(
                   labelText: 'ประเภท Content',
@@ -652,15 +650,28 @@ class _MenuScreenState extends State<MenuScreen>
                   const Text('สถานะ: '),
                   Switch(
                     value: _isActive,
-                    onChanged: (bool value) {
-                      setState(() {
-                        _isActive = value;
-                      });
-                    },
+                    onChanged: (v) => setState(() => _isActive = v),
                   ),
                   Text(_isActive ? 'Active' : 'Inactive'),
                 ],
               ),
+            Row(
+              children: [
+                const Text('เมนูระบบ (System): '),
+                Switch(
+                  value: _isSystem,
+                  activeColor: Colors.red,
+                  onChanged: (v) => setState(() => _isSystem = v),
+                ),
+                Text(
+                  _isSystem ? 'เฉพาะ Developer' : 'ทั่วไป',
+                  style: TextStyle(
+                    color: _isSystem ? Colors.red : Colors.grey,
+                    fontWeight: _isSystem ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,

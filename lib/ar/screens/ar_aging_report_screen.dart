@@ -368,6 +368,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                 if (_allowedBranches.isNotEmpty) ...[
                                   const SizedBox(height: 16),
                                   DropdownButtonFormField<int?>(
+                                    isExpanded: true,
                                     value: _selectedBranchId,
                                     decoration: const InputDecoration(
                                         labelText: 'สาขา',

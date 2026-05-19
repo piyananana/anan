@@ -2,6 +2,7 @@ import '../../config/app_config.dart';
 // lib/services/backup_service.dart
 
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import '../models/backup_schedule.dart';
 import 'auth_service.dart';
@@ -159,6 +160,39 @@ class BackupService {
     }
   }
 
+  /// Upload ไฟล์ .backup จากเครื่อง client แล้ว restore ไปยัง targetDatabase
+  Future<void> restoreFromUpload(PlatformFile file, String targetDatabase) async {
+    final authHeaders = await authService.getAuthHeader();
+    final uri = Uri.parse('$baseUrl/backup/restore-from-upload');
+    final request = http.MultipartRequest('POST', uri);
+
+    // ใส่ header ยกเว้น Content-Type (multipart จัดการเอง)
+    authHeaders.forEach((key, value) {
+      if (key.toLowerCase() != 'content-type') request.headers[key] = value;
+    });
+
+    request.fields['targetDatabase'] = targetDatabase;
+
+    if (file.bytes != null) {
+      request.files.add(http.MultipartFile.fromBytes(
+        'backupFile', file.bytes!, filename: file.name,
+      ));
+    } else if (file.path != null) {
+      request.files.add(await http.MultipartFile.fromPath(
+        'backupFile', file.path!, filename: file.name,
+      ));
+    } else {
+      throw Exception('ไม่สามารถอ่านไฟล์ได้');
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode != 200) {
+      final errorData = json.decode(response.body);
+      throw Exception(errorData['message'] ?? 'Restore failed: ${response.statusCode}');
+    }
+  }
+
   Future<void> saveSchedule(int id, BackupSchedule schedule) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(
@@ -169,7 +203,6 @@ class BackupService {
     if (response.statusCode != 200) {
       final errorData = json.decode(response.body);
       throw Exception(errorData['message'] ?? 'Failed to save backup schedule with status: ${response.statusCode}');
-      // throw Exception('Failed to save backup schedule');
     }
   }
 

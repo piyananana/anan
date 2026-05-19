@@ -644,6 +644,7 @@ class ArCustomerGroupDetailWidgetState
                         const SizedBox(width: 8),
                         Expanded(
                           child: DropdownButtonFormField<String>(
+                            isExpanded: true,
                             value: _runningSuffixDate,
                             decoration: const InputDecoration(
                               labelText: 'วันที่ในรหัส',

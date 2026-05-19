@@ -359,7 +359,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
               _searchQuery.isEmpty
                   ? 'ทั้งหมด ${_list.length} แถว'
                   : 'พบ ${displayList.length} จาก ${_list.length} แถว',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
             ),
           ),
         ),

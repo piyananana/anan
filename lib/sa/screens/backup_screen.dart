@@ -534,9 +534,11 @@
 
 // lib/screens/backup_screen.dart
 import 'dart:async';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/backup_schedule.dart';
+import '../services/auth_service.dart';
 import '../services/backup_service.dart';
 import '../../config/app_config.dart';
 import 'dart:io';
@@ -592,6 +594,12 @@ class _BackupScreenState extends State<BackupScreen>
   List<String> _yearlyFiles = [];
   String? _selectedYearlyFile;
 
+  // Upload restore state
+  PlatformFile? _uploadFile;
+  String? _uploadTargetDatabase;
+  List<String> _availableDatabases = [];
+  bool _isUploadRestoring = false;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -599,6 +607,7 @@ class _BackupScreenState extends State<BackupScreen>
   void initState() {
     super.initState();
     _fetchData();
+    _fetchDatabases();
     _startInstantBackupStatusPolling();
   }
 
@@ -936,6 +945,8 @@ class _BackupScreenState extends State<BackupScreen>
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
+          _buildUploadRestoreCard(),
+          const SizedBox(height: 16),
             _buildScheduleCard(
               'สำรองข้อมูลปัจจุบัน',
               lastBackup: _instantLastBackup,
@@ -1419,6 +1430,184 @@ class _BackupScreenState extends State<BackupScreen>
                   ),
                 );
               }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _fetchDatabases() async {
+    try {
+      final dbs = await AuthService().fetchDatabases();
+      if (mounted) setState(() => _availableDatabases = dbs);
+    } catch (_) {}
+  }
+
+  Future<void> _pickUploadFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      withData: kIsWeb,
+    );
+    if (result != null && result.files.isNotEmpty) {
+      setState(() {
+        _uploadFile = result.files.first;
+        _uploadTargetDatabase ??= AuthService().selectedDatabase;
+      });
+    }
+  }
+
+  Future<void> _doUploadRestore() async {
+    if (_uploadFile == null || _uploadTargetDatabase == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.red),
+          SizedBox(width: 8),
+          Text('ยืนยันการ Restore'),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('ข้อมูลในฐานข้อมูลปลายทางจะถูกแทนที่ทั้งหมด',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text('ไฟล์: ${_uploadFile!.name}'),
+            Text('ฐานข้อมูลปลายทาง: $_uploadTargetDatabase'),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('ยืนยัน Restore', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _isUploadRestoring = true);
+    try {
+      await _backupService.restoreFromUpload(_uploadFile!, _uploadTargetDatabase!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Restore ไปยัง "$_uploadTargetDatabase" สำเร็จ'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        setState(() => _uploadFile = null);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadRestoring = false);
+    }
+  }
+
+  Widget _buildUploadRestoreCard() {
+    return Card(
+      elevation: 4,
+      color: Colors.orange.shade50,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.orange.shade300),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.upload_file, color: Colors.orange.shade800),
+              const SizedBox(width: 8),
+              Text('Restore จากไฟล์ที่ดาวน์โหลด',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange.shade900)),
+            ]),
+            const SizedBox(height: 4),
+            Text('สำหรับ restore ข้อมูลจากฐานข้อมูล A ไปยังฐานข้อมูล B',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+            const Divider(height: 20),
+
+            // File picker
+            Row(children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    _uploadFile?.name ?? 'ยังไม่ได้เลือกไฟล์',
+                    style: TextStyle(
+                      color: _uploadFile != null ? Colors.black87 : Colors.grey,
+                      fontSize: 13,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: _isUploadRestoring ? null : _pickUploadFile,
+                icon: const Icon(Icons.folder_open, size: 18),
+                label: const Text('เลือกไฟล์'),
+              ),
+            ]),
+            const SizedBox(height: 12),
+
+            // Target database dropdown
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              value: _uploadTargetDatabase,
+              decoration: const InputDecoration(
+                labelText: 'ฐานข้อมูลปลายทาง',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: _availableDatabases
+                  .map((db) => DropdownMenuItem(value: db, child: Text(db)))
+                  .toList(),
+              onChanged: _isUploadRestoring
+                  ? null
+                  : (v) => setState(() => _uploadTargetDatabase = v),
+            ),
+            const SizedBox(height: 16),
+
+            // Restore button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: (_uploadFile != null &&
+                        _uploadTargetDatabase != null &&
+                        !_isUploadRestoring)
+                    ? _doUploadRestore
+                    : null,
+                icon: _isUploadRestoring
+                    ? const SizedBox(
+                        width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.restore),
+                label: Text(_isUploadRestoring ? 'กำลัง Restore...' : 'Restore ไปยังฐานข้อมูลที่เลือก'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
           ],
         ),
       ),

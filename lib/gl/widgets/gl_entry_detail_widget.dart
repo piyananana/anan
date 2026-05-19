@@ -626,6 +626,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
               Expanded(
                 flex: 4,
                 child: DropdownButtonFormField<ModuleDocument>(
+                  isExpanded: true,
                   value: _selectedDocType,
                   items: _allowedDocTypes.map((e) => DropdownMenuItem(
                       value: e, child: Text('${e.docCode} ${e.docNameThai}'))).toList(),
@@ -645,8 +646,11 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 child: TextFormField(
                   key: ValueKey('docNo_${_header.docNo}'),
                   initialValue: _header.docNo,
-                  decoration: _fieldDeco('เลขที่เอกสาร',
-                      forcedReadOnly: _selectedDocType?.isAutoNumbering ?? false),
+                  decoration: _fieldDeco(
+                      (_selectedDocType?.isAutoNumbering ?? false) ? 'เลขที่อัตโนมัติ' : 'เลขที่เอกสาร',
+                      forcedReadOnly: _selectedDocType?.isAutoNumbering ?? false).copyWith(
+                    hintText: (_selectedDocType?.isAutoNumbering ?? false) ? '(ระบบกำหนดให้อัตโนมัติ)' : null,
+                  ),
                   readOnly: _isReadOnly || (_selectedDocType?.isAutoNumbering ?? false),
                   onSaved: (v) => _header.docNo = v ?? '',
                   validator: (v) => (v == null || v.isEmpty) ? 'ระบุเลขที่' : null,
@@ -667,6 +671,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
               Expanded(
                 flex: 4,
                 child: DropdownButtonFormField<ModuleDocument>(
+                  isExpanded: true,
                   value: _selectedRefDocType,
                   items: _allDocTypes.map((e) => DropdownMenuItem(
                       value: e, child: Text('${e.docCode} ${e.docNameThai}', overflow: TextOverflow.ellipsis))).toList(),

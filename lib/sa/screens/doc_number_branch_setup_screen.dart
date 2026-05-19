@@ -654,6 +654,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             )),
             const SizedBox(width: 8),
             Expanded(child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _suffixDate,
               decoration: const InputDecoration(
                 labelText: 'คำต่อ(ปีเดือนวัน)',
@@ -678,6 +679,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             )),
             const SizedBox(width: 8),
             Expanded(child: DropdownButtonFormField<int>(
+              isExpanded: true,
               value: _runningLen,
               decoration: const InputDecoration(
                 labelText: 'ความยาวเลขที่',

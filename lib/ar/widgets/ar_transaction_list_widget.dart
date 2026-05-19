@@ -230,7 +230,7 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
                 _hasActiveFilters
                     ? 'พบ ${_filteredRows.length} รายการ จาก ${_rows.length} รายการ'
                     : '${_filteredRows.length} รายการ',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: const TextStyle(fontSize: 12, color: Colors.black87),
               ),
             ),
           ),

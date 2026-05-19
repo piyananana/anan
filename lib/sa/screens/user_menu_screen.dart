@@ -3,15 +3,15 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import 'dart:collection'; // สำหรับ HashSet
 
 import '../models/anan_module.dart';
 import '../models/user.dart';
-import '../models/menu.dart'; 
+import '../models/menu.dart';
+import '../models/menu_permission.dart';
 import '../services/user_service.dart';
-import '../services/menu_service.dart'; 
-import '../services/user_menu_service.dart'; 
-import '../widgets/user_list_widget.dart'; // ใช้ UserListPanel เดิมแต่เปลี่ยน callback
+import '../services/menu_service.dart';
+import '../services/user_menu_service.dart';
+import '../widgets/user_list_widget.dart';
 import '../widgets/user_menu_detail_tree_widget.dart';
 
 // Enum สำหรับโหมดการแสดงผลของ Panel ขวา
@@ -43,40 +43,23 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
   Mode _mode = Mode.none;
   User? _selectedNode; // ผู้ใช้ที่เลือกใน Panel ซ้าย
 
-  // ชุดของ Menu ID ที่ผู้ใช้ที่เลือกมีสิทธิ์ (สำหรับการแสดงผล/แก้ไข)
-  Set<int> _currentGrantedMenuIds = HashSet();
+  // สิทธิ์เมนูที่ผู้ใช้ที่เลือกมี (สำหรับการแสดงผล/แก้ไข)
+  Map<int, MenuPermission> _currentGrantedPerms = {};
 
-  // ชุดของ Menu ID ที่ถูกเลือกในโหมด Edit (ยังไม่บันทึก)
-  Set<int> _stagedGrantedMenuIds = HashSet();
+  // สิทธิ์เมนูที่ถูกเลือกในโหมด Edit (ยังไม่บันทึก)
+  Map<int, MenuPermission> _stagedGrantedPerms = {};
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
   bool _isDraggingDivider = false;
 
-  UserSortBy _sortBy = UserSortBy.userName;
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-
   @override
   void initState() {
     super.initState();
     _fetchUsersAndMenus();
-
-    _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text;
-      });
-    });
   }
 
   @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  // TODO: implement wantKeepAlive
   bool get wantKeepAlive => true;
 
   Future<void> _fetchUsersAndMenus() async {
@@ -115,20 +98,29 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
 
   Future<void> _onView(User user) async {
     setState(() {
-      _mode = Mode.none; // เคลียร์ก่อนโหลดใหม่
+      _mode = Mode.none;
       _selectedNode = user;
-      _currentGrantedMenuIds.clear();
-      _stagedGrantedMenuIds.clear(); // Clear staged as well
+      _currentGrantedPerms = {};
+      _stagedGrantedPerms = {};
     });
     try {
-      // final masterService =
-      //     Provider.of<UserMenuService>(context, listen: false);
-      // final grantedIds = await masterService.fetchUserMenu(user.id);
-      final menuService =
-          Provider.of<MenuService>(context, listen: false);
-      final grantedIds = await menuService.fetchMenuByUserId(user.id);
+      final menuService = Provider.of<MenuService>(context, listen: false);
+      final grantedMenus = await menuService.fetchMenuByUserId(user.id);
+      final perms = <int, MenuPermission>{};
+      for (final m in grantedMenus) {
+        perms[m.id] = MenuPermission(
+          menuId: m.id,
+          canView: m.canView,
+          canCreate: m.canCreate,
+          canEdit: m.canEdit,
+          canDelete: m.canDelete,
+          canApprove: m.canApprove,
+          canPrint: m.canPrint,
+          canExport: m.canExport,
+        );
+      }
       setState(() {
-        _currentGrantedMenuIds = grantedIds.map((menu) => menu.id).toSet();
+        _currentGrantedPerms = perms;
         _mode = Mode.view;
       });
     } catch (e) {
@@ -146,19 +138,30 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
 
   Future<void> _onEdit(User user) async {
     setState(() {
-      _mode = Mode.none; // เคลียร์ก่อนโหลดใหม่
+      _mode = Mode.none;
       _selectedNode = user;
-      _currentGrantedMenuIds.clear();
-      _stagedGrantedMenuIds.clear(); // Clear staged before loading
+      _currentGrantedPerms = {};
+      _stagedGrantedPerms = {};
     });
     try {
-      final menuService =
-          Provider.of<MenuService>(context, listen: false);
-      final grantedIds = await menuService.fetchMenuByUserId(user.id);
+      final menuService = Provider.of<MenuService>(context, listen: false);
+      final grantedMenus = await menuService.fetchMenuByUserId(user.id);
+      final perms = <int, MenuPermission>{};
+      for (final m in grantedMenus) {
+        perms[m.id] = MenuPermission(
+          menuId: m.id,
+          canView: m.canView,
+          canCreate: m.canCreate,
+          canEdit: m.canEdit,
+          canDelete: m.canDelete,
+          canApprove: m.canApprove,
+          canPrint: m.canPrint,
+          canExport: m.canExport,
+        );
+      }
       setState(() {
-        _currentGrantedMenuIds = grantedIds.map((menu) => menu.id).toSet();
-        _stagedGrantedMenuIds = HashSet.from(
-            grantedIds.map((menu) => menu.id)); // คัดลอกไปที่ staged เพื่อแก้ไข
+        _currentGrantedPerms = perms;
+        _stagedGrantedPerms = Map.from(perms);
         _mode = Mode.edit;
       });
     } catch (e) {
@@ -229,7 +232,7 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
       return;
     }
 
-    if (_stagedGrantedMenuIds.isEmpty) {
+    if (_stagedGrantedPerms.isEmpty) {
       // ถามผู้ใช้ก่อนว่าต้องการลบสิทธิ์ทั้งหมดจริงหรือไม่
       final bool? confirmDelete = await showDialog<bool>(
         context: context,
@@ -262,15 +265,15 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
     try {
       final masterService =
           Provider.of<UserMenuService>(context, listen: false);
-      if (_stagedGrantedMenuIds.isEmpty) {
-        // ถ้า Set ว่างเปล่า ให้เรียก API ลบทั้งหมด
+      if (_stagedGrantedPerms.isEmpty) {
+        // ถ้า Map ว่างเปล่า ให้เรียก API ลบทั้งหมด
         await masterService.deleteUserMenu(_selectedNode!.id);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text('ลบสิทธิ์ทั้งหมดของผู้ใช้ ${_selectedNode!.userName} สำเร็จ')),
         );
       } else {
-        await masterService.updateUserMenu(_selectedNode!.id, _stagedGrantedMenuIds);
+        await masterService.updateUserMenu(_selectedNode!.id, _stagedGrantedPerms);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text('บันทึกสิทธิ์สำหรับผู้ใช้ ${_selectedNode!.userName} สำเร็จ')),
@@ -300,32 +303,20 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
     setState(() {
       _mode = Mode.none;
       _selectedNode = null;
-      _currentGrantedMenuIds.clear();
-      _stagedGrantedMenuIds.clear();
-    });
-  }
-
-  void _onSortSelected(UserSortBy sortBy) {
-    setState(() {
-      _sortBy = sortBy;
+      _currentGrantedPerms = {};
+      _stagedGrantedPerms = {};
     });
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Row(children: [Icon(Icons.admin_panel_settings, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการสิทธิ์เมนูของผู้ใช้')]),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
-        // leading: IconButton(
-        //   icon: const Icon(Icons.arrow_back, color: Colors.white),
-        //   onPressed: () {
-        //     widget.onExit?.call(); // เรียก Callback ย้อนกลับไป HomeScreen
-        //   },
-        // ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -336,33 +327,6 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
             icon: const Icon(Icons.cleaning_services_outlined, color: Colors.white),
             onPressed: _onClearRightPanel,
             tooltip: 'เคลียร์ Panel ขวา',
-          ),
-          PopupMenuButton<UserSortBy>(
-            icon: const Icon(Icons.sort_outlined, color: Colors.white),
-            tooltip: 'จัดเรียงข้อมูล',
-            onSelected: _onSortSelected,
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<UserSortBy>>[
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.userName,
-                child: Text('เรียงตามผู้ใช้'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.firstName,
-                child: Text('เรียงตามชื่อจริง'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.lastName,
-                child: Text('เรียงตามนามสกุล'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.status,
-                child: Text('เรียงตามสถานะ'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.userType,
-                child: Text('เรียงตามประเภทผู้ใช้'),
-              ),
-            ],
           ),
           _selectedNode != null ?
           IconButton(
@@ -414,19 +378,16 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
                               maxWidth: _leftPanelWidth,
                               minWidth: _leftPanelWidth,
                               alignment: Alignment.topLeft,
-                              child: Container(
-                                color: Colors.blueGrey[100],
+                              child: ColoredBox(
+                                color: Colors.blueGrey.shade100,
                                 child: UserListPanel(
                                   users: _users,
-                                  onViewPermissions: _onView,
-                                  onEditPermissions: _onEdit,
-                                  onDeletePermissions: _onDelete,
+                                  enableAddButton: false,
+                                  enableSortButton: true,
+                                  onAdd: () {},
                                   onEdit: _onEdit,
                                   onView: _onView,
                                   onDelete: _onDelete,
-                                  searchController: _searchController,
-                                  sortBy: _sortBy,
-                                  searchQuery: _searchQuery,
                                 ),
                               ),
                             ),
@@ -481,15 +442,12 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
         Expanded(
           child: UserMenuDetailTreeWidget(
             lists: _allMenus,
-            initialGrantedIds: _mode == Mode.view
-                ? _currentGrantedMenuIds
-                : _stagedGrantedMenuIds,
+            initialPermissions: _mode == Mode.view
+                ? _currentGrantedPerms
+                : _stagedGrantedPerms,
             isEditing: _mode == Mode.edit,
-            onPermissionsChanged: (updatedGrantedIds) {
-              // อัปเดต stagedGrantedMenuIds เมื่อมีการเปลี่ยนแปลงใน PermissionMenuTreeview
-              setState(() {
-                _stagedGrantedMenuIds = updatedGrantedIds;
-              });
+            onPermissionsChanged: (updated) {
+              setState(() => _stagedGrantedPerms = updated);
             },
           ),
         ),

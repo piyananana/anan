@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 import '../models/user.dart';
+import '../services/auth_service.dart';
 import '../services/user_service.dart';
 import '../widgets/user_list_widget.dart';
 import '../widgets/user_detail_widget.dart';
@@ -36,35 +37,25 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
   User? _selectedUserForEdit;
   User? _selectedUserForView;
 
-  UserSortBy _sortBy = UserSortBy.userName;
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
   bool _isDraggingDivider = false;
+
+  String get _currentUserType => AuthService().currentUser?.userType ?? 'guest';
+
+  // กรองรายชื่อตาม hierarchy — ผู้ login เห็นเฉพาะ type ที่ ≤ ตัวเอง
+  List<User> get _visibleUsers {
+    final allowed = User.allowedTypesFor(_currentUserType).toSet();
+    return _users.where((u) => allowed.contains(u.userType)).toList();
+  }
 
   @override
   void initState() {
     super.initState();
     _fetchUsers();
-
-    _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text;
-      });
-    });
   }
 
   @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  // TODO: implement wantKeepAlive
-  // bool get wantKeepAlive => throw UnimplementedError();
   bool get wantKeepAlive => true;
 
   Future<void> _fetchUsers() async {
@@ -189,16 +180,10 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
     });
   }
 
-  void _onSortSelected(UserSortBy sortBy) {
-    setState(() {
-      _sortBy = sortBy;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Row(children: [Icon(Icons.manage_accounts, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการผู้ใช้')]),
@@ -209,38 +194,6 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
             icon: const Icon(Icons.refresh),
             tooltip: 'รีเฟรชรายการ',
             onPressed: _fetchUsers,
-          ),
-          // IconButton(
-          //   icon: const Icon(Icons.add, color: Colors.white),
-          //   onPressed: _onAddUser,
-          //   tooltip: 'เพิ่มผู้ใช้ใหม่',
-          // ),
-          PopupMenuButton<UserSortBy>(
-            icon: const Icon(Icons.sort, color: Colors.white),
-            tooltip: 'จัดเรียงข้อมูล',
-            onSelected: _onSortSelected,
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<UserSortBy>>[
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.userName,
-                child: Text('เรียงตาม Username'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.firstName,
-                child: Text('เรียงตามชื่อจริง'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.lastName,
-                child: Text('เรียงตามนามสกุล'),
-              ),
-              const PopupMenuItem<UserSortBy>(
-                value: UserSortBy.status,
-                child: Text('เรียงตามสถานะ'),
-              ),
-              const PopupMenuItem<UserSortBy>( // <-- เพิ่มการจัดเรียงตาม User Type
-                value: UserSortBy.userType,
-                child: Text('เรียงตามประเภทผู้ใช้'),
-              ),
-            ],
           ),
           const SizedBox(width: 8),
         ],
@@ -283,36 +236,16 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
                               maxWidth: _leftPanelWidth,
                               minWidth: _leftPanelWidth,
                               alignment: Alignment.topLeft,
-                              child: Container(
-                                color: Colors.blueGrey[100],
-                                child: Column(
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton.icon(
-                                          onPressed: _onAddUser,
-                                          icon: const Icon(Icons.add),
-                                          label: const Text('เพิ่มผู้ใช้ใหม่'),
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: UserListPanel(
-                                        users: _users,
-                                        onEdit: _onEditUser,
-                                        onView: _onViewUser,
-                                        onDelete: _onDeleteUser,
-                                        searchController: _searchController,
-                                        sortBy: _sortBy,
-                                        searchQuery: _searchQuery,
-                                        onViewPermissions: (user) {},
-                                        onEditPermissions: (user) {},
-                                        onDeletePermissions: (user) {},
-                                      ),
-                                    ),
-                                  ],
+                              child: ColoredBox(
+                                color: Colors.blueGrey.shade100,
+                                child: UserListPanel(
+                                  users: _visibleUsers,
+                                  enableAddButton: true,
+                                  enableSortButton: true,
+                                  onAdd: _onAddUser,
+                                  onEdit: _onEditUser,
+                                  onView: _onViewUser,
+                                  onDelete: _onDeleteUser,
                                 ),
                               ),
                             ),
@@ -353,12 +286,14 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
       case UserFormState.adding:
         return UserDetailForm(
           adminMode: true,
+          currentUserType: _currentUserType,
           onSubmit: _onFormSubmit,
           onCancel: _onFormCancel,
         );
       case UserFormState.editing:
         return UserDetailForm(
           adminMode: true,
+          currentUserType: _currentUserType,
           editUser: _selectedUserForEdit,
           onSubmit: _onFormSubmit,
           onCancel: _onFormCancel,
@@ -366,6 +301,7 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
       case UserFormState.viewing:
         return UserDetailForm(
           adminMode: true,
+          currentUserType: _currentUserType,
           editUser: _selectedUserForView,
           onSubmit: _onFormSubmit,
           onCancel: _onFormCancel,

@@ -287,7 +287,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                 _hasActiveFilters
                     ? 'พบ ${_filteredEntries.length} รายการ จาก ${_entries.length} รายการ'
                     : '${_filteredEntries.length} รายการ',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: const TextStyle(fontSize: 12, color: Colors.black87),
               ),
             ),
           ),

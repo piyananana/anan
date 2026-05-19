@@ -361,6 +361,7 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _collectorType,
                     decoration: const InputDecoration(
                       labelText: 'ประเภท *',

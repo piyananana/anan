@@ -3,6 +3,7 @@ import '../../config/app_config.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
+import '../models/menu_permission.dart';
 
 // import '../models/menu.dart';
 
@@ -49,25 +50,21 @@ class UserMenuService {
   // }
 
   // Update user menu for a user
-  Future<void> updateUserMenu(int userId, Set<int> newMenuIds) async {
+  Future<void> updateUserMenu(int userId, Map<int, MenuPermission> permissions) async {
     try {
       final headers = await authService.getAuthHeader();
-      final requestBody = jsonEncode({'menuIds': newMenuIds.toList()});
+      final menus = permissions.values.map((p) => p.toJson()).toList();
+      final requestBody = jsonEncode({'menus': menus});
       final response = await http.put(
         Uri.parse('$baseUrl/sa_user_menu/$userId'),
         headers: headers,
-        body: requestBody
+        body: requestBody,
       );
 
-      if (response.statusCode == 200) {
-        print('User menu updated successfully for User $userId');
-        print('Node.js Response Body: ${response.body}');
-      } else {
-        print('Failed to update user menu: Status ${response.statusCode}, Body: ${response.body}');
-        throw Exception('Failed to update user meu: Status ${response.statusCode}, Body: ${response.body}');
+      if (response.statusCode != 200) {
+        throw Exception('Failed to update user menu: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      print('Error in update User menu catch block: $e');
       throw Exception('Network or unknown error during user menu update: $e');
     }
   }

@@ -7,7 +7,8 @@ import '../widgets/change_password_dialog.dart';
 import 'home_screen.dart'; // หน้าหลักหลังจาก login
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final String? logoutMessage;
+  const LoginScreen({super.key, this.logoutMessage});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -26,6 +27,16 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _fetchDatabasesAndLoadDefault();
+    if (widget.logoutMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(widget.logoutMessage!),
+          backgroundColor: Colors.orange.shade700,
+          duration: const Duration(seconds: 5),
+        ));
+      });
+    }
   }
 
   Future<void> _fetchDatabasesAndLoadDefault() async {
@@ -173,6 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             // Dropdown สำหรับเลือกฐานข้อมูล
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
+                              isExpanded: true,
                               decoration: const InputDecoration(
                                 labelText: 'ฐานข้อมูล',
                                 border: OutlineInputBorder(),

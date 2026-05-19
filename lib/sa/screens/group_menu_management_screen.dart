@@ -1,15 +1,13 @@
 // screens/group_menu_management_screen.dart
-import 'dart:collection';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/group.dart';
 import '../models/menu.dart';
+import '../models/menu_permission.dart';
 import '../services/group_service.dart';
 import '../services/menu_service.dart';
 import '../services/group_menu_service.dart';
-// import '../widgets/permission_menu_treeview.dart';
 import '../widgets/user_menu_detail_tree_widget.dart';
 
 // Enum เพื่อบอกสถานะของ Form
@@ -36,11 +34,11 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
   List<Group> _currentList = []; // กำหนดค่าเริ่มต้นเป็น List ว่างเปล่า
   List<Menu> _allMenus = []; // <-- เก็บเมนูทั้งหมดในระบบ
 
-  // ชุดของ Menu ID ที่กลุ่มที่เลือกมีสิทธิ์ (สำหรับการแสดงผล/แก้ไข)
-  Set<int> _currentGrantedMenuIds = HashSet();
+  // สิทธิ์เมนูที่กลุ่มที่เลือกมี (สำหรับการแสดงผล/แก้ไข)
+  Map<int, MenuPermission> _currentGrantedPerms = {};
 
-  // ชุดของ Menu ID ที่ถูกเลือกในโหมด Edit (ยังไม่บันทึก)
-  Set<int> _stagedGrantedMenuIds = HashSet();
+  // สิทธิ์เมนูที่ถูกเลือกในโหมด Edit (ยังไม่บันทึก)
+  Map<int, MenuPermission> _stagedGrantedPerms = {};
 
   bool _isLoading = true; // เพิ่มสถานะการโหลดเมนู
   String _errorLoading = ''; // เพิ่มข้อความ error
@@ -114,17 +112,29 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
   Future<void> _onView(Group rowData) async {
     _clearForm();
     setState(() {
-      _nodeMode = NodeMode.none; // เคลียร์ก่อนโหลดใหม่
+      _nodeMode = NodeMode.none;
       _selectedNode = rowData;
-      _currentGrantedMenuIds.clear();
-      _stagedGrantedMenuIds.clear(); // Clear staged as well
+      _currentGrantedPerms = {};
+      _stagedGrantedPerms = {};
     });
     try {
-      final menuService =
-          Provider.of<MenuService>(context, listen: false);
-      final grantedIds = await menuService.fetchMenuByGroupId(rowData.id);
+      final menuService = Provider.of<MenuService>(context, listen: false);
+      final grantedMenus = await menuService.fetchMenuByGroupId(rowData.id);
+      final perms = <int, MenuPermission>{};
+      for (final m in grantedMenus) {
+        perms[m.id] = MenuPermission(
+          menuId: m.id,
+          canView: m.canView,
+          canCreate: m.canCreate,
+          canEdit: m.canEdit,
+          canDelete: m.canDelete,
+          canApprove: m.canApprove,
+          canPrint: m.canPrint,
+          canExport: m.canExport,
+        );
+      }
       setState(() {
-        _currentGrantedMenuIds = grantedIds.map((menu) => menu.id).toSet();
+        _currentGrantedPerms = perms;
         _nodeMode = NodeMode.view;
       });
     } catch (e) {
@@ -144,17 +154,28 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
     setState(() {
       _nodeMode = NodeMode.none;
       _selectedNode = rowData;
-      _currentGrantedMenuIds.clear();
-      _stagedGrantedMenuIds.clear(); // Clear staged before loading
+      _currentGrantedPerms = {};
+      _stagedGrantedPerms = {};
     });
     try {
-      final menuService =
-          Provider.of<MenuService>(context, listen: false);
-      final grantedIds = await menuService.fetchMenuByGroupId(rowData.id);
+      final menuService = Provider.of<MenuService>(context, listen: false);
+      final grantedMenus = await menuService.fetchMenuByGroupId(rowData.id);
+      final perms = <int, MenuPermission>{};
+      for (final m in grantedMenus) {
+        perms[m.id] = MenuPermission(
+          menuId: m.id,
+          canView: m.canView,
+          canCreate: m.canCreate,
+          canEdit: m.canEdit,
+          canDelete: m.canDelete,
+          canApprove: m.canApprove,
+          canPrint: m.canPrint,
+          canExport: m.canExport,
+        );
+      }
       setState(() {
-        _currentGrantedMenuIds = grantedIds.map((menu) => menu.id).toSet();
-        _stagedGrantedMenuIds = HashSet.from(
-            grantedIds.map((menu) => menu.id)); // คัดลอกไปที่ staged เพื่อแก้ไข
+        _currentGrantedPerms = perms;
+        _stagedGrantedPerms = Map.from(perms);
         _nodeMode = NodeMode.edit;
       });
     } catch (e) {
@@ -179,7 +200,7 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
       return;
     }
 
-    if (_stagedGrantedMenuIds.isEmpty) {
+    if (_stagedGrantedPerms.isEmpty) {
       // ถามผู้ใช้ก่อนว่าต้องการลบสิทธิ์ทั้งหมดจริงหรือไม่
       final bool? confirmDelete = await showDialog<bool>(
         context: context,
@@ -212,15 +233,15 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
     try {
       final masterService =
           Provider.of<GroupMenuService>(context, listen: false);
-      if (_stagedGrantedMenuIds.isEmpty) {
-        // ถ้า Set ว่างเปล่า ให้เรียก API ลบทั้งหมด
+      if (_stagedGrantedPerms.isEmpty) {
+        // ถ้า Map ว่างเปล่า ให้เรียก API ลบทั้งหมด
         await masterService.deleteGroupMenu(_selectedNode!.id);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text('ลบสิทธิ์ทั้งหมดของกลุ่ม ${_selectedNode?.name} สำเร็จ')),
         );
       } else {
-        await masterService.updateGroupMenu(_selectedNode?.id, _stagedGrantedMenuIds);
+        await masterService.updateGroupMenu(_selectedNode?.id, _stagedGrantedPerms);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text('บันทึกสิทธิ์สำหรับกลุ่ม ${_selectedNode?.name} สำเร็จ')),
@@ -465,15 +486,12 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
         Expanded(
           child: UserMenuDetailTreeWidget(
             lists: _allMenus,
-            initialGrantedIds: _nodeMode == NodeMode.view
-                ? _currentGrantedMenuIds
-                : _stagedGrantedMenuIds,
+            initialPermissions: _nodeMode == NodeMode.view
+                ? _currentGrantedPerms
+                : _stagedGrantedPerms,
             isEditing: _nodeMode == NodeMode.edit,
-            onPermissionsChanged: (updatedGrantedIds) {
-              // อัปเดต stagedGrantedMenuIds เมื่อมีการเปลี่ยนแปลงใน PermissionMenuTreeview
-              setState(() {
-                _stagedGrantedMenuIds = updatedGrantedIds;
-              });
+            onPermissionsChanged: (updated) {
+              setState(() => _stagedGrantedPerms = updated);
             },
           ),
         ),

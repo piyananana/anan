@@ -76,6 +76,7 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _sortBy = 'code_asc';
   List<ArCollector> _list = [];
   int _totalCount = 0;
   bool _isLoading = false;
@@ -117,14 +118,25 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
 
   void refresh() => _fetch();
 
+  void _onSortSelected(String v) => setState(() => _sortBy = v);
+
   List<ArCollector> get _filtered {
-    if (_searchQuery.isEmpty) return _list;
-    final q = _searchQuery.toUpperCase();
-    return _list.where((c) {
-      return c.collectorCode.toUpperCase().contains(q) ||
-          c.collectorNameThai.toUpperCase().contains(q) ||
-          (c.collectorNameEng?.toUpperCase().contains(q) ?? false);
-    }).toList();
+    List<ArCollector> items = List.from(_list);
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toUpperCase();
+      items = items.where((c) {
+        return c.collectorCode.toUpperCase().contains(q) ||
+            c.collectorNameThai.toUpperCase().contains(q) ||
+            (c.collectorNameEng?.toUpperCase().contains(q) ?? false);
+      }).toList();
+    }
+    switch (_sortBy) {
+      case 'code_asc': items.sort((a, b) => a.collectorCode.compareTo(b.collectorCode)); break;
+      case 'code_desc': items.sort((a, b) => b.collectorCode.compareTo(a.collectorCode)); break;
+      case 'name_asc': items.sort((a, b) => a.collectorNameThai.compareTo(b.collectorNameThai)); break;
+      case 'name_desc': items.sort((a, b) => b.collectorNameThai.compareTo(a.collectorNameThai)); break;
+    }
+    return items;
   }
 
   @override
@@ -146,6 +158,17 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
                   tooltip: 'เพิ่มข้อมูลใหม่',
                   onPressed: widget.onAdd,
                 ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.sort),
+                tooltip: 'จัดเรียง',
+                onSelected: _onSortSelected,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
+                  PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+                ],
+              ),
               Expanded(
                 child: TextField(
                   controller: _searchController,
@@ -167,7 +190,7 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(countText,
-                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
           ),
         ),
         Expanded(

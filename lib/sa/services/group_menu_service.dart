@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
+import '../models/menu_permission.dart';
 
 class GroupMenuService {
   // final String baseUrl = 'http://localhost:3000/api/sa'; // เปลี่ยนตาม IP ของ Node.js backend
@@ -41,25 +42,21 @@ class GroupMenuService {
   // }
 
   // Update permissions for an organization
-  Future<void> updateGroupMenu(String? groupId, Set<int> newMenuIds) async {
+  Future<void> updateGroupMenu(String? groupId, Map<int, MenuPermission> permissions) async {
     try {
       final headers = await authService.getAuthHeader();
-      final requestBody = jsonEncode({'menuIds': newMenuIds.toList()});
+      final menus = permissions.values.map((p) => p.toJson()).toList();
+      final requestBody = jsonEncode({'menus': menus});
       final response = await http.put(
         Uri.parse('$baseUrl/sa_group_menu/$groupId'),
         headers: headers,
-        body: requestBody
+        body: requestBody,
       );
 
-      if (response.statusCode == 200) {
-        // print('Updated successfully for Group menu $groupId');
-        // print('Node.js Response Body: ${response.body}');
-      } else {
-        print('Failed to update group menu: Status ${response.statusCode}, Body: ${response.body}');
-        throw Exception('Failed to update group menu: Status ${response.statusCode}, Body: ${response.body}');
+      if (response.statusCode != 200) {
+        throw Exception('Failed to update group menu: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      print('Error in updateGroupMenu catch block: $e');
       throw Exception('Network or unknown error during permission update: $e');
     }
   }

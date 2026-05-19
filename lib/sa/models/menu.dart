@@ -40,6 +40,7 @@ import '../../gl/screens/year_end_closing_screen.dart';
 import '../../gl/screens/year_end_closing_config_screen.dart';
 import '../../gl/screens/gl_dimension_type_screen.dart';
 import '../../gl/screens/gl_dimension_value_screen.dart';
+import '../../gl/screens/gl_reset_screen.dart';
 
 import '../../ar/screens/ar_customer_screen.dart';
 import '../../ar/screens/ar_customer_group_screen.dart';
@@ -49,6 +50,7 @@ import '../../ar/screens/ar_transaction_screen.dart';
 import '../../ar/screens/ar_aging_report_screen.dart';
 import '../../ar/screens/ar_collector_screen.dart';
 import '../../ar/screens/ar_gl_account_setup_screen.dart';
+import '../../ar/screens/ar_reset_screen.dart';
 
 import '../../cm/screens/cm_bank_screen.dart';
 import '../../cm/screens/cm_bank_account_screen.dart';
@@ -64,6 +66,14 @@ class Menu {
   final int sortOrder;
   final Widget Function(BuildContext context)
       builder; // ฟังก์ชันสำหรับสร้าง Widget ของหน้านั้นๆ
+  final bool isSystem;
+  final bool canView;
+  final bool canCreate;
+  final bool canEdit;
+  final bool canDelete;
+  final bool canApprove;
+  final bool canPrint;
+  final bool canExport;
 
   List<Menu> children = [];
   static final Map<String, Widget Function(BuildContext context)>
@@ -135,6 +145,7 @@ class Menu {
     'FinancialReportBuilderScreen': (context) => const FinancialReportBuilderScreen(),
     'YearEndClosingScreen': (context) => const YearEndClosingScreen(),
     'YearEndClosingConfigScreen': (context) => const YearEndClosingConfigScreen(),
+    'GlResetScreen': (context) => const GlResetScreen(),
 
     'ArCustomerScreen': (context) => ArCustomerScreen(
           onFieldsChanged: () {},
@@ -150,6 +161,7 @@ class Menu {
     'BankScreen': (context) => BankScreen(onFieldsChanged: () {}),
     'CdWhtTypeScreen': (context) => CdWhtTypeScreen(onFieldsChanged: () {}),
     'ArGlAccountSetupScreen': (context) => const ArGlAccountSetupScreen(),
+    'ArResetScreen': (context) => const ArResetScreen(),
 
     'CmBankScreen': (context) => CmBankScreen(onFieldsChanged: () {}),
     'CmBankAccountScreen': (context) => CmBankAccountScreen(onFieldsChanged: () {}),
@@ -167,8 +179,16 @@ class Menu {
     required this.menuType,
     this.targetPath,
     required this.sortOrder,
-    this.children = const [], // <-- กำหนดค่าเริ่มต้น
+    this.children = const [],
     required this.builder,
+    this.isSystem = false,
+    this.canView = true,
+    this.canCreate = false,
+    this.canEdit = false,
+    this.canDelete = false,
+    this.canApprove = false,
+    this.canPrint = false,
+    this.canExport = false,
   });
 
   factory Menu.fromJson(Map<String, dynamic> json) {
@@ -184,8 +204,16 @@ class Menu {
         menuType: json['menu_type'],
         targetPath: json['target_path'] ?? '',
         sortOrder: json['sort_order'],
-        children: [], // จะถูกเติมในภายหลังเมื่อสร้าง tree
-        builder: screenBuilder);
+        children: [],
+        builder: screenBuilder,
+        isSystem: json['is_system'] ?? false,
+        canView: json['can_view'] ?? true,
+        canCreate: json['can_create'] ?? false,
+        canEdit: json['can_edit'] ?? false,
+        canDelete: json['can_delete'] ?? false,
+        canApprove: json['can_approve'] ?? false,
+        canPrint: json['can_print'] ?? false,
+        canExport: json['can_export'] ?? false);
   }
 }
 

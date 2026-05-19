@@ -183,6 +183,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
                       if (!_useGlobal) ...[
                         const SizedBox(height: 12),
                         DropdownButtonFormField<Branch>(
+                          isExpanded: true,
                           value: _selectedBranch,
                           decoration: const InputDecoration(
                             labelText: 'สาขา',
@@ -223,6 +224,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
                           return const Text('ไม่มีการตั้งค่าเลขที่สาขานี้', style: TextStyle(color: Colors.orange));
                         }
                         return DropdownButtonFormField<DocNumberBranchConfig>(
+                          isExpanded: true,
                           value: _selectedDocType,
                           decoration: const InputDecoration(
                             labelText: 'ประเภทเอกสาร',

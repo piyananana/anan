@@ -5,10 +5,12 @@ import '../models/password_status.dart';
 import '../models/user.dart';
 import '../services/menu_service.dart';
 import '../services/auth_service.dart';
+import '../services/inactivity_service.dart';
+import '../services/password_policy_service.dart';
 import '../widgets/menu_tree_view.dart';
-// import '../widgets/dynamic_content_display.dart';
 import '../widgets/change_password_dialog.dart';
 import '../widgets/confirm_logout_dialog.dart';
+import '../widgets/inactivity_detector.dart';
 import 'login_screen.dart';
 import 'menu_screen.dart';
 
@@ -75,6 +77,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    InactivityService().stop();
     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
 
@@ -154,6 +157,17 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Future<void> _loadUserAndMenus() async {
     await _fetchUser();
     await _fetchMenus();
+    await _startInactivityTimer();
+  }
+
+  Future<void> _startInactivityTimer() async {
+    try {
+      final policy = await PasswordPolicyService().getPasswordPolicy();
+      InactivityService().configure(policy.sessionTimeoutMinutes);
+    } catch (_) {
+      InactivityService().configure(5); // fallback default
+    }
+    InactivityService().start();
   }
 
   Future<void> _fetchUser() async {
@@ -259,11 +273,12 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   // *** ฟังก์ชันสำหรับ Logout ***
   Future<void> _performLogout() async {
+    InactivityService().stop();
     final authService = Provider.of<AuthService>(context, listen: false);
     await authService.logout();
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const LoginScreen()),
-      (Route<dynamic> route) => false, // ลบทุก Route เก่า
+      (Route<dynamic> route) => false,
     );
   }
 
@@ -513,7 +528,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               const SizedBox(width: 8), // เพื่อให้มีพื้นที่ขอบขวาเล็กน้อย
             ],
           ),
-          body: _isLoading
+          body: InactivityDetector(child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _error.isNotEmpty
                   ? Center(child: Text('Error: $_error'))
@@ -669,7 +684,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               ),
                             ),
                           ],
-                        ),
+                        )),
         );
       },
     );

@@ -90,6 +90,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   DateTime _docDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
   DateTime? _billingDate;
   DateTime? _dueDate;
+  DateTime? _expectedPaymentDate;
   int? _arAccountId;
   double _exchangeRate = 1.0;
   final _refNoCtrl = TextEditingController();
@@ -249,6 +250,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         _docNo = h.docNo;
         _docDate = h.docDate;
         _dueDate = h.dueDate;
+        _billingDate = h.billingDate;
+        _expectedPaymentDate = h.expectedPaymentDate;
         _arAccountId = h.arAccountId;
         _exchangeRate = h.exchangeRate;
         _refNoCtrl.text = h.refNo ?? '';
@@ -381,6 +384,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       _docDate = DateTime.now();
       _billingDate = null;
       _dueDate = null;
+      _expectedPaymentDate = null;
       _arAccountId = null;
       _exchangeRate = 1.0;
       _refNoCtrl.clear();
@@ -432,29 +436,37 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     });
   }
 
-  DateTime _calcDueDate(DateTime base, int months, int days) {
-    var d = months > 0
-        ? DateTime(base.year, base.month + months, base.day)
-        : base;
-    if (days > 0) d = d.add(Duration(days: days));
-    return d;
+  // คำนวณวันครบกำหนด — ตรงกับ _previewCalcDueDate ใน ar_customer_detail_widget
+  DateTime _calcDueDate(
+      DateTime invoiceDate,
+      DateTime? billingDate,
+      List<ArCustomerBillingCondition> conditions,
+      int months,
+      int days) {
+    final useFromBilling =
+        billingDate != null && conditions.any((c) => c.dueFromBillingDate);
+    var base = useFromBilling ? billingDate! : invoiceDate;
+    if (months > 0) base = DateTime(base.year, base.month + months, base.day);
+    if (days > 0) base = base.add(Duration(days: days));
+    return base;
   }
 
-  // คำนวณวันที่วางบิลถัดไปจาก docDate ตามเงื่อนไขการวางบิลของลูกค้า
+  // คำนวณวันที่วางบิล — ตรงกับ _previewCalcBillingDate ใน ar_customer_detail_widget
   DateTime? _calcBillingDate(DateTime docDate, List<ArCustomerBillingCondition> conditions) {
     if (conditions.isEmpty) return null;
     final cond = conditions.reduce((a, b) => a.sortOrder <= b.sortOrder ? a : b);
 
+    if (cond.billWithDelivery) return docDate;
+
     if (cond.billingDayOfMonth.isNotEmpty) {
       final days = [...cond.billingDayOfMonth]..sort();
-      // ลองเดือนปัจจุบัน
       for (final day in days) {
+        final lastDay = DateTime(docDate.year, docDate.month + 1, 0).day;
         final candidate = day == 31
-            ? DateTime(docDate.year, docDate.month + 1, 0) // สิ้นเดือน
-            : DateTime(docDate.year, docDate.month, day.clamp(1, 28));
+            ? DateTime(docDate.year, docDate.month + 1, 0)
+            : DateTime(docDate.year, docDate.month, day.clamp(1, lastDay));
         if (!candidate.isBefore(docDate)) return candidate;
       }
-      // เดือนถัดไป
       final d = days.first;
       return d == 31
           ? DateTime(docDate.year, docDate.month + 2, 0)
@@ -462,14 +474,105 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     }
 
     if (cond.billingDayOfWeek.isNotEmpty) {
-      for (int offset = 0; offset <= 7; offset++) {
-        final candidate = docDate.add(Duration(days: offset));
-        final condDay = candidate.weekday % 7; // 0=อา,1=จ,...,6=ส
-        if (cond.billingDayOfWeek.contains(condDay)) return candidate;
+      if (cond.billingWeekOfMonth.isNotEmpty) {
+        for (int m = 0; m <= 2; m++) {
+          final totalMonth = docDate.month + m;
+          final y = docDate.year + (totalMonth - 1) ~/ 12;
+          final mo = ((totalMonth - 1) % 12) + 1;
+          for (final wd in cond.billingDayOfWeek) {
+            for (final wom in cond.billingWeekOfMonth) {
+              final d = _nthWeekdayOfMonth(y, mo, wd, wom);
+              if (d != null && !d.isBefore(docDate)) return d;
+            }
+          }
+        }
+      } else {
+        for (int offset = 0; offset <= 13; offset++) {
+          final candidate = docDate.add(Duration(days: offset));
+          if (cond.billingDayOfWeek.contains(candidate.weekday % 7)) return candidate;
+        }
       }
     }
 
     return null;
+  }
+
+  // คำนวณวันที่ weekday ลำดับที่ weekOfMonth ของเดือน
+  DateTime? _nthWeekdayOfMonth(int year, int month, int weekday, int weekOfMonth) {
+    if (weekOfMonth == -1) {
+      final last = DateTime(year, month + 1, 0).day;
+      for (int d = last; d >= 1; d--) {
+        if (DateTime(year, month, d).weekday % 7 == weekday) return DateTime(year, month, d);
+      }
+    } else {
+      int count = 0;
+      for (int d = 1; d <= 31; d++) {
+        final date = DateTime(year, month, d);
+        if (date.month != month) break;
+        if (date.weekday % 7 == weekday) {
+          count++;
+          if (count == weekOfMonth) return date;
+        }
+      }
+    }
+    return null;
+  }
+
+  List<DateTime> _generatePaymentCandidates(
+      DateTime startDate, ArCustomerPaymentCondition cond, int maxMonths) {
+    final result = <DateTime>[];
+    for (int m = 0; m <= maxMonths; m++) {
+      final totalMonth = startDate.month + m;
+      final y  = startDate.year + (totalMonth - 1) ~/ 12;
+      final mo = ((totalMonth - 1) % 12) + 1;
+      if (cond.paymentDayOfMonth.isNotEmpty) {
+        for (final day in cond.paymentDayOfMonth) {
+          final lastDay = DateTime(y, mo + 1, 0).day;
+          final d = day == 31
+              ? DateTime(y, mo + 1, 0)
+              : DateTime(y, mo, day.clamp(1, lastDay));
+          if (!d.isBefore(startDate)) result.add(d.add(Duration(days: cond.additionalDays)));
+        }
+      } else if (cond.paymentDayOfWeek.isNotEmpty) {
+        if (cond.paymentWeekOfMonth.isNotEmpty) {
+          for (final wd in cond.paymentDayOfWeek) {
+            for (final wom in cond.paymentWeekOfMonth) {
+              final d = _nthWeekdayOfMonth(y, mo, wd, wom);
+              if (d != null && !d.isBefore(startDate)) result.add(d.add(Duration(days: cond.additionalDays)));
+            }
+          }
+        } else {
+          for (int day = 1; day <= 31; day++) {
+            final d = DateTime(y, mo, day);
+            if (d.month != mo) break;
+            if (!d.isBefore(startDate) && cond.paymentDayOfWeek.contains(d.weekday % 7)) {
+              result.add(d.add(Duration(days: cond.additionalDays)));
+            }
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  // คำนวณวันที่ชำระ (คาด) จากเงื่อนไขการรับชำระของลูกค้า
+  DateTime? _calcExpectedPaymentDate(DateTime? billingDate, DateTime? dueDate) {
+    if (dueDate == null) return null;
+    final conditions = _selectedCustomer?.paymentConditions ?? [];
+    if (conditions.isEmpty) return dueDate;
+    final cond = conditions.reduce((a, b) => a.sortOrder <= b.sortOrder ? a : b);
+    final base = billingDate ?? dueDate;
+    final maxM = cond.withinMonthsFromBilling > 0 ? cond.withinMonthsFromBilling + 1 : 6;
+    var candidates = _generatePaymentCandidates(base, cond, maxM);
+    if (cond.withinMonthsFromBilling > 0) {
+      final limit = DateTime(base.year, base.month + cond.withinMonthsFromBilling, base.day);
+      candidates = candidates.where((d) => !d.isAfter(limit)).toList();
+    }
+    if (candidates.isEmpty) return dueDate;
+    final onOrAfter = candidates.where((d) => !d.isBefore(dueDate)).toList();
+    if (onOrAfter.isNotEmpty) { onOrAfter.sort(); return onOrAfter.first; }
+    candidates.sort((a, b) => b.compareTo(a));
+    return candidates.first;
   }
 
   Future<void> _selectBillingDate() async {
@@ -479,7 +582,16 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (picked != null) setState(() => _billingDate = picked);
+    if (picked != null) setState(() {
+      _billingDate = picked;
+      // ถ้า dueFromBillingDate ให้คำนวณวันครบกำหนดใหม่จากวันวางบิลที่เปลี่ยน
+      if (_selectedCustomer != null &&
+          (_selectedCustomer!.creditTermMonths > 0 || _selectedCustomer!.creditTermDays > 0)) {
+        _dueDate = _calcDueDate(_docDate, _billingDate, _selectedCustomer!.billingConditions,
+            _selectedCustomer!.creditTermMonths, _selectedCustomer!.creditTermDays);
+      }
+      _expectedPaymentDate = _calcExpectedPaymentDate(_billingDate, _dueDate);
+    });
   }
 
   void _onCustomerChanged(ArCustomer? customer) {
@@ -493,8 +605,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           : null;
       // Default due date based on credit term
       if (customer != null && (customer.creditTermMonths > 0 || customer.creditTermDays > 0)) {
-        _dueDate = _calcDueDate(_docDate, customer.creditTermMonths, customer.creditTermDays);
+        _dueDate = _calcDueDate(_docDate, _billingDate, customer.billingConditions,
+            customer.creditTermMonths, customer.creditTermDays);
       }
+      _expectedPaymentDate = _calcExpectedPaymentDate(_billingDate, _dueDate);
     });
     // Load open invoices สำหรับ Receipt, CN-55, DN-35, BC
     if ((_isReceipt || _isCreditNoteWithBill || _isDebitNoteWithBill || _isBillCollection) && customer != null) {
@@ -729,14 +843,19 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       return;
     }
     setState(() {
-      if (isDueDate) _dueDate = picked;
-      else {
+      if (isDueDate) {
+        _dueDate = picked;
+      } else {
         _docDate = picked;
-        if (_selectedCustomer != null &&
-            (_selectedCustomer!.creditTermMonths > 0 || _selectedCustomer!.creditTermDays > 0)) {
-          _dueDate = _calcDueDate(picked, _selectedCustomer!.creditTermMonths, _selectedCustomer!.creditTermDays);
+        if (_selectedCustomer != null) {
+          _billingDate = _calcBillingDate(picked, _selectedCustomer!.billingConditions);
+          if (_selectedCustomer!.creditTermMonths > 0 || _selectedCustomer!.creditTermDays > 0) {
+            _dueDate = _calcDueDate(picked, _billingDate, _selectedCustomer!.billingConditions,
+                _selectedCustomer!.creditTermMonths, _selectedCustomer!.creditTermDays);
+          }
         }
       }
+      _expectedPaymentDate = _calcExpectedPaymentDate(_billingDate, _dueDate);
     });
   }
 
@@ -824,6 +943,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       docNo: _docNo,
       docDate: _docDate,
       dueDate: _dueDate,
+      billingDate: _isInvoice ? _billingDate : null,
+      expectedPaymentDate: _isInvoice ? _expectedPaymentDate : null,
       customerId: _selectedCustomer!.id!,
       customerCode: _selectedCustomer!.customerCode,
       customerNameTh: _selectedCustomer!.customerNameTh,
@@ -1385,6 +1506,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Header title row — ประกอบด้วย title + 4 fields หลัก
           Row(children: [
             const Icon(Icons.article_outlined, size: 18),
             const SizedBox(width: 6),
@@ -1396,23 +1518,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               padding: EdgeInsets.zero,
               onPressed: () => setState(() => _headerExpanded = !_headerExpanded),
             ),
-            const Spacer(),
-            if (_status != 'Draft')
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _status == 'Posted' ? Colors.green[50] : Colors.red[50],
-                  border: Border.all(color: _status == 'Posted' ? Colors.green : Colors.red),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(_status, style: TextStyle(color: _status == 'Posted' ? Colors.green[800] : Colors.red[800], fontWeight: FontWeight.bold)),
-              ),
-          ]),
-          if (_headerExpanded) ...[
-          const SizedBox(height: 16),
-          // Row 1: DocType | DocNo | DocDate | BillingDate | DueDate (ตั้งหนี้เท่านั้น) | RefNo
-          Row(children: [
-            // Doc type
+            const SizedBox(width: 8),
             Expanded(
               flex: 1,
               child: DropdownButtonFormField<ModuleDocument>(
@@ -1457,22 +1563,21 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ),
             ),
             const SizedBox(width: 8),
-            // Doc no
             Expanded(
               flex: 1,
               child: TextFormField(
                 key: ValueKey('ar_docNo_${widget.resetKey}_$_transactionId'),
                 initialValue: _docNo == 'AUTO' ? '' : _docNo,
-                decoration: _fieldDeco('เลขที่เอกสาร',
+                decoration: _fieldDeco(
+                    _selectedDocType?.isAutoNumbering == true ? 'เลขที่อัตโนมัติ' : 'เลขที่เอกสาร',
                     forcedReadOnly: _selectedDocType?.isAutoNumbering == true).copyWith(
-                  hintText: _selectedDocType?.isAutoNumbering == true ? '(เลขที่อัตโนมัติ)' : 'ระบุเลขที่',
+                  hintText: _selectedDocType?.isAutoNumbering == true ? '(ระบบกำหนดให้อัตโนมัติ)' : 'ระบุเลขที่',
                 ),
                 readOnly: _isReadOnly || (_selectedDocType?.isAutoNumbering == true),
                 onChanged: (v) => _docNo = v.isEmpty ? 'AUTO' : v,
               ),
             ),
             const SizedBox(width: 8),
-            // Doc date
             Expanded(
               flex: 1,
               child: InkWell(
@@ -1486,39 +1591,6 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 ),
               ),
             ),
-            if (_selectedCustomer != null && _selectedCustomer!.billingConditions.isNotEmpty) ...[
-              const SizedBox(width: 8),
-              // Billing date — แสดงเฉพาะเมื่อลูกหนี้มีเงื่อนไขการวางบิล
-              Expanded(
-                flex: 1,
-                child: InkWell(
-                  onTap: _isReadOnly ? null : _selectBillingDate,
-                  child: InputDecorator(
-                    decoration: _fieldDeco('วันที่วางบิล'),
-                    child: Row(children: [
-                      Expanded(child: Text(_billingDate != null ? _dateFmt.format(_billingDate!) : '-')),
-                      if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
-                    ]),
-                  ),
-                ),
-              ),
-            ],
-            if (_isInvoice) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 1,
-                child: InkWell(
-                  onTap: _isReadOnly ? null : () => _selectDate(true),
-                  child: InputDecorator(
-                    decoration: _fieldDeco('ครบกำหนด'),
-                    child: Row(children: [
-                      Expanded(child: Text(_dueDate != null ? _dateFmt.format(_dueDate!) : '-')),
-                      if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
-                    ]),
-                  ),
-                ),
-              ),
-            ],
             const SizedBox(width: 8),
             Expanded(
               flex: 1,
@@ -1537,7 +1609,20 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 readOnly: _isReadOnly,
               ),
             ),
+            if (_status != 'Draft') ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _status == 'Posted' ? Colors.green[50] : Colors.red[50],
+                  border: Border.all(color: _status == 'Posted' ? Colors.green : Colors.red),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(_status, style: TextStyle(color: _status == 'Posted' ? Colors.green[800] : Colors.red[800], fontWeight: FontWeight.bold)),
+              ),
+            ],
           ]),
+          if (_headerExpanded) ...[
           const SizedBox(height: 12),
           // Branch + Dimensions row (all flex: 1)
           Row(children: [
@@ -1593,7 +1678,15 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               child: InkWell(
                 onTap: _isReadOnly ? null : () async {
                   final c = await _showCustomerPicker();
-                  if (c != null) _onCustomerChanged(c);
+                  if (c != null && c.id != null) {
+                    try {
+                      // fetch full customer เพื่อให้ได้ billingConditions + paymentConditions
+                      final full = await _customerService.fetchRow(c.id!);
+                      if (mounted) _onCustomerChanged(full);
+                    } catch (_) {
+                      if (mounted) _onCustomerChanged(c);
+                    }
+                  }
                 },
                 child: InputDecorator(
                   decoration: _fieldDeco('ลูกค้า *').copyWith(
@@ -1644,6 +1737,50 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ),
             ),
           ]),
+          // แถววันที่ — แสดงเฉพาะประเภทเอกสารตั้งหนี้ (ต้องเลือกลูกค้าก่อน)
+          if (_isInvoice) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                flex: 1,
+                child: InkWell(
+                  onTap: _isReadOnly ? null : _selectBillingDate,
+                  child: InputDecorator(
+                    decoration: _fieldDeco('วันที่วางบิล'),
+                    child: Row(children: [
+                      Expanded(child: Text(_billingDate != null ? _dateFmt.format(_billingDate!) : '-')),
+                      if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
+                    ]),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 1,
+                child: InkWell(
+                  onTap: _isReadOnly ? null : () => _selectDate(true),
+                  child: InputDecorator(
+                    decoration: _fieldDeco('วันครบกำหนด'),
+                    child: Row(children: [
+                      Expanded(child: Text(_dueDate != null ? _dateFmt.format(_dueDate!) : '-')),
+                      if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
+                    ]),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 1,
+                child: InputDecorator(
+                  decoration: _fieldDeco('วันที่ชำระ (คาด)', forcedReadOnly: true),
+                  child: Text(
+                    _expectedPaymentDate != null ? _dateFmt.format(_expectedPaymentDate!) : '-',
+                    style: TextStyle(color: _expectedPaymentDate != null ? null : Colors.grey[500]),
+                  ),
+                ),
+              ),
+            ]),
+          ],
           ], // end _headerExpanded
         ]),
       ),

@@ -447,6 +447,7 @@ class ModuleDocumentDetailWidgetState
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     value: _isDocType ? 'ประเภทเอกสาร' : 'หัวข้อ',
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'ชนิดข้อมูล',
                       border: OutlineInputBorder(),
@@ -472,6 +473,7 @@ class ModuleDocumentDetailWidgetState
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     value: _sysModule,
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'โมดูล',
                       border: OutlineInputBorder(),
@@ -508,6 +510,7 @@ class ModuleDocumentDetailWidgetState
                             value: _sysDocTypes.containsKey(_sysDocType)
                                 ? _sysDocType
                                 : '',
+                            isExpanded: true,
                             decoration: InputDecoration(
                               labelText: _sysDocTypes.isNotEmpty
                                   ? 'ประเภทเอกสารหลักของ ${sysModules[_sysModule]}'
@@ -594,6 +597,7 @@ class ModuleDocumentDetailWidgetState
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: DropdownButtonFormField<String>(
+                                        isExpanded: true,
                                         value: _formatSuffixDate,
                                         decoration: const InputDecoration(
                                           labelText: 'คำต่อ(ปีเดือนวัน)',
@@ -652,6 +656,7 @@ class ModuleDocumentDetailWidgetState
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: DropdownButtonFormField<int>(
+                                        isExpanded: true,
                                         value: _runningLength,
                                         decoration: const InputDecoration(
                                           labelText: 'ความยาวเลขที่',

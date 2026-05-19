@@ -352,25 +352,28 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
                     maxWidth: _leftPanelWidth,
                     minWidth: _leftPanelWidth,
                     alignment: Alignment.topLeft,
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: ZipcodeListWidget(
-                            key: _listWidgetKey,
-                            enableAddButton: true,
-                            enableEditButton: true,
-                            enableViewButton: true,
-                            enableDeleteButton: true,
-                            enableSortButton: true,
-                            enableCardSelect: false,
-                            onAdd: _onAdd,
-                            onEdit: _onEdit,
-                            onView: _onView,
-                            onDelete: _onDelete,
-                            onCallback: _onCallback,
+                    child: ColoredBox(
+                      color: Colors.blueGrey.shade100,
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: ZipcodeListWidget(
+                              key: _listWidgetKey,
+                              enableAddButton: true,
+                              enableEditButton: true,
+                              enableViewButton: true,
+                              enableDeleteButton: true,
+                              enableSortButton: true,
+                              enableCardSelect: false,
+                              onAdd: _onAdd,
+                              onEdit: _onEdit,
+                              onView: _onView,
+                              onDelete: _onDelete,
+                              onCallback: _onCallback,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
