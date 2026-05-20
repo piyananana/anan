@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/inactivity_service.dart';
@@ -16,19 +17,56 @@ class InactivityDetector extends StatefulWidget {
 class _InactivityDetectorState extends State<InactivityDetector> {
   final _svc = InactivityService();
   bool _dialogShowing = false;
+  Timer? _sessionPollTimer;
 
   @override
   void initState() {
     super.initState();
     _svc.onShowWarning = _handleShowWarning;
     _svc.onTimeout = _handleTimeout;
+    // ตรวจ session ทุก 60 วิ เพื่อรับรู้ว่าถูก kick ออกจากเครื่องอื่น
+    _sessionPollTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _checkSession(),
+    );
   }
 
   @override
   void dispose() {
+    _sessionPollTimer?.cancel();
     _svc.onShowWarning = null;
     _svc.onTimeout = null;
     super.dispose();
+  }
+
+  Future<void> _checkSession() async {
+    try {
+      final headers = await AuthService().getAuthHeader();
+      final res = await http.post(
+        Uri.parse('${AuthService.baseUrl}/auth/check_token'),
+        headers: headers,
+      );
+      if (res.statusCode == 401) {
+        _sessionPollTimer?.cancel();
+        _handleSessionReplaced();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _handleSessionReplaced() async {
+    if (!mounted) return;
+    _svc.stop();
+    final auth = Provider.of<AuthService>(context, listen: false);
+    await auth.logout();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(
+          logoutMessage: 'บัญชีนี้ถูก Login จากเครื่องอื่น คุณถูก Logout อัตโนมัติ',
+        ),
+      ),
+      (_) => false,
+    );
   }
 
   void _handleShowWarning() {

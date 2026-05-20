@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
+import '../widgets/gl_dimension_value_list_widget.dart';
+import '../widgets/gl_dimension_value_detail_widget.dart';
 
 class GlDimensionValueScreen extends StatefulWidget {
   const GlDimensionValueScreen({super.key});
@@ -9,350 +11,260 @@ class GlDimensionValueScreen extends StatefulWidget {
   State<GlDimensionValueScreen> createState() => _GlDimensionValueScreenState();
 }
 
-class _GlDimensionValueScreenState extends State<GlDimensionValueScreen> {
+class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
+    with AutomaticKeepAliveClientMixin {
+  final GlobalKey<GlDimensionValueListWidgetState> _listKey = GlobalKey();
   final _service = GlDimensionService();
-  List<GlDimensionType> _types = [];
-  GlDimensionType? _selectedType;
-  List<GlDimensionValue> _values = [];
-  bool _isLoading = false;
 
-  final _searchCtrl = TextEditingController();
+  GlDimValueMode _mode = GlDimValueMode.none;
+  GlDimensionType? _currentType;
+  GlDimensionValue? _selectedData;
+  List<GlDimensionValue> _currentValues = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadTypes();
-  }
+  bool _isLeftPanelExpanded = true;
+  double _leftPanelWidth = 380.0;
+  bool _isDraggingDivider = false;
 
   @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
+  bool get wantKeepAlive => true;
 
-  Future<void> _loadTypes() async {
-    final types = await _service.fetchAllTypes();
+  void _onAddRoot(GlDimensionType type) {
     setState(() {
-      _types = types.where((t) => t.isActive).toList();
-      if (_types.isNotEmpty) {
-        _selectedType = _types.first;
-        _loadValues();
-      }
+      _mode = GlDimValueMode.add;
+      _currentType = type;
+      _selectedData = null;
     });
   }
 
-  Future<void> _loadValues() async {
-    if (_selectedType == null) return;
-    setState(() => _isLoading = true);
-    try {
-      final vals = await _service.fetchValuesByType(_selectedType!.typeCode, includeInactive: true);
-      setState(() => _values = vals);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  void _onAddChild(GlDimensionType type, GlDimensionValue parent) {
+    setState(() {
+      _mode = GlDimValueMode.addChild;
+      _currentType = type;
+      _selectedData = parent;
+    });
   }
 
-  List<GlDimensionValue> get _filtered {
-    final q = _searchCtrl.text.toLowerCase();
-    if (q.isEmpty) return _values;
-    return _values.where((v) =>
-        v.valueCode.toLowerCase().contains(q) ||
-        v.valueNameThai.toLowerCase().contains(q)).toList();
+  void _onEdit(GlDimensionType type, GlDimensionValue row) {
+    setState(() {
+      _mode = GlDimValueMode.edit;
+      _currentType = type;
+      _selectedData = row;
+    });
   }
 
-  /// จัดเรียง values แบบ DFS (parent ก่อน children) คืน list พร้อม depth
-  List<({GlDimensionValue value, int depth})> _buildHierarchy(List<GlDimensionValue> values) {
-    final byId = <int, GlDimensionValue>{for (final v in values) v.id: v};
-    final result = <({GlDimensionValue value, int depth})>[];
-
-    void addNode(GlDimensionValue v, int d) {
-      result.add((value: v, depth: d));
-      final children = values
-          .where((c) => c.parentId == v.id)
-          .toList()
-        ..sort((a, b) => a.valueCode.compareTo(b.valueCode));
-      for (final child in children) {
-        addNode(child, d + 1);
-      }
-    }
-
-    final roots = values
-        .where((v) => v.parentId == null || !byId.containsKey(v.parentId))
-        .toList()
-      ..sort((a, b) => a.valueCode.compareTo(b.valueCode));
-    for (final root in roots) {
-      addNode(root, 0);
-    }
-    return result;
+  void _onView(GlDimensionType type, GlDimensionValue row) {
+    setState(() {
+      _mode = GlDimValueMode.view;
+      _currentType = type;
+      _selectedData = row;
+    });
   }
 
-  Future<void> _openForm([GlDimensionValue? existing]) async {
-    final result = await showDialog<GlDimensionValue>(
-      context: context,
-      builder: (ctx) => _DimValueFormDialog(
-        typeCode: _selectedType!.typeCode,
-        typeName: _selectedType!.nameThai,
-        existing: existing,
-        allValues: _values,
-      ),
-    );
-    if (result != null) {
-      try {
-        if (existing == null) {
-          await _service.addValue(result);
-        } else {
-          await _service.updateValue(existing.id, result);
-        }
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกเรียบร้อย')));
-        _loadValues();
-      } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
-      }
-    }
-  }
-
-  Future<void> _delete(GlDimensionValue v) async {
+  Future<void> _onDelete(GlDimensionType type, GlDimensionValue v) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการปิดใช้งาน'),
-        content: Text('ปิดใช้งาน "${v.valueCode} — ${v.valueNameThai}" ?'),
+        title: const Row(children: [
+          Icon(Icons.delete_forever, color: Colors.red),
+          SizedBox(width: 8),
+          Text('ยืนยันการลบ'),
+        ]),
+        content: Text(
+          'ลบ "${v.valueCode} — ${v.valueNameThai}" ?\n\n'
+          'ไม่สามารถลบได้หากมีการใช้งานในธุรกรรม GL',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ยืนยัน')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('ยกเลิก')),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.delete, size: 16),
+            label: const Text('ลบ'),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
         ],
       ),
     );
-    if (ok == true) {
-      try {
-        await _service.deleteValue(v.id);
-        _loadValues();
-      } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    if (ok != true || !mounted) return;
+    try {
+      await _service.deleteValue(v.id);
+      _listKey.currentState?.refresh();
+      if (_selectedData?.id == v.id) _onCancel();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('ลบ "${v.valueCode}" เรียบร้อย')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red[700],
+          duration: const Duration(seconds: 4),
+        ));
       }
     }
   }
 
+  Future<void> _onSubmit(GlDimensionValue row) async {
+    try {
+      if (_mode == GlDimValueMode.add || _mode == GlDimValueMode.addChild) {
+        await _service.addValue(row);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('เพิ่ม "${row.valueCode}" เรียบร้อย')));
+        }
+      } else if (_mode == GlDimValueMode.edit) {
+        await _service.updateValue(row.id, row);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('บันทึก "${row.valueCode}" เรียบร้อย')));
+        }
+      }
+      _listKey.currentState?.refresh();
+      _onCancel();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  void _onCancel() {
+    setState(() {
+      _mode = GlDimValueMode.none;
+      _selectedData = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Row(children: [
-          Icon(Icons.list_alt, size: 20),
+          Icon(Icons.tune, color: Colors.white, size: 20),
           SizedBox(width: 8),
-          Text('ข้อมูล GL Dimension'),
+          Text('ค่า GL Dimension'),
         ]),
+        backgroundColor: Colors.teal[700],
+        foregroundColor: Colors.white,
         actions: [
-          if (_selectedType != null)
-            ElevatedButton.icon(
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('เพิ่ม'),
-              onPressed: _openForm,
-            ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรชรายการ',
+            onPressed: () {
+              _listKey.currentState?.refresh();
+              _onCancel();
+            },
+          ),
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(children: [
-        // Filter bar
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(children: [
-            SizedBox(width: 220, child: DropdownButtonFormField<GlDimensionType>(
-              isExpanded: true,
-              value: _selectedType,
-              decoration: const InputDecoration(labelText: 'ประเภท Dimension', isDense: true, border: OutlineInputBorder()),
-              items: _types.map((t) => DropdownMenuItem(value: t, child: Text('Slot ${t.slotNo}: ${t.nameThai}'))).toList(),
-              onChanged: (t) {
-                setState(() => _selectedType = t);
-                _loadValues();
-              },
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: TextFormField(
-              controller: _searchCtrl,
-              decoration: const InputDecoration(labelText: 'ค้นหา', isDense: true, border: OutlineInputBorder(), prefixIcon: Icon(Icons.search, size: 16)),
-              onChanged: (_) => setState(() {}),
-            )),
-          ]),
-        ),
-        // Table
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _filtered.isEmpty
-                  ? const Center(child: Text('ไม่มีข้อมูล', style: TextStyle(color: Colors.grey)))
-                  : SingleChildScrollView(
-                      child: Builder(builder: (context) {
-                        // ถ้ากำลัง search → flat list, ถ้าไม่ → hierarchy order
-                        final isSearching = _searchCtrl.text.isNotEmpty;
-                        final List<({GlDimensionValue value, int depth})> rows = isSearching
-                            ? _filtered.map((v) => (value: v, depth: 0)).toList()
-                            : _buildHierarchy(_values);
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final double maxLeftWidth =
+              (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── ปุ่ม collapse/expand ───────────────────────────────────
+              Container(
+                width: 36,
+                color: Colors.teal[700],
+                child: IconButton(
+                  icon: Icon(
+                    _isLeftPanelExpanded
+                        ? Icons.filter_list_off
+                        : Icons.filter_list,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => setState(
+                      () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
+                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                ),
+              ),
 
-                        return DataTable(
-                          headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
-                          columnSpacing: 12,
-                          columns: const [
-                            DataColumn(label: Text('รหัส', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('ชื่อ (ไทย)', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('ชื่อ (อังกฤษ)', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('สถานะ', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('จัดการ', style: TextStyle(fontWeight: FontWeight.bold))),
-                          ],
-                          rows: rows.map((item) {
-                            final v = item.value;
-                            final depth = item.depth;
-                            return DataRow(cells: [
-                              // รหัส — เยื้องตาม depth
-                              DataCell(Row(children: [
-                                if (depth > 0) ...[
-                                  SizedBox(width: depth * 16.0),
-                                  Icon(Icons.subdirectory_arrow_right,
-                                      size: 14, color: Colors.teal[300]),
-                                  const SizedBox(width: 4),
-                                ],
-                                Text(v.valueCode,
-                                    style: TextStyle(
-                                      fontWeight: depth == 0 ? FontWeight.bold : FontWeight.w500,
-                                      color: depth == 0 ? Colors.teal[700] : Colors.teal[500],
-                                    )),
-                              ])),
-                              DataCell(Text(v.valueNameThai,
-                                  style: TextStyle(
-                                    fontSize: depth > 0 ? 12 : 13,
-                                    color: v.isActive ? null : Colors.grey,
-                                  ))),
-                              DataCell(Text(v.valueNameEng ?? '',
-                                  style: const TextStyle(fontSize: 12))),
-                              DataCell(Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: v.isActive ? Colors.green[50] : Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: v.isActive ? Colors.green : Colors.grey),
-                                ),
-                                child: Text(v.isActive ? 'ใช้งาน' : 'ปิดใช้งาน',
-                                    style: TextStyle(fontSize: 11,
-                                        color: v.isActive ? Colors.green[700] : Colors.grey)),
-                              )),
-                              DataCell(Row(children: [
-                                IconButton(icon: const Icon(Icons.edit, size: 16), tooltip: 'แก้ไข',
-                                    onPressed: () => _openForm(v)),
-                                IconButton(icon: const Icon(Icons.block, size: 16, color: Colors.orange),
-                                    tooltip: 'ปิดใช้งาน',
-                                    onPressed: v.isActive ? () => _delete(v) : null),
-                              ])),
-                            ]);
-                          }).toList(),
-                        );
-                      }),
+              // ── Left panel (list) ───────────────────────────────────────
+              AnimatedContainer(
+                duration: _isDraggingDivider
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200),
+                width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
+                child: ClipRect(
+                  child: OverflowBox(
+                    maxWidth: _leftPanelWidth,
+                    minWidth: _leftPanelWidth,
+                    alignment: Alignment.topLeft,
+                    child: ColoredBox(
+                      color: Colors.blueGrey.shade100,
+                      child: GlDimensionValueListWidget(
+                        key: _listKey,
+                        onAddRoot: _onAddRoot,
+                        onAddChild: _onAddChild,
+                        onEdit: _onEdit,
+                        onView: _onView,
+                        onDelete: _onDelete,
+                        onTypeChanged: (type, values) {
+                          setState(() {
+                            _currentType = type;
+                            _currentValues = values;
+                            // ถ้า type เปลี่ยน ล้าง right panel
+                            if (_selectedData != null &&
+                                type?.typeCode != _currentType?.typeCode) {
+                              _mode = GlDimValueMode.none;
+                              _selectedData = null;
+                            }
+                          });
+                        },
+                      ),
                     ),
-        ),
-      ]),
-    );
-  }
-}
+                  ),
+                ),
+              ),
 
-// ── Form Dialog ──────────────────────────────────────────────────────────────
-class _DimValueFormDialog extends StatefulWidget {
-  final String typeCode;
-  final String typeName;
-  final GlDimensionValue? existing;
-  final List<GlDimensionValue> allValues;
+              // ── Divider ─────────────────────────────────────────────────
+              if (_isLeftPanelExpanded)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) =>
+                        setState(() => _isDraggingDivider = true),
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        _leftPanelWidth =
+                            (_leftPanelWidth + details.delta.dx)
+                                .clamp(250.0, maxLeftWidth);
+                      });
+                    },
+                    onHorizontalDragEnd: (_) =>
+                        setState(() => _isDraggingDivider = false),
+                    child: Container(width: 5, color: Colors.grey[400]),
+                  ),
+                ),
 
-  const _DimValueFormDialog({required this.typeCode, required this.typeName, this.existing, required this.allValues});
-
-  @override
-  State<_DimValueFormDialog> createState() => _DimValueFormDialogState();
-}
-
-class _DimValueFormDialogState extends State<_DimValueFormDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _codeCtrl;
-  late final TextEditingController _nameCtrl;
-  late final TextEditingController _nameEngCtrl;
-  int? _parentId;
-  bool _isActive = true;
-
-  @override
-  void initState() {
-    super.initState();
-    final e = widget.existing;
-    _codeCtrl    = TextEditingController(text: e?.valueCode ?? '');
-    _nameCtrl    = TextEditingController(text: e?.valueNameThai ?? '');
-    _nameEngCtrl = TextEditingController(text: e?.valueNameEng ?? '');
-    _parentId    = e?.parentId;
-    _isActive    = e?.isActive ?? true;
-  }
-
-  @override
-  void dispose() {
-    _codeCtrl.dispose(); _nameCtrl.dispose(); _nameEngCtrl.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    if (!_formKey.currentState!.validate()) return;
-    Navigator.pop(context, GlDimensionValue(
-      id:            widget.existing?.id ?? 0,
-      typeCode:      widget.typeCode,
-      valueCode:     _codeCtrl.text.trim().toUpperCase(),
-      valueNameThai: _nameCtrl.text.trim(),
-      valueNameEng:  _nameEngCtrl.text.trim().isEmpty ? null : _nameEngCtrl.text.trim(),
-      parentId:      _parentId,
-      isActive:      _isActive,
-    ));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final parents = widget.allValues.where((v) => v.id != (widget.existing?.id ?? 0) && v.isActive).toList();
-    return AlertDialog(
-      title: Text('${widget.existing == null ? 'เพิ่ม' : 'แก้ไข'} ${widget.typeName}'),
-      content: SizedBox(width: 480, child: Form(key: _formKey, child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Row(children: [
-          SizedBox(width: 140, child: TextFormField(
-            controller: _codeCtrl,
-            decoration: const InputDecoration(labelText: 'รหัส *', isDense: true, border: OutlineInputBorder()),
-            validator: (v) => v == null || v.trim().isEmpty ? 'กรุณาระบุรหัส' : null,
-          )),
-          const SizedBox(width: 12),
-          Expanded(child: TextFormField(
-            controller: _nameCtrl,
-            decoration: const InputDecoration(labelText: 'ชื่อภาษาไทย *', isDense: true, border: OutlineInputBorder()),
-            validator: (v) => v == null || v.trim().isEmpty ? 'กรุณาระบุชื่อ' : null,
-          )),
-        ]),
-        const SizedBox(height: 10),
-        TextFormField(
-          controller: _nameEngCtrl,
-          decoration: const InputDecoration(labelText: 'ชื่อภาษาอังกฤษ', isDense: true, border: OutlineInputBorder()),
-        ),
-        if (parents.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          DropdownButtonFormField<int?>(
-            isExpanded: true,
-            value: _parentId,
-            decoration: const InputDecoration(labelText: 'ระดับบน (parent)', isDense: true, border: OutlineInputBorder()),
-            items: [
-              const DropdownMenuItem<int?>(value: null, child: Text('— ไม่มี —')),
-              ...parents.map((p) => DropdownMenuItem<int?>(value: p.id, child: Text(p.displayName))),
+              // ── Right panel (detail form) ────────────────────────────────
+              Expanded(
+                child: GlDimensionValueDetailWidget(
+                  key: ValueKey('$_mode-${_selectedData?.id}-${_currentType?.typeCode}'),
+                  mode: _mode,
+                  selectedType: _currentType,
+                  selected: _selectedData,
+                  allValues: _currentValues,
+                  onSubmit: _onSubmit,
+                  onCancel: _onCancel,
+                  isPlaceholder: _mode == GlDimValueMode.none,
+                ),
+              ),
             ],
-            onChanged: (v) => setState(() => _parentId = v),
-          ),
-        ],
-        const SizedBox(height: 10),
-        Row(children: [
-          Switch(value: _isActive, onChanged: (v) => setState(() => _isActive = v)),
-          const Text('เปิดใช้งาน'),
-        ]),
-      ]))),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('ยกเลิก')),
-        ElevatedButton(onPressed: _submit, child: const Text('บันทึก')),
-      ],
+          );
+        },
+      ),
     );
   }
 }

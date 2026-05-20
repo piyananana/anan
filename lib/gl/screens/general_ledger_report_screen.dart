@@ -15,8 +15,8 @@ import '../../gl/services/account_service.dart';
 import '../../gl/services/general_ledger_report_service.dart';
 
 import '../../cd/services/branch_service.dart';
-import '../../cd/services/business_unit_service.dart';
-import '../../cd/services/project_service.dart';
+import '../../gl/models/gl_dimension.dart';
+import '../../gl/services/gl_dimension_service.dart';
 import '../../sa/models/user_branch.dart';
 import '../../sa/services/auth_service.dart';
 
@@ -34,8 +34,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   final AccountService _accountService = AccountService();
   final GeneralLedgerReportService _reportService = GeneralLedgerReportService();
   final BranchService _branchService = BranchService();
-  final BusinessUnitService _buService = BusinessUnitService();
-  final ProjectService _projectService = ProjectService();
+  final GlDimensionService _dimService = GlDimensionService();
   final AuthService authService = AuthService();
   
   late Map<String, String> headers;
@@ -51,9 +50,9 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   
   // Master Data Maps
   Map<int, String> _branchMap = {};
-  Map<int, String> _buMap = {};
-  Map<int, String> _projectMap = {};
   Map<int, Account> _accountMap = {};
+  List<GlDimensionType> _activeDimTypes = [];
+  Map<int, String> _dimValueMap = {}; // dim_value.id → value_code
 
   // Filter States
   FiscalYear? _selectedYear;
@@ -99,9 +98,6 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
       // โหลด Master Data
       final branches = await _branchService.fetchRows();
-      final bus = await _buService.fetchRows();
-      final projects = await _projectService.fetchRows();
-
       _branchList = branches
           .map((b) => {'id': b.id, 'code': b.branchCode, 'name': b.branchNameThai})
           .toList()
@@ -113,10 +109,17 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
       final allAccounts = await _accountService.fetchRows();
       _accountMap = {for (var a in allAccounts) a.id!: a};
-
       _branchMap = {for (var e in branches) e.id!: e.branchCode};
-      _buMap = {for (var e in bus) e.id!: e.buCode};
-      _projectMap = {for (var e in projects) e.id!: e.projectCode};
+
+      // โหลด Dimension Types และ Values (แสดงเฉพาะเมื่อมีการตั้งค่า dimension)
+      _activeDimTypes = await _dimService.fetchActiveTypes();
+      _dimValueMap = {};
+      for (final dt in _activeDimTypes) {
+        final vals = await _dimService.fetchValuesByType(dt.typeCode);
+        for (final v in vals) {
+          _dimValueMap[v.id] = v.valueCode;
+        }
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading master: $e')));
     } finally {
@@ -294,8 +297,8 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   Map<String, List<Map<String, dynamic>>> _groupTransactions() {
     Map<String, List<Map<String, dynamic>>> grouped = {};
     for (var t in _transactions) {
-      // Group ด้วย Account + Dimensions
-      String key = "${t['account_id']}_${t['branch_id'] ?? 0}_${t['business_unit_id'] ?? 0}_${t['project_id'] ?? 0}";
+      // Group ด้วย Account + Branch + Dimensions (dim1..dim5)
+      String key = "${t['account_id']}_${t['branch_id'] ?? 0}_${t['dim1_id'] ?? 0}_${t['dim2_id'] ?? 0}_${t['dim3_id'] ?? 0}_${t['dim4_id'] ?? 0}_${t['dim5_id'] ?? 0}";
       if (!grouped.containsKey(key)) {
         grouped[key] = [];
       }
@@ -410,8 +413,11 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
           'accCode': firstTx['account_code'] as String? ?? '',
           'accName': "${firstTx['account_code']} ${firstTx['account_name_thai']}",
           'brId': firstTx['branch_id'] as int?,
-          'buId': firstTx['business_unit_id'] as int?,
-          'pjId': firstTx['project_id'] as int?,
+          'dim1Id': firstTx['dim1_id'] as int?,
+          'dim2Id': firstTx['dim2_id'] as int?,
+          'dim3Id': firstTx['dim3_id'] as int?,
+          'dim4Id': firstTx['dim4_id'] as int?,
+          'dim5Id': firstTx['dim5_id'] as int?,
           'transactions': transactions,
           'begDr': null, // จะดึงในลูปหลัก
           'begCr': null,
@@ -421,10 +427,13 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
       for (var b in _beginningBalances) {
         final int bAccId = b['account_id'] as int;
         final int? bBrId = b['branch_id'] as int?;
-        final int? bBuId = b['business_unit_id'] as int?;
-        final int? bPjId = b['project_id'] as int?;
-        final String key = "${bAccId}_${bBrId ?? 0}_${bBuId ?? 0}_${bPjId ?? 0}";
-        if (txKeys.contains(key)) continue; // มี transaction แล้ว ข้ามไป
+        final int? bDim1 = b['dim1_id'] as int?;
+        final int? bDim2 = b['dim2_id'] as int?;
+        final int? bDim3 = b['dim3_id'] as int?;
+        final int? bDim4 = b['dim4_id'] as int?;
+        final int? bDim5 = b['dim5_id'] as int?;
+        final String key = "${bAccId}_${bBrId ?? 0}_${bDim1 ?? 0}_${bDim2 ?? 0}_${bDim3 ?? 0}_${bDim4 ?? 0}_${bDim5 ?? 0}";
+        if (txKeys.contains(key)) continue;
 
         final acc = _accountMap[bAccId];
         entries.add({
@@ -433,30 +442,32 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
           'accCode': acc?.accountCode ?? '',
           'accName': acc != null ? "${acc.accountCode} ${acc.accountNameThai}" : "Account $bAccId",
           'brId': bBrId,
-          'buId': bBuId,
-          'pjId': bPjId,
+          'dim1Id': bDim1, 'dim2Id': bDim2, 'dim3Id': bDim3, 'dim4Id': bDim4, 'dim5Id': bDim5,
           'transactions': <Map<String, dynamic>>[],
           'begDr': double.tryParse(b['amount_dr']?.toString() ?? '0') ?? 0,
           'begCr': double.tryParse(b['amount_cr']?.toString() ?? '0') ?? 0,
         });
       }
 
-      // เรียงตามรหัสบัญชี -> สาขา -> มิติ
+      // เรียงตามรหัสบัญชี -> สาขา -> dim1 -> dim2
       entries.sort((a, b) {
         int cmp = (a['accCode'] as String).compareTo(b['accCode'] as String);
         if (cmp != 0) return cmp;
         cmp = (a['brId'] as int? ?? 0).compareTo(b['brId'] as int? ?? 0);
         if (cmp != 0) return cmp;
-        cmp = (a['buId'] as int? ?? 0).compareTo(b['buId'] as int? ?? 0);
+        cmp = (a['dim1Id'] as int? ?? 0).compareTo(b['dim1Id'] as int? ?? 0);
         if (cmp != 0) return cmp;
-        return (a['pjId'] as int? ?? 0).compareTo(b['pjId'] as int? ?? 0);
+        return (a['dim2Id'] as int? ?? 0).compareTo(b['dim2Id'] as int? ?? 0);
       });
 
       for (var entry in entries) {
         final int accId = entry['accId'] as int;
         final int? brId = entry['brId'] as int?;
-        final int? buId = entry['buId'] as int?;
-        final int? pjId = entry['pjId'] as int?;
+        final int? dim1Id = entry['dim1Id'] as int?;
+        final int? dim2Id = entry['dim2Id'] as int?;
+        final int? dim3Id = entry['dim3Id'] as int?;
+        final int? dim4Id = entry['dim4Id'] as int?;
+        final int? dim5Id = entry['dim5Id'] as int?;
         final String accName = entry['accName'] as String;
         final List<Map<String, dynamic>> transactions = entry['transactions'] as List<Map<String, dynamic>>;
 
@@ -468,8 +479,11 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             var begRow = _beginningBalances.firstWhere((b) =>
               b['account_id'] == accId &&
               (b['branch_id'] == brId || (b['branch_id'] == null && brId == null)) &&
-              (b['business_unit_id'] == buId || (b['business_unit_id'] == null && buId == null)) &&
-              (b['project_id'] == pjId || (b['project_id'] == null && pjId == null))
+              (b['dim1_id'] == dim1Id || (b['dim1_id'] == null && dim1Id == null)) &&
+              (b['dim2_id'] == dim2Id || (b['dim2_id'] == null && dim2Id == null)) &&
+              (b['dim3_id'] == dim3Id || (b['dim3_id'] == null && dim3Id == null)) &&
+              (b['dim4_id'] == dim4Id || (b['dim4_id'] == null && dim4Id == null)) &&
+              (b['dim5_id'] == dim5Id || (b['dim5_id'] == null && dim5Id == null))
             );
             begDr = double.tryParse(begRow['amount_dr']?.toString() ?? '0') ?? 0;
             begCr = double.tryParse(begRow['amount_cr']?.toString() ?? '0') ?? 0;
@@ -483,15 +497,17 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
         double runningBalance = begDr - begCr;
 
-        // resolve code ก่อน แล้วค่อยตัดสินว่ามี dimension จริงหรือไม่
+        // สร้าง dimension string จาก active dim types
+        final dimIds = [dim1Id, dim2Id, dim3Id, dim4Id, dim5Id];
         String brCode = brId != null ? (_branchMap[brId] ?? '') : '';
-        String buCode = buId != null ? (_buMap[buId] ?? '') : '';
-        String pjCode = pjId != null ? (_projectMap[pjId] ?? '') : '';
-        bool hasDim = brCode.isNotEmpty || buCode.isNotEmpty || pjCode.isNotEmpty;
-        String branchStr = "สาขา: ${brCode.isNotEmpty ? brCode : '-'}";
-        String buStr = "หน่วยงาน: ${buCode.isNotEmpty ? buCode : '-'}";
-        String pjStr = "โครงการ: ${pjCode.isNotEmpty ? pjCode : '-'}";
-        String dims = hasDim ? '$branchStr / $buStr / $pjStr' : '';
+        final dimParts = <String>[];
+        if (brCode.isNotEmpty) dimParts.add('สาขา: $brCode');
+        for (final dt in _activeDimTypes) {
+          final id = dimIds[dt.slotNo - 1];
+          final code = id != null ? (_dimValueMap[id] ?? '') : '';
+          if (code.isNotEmpty) dimParts.add('${dt.nameThai}: $code');
+        }
+        String dims = dimParts.join(' / ');
 
         // [ส่วนที่ 1] บรรทัดยอดยกมา
         blocks.add(pw.Table(

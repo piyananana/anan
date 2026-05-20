@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/password_status.dart';
 import '../services/auth_service.dart';
 import '../widgets/change_password_dialog.dart';
+import '../widgets/session_conflict_dialog.dart';
 import 'home_screen.dart'; // หน้าหลักหลังจาก login
 
 class LoginScreen extends StatefulWidget {
@@ -75,36 +76,68 @@ class _LoginScreenState extends State<LoginScreen> {
       final responseData = await authService.login(
         _usernameController.text,
         _passwordController.text,
-        _selectedDatabase!
+        _selectedDatabase!,
       );
-      final passwordStatus =
-          PasswordStatus.fromJson(responseData['passwordStatus']);
 
-      if (passwordStatus.forceChangePassword) {
-        // บังคับเปลี่ยนรหัสผ่าน
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            // builder: (context) => ChangePasswordDialog(userId: responseData['userId'], forceChange: true),
-            builder: (context) => ChangePasswordDialog(userId: responseData['user']['id'], forceChange: true),
+      if (!mounted) return;
+
+      // มี session เดิม — แสดง dialog ให้เลือก
+      if (responseData['requiresConfirmation'] == true) {
+        setState(() => _isLoading = false);
+        final confirmToken = responseData['confirmToken'] as String;
+        final sessionStartedAt = responseData['sessionStartedAt'] != null
+            ? DateTime.tryParse(responseData['sessionStartedAt'].toString())
+            : null;
+
+        final confirmed = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => SessionConflictDialog(
+            sessionStartedAt: sessionStartedAt,
+            onForceLogout: () => Navigator.of(context).pop(true),
+            onCancel: () => Navigator.of(context).pop(false),
           ),
         );
-      } else {
-        // Login สำเร็จ ไปหน้า Home
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => HomeScreen(
-                passwordStatus: passwordStatus), // ส่ง passwordStatus ไป Home
-          ),
+
+        if (confirmed != true || !mounted) return;
+
+        setState(() => _isLoading = true);
+        final confirmData = await authService.confirmLogin(confirmToken, forceLogout: true);
+        if (!mounted) return;
+        if (confirmData['success'] != true) return;
+
+        final passwordStatus = PasswordStatus.fromJson(confirmData['passwordStatus']
+            ?? {'isPasswordExpired': false, 'forceChangePassword': false});
+        _navigateAfterLogin(passwordStatus, confirmData);
+        return;
+      }
+
+      final passwordStatus = PasswordStatus.fromJson(responseData['passwordStatus']);
+      _navigateAfterLogin(passwordStatus, responseData);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('เข้าสู่ระบบไม่สำเร็จ: ${e.toString().replaceFirst('Exception: ', '')}')),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('เข้าสู่ระบบไม่สำเร็จ: ${e.toString().replaceFirst('Exception: ', '')}')),
-      );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _navigateAfterLogin(PasswordStatus passwordStatus, Map<String, dynamic> data) {
+    if (passwordStatus.forceChangePassword) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ChangePasswordDialog(userId: data['user']['id'], forceChange: true),
+        ),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(passwordStatus: passwordStatus),
+        ),
+      );
     }
   }
 

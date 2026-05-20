@@ -151,7 +151,11 @@ class AuthService with ChangeNotifier {
     );
 
     if (response.statusCode == 200) {
-      final data = json.decode(response.body);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+
+      // มี session เดิม — คืนให้ frontend จัดการ (ไม่มี token/user ใน response นี้)
+      if (data['requiresConfirmation'] == true) return data;
+
       final String token = data['token'];
       _currentUser = User.fromJson(data['user']);
 
@@ -202,6 +206,68 @@ class AuthService with ChangeNotifier {
     }
   }
 
+  // เรียกหลัง dialog ยืนยัน — forceLogout=true: kick เครื่องเก่า, false: ยกเลิก
+  Future<Map<String, dynamic>> confirmLogin(String confirmToken, {required bool forceLogout}) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/login/confirm'),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Database-Name': _selectedDatabase ?? '',
+      },
+      body: json.encode({'confirmToken': confirmToken, 'forceLogout': forceLogout}),
+    );
+
+    if (response.statusCode != 200) {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'เกิดข้อผิดพลาด');
+    }
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    if (data['success'] == true) {
+      final String token = data['token'];
+      _currentUser = User.fromJson(data['user']);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_authTokenKey, token);
+      await prefs.setString(_userKey, json.encode(_currentUser!.toJson()));
+      await prefs.setString(_databaseKey, _selectedDatabase!);
+      setToken(token);
+      await saveDefaultDatabase(_selectedDatabase!);
+      await saveSelectedDatabase(_selectedDatabase!);
+
+      // โหลดข้อมูลบริษัท (เหมือน login ปกติ)
+      try {
+        final company = await CompanyService().fetchCompany();
+        _company = company;
+      } catch (_) {}
+
+      // โหลด branches
+      try {
+        final authHeaders = {
+          'Content-Type': 'application/json; charset=UTF-8',
+          'Authorization': 'Bearer $token',
+          'X-Database-Name': _selectedDatabase!,
+          'UserId': _currentUser!.id.toString(),
+          'UserName': _currentUser!.userName,
+        };
+        final branchRes = await http.get(
+          Uri.parse('$baseUrl/sa_user_branch/${_currentUser!.id}'),
+          headers: authHeaders,
+        );
+        if (branchRes.statusCode == 200) {
+          _allowedBranches = (json.decode(branchRes.body) as List)
+              .map((b) => UserBranch.fromJson(b))
+              .toList();
+          final defs = _allowedBranches.where((b) => b.isDefault);
+          _defaultBranch = defs.isEmpty ? null : defs.first;
+          await prefs.setString(_branchesKey,
+              json.encode(_allowedBranches.map((b) => b.toJson()).toList()));
+        }
+      } catch (_) {}
+
+      notifyListeners();
+    }
+    return data;
+  }
+
   Future<void> changePassword({
     required int? userId,
     required String oldPassword,
@@ -243,6 +309,12 @@ class AuthService with ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // แจ้ง backend ลบ session (best-effort)
+    try {
+      final headers = await getAuthHeader();
+      await http.post(Uri.parse('$baseUrl/auth/logout'), headers: headers);
+    } catch (_) {}
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_authTokenKey);
     await prefs.remove(_userKey);

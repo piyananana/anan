@@ -308,6 +308,42 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
     });
   }
 
+  /// แปลง List<Menu> → Map<int, MenuPermission>
+  Map<int, MenuPermission> _permsFromMenuList(List<Menu> menus) => {
+    for (final m in menus)
+      m.id: MenuPermission(
+        menuId: m.id,
+        canView: m.canView,
+        canCreate: m.canCreate,
+        canEdit: m.canEdit,
+        canDelete: m.canDelete,
+        canApprove: m.canApprove,
+        canPrint: m.canPrint,
+        canExport: m.canExport,
+      )
+  };
+
+  Future<void> _showCopyDialog() async {
+    final menuService     = Provider.of<MenuService>(context, listen: false);
+    final userMenuService = Provider.of<UserMenuService>(context, listen: false);
+
+    final targetUserId = await showDialog<int>(
+      context: context,
+      builder: (_) => _CopyPermissionsDialog(
+        users: _users,
+        preselectedUser: _selectedNode,
+        menuService: menuService,
+        userMenuService: userMenuService,
+        permsFromMenuList: _permsFromMenuList,
+      ),
+    );
+
+    // ถ้า dialog คัดลอกไปยัง user ที่กำลัง view/edit อยู่ → refresh
+    if (targetUserId != null && mounted && _selectedNode?.id == targetUserId) {
+      _onView(_selectedNode!);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -327,6 +363,11 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
             icon: const Icon(Icons.cleaning_services_outlined, color: Colors.white),
             onPressed: _onClearRightPanel,
             tooltip: 'เคลียร์ Panel ขวา',
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy_all, color: Colors.white),
+            onPressed: _showCopyDialog,
+            tooltip: 'คัดลอกสิทธิ์จากผู้ใช้อื่น',
           ),
           _selectedNode != null ?
           IconButton(
@@ -454,5 +495,199 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
       ],
     );
   }
-  
+}
+
+// ── Copy Permissions Dialog ─────────────────────────────────────────────────
+
+class _CopyPermissionsDialog extends StatefulWidget {
+  final List<User> users;
+  final User? preselectedUser;       // user ที่กำลัง view/edit อยู่ (เป็น "ปลายทาง" default)
+  final MenuService menuService;
+  final UserMenuService userMenuService;
+  final Map<int, MenuPermission> Function(List<Menu>) permsFromMenuList;
+
+  const _CopyPermissionsDialog({
+    required this.users,
+    required this.preselectedUser,
+    required this.menuService,
+    required this.userMenuService,
+    required this.permsFromMenuList,
+  });
+
+  @override
+  State<_CopyPermissionsDialog> createState() => _CopyPermissionsDialogState();
+}
+
+class _CopyPermissionsDialogState extends State<_CopyPermissionsDialog> {
+  User? _fromUser;
+  User? _toUser;
+  bool _replaceExisting = true;   // true = ลบก่อนแล้วคัดลอก, false = รวมสิทธิ์
+  bool _isCopying = false;
+  String? _errorMsg;
+
+  @override
+  void initState() {
+    super.initState();
+    _toUser = widget.preselectedUser;
+  }
+
+  List<User> get _fromCandidates =>
+      widget.users.where((u) => u.id != _toUser?.id).toList();
+
+  List<User> get _toCandidates =>
+      widget.users.where((u) => u.id != _fromUser?.id).toList();
+
+  Future<void> _doCopy() async {
+    if (_fromUser == null || _toUser == null) return;
+    setState(() { _isCopying = true; _errorMsg = null; });
+
+    try {
+      // โหลดสิทธิ์ต้นทาง
+      final srcMenus = await widget.menuService.fetchMenuByUserId(_fromUser!.id);
+      final srcPerms = widget.permsFromMenuList(srcMenus);
+
+      Map<int, MenuPermission> finalPerms;
+
+      if (_replaceExisting) {
+        finalPerms = srcPerms;
+      } else {
+        // โหลดสิทธิ์ปลายทาง แล้ว OR กัน
+        final dstMenus = await widget.menuService.fetchMenuByUserId(_toUser!.id);
+        final dstPerms = widget.permsFromMenuList(dstMenus);
+        finalPerms = Map.from(dstPerms);
+        for (final entry in srcPerms.entries) {
+          final dst = finalPerms[entry.key];
+          if (dst == null) {
+            finalPerms[entry.key] = entry.value;
+          } else {
+            finalPerms[entry.key] = MenuPermission(
+              menuId:    dst.menuId,
+              canView:   dst.canView   || entry.value.canView,
+              canCreate: dst.canCreate || entry.value.canCreate,
+              canEdit:   dst.canEdit   || entry.value.canEdit,
+              canDelete: dst.canDelete || entry.value.canDelete,
+              canApprove:dst.canApprove|| entry.value.canApprove,
+              canPrint:  dst.canPrint  || entry.value.canPrint,
+              canExport: dst.canExport || entry.value.canExport,
+            );
+          }
+        }
+      }
+
+      await widget.userMenuService.updateUserMenu(_toUser!.id, finalPerms);
+
+      if (mounted) Navigator.pop(context, _toUser!.id);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCopying = false;
+          _errorMsg = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canCopy = _fromUser != null && _toUser != null && !_isCopying;
+
+    return AlertDialog(
+      title: const Row(children: [
+        Icon(Icons.copy_all, color: Colors.deepOrange),
+        SizedBox(width: 8),
+        Text('คัดลอกสิทธิ์เมนู'),
+      ]),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // FROM
+            DropdownButtonFormField<User>(
+              isExpanded: true,
+              value: _fromUser,
+              decoration: const InputDecoration(
+                labelText: 'คัดลอกจาก (ต้นทาง)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: _fromCandidates
+                  .map((u) => DropdownMenuItem(
+                        value: u,
+                        child: Text('${u.userName}  (${u.firstName} ${u.lastName})',
+                            overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
+              onChanged: _isCopying ? null : (u) => setState(() => _fromUser = u),
+            ),
+            const SizedBox(height: 14),
+
+            // TO
+            DropdownButtonFormField<User>(
+              isExpanded: true,
+              value: _toUser,
+              decoration: const InputDecoration(
+                labelText: 'คัดลอกไปยัง (ปลายทาง)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: _toCandidates
+                  .map((u) => DropdownMenuItem(
+                        value: u,
+                        child: Text('${u.userName}  (${u.firstName} ${u.lastName})',
+                            overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
+              onChanged: _isCopying ? null : (u) => setState(() => _toUser = u),
+            ),
+            const SizedBox(height: 16),
+
+            // Mode
+            const Text('วิธีการคัดลอก', style: TextStyle(fontWeight: FontWeight.w600)),
+            RadioListTile<bool>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('แทนที่สิทธิ์เดิม (ได้รับเฉพาะสิทธิ์ที่คัดลอก)'),
+              value: true,
+              groupValue: _replaceExisting,
+              onChanged: _isCopying ? null : (v) => setState(() => _replaceExisting = v!),
+            ),
+            RadioListTile<bool>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('รวมกับสิทธิ์เดิม (ได้รับสิทธิ์เดิม + สิทธิ์ที่คัดลอก)'),
+              value: false,
+              groupValue: _replaceExisting,
+              onChanged: _isCopying ? null : (v) => setState(() => _replaceExisting = v!),
+            ),
+
+            if (_errorMsg != null) ...[
+              const SizedBox(height: 8),
+              Text(_errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isCopying ? null : () => Navigator.pop(context),
+          child: const Text('ยกเลิก'),
+        ),
+        ElevatedButton.icon(
+          icon: _isCopying
+              ? const SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.copy_all, size: 18),
+          label: Text(_isCopying ? 'กำลังคัดลอก...' : 'คัดลอก'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.deepOrange[700],
+            foregroundColor: Colors.white,
+          ),
+          onPressed: canCopy ? _doCopy : null,
+        ),
+      ],
+    );
+  }
 }

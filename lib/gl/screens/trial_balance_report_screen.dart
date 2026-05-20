@@ -14,8 +14,8 @@ import '../../gl/services/trial_balance_report_service.dart';
 
 // Master Data Services
 import '../../cd/services/branch_service.dart';
-import '../../cd/services/business_unit_service.dart';
-import '../../cd/services/project_service.dart';
+import '../../gl/models/gl_dimension.dart';
+import '../../gl/services/gl_dimension_service.dart';
 import '../../sa/models/user_branch.dart';
 import '../../sa/services/auth_service.dart';
 
@@ -33,8 +33,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
   final PeriodService _periodService = PeriodService();
   final TrialBalanceReportService _reportService = TrialBalanceReportService();
   final BranchService _branchService = BranchService();
-  final BusinessUnitService _buService = BusinessUnitService();
-  final ProjectService _projectService = ProjectService();
+  final GlDimensionService _dimService = GlDimensionService();
   final AuthService authService = AuthService();
   late Map<String, String> headers;
 
@@ -49,8 +48,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 
   // Master Data Maps
   Map<int, String> _branchMap = {};
-  Map<int, String> _buMap = {};
-  Map<int, String> _projectMap = {};
+  List<GlDimensionType> _activeDimTypes = [];
 
   // Hierarchy Helper
   Map<int, int> _accountLevels = {};
@@ -97,16 +95,14 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
       }
 
       final branches = await _branchService.fetchRows();
-      final bus = await _buService.fetchRows();
-      final projects = await _projectService.fetchRows();
-
       _branchList = branches
           .map((b) => {'id': b.id, 'code': b.branchCode, 'name': b.branchNameThai})
           .toList()
         ..sort((a, b) => (a['code'] as String).compareTo(b['code'] as String));
       _branchMap = {for (var e in branches) e.id!: e.branchCode};
-      _buMap = {for (var e in bus) e.id!: e.buCode};
-      _projectMap = {for (var e in projects) e.id!: e.projectCode};
+
+      // โหลด Dimension Types (แสดง _showDimensions เฉพาะเมื่อมีการตั้งค่า)
+      _activeDimTypes = await _dimService.fetchActiveTypes();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -612,18 +608,16 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
               !_showOnlyHeaders) {
             final dims = row['dimension_rows'] as List;
             for (var d in dims) {
-              String brCode =
-                  d['branch_code'] ?? _branchMap[d['branch_id']] ?? "";
-              String buCode =
-                  d['bu_code'] ?? _buMap[d['business_unit_id']] ?? "";
-              String pjCode =
-                  d['project_code'] ?? _projectMap[d['project_id']] ?? "";
-
-              // แสดงเฉพาะบัญชีที่มีการป้อน dimension อย่างน้อย 1 ตัว
-              bool hasDim = brCode.isNotEmpty || buCode.isNotEmpty || pjCode.isNotEmpty;
-              // dimension ที่ไม่ได้ป้อนให้แสดง "..."
-              String dimText =
-                  '${brCode.isNotEmpty ? brCode : " - "} / ${buCode.isNotEmpty ? buCode : " - "} / ${pjCode.isNotEmpty ? pjCode : " - "}';
+              final String brCode = d['branch_code'] as String? ?? '';
+              final dimParts = <String>[];
+              if (brCode.isNotEmpty) dimParts.add(brCode);
+              // backend ส่ง dim1_code, dim2_code กลับมา
+              for (int slot = 1; slot <= 2; slot++) {
+                final code = d['dim${slot}_code'] as String? ?? '';
+                if (code.isNotEmpty) dimParts.add(code);
+              }
+              bool hasDim = dimParts.isNotEmpty;
+              String dimText = dimParts.join(' / ');
 
               if (hasDim) {
                 double dEnd = (double.tryParse(d['beg_dr'].toString()) ?? 0) -
@@ -902,12 +896,14 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       ),
                     ],
                     const SizedBox(height: 16),
-                    SwitchListTile(
-                      title: const Text('แสดงสาขา/มิติ'),
-                      value: _showDimensions,
-                      onChanged: (v) => setState(() => _showDimensions = v),
-                      contentPadding: EdgeInsets.zero,
-                    ),
+                    // แสดงเฉพาะเมื่อมี dimension type ที่ active
+                    if (_activeDimTypes.isNotEmpty)
+                      SwitchListTile(
+                        title: const Text('แสดงสาขา/มิติ'),
+                        value: _showDimensions,
+                        onChanged: (v) => setState(() => _showDimensions = v),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     SwitchListTile(
                       title: const Text('ซ่อนบัญชีที่ยอดเป็นศูนย์'),
                       value: _hideZero,

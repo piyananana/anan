@@ -29,6 +29,8 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
   bool _requireSpecialChars = false;
   bool _forceChangeOnExpiry = false;
 
+  String _singleSessionMode = 'dialog'; // 'dialog' | 'force'
+
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -64,6 +66,7 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
         _expiryDaysController.text = policy.passwordExpiryDays.toString();
         _notificationDaysController.text = policy.passwordNotificationDays.toString();
         _sessionTimeoutController.text = policy.sessionTimeoutMinutes.toString();
+        _singleSessionMode = policy.singleSessionMode;
         _requireUppercase = policy.requireUppercase;
         _requireLowercase = policy.requireLowercase;
         _requireDigits = policy.requireDigits;
@@ -99,6 +102,7 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
           passwordNotificationDays: int.parse(_notificationDaysController.text),
           forcePasswordChangeOnExpiry: _forceChangeOnExpiry,
           sessionTimeoutMinutes: int.parse(_sessionTimeoutController.text),
+          singleSessionMode: _singleSessionMode,
         );
 
         await PasswordPolicyService().updatePasswordPolicy(newPolicy);
@@ -248,6 +252,38 @@ class _PasswordPolicyScreenState extends State<PasswordPolicyScreen> with Automa
                             tooltip: 'ระบบจะออกจากระบบอัตโนมัติเมื่อไม่มีการใช้งานตามเวลาที่กำหนด (1-600 นาที)',
                             min: 1,
                             max: 600,
+                          ),
+                          const SizedBox(height: 20),
+                          const Text(
+                            'นโยบาย Login พร้อมกัน (Single Session)',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'ผู้ใช้สามารถ Login ได้เพียง 1 เครื่องในเวลาเดียวกัน',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          ),
+                          RadioListTile<String>(
+                            value: 'dialog',
+                            groupValue: _singleSessionMode,
+                            title: const Text('แสดง Dialog ให้เลือก'),
+                            subtitle: const Text(
+                              'เครื่องใหม่จะถามว่าต้องการ Logout เครื่องเก่าหรือไม่ (แนะนำ)',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            onChanged: (v) => setState(() => _singleSessionMode = v!),
+                            dense: true,
+                          ),
+                          RadioListTile<String>(
+                            value: 'force',
+                            groupValue: _singleSessionMode,
+                            title: const Text('Logout เครื่องเก่าทันที'),
+                            subtitle: const Text(
+                              'เมื่อ Login จากเครื่องใหม่ เครื่องเก่าจะถูก Logout อัตโนมัติโดยไม่ถาม',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            onChanged: (v) => setState(() => _singleSessionMode = v!),
+                            dense: true,
                           ),
                           const SizedBox(height: 24),
                           const Divider(),

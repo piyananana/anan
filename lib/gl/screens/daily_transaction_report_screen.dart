@@ -10,9 +10,9 @@ import '../../gl/models/period.dart';
 import '../../gl/services/period_service.dart';
 import '../../gl/services/daily_transaction_report_service.dart';
 import '../../cd/services/branch_service.dart';
-import '../../cd/services/business_unit_service.dart';
+import '../../gl/models/gl_dimension.dart';
+import '../../gl/services/gl_dimension_service.dart';
 import '../../sa/models/user_branch.dart';
-import '../../cd/services/project_service.dart';
 import '../../sa/models/company.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
@@ -33,8 +33,7 @@ class _DailyTransactionReportScreenState
   final DailyTransactionReportService _reportService =
       DailyTransactionReportService();
   final BranchService _branchService = BranchService();
-  final BusinessUnitService _buService = BusinessUnitService();
-  final ProjectService _projectService = ProjectService();
+  final GlDimensionService _dimService = GlDimensionService();
   final AuthService _authService = AuthService();
 
   // Auth
@@ -47,8 +46,8 @@ class _DailyTransactionReportScreenState
   List<Map<String, dynamic>> _glDocTypes = [];
   List<Map<String, dynamic>> _refDocTypes = [];
   Map<int, String> _branchMap = {};
-  Map<int, String> _buMap = {};
-  Map<int, String> _projectMap = {};
+  List<GlDimensionType> _activeDimTypes = [];
+  Map<int, String> _dimValueMap = {};
   List<dynamic> _branchList = [];
   List<UserBranch> _allowedBranches = [];
   int? _selectedBranchId;
@@ -115,15 +114,21 @@ class _DailyTransactionReportScreenState
       _refDocTypes = docTypes.where((d) => d['sys_module'] != '01').toList();
 
       final branches = await _branchService.fetchRows();
-      final bus = await _buService.fetchRows();
-      final projects = await _projectService.fetchRows();
       _branchList = branches
           .map((b) => {'id': b.id, 'code': b.branchCode, 'name': b.branchNameThai})
           .toList()
         ..sort((a, b) => (a['code'] as String).compareTo(b['code'] as String));
       _branchMap = {for (var e in branches) e.id!: e.branchCode};
-      _buMap = {for (var e in bus) e.id!: e.buCode};
-      _projectMap = {for (var e in projects) e.id!: e.projectCode};
+
+      // โหลด Dimension Types และ Values
+      _activeDimTypes = await _dimService.fetchActiveTypes();
+      _dimValueMap = {};
+      for (final dt in _activeDimTypes) {
+        final vals = await _dimService.fetchValuesByType(dt.typeCode);
+        for (final v in vals) {
+          _dimValueMap[v.id] = v.valueCode;
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -525,18 +530,16 @@ class _DailyTransactionReportScreenState
         final cr = (d['credit_lc'] as num).toDouble();
         final desc = d['description'] ?? '';
 
-        final brCode = d['branch_id'] != null
-            ? (_branchMap[d['branch_id']] ?? '')
-            : '';
-        final buCode = d['business_unit_id'] != null
-            ? (_buMap[d['business_unit_id']] ?? '')
-            : '';
-        final pjCode = d['project_id'] != null
-            ? (_projectMap[d['project_id']] ?? '')
-            : '';
-        final dimParts = [brCode, buCode, pjCode]
-            .where((s) => s.isNotEmpty)
-            .toList();
+        final brCode = d['branch_id'] != null ? (_branchMap[d['branch_id']] ?? '') : '';
+        final dimParts = <String>[];
+        if (brCode.isNotEmpty) dimParts.add(brCode);
+        if (_activeDimTypes.isNotEmpty) {
+          for (final dt in _activeDimTypes) {
+            final id = d['dim${dt.slotNo}_id'] as int?;
+            final code = id != null ? (_dimValueMap[id] ?? '') : '';
+            if (code.isNotEmpty) dimParts.add(code);
+          }
+        }
         final dimStr = dimParts.isEmpty ? '' : dimParts.join('/');
 
         return pw.TableRow(children: [
