@@ -18,6 +18,7 @@ import '../../cd/models/vat_rate.dart';
 import '../../cd/services/vat_rate_service.dart';
 import '../models/ar_gl_account_setup.dart';
 import '../services/ar_gl_account_setup_service.dart';
+import '../../utils/date_utils.dart' show parseLocalDateNullable;
 import '../../cm/models/cm_payment_method.dart';
 import '../../cm/widgets/cm_payment_method_list_widget.dart';
 import '../../gl/services/gl_entry_service.dart';
@@ -636,7 +637,42 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       for (final c in _applyCtrlMap.values) c.dispose();
       _applyCtrlMap.clear();
       setState(() => _openInvoices = invoices);
+      // auto-fill ยอดคงเหลือสำหรับ invoice ที่ billing_date ตรงกับ doc_date
+      _autoFillBillCollection();
     } catch (_) {}
+  }
+
+  // สำหรับวางบิล: ถ้า billing_date ของ invoice ตรงกับ doc_date ของเอกสาร
+  // ให้ pre-fill ยอดคงเหลือเข้าช่องชำระ/หักกลบ (ยังแก้ไขได้)
+  void _autoFillBillCollection() {
+    if (!_isBillCollection) return;
+    final dd = DateTime(_docDate.year, _docDate.month, _docDate.day);
+    bool changed = false;
+    for (final inv in _openInvoices) {
+      if (inv.billingDate == null) continue;
+      final bd = DateTime(
+          inv.billingDate!.year, inv.billingDate!.month, inv.billingDate!.day);
+      if (bd != dd) continue;
+      if (inv.balanceAmountLc <= 0) continue;
+      // ไม่ override ถ้ามีค่าอยู่แล้ว
+      if (_applyRows.any((a) => a.appliedToId == inv.id)) continue;
+      _applyRows.add(_ApplyRow(
+        appliedToId: inv.id,
+        appliedToDocNo: inv.docNo,
+        appliedToDocDate: inv.docDate,
+        appliedToTotal: inv.totalAmountLc,
+        appliedAmountLc: inv.balanceAmountLc,
+      ));
+      final ctrl = _applyCtrlMap[inv.id];
+      if (ctrl != null) {
+        ctrl.text = inv.balanceAmountLc.toStringAsFixed(2);
+      } else {
+        _applyCtrlMap[inv.id] = TextEditingController(
+            text: inv.balanceAmountLc.toStringAsFixed(2));
+      }
+      changed = true;
+    }
+    if (changed && mounted) setState(() => _recalcTotals());
   }
 
   // โหลด open invoices โดยไม่ clear _applyCtrlMap
@@ -2009,7 +2045,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final totalCnDeduct  = _cnRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
     final totalCash      = totalApplied - totalAdvance - totalCnDeduct;
     final currency       = _selectedCurrency?.currencyCode ?? '';
-    final showBcCols     = _isReceipt && (_selectedCustomer?.requiresBilling == true);
+    final showBcCols        = _isReceipt && (_selectedCustomer?.requiresBilling == true);
+    final showBcBillingCol  = _isBillCollection; // วางบิล: แสดงคอลัมน์วันที่วางบิลตามใบแจ้งหนี้
 
     // เงื่อนไขการแสดง card หักมัดจำ / หักใบลดหนี้ (Receipt และ BC)
     final showAdvanceCard = (_isReceipt || _isBillCollection) &&
@@ -2068,6 +2105,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                           const DataColumn(label: Text('วางบิลวันที่', style: TextStyle(fontWeight: FontWeight.bold))),
                           const DataColumn(label: Text('ยอดวางบิล', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                         ],
+                        if (showBcBillingCol)
+                          const DataColumn(label: Text('วันที่วางบิล', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
                         const DataColumn(label: Text('ครบกำหนด', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('ยอดรวม', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                         const DataColumn(label: Text('คงเหลือ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
@@ -2080,13 +2119,23 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                           () => TextEditingController(text: existing?.appliedAmountLc.toStringAsFixed(2) ?? ''),
                         );
                         final bcInfo = _invoiceBcMap[inv.id];
-                        return DataRow(cells: [
+                        // วางบิล: ตรวจว่า billing_date ตรงกับ doc_date หรือไม่
+                        final invBdOnly = inv.billingDate == null ? null
+                            : DateTime(inv.billingDate!.year, inv.billingDate!.month, inv.billingDate!.day);
+                        final docDateOnly = DateTime(_docDate.year, _docDate.month, _docDate.day);
+                        final isBillingMatch = showBcBillingCol &&
+                            invBdOnly != null && invBdOnly == docDateOnly;
+                        return DataRow(
+                          color: isBillingMatch
+                              ? WidgetStateProperty.all(Colors.amber[100])
+                              : null,
+                          cells: [
                           DataCell(Text(inv.docNo, style: const TextStyle(fontSize: 12))),
                           DataCell(Text(_dateFmt.format(inv.docDate), style: const TextStyle(fontSize: 12))),
                           if (showBcCols) ...[
                             DataCell(Text(
                               bcInfo != null && bcInfo['billing_date'] != null
-                                  ? _dateFmt.format(DateTime.tryParse(bcInfo['billing_date'].toString()) ?? inv.docDate)
+                                  ? _dateFmt.format(parseLocalDateNullable(bcInfo['billing_date']) ?? inv.docDate)
                                   : '-',
                               style: TextStyle(fontSize: 12, color: bcInfo != null && bcInfo['billing_date'] != null ? Colors.blue[700] : Colors.grey),
                             )),
@@ -2095,6 +2144,15 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                               style: TextStyle(fontSize: 12, color: bcInfo != null ? Colors.blue[700] : Colors.grey),
                             )),
                           ],
+                          if (showBcBillingCol)
+                            DataCell(Text(
+                              inv.billingDate != null ? _dateFmt.format(inv.billingDate!) : '-',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: isBillingMatch ? FontWeight.bold : FontWeight.normal,
+                                color: isBillingMatch ? Colors.teal[800] : Colors.black54,
+                              ),
+                            )),
                           DataCell(Text(inv.dueDate != null ? _dateFmt.format(inv.dueDate!) : '-', style: const TextStyle(fontSize: 12))),
                           DataCell(Text(_fmt.format(inv.totalAmountLc), style: const TextStyle(fontSize: 12))),
                           DataCell(Text(_fmt.format(inv.balanceAmountLc),

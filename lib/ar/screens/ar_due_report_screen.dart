@@ -17,22 +17,22 @@ import '../../sa/models/user_branch.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
 
-class ArAgingReportScreen extends StatefulWidget {
-  const ArAgingReportScreen({super.key});
+class ArDueReportScreen extends StatefulWidget {
+  const ArDueReportScreen({super.key});
 
   @override
-  State<ArAgingReportScreen> createState() => _ArAgingReportScreenState();
+  State<ArDueReportScreen> createState() => _ArDueReportScreenState();
 }
 
-class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
+class _ArDueReportScreenState extends State<ArDueReportScreen> {
   final ArAgingReportService _reportService = ArAgingReportService();
   final CompanyService _companyService = CompanyService();
   final AuthService _authService = AuthService();
   final ArCustomerGroupService _groupService = ArCustomerGroupService();
   final ArCustomerService _customerService = ArCustomerService();
   final SalespersonService _salespersonService = SalespersonService();
-  final TextEditingController _daysIntervalCtrl =
-      TextEditingController(text: '30');
+  final TextEditingController _monthsIntervalCtrl =
+      TextEditingController(text: '1');
 
   bool _isLoading = false;
   bool _isFilterExpanded = true;
@@ -58,7 +58,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
   String _toLabel = '';
 
   // Column settings
-  int _overdueColumnCount = 3;
+  int _columnCount = 3;
   bool _showDetail = false;
   String _sortOrder = 'none'; // 'none' | 'desc' | 'asc'
 
@@ -74,37 +74,55 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
   @override
   void dispose() {
-    _daysIntervalCtrl.dispose();
+    _monthsIntervalCtrl.dispose();
     super.dispose();
   }
 
   // ─── helpers ─────────────────────────────────────────────────────────────────
 
   int get _columnInterval =>
-      (int.tryParse(_daysIntervalCtrl.text) ?? 30).clamp(1, 9999);
+      (int.tryParse(_monthsIntervalCtrl.text) ?? 1).clamp(1, 12);
 
-  // totalBuckets = 1 (ยังไม่ครบกำหนด) + overdueColumnCount
-  int get _totalBuckets => _overdueColumnCount + 1;
+  // totalBuckets = 1 (เกินกำหนดแล้ว) + columnCount
+  int get _totalBuckets => _columnCount + 1;
 
-  // Labels: index 0 = ยังไม่ครบกำหนด, 1..N-1 = ranges, N = เกิน
+  // Bucket labels:
+  //   0 = เกินกำหนดแล้ว
+  //   1..N-1 = calendar months forward from asOfDate
+  //   N = last month + "+" (catch-all for far future)
   List<String> get _dynamicBucketLabels {
     final I = _columnInterval;
-    final labels = <String>['ยังไม่ครบกำหนด'];
-    for (int i = 0; i < _overdueColumnCount - 1; i++) {
-      labels.add('${i * I + 1}-${(i + 1) * I}');
+    final labels = <String>['เกินกำหนดแล้ว'];
+    for (int i = 0; i < _columnCount - 1; i++) {
+      final dt =
+          DateTime(_asOfDate.year, _asOfDate.month + i * I, 1);
+      labels.add(DateFormat('MM/yy').format(dt));
     }
-    labels.add('เกิน ${(_overdueColumnCount - 1) * I}');
+    final lastDt = DateTime(
+        _asOfDate.year, _asOfDate.month + (_columnCount - 1) * I, 1);
+    labels.add('${DateFormat('MM/yy').format(lastDt)}+');
     return labels;
   }
 
-  // Assign invoice to bucket index (0 = not yet due, 1 = most recent, N = oldest)
-  int _bucketDynamic(num days) {
-    if (days <= 0) return 0;
-    final I = _columnInterval;
-    for (int i = 1; i < _overdueColumnCount; i++) {
-      if (days <= i * I) return i;
+  // Assign invoice to bucket using due_date (not days_overdue)
+  //   0 = already overdue
+  //   1 = due in first interval (current month or soon)
+  //   N = due in Nth interval or later (catch-all)
+  int _bucketForDueDate(String? dueDateStr) {
+    if (dueDateStr == null || dueDateStr.isEmpty) return 0;
+    try {
+      final raw  = DateTime.parse(dueDateStr).toLocal();
+      final dueDate = DateTime(raw.year, raw.month, raw.day);
+      final asOf    = DateTime(_asOfDate.year, _asOfDate.month, _asOfDate.day);
+      if (dueDate.isBefore(asOf)) return 0; // already overdue
+      final monthsDiff = (dueDate.year - _asOfDate.year) * 12 +
+          (dueDate.month - _asOfDate.month);
+      final I = _columnInterval;
+      final idx = (monthsDiff / I).floor() + 1;
+      return idx.clamp(1, _columnCount);
+    } catch (_) {
+      return 0;
     }
-    return _overdueColumnCount;
   }
 
   // ─── data ─────────────────────────────────────────────────────────────────────
@@ -138,11 +156,9 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
         customerCodeFrom: _customerCodeFrom,
         customerCodeTo: _customerCodeTo,
       );
-      // Step 1: filter non-empty + code range + กลุ่ม + พนักงานขาย จาก raw data
-      // (backend ส่ง customer_group_id, salesperson_id มาแล้วใน response)
-      var filtered = raw
-          .where((c) => ((c['invoices'] as List?) ?? []).isNotEmpty)
-          .toList();
+      // Step 1: filter non-empty + กลุ่ม + พนักงานขาย + code range จาก raw data
+      var filtered =
+          raw.where((c) => ((c['invoices'] as List?) ?? []).isNotEmpty).toList();
       if (_selectedGroupId != null) {
         filtered = filtered
             .where((c) => c['customer_group_id'] == _selectedGroupId)
@@ -188,7 +204,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
       if (filtered.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('ไม่พบข้อมูลลูกหนี้คงค้าง ณ วันที่ที่เลือก')));
+            content: Text('ไม่พบข้อมูลลูกหนี้ ณ วันที่ที่เลือก')));
       }
 
       setState(() {
@@ -206,33 +222,32 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
     }
   }
 
-  void _onColumnSettingChanged() {
+  void _onSettingChanged() {
     if (_reportData.isNotEmpty) setState(() => _pdfKey++);
   }
 
   // ─── PDF ──────────────────────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
-    final doc              = pw.Document();
-    final fontData         = await rootBundle.load('assets/fonts/THSarabun.ttf');
-    final fontBoldData     = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
-    final fontItalicData   = await rootBundle.load('assets/fonts/THSarabun Italic.ttf');
-    final font             = pw.Font.ttf(fontData);
-    final fontBold         = pw.Font.ttf(fontBoldData);
-    final fontItalic       = pw.Font.ttf(fontItalicData);
+    final doc            = pw.Document();
+    final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
+    final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
+    final fontItalicData = await rootBundle.load('assets/fonts/THSarabun Italic.ttf');
+    final font           = pw.Font.ttf(fontData);
+    final fontBold       = pw.Font.ttf(fontBoldData);
+    final fontItalic     = pw.Font.ttf(fontItalicData);
 
     final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
     final userName     = _headers?['UserName'] ?? '(ไม่ระบุชื่อ)';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final asOfLine     = 'ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_asOfDate)}';
 
-    // Snapshot settings for this render
     final bucketLabels = _dynamicBucketLabels;
     final totalBuckets = _totalBuckets;
     final showDetail   = _showDetail;
     final sortOrder    = _sortOrder;
 
-    // เงื่อนไข บรรทัดที่ 3 ชิดซ้าย
+    // Conditions line (row 3)
     final conditions = <String>[];
     if (_selectedBranchId != null) {
       final b = _allowedBranches.firstWhere(
@@ -241,8 +256,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       conditions.add('สาขา: ${b.branchCode} ${b.branchNameThai}');
     }
     if (_selectedGroupId != null) {
-      final g = _customerGroups.firstWhere(
-          (g) => g.id == _selectedGroupId,
+      final g = _customerGroups.firstWhere((g) => g.id == _selectedGroupId,
           orElse: () => _customerGroups.first);
       conditions.add('กลุ่มลูกค้า: ${g.groupCode} ${g.groupNameThai}');
     }
@@ -254,12 +268,14 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
     }
     if ((_customerCodeFrom ?? '').isNotEmpty || (_customerCodeTo ?? '').isNotEmpty) {
       final from = _customerCodeFrom ?? '';
-      final to = _customerCodeTo ?? '';
-      conditions.add('รหัสลูกค้า: ${from.isEmpty ? '(ทั้งหมด)' : from} – ${to.isEmpty ? '(ทั้งหมด)' : to}');
+      final to   = _customerCodeTo ?? '';
+      conditions.add(
+          'รหัสลูกค้า: ${from.isEmpty ? '(ทั้งหมด)' : from} – ${to.isEmpty ? '(ทั้งหมด)' : to}');
     }
-    conditions.add('คอลัมน์ครบกำหนด: $_overdueColumnCount คอลัมน์  ทุก $_columnInterval วัน');
+    conditions.add('คอลัมน์: $_columnCount คอลัมน์  ทุก $_columnInterval เดือน');
     if (sortOrder != 'none') {
-      conditions.add('เรียงยอดหนี้: ${sortOrder == 'desc' ? 'มากไปน้อย' : 'น้อยไปมาก'}');
+      conditions.add(
+          'เรียงยอด: ${sortOrder == 'desc' ? 'มากไปน้อย' : 'น้อยไปมาก'}');
     }
     if (showDetail) conditions.add('แสดงรายละเอียดใบแจ้งหนี้');
     final conditionLine = '* ${conditions.join(' | ')}';
@@ -277,13 +293,13 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       }
     }
 
-    // ── compute per-customer buckets ──
+    // Compute per-customer buckets using due_date
     final rows = _reportData.map((c) {
       final buckets = List<double>.filled(totalBuckets, 0);
       for (final inv in (c['invoices'] as List? ?? [])) {
-        final days = (inv['days_overdue'] as num?) ?? 0;
-        final bal  = (inv['balance_amount_lc'] as num?)?.toDouble() ?? 0.0;
-        buckets[_bucketDynamic(days)] += bal;
+        final dueDate = inv['due_date'] as String?;
+        final bal     = (inv['balance_amount_lc'] as num?)?.toDouble() ?? 0.0;
+        buckets[_bucketForDueDate(dueDate)] += bal;
       }
       final code   = c['customer_code'] as String? ?? '';
       final detail = _customerDetailMap[code];
@@ -302,7 +318,6 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       );
     }).toList();
 
-    // Sort by total
     if (sortOrder == 'desc') {
       rows.sort((a, b) => b.total.compareTo(a.total));
     } else if (sortOrder == 'asc') {
@@ -317,13 +332,13 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
     // Dynamic column widths
     final colW = <int, pw.TableColumnWidth>{
-      0: const pw.FlexColumnWidth(7),   // รหัส / เลขที่ใบแจ้งหนี้
-      1: const pw.FlexColumnWidth(15),  // ชื่อ / วันที่ครบกำหนด
+      0: const pw.FlexColumnWidth(7),
+      1: const pw.FlexColumnWidth(15),
     };
     for (int i = 0; i < totalBuckets; i++) {
       colW[i + 2] = const pw.FlexColumnWidth(9);
     }
-    colW[totalBuckets + 2] = const pw.FlexColumnWidth(10); // รวม
+    colW[totalBuckets + 2] = const pw.FlexColumnWidth(10);
 
     doc.addPage(
       pw.MultiPage(
@@ -332,7 +347,6 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
         margin: const pw.EdgeInsets.all(20),
         header: (ctx) => pw.Column(
           children: [
-            // แถว 1: บริษัท | ชื่อรายงาน | หน้า
             pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
@@ -342,7 +356,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                         style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 7,
-                    child: pw.Text('รายงานลูกหนี้คงค้างตามอายุหนี้',
+                    child: pw.Text('รายงานกำหนดชำระลูกหนี้',
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(
                             fontSize: 16, fontWeight: pw.FontWeight.bold))),
@@ -354,7 +368,6 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
               ],
             ),
             pw.SizedBox(height: 4),
-            // แถว 2: | ณ วันที่ | พิมพ์โดย
             pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
@@ -374,7 +387,6 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
               ],
             ),
             pw.SizedBox(height: 4),
-            // แถว 3: เงื่อนไขทั้งหมด ชิดซ้าย | พิมพ์เมื่อ ชิดขวา
             pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
@@ -398,8 +410,8 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
           final cellStyle   = pw.TextStyle(font: font, fontSize: 9);
           final boldStyle   = pw.TextStyle(font: fontBold, fontSize: 9);
           final detailStyle = pw.TextStyle(font: fontItalic, fontSize: 8);
-          const edg     = pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2);
-          const edgDtl  = pw.EdgeInsets.fromLTRB(8, 1, 3, 1);
+          const edg    = pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2);
+          const edgDtl = pw.EdgeInsets.fromLTRB(8, 1, 3, 1);
 
           pw.Widget hCell(String t, {pw.TextAlign a = pw.TextAlign.center}) =>
               pw.Container(
@@ -407,20 +419,21 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                   child: pw.Text(t, style: hdrStyle, textAlign: a));
 
           pw.Widget dCell(String t,
-                  {pw.TextAlign a = pw.TextAlign.left, pw.TextStyle? s,
+                  {pw.TextAlign a = pw.TextAlign.left,
+                  pw.TextStyle? s,
                   pw.EdgeInsets? p}) =>
               pw.Container(
                   padding: p ?? edg,
                   child: pw.Text(t, style: s ?? cellStyle, textAlign: a));
 
-          pw.Widget amtCell(double v, {bool bold = false, pw.TextStyle? s}) =>
+          pw.Widget amtCell(double v,
+                  {bool bold = false, pw.TextStyle? s}) =>
               pw.Container(
                   padding: edg,
                   child: pw.Text(fmtAmt(v),
                       style: s ?? (bold ? boldStyle : cellStyle),
                       textAlign: pw.TextAlign.right));
 
-          // ── summary row (per customer) ──
           pw.TableRow summaryRow(
               String code, String name, List<double> bks, double tot,
               {bool isTotal = false, PdfColor? bg}) {
@@ -436,7 +449,6 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
             );
           }
 
-          // ── conditions row (billing + payment, same cell as name, italic) ──
           pw.TableRow conditionsRow(String text) {
             final empty = pw.Container(
                 padding: edgDtl,
@@ -454,25 +466,21 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
             );
           }
 
-          // ── detail row (per invoice) ──
           pw.TableRow invRow(Map<String, dynamic> inv) {
             final docNo    = inv['doc_no'] as String? ?? '';
             final docDate  = fmtDate(inv['doc_date'] as String?);
             final billDate = fmtDate(inv['billing_date'] as String?);
-            final dueDate  = fmtDate(inv['due_date'] as String?);
-            final days     = (inv['days_overdue'] as num?) ?? 0;
+            final dueStr   = inv['due_date'] as String?;
+            final dueDate  = fmtDate(dueStr);
             final bal      = (inv['balance_amount_lc'] as num?)?.toDouble() ?? 0.0;
-            final bucket   = _bucketDynamic(days);
-
+            final bucket   = _bucketForDueDate(dueStr);
             final dateParts = <String>[];
             if (docDate.isNotEmpty) dateParts.add('แจ้ง:$docDate');
             if (billDate.isNotEmpty) dateParts.add('บิล:$billDate');
             if (dueDate.isNotEmpty) dateParts.add('ครบ:$dueDate');
             final dateText = dateParts.join('  ');
-
-            final bks = List<double>.filled(totalBuckets, 0);
+            final bks   = List<double>.filled(totalBuckets, 0);
             bks[bucket] = bal;
-
             return pw.TableRow(
               decoration: const pw.BoxDecoration(
                   color: PdfColor(0.96, 0.96, 0.96)),
@@ -487,7 +495,6 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
           // Build table rows
           final tableRows = <pw.TableRow>[
-            // header
             pw.TableRow(
               decoration: const pw.BoxDecoration(
                   color: PdfColor(0.87, 0.94, 0.92)),
@@ -507,7 +514,6 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
           for (final r in rows) {
             tableRows.add(summaryRow(r.code, r.name, r.buckets, r.total));
             if (showDetail) {
-              // conditions row (billing + payment) under customer name
               final billTexts = r.billingConds
                   .map(_billingCondSummary)
                   .where((s) => s != '(ไม่ระบุเงื่อนไข)')
@@ -526,14 +532,12 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                 }
                 tableRows.add(conditionsRow(lines.join('\n')));
               }
-              // invoice detail rows
               for (final inv in r.invoices) {
                 tableRows.add(invRow(inv));
               }
             }
           }
 
-          // grand total
           tableRows.add(summaryRow('', 'รวมทั้งหมด', grand, grandTotal,
               isTotal: true,
               bg: const PdfColor(0.87, 0.94, 0.92)));
@@ -559,9 +563,9 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Row(children: [
-          Icon(Icons.account_balance_wallet, size: 20, color: Colors.white),
+          Icon(Icons.calendar_month, size: 20, color: Colors.white),
           SizedBox(width: 8),
-          Text('รายงานลูกหนี้คงค้างตามอายุหนี้'),
+          Text('รายงานกำหนดชำระลูกหนี้'),
         ]),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
@@ -570,11 +574,12 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
           ? const Center(child: CircularProgressIndicator())
           : LayoutBuilder(builder: (context, constraints) {
               final maxFilterWidth =
-                  (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+                  (constraints.maxWidth - 36 - 5 - 300)
+                      .clamp(100.0, double.infinity);
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── toggle button ──────────────────────────────────────────
+                  // ── toggle ─────────────────────────────────────────────────
                   Container(
                     width: 36,
                     color: Colors.teal[800],
@@ -587,8 +592,8 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                           size: 20),
                       padding: EdgeInsets.zero,
                       tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
-                      onPressed: () =>
-                          setState(() => _isFilterExpanded = !_isFilterExpanded),
+                      onPressed: () => setState(
+                          () => _isFilterExpanded = !_isFilterExpanded),
                     ),
                   ),
                   // ── filter panel ───────────────────────────────────────────
@@ -669,8 +674,8 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                                     TextOverflow.ellipsis),
                                           )),
                                     ],
-                                    onChanged: (v) =>
-                                        setState(() => _selectedBranchId = v),
+                                    onChanged: (v) => setState(
+                                        () => _selectedBranchId = v),
                                   ),
                                 ],
 
@@ -692,7 +697,8 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                           value: g.id,
                                           child: Text(
                                               '${g.groupCode}  ${g.groupNameThai}',
-                                              overflow: TextOverflow.ellipsis),
+                                              overflow:
+                                                  TextOverflow.ellipsis),
                                         )),
                                   ],
                                   onChanged: (v) =>
@@ -736,8 +742,6 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                     _fromLabel = '';
                                   }),
                                 ),
-
-                                // รหัสลูกค้าถึง
                                 const SizedBox(height: 8),
                                 _buildCustomerCodeField(
                                   label: 'รหัสลูกค้า ถึง',
@@ -753,12 +757,12 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                 const Divider(height: 1),
                                 const SizedBox(height: 12),
 
-                                // จำนวนคอลัมน์ที่ครบกำหนดแล้ว (2-5)
+                                // จำนวนคอลัมน์
                                 DropdownButtonFormField<int>(
                                   isExpanded: true,
-                                  value: _overdueColumnCount,
+                                  value: _columnCount,
                                   decoration: const InputDecoration(
-                                      labelText: 'จำนวนคอลัมน์ที่ครบกำหนดแล้ว',
+                                      labelText: 'จำนวนคอลัมน์กำหนดชำระ',
                                       border: OutlineInputBorder(),
                                       isDense: true),
                                   items: [2, 3, 4, 5]
@@ -768,35 +772,34 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                       .toList(),
                                   onChanged: (v) {
                                     if (v != null) {
-                                      setState(() => _overdueColumnCount = v);
-                                      _onColumnSettingChanged();
+                                      setState(() => _columnCount = v);
+                                      _onSettingChanged();
                                     }
                                   },
                                 ),
                                 const SizedBox(height: 12),
 
-                                // จำนวนวันต่อคอลัมน์
+                                // จำนวนเดือนต่อคอลัมน์
                                 TextField(
-                                  controller: _daysIntervalCtrl,
+                                  controller: _monthsIntervalCtrl,
                                   keyboardType: TextInputType.number,
                                   textAlign: TextAlign.right,
                                   decoration: const InputDecoration(
-                                    labelText: 'จำนวนวันต่อคอลัมน์',
+                                    labelText: 'จำนวนเดือนต่อคอลัมน์',
                                     border: OutlineInputBorder(),
                                     isDense: true,
-                                    suffixText: 'วัน',
+                                    suffixText: 'เดือน',
                                   ),
-                                  onEditingComplete: _onColumnSettingChanged,
+                                  onEditingComplete: _onSettingChanged,
                                 ),
-
                                 const SizedBox(height: 12),
 
-                                // เรียงตามยอดหนี้รวม
+                                // เรียงตามยอด
                                 DropdownButtonFormField<String>(
                                   isExpanded: true,
                                   value: _sortOrder,
                                   decoration: const InputDecoration(
-                                      labelText: 'เรียงตามยอดหนี้รวม',
+                                      labelText: 'เรียงตามยอดรวม',
                                       border: OutlineInputBorder(),
                                       isDense: true),
                                   items: const [
@@ -813,7 +816,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                   onChanged: (v) {
                                     if (v != null) {
                                       setState(() => _sortOrder = v);
-                                      _onColumnSettingChanged();
+                                      _onSettingChanged();
                                     }
                                   },
                                 ),
@@ -833,7 +836,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                       activeColor: Colors.teal[800],
                                       onChanged: (v) {
                                         setState(() => _showDetail = v);
-                                        _onColumnSettingChanged();
+                                        _onSettingChanged();
                                       },
                                     ),
                                   ],
@@ -909,12 +912,12 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
     );
   }
 
-  // ── customer code picker ────────────────────────────────────────────────────
+  // ── customer code picker ──────────────────────────────────────────────────
 
   Future<void> _pickCustomer({required bool isFrom}) async {
     final result = await showDialog<ArCustomer>(
       context: context,
-      builder: (_) => const _CustomerSearchDialog(),
+      builder: (_) => const _DueReportCustomerSearchDialog(),
     );
     if (result != null && mounted) {
       setState(() {
@@ -957,8 +960,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
               onTap: onPick,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Icon(Icons.search, size: 18,
-                    color: Colors.teal[800]),
+                child: Icon(Icons.search, size: 18, color: Colors.teal[800]),
               ),
             ),
           ],
@@ -969,9 +971,8 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
         child: Text(
           hasValue ? displayText : '— ทั้งหมด —',
           style: TextStyle(
-            fontSize: 13,
-            color: hasValue ? Colors.black87 : Colors.black38,
-          ),
+              fontSize: 13,
+              color: hasValue ? Colors.black87 : Colors.black38),
           overflow: TextOverflow.ellipsis,
         ),
       ),
@@ -979,69 +980,18 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
   }
 }
 
-// ── condition text helpers (identical logic to ar_customer_detail_widget) ─────
+// ── customer search dialog ────────────────────────────────────────────────────
 
-const _dayNames = [
-  'อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'
-];
-const _weekNames = {1: 'แรก', 2: 'ที่2', 3: 'ที่3', 4: 'ที่4', -1: 'สุดท้าย'};
-
-String _billingCondSummary(ArCustomerBillingCondition b) {
-  final parts = <String>[];
-  if (b.billWithDelivery) parts.add('วางบิลพร้อมส่งของ');
-  if (b.billingDayOfMonth.isNotEmpty) {
-    parts.add(b.billingDayOfMonth
-        .map((d) => d == 31 ? 'สิ้นเดือน' : 'วันที่ $d')
-        .join(', '));
-  }
-  if (b.billingDayOfWeek.isNotEmpty) {
-    parts.add('วัน${b.billingDayOfWeek.map((d) => _dayNames[d]).join('-')}');
-  }
-  if (b.billingWeekOfMonth.isNotEmpty) {
-    parts.add(
-        'สัปดาห์${b.billingWeekOfMonth.map((w) => _weekNames[w] ?? '$w').join('/')}');
-  }
-  if (b.billingTimeFrom != null || b.billingTimeTo != null) {
-    parts.add('${b.billingTimeFrom ?? ''}–${b.billingTimeTo ?? ''}');
-  }
-  if (b.dueFromBillingDate) parts.add('due นับจากวางบิล');
-  return parts.isEmpty ? '(ไม่ระบุเงื่อนไข)' : parts.join('  ·  ');
-}
-
-String _paymentCondSummary(ArCustomerPaymentCondition p) {
-  final parts = <String>[];
-  if (p.paymentDayOfMonth.isNotEmpty) {
-    parts.add(p.paymentDayOfMonth
-        .map((d) => d == 31 ? 'สิ้นเดือน' : 'วันที่ $d')
-        .join(', '));
-  }
-  if (p.paymentDayOfWeek.isNotEmpty) {
-    parts.add('วัน${p.paymentDayOfWeek.map((d) => _dayNames[d]).join('-')}');
-  }
-  if (p.paymentWeekOfMonth.isNotEmpty) {
-    parts.add(
-        'สัปดาห์${p.paymentWeekOfMonth.map((w) => _weekNames[w] ?? '$w').join('/')}');
-  }
-  if (p.withinMonthsFromBilling > 0) {
-    parts.add('ภายใน ${p.withinMonthsFromBilling} เดือนจากวางบิล');
-  }
-  if (p.additionalDays != 0) parts.add('+${p.additionalDays} วัน');
-  if (p.paymentTimeFrom != null || p.paymentTimeTo != null) {
-    parts.add('${p.paymentTimeFrom ?? ''}–${p.paymentTimeTo ?? ''}');
-  }
-  return parts.isEmpty ? '(ไม่ระบุเงื่อนไข)' : parts.join('  ·  ');
-}
-
-// ── customer search dialog ───────────────────────────────────────────────────
-
-class _CustomerSearchDialog extends StatefulWidget {
-  const _CustomerSearchDialog();
+class _DueReportCustomerSearchDialog extends StatefulWidget {
+  const _DueReportCustomerSearchDialog();
 
   @override
-  State<_CustomerSearchDialog> createState() => _CustomerSearchDialogState();
+  State<_DueReportCustomerSearchDialog> createState() =>
+      _DueReportCustomerSearchDialogState();
 }
 
-class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
+class _DueReportCustomerSearchDialogState
+    extends State<_DueReportCustomerSearchDialog> {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final ArCustomerService _service = ArCustomerService();
@@ -1083,9 +1033,9 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // title bar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.teal[800],
               child: const Text('ค้นหาลูกค้า',
                   style: TextStyle(
@@ -1093,7 +1043,6 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
                       fontWeight: FontWeight.bold,
                       fontSize: 15)),
             ),
-            // search field
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
               child: TextField(
@@ -1108,10 +1057,10 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
                 onChanged: _search,
               ),
             ),
-            // column headers
             Container(
               color: Colors.grey[200],
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: const Row(
                 children: [
                   SizedBox(
@@ -1127,7 +1076,6 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
               ),
             ),
             const Divider(height: 1),
-            // list
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
@@ -1158,7 +1106,8 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
                                     ),
                                     Expanded(
                                       child: Text(c.customerNameTh,
-                                          style: const TextStyle(fontSize: 13),
+                                          style:
+                                              const TextStyle(fontSize: 13),
                                           overflow: TextOverflow.ellipsis),
                                     ),
                                   ],
@@ -1169,9 +1118,9 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
                         ),
             ),
             const Divider(height: 1),
-            // cancel button
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -1187,4 +1136,59 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
       ),
     );
   }
+}
+
+// ── condition text helpers (same as ar_aging_report_screen) ──────────────────
+
+const _dueRptDayNames = [
+  'อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'
+];
+const _dueRptWeekNames = {
+  1: 'แรก', 2: 'ที่2', 3: 'ที่3', 4: 'ที่4', -1: 'สุดท้าย'
+};
+
+String _billingCondSummary(ArCustomerBillingCondition b) {
+  final parts = <String>[];
+  if (b.billWithDelivery) parts.add('วางบิลพร้อมส่งของ');
+  if (b.billingDayOfMonth.isNotEmpty) {
+    parts.add(b.billingDayOfMonth
+        .map((d) => d == 31 ? 'สิ้นเดือน' : 'วันที่ $d')
+        .join(', '));
+  }
+  if (b.billingDayOfWeek.isNotEmpty) {
+    parts.add(
+        'วัน${b.billingDayOfWeek.map((d) => _dueRptDayNames[d]).join('-')}');
+  }
+  if (b.billingWeekOfMonth.isNotEmpty) {
+    parts.add('สัปดาห์${b.billingWeekOfMonth.map((w) => _dueRptWeekNames[w] ?? '$w').join('/')}');
+  }
+  if (b.billingTimeFrom != null || b.billingTimeTo != null) {
+    parts.add('${b.billingTimeFrom ?? ''}–${b.billingTimeTo ?? ''}');
+  }
+  if (b.dueFromBillingDate) parts.add('due นับจากวางบิล');
+  return parts.isEmpty ? '(ไม่ระบุเงื่อนไข)' : parts.join('  ·  ');
+}
+
+String _paymentCondSummary(ArCustomerPaymentCondition p) {
+  final parts = <String>[];
+  if (p.paymentDayOfMonth.isNotEmpty) {
+    parts.add(p.paymentDayOfMonth
+        .map((d) => d == 31 ? 'สิ้นเดือน' : 'วันที่ $d')
+        .join(', '));
+  }
+  if (p.paymentDayOfWeek.isNotEmpty) {
+    parts.add(
+        'วัน${p.paymentDayOfWeek.map((d) => _dueRptDayNames[d]).join('-')}');
+  }
+  if (p.paymentWeekOfMonth.isNotEmpty) {
+    parts.add('สัปดาห์${p.paymentWeekOfMonth.map((w) => _dueRptWeekNames[w] ?? '$w').join('/')}');
+  }
+  if (p.withinMonthsFromBilling > 0) {
+    parts.add('ภายใน ${p.withinMonthsFromBilling} เดือนจากวางบิล');
+  }
+  if (p.additionalDays != 0) parts.add('+${p.additionalDays} วัน');
+  if (p.paymentTimeFrom != null || p.paymentTimeTo != null) {
+    parts.add('${p.paymentTimeFrom ?? ''}–${p.paymentTimeTo ?? ''}');
+  }
+  return parts.isEmpty ? '(ไม่ระบุเงื่อนไข)' : parts.join('  ·  ');
 }
