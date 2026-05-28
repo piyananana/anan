@@ -49,6 +49,12 @@ import '../../ar/screens/ar_customer_running_screen.dart';
 import '../../ar/screens/ar_transaction_screen.dart';
 import '../../ar/screens/ar_aging_report_screen.dart';
 import '../../ar/screens/ar_due_report_screen.dart';
+import '../../ar/screens/ar_movement_report_screen.dart';
+import '../../ar/screens/ar_billing_plan_report_screen.dart';
+import '../../ar/screens/ar_bulk_billing_screen.dart';
+import '../../ar/screens/ar_transaction_report_screen.dart';
+import '../../ar/screens/ar_billing_status_report_screen.dart';
+import '../../vt/screens/vat_report_screen.dart';
 import '../../ar/screens/ar_collector_screen.dart';
 import '../../ar/screens/ar_gl_account_setup_screen.dart';
 import '../../ar/screens/ar_reset_screen.dart';
@@ -158,7 +164,13 @@ class Menu {
     'ArCustomerRunningScreen': (context) => const ArCustomerRunningScreen(),
     'ArTransactionScreen': (context) => const ArTransactionScreen(),
     'ArAgingReportScreen': (context) => const ArAgingReportScreen(),
-    'ArDueReportScreen': (context) => const ArDueReportScreen(),
+    'ArDueReportScreen':      (context) => const ArDueReportScreen(),
+    'ArMovementReportScreen':      (context) => const ArMovementReportScreen(),
+    'ArBillingPlanReportScreen':   (context) => const ArBillingPlanReportScreen(),
+    'ArBulkBillingScreen':         (context) => const ArBulkBillingScreen(),
+    'ArTransactionReportScreen':    (context) => const ArTransactionReportScreen(),
+    'ArBillingStatusReportScreen':  (context) => const ArBillingStatusReportScreen(),
+    'VatReportScreen':        (context) => const VatReportScreen(),
     'ArCollectorScreen': (context) => ArCollectorScreen(onFieldsChanged: () {}),
     'BankScreen': (context) => BankScreen(onFieldsChanged: () {}),
     'CdWhtTypeScreen': (context) => CdWhtTypeScreen(onFieldsChanged: () {}),

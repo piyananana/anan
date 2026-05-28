@@ -8,4 +8,5 @@ class AppConfig {
   static const String apiCd = '${baseHost}/api/cd';
   static const String apiAr = '${baseHost}/api/ar';
   static const String apiCm = '${baseHost}/api/cm';
+  static const String apiVt = '${baseHost}/api/vt';
 }
