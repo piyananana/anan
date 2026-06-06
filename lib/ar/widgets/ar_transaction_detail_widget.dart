@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/ar_transaction.dart';
@@ -293,7 +293,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
         // Load apply rows — BC ใช้ bc_* apply types, เอกสารอื่นใช้ invoice/advance/cn
         // _selectedDocType ถูก set แล้วข้างบน ดังนั้น _isBillCollection ใช้งานได้เลย
+        // สำหรับ FC transaction ใช้ appliedAmountFc เป็น "entered amount" ใน controller
         final isBc = _isBillCollection;
+        final isFcLoad = _selectedCurrency?.baseCurrencyFlag == false;
+        double _fcAmt(ArTransactionApply a) =>
+            isFcLoad && a.appliedAmountFc > 0 ? a.appliedAmountFc : a.appliedAmountLc;
         _applyRows = data.applies
             .where((a) => isBc
                 ? a.applyType == 'bc_invoice'
@@ -303,7 +307,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   appliedToDocNo: a.appliedToDocNo ?? '',
                   appliedToDocDate: a.appliedToDocDate,
                   appliedToTotal: a.appliedToTotal ?? 0,
-                  appliedAmountLc: a.appliedAmountLc,
+                  appliedToTotalFc: a.appliedToTotalFc,
+                  appliedToExchangeRate: a.appliedToExchangeRate,
+                  appliedToDueDate: a.appliedToDueDate,
+                  appliedToExpectedPaymentDate: a.appliedToExpectedPaymentDate,
+                  appliedAmountLc: _fcAmt(a),
                 ))
             .toList();
         _advanceRows = data.applies
@@ -313,7 +321,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   appliedToDocNo: a.appliedToDocNo ?? '',
                   appliedToDocDate: a.appliedToDocDate,
                   appliedToTotal: a.appliedToTotal ?? 0,
-                  appliedAmountLc: a.appliedAmountLc,
+                  appliedToTotalFc: a.appliedToTotalFc,
+                  appliedToExchangeRate: a.appliedToExchangeRate,
+                  appliedToDueDate: a.appliedToDueDate,
+                  appliedToExpectedPaymentDate: a.appliedToExpectedPaymentDate,
+                  appliedAmountLc: _fcAmt(a),
                 ))
             .toList();
         _cnRows = data.applies
@@ -323,7 +335,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   appliedToDocNo: a.appliedToDocNo ?? '',
                   appliedToDocDate: a.appliedToDocDate,
                   appliedToTotal: a.appliedToTotal ?? 0,
-                  appliedAmountLc: a.appliedAmountLc,
+                  appliedToTotalFc: a.appliedToTotalFc,
+                  appliedToExchangeRate: a.appliedToExchangeRate,
+                  appliedToDueDate: a.appliedToDueDate,
+                  appliedToExpectedPaymentDate: a.appliedToExpectedPaymentDate,
+                  appliedAmountLc: _fcAmt(a),
                 ))
             .toList();
         _advanceRefundRows = data.applies
@@ -333,11 +349,15 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   appliedToDocNo: a.appliedToDocNo ?? '',
                   appliedToDocDate: a.appliedToDocDate,
                   appliedToTotal: a.appliedToTotal ?? 0,
-                  appliedAmountLc: a.appliedAmountLc,
+                  appliedToTotalFc: a.appliedToTotalFc,
+                  appliedToExchangeRate: a.appliedToExchangeRate,
+                  appliedToDueDate: a.appliedToDueDate,
+                  appliedToExpectedPaymentDate: a.appliedToExpectedPaymentDate,
+                  appliedAmountLc: _fcAmt(a),
                 ))
             .toList();
         for (final r in _paymentRows) r.dispose();
-        _paymentRows = data.payments.map((p) => _PaymentRow.fromModel(p)).toList();
+        _paymentRows = data.payments.map((p) => _PaymentRow.fromModel(p, isFcLoad)).toList();
       });
       _recalcTotals();
 
@@ -354,6 +374,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       if (_isReceipt && _selectedCustomer?.id != null &&
           (_selectedCustomer!.requiresBilling)) {
         await _loadInvoiceBillingSummary(_selectedCustomer!.id!);
+      }
+      // โหลดข้อมูล BC จาก ref_no เพื่อแสดงคอลัมน์วางบิลใน view mode
+      if (_isReceipt && _refNoCtrl.text.trim().isNotEmpty && _invoiceBcMap.isEmpty) {
+        await _loadBcMapForView(_refNoCtrl.text.trim());
       }
       // โหลด open advances for refund สำหรับ RDP-65
       if (_isAdvanceRefund && _selectedCustomer?.id != null) {
@@ -610,6 +634,15 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             customer.creditTermMonths, customer.creditTermDays);
       }
       _expectedPaymentDate = _calcExpectedPaymentDate(_billingDate, _dueDate);
+      // Default currency and exchange rate from customer
+      if (customer != null && customer.currencyCode.isNotEmpty) {
+        final matched = _currencies.cast<Currency?>()
+            .firstWhere((c) => c!.currencyCode == customer.currencyCode, orElse: () => null);
+        if (matched != null) {
+          _selectedCurrency = matched;
+          _exchangeRate = matched.baseRate > 0 ? matched.baseRate : 1.0;
+        }
+      }
     });
     // Load open invoices สำหรับ Receipt, CN-55, DN-35, BC
     if ((_isReceipt || _isCreditNoteWithBill || _isDebitNoteWithBill || _isBillCollection) && customer != null) {
@@ -646,6 +679,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   // ให้ pre-fill ยอดคงเหลือเข้าช่องชำระ/หักกลบ (ยังแก้ไขได้)
   void _autoFillBillCollection() {
     if (!_isBillCollection) return;
+    final isFc = _selectedCurrency?.baseCurrencyFlag == false;
     final dd = DateTime(_docDate.year, _docDate.month, _docDate.day);
     bool changed = false;
     for (final inv in _openInvoices) {
@@ -656,19 +690,22 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       if (inv.balanceAmountLc <= 0) continue;
       // ไม่ override ถ้ามีค่าอยู่แล้ว
       if (_applyRows.any((a) => a.appliedToId == inv.id)) continue;
+      final fillAmt = isFc && inv.exchangeRate > 0
+          ? inv.balanceAmountLc / inv.exchangeRate
+          : inv.balanceAmountLc;
       _applyRows.add(_ApplyRow(
         appliedToId: inv.id,
         appliedToDocNo: inv.docNo,
         appliedToDocDate: inv.docDate,
-        appliedToTotal: inv.totalAmountLc,
-        appliedAmountLc: inv.balanceAmountLc,
+        appliedToTotal: isFc ? inv.totalAmountFc : inv.totalAmountLc,
+        appliedAmountLc: fillAmt,
       ));
       final ctrl = _applyCtrlMap[inv.id];
       if (ctrl != null) {
-        ctrl.text = inv.balanceAmountLc.toStringAsFixed(2);
+        ctrl.text = fillAmt.toStringAsFixed(2);
       } else {
         _applyCtrlMap[inv.id] = TextEditingController(
-            text: inv.balanceAmountLc.toStringAsFixed(2));
+            text: fillAmt.toStringAsFixed(2));
       }
       changed = true;
     }
@@ -691,10 +728,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 docNo: a.appliedToDocNo,
                 docDate: a.appliedToDocDate ?? DateTime.now(),
                 customerId: customerId,
-                totalAmountLc: a.appliedToTotal,
-                totalAmountFc: a.appliedToTotal,
-                paidAmountLc: a.appliedToTotal,
+                exchangeRate: a.appliedToExchangeRate ?? 1.0,
+                totalAmountLc: a.appliedToTotal ?? 0,
+                totalAmountFc: a.appliedToTotalFc ?? a.appliedToTotal ?? 0,
+                paidAmountLc: a.appliedToTotal ?? 0,
                 balanceAmountLc: 0,
+                dueDate: a.appliedToDueDate,
+                expectedPaymentDate: a.appliedToExpectedPaymentDate,
                 status: 'Posted',
               ))
           .toList();
@@ -733,9 +773,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 docNo: a.appliedToDocNo,
                 docDate: a.appliedToDocDate ?? DateTime.now(),
                 customerId: customerId,
-                totalAmountLc: a.appliedToTotal,
-                totalAmountFc: a.appliedToTotal,
-                paidAmountLc: a.appliedToTotal,
+                exchangeRate: a.appliedToExchangeRate ?? 1.0,
+                totalAmountLc: a.appliedToTotal ?? 0,
+                totalAmountFc: a.appliedToTotalFc ?? a.appliedToTotal ?? 0,
+                paidAmountLc: a.appliedToTotal ?? 0,
                 balanceAmountLc: 0,
                 status: 'Posted',
               ))
@@ -774,9 +815,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 docNo: r.appliedToDocNo,
                 docDate: r.appliedToDocDate ?? DateTime.now(),
                 customerId: customerId,
-                totalAmountLc: r.appliedToTotal,
-                totalAmountFc: r.appliedToTotal,
-                paidAmountLc: r.appliedToTotal,
+                exchangeRate: r.appliedToExchangeRate ?? 1.0,
+                totalAmountLc: r.appliedToTotal ?? 0,
+                totalAmountFc: r.appliedToTotalFc ?? r.appliedToTotal ?? 0,
+                paidAmountLc: r.appliedToTotal ?? 0,
                 balanceAmountLc: 0,
                 status: 'Posted',
               ))
@@ -802,6 +844,32 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     } catch (_) {}
   }
 
+  // โหลดข้อมูล BC จาก ref_no เพื่อแสดงคอลัมน์วางบิลใน view mode
+  // ใช้ viewOnly=true เพื่อข้ามการตรวจสอบสถานะ (BC ที่ชำระแล้วก็ดึงได้)
+  Future<void> _loadBcMapForView(String refNo) async {
+    try {
+      final bc = await _service.fetchBillCollectionByDocNo(refNo, viewOnly: true);
+      if (bc == null || !mounted) return;
+      final bcDate = bc.header.billingDate ?? bc.header.docDate;
+      final matchedCcy = _currencies.cast<Currency?>().firstWhere(
+        (c) => c!.id == bc.header.currencyId || c!.currencyCode == bc.header.currencyCode,
+        orElse: () => null,
+      );
+      final isFcBc = matchedCcy?.baseCurrencyFlag == false;
+      double bcAmt(ArTransactionApply a) =>
+          isFcBc && a.appliedAmountFc > 0 ? a.appliedAmountFc : a.appliedAmountLc;
+      final newBcMap = <int, Map<String, dynamic>>{};
+      for (final a in bc.applies.where((a) => a.applyType == 'bc_invoice')) {
+        newBcMap[a.appliedToId] = {
+          'bc_doc_no': bc.header.docNo,
+          'billing_date': bcDate.toIso8601String(),
+          'billed_amount': bcAmt(a),
+        };
+      }
+      if (mounted) setState(() => _invoiceBcMap = newBcMap);
+    } catch (_) {}
+  }
+
   Future<void> _loadOpenAdvancesForRefund(int customerId) async {
     try {
       final advances = await _service.fetchOpenAdvancesForRefund(customerId);
@@ -823,9 +891,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 docNo: a.appliedToDocNo,
                 docDate: a.appliedToDocDate ?? DateTime.now(),
                 customerId: customerId,
-                totalAmountLc: a.appliedToTotal,
-                totalAmountFc: a.appliedToTotal,
-                paidAmountLc: a.appliedToTotal,
+                exchangeRate: a.appliedToExchangeRate ?? 1.0,
+                totalAmountLc: a.appliedToTotal ?? 0,
+                totalAmountFc: a.appliedToTotalFc ?? a.appliedToTotal ?? 0,
+                paidAmountLc: a.appliedToTotal ?? 0,
                 balanceAmountLc: 0,
                 status: 'Posted',
               ))
@@ -861,6 +930,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final d = DateTime(date.year, date.month, date.day); // strip time component
     return _openPeriods.any((p) =>
         !d.isBefore(p.periodStartDate) && !d.isAfter(p.periodEndDate));
+  }
+
+  // วันที่เอกสารอ้างอิงต้องไม่เกินวันที่เอกสารธุรกรรม
+  bool _isInvoiceDateValid(DateTime? docDate) {
+    if (docDate == null) return true;
+    final d = DateTime(docDate.year, docDate.month, docDate.day);
+    final txDate = DateTime(_docDate.year, _docDate.month, _docDate.day);
+    return !d.isAfter(txDate);
   }
 
   Future<void> _selectDate(bool isDueDate) async {
@@ -969,6 +1046,19 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       return;
     }
 
+    // ตรวจสอบวันที่เอกสารอ้างอิงต้องไม่เกินวันที่เอกสาร
+    final hasInvalidRef = [
+      ..._applyRows, ..._advanceRows, ..._cnRows, ..._advanceRefundRows,
+    ].any((a) => !_isInvoiceDateValid(a.appliedToDocDate));
+    if (hasInvalidRef) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('มีเอกสารอ้างอิงที่มีวันที่หลังวันที่เอกสาร กรุณาตรวจสอบรายการที่ไฮไลท์สีแดง'),
+        backgroundColor: Colors.red,
+        duration: Duration(seconds: 5),
+      ));
+      return;
+    }
+
     _recalcTotals();
     final userName = _authService.currentUser?.userName ?? '';
     final lc = _exchangeRate;
@@ -1045,30 +1135,31 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       );
     }).toList();
 
+    // _ApplyRow.appliedAmountLc เก็บ "ยอดที่ผู้ใช้ป้อน" ซึ่งเป็น FC สำหรับ FC transaction
+    // appliedAmountFc = ยอด FC, appliedAmountLc = FC × exchangeRate = LC
     final applies = [
       ..._applyRows.map((a) => ArTransactionApply(
             appliedToId: a.appliedToId,
-            appliedAmountLc: a.appliedAmountLc,
-            appliedAmountFc: a.appliedAmountLc / lc,
-            // DN-35: 'dn_ref' = reference only  BC: 'bc_invoice' = วางบิลอ้างอิง ไม่ลด balance
+            appliedAmountFc: a.appliedAmountLc,
+            appliedAmountLc: a.appliedAmountLc * lc,
             applyType: _isDebitNoteWithBill ? 'dn_ref' : _isBillCollection ? 'bc_invoice' : 'invoice',
           )),
       ..._advanceRows.map((a) => ArTransactionApply(
             appliedToId: a.appliedToId,
-            appliedAmountLc: a.appliedAmountLc,
-            appliedAmountFc: a.appliedAmountLc / lc,
+            appliedAmountFc: a.appliedAmountLc,
+            appliedAmountLc: a.appliedAmountLc * lc,
             applyType: _isBillCollection ? 'bc_advance' : 'advance',
           )),
       ..._cnRows.map((a) => ArTransactionApply(
             appliedToId: a.appliedToId,
-            appliedAmountLc: a.appliedAmountLc,
-            appliedAmountFc: a.appliedAmountLc / lc,
+            appliedAmountFc: a.appliedAmountLc,
+            appliedAmountLc: a.appliedAmountLc * lc,
             applyType: _isBillCollection ? 'bc_cn' : 'cn',
           )),
       ..._advanceRefundRows.map((a) => ArTransactionApply(
             appliedToId: a.appliedToId,
-            appliedAmountLc: a.appliedAmountLc,
-            appliedAmountFc: a.appliedAmountLc / lc,
+            appliedAmountFc: a.appliedAmountLc,
+            appliedAmountLc: a.appliedAmountLc * lc,
             applyType: 'advance_refund',
           )),
     ];
@@ -1084,8 +1175,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         paymentMethodType: r.paymentMethodType,
         cmBankAccountId: r.cmBankAccountId,
         glAccountId: r.glAccountId,
-        amountLc: double.tryParse(r.amountCtrl.text) ?? 0,
-        amountFc: (double.tryParse(r.amountCtrl.text) ?? 0) / lc,
+        amountLc: (double.tryParse(r.amountCtrl.text) ?? 0) * lc,
+        amountFc: double.tryParse(r.amountCtrl.text) ?? 0,
         refNo: r.refNoCtrl.text.isEmpty ? null : r.refNoCtrl.text,
         paymentDate: r.paymentDate,
         remark: r.remarkCtrl.text.isEmpty ? null : r.remarkCtrl.text,
@@ -1226,7 +1317,32 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         try { _selectedCustomer = _customers.firstWhere((c) => c.id == bc.header.customerId); } catch (_) {}
         if (_selectedCustomer != null) await _loadOpenInvoicesKeepApplied(_selectedCustomer!.id!);
       }
+      // ─── ดึงสกุลเงินและอัตราแลกเปลี่ยนจากใบวางบิล ───
+      final matchedCcy = _currencies.cast<Currency?>()
+          .firstWhere(
+            (c) => c!.id == bc.header.currencyId || c!.currencyCode == bc.header.currencyCode,
+            orElse: () => null);
+      final isFcBc = matchedCcy?.baseCurrencyFlag == false;
+      double bcAmt(ArTransactionApply a) =>
+          isFcBc && a.appliedAmountFc > 0 ? a.appliedAmountFc : a.appliedAmountLc;
+      // สร้าง invoiceBcMap สำหรับแสดงคอลัมน์วางบิลวันที่
+      final bcDate = bc.header.billingDate ?? bc.header.docDate;
+      final newBcMap = <int, Map<String, dynamic>>{};
+      for (final a in bc.applies.where((a) => a.applyType == 'bc_invoice')) {
+        newBcMap[a.appliedToId] = {
+          'bc_doc_no': bc.header.docNo,
+          'billing_date': bcDate.toIso8601String(),
+          'billed_amount': bcAmt(a),
+        };
+      }
       setState(() {
+        if (matchedCcy != null) {
+          _selectedCurrency = matchedCcy;
+          _exchangeRate = bc.header.exchangeRate > 0
+              ? bc.header.exchangeRate
+              : (matchedCcy.baseRate > 0 ? matchedCcy.baseRate : 1.0);
+        }
+        _invoiceBcMap = newBcMap;
         _applyRows = bc.applies
             .where((a) => a.applyType == 'bc_invoice')
             .map((a) => _ApplyRow(
@@ -1234,7 +1350,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   appliedToDocNo: a.appliedToDocNo ?? '',
                   appliedToDocDate: a.appliedToDocDate,
                   appliedToTotal: a.appliedToTotal ?? 0,
-                  appliedAmountLc: a.appliedAmountLc,
+                  appliedAmountLc: bcAmt(a),
                 ))
             .toList();
         _advanceRows = bc.applies
@@ -1244,7 +1360,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   appliedToDocNo: a.appliedToDocNo ?? '',
                   appliedToDocDate: a.appliedToDocDate,
                   appliedToTotal: a.appliedToTotal ?? 0,
-                  appliedAmountLc: a.appliedAmountLc,
+                  appliedAmountLc: bcAmt(a),
                 ))
             .toList();
         _cnRows = bc.applies
@@ -1254,12 +1370,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   appliedToDocNo: a.appliedToDocNo ?? '',
                   appliedToDocDate: a.appliedToDocDate,
                   appliedToTotal: a.appliedToTotal ?? 0,
-                  appliedAmountLc: a.appliedAmountLc,
+                  appliedAmountLc: bcAmt(a),
                 ))
             .toList();
       });
       // ซิงค์ค่า controller ให้ตรงกับยอดในใบวางบิล
-      // (putIfAbsent สร้างใหม่ถ้าไม่มี, แล้ว .text = ... อัพเดตทุก case)
       for (final a in _applyRows) {
         _applyCtrlMap.putIfAbsent(a.appliedToId, () => TextEditingController())
             .text = a.appliedAmountLc.toStringAsFixed(2);
@@ -1755,7 +1870,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             Expanded(
               flex: 1,
               child: TextFormField(
-                key: ValueKey('ar_rate_${widget.resetKey}_$_transactionId'),
+                key: ValueKey('ar_rate_${widget.resetKey}_${_transactionId}_${_selectedCurrency?.currencyCode}'),
                 initialValue: _exchangeRate.toStringAsFixed(6),
                 decoration: _fieldDeco('อัตราแลกเปลี่ยน'),
                 keyboardType: TextInputType.number,
@@ -2045,8 +2160,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final totalCnDeduct  = _cnRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
     final totalCash      = totalApplied - totalAdvance - totalCnDeduct;
     final currency       = _selectedCurrency?.currencyCode ?? '';
-    final showBcCols        = _isReceipt && (_selectedCustomer?.requiresBilling == true);
+    final showBcCols        = _isReceipt &&
+        (_selectedCustomer?.requiresBilling == true ||
+         _invoiceBcMap.isNotEmpty ||
+         _refNoCtrl.text.trim().isNotEmpty);
     final showBcBillingCol  = _isBillCollection; // วางบิล: แสดงคอลัมน์วันที่วางบิลตามใบแจ้งหนี้
+    final isFcDoc = _selectedCurrency?.baseCurrencyFlag == false; // เอกสารเป็น FC
 
     // เงื่อนไขการแสดง card หักมัดจำ / หักใบลดหนี้ (Receipt และ BC)
     final showAdvanceCard = (_isReceipt || _isBillCollection) &&
@@ -2108,11 +2227,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                         if (showBcBillingCol)
                           const DataColumn(label: Text('วันที่วางบิล', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
                         const DataColumn(label: Text('ครบกำหนด', style: TextStyle(fontWeight: FontWeight.bold))),
-                        const DataColumn(label: Text('ยอดรวม', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        const DataColumn(label: Text('คงเหลือ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        const DataColumn(label: Text('ชำระ/หักกลบ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        if (_isReceipt)
+                          const DataColumn(label: Text('ชำระ(คาด)', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isFcDoc ? 'ยอดรวม ($currency)' : 'ยอดรวม', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? 'คงเหลือ ($currency)' : 'คงเหลือ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? 'ชำระ ($currency)' : 'ชำระ/หักกลบ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       ],
-                      rows: _openInvoices.map((inv) {
+                      rows: _openInvoices.where((inv) => _isInvoiceDateValid(inv.docDate)).map((inv) {
                         final existing = _applyRows.where((a) => a.appliedToId == inv.id).firstOrNull;
                         final applyCtrl = _applyCtrlMap.putIfAbsent(
                           inv.id,
@@ -2133,12 +2254,21 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                           DataCell(Text(inv.docNo, style: const TextStyle(fontSize: 12))),
                           DataCell(Text(_dateFmt.format(inv.docDate), style: const TextStyle(fontSize: 12))),
                           if (showBcCols) ...[
-                            DataCell(Text(
-                              bcInfo != null && bcInfo['billing_date'] != null
-                                  ? _dateFmt.format(parseLocalDateNullable(bcInfo['billing_date']) ?? inv.docDate)
-                                  : '-',
-                              style: TextStyle(fontSize: 12, color: bcInfo != null && bcInfo['billing_date'] != null ? Colors.blue[700] : Colors.grey),
-                            )),
+                            DataCell(() {
+                              final hasRefNo = _refNoCtrl.text.trim().isNotEmpty;
+                              DateTime? displayDate;
+                              if (hasRefNo) {
+                                displayDate = bcInfo != null && bcInfo['billing_date'] != null
+                                    ? parseLocalDateNullable(bcInfo['billing_date'])
+                                    : null;
+                              } else {
+                                displayDate = inv.billingDate;
+                              }
+                              return Text(
+                                displayDate != null ? _dateFmt.format(displayDate) : '-',
+                                style: TextStyle(fontSize: 12, color: displayDate != null ? Colors.blue[700] : Colors.grey),
+                              );
+                            }()),
                             DataCell(Text(
                               bcInfo != null ? _fmt.format(num.tryParse(bcInfo['billed_amount'].toString()) ?? 0) : '-',
                               style: TextStyle(fontSize: 12, color: bcInfo != null ? Colors.blue[700] : Colors.grey),
@@ -2154,8 +2284,23 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                               ),
                             )),
                           DataCell(Text(inv.dueDate != null ? _dateFmt.format(inv.dueDate!) : '-', style: const TextStyle(fontSize: 12))),
-                          DataCell(Text(_fmt.format(inv.totalAmountLc), style: const TextStyle(fontSize: 12))),
-                          DataCell(Text(_fmt.format(inv.balanceAmountLc),
+                          if (_isReceipt) ...[
+                            DataCell(() {
+                              final epd = inv.expectedPaymentDate;
+                              if (epd == null) return const Text('-', style: TextStyle(fontSize: 12));
+                              final epdOnly = DateTime(epd.year, epd.month, epd.day);
+                              final isLate = epdOnly != docDateOnly;
+                              return Text(
+                                _dateFmt.format(epd),
+                                style: TextStyle(fontSize: 12, color: isLate ? Colors.red : null, fontWeight: isLate ? FontWeight.bold : null),
+                              );
+                            }()),
+                          ],
+                          DataCell(Text(_fmt.format(isFcDoc ? inv.totalAmountFc : inv.totalAmountLc), style: const TextStyle(fontSize: 12))),
+                          DataCell(Text(
+                              _fmt.format(isFcDoc && inv.exchangeRate > 0
+                                  ? inv.balanceAmountLc / inv.exchangeRate
+                                  : inv.balanceAmountLc),
                               style: TextStyle(fontSize: 12, color: Colors.blue[700]))),
                           DataCell(SizedBox(width: 140, child: _isReadOnly
                             ? Text(_fmt.format(existing?.appliedAmountLc ?? 0),
@@ -2175,7 +2320,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                                   } else {
                                     final row = _ApplyRow(
                                       appliedToId: inv.id, appliedToDocNo: inv.docNo,
-                                      appliedToDocDate: inv.docDate, appliedToTotal: inv.totalAmountLc,
+                                      appliedToDocDate: inv.docDate,
+                                      appliedToTotal: isFcDoc ? inv.totalAmountFc : inv.totalAmountLc,
                                       appliedAmountLc: amount,
                                     );
                                     setState(() {
@@ -2184,7 +2330,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                                     });
                                   }
                                 },
-                              ))),
+                              )))
                         ]);
                       }).toList(),
                     ),
@@ -2239,24 +2385,28 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                       columnSpacing: 12,
                       dataRowMinHeight: 36,
                       dataRowMaxHeight: 46,
-                      columns: const [
-                        DataColumn(label: Text('เลขที่มัดจำ', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('ยอดมัดจำ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('คงเหลือ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('หักมัดจำ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      columns: [
+                        const DataColumn(label: Text('เลขที่มัดจำ', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isFcDoc ? 'ยอดมัดจำ ($currency)' : 'ยอดมัดจำ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? 'คงเหลือ ($currency)' : 'คงเหลือ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? 'หักมัดจำ ($currency)' : 'หักมัดจำ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       ],
-                      rows: _openAdvances.map((adv) {
+                      rows: _openAdvances.where((adv) => _isInvoiceDateValid(adv.docDate)).map((adv) {
                         final existing = _advanceRows.where((a) => a.appliedToId == adv.id).firstOrNull;
                         final advCtrl = _advanceCtrlMap.putIfAbsent(
                           adv.id,
                           () => TextEditingController(text: existing?.appliedAmountLc.toStringAsFixed(2) ?? ''),
                         );
+                        final advTotalDisplay = isFcDoc ? adv.totalAmountFc : adv.totalAmountLc;
+                        final advBalanceDisplay = isFcDoc && adv.exchangeRate > 0
+                            ? adv.balanceAmountLc / adv.exchangeRate
+                            : adv.balanceAmountLc;
                         return DataRow(cells: [
                           DataCell(Text(adv.docNo, style: const TextStyle(fontSize: 12))),
                           DataCell(Text(_dateFmt.format(adv.docDate), style: const TextStyle(fontSize: 12))),
-                          DataCell(Text(_fmt.format(adv.totalAmountLc), style: const TextStyle(fontSize: 12))),
-                          DataCell(Text(_fmt.format(adv.balanceAmountLc),
+                          DataCell(Text(_fmt.format(advTotalDisplay), style: const TextStyle(fontSize: 12))),
+                          DataCell(Text(_fmt.format(advBalanceDisplay),
                               style: TextStyle(fontSize: 12, color: Colors.orange[700]))),
                           DataCell(SizedBox(width: 140, child: _isReadOnly
                             ? Text(_fmt.format(existing?.appliedAmountLc ?? 0),
@@ -2276,7 +2426,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                                   } else {
                                     final row = _ApplyRow(
                                       appliedToId: adv.id, appliedToDocNo: adv.docNo,
-                                      appliedToDocDate: adv.docDate, appliedToTotal: adv.totalAmountLc,
+                                      appliedToDocDate: adv.docDate,
+                                      appliedToTotal: isFcDoc ? adv.totalAmountFc : adv.totalAmountLc,
                                       appliedAmountLc: amount,
                                     );
                                     setState(() {
@@ -2333,24 +2484,28 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                       columnSpacing: 12,
                       dataRowMinHeight: 36,
                       dataRowMaxHeight: 46,
-                      columns: const [
-                        DataColumn(label: Text('เลขที่ลดหนี้', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('ยอดลดหนี้', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('คงเหลือ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('หักลดหนี้', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      columns: [
+                        const DataColumn(label: Text('เลขที่ลดหนี้', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isFcDoc ? 'ยอดลดหนี้ ($currency)' : 'ยอดลดหนี้', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? 'คงเหลือ ($currency)' : 'คงเหลือ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? 'หักลดหนี้ ($currency)' : 'หักลดหนี้', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       ],
-                      rows: _openCreditNotes.map((cn) {
+                      rows: _openCreditNotes.where((cn) => _isInvoiceDateValid(cn.docDate)).map((cn) {
                         final existing = _cnRows.where((r) => r.appliedToId == cn.id).firstOrNull;
                         final cnCtrl = _cnCtrlMap.putIfAbsent(
                           cn.id,
                           () => TextEditingController(text: existing?.appliedAmountLc.toStringAsFixed(2) ?? ''),
                         );
+                        final cnTotalDisplay = isFcDoc ? cn.totalAmountFc : cn.totalAmountLc;
+                        final cnBalanceDisplay = isFcDoc && cn.exchangeRate > 0
+                            ? cn.balanceAmountLc / cn.exchangeRate
+                            : cn.balanceAmountLc;
                         return DataRow(cells: [
                           DataCell(Text(cn.docNo, style: const TextStyle(fontSize: 12))),
                           DataCell(Text(_dateFmt.format(cn.docDate), style: const TextStyle(fontSize: 12))),
-                          DataCell(Text(_fmt.format(cn.totalAmountLc), style: const TextStyle(fontSize: 12))),
-                          DataCell(Text(_fmt.format(cn.balanceAmountLc),
+                          DataCell(Text(_fmt.format(cnTotalDisplay), style: const TextStyle(fontSize: 12))),
+                          DataCell(Text(_fmt.format(cnBalanceDisplay),
                               style: TextStyle(fontSize: 12, color: Colors.red[700]))),
                           DataCell(SizedBox(width: 140, child: _isReadOnly
                             ? Text(_fmt.format(existing?.appliedAmountLc ?? 0),
@@ -2370,7 +2525,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                                   } else {
                                     final row = _ApplyRow(
                                       appliedToId: cn.id, appliedToDocNo: cn.docNo,
-                                      appliedToDocDate: cn.docDate, appliedToTotal: cn.totalAmountLc,
+                                      appliedToDocDate: cn.docDate,
+                                      appliedToTotal: isFcDoc ? cn.totalAmountFc : cn.totalAmountLc,
                                       appliedAmountLc: amount,
                                     );
                                     setState(() {
@@ -2446,7 +2602,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                       DataColumn(label: Text('คงเหลือ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       DataColumn(label: Text('คืนมัดจำ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                     ],
-                    rows: _openAdvancesForRefund.map((adv) {
+                    rows: _openAdvancesForRefund.where((adv) => _isInvoiceDateValid(adv.docDate)).map((adv) {
                       final existing = _advanceRefundRows.where((a) => a.appliedToId == adv.id).firstOrNull;
                       final ctrl = _advanceRefundCtrlMap.putIfAbsent(
                         adv.id,
@@ -3019,7 +3175,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           refDocNo: header.refDocNo?.isNotEmpty == true ? header.refDocNo! : _docNo,
           docDate: header.docDate,
           description: header.description,
-          lines: details.map((d) => _GlLine(d.accountCode, d.accountName, d.description, d.debitLc, d.creditLc)).toList(),
+          lines: details.map((d) => _GlLine(d.accountCode, d.accountName, d.description, d.debitLc, d.creditLc, d.debitFc, d.creditFc)).toList(),
+          currencyCode: _selectedCurrency?.currencyCode ?? '',
         );
       } catch (e) {
         if (!mounted) return;
@@ -3050,6 +3207,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         docDate: _docDate,
         description: _descCtrl.text,
         lines: _computeGlPreview(deferredVatLc: deferredVatLc),
+        currencyCode: _selectedCurrency?.currencyCode ?? '',
       );
     }
   }
@@ -3081,12 +3239,19 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     required DateTime docDate,
     required String description,
     required List<_GlLine> lines,
+    String currencyCode = '',
   }) {
     final fmt = NumberFormat('#,##0.00');
     final dateFmt = DateFormat('dd/MM/yyyy');
-    final totalDebit  = lines.fold(0.0, (s, l) => s + l.debit);
-    final totalCredit = lines.fold(0.0, (s, l) => s + l.credit);
-    final isBalanced  = (totalDebit - totalCredit).abs() < 0.005;
+    final totalDebit   = lines.fold(0.0, (s, l) => s + l.debit);
+    final totalCredit  = lines.fold(0.0, (s, l) => s + l.credit);
+    final isBalanced   = (totalDebit - totalCredit).abs() < 0.005;
+    final hasFc        = lines.any((l) => l.debitFc > 0 || l.creditFc > 0);
+    final totalDebitFc  = hasFc ? lines.fold(0.0, (s, l) => s + l.debitFc)  : 0.0;
+    final totalCreditFc = hasFc ? lines.fold(0.0, (s, l) => s + l.creditFc) : 0.0;
+    final fcLabel = currencyCode.isNotEmpty ? currencyCode : 'FC';
+    final lcLabel = _currencies.cast<Currency?>()
+        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
 
     Widget cell(String text, {TextAlign align = TextAlign.left, bool bold = false, Color? color}) =>
         Padding(
@@ -3096,52 +3261,78 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               textAlign: align),
         );
 
-    TableRow headerRow = TableRow(
-      decoration: BoxDecoration(color: Colors.grey[200]),
-      children: [
-        cell('#',        bold: true, align: TextAlign.center),
-        cell('รหัสบัญชี', bold: true),
-        cell('ชื่อบัญชี',  bold: true),
-        cell('รายละเอียด', bold: true),
-        cell('เดบิต',     bold: true, align: TextAlign.right),
-        cell('เครดิต',    bold: true, align: TextAlign.right),
-      ],
-    );
+    TableRow headerRow = hasFc
+        ? TableRow(
+            decoration: BoxDecoration(color: Colors.grey[200]),
+            children: [
+              cell('#',                   bold: true, align: TextAlign.center),
+              cell('รหัสบัญชี',            bold: true),
+              cell('ชื่อบัญชี',             bold: true),
+              cell('รายละเอียด',            bold: true),
+              cell('เดบิต ($fcLabel)',      bold: true, align: TextAlign.right),
+              cell('เครดิต ($fcLabel)',     bold: true, align: TextAlign.right),
+              cell('เดบิต ($lcLabel)',      bold: true, align: TextAlign.right),
+              cell('เครดิต ($lcLabel)',     bold: true, align: TextAlign.right),
+            ],
+          )
+        : TableRow(
+            decoration: BoxDecoration(color: Colors.grey[200]),
+            children: [
+              cell('#',        bold: true, align: TextAlign.center),
+              cell('รหัสบัญชี', bold: true),
+              cell('ชื่อบัญชี',  bold: true),
+              cell('รายละเอียด', bold: true),
+              cell('เดบิต',     bold: true, align: TextAlign.right),
+              cell('เครดิต',    bold: true, align: TextAlign.right),
+            ],
+          );
 
     List<TableRow> dataRows = lines.asMap().entries.map((e) {
+      final i = e.key;
       final l = e.value;
-      return TableRow(
-        decoration: BoxDecoration(
-          color: e.key.isOdd ? Colors.grey[50] : Colors.white,
-        ),
-        children: [
-          cell('${e.key + 1}', align: TextAlign.center),
-          cell(l.accountCode),
-          cell(l.accountName),
-          cell(l.description),
-          cell(l.debit > 0 ? fmt.format(l.debit) : '', align: TextAlign.right, color: Colors.blue[700]),
-          cell(l.credit > 0 ? fmt.format(l.credit) : '', align: TextAlign.right, color: Colors.red[700]),
-        ],
-      );
+      final bg = i.isOdd ? Colors.grey[50] : Colors.white;
+      return hasFc
+          ? TableRow(decoration: BoxDecoration(color: bg), children: [
+              cell('${i + 1}', align: TextAlign.center),
+              cell(l.accountCode),
+              cell(l.accountName),
+              cell(l.description),
+              cell(l.debitFc  > 0 ? fmt.format(l.debitFc)  : '', align: TextAlign.right, color: Colors.blue[700]),
+              cell(l.creditFc > 0 ? fmt.format(l.creditFc) : '', align: TextAlign.right, color: Colors.red[700]),
+              cell(l.debit  > 0 ? fmt.format(l.debit)  : '', align: TextAlign.right, color: Colors.blue[800]),
+              cell(l.credit > 0 ? fmt.format(l.credit) : '', align: TextAlign.right, color: Colors.red[800]),
+            ])
+          : TableRow(decoration: BoxDecoration(color: bg), children: [
+              cell('${i + 1}', align: TextAlign.center),
+              cell(l.accountCode),
+              cell(l.accountName),
+              cell(l.description),
+              cell(l.debit  > 0 ? fmt.format(l.debit)  : '', align: TextAlign.right, color: Colors.blue[700]),
+              cell(l.credit > 0 ? fmt.format(l.credit) : '', align: TextAlign.right, color: Colors.red[700]),
+            ]);
     }).toList();
 
-    TableRow totalsRow = TableRow(
-      decoration: BoxDecoration(color: Colors.grey[100]),
-      children: [
-        cell(''),
-        cell(''),
-        cell(''),
-        cell('รวม', bold: true, align: TextAlign.right),
-        cell(fmt.format(totalDebit),  bold: true, align: TextAlign.right, color: Colors.blue[800]),
-        cell(fmt.format(totalCredit), bold: true, align: TextAlign.right, color: Colors.red[800]),
-      ],
-    );
+    TableRow totalsRow = hasFc
+        ? TableRow(decoration: BoxDecoration(color: Colors.grey[100]), children: [
+            cell(''), cell(''), cell(''),
+            cell('รวม', bold: true, align: TextAlign.right),
+            cell(fmt.format(totalDebitFc),  bold: true, align: TextAlign.right, color: Colors.blue[700]),
+            cell(fmt.format(totalCreditFc), bold: true, align: TextAlign.right, color: Colors.red[700]),
+            cell(fmt.format(totalDebit),    bold: true, align: TextAlign.right, color: Colors.blue[800]),
+            cell(fmt.format(totalCredit),   bold: true, align: TextAlign.right, color: Colors.red[800]),
+          ])
+        : TableRow(decoration: BoxDecoration(color: Colors.grey[100]), children: [
+            cell(''), cell(''), cell(''),
+            cell('รวม', bold: true, align: TextAlign.right),
+            cell(fmt.format(totalDebit),  bold: true, align: TextAlign.right, color: Colors.blue[800]),
+            cell(fmt.format(totalCredit), bold: true, align: TextAlign.right, color: Colors.red[800]),
+          ]);
 
     showDialog(
       context: context,
       builder: (_) => Dialog(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900, maxHeight: 720),
+          constraints: BoxConstraints(maxWidth: hasFc ? 1100 : 900, maxHeight: 720),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -3151,6 +3342,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 const SizedBox(width: 8),
                 Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 const Spacer(),
+                if (hasFc) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: Colors.indigo[50], borderRadius: BorderRadius.circular(8)),
+                    child: Text('สกุลเงิน: $fcLabel', style: TextStyle(fontSize: 11, color: Colors.indigo[700], fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
@@ -3174,14 +3373,25 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               Expanded(
                 child: SingleChildScrollView(
                   child: Table(
-                    columnWidths: const {
-                      0: FixedColumnWidth(36),
-                      1: FixedColumnWidth(100),
-                      2: FlexColumnWidth(2.0),
-                      3: FlexColumnWidth(2.5),
-                      4: FixedColumnWidth(115),
-                      5: FixedColumnWidth(115),
-                    },
+                    columnWidths: hasFc
+                        ? const {
+                            0: FixedColumnWidth(36),
+                            1: FixedColumnWidth(90),
+                            2: FlexColumnWidth(1.8),
+                            3: FlexColumnWidth(2.0),
+                            4: FixedColumnWidth(100),
+                            5: FixedColumnWidth(100),
+                            6: FixedColumnWidth(100),
+                            7: FixedColumnWidth(100),
+                          }
+                        : const {
+                            0: FixedColumnWidth(36),
+                            1: FixedColumnWidth(100),
+                            2: FlexColumnWidth(2.0),
+                            3: FlexColumnWidth(2.5),
+                            4: FixedColumnWidth(115),
+                            5: FixedColumnWidth(115),
+                          },
                     border: TableBorder.all(color: Colors.grey[300]!, width: 0.5),
                     children: [headerRow, ...dataRows, totalsRow],
                   ),
@@ -3199,7 +3409,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 Text(
                   isBalanced
                       ? 'บาลานซ์ถูกต้อง (Balanced)'
-                      : 'ไม่บาลานซ์ — ส่วนต่าง ${fmt.format((totalDebit - totalCredit).abs())}',
+                      : 'ไม่บาลานซ์ — ส่วนต่าง ${fmt.format((totalDebit - totalCredit).abs())} $lcLabel',
                   style: TextStyle(
                     color: isBalanced ? Colors.teal : Colors.orange,
                     fontWeight: FontWeight.w600,
@@ -3226,6 +3436,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   List<_GlLine> _computeGlPreview({double deferredVatLc = 0}) {
     final lines = <_GlLine>[];
     final lc = _exchangeRate;
+    final isFcDoc = _selectedCurrency?.baseCurrencyFlag == false;
     final setup = _docSetup;
     if (setup == null) return lines;
 
@@ -3305,7 +3516,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
     // ── Invoice (10) / DN (30) / DN-with-bill (35) ────────────────────────
     if (sysType == arDocTypeInvoice || sysType == arDocTypeDebitNote || sysType == arDocTypeDebitNoteWithBill) {
-      lines.add(_GlLine(arCode, arName, 'ลูกหนี้การค้า', _totalAmountFc * lc, 0));
+      lines.add(_GlLine(arCode, arName, 'ลูกหนี้การค้า', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
       for (final r in _detailRows) {
         final qty      = double.tryParse(r.qtyCtrl.text) ?? 0;
         final price    = double.tryParse(r.priceCtrl.text) ?? 0;
@@ -3317,18 +3528,18 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         final revCode  = acctCode(r.revenueAccountId, setup.revenueAccountCode);
         final revName  = acctName(r.revenueAccountId, setup.revenueAccountName);
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : 'รายได้');
-        lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, 0, afterDisc * lc));
+        lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
         if (vat > 0) {
           final vatId   = r.isDeferredVat ? setup.vatPendingOutputAccountId : setup.vatOutputAccountId;
           final vatFb   = r.isDeferredVat ? setup.vatPendingOutputAccountCode : setup.vatOutputAccountCode;
           final vatNFb  = r.isDeferredVat ? setup.vatPendingOutputAccountName : setup.vatOutputAccountName;
-          lines.add(_GlLine(acctCode(vatId, vatFb), acctName(vatId, vatNFb).isEmpty ? 'VAT Output' : acctName(vatId, vatNFb), 'ภาษีมูลค่าเพิ่ม', 0, vat * lc));
+          lines.add(_GlLine(acctCode(vatId, vatFb), acctName(vatId, vatNFb).isEmpty ? 'VAT Output' : acctName(vatId, vatNFb), 'ภาษีมูลค่าเพิ่ม', 0, vat * lc, 0, isFcDoc ? vat : 0));
         }
       }
     }
     // ── Credit Note (50) ──────────────────────────────────────────────────
     else if (sysType == arDocTypeCreditNote) {
-      lines.add(_GlLine(arCode, arName, 'ลูกหนี้การค้า', 0, _totalAmountFc * lc));
+      lines.add(_GlLine(arCode, arName, 'ลูกหนี้การค้า', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       for (final r in _detailRows) {
         final qty      = double.tryParse(r.qtyCtrl.text) ?? 0;
         final price    = double.tryParse(r.priceCtrl.text) ?? 0;
@@ -3340,12 +3551,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         final revCode  = acctCode(r.revenueAccountId, setup.revenueAccountCode);
         final revName  = acctName(r.revenueAccountId, setup.revenueAccountName);
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : 'รายได้');
-        lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, afterDisc * lc, 0));
+        lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
         if (vat > 0) {
           final vatId   = r.isDeferredVat ? setup.vatPendingOutputAccountId : setup.vatOutputAccountId;
           final vatFb   = r.isDeferredVat ? setup.vatPendingOutputAccountCode : setup.vatOutputAccountCode;
           final vatNFb  = r.isDeferredVat ? setup.vatPendingOutputAccountName : setup.vatOutputAccountName;
-          lines.add(_GlLine(acctCode(vatId, vatFb), acctName(vatId, vatNFb).isEmpty ? 'VAT Output' : acctName(vatId, vatNFb), 'ภาษีมูลค่าเพิ่ม', vat * lc, 0));
+          lines.add(_GlLine(acctCode(vatId, vatFb), acctName(vatId, vatNFb).isEmpty ? 'VAT Output' : acctName(vatId, vatNFb), 'ภาษีมูลค่าเพิ่ม', vat * lc, 0, isFcDoc ? vat : 0, 0));
         }
       }
     }
@@ -3354,14 +3565,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       final revCode = setup.revenueAccountCode ?? '—';
       final revName = setup.revenueAccountName ?? 'Revenue';
       for (final a in _applyRows) {
-        lines.add(_GlLine(revCode, revName, 'ลดหนี้ ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0));
+        lines.add(_GlLine(revCode, revName, 'ลดหนี้ ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
       }
-      lines.add(_GlLine(arCode, arName, 'ลูกหนี้การค้า', 0, _totalAmountFc * lc));
+      lines.add(_GlLine(arCode, arName, 'ลูกหนี้การค้า', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
     }
     // ── Advance Receipt (60) ────────────────────────────────────────────
     else if (sysType == arDocTypeAdvanceReceipt) {
       if (_paymentRows.isEmpty) {
-        lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'รับมัดจำ', _totalAmountFc * lc, 0));
+        lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'รับมัดจำ', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
       } else {
         for (final p in _paymentRows) {
           final amt = double.tryParse(p.amountCtrl.text) ?? 0;
@@ -3369,29 +3580,49 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             paymentAcctCode(p),
             paymentAcctName(p).isEmpty ? 'Cash' : paymentAcctName(p),
             p.paymentMethodName ?? 'รับมัดจำ',
-            amt * lc, 0,
+            amt * lc, 0, isFcDoc ? amt : 0, 0,
           ));
         }
       }
-      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', 'มัดจำรับ', 0, _totalAmountFc * lc));
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', 'มัดจำรับ', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
     }
     // ── Advance Refund (65) ──────────────────────────────────────────────
     else if (sysType == arDocTypeAdvanceRefund) {
-      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', 'คืนมัดจำ', _totalAmountFc * lc, 0));
-      lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'จ่ายคืนเงินมัดจำ', 0, _totalAmountFc * lc));
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', 'คืนมัดจำ', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+      lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'จ่ายคืนเงินมัดจำ', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
     }
     // ── Receipt (70) ────────────────────────────────────────────────────
     else if (sysType == arDocTypeReceipt) {
+      final isFcReceipt = _selectedCurrency?.baseCurrencyFlag == false;
       final totalInvoiceApplied = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
       final totalAdvanceDeducted = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
       final totalCnDeducted = _cnRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
-      // cash received = invoice applied - advance deducted - CN deducted (header total_amount_lc)
       final totalCashLc = _totalAmountFc * lc;
+
+      // Build invoice rate map for FX calculation (keyed by invoice ID)
+      final invRateMap = <int, double>{
+        for (final inv in _openInvoices) if (inv.id != 0) inv.id: inv.exchangeRate,
+      };
+
+      // Compute AR credit at invoice exchange rate and receipt exchange rate (FC only)
+      double totalInvAtInvRate = 0; // FC × invoiceRate → LC needed to zero-out AR
+      double totalInvAtRecRate = 0; // FC × receiptRate → LC actually received
+      double totalCnAtInvRate  = 0; // CN FC × looked-up rate
+      if (isFcReceipt) {
+        for (final a in _applyRows) {
+          final invRate = invRateMap[a.appliedToId] ?? lc;
+          totalInvAtInvRate += a.appliedAmountLc * invRate;
+          totalInvAtRecRate += a.appliedAmountLc * lc;
+        }
+        for (final a in _cnRows) {
+          totalCnAtInvRate += a.appliedAmountLc * (invRateMap[a.appliedToId] ?? lc);
+        }
+      }
 
       // DR: Cash/Bank per payment method (or single cash line)
       if (_paymentRows.isEmpty) {
         if (totalCashLc > 0.005) {
-          lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'รับชำระ', totalCashLc, 0));
+          lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'รับชำระ', totalCashLc, 0, isFcReceipt ? _totalAmountFc : 0, 0));
         }
       } else {
         for (final p in _paymentRows) {
@@ -3401,7 +3632,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             paymentAcctCode(p),
             paymentAcctName(p).isEmpty ? 'Cash' : paymentAcctName(p),
             p.paymentMethodName ?? 'รับชำระ',
-            amt * lc, 0,
+            amt * lc, 0, isFcReceipt ? amt : 0, 0,
           ));
         }
       }
@@ -3410,17 +3641,37 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       if (totalAdvanceDeducted > 0.005) {
         lines.add(_GlLine(
           setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance',
-          'ตัดมัดจำ', totalAdvanceDeducted * lc, 0,
+          'ตัดมัดจำ', totalAdvanceDeducted * lc, 0, isFcReceipt ? totalAdvanceDeducted : 0, 0,
         ));
       }
 
-      // CR: ลูกหนี้การค้า — net = totalInvoiceApplied - totalCnDeducted
-      // (CN ลด AR ไปแล้วตอน Post CN → ไม่สร้าง CR แยก)
-      final arCreditLc = totalInvoiceApplied > 0
-          ? (totalInvoiceApplied - totalCnDeducted) * lc
-          : totalCashLc;
+      // CR: ลูกหนี้การค้า — FC = applied FC, LC = at invoice rate
+      final arCreditFc = isFcReceipt ? (totalInvoiceApplied - totalCnDeducted) : 0.0;
+      final arCreditLc = isFcReceipt
+          ? (totalInvAtInvRate > 0 ? totalInvAtInvRate - totalCnAtInvRate : totalCashLc)
+          : (totalInvoiceApplied > 0 ? (totalInvoiceApplied - totalCnDeducted) * lc : totalCashLc);
       if (arCreditLc > 0.005) {
-        lines.add(_GlLine(arCode, arName, 'ชำระหนี้', 0, arCreditLc));
+        lines.add(_GlLine(arCode, arName, 'ชำระหนี้', 0, arCreditLc, 0, arCreditFc));
+      }
+
+      // FX Gain/Loss: difference between LC at receipt rate vs invoice rate (pure LC — no FC equivalent)
+      if (isFcReceipt) {
+        final fxNet = totalInvAtRecRate - totalInvAtInvRate;
+        if (fxNet >= 0.005 && setup.fxGainAccountId != null) {
+          lines.add(_GlLine(
+            setup.fxGainAccountCode ?? acctCode(setup.fxGainAccountId, '—'),
+            setup.fxGainAccountName?.isNotEmpty == true ? setup.fxGainAccountName! : acctName(setup.fxGainAccountId, 'กำไรอัตราแลกเปลี่ยน'),
+            'กำไรจากอัตราแลกเปลี่ยน',
+            0, fxNet,
+          ));
+        } else if (fxNet <= -0.005 && setup.fxLossAccountId != null) {
+          lines.add(_GlLine(
+            setup.fxLossAccountCode ?? acctCode(setup.fxLossAccountId, '—'),
+            setup.fxLossAccountName?.isNotEmpty == true ? setup.fxLossAccountName! : acctName(setup.fxLossAccountId, 'ขาดทุนอัตราแลกเปลี่ยน'),
+            'ขาดทุนจากอัตราแลกเปลี่ยน',
+            fxNet.abs(), 0,
+          ));
+        }
       }
 
       // DR: ภาษีขายรอตัดบัญชี / CR: ภาษีขาย (รับรู้ VAT รอตัดบัญชีตามสัดส่วนที่ชำระ)
@@ -3509,6 +3760,10 @@ class _ApplyRow {
   final String appliedToDocNo;
   final DateTime? appliedToDocDate;
   final double appliedToTotal;
+  final double? appliedToTotalFc;
+  final double? appliedToExchangeRate;
+  final DateTime? appliedToDueDate;
+  final DateTime? appliedToExpectedPaymentDate;
   double appliedAmountLc;
 
   _ApplyRow({
@@ -3516,6 +3771,10 @@ class _ApplyRow {
     required this.appliedToDocNo,
     this.appliedToDocDate,
     this.appliedToTotal = 0,
+    this.appliedToTotalFc,
+    this.appliedToExchangeRate,
+    this.appliedToDueDate,
+    this.appliedToExpectedPaymentDate,
     this.appliedAmountLc = 0,
   });
 }
@@ -3574,7 +3833,7 @@ class _PaymentRow {
         terminalIdCtrl = TextEditingController(text: terminalId ?? ''),
         batchNoCtrl = TextEditingController(text: batchNo ?? '');
 
-  factory _PaymentRow.fromModel(ArTransactionPayment p) {
+  factory _PaymentRow.fromModel(ArTransactionPayment p, [bool isFc = false]) {
     return _PaymentRow(
       paymentMethodId: p.paymentMethodId,
       paymentMethodCode: p.paymentMethodCode,
@@ -3582,7 +3841,7 @@ class _PaymentRow {
       paymentMethodType: p.paymentMethodType,
       cmBankAccountId: p.cmBankAccountId,
       glAccountId: p.glAccountId,
-      amount: p.amountLc,
+      amount: isFc && p.amountFc > 0 ? p.amountFc : p.amountLc,
       refNo: p.refNo,
       remark: p.remark,
       paymentDate: p.paymentDate,
@@ -3616,8 +3875,10 @@ class _GlLine {
   final String accountCode;
   final String accountName;
   final String description;
-  final double debit;
-  final double credit;
+  final double debit;    // LC amount
+  final double credit;   // LC amount
+  final double debitFc;  // FC amount (0 for base-currency docs)
+  final double creditFc; // FC amount
 
-  const _GlLine(this.accountCode, this.accountName, this.description, this.debit, this.credit);
+  const _GlLine(this.accountCode, this.accountName, this.description, this.debit, this.credit, [this.debitFc = 0, this.creditFc = 0]);
 }

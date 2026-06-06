@@ -55,10 +55,16 @@ import '../../ar/screens/ar_bulk_billing_screen.dart';
 import '../../ar/screens/ar_transaction_report_screen.dart';
 import '../../ar/screens/ar_billing_status_report_screen.dart';
 import '../../ar/screens/ar_receipt_payment_report_screen.dart';
+import '../../ar/screens/ar_credit_limit_report_screen.dart';
+import '../../ar/screens/ar_fx_gain_loss_report_screen.dart';
 import '../../vt/screens/vat_report_screen.dart';
 import '../../ar/screens/ar_collector_screen.dart';
 import '../../ar/screens/ar_gl_account_setup_screen.dart';
 import '../../ar/screens/ar_reset_screen.dart';
+import '../../ar/screens/ar_year_end_setup_screen.dart';
+import '../../ar/screens/ar_pre_close_check_screen.dart';
+import '../../ar/screens/ar_fx_revaluation_screen.dart';
+import '../../ar/screens/ar_allowance_run_screen.dart';
 
 import '../../cm/screens/cm_bank_screen.dart';
 import '../../cm/screens/cm_bank_account_screen.dart';
@@ -172,12 +178,18 @@ class Menu {
     'ArTransactionReportScreen':    (context) => const ArTransactionReportScreen(),
     'ArBillingStatusReportScreen':      (context) => const ArBillingStatusReportScreen(),
     'ArReceiptPaymentReportScreen':    (context) => const ArReceiptPaymentReportScreen(),
+    'ArCreditLimitReportScreen':      (context) => const ArCreditLimitReportScreen(),
+    'ArFxGainLossReportScreen':       (context) => const ArFxGainLossReportScreen(),
     'VatReportScreen':        (context) => const VatReportScreen(),
     'ArCollectorScreen': (context) => ArCollectorScreen(onFieldsChanged: () {}),
     'BankScreen': (context) => BankScreen(onFieldsChanged: () {}),
     'CdWhtTypeScreen': (context) => CdWhtTypeScreen(onFieldsChanged: () {}),
     'ArGlAccountSetupScreen': (context) => const ArGlAccountSetupScreen(),
     'ArResetScreen': (context) => const ArResetScreen(),
+    'ArYearEndSetupScreen':   (context) => const ArYearEndSetupScreen(),
+    'ArPreCloseCheckScreen':  (context) => const ArPreCloseCheckScreen(),
+    'ArFxRevaluationScreen':  (context) => const ArFxRevaluationScreen(),
+    'ArAllowanceRunScreen':   (context) => const ArAllowanceRunScreen(),
 
     'CmBankScreen': (context) => CmBankScreen(onFieldsChanged: () {}),
     'CmBankAccountScreen': (context) => CmBankAccountScreen(onFieldsChanged: () {}),
