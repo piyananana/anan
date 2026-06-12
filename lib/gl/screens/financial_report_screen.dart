@@ -17,6 +17,8 @@ import '../../sa/models/company.dart';
 import '../../sa/models/user_branch.dart';
 import '../../sa/services/company_service.dart';
 import '../../sa/services/auth_service.dart';
+import 'package:excel/excel.dart';
+import '../../utils/file_download.dart';
 
 class FinancialReportScreen extends StatefulWidget {
   const FinancialReportScreen({super.key});
@@ -33,6 +35,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   final GlDimensionService _dimService = GlDimensionService();
 
   bool _isLoading = false;
+  bool _isExporting = false;
   bool _isFilterExpanded = true;
   double _filterPanelWidth = 350.0;
   bool _isDraggingDivider = false;
@@ -345,6 +348,77 @@ String _replaceVars(String text, pw.Context? context) {
     );
   }
 
+  // ─── Excel Export ────────────────────────────────────────────────────────────
+
+  Future<void> _exportExcel() async {
+    if (_reportData == null) return;
+    _isExporting = true;
+    setState(() {});
+    try {
+      final ex = Excel.createExcel();
+      ex.rename('Sheet1', 'Financial');
+      final s = ex['Financial'];
+
+      final List<dynamic> allRows = _reportData!['data'] ?? [];
+      final bodyRows = allRows.where((r) => r['row_type'] == 'BODY').toList();
+      final reportName = _reportData?['report_name']?.toString() ?? 'รายงานงบการเงิน';
+
+      final _periodLabel = _selectedPeriod?.periodName ?? _selectedYear?.fyCode ?? '';
+      final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 1, 0, reportName, bold: true);
+      _xlCell(s, 2, 0, '$_periodLabel  |  พิมพ์: $_ts');
+
+      int r = 3;
+      for (final rowData in bodyRows) {
+        final List<dynamic> columns = (rowData['columns'] as List?) ?? [];
+        int c = 0;
+        for (final col in columns) {
+          final String type = col['type']?.toString() ?? 'TEXT';
+          final style = col['style'] ?? {};
+          final dynamic rawValue = col['value'];
+          final bool bold = style['fontWeight'] == 'BOLD';
+          final String textAlign = style['textAlign']?.toString() ?? 'LEFT';
+          final HorizontalAlign align = textAlign == 'RIGHT'
+              ? HorizontalAlign.Right
+              : (textAlign == 'CENTER' ? HorizontalAlign.Center : HorizontalAlign.Left);
+
+          if (type == 'DIVIDER') {
+            c++;
+            continue;
+          }
+
+          if (type == 'TEXT') {
+            _xlCell(s, r, c, rawValue?.toString() ?? '', bold: bold, align: align);
+          } else {
+            final double val = double.tryParse(rawValue?.toString() ?? '0') ?? 0;
+            _xlCell(s, r, c, val == 0 ? TextCellValue('') : DoubleCellValue(val), bold: bold, align: HorizontalAlign.Right);
+          }
+          c++;
+        }
+        r++;
+      }
+
+      final bytes = ex.encode();
+      if (bytes == null) return;
+      final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadFile(bytes, '${reportName}_$ts.xlsx');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _xlCell(Sheet s, int r, int c, dynamic v,
+      {ExcelColor? bg, HorizontalAlign? align, bool bold = false}) {
+    final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+    cell.value = v is CellValue ? v : (v is double ? DoubleCellValue(v) : TextCellValue(v?.toString() ?? ''));
+    cell.cellStyle = CellStyle(
+      backgroundColorHex: bg ?? ExcelColor.none,
+      horizontalAlign: align ?? HorizontalAlign.Left,
+      bold: bold,
+    );
+  }
+
   // ฟังก์ชันหลักสำหรับสร้างหน้า PDF
   Future<Uint8List> _generatePdf(PdfPageFormat baseFormat) async {
     final doc = pw.Document();
@@ -398,6 +472,18 @@ String _replaceVars(String text, pw.Context? context) {
           backgroundColor: Colors.deepOrange[900],
           foregroundColor: Colors.white,
           actions: [
+            if (_isExporting)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Center(child: SizedBox(width: 20, height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.table_chart_outlined),
+                tooltip: 'Export Excel',
+                onPressed: _reportData == null ? null : _exportExcel,
+              ),
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'รีเฟรชรายการ',

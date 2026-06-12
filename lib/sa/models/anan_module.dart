@@ -46,9 +46,13 @@ const Map<String, String> arSysDocType = {
 const Map<String, String> apSysDocType = {
   '10': 'ตั้งหนี้ - Billing (BL)',
   '30': 'เพิ่มหนี้ - Debit Note from Supplier (DN)',
+  '35': 'เพิ่มหนี้ใบแจ้งหนี้ - Debit Note from Supplier Billing (DN)',
   '50': 'ลดหนี้ - Credit Note from Supplier (CN)',
-  '60': 'เงินมัดจำ - Deposit (DP)',
-  '70': 'จ่ายชำระ - Payment (PY)',
+  '55': 'ลดหนี้ใบแจ้งหนี้ - Credit Note from Supplier Billing (CN)',
+  '60': 'จ่ายเงินมัดจำ - Pay Deposit (DP)',
+  '65': 'รับคืนเงินมัดจำ - Return Deposit (RDP)',
+  '70': 'แจ้งโอนเงิน - Remittance Advice (RA)',
+  '80': 'จ่ายชำระ - Payment (PY)',
 };
 // '31': 'สินค้าคงคลัง'
 const Map<String, String> imSysDocType = {
@@ -64,8 +68,8 @@ const Map<String, String> imSysDocType = {
   '70': 'Transfer in-out', // transfer between location (stock=)
   '80': 'Adjust quantity', // adjust (stock+-) for Phys.Count, ...
 };
-// '81': 'เงินสดและเช็ค'
-const Map<String, String> cqSysDocType = {
+// '81': 'เงินสดและเช็ค / Cash Management (CM)'
+const Map<String, String> cmSysDocType = {
   '': 'ไม่ระบุ',
 };
 // '86': 'เงินมัดจำ'

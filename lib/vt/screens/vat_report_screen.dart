@@ -9,6 +9,8 @@ import '../services/vat_report_service.dart';
 import '../../sa/models/company.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
+import 'package:excel/excel.dart';
+import '../../utils/file_download.dart';
 
 // ─── ประเภทภาษีที่แสดงใน dropdown ────────────────────────────────────────────
 enum _VatChoice { output, input }
@@ -41,7 +43,8 @@ class _VatReportScreenState extends State<VatReportScreen> {
   bool _isFilterExpanded = true;
   double _filterPanelWidth = 280.0;
   bool _isDraggingDivider = false;
-  int _pdfKey = 0;
+  int  _pdfKey      = 0;
+  bool _isExporting = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -313,6 +316,20 @@ class _VatReportScreenState extends State<VatReportScreen> {
         ]),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
+        actions: [
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Export Excel',
+              onPressed: _reportData.isEmpty ? null : _exportExcel,
+            ),
+        ],
       ),
       body: _isLoading && _company == null
           ? const Center(child: CircularProgressIndicator())
@@ -476,6 +493,95 @@ class _VatReportScreenState extends State<VatReportScreen> {
                 ],
               );
             }),
+    );
+  }
+
+  // ─── Excel Export ─────────────────────────────────────────────────────────
+
+  Future<void> _exportExcel() async {
+    _isExporting = true;
+    setState(() {});
+    try {
+      final ex    = Excel.createExcel();
+      const sheet = 'VAT';
+      ex.rename('Sheet1', sheet);
+      final s = ex[sheet];
+
+      final hdrBg = ExcelColor.fromHexString('#92D050');
+      final totBg = ExcelColor.fromHexString('#BDD7EE');
+
+      final vatChoice = _vatChoice;
+      final _tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 1, 0, vatChoice.reportTitle, bold: true);
+      _xlCell(s, 2, 0, 'ช่วงวันที่: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $_tsLabel');
+
+      final hdrs = ['ลำดับที่', 'วัน เดือน ปี', 'เลขที่ใบกำกับภาษี',
+          vatChoice.entityLabel, 'เลขประจำตัวผู้เสียภาษีอากร',
+          'สาขาที่', 'มูลค่าสินค้าหรือบริการ', vatChoice.amountLabel];
+      for (int i = 0; i < hdrs.length; i++) {
+        _xlCell(s, 3, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
+      }
+
+      int row = 4;
+      double totalBase = 0, totalVat = 0;
+
+      for (final r in _reportData) {
+        final base = (r['base_amount'] as num?)?.toDouble() ?? 0;
+        final vat  = (r['vat_amount']  as num?)?.toDouble() ?? 0;
+        totalBase += base;
+        totalVat  += vat;
+
+        _xlCell(s, row, 0, '${r['seq'] ?? ''}',                    align: HorizontalAlign.Center);
+        _xlCell(s, row, 1, _fmtDate(r['tax_invoice_date'] as String?));
+        _xlCell(s, row, 2, r['tax_invoice_no'] as String? ?? '');
+        _xlCell(s, row, 3, r['entity_name']    as String? ?? '');
+        _xlCell(s, row, 4, _fmtTaxId(r['entity_tax_id']       as String?));
+        _xlCell(s, row, 5, _fmtBranch(r['entity_branch_code'] as String?), align: HorizontalAlign.Center);
+        _xlCell(s, row, 6, base, align: HorizontalAlign.Right);
+        _xlCell(s, row, 7, vat,  align: HorizontalAlign.Right);
+        row++;
+      }
+
+      // Total row
+      _xlCell(s, row, 0, '');
+      _xlCell(s, row, 1, '');
+      _xlCell(s, row, 2, '');
+      _xlCell(s, row, 3, 'ยอดรวม', bg: totBg, bold: true);
+      _xlCell(s, row, 4, '', bg: totBg);
+      _xlCell(s, row, 5, '', bg: totBg);
+      _xlCell(s, row, 6, totalBase, bg: totBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, row, 7, totalVat,  bg: totBg, bold: true, align: HorizontalAlign.Right);
+      row++;
+
+      // Summary row
+      _xlCell(s, row, 0, '');
+      _xlCell(s, row, 1, '');
+      _xlCell(s, row, 2, 'จำนวน ${_reportData.length} รายการ', bg: totBg, bold: true);
+      for (int i = 3; i <= 5; i++) _xlCell(s, row, i, '', bg: totBg);
+      _xlCell(s, row, 6, totalBase, bg: totBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, row, 7, totalVat,  bg: totBg, bold: true, align: HorizontalAlign.Right);
+
+      final bytes = ex.encode();
+      if (bytes == null) return;
+      final title = vatChoice.reportTitle;
+      final ts    = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadFile(bytes, '${title}_$ts.xlsx');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _xlCell(Sheet s, int r, int c, dynamic v,
+      {ExcelColor? bg, HorizontalAlign? align, bool bold = false}) {
+    final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+    cell.value = v is double
+        ? DoubleCellValue(v)
+        : TextCellValue(v?.toString() ?? '');
+    cell.cellStyle = CellStyle(
+      backgroundColorHex: bg ?? ExcelColor.none,
+      horizontalAlign: align ?? HorizontalAlign.Left,
+      bold: bold,
     );
   }
 

@@ -10,6 +10,7 @@ import '../screens/module_document_screen.dart';
 import '../screens/password_policy_screen.dart';
 import '../screens/doc_number_branch_setup_screen.dart';
 import '../screens/doc_number_reset_screen.dart';
+import '../screens/sa_module_approver_screen.dart';
 import '../screens/user_document_screen.dart';
 import '../screens/user_menu_screen.dart';
 import '../screens/user_screen.dart';
@@ -70,6 +71,16 @@ import '../../cm/screens/cm_bank_screen.dart';
 import '../../cm/screens/cm_bank_account_screen.dart';
 import '../../cm/screens/cm_payment_method_screen.dart';
 
+import '../../ap/screens/ap_vendor_screen.dart';
+import '../../ap/screens/ap_vendor_group_screen.dart';
+import '../../ap/screens/ap_vendor_import_screen.dart';
+import '../../ap/screens/ap_vendor_running_screen.dart';
+import '../../ap/screens/ap_transaction_screen.dart';
+import '../../ap/screens/ap_gl_account_setup_screen.dart';
+import '../../ap/screens/ap_payment_run_screen.dart';
+import '../../cm/screens/cm_bank_file_format_screen.dart';
+import '../screens/sa_smtp_config_screen.dart';
+
 class Menu {
   final int id;
   final int? parentId;
@@ -109,6 +120,7 @@ class Menu {
     'PasswordPolicyScreen': (context) => const PasswordPolicyScreen(),
     'DocNumberBranchSetupScreen': (context) => const DocNumberBranchSetupScreen(),
     'DocNumberResetScreen': (context) => const DocNumberResetScreen(),
+    'SaModuleApproverScreen': (context) => const SaModuleApproverScreen(),
     'UserDocumentScreen': (context) => const UserDocumentScreen(),
     'UserMenuScreen': (context) => const UserMenuScreen(),
     'UserScreen': (context) => const UserScreen(),
@@ -194,6 +206,16 @@ class Menu {
     'CmBankScreen': (context) => CmBankScreen(onFieldsChanged: () {}),
     'CmBankAccountScreen': (context) => CmBankAccountScreen(onFieldsChanged: () {}),
     'CmPaymentMethodScreen': (context) => CmPaymentMethodScreen(onFieldsChanged: () {}),
+
+    'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
+    'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),
+    'ApVendorImportScreen': (context) => ApVendorImportScreen(onFieldsChanged: () {}),
+    'ApVendorRunningScreen': (context) => const ApVendorRunningScreen(),
+    'ApTransactionScreen': (context) => const ApTransactionScreen(),
+    'ApGlAccountSetupScreen': (context) => const ApGlAccountSetupScreen(),
+    'ApPaymentRunScreen': (context) => const ApPaymentRunScreen(),
+    'CmBankFileFormatScreen': (context) => const CmBankFileFormatScreen(),
+    'SaSmtpConfigScreen':     (context) => const SaSmtpConfigScreen(),
     // 'PeriodScreen': (context) => const PeriodScreen(),
     // Add all your custom widgets here
     // 'YourCustomWidget1': (context) => const YourCustomWidget1(),

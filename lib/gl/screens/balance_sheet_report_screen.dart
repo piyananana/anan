@@ -2,6 +2,8 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
+import 'package:excel/excel.dart';
+import '../../utils/file_download.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -41,6 +43,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
   int? _selectedBranchId;
   bool _pageBreakPerType = false;
   bool _isLoading = false;
+  bool _isExporting = false;
   bool _isFilterExpanded = true;
   double _filterPanelWidth = 350.0;
   bool _isDraggingDivider = false;
@@ -196,6 +199,86 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         rows.where((r) => shownIds.contains(r['account_id'] as int)).toList();
 
     return (shownRows, leafIds);
+  }
+
+  // ---- Excel Export ----
+
+  Future<void> _exportExcel() async {
+    _isExporting = true;
+    setState(() {});
+    try {
+      final ex = Excel.createExcel();
+      ex.rename('Sheet1', 'BalanceSheet');
+      final s = ex['BalanceSheet'];
+      final hdrBg = ExcelColor.fromHexString('#92D050');
+      final totBg = ExcelColor.fromHexString('#BDD7EE');
+      final secBg = ExcelColor.fromHexString('#D9E1F2');
+
+      double endBal(Map<String, dynamic> row) =>
+          double.tryParse(row['end_balance'].toString()) ?? 0.0;
+
+      final _asOfLabel = _selectedPeriod != null
+          ? 'ณ วันที่: ${DateFormat('dd/MM/yyyy').format(_selectedPeriod!.periodEndDate)}'
+          : 'ปี: ${_selectedYear?.fyCode ?? ''}';
+      final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 1, 0, 'งบดุล (Balance Sheet)', bold: true);
+      _xlCell(s, 2, 0, '$_asOfLabel  |  พิมพ์: $_ts');
+
+      int r = 3;
+      _xlCell(s, r, 0, 'รหัส/ชื่อบัญชี', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, 'ยอดคงเหลือ', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      r++;
+
+      final allAsset    = _reportData.where((row) => row['account_type'] == 'ASSET').toList();
+      final allLiability = _reportData.where((row) => row['account_type'] == 'LIABILITY').toList();
+      final allEquity   = _reportData.where((row) => row['account_type'] == 'EQUITY').toList();
+
+      for (final group in [
+        ('สินทรัพย์ (ASSET)', allAsset),
+        ('หนี้สิน (LIABILITY)', allLiability),
+        ('ส่วนของเจ้าของ (EQUITY)', allEquity),
+      ]) {
+        final (label, rows) = group;
+        _xlCell(s, r, 0, label, bg: secBg, bold: true);
+        _xlCell(s, r, 1, '', bg: secBg);
+        r++;
+
+        double sectionTotal = 0.0;
+        for (final row in rows) {
+          final isHeader = row['is_header'] == true;
+          final code = row['account_code']?.toString() ?? '';
+          final name = row['account_name_thai']?.toString() ?? '';
+          final bal  = endBal(row);
+          if (!isHeader) sectionTotal += bal;
+          _xlCell(s, r, 0, '$code $name', bold: isHeader);
+          _xlCell(s, r, 1, bal == 0 ? TextCellValue('') : DoubleCellValue(bal), align: HorizontalAlign.Right, bold: isHeader);
+          r++;
+        }
+
+        _xlCell(s, r, 0, 'รวม $label', bg: totBg, bold: true);
+        _xlCell(s, r, 1, DoubleCellValue(sectionTotal), bg: totBg, bold: true, align: HorizontalAlign.Right);
+        r++;
+      }
+
+      final bytes = ex.encode();
+      if (bytes == null) return;
+      final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadFile(bytes, 'งบดุล_$ts.xlsx');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _xlCell(Sheet s, int r, int c, dynamic v,
+      {ExcelColor? bg, HorizontalAlign? align, bool bold = false}) {
+    final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+    cell.value = v is CellValue ? v : (v is double ? DoubleCellValue(v) : TextCellValue(v?.toString() ?? ''));
+    cell.cellStyle = CellStyle(
+      backgroundColorHex: bg ?? ExcelColor.none,
+      horizontalAlign: align ?? HorizontalAlign.Left,
+      bold: bold,
+    );
   }
 
   // ---- PDF Generation ----
@@ -527,6 +610,18 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Export Excel',
+              onPressed: _reportData.isEmpty ? null : _exportExcel,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'รีเฟรชรายการ',

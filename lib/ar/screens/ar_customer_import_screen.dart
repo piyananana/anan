@@ -7,10 +7,9 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:provider/provider.dart';
 
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../utils/file_download.dart';
 
 class ArCustomerImportScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
@@ -305,11 +304,20 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
   // ─── Template section ────────────────────────────────────────────────────────
 
   Future<void> _downloadTemplate() async {
-    final uri = Uri.parse('${AppConfig.apiAr}/ar_customer/import/template/download');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      _showSnack('ไม่สามารถเปิด URL ได้', isError: true);
+    try {
+      final authService = context.read<AuthService>();
+      final headers = await authService.getAuthHeader();
+      final response = await http.get(
+        Uri.parse('${AppConfig.apiAr}/ar_customer/import/template/download'),
+        headers: headers,
+      );
+      if (response.statusCode == 200) {
+        await downloadFile(response.bodyBytes, 'ar_customer_template.xlsx');
+      } else {
+        _showSnack('ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})', isError: true);
+      }
+    } catch (e) {
+      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
     }
   }
 

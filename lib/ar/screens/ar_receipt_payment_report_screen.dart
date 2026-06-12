@@ -15,6 +15,8 @@ import '../../cd/services/salesperson_service.dart';
 import '../../sa/models/company.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
+import 'package:excel/excel.dart';
+import '../../utils/file_download.dart';
 
 class ArReceiptPaymentReportScreen extends StatefulWidget {
   const ArReceiptPaymentReportScreen({super.key});
@@ -54,7 +56,8 @@ class _ArReceiptPaymentReportScreenState
   String  _fromLabel = '';
   String  _toLabel   = '';
   String  _sortBy    = 'customer'; // 'customer' | 'amount_desc' | 'amount_asc'
-  bool    _showDetail = false;
+  bool    _showDetail  = false;
+  bool    _isExporting = false;
 
   List<Map<String, dynamic>> _reportData = [];
 
@@ -411,6 +414,20 @@ class _ArReceiptPaymentReportScreenState
         ]),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
+        actions: [
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Export Excel',
+              onPressed: _reportData.isEmpty ? null : _exportExcel,
+            ),
+        ],
       ),
       body: _isLoading && _company == null
           ? const Center(child: CircularProgressIndicator())
@@ -746,6 +763,116 @@ class _ArReceiptPaymentReportScreenState
           overflow: TextOverflow.ellipsis,
         ),
       ),
+    );
+  }
+
+  // ─── Excel Export ─────────────────────────────────────────────────────────
+
+  Future<void> _exportExcel() async {
+    _isExporting = true;
+    setState(() {});
+    try {
+      final ex    = Excel.createExcel();
+      const sheet = 'ReceiptPayment';
+      ex.rename('Sheet1', sheet);
+      final s = ex[sheet];
+
+      final hdrBg = ExcelColor.fromHexString('#92D050');
+      final totBg = ExcelColor.fromHexString('#BDD7EE');
+      final detBg = ExcelColor.fromHexString('#F2F2F2');
+
+      final _tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 1, 0, 'รายงานการรับชำระ', bold: true);
+      _xlCell(s, 2, 0, 'วันที่ชำระ: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $_tsLabel');
+
+      final hdrs = ['รหัส – ชื่อลูกหนี้', 'ยอดชำระรวม', 'เงินสด', 'เช็ค',
+          'บัตรเครดิต/เดบิต', 'เงินโอน', 'อินเตอร์เน็ตแบงกิ้ง', 'ตั๋วแลกเงิน', 'อื่นๆ'];
+      for (int i = 0; i < hdrs.length; i++) {
+        _xlCell(s, 3, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
+      }
+
+      int row = 4;
+      double grandTotal = 0, grandCash = 0, grandCheck = 0, grandCard = 0;
+      double grandTransfer = 0, grandInternet = 0, grandBoe = 0, grandOther = 0;
+      int totalCustomers = 0;
+
+      for (final cust in _reportData) {
+        totalCustomers++;
+        final code  = cust['customer_code']    as String? ?? '';
+        final name  = cust['customer_name_th'] as String? ?? '';
+        final total = (cust['total_amount']    as num?)?.toDouble() ?? 0;
+        final cash  = (cust['cash_amount']     as num?)?.toDouble() ?? 0;
+        final check = (cust['check_amount']    as num?)?.toDouble() ?? 0;
+        final card  = (cust['card_amount']     as num?)?.toDouble() ?? 0;
+        final trans = (cust['transfer_amount'] as num?)?.toDouble() ?? 0;
+        final inet  = (cust['internet_amount'] as num?)?.toDouble() ?? 0;
+        final boe   = (cust['boe_amount']      as num?)?.toDouble() ?? 0;
+        final other = (cust['other_amount']    as num?)?.toDouble() ?? 0;
+
+        grandTotal    += total;  grandCash     += cash;
+        grandCheck    += check;  grandCard     += card;
+        grandTransfer += trans;  grandInternet += inet;
+        grandBoe      += boe;    grandOther    += other;
+
+        final bg = _showDetail ? ExcelColor.fromHexString('#BDD7EE') : null;
+        _xlCell(s, row, 0, '$code  $name', bg: bg, bold: _showDetail);
+        for (final pair in [total, cash, check, card, trans, inet, boe, other].asMap().entries) {
+          _xlCell(s, row, pair.key + 1, pair.value, bg: bg,
+              bold: _showDetail, align: HorizontalAlign.Right);
+        }
+        row++;
+
+        if (_showDetail) {
+          final receipts = (cust['receipts'] as List? ?? []).cast<Map<String, dynamic>>();
+          for (final r in receipts) {
+            final docNo  = r['doc_no']      as String? ?? '';
+            final docDate = _fmtDate(r['doc_date'] as String?);
+            final refNo  = r['ref_doc_no']  as String? ?? '';
+            final label  = '   $docNo  $docDate${refNo.isNotEmpty ? '  อ้างอิง: $refNo' : ''}';
+            final rTotal = (r['total_amount_lc'] as num?)?.toDouble() ?? 0;
+            final rCash  = (r['cash_amount']     as num?)?.toDouble() ?? 0;
+            final rCheck = (r['check_amount']    as num?)?.toDouble() ?? 0;
+            final rCard  = (r['card_amount']     as num?)?.toDouble() ?? 0;
+            final rTrans = (r['transfer_amount'] as num?)?.toDouble() ?? 0;
+            final rInet  = (r['internet_amount'] as num?)?.toDouble() ?? 0;
+            final rBoe   = (r['boe_amount']      as num?)?.toDouble() ?? 0;
+            final rOther = (r['other_amount']    as num?)?.toDouble() ?? 0;
+            _xlCell(s, row, 0, label, bg: detBg);
+            for (final pair in [rTotal, rCash, rCheck, rCard, rTrans, rInet, rBoe, rOther].asMap().entries) {
+              _xlCell(s, row, pair.key + 1, pair.value, bg: detBg, align: HorizontalAlign.Right);
+            }
+            row++;
+          }
+        }
+      }
+
+      _xlCell(s, row, 0, 'รวม $totalCustomers ลูกหนี้', bg: totBg, bold: true);
+      for (final pair in [grandTotal, grandCash, grandCheck, grandCard,
+          grandTransfer, grandInternet, grandBoe, grandOther].asMap().entries) {
+        _xlCell(s, row, pair.key + 1, pair.value, bg: totBg, bold: true, align: HorizontalAlign.Right);
+      }
+
+      final bytes = ex.encode();
+      if (bytes == null) return;
+      const title = 'รายงานการรับชำระ';
+      final ts    = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadFile(bytes, '${title}_$ts.xlsx');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _xlCell(Sheet s, int r, int c, dynamic v,
+      {ExcelColor? bg, HorizontalAlign? align, bool bold = false}) {
+    final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+    cell.value = v is double
+        ? DoubleCellValue(v)
+        : TextCellValue(v?.toString() ?? '');
+    cell.cellStyle = CellStyle(
+      backgroundColorHex: bg ?? ExcelColor.none,
+      horizontalAlign: align ?? HorizontalAlign.Left,
+      bold: bold,
     );
   }
 }

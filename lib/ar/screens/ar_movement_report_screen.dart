@@ -15,6 +15,8 @@ import '../../cd/services/salesperson_service.dart';
 import '../../sa/models/company.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
+import 'package:excel/excel.dart';
+import '../../utils/file_download.dart';
 
 class ArMovementReportScreen extends StatefulWidget {
   const ArMovementReportScreen({super.key});
@@ -35,6 +37,7 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
   double _filterPanelWidth = 320.0;
   bool _isDraggingDivider = false;
   int _pdfKey = 0;
+  bool _isExporting = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -108,6 +111,101 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
 
   void _onSettingChanged() {
     if (_reportData.isNotEmpty) setState(() => _pdfKey++);
+  }
+
+  // ─── Excel ────────────────────────────────────────────────────────────────
+
+  Future<void> _exportExcel() async {
+    _isExporting = true;
+    setState(() {});
+    try {
+      final ex = Excel.createExcel();
+      ex.rename('Sheet1', 'Movement');
+      final s = ex['Movement'];
+      final hdrBg = ExcelColor.fromHexString('#92D050');
+      final totBg = ExcelColor.fromHexString('#BDD7EE');
+      final detBg = ExcelColor.fromHexString('#F2F2F2');
+
+      String fmtDate(String? raw) {
+        if (raw == null || raw.isEmpty) return '';
+        try {
+          final d = DateTime.parse(raw).toLocal();
+          return DateFormat('dd/MM/yyyy').format(DateTime(d.year, d.month, d.day));
+        } catch (_) { return raw; }
+      }
+
+      final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 1, 0, 'รายงานการเคลื่อนไหวลูกหนี้', bold: true);
+      _xlCell(s, 2, 0, 'ช่วงวันที่: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $_ts');
+
+      int r = 3;
+      _xlCell(s, r, 0, 'รหัส-ชื่อลูกค้า', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, 'เลขที่เอกสาร', bg: hdrBg, bold: true);
+      _xlCell(s, r, 2, 'วันที่', bg: hdrBg, bold: true);
+      _xlCell(s, r, 3, 'ประเภทเอกสาร', bg: hdrBg, bold: true);
+      _xlCell(s, r, 4, 'อ้างอิง', bg: hdrBg, bold: true);
+      _xlCell(s, r, 5, 'เพิ่มหนี้', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 6, 'ลดหนี้', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 7, 'คงเหลือสะสม', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      r++;
+
+      for (final cust in _reportData) {
+        final code = cust['customer_code'] as String? ?? '';
+        final name = cust['customer_name_th'] as String? ?? '';
+        final openBal = (cust['opening_balance'] as num?)?.toDouble() ?? 0.0;
+
+        // Opening balance row
+        _xlCell(s, r, 0, '$code $name', bold: true);
+        _xlCell(s, r, 1, 'ยอดยกมา');
+        _xlCell(s, r, 5, TextCellValue(''), align: HorizontalAlign.Right);
+        _xlCell(s, r, 6, TextCellValue(''), align: HorizontalAlign.Right);
+        _xlCell(s, r, 7, DoubleCellValue(openBal), align: HorizontalAlign.Right, bold: true);
+        r++;
+
+        final txns = (cust['transactions'] as List?) ?? [];
+        for (final txn in txns) {
+          final debit  = (txn['debit_amount']  as num?)?.toDouble() ?? 0.0;
+          final credit = (txn['credit_amount'] as num?)?.toDouble() ?? 0.0;
+          final running = (txn['running_balance'] as num?)?.toDouble() ?? 0.0;
+          _xlCell(s, r, 0, '', bg: detBg);
+          _xlCell(s, r, 1, txn['doc_no']?.toString() ?? '', bg: detBg);
+          _xlCell(s, r, 2, fmtDate(txn['doc_date']?.toString()), bg: detBg);
+          _xlCell(s, r, 3, txn['doc_name_thai']?.toString() ?? '', bg: detBg);
+          _xlCell(s, r, 4, _getRefDisplay(txn as Map<String, dynamic>), bg: detBg);
+          _xlCell(s, r, 5, debit  == 0 ? TextCellValue('-') : DoubleCellValue(debit),  bg: detBg, align: HorizontalAlign.Right);
+          _xlCell(s, r, 6, credit == 0 ? TextCellValue('-') : DoubleCellValue(credit), bg: detBg, align: HorizontalAlign.Right);
+          _xlCell(s, r, 7, DoubleCellValue(running), bg: detBg, align: HorizontalAlign.Right);
+          r++;
+        }
+
+        // Closing balance for customer
+        final lastBal = txns.isNotEmpty
+            ? (txns.last['running_balance'] as num?)?.toDouble() ?? openBal
+            : openBal;
+        _xlCell(s, r, 0, 'ยอดคงเหลือ $code', bg: totBg, bold: true);
+        _xlCell(s, r, 7, DoubleCellValue(lastBal), bg: totBg, bold: true, align: HorizontalAlign.Right);
+        r++;
+      }
+
+      final bytes = ex.encode();
+      if (bytes == null) return;
+      final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadFile(bytes, 'รายงานการเคลื่อนไหวลูกหนี้_$ts.xlsx');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _xlCell(Sheet s, int r, int c, dynamic v,
+      {ExcelColor? bg, HorizontalAlign? align, bool bold = false}) {
+    final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+    cell.value = v is CellValue ? v : (v is double ? DoubleCellValue(v) : TextCellValue(v?.toString() ?? ''));
+    cell.cellStyle = CellStyle(
+      backgroundColorHex: bg ?? ExcelColor.none,
+      horizontalAlign: align ?? HorizontalAlign.Left,
+      bold: bold,
+    );
   }
 
   // ─── helpers ─────────────────────────────────────────────────────────────
@@ -633,6 +731,20 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
         ]),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
+        actions: [
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Export Excel',
+              onPressed: _reportData.isEmpty ? null : _exportExcel,
+            ),
+        ],
       ),
       body: _isLoading && _company == null
           ? const Center(child: CircularProgressIndicator())

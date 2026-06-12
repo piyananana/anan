@@ -283,11 +283,13 @@ class ArTransactionService {
   }
 
   // Fetch Bill Collection document by doc_no (for Receipt auto-fill)
-  // throws BcAlreadyPaidException (409) ถ้า BC ถูกชำระแล้ว
-  Future<ArTransaction?> fetchBillCollectionByDocNo(String docNo) async {
+  // throws BcAlreadyPaidException (409) ถ้า BC ถูกชำระแล้ว (เมื่อ viewOnly=false)
+  // viewOnly=true: ข้ามการตรวจสอบสถานะชำระ ใช้สำหรับแสดงข้อมูลใน view mode
+  Future<ArTransaction?> fetchBillCollectionByDocNo(String docNo, {bool viewOnly = false}) async {
     final headers = await authService.getAuthHeader();
+    final params = {'doc_no': docNo, if (viewOnly) 'view': 'true'};
     final uri = Uri.parse('$baseUrl/ar_transaction/bill_collection_by_doc_no')
-        .replace(queryParameters: {'doc_no': docNo});
+        .replace(queryParameters: params);
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {
       final json = jsonDecode(response.body);

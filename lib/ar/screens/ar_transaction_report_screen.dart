@@ -17,6 +17,8 @@ import '../../cd/services/salesperson_service.dart';
 import '../../sa/models/company.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
+import 'package:excel/excel.dart';
+import '../../utils/file_download.dart';
 
 // ─── sys_doc_type → column index mapping ──────────────────────────────────────
 // 0=แจ้งหนี้(10)  1=เพิ่มหนี้(30/35)  2=ลดหนี้(50/55)
@@ -77,7 +79,8 @@ class _ArTransactionReportScreenState
   String  _fromLabel = '';
   String  _toLabel   = '';
   String  _sortBy    = 'customer'; // 'customer' | 'doc_type'
-  bool    _showDetail = false;
+  bool    _showDetail   = false;
+  bool    _isExporting  = false;
 
   List<Map<String, dynamic>> _reportData = [];
 
@@ -423,6 +426,20 @@ class _ArTransactionReportScreenState
         ]),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
+        actions: [
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Export Excel',
+              onPressed: _reportData.isEmpty ? null : _exportExcel,
+            ),
+        ],
       ),
       body: _isLoading && _company == null
           ? const Center(child: CircularProgressIndicator())
@@ -794,6 +811,118 @@ class _ArTransactionReportScreenState
           overflow: TextOverflow.ellipsis,
         ),
       ),
+    );
+  }
+
+  // ─── Excel Export ─────────────────────────────────────────────────────────
+
+  Future<void> _exportExcel() async {
+    _isExporting = true;
+    setState(() {});
+    try {
+      final ex    = Excel.createExcel();
+      const sheet = 'Transaction';
+      ex.rename('Sheet1', sheet);
+      final s = ex[sheet];
+
+      final hdrBg = ExcelColor.fromHexString('#92D050');
+      final totBg = ExcelColor.fromHexString('#BDD7EE');
+      final detBg = ExcelColor.fromHexString('#F2F2F2');
+
+      final _tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 1, 0, 'รายงานธุรกรรมลูกหนี้', bold: true);
+      _xlCell(s, 2, 0, 'ช่วงวันที่: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $_tsLabel');
+
+      final hdrs = ['รหัส – ชื่อลูกค้า', 'แจ้งหนี้', 'เพิ่มหนี้', 'ลดหนี้', 'รับมัดจำ', 'คืนมัดจำ', 'รับชำระ'];
+      for (int i = 0; i < hdrs.length; i++) {
+        _xlCell(s, 3, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
+      }
+
+      int row = 4;
+      final grandAmts   = List<double>.filled(6, 0.0);
+      final grandCounts = List<int>.filled(6, 0);
+      int totalCustomers = 0;
+
+      for (final cust in _reportData) {
+        totalCustomers++;
+        final code = cust['customer_code']   as String? ?? '';
+        final name = cust['customer_name_th'] as String? ?? '';
+        final amts = [
+          (cust['inv_amount'] as num?)?.toDouble() ?? 0,
+          (cust['dn_amount']  as num?)?.toDouble() ?? 0,
+          (cust['cn_amount']  as num?)?.toDouble() ?? 0,
+          (cust['adv_amount'] as num?)?.toDouble() ?? 0,
+          (cust['ret_amount'] as num?)?.toDouble() ?? 0,
+          (cust['rec_amount'] as num?)?.toDouble() ?? 0,
+        ];
+        for (int i = 0; i < 6; i++) grandAmts[i] += amts[i];
+
+        _xlCell(s, row, 0, '$code  $name', bold: _showDetail);
+        for (int i = 0; i < 6; i++) {
+          _xlCell(s, row, i + 1, amts[i], align: HorizontalAlign.Right, bold: _showDetail);
+        }
+        row++;
+
+        if (_showDetail) {
+          final txns = (cust['transactions'] as List? ?? []).cast<Map<String, dynamic>>();
+          for (final t in txns) {
+            final sdt   = t['sys_doc_type'] as String? ?? '';
+            final ci    = _colIdx(sdt);
+            final tAmt  = (t['total_amount_lc'] as num?)?.toDouble() ?? 0;
+            final cols  = List<double>.filled(6, 0.0);
+            if (ci != null) { cols[ci] = tAmt; grandCounts[ci]++; }
+            final docDate = _fmtDate(t['doc_date'] as String?);
+            final refNo   = t['ref_doc_no'] as String? ?? '';
+            final label   = '   ${t['doc_name_thai'] ?? ''}  ${t['doc_no'] ?? ''}  $docDate'
+                '${refNo.isNotEmpty ? '  $refNo' : ''}';
+            _xlCell(s, row, 0, label, bg: detBg);
+            for (int i = 0; i < 6; i++) {
+              _xlCell(s, row, i + 1, cols[i], bg: detBg, align: HorizontalAlign.Right);
+            }
+            row++;
+          }
+        }
+      }
+
+      if (_showDetail) {
+        final totalDocs = grandCounts.fold(0, (a, b) => a + b);
+        _xlCell(s, row, 0, 'รวม $totalCustomers ลูกค้า / $totalDocs เอกสาร',
+            bg: totBg, bold: true);
+        for (int i = 0; i < 6; i++) {
+          _xlCell(s, row, i + 1, grandCounts[i] > 0 ? '${grandCounts[i]} ใบ' : '',
+              bg: totBg, bold: true, align: HorizontalAlign.Right);
+        }
+        row++;
+      }
+
+      _xlCell(s, row, 0,
+          _showDetail ? 'ยอดเงินรวมทุกประเภท' : 'รวม $totalCustomers ลูกค้า',
+          bg: totBg, bold: true);
+      for (int i = 0; i < 6; i++) {
+        _xlCell(s, row, i + 1, grandAmts[i], bg: totBg, bold: true, align: HorizontalAlign.Right);
+      }
+
+      final bytes = ex.encode();
+      if (bytes == null) return;
+      const title = 'รายงานธุรกรรมลูกหนี้';
+      final ts    = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadFile(bytes, '${title}_$ts.xlsx');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _xlCell(Sheet s, int r, int c, dynamic v,
+      {ExcelColor? bg, HorizontalAlign? align, bool bold = false}) {
+    final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+    cell.value = v is double
+        ? DoubleCellValue(v)
+        : TextCellValue(v?.toString() ?? '');
+    cell.cellStyle = CellStyle(
+      backgroundColorHex: bg ?? ExcelColor.none,
+      horizontalAlign: align ?? HorizontalAlign.Left,
+      bold: bold,
     );
   }
 }

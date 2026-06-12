@@ -16,6 +16,8 @@ import '../../sa/models/user_branch.dart';
 import '../../sa/models/company.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
+import 'package:excel/excel.dart';
+import '../../utils/file_download.dart';
 
 class DailyTransactionReportScreen extends StatefulWidget {
   const DailyTransactionReportScreen({super.key});
@@ -71,6 +73,7 @@ class _DailyTransactionReportScreenState
   List<Map<String, dynamic>> _reportData = [];
   bool _isLoading = false;
   bool _reportGenerated = false;
+  bool _isExporting = false;
   bool _isFilterExpanded = true;
   double _filterPanelWidth = 360.0;
   bool _isDraggingDivider = false;
@@ -335,6 +338,111 @@ class _DailyTransactionReportScreenState
             value != null ? DateFormat('dd/MM/yyyy').format(value) : '-',
             style: const TextStyle(fontSize: 14)),
       ),
+    );
+  }
+
+  // ── Excel Export ─────────────────────────────────────────────────────────
+
+  Future<void> _exportExcel() async {
+    _isExporting = true;
+    setState(() {});
+    try {
+      final ex = Excel.createExcel();
+      ex.rename('Sheet1', 'DailyTransaction');
+      final s = ex['DailyTransaction'];
+      final hdrBg = ExcelColor.fromHexString('#92D050');
+      final totBg = ExcelColor.fromHexString('#BDD7EE');
+      final detBg = ExcelColor.fromHexString('#F2F2F2');
+
+      final _periodLabel = _selectedPeriod != null
+          ? 'งวด ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}'
+          : 'ปี ${_selectedYear?.fyCode ?? ''}';
+      final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 1, 0, 'บันทึกรายการบัญชี (Daily Transaction)', bold: true);
+      _xlCell(s, 2, 0, '$_periodLabel  |  พิมพ์: $_ts');
+
+      int r = 3;
+      _xlCell(s, r, 0, 'รหัสบัญชี', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, 'ชื่อบัญชี', bg: hdrBg, bold: true);
+      _xlCell(s, r, 2, 'สาขา/มิติ', bg: hdrBg, bold: true);
+      _xlCell(s, r, 3, 'คำอธิบายรายการ', bg: hdrBg, bold: true);
+      _xlCell(s, r, 4, 'เดบิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 5, 'เครดิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      r++;
+
+      for (final entry in _reportData) {
+        final docNo = entry['doc_no'] ?? '';
+        final docDate = entry['doc_date'] != null
+            ? DateFormat('dd/MM/yyyy').format(DateTime.parse(entry['doc_date']).toLocal())
+            : '';
+        final description = entry['description'] ?? '';
+        final details = List<Map<String, dynamic>>.from(entry['details'] as List);
+
+        // Document header row
+        _xlCell(s, r, 0, docNo, bold: true);
+        _xlCell(s, r, 1, docDate, bold: true);
+        _xlCell(s, r, 2, '');
+        _xlCell(s, r, 3, description, bold: true);
+        _xlCell(s, r, 4, '');
+        _xlCell(s, r, 5, '');
+        r++;
+
+        double sumDr = 0, sumCr = 0;
+        for (final d in details) {
+          final accCode = d['account_code'] ?? '';
+          final accName = d['account_name_thai'] ?? '';
+          final dr = (d['debit_lc'] as num).toDouble();
+          final cr = (d['credit_lc'] as num).toDouble();
+          final desc = d['description'] ?? '';
+          final brCode = d['branch_id'] != null ? (_branchMap[d['branch_id']] ?? '') : '';
+          final dimParts = <String>[];
+          if (brCode.isNotEmpty) dimParts.add(brCode);
+          for (final dt in _activeDimTypes) {
+            final id = d['dim${dt.slotNo}_id'] as int?;
+            final code = id != null ? (_dimValueMap[id] ?? '') : '';
+            if (code.isNotEmpty) dimParts.add(code);
+          }
+          final dimStr = dimParts.isEmpty ? '' : dimParts.join('/');
+
+          _xlCell(s, r, 0, accCode, bg: detBg);
+          _xlCell(s, r, 1, accName, bg: detBg);
+          _xlCell(s, r, 2, dimStr, bg: detBg);
+          _xlCell(s, r, 3, desc, bg: detBg);
+          _xlCell(s, r, 4, dr == 0 ? TextCellValue('-') : DoubleCellValue(dr), bg: detBg, align: HorizontalAlign.Right);
+          _xlCell(s, r, 5, cr == 0 ? TextCellValue('-') : DoubleCellValue(cr), bg: detBg, align: HorizontalAlign.Right);
+          r++;
+          sumDr += dr;
+          sumCr += cr;
+        }
+
+        // Subtotal row
+        _xlCell(s, r, 0, 'รวม', bg: totBg, bold: true);
+        _xlCell(s, r, 1, '', bg: totBg);
+        _xlCell(s, r, 2, '', bg: totBg);
+        _xlCell(s, r, 3, '', bg: totBg);
+        _xlCell(s, r, 4, DoubleCellValue(sumDr), bg: totBg, bold: true, align: HorizontalAlign.Right);
+        _xlCell(s, r, 5, DoubleCellValue(sumCr), bg: totBg, bold: true, align: HorizontalAlign.Right);
+        r++;
+      }
+
+      final bytes = ex.encode();
+      if (bytes == null) return;
+      final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadFile(bytes, 'บันทึกรายการบัญชี_$ts.xlsx');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _xlCell(Sheet s, int r, int c, dynamic v,
+      {ExcelColor? bg, HorizontalAlign? align, bool bold = false}) {
+    final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+    cell.value = v is CellValue ? v : (v is double ? DoubleCellValue(v) : TextCellValue(v?.toString() ?? ''));
+    cell.cellStyle = CellStyle(
+      backgroundColorHex: bg ?? ExcelColor.none,
+      horizontalAlign: align ?? HorizontalAlign.Left,
+      bold: bold,
     );
   }
 
@@ -608,7 +716,7 @@ class _DailyTransactionReportScreenState
                 padding: const pw.EdgeInsets.all(3),
                 child: isBalanced
                     ? pw.SizedBox()
-                    : pw.Text('⚠ ไม่ดุล!',
+                    : pw.Text('[!] ไม่ดุล!',
                         style: pw.TextStyle(
                             fontSize: 10,
                             fontWeight: pw.FontWeight.bold,
@@ -674,6 +782,18 @@ class _DailyTransactionReportScreenState
         backgroundColor: Colors.indigo[800],
         foregroundColor: Colors.white,
         actions: [
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Export Excel',
+              onPressed: _reportGenerated ? _exportExcel : null,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'รีเฟรชรายการ',

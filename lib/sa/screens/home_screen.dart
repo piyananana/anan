@@ -13,6 +13,8 @@ import '../widgets/confirm_logout_dialog.dart';
 import '../widgets/inactivity_detector.dart';
 import 'login_screen.dart';
 import 'menu_screen.dart';
+import '../../ap/models/ap_payment_run.dart';
+import '../../ap/services/ap_payment_run_service.dart';
 
 class HomeScreen extends StatefulWidget {
   final PasswordStatus? passwordStatus; // รับสถานะรหัสผ่านจาก LoginScreen
@@ -42,6 +44,10 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   double _menuPanelCurrentWidth = 280.0;
   bool _isDraggingDivider = false;
   bool _menuWidthInitialized = false;
+
+  final _paymentRunSvc = ApPaymentRunService();
+  List<ApPaymentRun> _pendingRuns = [];
+  int get _pendingCount => _pendingRuns.length;
 
   // เพิ่ม TextEditingController สำหรับ Search Bar
   final TextEditingController _searchController = TextEditingController();
@@ -158,6 +164,25 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     await _fetchUser();
     await _fetchMenus();
     await _startInactivityTimer();
+    _loadPendingApprovals();
+  }
+
+  Future<void> _loadPendingApprovals() async {
+    try {
+      final runs = await _paymentRunSvc.fetchMyPending();
+      if (mounted) setState(() => _pendingRuns = runs);
+    } catch (_) {}
+  }
+
+  void _showPendingApprovalsDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => _PendingApprovalsDialog(
+        runs: _pendingRuns,
+        svc: _paymentRunSvc,
+        onActioned: _loadPendingApprovals,
+      ),
+    );
   }
 
   Future<void> _startInactivityTimer() async {
@@ -493,18 +518,61 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-              const SizedBox(width: 8), // ช่องว่าง
-              // ปุ่มเปลี่ยนรหัสผ่าน
+              const SizedBox(width: 8),
+              // ── Pending approvals bell ────────────────────────────────
+              GestureDetector(
+                onTap: _showPendingApprovalsDialog,
+                child: Container(
+                  padding: const EdgeInsets.all(1.0),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                        color: _pendingCount > 0 ? Colors.red : Colors.orange),
+                    borderRadius: BorderRadius.circular(6.0),
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: Icon(Icons.notifications_outlined,
+                            color: Colors.orange),
+                      ),
+                      if (_pendingCount > 0)
+                        Positioned(
+                          right: -4,
+                          top: -4,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            constraints: const BoxConstraints(
+                                minWidth: 16, minHeight: 16),
+                            child: Text(
+                              '$_pendingCount',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // ── เปลี่ยนรหัสผ่าน ───────────────────────────────────────
               Container(
                 padding: const EdgeInsets.all(1.0),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.orange), // สีขอบเริ่มต้น
-                  borderRadius:
-                      BorderRadius.circular(6.0), // กำหนดความโค้งของขอบ
+                  border: Border.all(color: Colors.orange),
+                  borderRadius: BorderRadius.circular(6.0),
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.password_outlined,
-                      color: Colors.orange), // ไอคอนเปลี่ยนรหัสผ่าน
+                  icon: const Icon(Icons.password_outlined, color: Colors.orange),
                   onPressed: _showChangePasswordDialog,
                   tooltip: 'เปลี่ยนรหัสผ่าน',
                 ),
@@ -692,4 +760,273 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
 }
 
+// ── Pending Approvals Dialog ──────────────────────────────────────────────────
+class _PendingApprovalsDialog extends StatefulWidget {
+  final List<ApPaymentRun> runs;
+  final ApPaymentRunService svc;
+  final VoidCallback onActioned;
 
+  const _PendingApprovalsDialog({
+    required this.runs,
+    required this.svc,
+    required this.onActioned,
+  });
+
+  @override
+  State<_PendingApprovalsDialog> createState() =>
+      _PendingApprovalsDialogState();
+}
+
+class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
+  late List<ApPaymentRun> _runs;
+  bool _busy = false;
+  String? _err;
+
+  @override
+  void initState() {
+    super.initState();
+    _runs = List.of(widget.runs);
+  }
+
+  Future<void> _act(ApPaymentRun run, bool approve) async {
+    final remarksCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(approve ? 'อนุมัติ Payment Run' : 'ปฏิเสธ Payment Run'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('เลขที่: ${run.runNumber ?? '-'}'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: remarksCtrl,
+              decoration: const InputDecoration(
+                labelText: 'หมายเหตุ',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: approve
+                ? null
+                : ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(approve ? 'อนุมัติ' : 'ปฏิเสธ'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() { _busy = true; _err = null; });
+    try {
+      final remarks = remarksCtrl.text.trim();
+      if (approve) {
+        await widget.svc.approveRun(run.id!, remarks: remarks.isEmpty ? null : remarks);
+      } else {
+        await widget.svc.rejectRun(run.id!, remarks: remarks.isEmpty ? null : remarks);
+      }
+      setState(() => _runs.removeWhere((r) => r.id == run.id));
+      widget.onActioned();
+    } catch (e) {
+      setState(() => _err = e.toString());
+    } finally {
+      setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = (DateTime d) =>
+        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    final numFmt = (double v) =>
+        v.toStringAsFixed(2).replaceAllMapped(
+            RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+
+    return AlertDialog(
+      title: Row(children: [
+        const Icon(Icons.notifications_active, color: Colors.orange),
+        const SizedBox(width: 8),
+        const Text('รายการรออนุมัติ'),
+        const Spacer(),
+        Text('(${_runs.length})', style: const TextStyle(color: Colors.grey)),
+      ]),
+      contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      content: SizedBox(
+        width: 600,
+        child: _runs.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: Text('ไม่มีรายการรออนุมัติ',
+                      style: TextStyle(color: Colors.grey)),
+                ),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_err != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.red[50],
+                        border: Border.all(color: Colors.red),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(_err!,
+                          style: const TextStyle(color: Colors.red)),
+                    ),
+                  // Header row
+                  Container(
+                    color: Colors.blueGrey[100],
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 6),
+                    child: const Row(children: [
+                      SizedBox(
+                          width: 140,
+                          child: Text('เลขที่',
+                              style:
+                                  TextStyle(fontWeight: FontWeight.bold))),
+                      SizedBox(
+                          width: 100,
+                          child: Text('วันที่',
+                              style:
+                                  TextStyle(fontWeight: FontWeight.bold))),
+                      Expanded(
+                          child: Text('รายละเอียด',
+                              style:
+                                  TextStyle(fontWeight: FontWeight.bold))),
+                      SizedBox(
+                          width: 110,
+                          child: Text('จำนวนเงิน',
+                              textAlign: TextAlign.right,
+                              style:
+                                  TextStyle(fontWeight: FontWeight.bold))),
+                      SizedBox(width: 180),
+                    ]),
+                  ),
+                  const Divider(height: 1),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 360),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: _runs.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final run = _runs[i];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
+                          child: Row(children: [
+                            SizedBox(
+                              width: 140,
+                              child: Text(run.runNumber ?? '-',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w500)),
+                            ),
+                            SizedBox(
+                              width: 100,
+                              child: Text(fmt(run.runDate)),
+                            ),
+                            Expanded(
+                              child: Text(
+                                run.description ?? '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            SizedBox(
+                              width: 110,
+                              child: Text(
+                                numFmt(run.totalAmountLc),
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 172,
+                              child: _busy
+                                  ? const Center(
+                                      child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child:
+                                              CircularProgressIndicator(
+                                                  strokeWidth: 2)))
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        ElevatedButton.icon(
+                                          onPressed: () =>
+                                              _act(run, true),
+                                          icon: const Icon(
+                                              Icons.check_circle_outline,
+                                              size: 14),
+                                          label: const Text('อนุมัติ'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                Colors.green[700],
+                                            foregroundColor: Colors.white,
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize:
+                                                MaterialTapTargetSize
+                                                    .shrinkWrap,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        ElevatedButton.icon(
+                                          onPressed: () =>
+                                              _act(run, false),
+                                          icon: const Icon(
+                                              Icons.cancel_outlined,
+                                              size: 14),
+                                          label: const Text('ปฏิเสธ'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red[700],
+                                            foregroundColor: Colors.white,
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize:
+                                                MaterialTapTargetSize
+                                                    .shrinkWrap,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ]),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('ปิด'),
+        ),
+      ],
+    );
+  }
+}

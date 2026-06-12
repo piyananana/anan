@@ -2,6 +2,8 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
+import 'package:excel/excel.dart';
+import '../../utils/file_download.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -64,6 +66,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   bool _hideZero = true;
   bool _isLoading = false;
   bool _reportGenerated = false;
+  bool _isExporting = false;
   bool _isFilterExpanded = true;
   double _filterPanelWidth = 350.0;
   bool _isDraggingDivider = false;
@@ -305,6 +308,204 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
       grouped[key]!.add(t);
     }
     return grouped;
+  }
+
+  // --- Excel Export ---
+  Future<void> _exportExcel() async {
+    _isExporting = true;
+    setState(() {});
+    try {
+      final ex = Excel.createExcel();
+      ex.rename('Sheet1', 'GL');
+      final s = ex['GL'];
+      final hdrBg = ExcelColor.fromHexString('#92D050');
+      final totBg = ExcelColor.fromHexString('#BDD7EE');
+      final detBg = ExcelColor.fromHexString('#F2F2F2');
+
+      String fmtDate(dynamic raw) {
+        if (raw == null || raw.toString().isEmpty) return '';
+        try {
+          final d = DateTime.parse(raw.toString()).toLocal();
+          return DateFormat('dd/MM/yyyy').format(DateTime(d.year, d.month, d.day));
+        } catch (_) { return raw.toString(); }
+      }
+
+      final _periodLabel = _selectedPeriod != null
+          ? 'งวด ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}'
+          : 'ปี ${_selectedYear?.fyCode ?? ''}';
+      final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 1, 0, 'บัญชีแยกประเภท (General Ledger)', bold: true);
+      _xlCell(s, 2, 0, '$_periodLabel  |  พิมพ์: $_ts');
+
+      int r = 3;
+      _xlCell(s, r, 0, 'รหัสบัญชี', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, 'วันที่', bg: hdrBg, bold: true);
+      _xlCell(s, r, 2, 'ประเภท', bg: hdrBg, bold: true);
+      _xlCell(s, r, 3, 'เลขที่เอกสาร', bg: hdrBg, bold: true);
+      _xlCell(s, r, 4, 'ลำดับ', bg: hdrBg, bold: true);
+      _xlCell(s, r, 5, 'อ้างอิง', bg: hdrBg, bold: true);
+      _xlCell(s, r, 6, 'คำอธิบาย', bg: hdrBg, bold: true);
+      _xlCell(s, r, 7, 'เดบิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 8, 'เครดิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 9, 'คงเหลือ', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 10, 'สาขา/มิติ', bg: hdrBg, bold: true);
+      r++;
+
+      final groupedData = _groupTransactions();
+      final txKeys = groupedData.keys.toSet();
+
+      List<Map<String, dynamic>> entries = [];
+      groupedData.forEach((key, transactions) {
+        final firstTx = transactions.first;
+        entries.add({
+          'key': key,
+          'accId': firstTx['account_id'] as int,
+          'accCode': firstTx['account_code'] as String? ?? '',
+          'accName': "${firstTx['account_code']} ${firstTx['account_name_thai']}",
+          'brId': firstTx['branch_id'] as int?,
+          'dim1Id': firstTx['dim1_id'] as int?, 'dim2Id': firstTx['dim2_id'] as int?,
+          'dim3Id': firstTx['dim3_id'] as int?, 'dim4Id': firstTx['dim4_id'] as int?,
+          'dim5Id': firstTx['dim5_id'] as int?,
+          'transactions': transactions,
+          'begDr': null, 'begCr': null,
+        });
+      });
+
+      for (var b in _beginningBalances) {
+        final int bAccId = b['account_id'] as int;
+        final int? bBrId = b['branch_id'] as int?;
+        final int? bDim1 = b['dim1_id'] as int?; final int? bDim2 = b['dim2_id'] as int?;
+        final int? bDim3 = b['dim3_id'] as int?; final int? bDim4 = b['dim4_id'] as int?;
+        final int? bDim5 = b['dim5_id'] as int?;
+        final String key = "${bAccId}_${bBrId ?? 0}_${bDim1 ?? 0}_${bDim2 ?? 0}_${bDim3 ?? 0}_${bDim4 ?? 0}_${bDim5 ?? 0}";
+        if (txKeys.contains(key)) continue;
+        final acc = _accountMap[bAccId];
+        entries.add({
+          'key': key, 'accId': bAccId,
+          'accCode': acc?.accountCode ?? '',
+          'accName': acc != null ? "${acc.accountCode} ${acc.accountNameThai}" : "Account $bAccId",
+          'brId': bBrId, 'dim1Id': bDim1, 'dim2Id': bDim2, 'dim3Id': bDim3, 'dim4Id': bDim4, 'dim5Id': bDim5,
+          'transactions': <Map<String, dynamic>>[],
+          'begDr': double.tryParse(b['amount_dr']?.toString() ?? '0') ?? 0,
+          'begCr': double.tryParse(b['amount_cr']?.toString() ?? '0') ?? 0,
+        });
+      }
+
+      entries.sort((a, b) {
+        int cmp = (a['accCode'] as String).compareTo(b['accCode'] as String);
+        if (cmp != 0) return cmp;
+        cmp = (a['brId'] as int? ?? 0).compareTo(b['brId'] as int? ?? 0);
+        if (cmp != 0) return cmp;
+        return (a['dim1Id'] as int? ?? 0).compareTo(b['dim1Id'] as int? ?? 0);
+      });
+
+      for (var entry in entries) {
+        final int accId = entry['accId'] as int;
+        final int? brId = entry['brId'] as int?;
+        final int? dim1Id = entry['dim1Id'] as int?; final int? dim2Id = entry['dim2Id'] as int?;
+        final int? dim3Id = entry['dim3Id'] as int?; final int? dim4Id = entry['dim4Id'] as int?;
+        final int? dim5Id = entry['dim5Id'] as int?;
+        final String accName = entry['accName'] as String;
+        final List<Map<String, dynamic>> transactions = entry['transactions'] as List<Map<String, dynamic>>;
+
+        double begDr = entry['begDr'] as double? ?? 0;
+        double begCr = entry['begCr'] as double? ?? 0;
+        if (entry['begDr'] == null) {
+          try {
+            var begRow = _beginningBalances.firstWhere((b) =>
+              b['account_id'] == accId &&
+              (b['branch_id'] == brId || (b['branch_id'] == null && brId == null)) &&
+              (b['dim1_id'] == dim1Id || (b['dim1_id'] == null && dim1Id == null)) &&
+              (b['dim2_id'] == dim2Id || (b['dim2_id'] == null && dim2Id == null)) &&
+              (b['dim3_id'] == dim3Id || (b['dim3_id'] == null && dim3Id == null)) &&
+              (b['dim4_id'] == dim4Id || (b['dim4_id'] == null && dim4Id == null)) &&
+              (b['dim5_id'] == dim5Id || (b['dim5_id'] == null && dim5Id == null))
+            );
+            begDr = double.tryParse(begRow['amount_dr']?.toString() ?? '0') ?? 0;
+            begCr = double.tryParse(begRow['amount_cr']?.toString() ?? '0') ?? 0;
+          } catch (_) {}
+        }
+
+        if (_hideZero && begDr.abs() < 0.001 && begCr.abs() < 0.001 && transactions.isEmpty) continue;
+
+        double runningBalance = begDr - begCr;
+
+        final dimIds = [dim1Id, dim2Id, dim3Id, dim4Id, dim5Id];
+        String brCode = brId != null ? (_branchMap[brId] ?? '') : '';
+        final dimParts = <String>[];
+        if (brCode.isNotEmpty) dimParts.add(brCode);
+        for (int i = 0; i < _activeDimTypes.length && i < 5; i++) {
+          final id = dimIds[i];
+          if (id != null) {
+            final code = _dimValueMap[id] ?? '';
+            if (code.isNotEmpty) dimParts.add(code);
+          }
+        }
+        final dimStr = dimParts.join('/');
+
+        // Account header
+        _xlCell(s, r, 0, accName, bold: true);
+        for (int c = 1; c <= 10; c++) _xlCell(s, r, c, '', bold: true);
+        r++;
+
+        // Opening balance row
+        _xlCell(s, r, 0, '', bg: detBg);
+        _xlCell(s, r, 1, '', bg: detBg);
+        _xlCell(s, r, 2, 'ยอดยกมา', bg: detBg, bold: true);
+        for (int c = 3; c <= 8; c++) _xlCell(s, r, c, '', bg: detBg);
+        _xlCell(s, r, 9, DoubleCellValue(runningBalance), bg: detBg, bold: true, align: HorizontalAlign.Right);
+        _xlCell(s, r, 10, dimStr, bg: detBg);
+        r++;
+
+        double sumDr = 0, sumCr = 0;
+        for (var t in transactions) {
+          final dr = double.tryParse(t['debit_lc'].toString()) ?? 0;
+          final cr = double.tryParse(t['credit_lc'].toString()) ?? 0;
+          runningBalance += (dr - cr);
+          sumDr += dr; sumCr += cr;
+          _xlCell(s, r, 0, '', bg: detBg);
+          _xlCell(s, r, 1, fmtDate(t['doc_date']), bg: detBg);
+          _xlCell(s, r, 2, t['doc_code']?.toString() ?? '', bg: detBg);
+          _xlCell(s, r, 3, t['doc_no']?.toString() ?? '', bg: detBg);
+          _xlCell(s, r, 4, t['line_no']?.toString() ?? '', bg: detBg);
+          _xlCell(s, r, 5, '${t['ref_doc_code'] ?? ''} ${t['ref_doc_no'] ?? ''}'.trim(), bg: detBg);
+          _xlCell(s, r, 6, t['description']?.toString() ?? '', bg: detBg);
+          _xlCell(s, r, 7, dr == 0 ? TextCellValue('') : DoubleCellValue(dr), bg: detBg, align: HorizontalAlign.Right);
+          _xlCell(s, r, 8, cr == 0 ? TextCellValue('') : DoubleCellValue(cr), bg: detBg, align: HorizontalAlign.Right);
+          _xlCell(s, r, 9, DoubleCellValue(runningBalance), bg: detBg, align: HorizontalAlign.Right);
+          _xlCell(s, r, 10, dimStr, bg: detBg);
+          r++;
+        }
+
+        // Total row
+        _xlCell(s, r, 0, 'รวม $accName', bg: totBg, bold: true);
+        for (int c = 1; c <= 6; c++) _xlCell(s, r, c, '', bg: totBg);
+        _xlCell(s, r, 7, DoubleCellValue(sumDr), bg: totBg, bold: true, align: HorizontalAlign.Right);
+        _xlCell(s, r, 8, DoubleCellValue(sumCr), bg: totBg, bold: true, align: HorizontalAlign.Right);
+        _xlCell(s, r, 9, DoubleCellValue(runningBalance), bg: totBg, bold: true, align: HorizontalAlign.Right);
+        _xlCell(s, r, 10, '', bg: totBg);
+        r++;
+      }
+
+      final bytes = ex.encode();
+      if (bytes == null) return;
+      final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadFile(bytes, 'บัญชีแยกประเภท_$ts.xlsx');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _xlCell(Sheet s, int r, int c, dynamic v,
+      {ExcelColor? bg, HorizontalAlign? align, bool bold = false}) {
+    final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+    cell.value = v is CellValue ? v : (v is double ? DoubleCellValue(v) : TextCellValue(v?.toString() ?? ''));
+    cell.cellStyle = CellStyle(
+      backgroundColorHex: bg ?? ExcelColor.none,
+      horizontalAlign: align ?? HorizontalAlign.Left,
+      bold: bold,
+    );
   }
 
   // --- สร้าง PDF ---
@@ -627,6 +828,18 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Export Excel',
+              onPressed: _reportGenerated ? _exportExcel : null,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'รีเฟรชรายการ',

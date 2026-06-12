@@ -1,0 +1,1725 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import '../models/ap_transaction.dart';
+import '../models/ap_vendor.dart';
+import '../models/ap_gl_account_setup.dart';
+import '../services/ap_transaction_service.dart';
+import '../services/ap_vendor_service.dart';
+import '../../gl/models/account.dart';
+import '../../gl/services/account_service.dart';
+import '../../cd/models/currency.dart';
+import '../../cd/services/currency_service.dart';
+import '../../sa/models/module_document.dart';
+import '../../sa/models/user_branch.dart';
+import '../../sa/services/auth_service.dart';
+import '../../gl/models/period.dart';
+import '../../gl/services/period_service.dart';
+import '../../cd/models/vat_rate.dart';
+import '../../cd/services/vat_rate_service.dart';
+import '../../gl/models/gl_dimension.dart';
+import '../../gl/services/gl_dimension_service.dart';
+import '../../gl/widgets/gl_dimension_picker_field.dart';
+import '../../cm/models/cm_payment_method.dart';
+import '../../cm/widgets/cm_payment_method_list_widget.dart';
+import '../../gl/services/gl_entry_service.dart';
+import '../../gl/models/gl_entry.dart' show GlEntryHeader, GlEntryDetail;
+
+class ApTransactionDetailWidget extends StatefulWidget {
+  final int? transactionId;
+  final bool viewOnly;
+  final int resetKey;
+  final VoidCallback onSaveSuccess;
+  final VoidCallback onCancel;
+
+  const ApTransactionDetailWidget({
+    super.key,
+    this.transactionId,
+    this.viewOnly = false,
+    this.resetKey = 0,
+    required this.onSaveSuccess,
+    required this.onCancel,
+  });
+
+  @override
+  State<ApTransactionDetailWidget> createState() => _ApTransactionDetailWidgetState();
+}
+
+class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
+  final _formKey = GlobalKey<FormState>();
+  final ApTransactionService _service = ApTransactionService();
+  final ApVendorService _vendorService = ApVendorService();
+  final AccountService _accountService = AccountService();
+  final CurrencyService _currencyService = CurrencyService();
+  final PeriodService _periodService = PeriodService();
+  final AuthService _authService = AuthService();
+  final VatRateService _vatRateService = VatRateService();
+  final GlDimensionService _dimService = GlDimensionService();
+  final GlEntryService _glEntryService = GlEntryService();
+
+  bool _isLoading = false;
+
+  // GL Dimensions
+  List<GlDimensionType> _dimTypes = [];
+  Map<String, List<GlDimensionValue>> _dimValues = {};
+  Map<int, int?> _dimSelections = {};
+  Map<int, String?> _dimNames = {};
+
+  // Master data
+  List<ModuleDocument> _allowedDocTypes = [];
+  List<ApVendor> _vendors = [];
+  List<Account> _accounts = [];
+  List<Currency> _currencies = [];
+  List<PostingPeriod> _openPeriods = [];
+  List<VatRate> _vatRates = [];
+  ApGlAccountSetup? _docSetup;
+
+  // Form state
+  ModuleDocument? _selectedDocType;
+  ApVendor? _selectedVendor;
+  Currency? _selectedCurrency;
+  UserBranch? _selectedBranch;
+  bool _isReadOnly = false;
+
+  // Header values
+  int _transactionId = 0;
+  int? _glEntryId;
+  String _docNo = 'AUTO';
+  DateTime _docDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  DateTime? _dueDate;
+  int? _apAccountId;
+  double _exchangeRate = 1.0;
+  final _refNoCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  String _status = 'Draft';
+
+  // Detail rows (for PI, CN, DN)
+  List<_DetailRow> _detailRows = [];
+
+  // Apply rows (for Payment 80, RA 70)
+  List<_ApplyRow> _applyRows = [];
+  List<ApOpenInvoice> _openInvoices = [];
+  final Map<int, TextEditingController> _applyCtrlMap = {};
+
+  // Advance rows (for Payment 80 — advance deduction)
+  List<_ApplyRow> _advanceRows = [];
+  List<ApOpenInvoice> _openAdvances = [];
+  final Map<int, TextEditingController> _advanceCtrlMap = {};
+
+  // RA rows (for Payment 80 — apply via RA, stored as applyType='ra_invoice')
+  List<_ApplyRow> _raRows = [];
+
+  // Advance refund rows (for Advance Refund 65)
+  List<_ApplyRow> _advanceRefundRows = [];
+  List<ApOpenInvoice> _openAdvancesForRefund = [];
+  final Map<int, TextEditingController> _advanceRefundCtrlMap = {};
+
+  // Payment rows
+  List<_PaymentRow> _paymentRows = [];
+
+  // WHT rows (for Payment 80, Advance Payment 60)
+  List<_WhtRow> _whtRows = [];
+
+  // Totals
+  double _subtotalFc = 0;
+  double _discountAmountFc = 0;
+  double _beforeVatFc = 0;
+  double _vatAmountFc = 0;
+  double _totalAmountFc = 0;
+
+  final _fmt = NumberFormat('#,##0.00');
+  final _dateFmt = DateFormat('dd/MM/yyyy');
+
+  bool get _isPurchaseInvoice => _selectedDocType?.sysDocType == apDocTypePurchaseInvoice.toString();
+  bool get _isCreditNote      => _selectedDocType?.sysDocType == apDocTypeCreditNote.toString();
+  bool get _isDebitNote       => _selectedDocType?.sysDocType == apDocTypeDebitNote.toString();
+  bool get _isAdvancePayment  => _selectedDocType?.sysDocType == apDocTypeAdvancePayment.toString();
+  bool get _isAdvanceRefund   => _selectedDocType?.sysDocType == apDocTypeAdvanceRefund.toString();
+  bool get _isRA              => _selectedDocType?.sysDocType == apDocTypeRemittanceAdvice.toString();
+  bool get _isPayment         => _selectedDocType?.sysDocType == apDocTypePayment.toString();
+
+  bool get _hasDetailRows     => _isPurchaseInvoice || _isCreditNote || _isDebitNote;
+  bool get _hasApplySection   => _isPayment || _isRA;
+  bool get _hasAdvanceRefund  => _isAdvanceRefund;
+  bool get _hasWhtSection     => _isPayment || _isAdvancePayment;
+  bool get _hasPaymentRows    => _isPayment || _isAdvancePayment || _isAdvanceRefund;
+  bool get _hasDueDate        => _isPurchaseInvoice;
+
+  bool _headerExpanded  = true;
+  bool _detailExpanded  = true;
+  bool _applyExpanded   = true;
+  bool _advanceExpanded = true;
+  bool _whtExpanded     = true;
+  bool _paymentExpanded = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initMasterData();
+  }
+
+  @override
+  void dispose() {
+    _refNoCtrl.dispose();
+    _descCtrl.dispose();
+    for (final r in _detailRows) r.dispose();
+    for (final c in _applyCtrlMap.values) c.dispose();
+    for (final c in _advanceCtrlMap.values) c.dispose();
+    for (final c in _advanceRefundCtrlMap.values) c.dispose();
+    for (final r in _paymentRows) r.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant ApTransactionDetailWidget old) {
+    super.didUpdateWidget(old);
+    if (widget.transactionId != old.transactionId ||
+        widget.viewOnly != old.viewOnly ||
+        widget.resetKey != old.resetKey) {
+      _loadTransactionData();
+    }
+  }
+
+  Future<void> _initMasterData() async {
+    setState(() => _isLoading = true);
+    try {
+      final results = await Future.wait([
+        _service.fetchDocTypesByUser(),
+        _vendorService.fetchActiveRows(),
+        _accountService.fetchRows(),
+        _currencyService.fetchActiveRows(),
+        _periodService.fetchOpenGlPeriods(),
+        _vatRateService.fetchRows(),
+        _dimService.fetchActiveTypes(),
+      ]);
+      _allowedDocTypes = results[0] as List<ModuleDocument>;
+      _vendors = results[1] as List<ApVendor>;
+      _accounts = results[2] as List<Account>;
+      _currencies = results[3] as List<Currency>;
+      _openPeriods = results[4] as List<PostingPeriod>;
+      _vatRates = (results[5] as List<VatRate>).where((v) => v.isActive).toList();
+      _dimTypes = results[6] as List<GlDimensionType>;
+
+      final dimValueResults = await Future.wait(
+        _dimTypes.map((t) => _dimService.fetchValuesByType(t.typeCode)),
+      );
+      for (int i = 0; i < _dimTypes.length; i++) {
+        _dimValues[_dimTypes[i].typeCode] = dimValueResults[i];
+      }
+
+      if (_allowedDocTypes.isNotEmpty && _selectedDocType == null) {
+        _selectedDocType = _allowedDocTypes.first;
+      }
+      if (_currencies.isNotEmpty) {
+        _selectedCurrency = _currencies.cast<Currency?>()
+            .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)
+            ?? _currencies.first;
+      }
+      _selectedBranch ??= _authService.defaultBranch;
+      await _loadTransactionData();
+      await _loadDocSetup();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading master: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadDocSetup() async {
+    if (_selectedDocType == null) return;
+    try {
+      final setup = await _service.fetchSetupByDocCode(_selectedDocType!.docCode);
+      if (mounted) setState(() => _docSetup = setup);
+    } catch (_) {}
+  }
+
+  Future<void> _loadTransactionData() async {
+    if (widget.transactionId == null) { _resetForm(); return; }
+    setState(() => _isLoading = true);
+    try {
+      final data = await _service.fetchRow(widget.transactionId!);
+      final h = data.header;
+      setState(() {
+        _transactionId = h.id;
+        _glEntryId = h.glEntryId;
+        _docNo = h.docNo;
+        _docDate = h.docDate;
+        _dueDate = h.dueDate;
+        _apAccountId = h.apAccountId;
+        _exchangeRate = h.exchangeRate;
+        _refNoCtrl.text = h.refNo ?? '';
+        _descCtrl.text = h.description ?? '';
+        _status = h.status;
+        _isReadOnly = widget.viewOnly || h.status != 'Draft';
+
+        _dimSelections = { 1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id };
+        _dimNames = { 1: h.dim1Name, 2: h.dim2Name, 3: h.dim3Name, 4: h.dim4Name, 5: h.dim5Name };
+
+        if (_allowedDocTypes.isNotEmpty) {
+          try { _selectedDocType = _allowedDocTypes.firstWhere((d) => d.id == h.docId); } catch (_) {}
+        }
+        if (_vendors.isNotEmpty) {
+          try { _selectedVendor = _vendors.firstWhere((v) => v.id == h.vendorId); } catch (_) {}
+        }
+        if (_currencies.isNotEmpty) {
+          try { _selectedCurrency = _currencies.firstWhere((c) => c.id == h.currencyId); } catch (_) {
+            try { _selectedCurrency = _currencies.firstWhere((c) => c.currencyCode == h.currencyCode); } catch (_) {}
+          }
+        }
+        if (h.branchId != null) {
+          final found = _authService.allowedBranches.cast<UserBranch?>()
+              .firstWhere((b) => b?.branchId == h.branchId, orElse: () => null);
+          _selectedBranch = found ?? _authService.defaultBranch;
+        }
+
+        for (final r in _detailRows) r.dispose();
+        _detailRows = data.details.map((d) => _DetailRow.fromModel(d)).toList();
+
+        final isFc = _selectedCurrency?.baseCurrencyFlag == false;
+        double _fcAmt(ApTransactionApply a) =>
+            isFc && a.appliedAmountFc > 0 ? a.appliedAmountFc : a.appliedAmountLc;
+
+        _applyRows = data.applies
+            .where((a) => a.applyType == 'invoice')
+            .map((a) => _ApplyRow(
+                  appliedToId: a.appliedToId,
+                  appliedToDocNo: a.appliedToDocNo ?? '',
+                  appliedToDocDate: a.appliedToDocDate,
+                  appliedToTotal: a.appliedAmountLc,
+                  appliedAmountLc: _fcAmt(a),
+                )).toList();
+        _advanceRows = data.applies
+            .where((a) => a.applyType == 'advance')
+            .map((a) => _ApplyRow(
+                  appliedToId: a.appliedToId,
+                  appliedToDocNo: a.appliedToDocNo ?? '',
+                  appliedToDocDate: a.appliedToDocDate,
+                  appliedToTotal: a.appliedAmountLc,
+                  appliedAmountLc: _fcAmt(a),
+                )).toList();
+        _raRows = data.applies
+            .where((a) => a.applyType == 'ra_invoice')
+            .map((a) => _ApplyRow(
+                  appliedToId: a.appliedToId,
+                  appliedToDocNo: a.appliedToDocNo ?? '',
+                  appliedToDocDate: a.appliedToDocDate,
+                  appliedToTotal: a.appliedAmountLc,
+                  appliedAmountLc: _fcAmt(a),
+                )).toList();
+        _advanceRefundRows = data.applies
+            .where((a) => a.applyType == 'advance_refund')
+            .map((a) => _ApplyRow(
+                  appliedToId: a.appliedToId,
+                  appliedToDocNo: a.appliedToDocNo ?? '',
+                  appliedToDocDate: a.appliedToDocDate,
+                  appliedToTotal: a.appliedAmountLc,
+                  appliedAmountLc: _fcAmt(a),
+                )).toList();
+
+        for (final r in _paymentRows) r.dispose();
+        _paymentRows = data.payments.map((p) => _PaymentRow.fromModel(p, isFc)).toList();
+        _whtRows = data.whts.map((w) => _WhtRow.fromModel(w)).toList();
+      });
+      _recalcTotals();
+
+      if (_hasApplySection && _selectedVendor?.id != null) {
+        await _loadOpenInvoicesKeepApplied(_selectedVendor!.id!);
+        await _loadOpenAdvancesKeepApplied(_selectedVendor!.id!);
+      }
+      if (_hasAdvanceRefund && _selectedVendor?.id != null) {
+        await _loadOpenAdvancesForRefundKeepApplied(_selectedVendor!.id!);
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _resetForm() {
+    setState(() {
+      _transactionId = 0; _glEntryId = null;
+      _docNo = 'AUTO'; _docDate = DateTime.now(); _dueDate = null;
+      _apAccountId = null; _exchangeRate = 1.0;
+      _refNoCtrl.clear(); _descCtrl.clear();
+      _status = 'Draft'; _isReadOnly = false;
+      _selectedDocType = _allowedDocTypes.isNotEmpty ? _allowedDocTypes.first : null;
+      _selectedBranch = _authService.defaultBranch;
+      _selectedCurrency = _currencies.cast<Currency?>()
+          .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)
+          ?? (_currencies.isNotEmpty ? _currencies.first : null);
+      _selectedVendor = null; _docSetup = null;
+      _dimSelections = {}; _dimNames = {};
+      for (final r in _detailRows) r.dispose(); _detailRows = [];
+      _applyRows = []; _openInvoices = [];
+      for (final c in _applyCtrlMap.values) c.dispose(); _applyCtrlMap.clear();
+      _advanceRows = []; _openAdvances = [];
+      for (final c in _advanceCtrlMap.values) c.dispose(); _advanceCtrlMap.clear();
+      _raRows = [];
+      _advanceRefundRows = []; _openAdvancesForRefund = [];
+      for (final c in _advanceRefundCtrlMap.values) c.dispose(); _advanceRefundCtrlMap.clear();
+      for (final r in _paymentRows) r.dispose(); _paymentRows = [];
+      _whtRows = [];
+      _recalcTotals();
+    });
+  }
+
+  void _recalcTotals() {
+    double subFc = 0, discFc = 0, vatFc = 0;
+    if (_isPayment) {
+      subFc = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
+      final advance = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
+      subFc = subFc - advance;
+    } else if (_isRA) {
+      subFc = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
+    } else if (_isAdvanceRefund) {
+      subFc = _advanceRefundRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
+    } else if (_isAdvancePayment) {
+      subFc = _paymentRows.fold(0.0, (s, r) => s + (double.tryParse(r.amountCtrl.text) ?? 0));
+    } else {
+      for (final r in _detailRows) {
+        final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
+        final price = double.tryParse(r.priceCtrl.text) ?? 0;
+        final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
+        final sub = qty * price;
+        final disc = sub * discPct / 100;
+        final afterDisc = sub - disc;
+        final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+        subFc += sub; discFc += disc; vatFc += vat;
+      }
+    }
+    final beforeVat = subFc - discFc;
+    setState(() {
+      _subtotalFc = subFc; _discountAmountFc = discFc;
+      _beforeVatFc = beforeVat; _vatAmountFc = vatFc;
+      _totalAmountFc = beforeVat + vatFc;
+    });
+  }
+
+  bool _validatePeriod(DateTime date) {
+    if (_openPeriods.isEmpty) return true;
+    return _openPeriods.any((p) {
+      final from = p.periodStartDate;
+      final to = p.periodEndDate;
+      return !date.isBefore(from) && !date.isAfter(to);
+    });
+  }
+
+  Future<void> _loadOpenInvoices(int vendorId) async {
+    try {
+      final inv = await _service.fetchOpenInvoices(vendorId);
+      for (final c in _applyCtrlMap.values) c.dispose(); _applyCtrlMap.clear();
+      if (mounted) setState(() { _openInvoices = inv; _applyRows = []; });
+    } catch (_) {}
+  }
+
+  Future<void> _loadOpenInvoicesKeepApplied(int vendorId) async {
+    try {
+      final inv = await _service.fetchOpenInvoices(vendorId);
+      final openIds = inv.map((i) => i.id).toSet();
+      final missing = _applyRows.where((a) => !openIds.contains(a.appliedToId))
+          .map((a) => ApOpenInvoice(id: a.appliedToId, docNo: a.appliedToDocNo,
+              docDate: a.appliedToDocDate, totalAmountLc: a.appliedToTotal,
+              balanceAmountLc: a.appliedAmountLc)).toList();
+      if (mounted) setState(() => _openInvoices = [...inv, ...missing]);
+    } catch (_) {}
+  }
+
+  Future<void> _loadOpenAdvances(int vendorId) async {
+    try {
+      final adv = await _service.fetchOpenAdvances(vendorId);
+      for (final c in _advanceCtrlMap.values) c.dispose(); _advanceCtrlMap.clear();
+      if (mounted) setState(() { _openAdvances = adv; _advanceRows = []; });
+    } catch (_) {}
+  }
+
+  Future<void> _loadOpenAdvancesKeepApplied(int vendorId) async {
+    try {
+      final adv = await _service.fetchOpenAdvances(vendorId);
+      final openIds = adv.map((i) => i.id).toSet();
+      final missing = _advanceRows.where((a) => !openIds.contains(a.appliedToId))
+          .map((a) => ApOpenInvoice(id: a.appliedToId, docNo: a.appliedToDocNo,
+              docDate: a.appliedToDocDate, totalAmountLc: a.appliedToTotal,
+              balanceAmountLc: a.appliedAmountLc)).toList();
+      if (mounted) setState(() => _openAdvances = [...adv, ...missing]);
+    } catch (_) {}
+  }
+
+
+  Future<void> _loadOpenAdvancesForRefund(int vendorId) async {
+    try {
+      final adv = await _service.fetchOpenAdvances(vendorId);
+      for (final c in _advanceRefundCtrlMap.values) c.dispose(); _advanceRefundCtrlMap.clear();
+      if (mounted) setState(() { _openAdvancesForRefund = adv; _advanceRefundRows = []; });
+    } catch (_) {}
+  }
+
+  Future<void> _loadOpenAdvancesForRefundKeepApplied(int vendorId) async {
+    try {
+      final adv = await _service.fetchOpenAdvances(vendorId);
+      final openIds = adv.map((i) => i.id).toSet();
+      final missing = _advanceRefundRows.where((a) => !openIds.contains(a.appliedToId))
+          .map((a) => ApOpenInvoice(id: a.appliedToId, docNo: a.appliedToDocNo,
+              docDate: a.appliedToDocDate, totalAmountLc: a.appliedToTotal,
+              balanceAmountLc: a.appliedAmountLc)).toList();
+      if (mounted) setState(() => _openAdvancesForRefund = [...adv, ...missing]);
+    } catch (_) {}
+  }
+
+  void _onVendorChanged(ApVendor? vendor) {
+    setState(() {
+      _selectedVendor = vendor;
+      _apAccountId = vendor?.apAccountId;
+      if (vendor != null && vendor.currencyCode.isNotEmpty) {
+        final matched = _currencies.cast<Currency?>()
+            .firstWhere((c) => c!.currencyCode == vendor.currencyCode, orElse: () => null);
+        if (matched != null) {
+          _selectedCurrency = matched;
+          _exchangeRate = matched.baseRate > 0 ? matched.baseRate : 1.0;
+        }
+      }
+      if (vendor != null && (vendor.creditTermMonths > 0 || vendor.creditTermDays > 0)) {
+        var base = _docDate;
+        if (vendor.creditTermMonths > 0) {
+          base = DateTime(base.year, base.month + vendor.creditTermMonths, base.day);
+        }
+        if (vendor.creditTermDays > 0) base = base.add(Duration(days: vendor.creditTermDays));
+        _dueDate = base;
+      }
+    });
+    if (_hasApplySection && vendor != null) {
+      _loadOpenInvoices(vendor.id!);
+      _loadOpenAdvances(vendor.id!);
+    }
+    if (_hasAdvanceRefund && vendor != null) {
+      _loadOpenAdvancesForRefund(vendor.id!);
+    }
+  }
+
+  Future<ApVendor?> _showVendorPicker() async {
+    return showDialog<ApVendor>(
+      context: context,
+      builder: (ctx) => Dialog(
+        child: SizedBox(
+          width: 600, height: 500,
+          child: Column(children: [
+            AppBar(
+              title: const Text('เลือกเจ้าหนี้'),
+              backgroundColor: Colors.blue[700],
+              foregroundColor: Colors.white,
+              automaticallyImplyLeading: false,
+              actions: [IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx))],
+            ),
+            Expanded(child: ListView.builder(
+              itemCount: _vendors.length,
+              itemBuilder: (_, i) {
+                final v = _vendors[i];
+                return ListTile(
+                  title: Text('${v.vendorCode}  ${v.vendorNameTh}'),
+                  subtitle: Text(v.taxId ?? ''),
+                  onTap: () => Navigator.pop(ctx, v),
+                );
+              },
+            )),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showBranchDialog() async {
+    final branches = _authService.allowedBranches;
+    if (branches.isEmpty) return;
+    final selected = await showDialog<UserBranch>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('เลือกสาขา'),
+        content: SizedBox(
+          width: 300, height: 300,
+          child: ListView(children: [
+            ListTile(
+              title: const Text('— ไม่ระบุสาขา —'),
+              onTap: () => Navigator.pop(ctx),
+            ),
+            ...branches.map((b) => ListTile(
+              title: Text('${b.branchCode}  ${b.branchNameThai}'),
+              onTap: () => Navigator.pop(ctx, b),
+            )),
+          ]),
+        ),
+      ),
+    );
+    if (selected != null && mounted) setState(() => _selectedBranch = selected);
+  }
+
+  Future<void> _selectDate(bool isDueDate) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isDueDate ? (_dueDate ?? _docDate) : _docDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() {
+      if (isDueDate) { _dueDate = picked; }
+      else { _docDate = picked; }
+    });
+  }
+
+  Future<void> _save(String action) async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedDocType == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกประเภทเอกสาร')));
+      return;
+    }
+    if (_selectedVendor == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกเจ้าหนี้')));
+      return;
+    }
+    if (action == 'Post' && !_isRA && !_validatePeriod(_docDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('วันที่เอกสารไม่อยู่ในงวดบัญชีที่เปิด')));
+      return;
+    }
+
+    _recalcTotals();
+    final lc = _exchangeRate;
+    final userName = _authService.currentUser?.userName ?? '';
+
+    final header = ApTransactionHeader(
+      id: _transactionId,
+      docId: _selectedDocType!.id,
+      docNo: _docNo,
+      docDate: _docDate,
+      dueDate: _hasDueDate ? _dueDate : null,
+      vendorId: _selectedVendor!.id!,
+      vendorCode: _selectedVendor!.vendorCode,
+      vendorNameTh: _selectedVendor!.vendorNameTh,
+      apAccountId: _apAccountId,
+      currencyId: _selectedCurrency?.id,
+      currencyCode: _selectedCurrency?.currencyCode ?? 'THB',
+      exchangeRate: _exchangeRate,
+      subtotalFc: _subtotalFc,
+      discountAmountFc: _discountAmountFc,
+      beforeVatFc: _beforeVatFc,
+      vatAmountFc: _vatAmountFc,
+      totalAmountFc: _totalAmountFc,
+      subtotalLc: _subtotalFc * lc,
+      discountAmountLc: _discountAmountFc * lc,
+      beforeVatLc: _beforeVatFc * lc,
+      vatAmountLc: _vatAmountFc * lc,
+      totalAmountLc: _totalAmountFc * lc,
+      refNo: _refNoCtrl.text.isEmpty ? null : _refNoCtrl.text,
+      description: _descCtrl.text.isEmpty ? null : _descCtrl.text,
+      status: _status,
+      dim1Id: _dimSelections[1], dim2Id: _dimSelections[2],
+      dim3Id: _dimSelections[3], dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
+      branchId: _selectedBranch?.branchId,
+      createdBy: _transactionId == 0 ? userName : null,
+      updatedBy: _transactionId != 0 ? userName : null,
+    );
+
+    final details = _detailRows.asMap().entries.map((e) {
+      final i = e.key; final r = e.value;
+      final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
+      final price = double.tryParse(r.priceCtrl.text) ?? 0;
+      final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
+      final sub = qty * price;
+      final disc = sub * discPct / 100;
+      final afterDisc = sub - disc;
+      final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+      return ApTransactionDetail(
+        lineNo: i + 1,
+        description: r.descCtrl.text.isEmpty ? null : r.descCtrl.text,
+        quantity: qty, unitPriceFc: price,
+        discountPercent: discPct, discountAmountFc: disc,
+        subtotalFc: afterDisc, vatType: r.vatType, vatRate: r.vatRate,
+        vatAmountFc: vat, totalAmountFc: afterDisc + vat,
+        expenseAccountId: r.expenseAccountId,
+        subtotalLc: afterDisc * lc, vatAmountLc: vat * lc,
+        totalAmountLc: (afterDisc + vat) * lc,
+        isDeferredVat: r.isDeferredVat && r.vatType != 'NOVAT',
+      );
+    }).toList();
+
+    final applies = [
+      ..._applyRows.map((a) => ApTransactionApply(
+            appliedToId: a.appliedToId, appliedToDocNo: a.appliedToDocNo,
+            appliedAmountFc: a.appliedAmountLc,
+            appliedAmountLc: a.appliedAmountLc * lc,
+            applyType: 'invoice',
+          )),
+      ..._advanceRows.map((a) => ApTransactionApply(
+            appliedToId: a.appliedToId, appliedToDocNo: a.appliedToDocNo,
+            appliedAmountFc: a.appliedAmountLc,
+            appliedAmountLc: a.appliedAmountLc * lc,
+            applyType: 'advance',
+          )),
+      ..._raRows.map((a) => ApTransactionApply(
+            appliedToId: a.appliedToId, appliedToDocNo: a.appliedToDocNo,
+            appliedAmountFc: a.appliedAmountLc,
+            appliedAmountLc: a.appliedAmountLc * lc,
+            applyType: 'ra_invoice',
+          )),
+      ..._advanceRefundRows.map((a) => ApTransactionApply(
+            appliedToId: a.appliedToId, appliedToDocNo: a.appliedToDocNo,
+            appliedAmountFc: a.appliedAmountLc,
+            appliedAmountLc: a.appliedAmountLc * lc,
+            applyType: 'advance_refund',
+          )),
+    ];
+
+    final payments = _paymentRows.asMap().entries.map((e) {
+      final i = e.key; final r = e.value;
+      return ApTransactionPayment(
+        lineNo: i + 1,
+        paymentMethodId: r.paymentMethodId,
+        paymentMethodCode: r.paymentMethodCode,
+        paymentMethodName: r.paymentMethodName,
+        paymentMethodType: r.paymentMethodType,
+        cmBankAccountId: r.cmBankAccountId,
+        glAccountId: r.glAccountId,
+        amountLc: (double.tryParse(r.amountCtrl.text) ?? 0) * lc,
+        amountFc: double.tryParse(r.amountCtrl.text) ?? 0,
+        refNo: r.refNoCtrl.text.isEmpty ? null : r.refNoCtrl.text,
+        paymentDate: r.paymentDate,
+        remark: r.remarkCtrl.text.isEmpty ? null : r.remarkCtrl.text,
+        drawerBankName: r.drawerBankNameCtrl.text.isEmpty ? null : r.drawerBankNameCtrl.text,
+        drawerBankBranch: r.drawerBankBranchCtrl.text.isEmpty ? null : r.drawerBankBranchCtrl.text,
+        drawerAccountNo: r.drawerAccountNoCtrl.text.isEmpty ? null : r.drawerAccountNoCtrl.text,
+      );
+    }).toList();
+
+    final whts = _whtRows.map((w) => ApTransactionWht(
+          whtType: w.whtTypeCtrl.text.isEmpty ? null : w.whtTypeCtrl.text,
+          whtRate: double.tryParse(w.rateCtrl.text) ?? 0,
+          baseAmountLc: (double.tryParse(w.baseCtrl.text) ?? 0) * lc,
+          whtAmountLc: (double.tryParse(w.whtCtrl.text) ?? 0) * lc,
+          description: w.descCtrl.text.isEmpty ? null : w.descCtrl.text,
+        )).toList();
+
+    setState(() => _isLoading = true);
+    try {
+      if (_transactionId == 0) {
+        await _service.createTransaction(
+          header: header, details: details, applies: applies,
+          payments: payments, whts: whts, action: action,
+        );
+      } else {
+        await _service.updateTransaction(
+          id: _transactionId, header: header, details: details, applies: applies,
+          payments: payments, whts: whts,
+        );
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(action == 'Post' ? 'บันทึกและ Post เรียบร้อย' : 'บันทึก Draft เรียบร้อย'),
+        ));
+        widget.onSaveSuccess();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('บันทึกไม่สำเร็จ: ${e.toString().replaceFirst('Exception: ', '')}'),
+        backgroundColor: Colors.red,
+      ));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _void() async {
+    final reasonCtrl = TextEditingController();
+    final voidReason = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        String? errorText;
+        return StatefulBuilder(
+          builder: (ctx, setD) => AlertDialog(
+            title: Row(children: [Icon(Icons.cancel_outlined, color: Colors.red[700], size: 20), const SizedBox(width: 8), const Text('ยืนยันการยกเลิกเอกสาร')]),
+            content: SizedBox(width: 400, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red[200]!)),
+                child: const Text('เอกสารที่ยกเลิกแล้วไม่สามารถกู้คืนได้\nระบบจะสร้าง Reversing GL Entry เพื่อยกเลิกผลกระทบทางบัญชี', style: TextStyle(fontSize: 13)),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: reasonCtrl, maxLines: 2, autofocus: true,
+                decoration: InputDecoration(labelText: 'เหตุผลการยกเลิก *', hintText: 'เช่น ยอดเงินผิด', border: const OutlineInputBorder(), errorText: errorText),
+              ),
+            ])),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ปิด')),
+              ElevatedButton.icon(
+                onPressed: () {
+                  if (reasonCtrl.text.trim().isEmpty) { setD(() => errorText = 'กรุณาระบุเหตุผล'); return; }
+                  Navigator.pop(ctx, reasonCtrl.text.trim());
+                },
+                icon: const Icon(Icons.check, size: 16),
+                label: const Text('ยืนยัน Void'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (voidReason == null) return;
+    setState(() => _isLoading = true);
+    try {
+      await _service.voidTransaction(_transactionId);
+      if (mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ยกเลิกเอกสารเรียบร้อย'))); widget.onSaveSuccess(); }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  InputDecoration _fieldDeco(String label, {bool forcedReadOnly = false}) {
+    final isRO = _isReadOnly || forcedReadOnly;
+    return InputDecoration(
+      labelText: label, border: const OutlineInputBorder(), isDense: true,
+      filled: true, fillColor: isRO ? Colors.grey[100] : Colors.white,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    return Form(
+      key: _formKey,
+      child: Column(children: [
+        _buildActionBar(),
+        Expanded(child: SingleChildScrollView(
+          padding: const EdgeInsets.all(12),
+          child: Column(children: [
+            _buildHeaderSection(),
+            if (_hasDetailRows) ...[const SizedBox(height: 8), _buildDetailSection()],
+            if (_hasApplySection) ...[const SizedBox(height: 8), _buildApplySection()],
+            if (_hasApplySection && _isPayment) ...[const SizedBox(height: 8), _buildAdvanceSection()],
+            if (_hasAdvanceRefund) ...[const SizedBox(height: 8), _buildAdvanceRefundSection()],
+            if (_hasWhtSection) ...[const SizedBox(height: 8), _buildWhtSection()],
+            if (_hasPaymentRows) ...[const SizedBox(height: 8), _buildPaymentSection()],
+            const SizedBox(height: 8),
+            _buildTotalsRow(),
+            if (_glEntryId != null) ...[const SizedBox(height: 8), _buildGlPreview()],
+          ]),
+        )),
+      ]),
+    );
+  }
+
+  Widget _buildActionBar() {
+    return Container(
+      color: Colors.blue[50],
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(children: [
+        if (!_isReadOnly) ...[
+          ElevatedButton.icon(
+            onPressed: () => _save('Draft'),
+            icon: const Icon(Icons.save_outlined, size: 16),
+            label: const Text('บันทึก Draft'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: () => _save('Post'),
+            icon: const Icon(Icons.check_circle_outline, size: 16),
+            label: const Text('Post'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
+          ),
+        ],
+        if (_status == 'Posted') ...[
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: _void,
+            icon: const Icon(Icons.cancel_outlined, size: 16),
+            label: const Text('Void'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
+          ),
+        ],
+        const Spacer(),
+        if (_status != 'Draft')
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: _status == 'Posted' ? Colors.green[50] : Colors.red[50],
+              border: Border.all(color: _status == 'Posted' ? Colors.green : Colors.red),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(_status, style: TextStyle(color: _status == 'Posted' ? Colors.green[800] : Colors.red[800], fontWeight: FontWeight.bold)),
+          ),
+        const SizedBox(width: 8),
+        OutlinedButton(onPressed: widget.onCancel, child: const Text('ปิด')),
+      ]),
+    );
+  }
+
+  Widget _buildHeaderSection() {
+    return Card(child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader('ข้อมูลเอกสาร', _headerExpanded, () => setState(() => _headerExpanded = !_headerExpanded)),
+        if (_headerExpanded) ...[
+          const SizedBox(height: 12),
+          // Row 1: DocType | DocNo | DocDate | RefNo
+          Row(children: [
+            Expanded(flex: 2, child: DropdownButtonFormField<ModuleDocument>(
+              value: _selectedDocType,
+              isExpanded: true,
+              decoration: _fieldDeco('ประเภทเอกสาร *'),
+              items: _allowedDocTypes.map((d) => DropdownMenuItem(
+                value: d,
+                child: Text('${d.docCode} ${d.docNameThai}', overflow: TextOverflow.ellipsis),
+              )).toList(),
+              onChanged: _isReadOnly ? null : (v) {
+                setState(() => _selectedDocType = v);
+                _resetForm();
+                _loadDocSetup();
+              },
+              validator: (v) => v == null ? 'กรุณาเลือก' : null,
+            )),
+            const SizedBox(width: 8),
+            Expanded(flex: 1, child: TextFormField(
+              key: ValueKey('ap_docNo_${widget.resetKey}_$_transactionId'),
+              initialValue: _docNo == 'AUTO' ? '' : _docNo,
+              decoration: _fieldDeco(
+                _selectedDocType?.isAutoNumbering == true ? 'เลขที่อัตโนมัติ' : 'เลขที่เอกสาร',
+                forcedReadOnly: _selectedDocType?.isAutoNumbering == true,
+              ).copyWith(hintText: _selectedDocType?.isAutoNumbering == true ? '(อัตโนมัติ)' : 'ระบุเลขที่'),
+              readOnly: _isReadOnly || (_selectedDocType?.isAutoNumbering == true),
+              onChanged: (v) => _docNo = v.isEmpty ? 'AUTO' : v,
+            )),
+            const SizedBox(width: 8),
+            Expanded(flex: 1, child: InkWell(
+              onTap: _isReadOnly ? null : () => _selectDate(false),
+              child: InputDecorator(
+                decoration: _fieldDeco('วันที่เอกสาร *'),
+                child: Row(children: [
+                  Expanded(child: Text(_dateFmt.format(_docDate))),
+                  if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
+                ]),
+              ),
+            )),
+            const SizedBox(width: 8),
+            Expanded(flex: 1, child: TextFormField(
+              controller: _refNoCtrl,
+              decoration: _fieldDeco('เลขที่อ้างอิง'),
+              readOnly: _isReadOnly,
+            )),
+          ]),
+          const SizedBox(height: 12),
+          // Row 2: Branch + Dims
+          Row(children: [
+            Expanded(flex: 1, child: InkWell(
+              onTap: _isReadOnly ? null : _showBranchDialog,
+              child: InputDecorator(
+                decoration: _fieldDeco('สาขา').copyWith(suffixIcon: _isReadOnly ? null : const Icon(Icons.search, size: 16)),
+                child: Text(
+                  _selectedBranch != null ? '${_selectedBranch!.branchCode}  ${_selectedBranch!.branchNameThai}' : '— ไม่ระบุสาขา —',
+                  style: TextStyle(color: _selectedBranch == null ? Colors.grey[500] : null, fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )),
+            ..._dimTypes.expand((t) {
+              final vals = _dimValues[t.typeCode] ?? [];
+              final selId = _dimSelections[t.slotNo];
+              final selVal = vals.cast<GlDimensionValue?>().firstWhere((v) => v?.id == selId, orElse: () => null);
+              return [
+                const SizedBox(width: 8),
+                Expanded(flex: 1, child: GlDimensionPickerField(
+                  dimType: t, values: vals, selected: selVal, readOnly: _isReadOnly, isDense: false,
+                  onSelected: (val) => setState(() { _dimSelections[t.slotNo] = val?.id; _dimNames[t.slotNo] = val?.valueNameThai; }),
+                )),
+              ];
+            }),
+          ]),
+          const SizedBox(height: 12),
+          // Row 3: Vendor | Currency | ExchangeRate | Description
+          Row(children: [
+            Expanded(flex: 3, child: InkWell(
+              onTap: _isReadOnly ? null : () async {
+                final v = await _showVendorPicker();
+                if (v != null) _onVendorChanged(v);
+              },
+              child: InputDecorator(
+                decoration: _fieldDeco('เจ้าหนี้ *').copyWith(suffixIcon: _isReadOnly ? null : const Icon(Icons.search, size: 16)),
+                child: Text(
+                  _selectedVendor != null
+                      ? '${_selectedVendor!.vendorCode} - ${_selectedVendor!.vendorNameTh}'
+                      : 'คลิกเพื่อเลือกเจ้าหนี้',
+                  style: TextStyle(color: _selectedVendor == null ? Colors.grey : null),
+                ),
+              ),
+            )),
+            const SizedBox(width: 8),
+            Expanded(flex: 1, child: DropdownButtonFormField<Currency>(
+              value: _selectedCurrency,
+              isExpanded: true,
+              decoration: _fieldDeco('สกุลเงิน'),
+              items: _currencies.map((c) => DropdownMenuItem(
+                value: c,
+                child: Text('${c.currencyCode} - ${c.currencyNameThai}', overflow: TextOverflow.ellipsis),
+              )).toList(),
+              onChanged: _isReadOnly ? null : (v) => setState(() { _selectedCurrency = v; _exchangeRate = v?.baseRate ?? 1.0; }),
+            )),
+            const SizedBox(width: 8),
+            Expanded(flex: 1, child: TextFormField(
+              key: ValueKey('ap_rate_${widget.resetKey}_$_transactionId'),
+              initialValue: _exchangeRate.toStringAsFixed(6),
+              decoration: _fieldDeco('อัตราแลกเปลี่ยน'),
+              keyboardType: TextInputType.number,
+              readOnly: _isReadOnly,
+              onChanged: (v) => setState(() => _exchangeRate = double.tryParse(v) ?? 1.0),
+            )),
+            const SizedBox(width: 8),
+            Expanded(flex: 3, child: TextFormField(
+              controller: _descCtrl,
+              decoration: _fieldDeco('คำอธิบาย'),
+              readOnly: _isReadOnly,
+            )),
+          ]),
+          if (_hasDueDate) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(flex: 1, child: InkWell(
+                onTap: _isReadOnly ? null : () => _selectDate(true),
+                child: InputDecorator(
+                  decoration: _fieldDeco('วันครบกำหนด'),
+                  child: Row(children: [
+                    Expanded(child: Text(_dueDate != null ? _dateFmt.format(_dueDate!) : '— ไม่กำหนด —',
+                        style: TextStyle(color: _dueDate == null ? Colors.grey : null))),
+                    if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
+                  ]),
+                ),
+              )),
+              const Expanded(flex: 3, child: SizedBox()),
+            ]),
+          ],
+        ],
+      ]),
+    ));
+  }
+
+  // ── Detail Section (PI / CN / DN) ──────────────────────────────────────────
+  Widget _buildDetailSection() {
+    return Card(child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader('รายการ', _detailExpanded, () => setState(() => _detailExpanded = !_detailExpanded),
+          trailing: _isReadOnly ? null : TextButton.icon(
+            onPressed: () {
+              final defaultVat = _vatRates.isNotEmpty ? _vatRates.first : null;
+              setState(() => _detailRows.add(_DetailRow(
+                vatType: defaultVat?.vatCode ?? 'VAT7',
+                vatRate: defaultVat?.rate ?? 7.0,
+                expenseAccountId: _docSetup?.expenseAccountId,
+              )));
+            },
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('เพิ่มรายการ'),
+          ),
+        ),
+        if (_detailExpanded) ...[
+          const SizedBox(height: 8),
+          if (_detailRows.isEmpty)
+            const Center(child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('ยังไม่มีรายการ กดปุ่ม "เพิ่มรายการ" เพื่อเพิ่ม'),
+            ))
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 8, dataRowMinHeight: 40, dataRowMaxHeight: 48,
+                headingRowColor: WidgetStateProperty.all(Colors.blue[50]),
+                columns: const [
+                  DataColumn(label: Text('#')),
+                  DataColumn(label: Text('คำอธิบาย')),
+                  DataColumn(label: Text('บัญชีค่าใช้จ่าย')),
+                  DataColumn(label: Text('จำนวน'), numeric: true),
+                  DataColumn(label: Text('ราคา/หน่วย'), numeric: true),
+                  DataColumn(label: Text('ส่วนลด %'), numeric: true),
+                  DataColumn(label: Text('VAT')),
+                  DataColumn(label: Text('VAT รอตัด')),
+                  DataColumn(label: Text('รวม FC'), numeric: true),
+                  DataColumn(label: SizedBox()),
+                ],
+                rows: _detailRows.asMap().entries.map((e) {
+                  final i = e.key; final r = e.value;
+                  final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
+                  final price = double.tryParse(r.priceCtrl.text) ?? 0;
+                  final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
+                  final afterDisc = qty * price * (1 - discPct / 100);
+                  final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+                  return DataRow(cells: [
+                    DataCell(Text('${i + 1}')),
+                    DataCell(SizedBox(width: 200, child: TextFormField(
+                      controller: r.descCtrl,
+                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), hintText: 'รายการ'),
+                      readOnly: _isReadOnly,
+                    ))),
+                    DataCell(_buildAccountCell(r, i)),
+                    DataCell(SizedBox(width: 80, child: TextFormField(
+                      controller: r.qtyCtrl,
+                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                      keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                      readOnly: _isReadOnly,
+                      onChanged: (_) { setState(() => r.totalCtrl.text = (afterDisc + vat).toStringAsFixed(2)); _recalcTotals(); },
+                    ))),
+                    DataCell(SizedBox(width: 100, child: TextFormField(
+                      controller: r.priceCtrl,
+                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                      keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                      readOnly: _isReadOnly,
+                      onChanged: (_) { setState(() => r.totalCtrl.text = (afterDisc + vat).toStringAsFixed(2)); _recalcTotals(); },
+                    ))),
+                    DataCell(SizedBox(width: 70, child: TextFormField(
+                      controller: r.discPctCtrl,
+                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), suffixText: '%'),
+                      keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                      readOnly: _isReadOnly,
+                      onChanged: (_) { setState(() => r.totalCtrl.text = (afterDisc + vat).toStringAsFixed(2)); _recalcTotals(); },
+                    ))),
+                    DataCell(SizedBox(width: 100, child: DropdownButtonFormField<String>(
+                      value: r.vatType,
+                      isDense: true,
+                      items: vatTypeOptions.map((vt) => DropdownMenuItem(value: vt, child: Text(vatTypeLabels[vt] ?? vt))).toList(),
+                      onChanged: _isReadOnly ? null : (v) {
+                        if (v == null) return;
+                        setState(() {
+                          r.vatType = v;
+                          r.vatRate = v == 'NOVAT' ? 0 : (_vatRates.cast<VatRate?>().firstWhere((vr) => vr!.vatCode == v, orElse: () => null)?.rate ?? 7.0);
+                          r.totalCtrl.text = (afterDisc + (v == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100)).toStringAsFixed(2);
+                        });
+                        _recalcTotals();
+                      },
+                    ))),
+                    DataCell(Checkbox(
+                      value: r.isDeferredVat,
+                      onChanged: (_isReadOnly || r.vatType == 'NOVAT') ? null : (v) => setState(() => r.isDeferredVat = v ?? false),
+                    )),
+                    DataCell(Text(_fmt.format(afterDisc + vat), style: const TextStyle(fontWeight: FontWeight.w500))),
+                    DataCell(_isReadOnly ? const SizedBox() : IconButton(
+                      icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                      onPressed: () { setState(() { r.dispose(); _detailRows.removeAt(i); }); _recalcTotals(); },
+                    )),
+                  ]);
+                }).toList(),
+              ),
+            ),
+        ],
+      ]),
+    ));
+  }
+
+  Widget _buildAccountCell(_DetailRow r, int i) {
+    final acct = r.expenseAccountId != null
+        ? _accounts.cast<Account?>().firstWhere((a) => a!.id == r.expenseAccountId, orElse: () => null)
+        : null;
+    return InkWell(
+      onTap: _isReadOnly ? null : () async {
+        final picked = await _showAccountPicker();
+        if (picked != null) setState(() => r.expenseAccountId = picked.id);
+      },
+      child: Container(
+        width: 160,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(4),
+          color: _isReadOnly ? Colors.grey[100] : Colors.white,
+        ),
+        child: Text(acct != null ? '${acct.accountCode} ${acct.accountNameThai}' : 'คลิกเลือกบัญชี',
+            style: TextStyle(fontSize: 12, color: acct == null ? Colors.grey : null), overflow: TextOverflow.ellipsis),
+      ),
+    );
+  }
+
+  Future<Account?> _showAccountPicker() async {
+    final searchCtrl = TextEditingController();
+    return showDialog<Account>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setD) {
+        final query = searchCtrl.text.toLowerCase();
+        final filtered = _accounts.where((a) =>
+            a.accountCode.toLowerCase().contains(query) ||
+            a.accountNameThai.toLowerCase().contains(query)).toList();
+        return Dialog(child: SizedBox(width: 500, height: 500, child: Column(children: [
+          AppBar(
+            title: const Text('เลือกบัญชี'),
+            backgroundColor: Colors.blue[700], foregroundColor: Colors.white,
+            automaticallyImplyLeading: false,
+            actions: [IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx))],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: TextField(
+              controller: searchCtrl,
+              decoration: const InputDecoration(labelText: 'ค้นหา', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), isDense: true),
+              onChanged: (_) => setD(() {}),
+            ),
+          ),
+          Expanded(child: ListView.builder(
+            itemCount: filtered.length,
+            itemBuilder: (_, i) {
+              final a = filtered[i];
+              return ListTile(
+                dense: true,
+                title: Text('${a.accountCode} ${a.accountNameThai}'),
+                onTap: () => Navigator.pop(ctx, a),
+              );
+            },
+          )),
+        ])));
+      }),
+    );
+  }
+
+  // ── Apply Section (Payment invoice selection) ────────────────────────────
+  Widget _buildApplySection() {
+    final label = _isRA ? 'เลือกใบแจ้งหนี้ (RA)' : 'เลือกใบแจ้งหนี้ที่ชำระ';
+    return Card(child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader(label, _applyExpanded, () => setState(() => _applyExpanded = !_applyExpanded)),
+        if (_applyExpanded)
+          _buildInvoiceSelectionTable(
+            open: _openInvoices,
+            selected: _applyRows,
+            ctrlMap: _applyCtrlMap,
+          ),
+      ]),
+    ));
+  }
+
+  // ── Advance Deduction Section (for Payment) ───────────────────────────────
+  Widget _buildAdvanceSection() {
+    return Card(child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader('หักมัดจำล่วงหน้า', _advanceExpanded, () => setState(() => _advanceExpanded = !_advanceExpanded)),
+        if (_advanceExpanded)
+          _buildInvoiceSelectionTable(
+            open: _openAdvances,
+            selected: _advanceRows,
+            ctrlMap: _advanceCtrlMap,
+          ),
+      ]),
+    ));
+  }
+
+  // ── Advance Refund Section ─────────────────────────────────────────────────
+  Widget _buildAdvanceRefundSection() {
+    return Card(child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader('เลือกมัดจำที่จะรับคืน', _advanceExpanded, () => setState(() => _advanceExpanded = !_advanceExpanded)),
+        if (_advanceExpanded)
+          _buildInvoiceSelectionTable(
+            open: _openAdvancesForRefund,
+            selected: _advanceRefundRows,
+            ctrlMap: _advanceRefundCtrlMap,
+          ),
+      ]),
+    ));
+  }
+
+  Widget _buildInvoiceSelectionTable({
+    required List<ApOpenInvoice> open,
+    required List<_ApplyRow> selected,
+    required Map<int, TextEditingController> ctrlMap,
+  }) {
+    final isFc = _selectedCurrency?.baseCurrencyFlag == false;
+    if (open.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(8),
+        child: Text('ไม่มีรายการที่ค้างชำระ', style: TextStyle(color: Colors.grey)),
+      );
+    }
+    return Column(children: [
+      ...open.map((inv) {
+        final isSelected = selected.any((a) => a.appliedToId == inv.id);
+        final balance = isFc && inv.exchangeRate > 0 ? inv.balanceAmountLc / inv.exchangeRate : inv.balanceAmountLc;
+        ctrlMap.putIfAbsent(inv.id, () {
+          final existing = selected.cast<_ApplyRow?>().firstWhere((a) => a?.appliedToId == inv.id, orElse: () => null);
+          return TextEditingController(text: existing != null ? existing.appliedAmountLc.toStringAsFixed(2) : balance.toStringAsFixed(2));
+        });
+        return CheckboxListTile(
+          dense: true,
+          value: isSelected,
+          title: Row(children: [
+            Expanded(child: Text('${inv.docNo} (${inv.docDate != null ? _dateFmt.format(inv.docDate!) : ''})', style: const TextStyle(fontSize: 13))),
+            const SizedBox(width: 8),
+            Text('คงเหลือ: ${_fmt.format(inv.balanceAmountLc)}', style: const TextStyle(fontSize: 12, color: Colors.blue)),
+          ]),
+          subtitle: isSelected ? Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(children: [
+              const Text('ยอดชำระ: ', style: TextStyle(fontSize: 12)),
+              SizedBox(width: 120, child: TextFormField(
+                controller: ctrlMap[inv.id],
+                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                readOnly: _isReadOnly,
+                onChanged: (v) {
+                  final idx = selected.indexWhere((a) => a.appliedToId == inv.id);
+                  if (idx >= 0) {
+                    selected[idx] = _ApplyRow(
+                      appliedToId: inv.id, appliedToDocNo: inv.docNo,
+                      appliedToDocDate: inv.docDate,
+                      appliedToTotal: isFc ? inv.balanceAmountLc / inv.exchangeRate : inv.balanceAmountLc,
+                      appliedAmountLc: double.tryParse(v) ?? 0,
+                    );
+                  }
+                  _recalcTotals();
+                },
+              )),
+            ]),
+          ) : null,
+          onChanged: _isReadOnly ? null : (checked) {
+            setState(() {
+              if (checked == true) {
+                selected.add(_ApplyRow(
+                  appliedToId: inv.id, appliedToDocNo: inv.docNo,
+                  appliedToDocDate: inv.docDate,
+                  appliedToTotal: balance,
+                  appliedAmountLc: double.tryParse(ctrlMap[inv.id]?.text ?? '') ?? balance,
+                ));
+              } else {
+                selected.removeWhere((a) => a.appliedToId == inv.id);
+              }
+            });
+            _recalcTotals();
+          },
+        );
+      }),
+    ]);
+  }
+
+  // ── WHT Section ───────────────────────────────────────────────────────────
+  Widget _buildWhtSection() {
+    return Card(child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader('ภาษีหัก ณ ที่จ่าย (WHT)', _whtExpanded, () => setState(() => _whtExpanded = !_whtExpanded),
+          trailing: _isReadOnly ? null : TextButton.icon(
+            onPressed: () => setState(() => _whtRows.add(_WhtRow())),
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('เพิ่ม WHT'),
+          ),
+        ),
+        if (_whtExpanded) ...[
+          if (_whtRows.isEmpty)
+            const Padding(padding: EdgeInsets.all(8), child: Text('ไม่มีรายการ WHT', style: TextStyle(color: Colors.grey)))
+          else
+            ...(_whtRows.asMap().entries.map((e) {
+              final i = e.key; final w = e.value;
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  Expanded(flex: 2, child: TextFormField(
+                    controller: w.whtTypeCtrl,
+                    decoration: _fieldDeco('ประเภท WHT'),
+                    readOnly: _isReadOnly,
+                    onChanged: (_) => setState(() {}),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 1, child: TextFormField(
+                    controller: w.rateCtrl,
+                    decoration: _fieldDeco('อัตรา (%)'),
+                    keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                    readOnly: _isReadOnly,
+                    onChanged: (v) {
+                      final base = double.tryParse(w.baseCtrl.text) ?? 0;
+                      final rate = double.tryParse(v) ?? 0;
+                      setState(() => w.whtCtrl.text = (base * rate / 100).toStringAsFixed(2));
+                    },
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: TextFormField(
+                    controller: w.baseCtrl,
+                    decoration: _fieldDeco('ฐานภาษี (LC)'),
+                    keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                    readOnly: _isReadOnly,
+                    onChanged: (v) {
+                      final base = double.tryParse(v) ?? 0;
+                      final rate = double.tryParse(w.rateCtrl.text) ?? 0;
+                      setState(() => w.whtCtrl.text = (base * rate / 100).toStringAsFixed(2));
+                    },
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: TextFormField(
+                    controller: w.whtCtrl,
+                    decoration: _fieldDeco('ภาษี WHT (LC)'),
+                    keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                    readOnly: _isReadOnly,
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 3, child: TextFormField(
+                    controller: w.descCtrl,
+                    decoration: _fieldDeco('คำอธิบาย'),
+                    readOnly: _isReadOnly,
+                  )),
+                  if (!_isReadOnly) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                      onPressed: () => setState(() { w.dispose(); _whtRows.removeAt(i); }),
+                    ),
+                  ],
+                ]),
+              );
+            })),
+          if (_whtRows.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Align(alignment: Alignment.centerRight, child: Text(
+              'รวม WHT: ${_fmt.format(_whtRows.fold(0.0, (s, w) => s + (double.tryParse(w.whtCtrl.text) ?? 0)))} บาท',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+            )),
+          ],
+        ],
+      ]),
+    ));
+  }
+
+  // ── Payment Section ───────────────────────────────────────────────────────
+  Widget _buildPaymentSection() {
+    return Card(child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader('ช่องทางการชำระเงิน', _paymentExpanded, () => setState(() => _paymentExpanded = !_paymentExpanded),
+          trailing: _isReadOnly ? null : TextButton.icon(
+            onPressed: () async {
+              final method = await showDialog<CmPaymentMethod>(
+                context: context,
+                builder: (ctx) => Dialog(child: SizedBox(
+                  width: 500, height: 400,
+                  child: Column(children: [
+                    AppBar(title: const Text('เลือกช่องทางการชำระเงิน'), backgroundColor: Colors.blue[700], foregroundColor: Colors.white, automaticallyImplyLeading: false,
+                      actions: [IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx))]),
+                    Expanded(child: CmPaymentMethodListWidget(
+                      enableAddButton: false, enableEditButton: false, enableViewButton: false, enableDeleteButton: false,
+                      enableCardSelect: false,
+                      onAdd: () {}, onEdit: (_) {}, onView: (_) {}, onDelete: (_) {},
+                      onCallback: (m) => Navigator.pop(ctx, m),
+                    )),
+                  ]),
+                )),
+              );
+              if (method != null) {
+                setState(() => _paymentRows.add(_PaymentRow(
+                  paymentMethodId: method.id, paymentMethodCode: method.methodCode,
+                  paymentMethodName: method.methodNameTh, paymentMethodType: method.methodType,
+                  cmBankAccountId: method.cmBankAccountId, glAccountId: method.glAccountId,
+                )));
+              }
+            },
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('เพิ่มช่องทาง'),
+          ),
+        ),
+        if (_paymentExpanded) ...[
+          if (_paymentRows.isEmpty)
+            const Padding(padding: EdgeInsets.all(8), child: Text('ยังไม่มีช่องทางการชำระเงิน', style: TextStyle(color: Colors.grey)))
+          else
+            ...(_paymentRows.asMap().entries.map((e) {
+              final i = e.key; final r = e.value;
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(flex: 2, child: InputDecorator(
+                    decoration: _fieldDeco('ช่องทาง', forcedReadOnly: true),
+                    child: Text('${r.paymentMethodCode ?? ''} ${r.paymentMethodName ?? ''}'.trim(), overflow: TextOverflow.ellipsis),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: TextFormField(
+                    controller: r.amountCtrl,
+                    decoration: _fieldDeco(_selectedCurrency?.baseCurrencyFlag == false ? 'จำนวนเงิน (FC)' : 'จำนวนเงิน (THB)'),
+                    keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                    readOnly: _isReadOnly,
+                    onChanged: (_) => _recalcTotals(),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: TextFormField(
+                    controller: r.refNoCtrl,
+                    decoration: _fieldDeco('เลขที่อ้างอิง'),
+                    readOnly: _isReadOnly,
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: InkWell(
+                    onTap: _isReadOnly ? null : () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: r.paymentDate ?? _docDate,
+                        firstDate: DateTime(2000), lastDate: DateTime(2100),
+                      );
+                      if (picked != null) setState(() => r.paymentDate = picked);
+                    },
+                    child: InputDecorator(
+                      decoration: _fieldDeco('วันที่ชำระ'),
+                      child: Row(children: [
+                        Expanded(child: Text(r.paymentDate != null ? _dateFmt.format(r.paymentDate!) : '—')),
+                        if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
+                      ]),
+                    ),
+                  )),
+                  if (r.paymentMethodType == 'CHECK') ...[
+                    const SizedBox(width: 8),
+                    Expanded(flex: 2, child: TextFormField(
+                      controller: r.drawerBankNameCtrl,
+                      decoration: _fieldDeco('ธนาคาร'),
+                      readOnly: _isReadOnly,
+                    )),
+                    const SizedBox(width: 8),
+                    Expanded(flex: 2, child: TextFormField(
+                      controller: r.drawerAccountNoCtrl,
+                      decoration: _fieldDeco('เลขที่เช็ค'),
+                      readOnly: _isReadOnly,
+                    )),
+                  ],
+                  if (!_isReadOnly) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.delete, size: 16, color: Colors.red),
+                      onPressed: () => setState(() { r.dispose(); _paymentRows.removeAt(i); }),
+                    ),
+                  ],
+                ]),
+              );
+            })),
+        ],
+      ]),
+    ));
+  }
+
+  // ── Totals Row ────────────────────────────────────────────────────────────
+  Widget _buildTotalsRow() {
+    final lc = _exchangeRate;
+    final isFc = _selectedCurrency?.baseCurrencyFlag == false;
+    final totalWht = _whtRows.fold(0.0, (s, w) => s + (double.tryParse(w.whtCtrl.text) ?? 0));
+    final totalPayment = _paymentRows.fold(0.0, (s, r) => s + (double.tryParse(r.amountCtrl.text) ?? 0));
+
+    return Card(
+      color: Colors.blue[50],
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          if (_hasDetailRows) ...[
+            _totalsLine('ยอดรวมก่อน VAT${isFc ? ' (FC)' : ''}', _beforeVatFc),
+            if (_vatAmountFc > 0) _totalsLine('VAT${isFc ? ' (FC)' : ''}', _vatAmountFc),
+          ],
+          _totalsLine(
+            isFc ? 'ยอดรวม (FC)' : 'ยอดรวม (THB)',
+            _totalAmountFc,
+            bold: true, color: Colors.blue[800],
+          ),
+          if (isFc) _totalsLine('ยอดรวม (THB)', _totalAmountFc * lc, bold: true, color: Colors.blue[800]),
+          if (_hasWhtSection && totalWht > 0) ...[
+            const Divider(),
+            _totalsLine('WHT หัก ณ ที่จ่าย', totalWht, color: Colors.red),
+          ],
+          if (_hasPaymentRows && totalPayment > 0) ...[
+            const Divider(),
+            _totalsLine('ยอดชำระ${isFc ? ' (FC)' : ''}', totalPayment),
+            if (isFc) _totalsLine('ยอดชำระ (THB)', totalPayment * lc),
+          ],
+        ]),
+      ),
+    );
+  }
+
+  Widget _totalsLine(String label, double amount, {bool bold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+        Text('$label: ', style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+        SizedBox(width: 120, child: Text(
+          _fmt.format(amount),
+          textAlign: TextAlign.right,
+          style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, color: color),
+        )),
+      ]),
+    );
+  }
+
+  // ── GL Preview ─────────────────────────────────────────────────────────────
+  Widget _buildGlPreview() {
+    if (_glEntryId == null) return const SizedBox.shrink();
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _glEntryService.fetchEntryDetail(_glEntryId!),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) return const CircularProgressIndicator();
+        if (snap.hasError || snap.data == null) return const SizedBox.shrink();
+        final header = snap.data!['header'] as GlEntryHeader;
+        final details = snap.data!['details'] as List<GlEntryDetail>;
+        return Card(child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('GL Entry: ${header.docNo}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            DataTable(
+              columnSpacing: 12, dataRowMinHeight: 28, dataRowMaxHeight: 36,
+              headingRowColor: WidgetStateProperty.all(Colors.grey[100]),
+              columns: const [
+                DataColumn(label: Text('บัญชี')),
+                DataColumn(label: Text('คำอธิบาย')),
+                DataColumn(label: Text('DR'), numeric: true),
+                DataColumn(label: Text('CR'), numeric: true),
+              ],
+              rows: details.map((d) => DataRow(cells: [
+                DataCell(Text('${d.accountCode} ${d.accountName}', style: const TextStyle(fontSize: 12))),
+                DataCell(Text(d.description ?? '', style: const TextStyle(fontSize: 12))),
+                DataCell(Text(d.debitLc > 0 ? _fmt.format(d.debitLc) : '', style: const TextStyle(fontSize: 12))),
+                DataCell(Text(d.creditLc > 0 ? _fmt.format(d.creditLc) : '', style: const TextStyle(fontSize: 12))),
+              ])).toList(),
+            ),
+          ]),
+        ));
+      },
+    );
+  }
+
+  Widget _sectionHeader(String title, bool expanded, VoidCallback onToggle, {Widget? trailing}) {
+    return Row(children: [
+      InkWell(
+        onTap: onToggle,
+        child: Row(children: [
+          Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 20, color: Colors.blue[700]),
+          const SizedBox(width: 4),
+          Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[800], fontSize: 15)),
+        ]),
+      ),
+      if (trailing != null) ...[const Spacer(), trailing],
+    ]);
+  }
+}
+
+// ── Helper: detail row ──────────────────────────────────────────────────────
+class _DetailRow {
+  final TextEditingController descCtrl;
+  final TextEditingController qtyCtrl;
+  final TextEditingController priceCtrl;
+  final TextEditingController discPctCtrl;
+  final TextEditingController totalCtrl;
+  String vatType;
+  double vatRate;
+  int? expenseAccountId;
+  bool isDeferredVat;
+
+  _DetailRow({
+    String? desc,
+    double qty = 1,
+    double price = 0,
+    double discPct = 0,
+    this.vatType = 'VAT7',
+    this.vatRate = 7.0,
+    this.expenseAccountId,
+    this.isDeferredVat = false,
+    double totalFc = 0,
+  })  : descCtrl = TextEditingController(text: desc ?? ''),
+        qtyCtrl = TextEditingController(text: qty.toString()),
+        priceCtrl = TextEditingController(text: price.toStringAsFixed(2)),
+        discPctCtrl = TextEditingController(text: discPct.toStringAsFixed(2)),
+        totalCtrl = TextEditingController(text: totalFc.toStringAsFixed(2));
+
+  factory _DetailRow.fromModel(ApTransactionDetail d) => _DetailRow(
+        desc: d.description, qty: d.quantity, price: d.unitPriceFc,
+        discPct: d.discountPercent, vatType: d.vatType, vatRate: d.vatRate,
+        expenseAccountId: d.expenseAccountId, isDeferredVat: d.isDeferredVat,
+        totalFc: d.totalAmountFc,
+      );
+
+  void dispose() {
+    descCtrl.dispose(); qtyCtrl.dispose(); priceCtrl.dispose();
+    discPctCtrl.dispose(); totalCtrl.dispose();
+  }
+}
+
+// ── Helper: apply row ───────────────────────────────────────────────────────
+class _ApplyRow {
+  final int appliedToId;
+  final String appliedToDocNo;
+  final DateTime? appliedToDocDate;
+  final double appliedToTotal;
+  double appliedAmountLc;
+
+  _ApplyRow({
+    required this.appliedToId,
+    required this.appliedToDocNo,
+    this.appliedToDocDate,
+    this.appliedToTotal = 0,
+    this.appliedAmountLc = 0,
+  });
+}
+
+// ── Helper: payment row ─────────────────────────────────────────────────────
+class _PaymentRow {
+  final int? paymentMethodId;
+  final String? paymentMethodCode;
+  final String? paymentMethodName;
+  final String paymentMethodType;
+  final int? cmBankAccountId;
+  final int? glAccountId;
+  final TextEditingController amountCtrl;
+  final TextEditingController refNoCtrl;
+  final TextEditingController remarkCtrl;
+  final TextEditingController drawerBankNameCtrl;
+  final TextEditingController drawerBankBranchCtrl;
+  final TextEditingController drawerAccountNoCtrl;
+  DateTime? paymentDate;
+
+  _PaymentRow({
+    this.paymentMethodId, this.paymentMethodCode, this.paymentMethodName,
+    this.paymentMethodType = 'CASH',
+    this.cmBankAccountId, this.glAccountId,
+    double amount = 0, String? refNo, String? remark, this.paymentDate,
+    String? drawerBankName, String? drawerBankBranch, String? drawerAccountNo,
+  })  : amountCtrl = TextEditingController(text: amount > 0 ? amount.toStringAsFixed(2) : ''),
+        refNoCtrl = TextEditingController(text: refNo ?? ''),
+        remarkCtrl = TextEditingController(text: remark ?? ''),
+        drawerBankNameCtrl = TextEditingController(text: drawerBankName ?? ''),
+        drawerBankBranchCtrl = TextEditingController(text: drawerBankBranch ?? ''),
+        drawerAccountNoCtrl = TextEditingController(text: drawerAccountNo ?? '');
+
+  factory _PaymentRow.fromModel(ApTransactionPayment p, [bool isFc = false]) => _PaymentRow(
+        paymentMethodId: p.paymentMethodId, paymentMethodCode: p.paymentMethodCode,
+        paymentMethodName: p.paymentMethodName, paymentMethodType: p.paymentMethodType,
+        cmBankAccountId: p.cmBankAccountId, glAccountId: p.glAccountId,
+        amount: isFc && p.amountFc > 0 ? p.amountFc : p.amountLc,
+        refNo: p.refNo, remark: p.remark, paymentDate: p.paymentDate,
+        drawerBankName: p.drawerBankName, drawerBankBranch: p.drawerBankBranch, drawerAccountNo: p.drawerAccountNo,
+      );
+
+  void dispose() {
+    amountCtrl.dispose(); refNoCtrl.dispose(); remarkCtrl.dispose();
+    drawerBankNameCtrl.dispose(); drawerBankBranchCtrl.dispose(); drawerAccountNoCtrl.dispose();
+  }
+}
+
+// ── Helper: WHT row ─────────────────────────────────────────────────────────
+class _WhtRow {
+  final TextEditingController whtTypeCtrl;
+  final TextEditingController rateCtrl;
+  final TextEditingController baseCtrl;
+  final TextEditingController whtCtrl;
+  final TextEditingController descCtrl;
+
+  _WhtRow({String? whtType, double rate = 0, double base = 0, double wht = 0, String? desc})
+      : whtTypeCtrl = TextEditingController(text: whtType ?? ''),
+        rateCtrl = TextEditingController(text: rate > 0 ? rate.toStringAsFixed(2) : ''),
+        baseCtrl = TextEditingController(text: base > 0 ? base.toStringAsFixed(2) : ''),
+        whtCtrl = TextEditingController(text: wht > 0 ? wht.toStringAsFixed(2) : ''),
+        descCtrl = TextEditingController(text: desc ?? '');
+
+  factory _WhtRow.fromModel(ApTransactionWht w) => _WhtRow(
+        whtType: w.whtType, rate: w.whtRate,
+        base: w.baseAmountLc, wht: w.whtAmountLc, desc: w.description,
+      );
+
+  void dispose() {
+    whtTypeCtrl.dispose(); rateCtrl.dispose(); baseCtrl.dispose(); whtCtrl.dispose(); descCtrl.dispose();
+  }
+}

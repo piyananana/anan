@@ -488,6 +488,10 @@ class ArTransactionApply {
   final String? appliedToDocNo;
   final DateTime? appliedToDocDate;
   final double? appliedToTotal;
+  final double? appliedToTotalFc;
+  final double? appliedToExchangeRate;
+  final DateTime? appliedToDueDate;
+  final DateTime? appliedToExpectedPaymentDate;
 
   const ArTransactionApply({
     this.id = 0,
@@ -500,6 +504,10 @@ class ArTransactionApply {
     this.appliedToDocNo,
     this.appliedToDocDate,
     this.appliedToTotal,
+    this.appliedToTotalFc,
+    this.appliedToExchangeRate,
+    this.appliedToDueDate,
+    this.appliedToExpectedPaymentDate,
   });
 
   factory ArTransactionApply.fromJson(Map<String, dynamic> j) {
@@ -514,6 +522,10 @@ class ArTransactionApply {
       appliedToDocNo: j['applied_to_doc_no'],
       appliedToDocDate: parseLocalDateNullable(j['applied_to_doc_date']),
       appliedToTotal: _toDouble(j['applied_to_total']),
+      appliedToTotalFc: _toDouble(j['applied_to_total_fc']),
+      appliedToExchangeRate: _toDouble(j['applied_to_exchange_rate']),
+      appliedToDueDate: parseLocalDateNullable(j['applied_to_due_date']),
+      appliedToExpectedPaymentDate: parseLocalDateNullable(j['applied_to_expected_payment_date']),
     );
   }
 

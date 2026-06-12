@@ -983,7 +983,27 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   ));
                 }),
                 // Debit
-                DataCell(SizedBox(width: 110, child: TextFormField(
+                DataCell(SizedBox(
+                  width: 110,
+                  child: _isReadOnly && _baseCurrency != currency
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (detail.debitFc != 0)
+                              Text(fmt.format(detail.debitFc),
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(fontSize: 14)),
+                            if (detail.debitLc != 0)
+                              Text(fmt.format(detail.debitLc),
+                                  textAlign: TextAlign.right,
+                                  style: detail.debitFc != 0
+                                      ? TextStyle(fontSize: 11, color: Colors.grey[600])
+                                      : const TextStyle(fontSize: 14)),
+                          ],
+                        )
+                      : TextFormField(
                   controller: _debitCtrls[i],
                   decoration: InputDecoration(
                     isDense: true,
@@ -1009,9 +1029,30 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     }
                     _calculateTotals();
                   },
-                ))),
+                        ),
+                )),
                 // Credit
-                DataCell(SizedBox(width: 110, child: TextFormField(
+                DataCell(SizedBox(
+                  width: 110,
+                  child: _isReadOnly && _baseCurrency != currency
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (detail.creditFc != 0)
+                              Text(fmt.format(detail.creditFc),
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(fontSize: 14)),
+                            if (detail.creditLc != 0)
+                              Text(fmt.format(detail.creditLc),
+                                  textAlign: TextAlign.right,
+                                  style: detail.creditFc != 0
+                                      ? TextStyle(fontSize: 11, color: Colors.grey[600])
+                                      : const TextStyle(fontSize: 14)),
+                          ],
+                        )
+                      : TextFormField(
                   controller: _creditCtrls[i],
                   decoration: InputDecoration(
                     isDense: true,
@@ -1037,7 +1078,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     }
                     _calculateTotals();
                   },
-                ))),
+                        ),
+                )),
                 // Description
                 DataCell(SizedBox(width: 220, child: TextFormField(
                   controller: _descCtrls[i],

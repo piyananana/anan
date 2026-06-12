@@ -16,6 +16,8 @@ import '../../sa/models/company.dart';
 import '../../sa/models/user_branch.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
+import 'package:excel/excel.dart';
+import '../../utils/file_download.dart';
 
 class ArDueReportScreen extends StatefulWidget {
   const ArDueReportScreen({super.key});
@@ -39,6 +41,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
   double _filterPanelWidth = 320.0;
   bool _isDraggingDivider = false;
   int _pdfKey = 0;
+  bool _isExporting = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -224,6 +227,105 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
   void _onSettingChanged() {
     if (_reportData.isNotEmpty) setState(() => _pdfKey++);
+  }
+
+  // ─── Excel ────────────────────────────────────────────────────────────────────
+
+  Future<void> _exportExcel() async {
+    _isExporting = true;
+    setState(() {});
+    try {
+      final ex = Excel.createExcel();
+      ex.rename('Sheet1', 'Due');
+      final s = ex['Due'];
+      final hdrBg = ExcelColor.fromHexString('#92D050');
+      final totBg = ExcelColor.fromHexString('#BDD7EE');
+      final detBg = ExcelColor.fromHexString('#F2F2F2');
+
+      final bucketLabels = _dynamicBucketLabels;
+      final totalBuckets = _totalBuckets;
+      String fmtDate(String? raw) {
+        if (raw == null || raw.isEmpty) return '';
+        try {
+          final d = DateTime.parse(raw).toLocal();
+          return DateFormat('dd/MM/yyyy').format(DateTime(d.year, d.month, d.day));
+        } catch (_) { return raw; }
+      }
+
+      final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 1, 0, 'รายงานกำหนดชำระลูกหนี้', bold: true);
+      _xlCell(s, 2, 0, 'ณ วันที่: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  พิมพ์: $_ts');
+
+      int r = 3;
+      _xlCell(s, r, 0, 'รหัสลูกหนี้', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, 'ชื่อลูกหนี้', bg: hdrBg, bold: true);
+      for (int b = 0; b < totalBuckets; b++) {
+        _xlCell(s, r, 2 + b, bucketLabels[b], bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      }
+      _xlCell(s, r, 2 + totalBuckets, 'รวม', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      r++;
+
+      final grandBuckets = List<double>.filled(totalBuckets, 0.0);
+      double grandTotal = 0.0;
+
+      for (final cust in _reportData) {
+        final code = cust['customer_code'] as String? ?? '';
+        final name = cust['customer_name_th'] as String? ?? '';
+        final invoices = (cust['invoices'] as List?) ?? [];
+        final custBuckets = List<double>.filled(totalBuckets, 0.0);
+        for (final inv in invoices) {
+          final dueDate = inv['due_date']?.toString();
+          final amt = (inv['balance_amount_lc'] as num?)?.toDouble() ?? 0.0;
+          final b = _bucketForDueDate(dueDate);
+          custBuckets[b] += amt;
+          if (_showDetail) {
+            _xlCell(s, r, 0, inv['doc_no']?.toString() ?? '', bg: detBg);
+            _xlCell(s, r, 1, fmtDate(dueDate), bg: detBg);
+            for (int bi = 0; bi < totalBuckets; bi++) {
+              _xlCell(s, r, 2 + bi, bi == b ? DoubleCellValue(amt) : TextCellValue('-'), bg: detBg, align: HorizontalAlign.Right);
+            }
+            _xlCell(s, r, 2 + totalBuckets, DoubleCellValue(amt), bg: detBg, align: HorizontalAlign.Right);
+            r++;
+          }
+        }
+        final custTotal = custBuckets.fold(0.0, (a, b) => a + b);
+        _xlCell(s, r, 0, code);
+        _xlCell(s, r, 1, name);
+        for (int b = 0; b < totalBuckets; b++) {
+          _xlCell(s, r, 2 + b, custBuckets[b] == 0 ? TextCellValue('-') : DoubleCellValue(custBuckets[b]), align: HorizontalAlign.Right);
+          grandBuckets[b] += custBuckets[b];
+        }
+        _xlCell(s, r, 2 + totalBuckets, DoubleCellValue(custTotal), align: HorizontalAlign.Right, bold: true);
+        grandTotal += custTotal;
+        r++;
+      }
+
+      _xlCell(s, r, 0, 'รวมทั้งสิ้น', bg: totBg, bold: true);
+      _xlCell(s, r, 1, '', bg: totBg);
+      for (int b = 0; b < totalBuckets; b++) {
+        _xlCell(s, r, 2 + b, DoubleCellValue(grandBuckets[b]), bg: totBg, bold: true, align: HorizontalAlign.Right);
+      }
+      _xlCell(s, r, 2 + totalBuckets, DoubleCellValue(grandTotal), bg: totBg, bold: true, align: HorizontalAlign.Right);
+
+      final bytes = ex.encode();
+      if (bytes == null) return;
+      final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadFile(bytes, 'รายงานกำหนดชำระลูกหนี้_$ts.xlsx');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _xlCell(Sheet s, int r, int c, dynamic v,
+      {ExcelColor? bg, HorizontalAlign? align, bool bold = false}) {
+    final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+    cell.value = v is CellValue ? v : (v is double ? DoubleCellValue(v) : TextCellValue(v?.toString() ?? ''));
+    cell.cellStyle = CellStyle(
+      backgroundColorHex: bg ?? ExcelColor.none,
+      horizontalAlign: align ?? HorizontalAlign.Left,
+      bold: bold,
+    );
   }
 
   // ─── PDF ──────────────────────────────────────────────────────────────────────
@@ -569,6 +671,20 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
         ]),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
+        actions: [
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Export Excel',
+              onPressed: _reportData.isEmpty ? null : _exportExcel,
+            ),
+        ],
       ),
       body: _isLoading && _company == null
           ? const Center(child: CircularProgressIndicator())

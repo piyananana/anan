@@ -15,6 +15,8 @@ import '../services/ar_collector_service.dart';
 import '../../sa/models/company.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
+import 'package:excel/excel.dart';
+import '../../utils/file_download.dart';
 
 class ArBillingPlanReportScreen extends StatefulWidget {
   const ArBillingPlanReportScreen({super.key});
@@ -37,7 +39,8 @@ class _ArBillingPlanReportScreenState
   bool   _isFilterExpanded = true;
   double _filterPanelWidth = 320.0;
   bool   _isDraggingDivider = false;
-  int    _pdfKey = 0;
+  int    _pdfKey      = 0;
+  bool   _isExporting = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -418,6 +421,20 @@ class _ArBillingPlanReportScreenState
         ]),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
+        actions: [
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Export Excel',
+              onPressed: _reportData.isEmpty ? null : _exportExcel,
+            ),
+        ],
       ),
       body: _isLoading && _company == null
           ? const Center(child: CircularProgressIndicator())
@@ -753,6 +770,108 @@ class _ArBillingPlanReportScreenState
           overflow: TextOverflow.ellipsis,
         ),
       ),
+    );
+  }
+
+  // ─── Excel Export ─────────────────────────────────────────────────────────
+
+  Future<void> _exportExcel() async {
+    _isExporting = true;
+    setState(() {});
+    try {
+      final ex    = Excel.createExcel();
+      const sheet = 'BillingPlan';
+      ex.rename('Sheet1', sheet);
+      final s = ex[sheet];
+
+      final hdrBg  = ExcelColor.fromHexString('#92D050');
+      final totBg  = ExcelColor.fromHexString('#BDD7EE');
+      final grandBg = ExcelColor.fromHexString('#A9D18E');
+
+      final _tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 1, 0, 'รายงานกำหนดวางบิล', bold: true);
+      _xlCell(s, 2, 0, 'วันที่วางบิล: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $_tsLabel');
+
+      final hdrs = ['วันที่วางบิล', 'ประเภทเอกสาร', 'เลขที่เอกสาร',
+          'วันแจ้งหนี้', 'วันครบกำหนด', 'วันชำระ (คาดว่า)',
+          'รหัส – ชื่อลูกหนี้', 'เบอร์โทร', 'ยอดคงค้าง', 'อ้างอิง'];
+      for (int i = 0; i < hdrs.length; i++) {
+        _xlCell(s, 3, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
+      }
+
+      int row = 4;
+      double grandBal = 0;
+      int grandCnt = 0;
+
+      for (final collector in _reportData) {
+        final collCode = collector['collector_code']      as String? ?? '';
+        final collName = collector['collector_name_thai'] as String? ?? '';
+        final totalBal = (collector['total_balance']      as num?)?.toDouble() ?? 0;
+        final invoices = (collector['invoices'] as List? ?? []).cast<Map<String, dynamic>>();
+
+        // Collector header
+        final collLabel = collCode.isEmpty ? collName : '$collCode  $collName';
+        _xlCell(s, row, 0, collLabel, bold: true);
+        for (int i = 1; i < 10; i++) _xlCell(s, row, i, '');
+        row++;
+
+        for (final inv in invoices) {
+          grandCnt++;
+          final bal = (inv['balance_amount_lc'] as num?)?.toDouble() ?? 0;
+          final custText = '${inv['customer_code'] ?? ''}  ${inv['customer_name_th'] ?? ''}';
+          _xlCell(s, row, 0, _fmtDate(inv['billing_date']           as String?), align: HorizontalAlign.Center);
+          _xlCell(s, row, 1, inv['doc_name_thai']                   as String? ?? '');
+          _xlCell(s, row, 2, inv['doc_no']                          as String? ?? '');
+          _xlCell(s, row, 3, _fmtDate(inv['doc_date']              as String?), align: HorizontalAlign.Center);
+          _xlCell(s, row, 4, _fmtDate(inv['due_date']              as String?), align: HorizontalAlign.Center);
+          _xlCell(s, row, 5, _fmtDate(inv['expected_payment_date'] as String?), align: HorizontalAlign.Center);
+          _xlCell(s, row, 6, custText);
+          _xlCell(s, row, 7, inv['customer_phone'] as String? ?? '', align: HorizontalAlign.Center);
+          _xlCell(s, row, 8, bal,                                    align: HorizontalAlign.Right);
+          _xlCell(s, row, 9, inv['ref_no'] as String? ?? '',         align: HorizontalAlign.Center);
+          row++;
+        }
+
+        // Subtotal per collector
+        _xlCell(s, row, 0, '',                           bg: totBg);
+        for (int i = 1; i <= 5; i++) _xlCell(s, row, i, '', bg: totBg);
+        _xlCell(s, row, 6, 'รวม ${invoices.length} รายการ', bg: totBg, bold: true);
+        _xlCell(s, row, 7, '',                           bg: totBg);
+        _xlCell(s, row, 8, totalBal, bg: totBg, bold: true, align: HorizontalAlign.Right);
+        _xlCell(s, row, 9, '',                           bg: totBg);
+        row++;
+
+        grandBal += totalBal;
+      }
+
+      // Grand total
+      for (int i = 0; i < 6; i++) _xlCell(s, row, i, '', bg: grandBg);
+      _xlCell(s, row, 6, 'รวมทุกผู้วางบิล $grandCnt รายการ', bg: grandBg, bold: true);
+      _xlCell(s, row, 7, '', bg: grandBg);
+      _xlCell(s, row, 8, grandBal, bg: grandBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, row, 9, '', bg: grandBg);
+
+      final bytes = ex.encode();
+      if (bytes == null) return;
+      const title = 'รายงานกำหนดวางบิล';
+      final ts    = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadFile(bytes, '${title}_$ts.xlsx');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  void _xlCell(Sheet s, int r, int c, dynamic v,
+      {ExcelColor? bg, HorizontalAlign? align, bool bold = false}) {
+    final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+    cell.value = v is double
+        ? DoubleCellValue(v)
+        : TextCellValue(v?.toString() ?? '');
+    cell.cellStyle = CellStyle(
+      backgroundColorHex: bg ?? ExcelColor.none,
+      horizontalAlign: align ?? HorizontalAlign.Left,
+      bold: bold,
     );
   }
 }
