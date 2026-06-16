@@ -159,8 +159,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   id: 0, accountCode: '', accountNameThai: '', accountNameEng: '',
                   isActive: true, accountType: '', accountSubType: '',
                   normalBalance: '', isNormalAccount: false, isReconcilable: false,
-                  currencyCode: '', moduleLinkCode: '', costCenterRequired: false,
-                  projectRequired: false, branchRequired: false, dimRules: const []),
+                  currencyCode: '', moduleLinkCode: '', branchRequired: false, dimRules: const []),
             );
             detail.accountCode = match.accountCode;
             detail.accountName = match.accountNameThai;
@@ -894,8 +893,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     id: 0, accountCode: '', accountNameThai: '', accountNameEng: '',
                     accountType: '', accountSubType: '', normalBalance: '',
                     isNormalAccount: false, isReconcilable: false, currencyCode: '',
-                    moduleLinkCode: '', costCenterRequired: false, projectRequired: false,
-                    branchRequired: false, isActive: true, dimRules: const []),
+                    moduleLinkCode: '', branchRequired: false, isActive: true, dimRules: const []),
               );
               return DataRow(cells: [
                 DataCell(Text('${i + 1}')),

@@ -49,8 +49,6 @@ class Account {
       isReconcilable; // TRUE: บัญชีที่ใช้ในการกระทบยอด, FALSE: บัญชีทั่วไป
   final String currencyCode; // สกุลเงินหลักของบัญชี (อ้างอิงจาก cd_currency)
   final String moduleLinkCode; // โค้ดเชื่อมโยงกับโมดูลอื่นๆ (เช่น 'AP', 'AR')
-  final bool costCenterRequired;
-  final bool projectRequired;
   final bool branchRequired;
   final bool isActive;
   final List<GlAccountDimRule> dimRules;
@@ -75,8 +73,6 @@ class Account {
     required this.isReconcilable,
     required this.currencyCode,
     required this.moduleLinkCode,
-    required this.costCenterRequired,
-    required this.projectRequired,
     required this.branchRequired,
     required this.isActive,
     this.dimRules = const [],
@@ -104,8 +100,6 @@ class Account {
       isReconcilable: json['is_reconcilable'] as bool,
       currencyCode: json['currency_code'] as String,
       moduleLinkCode: json['module_link_code'] as String,
-      costCenterRequired: json['cost_center_required'] as bool? ?? false,
-      projectRequired: json['project_required'] as bool? ?? false,
       branchRequired: json['branch_required'] as bool? ?? false,
       isActive: json['is_active'] as bool,
       dimRules: (json['dim_rules'] as List?)
@@ -141,8 +135,6 @@ class Account {
       'is_reconcilable': isReconcilable,
       'currency_code': currencyCode,
       'module_link_code': moduleLinkCode,
-      'cost_center_required': costCenterRequired,
-      'project_required': projectRequired,
       'branch_required': branchRequired,
       'is_active': isActive,
       'dim_rules': dimRules.map((r) => r.toJson()).toList(),

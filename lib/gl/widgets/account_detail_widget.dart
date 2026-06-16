@@ -43,8 +43,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
   late bool _isReconcilable;
   late String _currencyCode; // เลือกจาก cd_currency
   late String _moduleLinkCode; // เลือกจาก sa_module_link
-  late bool _costCenterRequired;
-  late bool _projectRequired;
   late bool _branchRequired;
   late bool _isActive;
 
@@ -144,8 +142,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _isControlAccount = false;
       _isReconcilable = false;
       _moduleLinkCode = '';
-      _costCenterRequired = false;
-      _projectRequired = false;
       _branchRequired = false;
       _initDimRules(null);
     } else {
@@ -157,8 +153,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _isControlAccount = _selected?.isControlAccount ?? false;
       _isReconcilable = _selected?.isReconcilable ?? false;
       _moduleLinkCode = _selected?.moduleLinkCode ?? '';
-      _costCenterRequired = _selected?.costCenterRequired ?? false;
-      _projectRequired = _selected?.projectRequired ?? false;
       _branchRequired = _selected?.branchRequired ?? false;
       _initDimRules(_selected);
     }
@@ -186,8 +180,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
         _isControlAccount = false;
         _isReconcilable = false;
         _moduleLinkCode = '';
-        _costCenterRequired = false;
-        _projectRequired = false;
         _branchRequired = false;
         _initDimRules(null);
       } else {
@@ -199,8 +191,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
         _isControlAccount = _selected?.isControlAccount ?? false;
         _isReconcilable = _selected?.isReconcilable ?? false;
         _moduleLinkCode = _selected?.moduleLinkCode ?? '';
-        _costCenterRequired = _selected?.costCenterRequired ?? false;
-        _projectRequired = _selected?.projectRequired ?? false;
         _branchRequired = _selected?.branchRequired ?? false;
         _initDimRules(_selected);
       }
@@ -218,8 +208,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _isReconcilable = false;
       _currencyCode = _baseCurrencyCode();
       _moduleLinkCode = '';
-      _costCenterRequired = false;
-      _projectRequired = false;
       _branchRequired = false;
       _isActive = true;
       _initDimRules(null);
@@ -238,8 +226,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _isReconcilable = false;
       _currencyCode = _baseCurrencyCode();
       _moduleLinkCode = '';
-      _costCenterRequired = false;
-      _projectRequired = false;
       _branchRequired = false;
       _isActive = true;
       _initDimRules(null);
@@ -278,8 +264,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
           isReconcilable: _isReconcilable,
           currencyCode: _currencyCode,
           moduleLinkCode: _moduleLinkCode,
-          costCenterRequired: _costCenterRequired,
-          projectRequired: _projectRequired,
           branchRequired: _branchRequired,
           isActive: _isActive,
           dimRules: _dimRules.entries
