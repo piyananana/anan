@@ -180,7 +180,6 @@ class _ChartOfAccountsReportScreenState
       final moduleLabel = sysModules[a.moduleLinkCode] ?? a.moduleLinkCode;
       parts.add('Control Account: $moduleLabel');
     }
-    if (a.isReconcilable) parts.add('กระทบยอดบัญชี');
     if (a.branchRequired) parts.add('ระบุสาขา');
     for (final r in a.dimRules.where((r) => r.isRequired)) {
       final label = _dimTypeMap[r.typeCode]?.nameThai ?? r.typeCode;

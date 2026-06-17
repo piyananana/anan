@@ -40,7 +40,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
   late String _normalBalance;
   late bool _isNormalAccount;
   late bool _isControlAccount;
-  late bool _isReconcilable;
   late String _currencyCode; // เลือกจาก cd_currency
   late String _moduleLinkCode; // เลือกจาก sa_module_link
   late bool _branchRequired;
@@ -140,7 +139,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _accountNameEngController.clear();
       _isNormalAccount = true;
       _isControlAccount = false;
-      _isReconcilable = false;
       _moduleLinkCode = '';
       _branchRequired = false;
       _initDimRules(null);
@@ -151,7 +149,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
           TextEditingController(text: _selected?.accountNameEng ?? '');
       _isNormalAccount = _selected?.isNormalAccount ?? true;
       _isControlAccount = _selected?.isControlAccount ?? false;
-      _isReconcilable = _selected?.isReconcilable ?? false;
       _moduleLinkCode = _selected?.moduleLinkCode ?? '';
       _branchRequired = _selected?.branchRequired ?? false;
       _initDimRules(_selected);
@@ -178,7 +175,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
         _accountNameEngController.clear();
         _isNormalAccount = true;
         _isControlAccount = false;
-        _isReconcilable = false;
         _moduleLinkCode = '';
         _branchRequired = false;
         _initDimRules(null);
@@ -189,7 +185,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
             TextEditingController(text: _selected?.accountNameEng ?? '');
         _isNormalAccount = _selected?.isNormalAccount ?? false;
         _isControlAccount = _selected?.isControlAccount ?? false;
-        _isReconcilable = _selected?.isReconcilable ?? false;
         _moduleLinkCode = _selected?.moduleLinkCode ?? '';
         _branchRequired = _selected?.branchRequired ?? false;
         _initDimRules(_selected);
@@ -205,7 +200,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _normalBalance = 'DR';
       _isNormalAccount = false;
       _isControlAccount = false;
-      _isReconcilable = false;
       _currencyCode = _baseCurrencyCode();
       _moduleLinkCode = '';
       _branchRequired = false;
@@ -223,7 +217,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _normalBalance = _selected?.normalBalance ?? 'DR';
       _isNormalAccount = true;
       _isControlAccount = false;
-      _isReconcilable = false;
       _currencyCode = _baseCurrencyCode();
       _moduleLinkCode = '';
       _branchRequired = false;
@@ -261,7 +254,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
           normalBalance: _normalBalance,
           isNormalAccount: _isNormalAccount,
           isControlAccount: _isControlAccount,
-          isReconcilable: _isReconcilable,
           currencyCode: _currencyCode,
           moduleLinkCode: _moduleLinkCode,
           branchRequired: _branchRequired,
@@ -547,23 +539,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                       },
                     ),
                     ], // end if (_isControlAccount)
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                              'การกระทบยอดบัญชี: ${_isReconcilable ? 'ต้องกระทบยอดบัญชี' : 'ไม่ต้องกระทบยอดบัญชี'}'),
-                        ),
-                        Switch(
-                          value: _isReconcilable,
-                          onChanged: readOnly ? null : (bool value) {
-                            setState(() {
-                              _isReconcilable = value;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
                     ..._dimTypes.expand((t) {
                       final enabled = _dimRules[t.typeCode] ?? false;
                       return [

@@ -45,8 +45,6 @@ class Account {
       isNormalAccount; // TRUE: บัญชีที่ลงรายการได้, FALSE: บัญชีรวม/บัญชีแม่
   final bool
       isControlAccount; // TRUE: บันทึกได้เฉพาะจากโมดูลอื่น (AR/AP/Inventory) ห้ามลงตรงใน GL
-  final bool
-      isReconcilable; // TRUE: บัญชีที่ใช้ในการกระทบยอด, FALSE: บัญชีทั่วไป
   final String currencyCode; // สกุลเงินหลักของบัญชี (อ้างอิงจาก cd_currency)
   final String moduleLinkCode; // โค้ดเชื่อมโยงกับโมดูลอื่นๆ (เช่น 'AP', 'AR')
   final bool branchRequired;
@@ -70,7 +68,6 @@ class Account {
     required this.normalBalance,
     required this.isNormalAccount,
     this.isControlAccount = false,
-    required this.isReconcilable,
     required this.currencyCode,
     required this.moduleLinkCode,
     required this.branchRequired,
@@ -97,7 +94,6 @@ class Account {
       normalBalance: json['normal_balance'] as String,
       isNormalAccount: json['is_normal_account'] as bool,
       isControlAccount: json['is_control_account'] as bool? ?? false,
-      isReconcilable: json['is_reconcilable'] as bool,
       currencyCode: json['currency_code'] as String,
       moduleLinkCode: json['module_link_code'] as String,
       branchRequired: json['branch_required'] as bool? ?? false,
@@ -132,7 +128,6 @@ class Account {
       'normal_balance': normalBalance,
       'is_normal_account': isNormalAccount,
       'is_control_account': isControlAccount,
-      'is_reconcilable': isReconcilable,
       'currency_code': currencyCode,
       'module_link_code': moduleLinkCode,
       'branch_required': branchRequired,

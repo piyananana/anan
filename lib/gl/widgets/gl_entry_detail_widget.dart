@@ -158,7 +158,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
               orElse: () => Account(
                   id: 0, accountCode: '', accountNameThai: '', accountNameEng: '',
                   isActive: true, accountType: '', accountSubType: '',
-                  normalBalance: '', isNormalAccount: false, isReconcilable: false,
+                  normalBalance: '', isNormalAccount: false,
                   currencyCode: '', moduleLinkCode: '', branchRequired: false, dimRules: const []),
             );
             detail.accountCode = match.accountCode;
@@ -892,7 +892,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 orElse: () => Account(
                     id: 0, accountCode: '', accountNameThai: '', accountNameEng: '',
                     accountType: '', accountSubType: '', normalBalance: '',
-                    isNormalAccount: false, isReconcilable: false, currencyCode: '',
+                    isNormalAccount: false, currencyCode: '',
                     moduleLinkCode: '', branchRequired: false, isActive: true, dimRules: const []),
               );
               return DataRow(cells: [
