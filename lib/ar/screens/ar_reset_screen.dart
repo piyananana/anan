@@ -17,6 +17,14 @@ class _ArResetScreenState extends State<ArResetScreen> {
   bool _deleteTransactions = true;
   bool _resetDocNumbers = false;
 
+  // ข้อมูลหลัก (master data) — ปิดไว้เป็นค่าเริ่มต้นเพราะมีผลกว้างกว่าข้อมูลธุรกรรม
+  bool _resetCustomerRunning = false;
+  bool _resetCustomerGroups = false;
+  bool _resetCustomers = false;
+  bool _resetCollectors = false;
+  bool _resetGlAccountSetup = false;
+  bool _resetYearEndSetup = false;
+
   final _confirmCtrl = TextEditingController();
   bool _isLoadingCounts = false;
   bool _isExecuting = false;
@@ -60,7 +68,14 @@ class _ArResetScreenState extends State<ArResetScreen> {
 
   bool get _canExecute =>
       _confirmCtrl.text.trim() == 'ยืนยัน' &&
-      (_deleteTransactions || _resetDocNumbers) &&
+      (_deleteTransactions ||
+          _resetDocNumbers ||
+          _resetCustomerRunning ||
+          _resetCustomerGroups ||
+          _resetCustomers ||
+          _resetCollectors ||
+          _resetGlAccountSetup ||
+          _resetYearEndSetup) &&
       !_isExecuting;
 
   Future<void> _execute() async {
@@ -90,6 +105,21 @@ class _ArResetScreenState extends State<ArResetScreen> {
             ],
             if (_resetDocNumbers)
               _confirmRow(Icons.format_list_numbered, 'Reset เลขที่เอกสาร AR เป็น 1', null),
+            if (_resetCustomers)
+              _confirmRow(Icons.people, 'ลูกค้า (และที่อยู่/ผู้ติดต่อ/บัญชีธนาคาร/เงื่อนไขวางบิล-รับชำระ)',
+                  _counts?['ar_customer']),
+            if (_resetCustomerGroups)
+              _confirmRow(Icons.groups, 'กลุ่มลูกค้า (และเงื่อนไขวางบิล/รับชำระของกลุ่ม)',
+                  _counts?['ar_customer_group']),
+            if (_resetCollectors)
+              _confirmRow(Icons.badge, 'ผู้วางบิล/รับชำระ', _counts?['ar_collector']),
+            if (_resetGlAccountSetup)
+              _confirmRow(Icons.account_balance, 'ตั้งค่าเชื่อมต่อ GL', _counts?['ar_gl_account_setup']),
+            if (_resetYearEndSetup)
+              _confirmRow(Icons.event_note,
+                  'ตั้งค่าปิดสิ้นปี (บัญชี FX/Allowance, % สำรองหนี้สูญ, ประวัติ Run)', null),
+            if (_resetCustomerRunning)
+              _confirmRow(Icons.tag, 'ตั้งค่ารหัสลูกค้าอัตโนมัติ (คืนค่าเริ่มต้น)', null),
           ],
         ),
         actions: [
@@ -114,6 +144,12 @@ class _ArResetScreenState extends State<ArResetScreen> {
         body: json.encode({
           'deleteTransactions': _deleteTransactions,
           'resetDocNumbers': _resetDocNumbers,
+          'resetCustomers': _resetCustomers,
+          'resetCustomerGroups': _resetCustomerGroups,
+          'resetCollectors': _resetCollectors,
+          'resetGlAccountSetup': _resetGlAccountSetup,
+          'resetYearEndSetup': _resetYearEndSetup,
+          'resetCustomerRunning': _resetCustomerRunning,
         }),
       );
 
@@ -190,6 +226,45 @@ class _ArResetScreenState extends State<ArResetScreen> {
     );
   }
 
+  Widget _masterDataCard({
+    required bool value,
+    required ValueChanged<bool?> onChanged,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required List<String> detailLines,
+  }) {
+    return Card(
+      elevation: 1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CheckboxListTile(
+            title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+            value: value,
+            activeColor: color,
+            controlAffinity: ListTileControlAffinity.leading,
+            onChanged: onChanged,
+          ),
+          if (value)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(56, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: detailLines
+                    .map((line) => Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Text('• $line', style: TextStyle(fontSize: 12, color: color)),
+                        ))
+                    .toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -241,8 +316,9 @@ class _ArResetScreenState extends State<ArResetScreen> {
                     ]),
                     const SizedBox(height: 8),
                     Text(
-                      'ฟังก์ชันนี้จะลบข้อมูลธุรกรรม AR ออกจากฐานข้อมูลอย่างถาวร '
-                      'ข้อมูลหลัก (ลูกค้า, กลุ่มลูกค้า, ผังบัญชี AR) จะยังคงอยู่ '
+                      'ฟังก์ชันนี้จะลบข้อมูลธุรกรรม AR และ/หรือข้อมูลหลัก '
+                      '(ลูกค้า, กลุ่มลูกค้า, ผู้วางบิล/รับชำระ, ตั้งค่าต่างๆ) ตามที่เลือกไว้ด้านล่าง '
+                      'ออกจากฐานข้อมูลอย่างถาวร '
                       'หมายเหตุ: GL Entries ที่สร้างจาก AR ต้องล้างแยกที่ GL Reset',
                       style: TextStyle(color: Colors.red[900], fontSize: 13),
                     ),
@@ -307,6 +383,98 @@ class _ArResetScreenState extends State<ArResetScreen> {
                   activeColor: Colors.purple[700],
                   onChanged: (v) => setState(() => _resetDocNumbers = v ?? false),
                   controlAffinity: ListTileControlAffinity.leading,
+                ),
+
+                const SizedBox(height: 24),
+                const Text('เลือกข้อมูลหลักที่ต้องการลบ/รีเซ็ต',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(
+                  'ใช้สำหรับล้างข้อมูลตั้งต้น/ทดสอบก่อนใช้งานจริง — ไม่เลือกรายการใด การ์ดนั้นจะถูกย่อ',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+
+                _masterDataCard(
+                  title: 'ตั้งค่ารหัสลูกค้าอัตโนมัติ',
+                  subtitle: 'ar_customer_running — เปิดใช้งาน: '
+                      '${(_counts?['ar_customer_running']?['is_auto_numbering'] == true) ? 'ใช่' : 'ไม่ใช่'}, '
+                      'เลขที่ถัดไป: ${_counts?['ar_customer_running']?['next_running_number'] ?? '-'}',
+                  value: _resetCustomerRunning,
+                  color: Colors.indigo[700]!,
+                  onChanged: (v) => setState(() => _resetCustomerRunning = v ?? false),
+                  detailLines: const [
+                    'คืนค่าเป็นค่าเริ่มต้น: ปิดใช้งาน, รูปแบบ CUST-0001, เลขที่ถัดไป = 1',
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                _masterDataCard(
+                  title: 'กลุ่มลูกค้า',
+                  subtitle: 'ar_customer_group (${_counts?['ar_customer_group'] ?? '-'} รายการ)',
+                  value: _resetCustomerGroups,
+                  color: Colors.blue[700]!,
+                  onChanged: (v) => setState(() => _resetCustomerGroups = v ?? false),
+                  detailLines: const [
+                    'ลบกลุ่มลูกค้าทั้งหมด รวมเงื่อนไขวางบิล/รับชำระของกลุ่ม',
+                    'หากลูกค้ายังอ้างอิงกลุ่มอยู่ ควรเลือก "ลูกค้า" ด้วย ไม่เช่นนั้นจะลบไม่ได้',
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                _masterDataCard(
+                  title: 'ลูกค้า',
+                  subtitle: 'ar_customer (${_counts?['ar_customer'] ?? '-'} รายการ)',
+                  value: _resetCustomers,
+                  color: Colors.red[700]!,
+                  onChanged: (v) => setState(() => _resetCustomers = v ?? false),
+                  detailLines: const [
+                    'ลบลูกค้าทั้งหมด รวมที่อยู่/ผู้ติดต่อ/บัญชีธนาคาร/เงื่อนไขวางบิล-รับชำระ',
+                    'หากยังมี AR Transactions ของลูกค้านี้ ต้องเลือก "ลบ AR Transactions ทั้งหมด" ด้วย ไม่เช่นนั้นจะลบไม่ได้',
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                _masterDataCard(
+                  title: 'ผู้วางบิล/รับชำระ',
+                  subtitle: 'ar_collector (${_counts?['ar_collector'] ?? '-'} รายการ)',
+                  value: _resetCollectors,
+                  color: Colors.brown[600]!,
+                  onChanged: (v) => setState(() => _resetCollectors = v ?? false),
+                  detailLines: const [
+                    'ลบข้อมูลผู้วางบิล/ผู้รับชำระทั้งหมด',
+                    'หากลูกค้ายังอ้างอิงผู้วางบิล/รับชำระอยู่ ควรเลือก "ลูกค้า" ด้วย ไม่เช่นนั้นจะลบไม่ได้',
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                _masterDataCard(
+                  title: 'ตั้งค่าเชื่อมต่อ GL',
+                  subtitle: 'ar_gl_account_setup (${_counts?['ar_gl_account_setup'] ?? '-'} รายการ)',
+                  value: _resetGlAccountSetup,
+                  color: Colors.teal[700]!,
+                  onChanged: (v) => setState(() => _resetGlAccountSetup = v ?? false),
+                  detailLines: const [
+                    'ลบการตั้งค่าบัญชีเชื่อมต่อ GL ตามประเภทเอกสาร/วิธีรับชำระเงินทั้งหมด',
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                _masterDataCard(
+                  title: 'ตั้งค่าปิดสิ้นปีต่างๆ',
+                  subtitle: 'บัญชี FX/Allowance: '
+                      '${(_counts?['ar_year_end_setup_configured'] == true) ? 'ตั้งค่าแล้ว' : 'ยังไม่ตั้งค่า'}'
+                      '  |  กฎ % สำรอง (${_counts?['ar_allowance_rule'] ?? '-'})'
+                      '  |  FX Revaluation (${_counts?['ar_fx_revaluation'] ?? '-'})'
+                      '  |  Allowance Run (${_counts?['ar_allowance_run'] ?? '-'})',
+                  value: _resetYearEndSetup,
+                  color: Colors.deepPurple[600]!,
+                  onChanged: (v) => setState(() => _resetYearEndSetup = v ?? false),
+                  detailLines: const [
+                    'คืนค่าบัญชี FX Gain/Loss และ Allowance ในการตั้งค่าปิดสิ้นปีเป็นค่าว่าง',
+                    'คืนค่ากฎ % สำรองหนี้สูญ (Allowance Rule) เป็นค่าเริ่มต้น 4 ช่วงอายุหนี้',
+                    'ลบประวัติการ Run FX Revaluation และ Allowance Run ทั้งหมด',
+                  ],
                 ),
 
                 const SizedBox(height: 24),

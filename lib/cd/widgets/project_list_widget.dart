@@ -95,6 +95,7 @@ class ProjectListWidgetState extends State<ProjectListWidget>
 
   List<Project> _filterAndSort() {
     List<Project> displayLists = List.from(_lists);
+    if (widget.enableCardSelect) displayLists = displayLists.where((e) => e.isActive).toList();
     // 1. Filter
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toUpperCase();

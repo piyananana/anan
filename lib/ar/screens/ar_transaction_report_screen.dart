@@ -19,6 +19,7 @@ import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../widgets/ar_customer_group_multi_picker.dart';
 
 // ─── sys_doc_type → column index mapping ──────────────────────────────────────
 // 0=แจ้งหนี้(10)  1=เพิ่มหนี้(30/35)  2=ลดหนี้(50/55)
@@ -72,7 +73,7 @@ class _ArTransactionReportScreenState
   DateTime _dateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _dateTo   = DateTime.now();
   int?    _selectedBranchId;
-  int?    _selectedGroupId;
+  List<int> _selectedGroupIds = [];
   int?    _selectedSalespersonId;
   String? _customerCodeFrom;
   String? _customerCodeTo;
@@ -116,7 +117,7 @@ class _ArTransactionReportScreenState
         dateFrom:          DateFormat('yyyy-MM-dd').format(_dateFrom),
         dateTo:            DateFormat('yyyy-MM-dd').format(_dateTo),
         branchId:          _selectedBranchId,
-        customerGroupId:   _selectedGroupId,
+        customerGroupIds:  _selectedGroupIds,
         salespersonId:     _selectedSalespersonId,
         customerCodeFrom:  _customerCodeFrom,
         customerCodeTo:    _customerCodeTo,
@@ -166,10 +167,13 @@ class _ArTransactionReportScreenState
           orElse: () => _branches.first);
       conditions.add('สาขา: ${b.branchCode} ${b.branchNameThai}');
     }
-    if (_selectedGroupId != null) {
-      final g = _customerGroups.firstWhere((g) => g.id == _selectedGroupId,
-          orElse: () => _customerGroups.first);
-      conditions.add('กลุ่ม: ${g.groupCode} ${g.groupNameThai}');
+    if (_selectedGroupIds.isNotEmpty) {
+      final names = _selectedGroupIds.map((id) {
+        final g = _customerGroups.firstWhere((g) => g.id == id,
+            orElse: () => _customerGroups.first);
+        return '${g.groupCode} ${g.groupNameThai}';
+      }).join(', ');
+      conditions.add('กลุ่ม: $names');
     }
     if (_selectedSalespersonId != null) {
       final s = _salespersons.firstWhere((s) => s.id == _selectedSalespersonId,
@@ -539,28 +543,12 @@ class _ArTransactionReportScreenState
                                     const SizedBox(height: 12),
 
                                     // กลุ่มลูกหนี้
-                                    DropdownButtonFormField<int?>(
-                                      isExpanded: true,
-                                      value: _selectedGroupId,
-                                      decoration: const InputDecoration(
-                                          labelText: 'กลุ่มลูกหนี้',
-                                          border: OutlineInputBorder(),
-                                          isDense: true),
-                                      items: [
-                                        const DropdownMenuItem<int?>(
-                                            value: null,
-                                            child: Text('— ทุกกลุ่ม —')),
-                                        ..._customerGroups.map((g) =>
-                                            DropdownMenuItem<int?>(
-                                              value: g.id,
-                                              child: Text(
-                                                  '${g.groupCode}  ${g.groupNameThai}',
-                                                  overflow:
-                                                      TextOverflow.ellipsis),
-                                            )),
-                                      ],
+                                    ArCustomerGroupMultiPicker(
+                                      groups: _customerGroups,
+                                      selectedIds: _selectedGroupIds,
+                                      label: 'กลุ่มลูกหนี้',
                                       onChanged: (v) => setState(
-                                          () => _selectedGroupId = v),
+                                          () => _selectedGroupIds = v),
                                     ),
                                     const SizedBox(height: 12),
 

@@ -125,6 +125,7 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
 
   List<CdWhtType> get _filtered {
     List<CdWhtType> items = List.from(_rows);
+    if (widget.enableCardSelect) items = items.where((e) => e.isActive).toList();
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       items = items.where((r) =>
@@ -225,7 +226,8 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
-                          child: ListTile(
+                          child: Stack(children: [
+                          ListTile(
                             // leading: อัตราภาษีใน CircleAvatar
                             leading: CircleAvatar(
                               backgroundColor: row.isActive
@@ -292,6 +294,16 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
                                 ? () => widget.onCallback(row)
                                 : null,
                           ),
+                          if (!row.isActive)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(Icons.block, size: 72,
+                                      color: Colors.red.withOpacity(0.12)),
+                                ),
+                              ),
+                            ),
+                          ]),
                         );
                       },
                     ),

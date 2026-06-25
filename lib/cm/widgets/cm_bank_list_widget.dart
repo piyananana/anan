@@ -119,6 +119,7 @@ class CmBankListWidgetState extends State<CmBankListWidget>
 
   List<CmBank> get _filtered {
     List<CmBank> items = List.from(_list);
+    if (widget.enableCardSelect) items = items.where((e) => e.isActive).toList();
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toUpperCase();
       items = items.where((r) {
@@ -204,7 +205,8 @@ class CmBankListWidgetState extends State<CmBankListWidget>
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
-                          child: ListTile(
+                          child: Stack(children: [
+                          ListTile(
                             leading: item.shortName != null
                                 ? CircleAvatar(
                                     backgroundColor: Colors.teal.shade100,
@@ -274,6 +276,16 @@ class CmBankListWidgetState extends State<CmBankListWidget>
                               ],
                             ),
                           ),
+                          if (!item.isActive)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(Icons.block, size: 72,
+                                      color: Colors.red.withOpacity(0.12)),
+                                ),
+                              ),
+                            ),
+                          ]),
                         );
                       },
                     ),

@@ -569,7 +569,7 @@ class ModuleDocumentDetailWidgetState
                 children: [
                   // Doc code
                   TextFormField(
-                    readOnly: widget.mode != Mode.add &&
+                    readOnly: widget.mode != Mode.addRoot &&
                         widget.mode != Mode.addChild,
                     controller: _docCodeController,
                     style: const TextStyle(

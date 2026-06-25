@@ -1145,8 +1145,9 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       builder: (ctx) => StatefulBuilder(builder: (ctx, setD) {
         final query = searchCtrl.text.toLowerCase();
         final filtered = _accounts.where((a) =>
-            a.accountCode.toLowerCase().contains(query) ||
-            a.accountNameThai.toLowerCase().contains(query)).toList();
+            a.isActive && a.isNormalAccount &&
+            (a.accountCode.toLowerCase().contains(query) ||
+            a.accountNameThai.toLowerCase().contains(query))).toList();
         return Dialog(child: SizedBox(width: 500, height: 500, child: Column(children: [
           AppBar(
             title: const Text('เลือกบัญชี'),

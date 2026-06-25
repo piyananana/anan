@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:provider/provider.dart';
+
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
 import '../../utils/file_download.dart';
@@ -20,10 +21,15 @@ class ApVendorImportScreen extends StatefulWidget {
 }
 
 class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
+  // File state
   String? _fileName;
   Uint8List? _fileBytes;
   String? _fileExtension;
 
+  // Template (loaded dynamically so it always matches the backend)
+  List<Map<String, dynamic>> _templateSheets = [];
+
+  // Validation result
   bool _isValidated = false;
   int _totalRows = 0;
   int _validRows = 0;
@@ -36,43 +42,41 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
 
   final _previewScrollCtrl = ScrollController();
 
+  static const _appColor = Color(0xFF37474F);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTemplateSheets();
+  }
+
   @override
   void dispose() {
     _previewScrollCtrl.dispose();
     super.dispose();
   }
 
-  static const _templateColumns = [
-    {'key': 'vendor_code',              'label': 'รหัสเจ้าหนี้ (ว่างได้ถ้าอัตโนมัติ)', 'required': false, 'example': 'V001'},
-    {'key': 'vendor_group_code',        'label': 'รหัสกลุ่มเจ้าหนี้',          'required': false, 'example': 'LOCAL'},
-    {'key': 'old_vendor_code',          'label': 'รหัสเจ้าหนี้เก่า',           'required': false, 'example': 'VA0001'},
-    {'key': 'vendor_name_th',           'label': 'ชื่อเจ้าหนี้ (ไทย)',         'required': true,  'example': 'บริษัท XYZ จำกัด'},
-    {'key': 'vendor_name_en',           'label': 'ชื่อเจ้าหนี้ (อังกฤษ)',      'required': false, 'example': 'XYZ Co., Ltd.'},
-    {'key': 'tax_id',                   'label': 'เลขประจำตัวผู้เสียภาษี',     'required': false, 'example': '0105555012345'},
-    {'key': 'credit_term_months',       'label': 'เครดิต (เดือน)',              'required': false, 'example': '0'},
-    {'key': 'credit_term_days',         'label': 'เครดิต (วัน)',                'required': false, 'example': '30'},
-    {'key': 'currency_code',            'label': 'สกุลเงิน',                    'required': false, 'example': 'THB'},
-    {'key': 'remark',                   'label': 'หมายเหตุ',                    'required': false, 'example': ''},
-    {'key': 'address_no',               'label': 'บ้านเลขที่',                  'required': false, 'example': '123'},
-    {'key': 'address_building_village', 'label': 'อาคาร/หมู่บ้าน',             'required': false, 'example': 'อาคาร ABC'},
-    {'key': 'address_alley',            'label': 'ซอย',                         'required': false, 'example': 'พหลโยธิน 5'},
-    {'key': 'address_road',             'label': 'ถนน',                         'required': false, 'example': 'พหลโยธิน'},
-    {'key': 'address_sub_district',     'label': 'ตำบล/แขวง',                  'required': false, 'example': 'จตุจักร'},
-    {'key': 'address_district',         'label': 'อำเภอ/เขต',                  'required': false, 'example': 'จตุจักร'},
-    {'key': 'address_province',         'label': 'จังหวัด',                     'required': false, 'example': 'กรุงเทพมหานคร'},
-    {'key': 'address_zip_code',         'label': 'รหัสไปรษณีย์',               'required': false, 'example': '10900'},
-    {'key': 'contact_name',             'label': 'ชื่อผู้ติดต่อ',              'required': false, 'example': 'คุณสมชาย'},
-    {'key': 'position',                 'label': 'ตำแหน่ง',                    'required': false, 'example': 'ผู้จัดการ'},
-    {'key': 'phone',                    'label': 'โทรศัพท์',                    'required': false, 'example': '02-123-4567'},
-    {'key': 'mobile',                   'label': 'มือถือ',                      'required': false, 'example': '081-234-5678'},
-    {'key': 'email',                    'label': 'อีเมล',                       'required': false, 'example': 'info@xyz.co.th'},
-    {'key': 'bank_name',                'label': 'ธนาคาร',                      'required': false, 'example': 'กสิกรไทย'},
-    {'key': 'bank_branch_name',         'label': 'สาขาธนาคาร',                 'required': false, 'example': 'สีลม'},
-    {'key': 'account_number',           'label': 'เลขบัญชีธนาคาร',             'required': false, 'example': '123-4-56789-0'},
-    {'key': 'account_name',             'label': 'ชื่อบัญชีธนาคาร',            'required': false, 'example': 'บริษัท XYZ จำกัด'},
-  ];
+  // ─── Template definition ─────────────────────────────────────────────────
 
-  // ─── File picker ────────────────────────────────────────────────────────────
+  Future<void> _loadTemplateSheets() async {
+    try {
+      final authService = context.read<AuthService>();
+      final headers = await authService.getAuthHeader();
+      final response = await http.get(
+        Uri.parse('${AppConfig.apiAp}/ap_vendor/import/template'),
+        headers: headers,
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (!mounted) return;
+        setState(() {
+          _templateSheets = List<Map<String, dynamic>>.from(data['sheets'] ?? []);
+        });
+      }
+    } catch (_) {}
+  }
+
+  // ─── File picker ──────────────────────────────────────────────────────────
 
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
@@ -92,7 +96,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
     });
   }
 
-  // ─── Validate ───────────────────────────────────────────────────────────────
+  // ─── Validate ─────────────────────────────────────────────────────────────
 
   Future<void> _validate() async {
     if (_fileBytes == null) return;
@@ -140,7 +144,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
     }
   }
 
-  // ─── Confirm import ─────────────────────────────────────────────────────────
+  // ─── Confirm import ───────────────────────────────────────────────────────
 
   Future<void> _confirmImport() async {
     if (_validatedData.isEmpty) return;
@@ -222,13 +226,13 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
     ));
   }
 
-  // ─── Build ──────────────────────────────────────────────────────────────────
+  // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF37474F),
+        backgroundColor: _appColor,
         foregroundColor: Colors.white,
         title: const Row(children: [
           Icon(Icons.upload_file, color: Colors.white),
@@ -276,8 +280,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
                   onPressed: _isImporting ? null : _confirmImport,
                   icon: _isImporting
                       ? const SizedBox(
-                          width: 18,
-                          height: 18,
+                          width: 18, height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check_circle_outline),
                   label: Text(_isImporting
@@ -296,7 +299,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
     );
   }
 
-  // ─── Template section ────────────────────────────────────────────────────────
+  // ─── Template section ─────────────────────────────────────────────────────
 
   Future<void> _downloadTemplate() async {
     try {
@@ -319,61 +322,75 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
   Widget _buildTemplateSection() {
     return Card(
       child: ExpansionTile(
-        leading: const Icon(Icons.table_chart_outlined, color: Color(0xFF37474F)),
+        leading: const Icon(Icons.table_chart_outlined, color: _appColor),
         title: const Text('เทมเพลตนำเข้าข้อมูล',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: const Text('คลิกเพื่อดูรายละเอียดคอลัมน์ที่ต้องใช้'),
+        subtitle: const Text('คลิกเพื่อดูรายละเอียดคอลัมน์ในแต่ละ sheet'),
         trailing: OutlinedButton.icon(
           onPressed: _downloadTemplate,
           icon: const Icon(Icons.download, size: 18),
           label: const Text('ดาวน์โหลดเทมเพลต'),
           style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF37474F),
-            side: const BorderSide(color: Color(0xFF37474F)),
+            foregroundColor: _appColor,
+            side: const BorderSide(color: _appColor),
           ),
         ),
         initiallyExpanded: false,
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: DataTable(
-              columnSpacing: 16,
-              headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-              columns: const [
-                DataColumn(label: Text('ชื่อ Header', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('ความหมาย',   style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('จำเป็น',      style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('ตัวอย่าง',   style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-              rows: _templateColumns
-                  .map((col) => DataRow(cells: [
-                        DataCell(Text(col['key'] as String,
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
-                        DataCell(Text(col['label'] as String)),
-                        DataCell((col['required'] as bool)
-                            ? const Icon(Icons.star, color: Colors.red, size: 14)
-                            : const Text('-', style: TextStyle(color: Colors.grey))),
-                        DataCell(Text(col['example'] as String,
-                            style: const TextStyle(color: Colors.grey, fontSize: 12))),
-                      ]))
-                  .toList(),
-            ),
-          ),
           const Padding(
-            padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              '★ = จำเป็นต้องระบุ  |  แถวแรกของไฟล์ต้องเป็น header ชื่อตรงกับคอลัมน์ด้านบนทุกคอลัมน์\n'
-              'รหัสเจ้าหนี้: ว่างได้ถ้าการตั้งค่าระบบเปิดใช้รหัสอัตโนมัติ',
+              'เทมเพลตประกอบด้วย 5 sheet ตามหัวข้อข้อมูลเจ้าหนี้ ทุก sheet (ยกเว้น "ข้อมูลพื้นฐาน") '
+              'ใช้คอลัมน์ "old_vendor_code" (รหัสเก่าเจ้าหนี้) เป็นตัวเชื่อมข้อมูลกับแถวใน sheet "ข้อมูลพื้นฐาน"\n'
+              '★ = จำเป็นต้องระบุ',
               style: TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),
+          for (final sheet in _templateSheets) _buildTemplateSheetTile(sheet),
+          const SizedBox(height: 8),
         ],
       ),
     );
   }
 
-  // ─── File picker section ────────────────────────────────────────────────────
+  Widget _buildTemplateSheetTile(Map<String, dynamic> sheet) {
+    final columns = List<Map<String, dynamic>>.from(sheet['columns'] ?? []);
+    return ExpansionTile(
+      title: Text(sheet['name']?.toString() ?? '',
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: DataTable(
+            columnSpacing: 16,
+            headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
+            columns: const [
+              DataColumn(label: Text('ชื่อ Header', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('ความหมาย',   style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('จำเป็น',      style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('ตัวอย่าง',   style: TextStyle(fontWeight: FontWeight.bold))),
+            ],
+            rows: columns
+                .map((col) => DataRow(cells: [
+                      DataCell(Text(col['key']?.toString() ?? '',
+                          style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
+                      DataCell(Text(col['label']?.toString() ?? '')),
+                      DataCell((col['required'] as bool? ?? false)
+                          ? const Icon(Icons.star, color: Colors.red, size: 14)
+                          : const Text('-', style: TextStyle(color: Colors.grey))),
+                      DataCell(Text(col['example']?.toString() ?? '',
+                          style: const TextStyle(color: Colors.grey, fontSize: 12))),
+                    ]))
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  // ─── File picker section ──────────────────────────────────────────────────
 
   Widget _buildFilePickerSection() {
     return Card(
@@ -397,7 +414,8 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
                 ),
                 child: Text(
                   _fileName ?? 'ยังไม่ได้เลือกไฟล์',
-                  style: TextStyle(color: _fileName != null ? Colors.black87 : Colors.grey),
+                  style: TextStyle(
+                      color: _fileName != null ? Colors.black87 : Colors.grey),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -413,13 +431,12 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
               onPressed: _fileBytes == null || _isLoading ? null : _validate,
               icon: _isLoading
                   ? const SizedBox(
-                      width: 16,
-                      height: 16,
+                      width: 16, height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.fact_check_outlined),
               label: const Text('ตรวจสอบ'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF37474F),
+                backgroundColor: _appColor,
                 foregroundColor: Colors.white,
               ),
             ),
@@ -429,7 +446,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
     );
   }
 
-  // ─── Validation result section ──────────────────────────────────────────────
+  // ─── Validation result section ────────────────────────────────────────────
 
   Widget _buildResultSection() {
     final allOk = _errorRows == 0;
@@ -507,6 +524,9 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
           'ตัวอย่างข้อมูลที่จะนำเข้า${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
+        const SizedBox(height: 4),
+        const Text('คลิกแถวเพื่อดูรายละเอียดทุกหัวข้อของเจ้าหนี้',
+            style: TextStyle(color: Colors.grey, fontSize: 12)),
         const SizedBox(height: 8),
         Scrollbar(
           controller: _previewScrollCtrl,
@@ -521,45 +541,275 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
                 DataColumn(label: Text('รหัสเจ้าหนี้')),
                 DataColumn(label: Text('กลุ่ม')),
                 DataColumn(label: Text('ชื่อ (ไทย)')),
+                DataColumn(label: Text('ชื่อ (อังกฤษ)')),
                 DataColumn(label: Text('เลขภาษี')),
+                DataColumn(label: Text('ประเภทธุรกิจ')),
+                DataColumn(label: Text('สกุลเงิน')),
                 DataColumn(label: Text('เครดิต (ด/ว)')),
-                DataColumn(label: Text('บ้านเลขที่')),
-                DataColumn(label: Text('ซอย')),
-                DataColumn(label: Text('ถนน')),
-                DataColumn(label: Text('จังหวัด')),
-                DataColumn(label: Text('รหัสไปรษณีย์')),
-                DataColumn(label: Text('ผู้ติดต่อ')),
-                DataColumn(label: Text('โทรศัพท์')),
-                DataColumn(label: Text('ธนาคาร')),
-                DataColumn(label: Text('เลขบัญชี')),
+                DataColumn(label: Text('ใช้งาน')),
               ],
               rows: _validatedData
                   .take(50)
-                  .map((r) => DataRow(cells: [
-                        DataCell(Text(r['vendor_code'] ?? '(อัตโนมัติ)')),
-                        DataCell(Text(r['vendor_group_code'] ?? '')),
-                        DataCell(ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 180),
-                          child: Text(r['vendor_name_th'] ?? '',
-                              overflow: TextOverflow.ellipsis),
-                        )),
-                        DataCell(Text(r['tax_id'] ?? '')),
-                        DataCell(Text('${r['credit_term_months'] ?? 0}/${r['credit_term_days'] ?? 30}')),
-                        DataCell(Text(r['address_no'] ?? '')),
-                        DataCell(Text(r['address_alley'] ?? '')),
-                        DataCell(Text(r['address_road'] ?? '')),
-                        DataCell(Text(r['address_province'] ?? '')),
-                        DataCell(Text(r['address_zip_code'] ?? '')),
-                        DataCell(Text(r['contact_name'] ?? '')),
-                        DataCell(Text(r['phone'] ?? '')),
-                        DataCell(Text(r['bank_name'] ?? '')),
-                        DataCell(Text(r['account_number'] ?? '')),
-                      ]))
+                  .map((r) => DataRow(
+                        onSelectChanged: (_) => _showVendorDetailDialog(r),
+                        cells: [
+                          DataCell(Text(r['vendor_code']?.toString() ?? '(อัตโนมัติ)')),
+                          DataCell(Text(_fmt(r['vendor_group_code']))),
+                          DataCell(ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 200),
+                            child: Text(r['vendor_name_th']?.toString() ?? '',
+                                overflow: TextOverflow.ellipsis),
+                          )),
+                          DataCell(ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 200),
+                            child: Text(r['vendor_name_en']?.toString() ?? '',
+                                overflow: TextOverflow.ellipsis),
+                          )),
+                          DataCell(Text(_fmt(r['tax_id']))),
+                          DataCell(Text(_fmt(r['business_type_code']))),
+                          DataCell(Text(_fmt(r['currency_code']))),
+                          DataCell(Text('${_fmtNum(r['credit_term_months'])}/${_fmtNum(r['credit_term_days'])}')),
+                          DataCell(Text(_fmt(r['is_active']))),
+                        ],
+                      ))
                   .toList(),
             ),
           ),
         ),
       ],
     ]);
+  }
+
+  // ─── Vendor detail dialog (tabbed, per ap_vendor_detail_widget sections) ──
+
+  static const _addressColumns = [
+    ['address_type', 'ประเภทที่อยู่'],
+    ['address_no', 'บ้านเลขที่'],
+    ['address_building_village', 'อาคาร/หมู่บ้าน'],
+    ['address_alley', 'ซอย'],
+    ['address_road', 'ถนน'],
+    ['address_sub_district', 'ตำบล/แขวง'],
+    ['address_district', 'อำเภอ/เขต'],
+    ['address_province', 'จังหวัด'],
+    ['address_zip_code', 'รหัสไปรษณีย์'],
+    ['address_country', 'ประเทศ'],
+    ['is_default', 'ที่อยู่หลัก'],
+  ];
+
+  static const _contactColumns = [
+    ['contact_name', 'ชื่อผู้ติดต่อ'],
+    ['position', 'ตำแหน่ง'],
+    ['phone', 'โทรศัพท์'],
+    ['mobile', 'มือถือ'],
+    ['email', 'อีเมล'],
+    ['is_default', 'ผู้ติดต่อหลัก'],
+  ];
+
+  static const _bankColumns = [
+    ['bank_name', 'ธนาคาร'],
+    ['branch_name', 'สาขา'],
+    ['account_number', 'เลขที่บัญชี'],
+    ['account_name', 'ชื่อบัญชี'],
+    ['account_type', 'ประเภทบัญชี'],
+    ['is_default', 'บัญชีหลัก'],
+  ];
+
+  void _showVendorDetailDialog(Map<String, dynamic> row) {
+    const tabLabels = [
+      'ข้อมูลพื้นฐาน',
+      'ที่อยู่',
+      'ผู้ติดต่อ',
+      'บัญชีธนาคาร',
+      'บัญชีเจ้าหนี้ (GL)',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final size = MediaQuery.of(ctx).size;
+        return Dialog(
+          insetPadding: const EdgeInsets.all(24),
+          child: SizedBox(
+            width: size.width * 0.9,
+            height: size.height * 0.9,
+            child: DefaultTabController(
+              length: tabLabels.length,
+              child: Column(children: [
+                AppBar(
+                  automaticallyImplyLeading: false,
+                  backgroundColor: _appColor,
+                  foregroundColor: Colors.white,
+                  title: Text(
+                    '${row['vendor_code']?.toString() ?? '(อัตโนมัติ)'} - ${row['vendor_name_th']?.toString() ?? ''}',
+                    style: const TextStyle(fontSize: 15, color: Colors.white),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                  bottom: TabBar(
+                    isScrollable: true,
+                    indicatorColor: Colors.white,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.white70,
+                    tabs: tabLabels.map((l) => Tab(text: l)).toList(),
+                  ),
+                ),
+                Expanded(
+                  child: TabBarView(children: [
+                    _buildGeneralTab(row),
+                    _buildListTable(row['addresses'] as List? ?? [], _addressColumns),
+                    _buildListTable(row['contacts'] as List? ?? [], _contactColumns),
+                    _buildListTable(row['bank_accounts'] as List? ?? [], _bankColumns),
+                    _buildApAccountTab(row),
+                  ]),
+                ),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGeneralTab(Map<String, dynamic> row) {
+    final items = <List<String>>[
+      ['รหัสเจ้าหนี้', row['vendor_code']?.toString() ?? '(อัตโนมัติ)'],
+      ['กลุ่มเจ้าหนี้', _fmt(row['vendor_group_code'])],
+      ['รหัสเก่า', _fmt(row['old_vendor_code'])],
+      ['ชื่อ (ไทย)', _fmt(row['vendor_name_th'])],
+      ['ชื่อ (อังกฤษ)', _fmt(row['vendor_name_en'])],
+      ['เลขประจำตัวผู้เสียภาษี', _fmt(row['tax_id'])],
+      ['ประเภทธุรกิจ', _fmt(row['business_type_code'])],
+      ['เครดิต (เดือน)', _fmt(row['credit_term_months'])],
+      ['เครดิต (วัน)', _fmt(row['credit_term_days'])],
+      ['สกุลเงิน', _fmt(row['currency_code'])],
+      ['ใช้งาน', _fmt(row['is_active'])],
+      ['หมายเหตุ', _fmt(row['remark'])],
+    ];
+    return _buildKeyValueTable(items);
+  }
+
+  Widget _buildApAccountTab(Map<String, dynamic> row) {
+    final items = <List<String>>[
+      ['รหัสบัญชีเจ้าหนี้', _fmt(row['ap_account_code'])],
+    ];
+    return _buildKeyValueTable(items);
+  }
+
+  Widget _buildKeyValueTable(List<List<String>> items) {
+    return _DualScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Table(
+          defaultColumnWidth: const IntrinsicColumnWidth(),
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          children: items
+              .map((kv) => TableRow(children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      child: Text(kv[0],
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 240),
+                        child: Text(kv[1].isEmpty ? '-' : kv[1]),
+                      ),
+                    ),
+                  ]))
+              .toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListTable(List<dynamic> rows, List<List<String>> columns) {
+    if (rows.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('ไม่มีข้อมูล', style: TextStyle(color: Colors.grey)),
+      );
+    }
+    return _DualScrollView(
+      child: DataTable(
+        columnSpacing: 16,
+        headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
+        columns: columns
+            .map((c) => DataColumn(
+                label: Text(c[1],
+                    style: const TextStyle(fontWeight: FontWeight.bold))))
+            .toList(),
+        rows: rows.map((r) {
+          final map = r as Map<String, dynamic>;
+          return DataRow(
+            cells: columns
+                .map((c) => DataCell(Text(_fmt(map[c[0]]))))
+                .toList(),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  String _fmtNum(dynamic v) {
+    if (v == null) return '0';
+    final n = v is num ? v : num.tryParse(v.toString()) ?? 0;
+    if (n == n.roundToDouble()) return n.toInt().toString();
+    return n.toString();
+  }
+
+  String _fmt(dynamic val) {
+    if (val == null) return '';
+    if (val is bool) return val ? 'ใช่' : 'ไม่ใช่';
+    if (val is List) return val.map((e) => _fmtNum(e)).join(', ');
+    if (val is num) return _fmtNum(val);
+    return val.toString();
+  }
+}
+
+// ─── Dual scrollbar (vertical + horizontal) wrapper ─────────────────────────
+class _DualScrollView extends StatefulWidget {
+  final Widget child;
+  const _DualScrollView({required this.child});
+
+  @override
+  State<_DualScrollView> createState() => _DualScrollViewState();
+}
+
+class _DualScrollViewState extends State<_DualScrollView> {
+  final _vertCtrl = ScrollController();
+  final _horzCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _vertCtrl.dispose();
+    _horzCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      controller: _vertCtrl,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _vertCtrl,
+        child: Scrollbar(
+          controller: _horzCtrl,
+          thumbVisibility: true,
+          notificationPredicate: (notif) => notif.depth == 0,
+          child: SingleChildScrollView(
+            controller: _horzCtrl,
+            scrollDirection: Axis.horizontal,
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
   }
 }

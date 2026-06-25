@@ -134,31 +134,44 @@ class _UserListPanelState extends State<UserListPanel> {
                     return Card(
                       margin: const EdgeInsets.symmetric(
                           horizontal: 8.0, vertical: 4.0),
-                      child: ListTile(
-                        title: Text(
-                            '${user.firstName} ${user.lastName} (${user.userName})'),
-                        subtitle: Text(
-                            'อีเมล: ${user.email ?? '(ไม่มี)'}\nสถานะ: ${user.status}, ประเภท: ${user.userType}'),
-                        isThreeLine: true,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.visibility,
-                                  color: Colors.green),
-                              onPressed: () => widget.onView(user),
+                      child: Stack(
+                        children: [
+                          ListTile(
+                            title: Text(
+                                '${user.firstName} ${user.lastName} (${user.userName})'),
+                            subtitle: Text(
+                                'อีเมล: ${user.email ?? '(ไม่มี)'}\nสถานะ: ${user.status}, ประเภท: ${user.userType}'),
+                            isThreeLine: true,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.visibility,
+                                      color: Colors.green),
+                                  onPressed: () => widget.onView(user),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  onPressed: () => widget.onEdit(user),
+                                ),
+                                IconButton(
+                                  icon:
+                                      const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () => widget.onDelete(user),
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => widget.onEdit(user),
+                          ),
+                          if (user.status != 'active')
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(Icons.block, size: 72,
+                                      color: Colors.red.withOpacity(0.12)),
+                                ),
+                              ),
                             ),
-                            IconButton(
-                              icon:
-                                  const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => widget.onDelete(user),
-                            ),
-                          ],
-                        ),
+                        ],
                       ),
                     );
                   },

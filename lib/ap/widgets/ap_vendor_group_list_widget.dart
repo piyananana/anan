@@ -70,6 +70,7 @@ class ApVendorGroupListWidgetState extends State<ApVendorGroupListWidget>
 
   List<ApVendorGroup> _filtered() {
     var display = List<ApVendorGroup>.from(_list);
+    if (widget.enableCardSelect) display = display.where((e) => e.isActive).toList();
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toUpperCase();
       display = display.where((g) =>
@@ -165,7 +166,8 @@ class ApVendorGroupListWidgetState extends State<ApVendorGroupListWidget>
                 final item = display[i];
                 return Card(
                   margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: ListTile(
+                  child: Stack(children: [
+                  ListTile(
                     title: Text('${item.groupCode} — ${item.groupNameThai}',
                       style: TextStyle(fontWeight: FontWeight.bold, color: item.isActive ? null : Colors.grey)),
                     subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -194,6 +196,16 @@ class ApVendorGroupListWidgetState extends State<ApVendorGroupListWidget>
                         ),
                     ]),
                   ),
+                  if (!item.isActive)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Center(
+                          child: Icon(Icons.block, size: 72,
+                              color: Colors.red.withOpacity(0.12)),
+                        ),
+                      ),
+                    ),
+                  ]),
                 );
               },
             )),

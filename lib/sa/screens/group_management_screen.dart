@@ -45,6 +45,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
   final TextEditingController _nameController = TextEditingController();
   bool _isActive = true;
   bool _haveSubGroup = true;
+  bool _canClosePeriod = false;
   final TextEditingController _descriptionController = TextEditingController();
 
   bool _isLeftPanelExpanded = true;
@@ -116,6 +117,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
     setState(() {
       _isActive = true;
       _haveSubGroup = true;
+      _canClosePeriod = false;
       _selectedNode = null;
       _formMode = NodeMode.none;
       _parentIdForNew = null;
@@ -134,6 +136,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
       _descriptionController.text = '';
       _isActive = true;
       _haveSubGroup = true;
+      _canClosePeriod = false;
     });
   }
 
@@ -144,14 +147,11 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
       _selectedNode = parentRowData;
       _parentIdForNew = parentRowData.id;
       _parentNameForNew = parentRowData.name;
-      // ตั้งค่าเริ่มต้นสำหรับการเพิ่มรายการย่อย
       _nameController.text = '';
       _descriptionController.text = '';
-      // _contactPersonController.text = '';
-      // _phoneNumberController.text = '';
-      // _emailController.text = '';
       _isActive = true;
       _haveSubGroup = true;
+      _canClosePeriod = false;
     });
   }
 
@@ -164,6 +164,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
       _descriptionController.text = rowData.description ?? '';
       _isActive = rowData.isActive;
       _haveSubGroup = rowData.haveSubGroup;
+      _canClosePeriod = rowData.canClosePeriod;
     });
   }
 
@@ -175,18 +176,15 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
 
     try {
       final data = Group(
-        id: _selectedNode?.id, // ID จะเป็น null ถ้าเป็นการเพิ่มใหม่
+        id: _selectedNode?.id,
         name: _nameController.text,
-        // กำหนด parentId ที่ถูกต้อง:
-        // ถ้าเป็นการแก้ไข ให้ใช้ _currentUnitParentId
-        // ถ้าเป็นการเพิ่มใหม่ ให้ใช้ _parentForNewUnitId
-        // parentId: _selectedNode != null ? _currentParentId : _parentForNewUnitId,
-        parentId: _formMode == NodeMode.addRoot ? null 
+        parentId: _formMode == NodeMode.addRoot ? null
             : _formMode == NodeMode.addChild ? _parentIdForNew
-            : _selectedNode?.parentId, // ใช้ parentId ของเมนูที่ถูกเลือก
+            : _selectedNode?.parentId,
         isActive: _isActive,
         haveSubGroup: _haveSubGroup,
         description: _descriptionController.text.isEmpty ? null : _descriptionController.text,
+        canClosePeriod: _canClosePeriod,
       );
       if (_formMode == NodeMode.addRoot || _formMode == NodeMode.addChild) {
         final newData = await service.createData(data);
@@ -396,57 +394,70 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          onTap: () {
-            if (isFolder && hasChildren) {
-              setState(() {
-                _expandedState[rowData.id] = !isExpanded;
-              });
-            } else {
-              _setEditMode(rowData); // คลิกเมนูเพื่อแก้ไขรายละเอียด
-            }
-          },
-          child: Padding(
-            padding: EdgeInsets.only(left: level * 16.0),
-            child: Row(
-              children: [
-                if (isFolder && hasChildren)
-                  Icon(isExpanded ? Icons.arrow_drop_down : Icons.arrow_right),
-                if (!isFolder || !hasChildren)
-                  const SizedBox(width: 24),
-                Icon(isFolder ? Icons.group_work
-                  : Icons.groups_3),
-                const SizedBox(width: 8),
-                // Icon(Icons.groups_3),
-                Expanded(
-                  child: Text(
-                    rowData.name,
-                    style: const TextStyle(fontSize: 16),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+        Stack(
+          children: [
+            GestureDetector(
+              onTap: () {
+                if (isFolder && hasChildren) {
+                  setState(() {
+                    _expandedState[rowData.id] = !isExpanded;
+                  });
+                } else {
+                  _setEditMode(rowData); // คลิกเมนูเพื่อแก้ไขรายละเอียด
+                }
+              },
+              child: Padding(
+                padding: EdgeInsets.only(left: level * 16.0),
+                child: Row(
+                  children: [
+                    if (isFolder && hasChildren)
+                      Icon(isExpanded ? Icons.arrow_drop_down : Icons.arrow_right),
+                    if (!isFolder || !hasChildren)
+                      const SizedBox(width: 24),
+                    Icon(isFolder ? Icons.group_work
+                      : Icons.groups_3),
+                    const SizedBox(width: 8),
+                    // Icon(Icons.groups_3),
+                    Expanded(
+                      child: Text(
+                        rowData.name,
+                        style: const TextStyle(fontSize: 16),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // Icon ปุ่ม Add สำหรับ Folder
+                    if (isFolder)
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline, size: 20),
+                        tooltip: 'เพิ่มรายการย่อย',
+                        onPressed: () => _setAddChildMode(rowData),
+                      ),
+                    // Icon ปุ่ม Edit
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                      tooltip: 'แก้ไข',
+                      onPressed: () => _setEditMode(rowData),
+                    ),
+                    // Icon ปุ่ม Delete
+                    IconButton(
+                      icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                      tooltip: 'ลบ',
+                      onPressed: () => _confirmDeleteData(rowData),
+                    ),
+                  ],
                 ),
-                // Icon ปุ่ม Add สำหรับ Folder
-                if (isFolder)
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline, size: 20),
-                    tooltip: 'เพิ่มรายการย่อย',
-                    onPressed: () => _setAddChildMode(rowData),
-                  ),
-                // Icon ปุ่ม Edit
-                IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                  tooltip: 'แก้ไข',
-                  onPressed: () => _setEditMode(rowData),
-                ),
-                // Icon ปุ่ม Delete
-                IconButton(
-                  icon: const Icon(Icons.delete, size: 20, color: Colors.red),
-                  tooltip: 'ลบ',
-                  onPressed: () => _confirmDeleteData(rowData),
-                ),
-              ],
+              ),
             ),
-          ),
+            if (!rowData.isActive)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Center(
+                    child: Icon(Icons.block, size: 48,
+                        color: Colors.red.withOpacity(0.12)),
+                  ),
+                ),
+              ),
+          ],
         ),
         if (isExpanded && hasChildren)
           Column(
@@ -506,6 +517,23 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
               onChanged: (bool value) {
                 setState(() {
                   _haveSubGroup = value;
+                });
+              },
+            ),
+            SwitchListTile(
+              title: const Text('สิทธิ์อนุมัติการปิดงวดบัญชี'),
+              subtitle: const Text(
+                'กลุ่มนี้สามารถอนุมัติการเปลี่ยนสถานะงวดบัญชีเป็น CLOSED ได้',
+                style: TextStyle(fontSize: 12),
+              ),
+              secondary: Icon(
+                Icons.lock,
+                color: _canClosePeriod ? Colors.red : Colors.grey,
+              ),
+              value: _canClosePeriod,
+              onChanged: (bool value) {
+                setState(() {
+                  _canClosePeriod = value;
                 });
               },
             ),

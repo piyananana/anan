@@ -10,6 +10,7 @@ import '../services/ar_bulk_billing_service.dart';
 import '../services/ar_customer_service.dart';
 import '../services/ar_customer_group_service.dart';
 import '../services/ar_collector_service.dart';
+import '../widgets/ar_customer_group_multi_picker.dart';
 
 // ─── Column widths (all fixed — no Expanded in horizontal scroll) ─────────────
 const double _wCB    = 40.0;   // checkbox
@@ -95,7 +96,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
   // Filters
   DateTime _dateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _dateTo   = DateTime.now();
-  int?    _selectedGroupId;
+  List<int> _selectedGroupIds = [];
   int?    _selectedCollectorId;
   String? _customerCodeFrom;
   String? _customerCodeTo;
@@ -158,7 +159,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
       final raw = await _planService.getBillingPlanReport(
         dateFrom:           DateFormat('yyyy-MM-dd').format(_dateFrom),
         dateTo:             DateFormat('yyyy-MM-dd').format(_dateTo),
-        customerGroupId:    _selectedGroupId,
+        customerGroupIds:   _selectedGroupIds,
         billingCollectorId: _selectedCollectorId,
         customerCodeFrom:   _customerCodeFrom,
         customerCodeTo:     _customerCodeTo,
@@ -481,28 +482,11 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                               const SizedBox(height: 12),
 
                               // กลุ่มลูกค้า
-                              DropdownButtonFormField<int?>(
-                                isExpanded: true,
-                                value: _selectedGroupId,
-                                decoration: const InputDecoration(
-                                    labelText: 'กลุ่มลูกค้า',
-                                    border: OutlineInputBorder(),
-                                    isDense: true),
-                                items: [
-                                  const DropdownMenuItem<int?>(
-                                      value: null,
-                                      child: Text('— ทุกกลุ่ม —')),
-                                  ..._customerGroups.map((g) =>
-                                      DropdownMenuItem<int?>(
-                                        value: g.id,
-                                        child: Text(
-                                            '${g.groupCode}  ${g.groupNameThai}',
-                                            overflow:
-                                                TextOverflow.ellipsis),
-                                      )),
-                                ],
+                              ArCustomerGroupMultiPicker(
+                                groups: _customerGroups,
+                                selectedIds: _selectedGroupIds,
                                 onChanged: (v) =>
-                                    setState(() => _selectedGroupId = v),
+                                    setState(() => _selectedGroupIds = v),
                               ),
                               const SizedBox(height: 12),
 

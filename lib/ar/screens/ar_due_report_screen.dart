@@ -18,6 +18,7 @@ import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../widgets/ar_customer_group_multi_picker.dart';
 
 class ArDueReportScreen extends StatefulWidget {
   const ArDueReportScreen({super.key});
@@ -52,7 +53,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
   // Customer filters
   List<ArCustomerGroup> _customerGroups = [];
-  int? _selectedGroupId;
+  List<int> _selectedGroupIds = [];
   List<Salesperson> _salespersons = [];
   int? _selectedSalespersonId;
   String? _customerCodeFrom;
@@ -154,7 +155,6 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
       final raw = await _reportService.getAgingReport(
         asOfDate: DateFormat('yyyy-MM-dd').format(_asOfDate),
         branchId: _selectedBranchId,
-        customerGroupId: _selectedGroupId,
         salespersonId: _selectedSalespersonId,
         customerCodeFrom: _customerCodeFrom,
         customerCodeTo: _customerCodeTo,
@@ -162,9 +162,9 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
       // Step 1: filter non-empty + กลุ่ม + พนักงานขาย + code range จาก raw data
       var filtered =
           raw.where((c) => ((c['invoices'] as List?) ?? []).isNotEmpty).toList();
-      if (_selectedGroupId != null) {
+      if (_selectedGroupIds.isNotEmpty) {
         filtered = filtered
-            .where((c) => c['customer_group_id'] == _selectedGroupId)
+            .where((c) => _selectedGroupIds.contains(c['customer_group_id']))
             .toList();
       }
       if (_selectedSalespersonId != null) {
@@ -357,10 +357,13 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
           orElse: () => _allowedBranches.first);
       conditions.add('สาขา: ${b.branchCode} ${b.branchNameThai}');
     }
-    if (_selectedGroupId != null) {
-      final g = _customerGroups.firstWhere((g) => g.id == _selectedGroupId,
-          orElse: () => _customerGroups.first);
-      conditions.add('กลุ่มลูกค้า: ${g.groupCode} ${g.groupNameThai}');
+    if (_selectedGroupIds.isNotEmpty) {
+      final names = _selectedGroupIds.map((id) {
+        final g = _customerGroups.firstWhere((g) => g.id == id,
+            orElse: () => _customerGroups.first);
+        return '${g.groupCode} ${g.groupNameThai}';
+      }).join(', ');
+      conditions.add('กลุ่มลูกค้า: $names');
     }
     if (_selectedSalespersonId != null) {
       final sp = _salespersons.firstWhere(
@@ -797,28 +800,11 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
                                 // กลุ่มลูกค้า
                                 const SizedBox(height: 12),
-                                DropdownButtonFormField<int?>(
-                                  isExpanded: true,
-                                  value: _selectedGroupId,
-                                  decoration: const InputDecoration(
-                                      labelText: 'กลุ่มลูกค้า',
-                                      border: OutlineInputBorder(),
-                                      isDense: true),
-                                  items: [
-                                    const DropdownMenuItem<int?>(
-                                        value: null,
-                                        child: Text('— ทุกกลุ่ม —')),
-                                    ..._customerGroups.map((g) =>
-                                        DropdownMenuItem<int?>(
-                                          value: g.id,
-                                          child: Text(
-                                              '${g.groupCode}  ${g.groupNameThai}',
-                                              overflow:
-                                                  TextOverflow.ellipsis),
-                                        )),
-                                  ],
+                                ArCustomerGroupMultiPicker(
+                                  groups: _customerGroups,
+                                  selectedIds: _selectedGroupIds,
                                   onChanged: (v) =>
-                                      setState(() => _selectedGroupId = v),
+                                      setState(() => _selectedGroupIds = v),
                                 ),
 
                                 // พนักงานขาย

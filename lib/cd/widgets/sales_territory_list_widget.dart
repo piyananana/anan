@@ -320,7 +320,10 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
       displayList = _list.where((t) => includedIds.contains(t.id)).toList();
     }
 
-    final topLevel = _childrenOf(null, displayList);
+    final effectiveList = widget.enableCardSelect
+        ? displayList.where((t) => t.isActive).toList()
+        : displayList;
+    final topLevel = _childrenOf(null, effectiveList);
 
     return Column(
       children: [
@@ -372,7 +375,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
                   : ListView.builder(
                       itemCount: topLevel.length,
                       itemBuilder: (ctx, i) =>
-                          _buildNode(topLevel[i], 0, displayList),
+                          _buildNode(topLevel[i], 0, effectiveList),
                     ),
         ),
       ],

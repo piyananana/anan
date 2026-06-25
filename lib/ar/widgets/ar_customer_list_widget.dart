@@ -146,7 +146,8 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final display = List<ArCustomer>.from(_lists);
+    var display = List<ArCustomer>.from(_lists);
+    if (widget.enableCardSelect) display = display.where((e) => e.isActive).toList();
     switch (_sortBy) {
       case 'code_asc': display.sort((a, b) => a.customerCode.compareTo(b.customerCode)); break;
       case 'code_desc': display.sort((a, b) => b.customerCode.compareTo(a.customerCode)); break;
@@ -169,7 +170,8 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8.0, vertical: 4.0),
-                          child: ListTile(
+                          child: Stack(children: [
+                          ListTile(
                             leading: CircleAvatar(
                               backgroundColor: item.isActive
                                   ? Colors.orange.shade100
@@ -229,6 +231,16 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
                               ],
                             ),
                           ),
+                          if (!item.isActive)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(Icons.block, size: 72,
+                                      color: Colors.red.withOpacity(0.12)),
+                                ),
+                              ),
+                            ),
+                          ]),
                         );
                       },
                     ),

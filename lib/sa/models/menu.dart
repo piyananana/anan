@@ -28,6 +28,9 @@ import '../../cd/screens/salesperson_screen.dart';
 import '../../cd/screens/cd_wht_type_screen.dart';
 
 import '../../gl/screens/account_screen.dart';
+import '../../gl/screens/account_import_screen.dart';
+import '../../gl/screens/gl_opening_balance_import_screen.dart';
+import '../../gl/screens/chart_of_accounts_report_screen.dart';
 import '../../gl/screens/financial_report_builder_screen.dart';
 import '../../gl/screens/gl_entry_screen.dart';
 import '../../gl/screens/financial_report_screen.dart';
@@ -46,6 +49,7 @@ import '../../gl/screens/gl_reset_screen.dart';
 import '../../ar/screens/ar_customer_screen.dart';
 import '../../ar/screens/ar_customer_group_screen.dart';
 import '../../ar/screens/ar_customer_import_screen.dart';
+import '../../ar/screens/ar_customer_balance_import_screen.dart';
 import '../../ar/screens/ar_customer_running_screen.dart';
 import '../../ar/screens/ar_transaction_screen.dart';
 import '../../ar/screens/ar_aging_report_screen.dart';
@@ -57,6 +61,7 @@ import '../../ar/screens/ar_transaction_report_screen.dart';
 import '../../ar/screens/ar_billing_status_report_screen.dart';
 import '../../ar/screens/ar_receipt_payment_report_screen.dart';
 import '../../ar/screens/ar_credit_limit_report_screen.dart';
+import '../../ar/screens/ar_customer_report_screen.dart';
 import '../../ar/screens/ar_fx_gain_loss_report_screen.dart';
 import '../../vt/screens/vat_report_screen.dart';
 import '../../ar/screens/ar_collector_screen.dart';
@@ -156,6 +161,8 @@ class Menu {
     'AccountScreen': (context) => AccountScreen(
           onFieldsChanged: () {},
         ),
+    'AccountImportScreen': (context) => AccountImportScreen(onFieldsChanged: () {}),
+    'GlOpeningBalanceImportScreen': (context) => GlOpeningBalanceImportScreen(onFieldsChanged: () {}),
     'GlEntryScreen': (context) => const GlEntryScreen(),
     'GlDimensionTypeScreen': (context) => const GlDimensionTypeScreen(),
     'GlDimensionValueScreen': (context) => const GlDimensionValueScreen(),
@@ -164,6 +171,7 @@ class Menu {
     'PeriodScreen': (context) => PeriodScreen(
           onFieldsChanged: () {},
         ),
+    'ChartOfAccountsReportScreen': (context) => const ChartOfAccountsReportScreen(),
     'TrialBalanceReportScreen': (context) => const TrialBalanceReportScreen(),
     'DailyTransactionReportScreen': (context) => const DailyTransactionReportScreen(),
     'BalanceSheetReportScreen': (context) => const BalanceSheetReportScreen(),
@@ -180,6 +188,7 @@ class Menu {
           onFieldsChanged: () {},
         ),
     'ArCustomerImportScreen': (context) => ArCustomerImportScreen(onFieldsChanged: () {}),
+    'ArCustomerBalanceImportScreen': (context) => ArCustomerBalanceImportScreen(onFieldsChanged: () {}),
     'ArCustomerRunningScreen': (context) => const ArCustomerRunningScreen(),
     'ArTransactionScreen': (context) => const ArTransactionScreen(),
     'ArAgingReportScreen': (context) => const ArAgingReportScreen(),
@@ -191,6 +200,7 @@ class Menu {
     'ArBillingStatusReportScreen':      (context) => const ArBillingStatusReportScreen(),
     'ArReceiptPaymentReportScreen':    (context) => const ArReceiptPaymentReportScreen(),
     'ArCreditLimitReportScreen':      (context) => const ArCreditLimitReportScreen(),
+    'ArCustomerReportScreen':         (context) => const ArCustomerReportScreen(),
     'ArFxGainLossReportScreen':       (context) => const ArFxGainLossReportScreen(),
     'VatReportScreen':        (context) => const VatReportScreen(),
     'ArCollectorScreen': (context) => ArCollectorScreen(onFieldsChanged: () {}),

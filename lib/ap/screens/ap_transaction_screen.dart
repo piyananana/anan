@@ -89,6 +89,11 @@ class _ApTransactionScreenState extends State<ApTransactionScreen>
         children: [
           TabBar(
             controller: _tabController,
+            onTap: (index) {
+              if (index == 1) {
+                _tabController.animateTo(_currentTabIndex, duration: Duration.zero);
+              }
+            },
             dividerColor: Colors.grey,
             labelColor: Colors.blue[800],
             isScrollable: true,

@@ -157,9 +157,9 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
               (a) => a.id == detail.accountId,
               orElse: () => Account(
                   id: 0, accountCode: '', accountNameThai: '', accountNameEng: '',
-                  isActive: true, accountType: '', accountSubType: '',
+                  isActive: true, accountType: '',
                   normalBalance: '', isNormalAccount: false,
-                  currencyCode: '', moduleLinkCode: '', branchRequired: false, dimRules: const []),
+                  currencyCode: '', branchRequired: false, dimRules: const []),
             );
             detail.accountCode = match.accountCode;
             detail.accountName = match.accountNameThai;
@@ -460,7 +460,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
 
   Future<Account?> _showAccountDialog() async {
     final searchCtrl = TextEditingController();
-    final available = _accounts.where((a) => !a.isControlAccount && a.isActive).toList();
+    final available = _accounts.where((a) => a.isNormalAccount && !a.isControlAccount && a.isActive).toList();
     List<Account> filtered = List.from(available);
     final result = await showDialog<Account>(
       context: context,
@@ -891,9 +891,9 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 (a) => a.id == detail.accountId,
                 orElse: () => Account(
                     id: 0, accountCode: '', accountNameThai: '', accountNameEng: '',
-                    accountType: '', accountSubType: '', normalBalance: '',
+                    accountType: '', normalBalance: '',
                     isNormalAccount: false, currencyCode: '',
-                    moduleLinkCode: '', branchRequired: false, isActive: true, dimRules: const []),
+                    branchRequired: false, isActive: true, dimRules: const []),
               );
               return DataRow(cells: [
                 DataCell(Text('${i + 1}')),
@@ -1198,11 +1198,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   // ── Action buttons ───────────────────────────────────────────────────────
   Widget _buildActionButtons() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey[300]!)),
-      ),
+      color: Colors.deepOrange[50],
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(children: [
         if (!_isReadOnly && _header.status == 'Draft') ...[
           OutlinedButton(onPressed: () => _save('Draft'), child: const Text('ดราฟท์')),
@@ -1242,6 +1239,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     return Form(
       key: _formKey,
       child: Column(children: [
+        _buildActionButtons(),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(8),
@@ -1253,7 +1251,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
           ),
         ),
         _buildTotalsRow(),
-        _buildActionButtons(),
       ]),
     );
   }

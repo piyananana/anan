@@ -13,6 +13,8 @@ import '../widgets/confirm_logout_dialog.dart';
 import '../widgets/inactivity_detector.dart';
 import 'login_screen.dart';
 import 'menu_screen.dart';
+import 'user_screen.dart';
+import 'user_menu_screen.dart';
 import '../../ap/models/ap_payment_run.dart';
 import '../../ap/services/ap_payment_run_service.dart';
 
@@ -216,7 +218,6 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       });
       final menus =
           await MenuService().fetchMenuByUserId(_currentUser?.id ?? 0);
-      // Initialize top-level folders ให้ expand เป็น default (เฉพาะครั้งแรก)
       for (var menu in menus) {
         if (menu.menuType == 'folder' && menu.parentId == null) {
           _menuExpandedState.putIfAbsent(menu.id, () => true);
@@ -227,16 +228,75 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _isLoading = false;
         _currentMenuContent = null;
       });
+      // ไม่ใช่ developer และไม่มีเมนูเลย → แจ้งเตือนแล้วกลับ login
+      if (menus.isEmpty && !(_currentUser?.isDeveloper ?? false)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _showNoMenuDialog());
+      }
     } catch (e) {
       setState(() {
         _error = 'Failed to load menus: $e';
         _isLoading = false;
       });
-      // ถ้า Error เป็น Unauthorized (401) อาจจะพาไปหน้า Login
       if (e.toString().contains('Unauthorized')) {
-        _performLogout(); // บังคับ logout
+        _performLogout();
       }
     }
+  }
+
+  Future<void> _showNoMenuDialog() async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+          SizedBox(width: 8),
+          Text('ยังไม่ได้กำหนดสิทธิ์เมนู'),
+        ]),
+        content: const Text(
+          'บัญชีผู้ใช้นี้ยังไม่ได้รับการกำหนดสิทธิ์เมนูใดเลย\n'
+          'กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์การใช้งาน',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _performLogout();
+            },
+            child: const Text('ตกลง'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeveloperBootstrap() {
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          TabBar(
+            labelColor: Colors.green.shade900,
+            indicatorColor: Colors.green.shade900,
+            tabs: const [
+              Tab(icon: Icon(Icons.menu_book_outlined), text: 'จัดการเมนู'),
+              Tab(icon: Icon(Icons.people_outline), text: 'จัดการผู้ใช้'),
+              Tab(icon: Icon(Icons.manage_accounts_outlined), text: 'สิทธิ์เมนูผู้ใช้'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                MenuScreen(onMenusChanged: _fetchMenus, onExit: _onExitContent),
+                const UserScreen(),
+                const UserMenuScreen(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onMenuSelected(Menu menu) async {
@@ -600,15 +660,11 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ? const Center(child: CircularProgressIndicator())
               : _error.isNotEmpty
                   ? Center(child: Text('Error: $_error'))
-                  : _allMenus.isEmpty // <-- ตรวจเช็คว่ามีเมนูหรือไม่
-                      ? MenuScreen(
-                          // <-- แสดง MenuManagementScreen ถ้าไม่มีเมนู
-                          // initialMenus: _allMenus,
-                          onMenusChanged:
-                              _fetchMenus, // Callback ให้ HomeScreen โหลดเมนูใหม่
-                          onExit: _onExitContent, // <-- ส่ง Callback นี้ไป
-                        )
-                      : Row(
+                  : _allMenus.isEmpty && (_currentUser?.isDeveloper ?? false)
+                      ? _buildDeveloperBootstrap()
+                      : _allMenus.isEmpty
+                          ? const Center(child: CircularProgressIndicator())
+                          : Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             // Toggle button — fixed width, always same element

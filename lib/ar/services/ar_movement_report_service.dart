@@ -10,7 +10,7 @@ class ArMovementReportService {
   Future<List<Map<String, dynamic>>> getMovementReport({
     required String dateFrom,
     required String dateTo,
-    int? customerGroupId,
+    List<int>? customerGroupIds,
     int? salespersonId,
     String? customerCodeFrom,
     String? customerCodeTo,
@@ -20,8 +20,8 @@ class ArMovementReportService {
       'date_from': dateFrom,
       'date_to':   dateTo,
     };
-    if (customerGroupId != null) {
-      params['customer_group_id'] = customerGroupId.toString();
+    if (customerGroupIds != null && customerGroupIds.isNotEmpty) {
+      params['customer_group_id'] = customerGroupIds.join(',');
     }
     if (salespersonId != null) {
       params['salesperson_id'] = salespersonId.toString();

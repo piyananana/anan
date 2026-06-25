@@ -10,7 +10,7 @@ class ArBillingPlanReportService {
   Future<List<Map<String, dynamic>>> getBillingPlanReport({
     required String dateFrom,
     required String dateTo,
-    int? customerGroupId,
+    List<int>? customerGroupIds,
     int? billingCollectorId,
     String? customerCodeFrom,
     String? customerCodeTo,
@@ -20,8 +20,8 @@ class ArBillingPlanReportService {
       'date_from': dateFrom,
       'date_to':   dateTo,
     };
-    if (customerGroupId != null) {
-      params['customer_group_id'] = customerGroupId.toString();
+    if (customerGroupIds != null && customerGroupIds.isNotEmpty) {
+      params['customer_group_id'] = customerGroupIds.join(',');
     }
     if (billingCollectorId != null) {
       params['billing_collector_id'] = billingCollectorId.toString();

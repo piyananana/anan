@@ -122,6 +122,7 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
 
   List<ArCollector> get _filtered {
     List<ArCollector> items = List.from(_list);
+    if (widget.enableCardSelect) items = items.where((e) => e.isActive).toList();
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toUpperCase();
       items = items.where((c) {
@@ -208,7 +209,8 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
-                          child: ListTile(
+                          child: Stack(children: [
+                          ListTile(
                             title: Text(
                               '${item.collectorCode} — ${item.collectorNameThai}',
                               style: TextStyle(
@@ -261,6 +263,16 @@ class ArCollectorListWidgetState extends State<ArCollectorListWidget>
                               ],
                             ),
                           ),
+                          if (!item.isActive)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(Icons.block, size: 72,
+                                      color: Colors.red.withOpacity(0.12)),
+                                ),
+                              ),
+                            ),
+                          ]),
                         );
                       },
                     ),

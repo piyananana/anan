@@ -92,6 +92,7 @@ class CurrencyListWidgetState extends State<CurrencyListWidget>
 
   List<Currency> _filterAndSort() {
     List<Currency> displayLists = List.from(_lists);
+    if (widget.enableCardSelect) displayLists = displayLists.where((e) => e.isActive).toList();
     // 1. Filter
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toUpperCase();

@@ -100,6 +100,7 @@ class BankListWidgetState extends State<BankListWidget>
 
   List<Bank> _filterAndSort() {
     List<Bank> display = List.from(_lists);
+    if (widget.enableCardSelect) display = display.where((e) => e.isActive).toList();
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toUpperCase();
       display = display.where((row) {
@@ -232,7 +233,8 @@ class BankListWidgetState extends State<BankListWidget>
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8.0, vertical: 4.0),
-                          child: ListTile(
+                          child: Stack(children: [
+                          ListTile(
                             leading: item.shortName != null
                                 ? CircleAvatar(
                                     backgroundColor: Colors.blue.shade100,
@@ -295,6 +297,16 @@ class BankListWidgetState extends State<BankListWidget>
                               ],
                             ),
                           ),
+                          if (!item.isActive)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(Icons.block, size: 72,
+                                      color: Colors.red.withOpacity(0.12)),
+                                ),
+                              ),
+                            ),
+                          ]),
                         );
                       },
                     ),

@@ -11,7 +11,7 @@ class ArFxGainLossReportService {
     required String dateFrom,
     required String dateTo,
     String? currencyCode,
-    int? customerGroupId,
+    List<int>? customerGroupIds,
     int? salespersonId,
     String? customerCodeFrom,
     String? customerCodeTo,
@@ -28,7 +28,7 @@ class ArFxGainLossReportService {
     if (currencyCode != null && currencyCode.isNotEmpty) {
       params['currency_code'] = currencyCode;
     }
-    if (customerGroupId != null)  params['customer_group_id'] = customerGroupId.toString();
+    if (customerGroupIds != null && customerGroupIds.isNotEmpty)  params['customer_group_id'] = customerGroupIds.join(',');
     if (salespersonId   != null)  params['salesperson_id']    = salespersonId.toString();
     if (customerCodeFrom != null && customerCodeFrom.isNotEmpty) {
       params['customer_code_from'] = customerCodeFrom;

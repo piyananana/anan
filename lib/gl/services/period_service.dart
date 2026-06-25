@@ -209,6 +209,21 @@ class PeriodService {
     }
   }
   
+  Future<Map<String, dynamic>> verifyCloseApprover(String username, String password) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.post(
+      Uri.parse('$baseUrl/gl_posting_period/verify_close_approver'),
+      headers: headers,
+      body: json.encode({'username': username, 'password': password}),
+    );
+    final body = json.decode(response.body) as Map<String, dynamic>;
+    if (response.statusCode == 200) {
+      return body;
+    } else {
+      throw Exception(body['message'] ?? 'ไม่สามารถยืนยันตัวตนได้');
+    }
+  }
+
   Future<PostingPeriod> updateStatusDetailRow(int rowId, String module, String newStatus) async {
     final body = {
       // ใช้ dynamic key เพื่อส่งสถานะที่ต้องการเปลี่ยนเท่านั้น

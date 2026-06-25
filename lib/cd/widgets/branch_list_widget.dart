@@ -93,6 +93,7 @@ class BranchListWidgetState extends State<BranchListWidget>
 
   List<Branch> _filterAndSort() {
     List<Branch> displayLists = List.from(_lists);
+    if (widget.enableCardSelect) displayLists = displayLists.where((e) => e.isActive).toList();
     // 1. Filter
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toUpperCase();
@@ -265,7 +266,8 @@ class BranchListWidgetState extends State<BranchListWidget>
                     return Card(
                       margin: const EdgeInsets.symmetric(
                           horizontal: 8.0, vertical: 4.0),
-                      child: ListTile(
+                      child: Stack(children: [
+                      ListTile(
                         // leading: Text('${(index + 1).toString()}.'),
                         // // CircleAvatar(
                         // //   child: Text((index + 1).toString()),
@@ -314,6 +316,16 @@ class BranchListWidgetState extends State<BranchListWidget>
                           ],
                         ),
                       ),
+                      if (!item.isActive)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: Center(
+                              child: Icon(Icons.block, size: 72,
+                                  color: Colors.red.withOpacity(0.12)),
+                            ),
+                          ),
+                        ),
+                      ]),
                     );
                   },
                 ),

@@ -195,45 +195,14 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
     //     .toList();
     try {
       if (user.isMember) {
-        await _userMenuService.deleteUserMenu(user.id);
         await _groupUserService.createGroupUserByUserId(
             _selectedNode!.id!, user.id);
         _showSnackBar(
-            'ผู้ใช้เข้ากลุ่มและได้สิทธิ์เมนูใหม่ตามกลุ่มแล้ว', Colors.green);
+            'เพิ่ม "${user.userName}" เข้ากลุ่มแล้ว (เมนูกลุ่มถูกเพิ่มเข้าสิทธิ์ที่มีอยู่)', Colors.green);
       } else {
-        final bool? confirm = await showDialog<bool>(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: const Text('ยืนยันการลบผู้ใช้'),
-              content: Text(
-                  'การลบผู้ใช้ออกจากกลุ่ม จะลบสิทธิ์เมนูผู้ใช้ด้วย คุณแน่ใจหรือไม่ "${user.userName}"?'),
-              actions: <Widget>[
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('ยกเลิก'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white),
-                  child: const Text('ตกลง'),
-                ),
-              ],
-            );
-          },
-        );
-        if (confirm == true) {
-          await _groupUserService.deleteGroupUserByUserId(
-              _selectedNode!.id!, user.id);
-          _showSnackBar(
-              'ผู้ใช้ออกจากกลุ่มและถอนสิทธิ์เมนูตามกลุ่มแล้ว', Colors.green);
-        } else {
-          setState(() {
-            user.isMember = !newValue;
-          });
-        }
+        await _groupUserService.deleteGroupUserByUserId(
+            _selectedNode!.id!, user.id);
+        _showSnackBar('ลบผู้ใช้ "${user.userName}" ออกจากกลุ่มแล้ว (สิทธิ์เมนูยังคงอยู่)', Colors.green);
       }
       // // ถ้าผู้ใช้ถูกยกเลิกการเลือก ให้ลบสิทธิ์เมนูด้วย
       // if (!newValue) {

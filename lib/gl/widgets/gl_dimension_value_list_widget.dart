@@ -214,7 +214,8 @@ class GlDimensionValueListWidgetState
                               horizontal: 6, vertical: 2),
                           elevation: 0.5,
                           color: v.isActive ? null : Colors.grey[50],
-                          child: ListTile(
+                          child: Stack(children: [
+                          ListTile(
                             dense: true,
                             contentPadding: EdgeInsets.only(
                               left: 8 + depth * 16.0,
@@ -313,6 +314,16 @@ class GlDimensionValueListWidgetState
                               ],
                             ),
                           ),
+                          if (!v.isActive)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(Icons.block, size: 72,
+                                      color: Colors.red.withOpacity(0.12)),
+                                ),
+                              ),
+                            ),
+                          ]),
                         );
                       },
                     );

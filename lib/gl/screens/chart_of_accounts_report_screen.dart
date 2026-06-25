@@ -13,7 +13,6 @@ import '../models/account.dart';
 import '../services/account_service.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
-import '../../sa/models/anan_module.dart';
 import '../../sa/services/auth_service.dart';
 
 class ChartOfAccountsReportScreen extends StatefulWidget {
@@ -176,10 +175,7 @@ class _ChartOfAccountsReportScreenState
     final List<String> parts = [];
     if (!a.isActive) parts.add('หยุดใช้งาน');
     if (!a.isNormalAccount) parts.add('หัวบัญชี/บัญชีรวม');
-    if (a.isControlAccount) {
-      final moduleLabel = sysModules[a.moduleLinkCode] ?? a.moduleLinkCode;
-      parts.add('Control Account: $moduleLabel');
-    }
+    if (a.isControlAccount) parts.add('Control Account');
     if (a.branchRequired) parts.add('ระบุสาขา');
     for (final r in a.dimRules.where((r) => r.isRequired)) {
       final label = _dimTypeMap[r.typeCode]?.nameThai ?? r.typeCode;

@@ -804,8 +804,9 @@ class _AccountPickerListState extends State<_AccountPickerList> {
   @override
   Widget build(BuildContext context) {
     final filtered = widget.accounts.where((a) =>
-      a.accountCode.toUpperCase().contains(_search.toUpperCase()) ||
-      (a.accountNameThai ?? '').toUpperCase().contains(_search.toUpperCase())
+      a.isActive && a.isNormalAccount &&
+      (a.accountCode.toUpperCase().contains(_search.toUpperCase()) ||
+      (a.accountNameThai ?? '').toUpperCase().contains(_search.toUpperCase()))
     ).toList();
     return Column(children: [
       TextField(

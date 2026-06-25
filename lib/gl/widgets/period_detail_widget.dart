@@ -416,120 +416,123 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
   }
 
   Widget _buildDetailList() {
-    _selectedDetail =
-        widget.selectedDetail != null ? widget.selectedDetail! : [];
+    _selectedDetail = widget.selectedDetail != null ? widget.selectedDetail! : [];
+
+    const Map<int, TableColumnWidth> colWidths = {
+      0: FixedColumnWidth(44),
+      1: FlexColumnWidth(2),
+      2: FixedColumnWidth(90),
+      3: FixedColumnWidth(90),
+      4: FixedColumnWidth(90),
+      5: FixedColumnWidth(90),
+      6: FixedColumnWidth(80),
+    };
+    final borderSide = BorderSide(width: 1, color: Colors.grey.shade500);
+
     return Column(
       children: [
         const SizedBox(height: 8),
-        // const Divider(),
-        Row(
-          children: [
-            Expanded(
-              child: Text('จำนวนงวดเดือนบัญชี = ${_selectedDetail.length} งวด',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      // fontSize: 16, 
-                      )),
-            ),
-            if (widget.mode != Mode.view)
-              ElevatedButton.icon(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'จำนวนงวดเดือนบัญชี = ${_selectedDetail.length} งวด',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (widget.mode != Mode.view)
+                ElevatedButton.icon(
                   onPressed: () => _showDetailDialog(),
                   icon: const Icon(Icons.add),
-                  label: const Text('เพิ่มงวดเดือนพิเศษ')),
+                  label: const Text('เพิ่มงวดเดือนพิเศษ'),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // ── Frozen header ─────────────────────────────────────────────────
+        Table(
+          columnWidths: colWidths,
+          border: TableBorder.all(width: 1, color: Colors.grey.shade500),
+          children: [
+            TableRow(
+              decoration: BoxDecoration(color: Colors.grey.shade200),
+              children: [
+                _tableHeaderCell('#'),
+                _tableHeaderCell('ชื่อ/วันที่'),
+                _tableHeaderCell('สถานะ GL'),
+                _tableHeaderCell('สถานะ AR'),
+                _tableHeaderCell('สถานะ AP'),
+                _tableHeaderCell('สถานะ IM'),
+                _tableHeaderCell('Actions'),
+              ],
+            ),
           ],
         ),
-        // const Divider(),
-        const SizedBox(height: 8),
+        // ── Scrollable rows ───────────────────────────────────────────────
         Expanded(
           child: SingleChildScrollView(
-            child: Row(children: [
-          Expanded(
-            child: DataTable(
-              border: TableBorder.all(width: 1, color: Colors.grey.shade500),
-              columnSpacing: 10,
-              dataRowMinHeight: 72,
-              dataRowMaxHeight: 72,
-              columns: const [
-                DataColumn(
-                    label: Expanded(
-                        child: Text(
-                  '#',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ))),
-                DataColumn(
-                  label: Expanded(
-                      child: Text(
-                    'ชื่อ/วันที่',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  )),
-                ),
-                DataColumn(
-                    label: Expanded(
-                        child: Text(
-                  'สถานะ GL',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ))),
-                DataColumn(
-                    label: Expanded(
-                        child: Text(
-                  'สถานะ AR',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ))),
-                DataColumn(
-                    label: Expanded(
-                        child: Text(
-                  'สถานะ AP',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ))),
-                DataColumn(
-                    label: Expanded(
-                        child: Text(
-                  'สถานะ IM',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ))),
-                DataColumn(
-                    label: Expanded(
-                        child: Text(
-                  'Actions',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ))),
-              ],
-              rows: _selectedDetail.map((period) {
+            child: Table(
+              columnWidths: colWidths,
+              border: TableBorder(
+                left: borderSide,
+                right: borderSide,
+                bottom: borderSide,
+                horizontalInside: borderSide,
+                verticalInside: borderSide,
+              ),
+              children: _selectedDetail.map((period) {
                 final bool isClosed = period.glStatus == 'CLOSED';
-                return DataRow(cells: [
-                  DataCell(
-                    Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [Text(period.periodNumber.toString())]),
+                return TableRow(children: [
+                  TableCell(
+                    verticalAlignment: TableCellVerticalAlignment.middle,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Text(period.periodNumber.toString(),
+                            textAlign: TextAlign.center),
+                      ),
+                    ),
                   ),
-                  DataCell(Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(period.periodName,
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
-                      Text(
-                          // '${_dateFormat.format(period.periodStartDate.toLocal())} - ${_dateFormat.format(period.periodEndDate.toLocal())}',
-                          '${_dateFormat.format(period.periodStartDate)} - ${_dateFormat.format(period.periodEndDate)}',
-                          style: const TextStyle(fontSize: 10)),
-                    ],
+                  TableCell(
+                    verticalAlignment: TableCellVerticalAlignment.middle,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(period.periodName,
+                              style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Text(
+                            '${_dateFormat.format(period.periodStartDate)} - ${_dateFormat.format(period.periodEndDate)}',
+                            style: const TextStyle(fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  TableCell(child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Center(child: _buildStatusChip(period.glStatus, 'GL', period)),
                   )),
-                  DataCell(Center(
-                      child: _buildStatusChip(period.glStatus, 'GL', period))),
-                  DataCell(Center(
-                      child: _buildStatusChip(period.arStatus, 'AR', period))),
-                  DataCell(Center(
-                      child: _buildStatusChip(period.apStatus, 'AP', period))),
-                  DataCell(Center(
-                      child: _buildStatusChip(period.imStatus, 'IM', period))),
-                  DataCell(Row(
+                  TableCell(child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Center(child: _buildStatusChip(period.arStatus, 'AR', period)),
+                  )),
+                  TableCell(child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Center(child: _buildStatusChip(period.apStatus, 'AP', period)),
+                  )),
+                  TableCell(child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Center(child: _buildStatusChip(period.imStatus, 'IM', period)),
+                  )),
+                  TableCell(
+                    verticalAlignment: TableCellVerticalAlignment.middle,
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         IconButton(
@@ -556,14 +559,26 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                               : () => _deletePeriod(period.id),
                           tooltip: 'ลบงวดเดือนบัญชี',
                         ),
-                      ])),
+                      ],
+                    ),
+                  ),
                 ]);
               }).toList(),
             ),
           ),
-        ])),
         ),
       ],
+    );
+  }
+
+  Widget _tableHeaderCell(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      child: Text(
+        text,
+        style: const TextStyle(fontWeight: FontWeight.bold),
+        textAlign: TextAlign.center,
+      ),
     );
   }
 
@@ -780,73 +795,68 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     }
     if (widget.mode == Mode.view) chipColor = Colors.grey;
 
-    Widget? actionButton;
+    // Icons ใต้ chip (เฉพาะ edit mode)
+    List<Widget> actionIcons = [];
     if (widget.mode != Mode.view) {
       if (status == 'OPEN') {
-        // ปุ่มกลมสีแดง → HARD CLOSE
-        actionButton = Tooltip(
-          message: 'ปิด',
-          child: SizedBox(
-            width: 22,
-            height: 22,
-            child: ElevatedButton(
-              onPressed: () => _confirmDirectClose(period, module),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                shape: const CircleBorder(),
-                padding: EdgeInsets.zero,
-              ),
-              child: const Icon(Icons.lock, size: 12, color: Colors.white),
-            ),
+        // icon ล็อคสีส้ม → LOCKED
+        actionIcons.add(Tooltip(
+          message: 'ล็อค (LOCKED)',
+          child: InkWell(
+            onTap: () => _confirmSoftClose(period, module),
+            child: const Icon(Icons.lock_outline, color: Colors.orange, size: 20),
           ),
-        );
-      } else if (status == 'LOCKED') {
-        // ปุ่มกลมสีเขียว → เปลี่ยนกลับเป็น OPEN
-        actionButton = Tooltip(
-          message: 'ปลดล็อค',
-          child: SizedBox(
-            width: 22,
-            height: 22,
-            child: ElevatedButton(
-              onPressed: () => _updateStatus(period, module, 'OPEN'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                shape: const CircleBorder(),
-                padding: EdgeInsets.zero,
-              ),
-              child: const Icon(Icons.lock_open, size: 12, color: Colors.white),
-            ),
+        ));
+        // icon ปิดสีแดง → CLOSED (2-step approval)
+        actionIcons.add(Tooltip(
+          message: 'ปิดงวด (CLOSED)',
+          child: InkWell(
+            onTap: () => _confirmClose(period, module, 'OPEN'),
+            child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
           ),
-        );
-      }
-    }
-
-    // Chip คลิกได้: OPEN→SOFT_CLOSE (มี dialog), SOFT_CLOSE→HARD_CLOSE (มี dialog + ตรวจ Draft)
-    VoidCallback? chipOnTap;
-    if (widget.mode != Mode.view) {
-      if (status == 'OPEN') {
-        chipOnTap = () => _confirmSoftClose(period, module);
+        ));
       } else if (status == 'LOCKED') {
-        chipOnTap = () => _confirmHardClose(period, module);
+        // icon ปลดล็อคสีเขียว → OPEN
+        actionIcons.add(Tooltip(
+          message: 'ปลดล็อค (OPEN)',
+          child: InkWell(
+            onTap: () => _updateStatus(period, module, 'OPEN'),
+            child: const Icon(Icons.lock_open_outlined, color: Colors.green, size: 20),
+          ),
+        ));
+        // icon ปิดสีแดง → CLOSED (2-step approval)
+        actionIcons.add(Tooltip(
+          message: 'ปิดงวด (CLOSED)',
+          child: InkWell(
+            onTap: () => _confirmClose(period, module, 'LOCKED'),
+            child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
+          ),
+        ));
       }
+      // CLOSED → ไม่มี icon
     }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        GestureDetector(
-          onTap: chipOnTap,
-          child: Chip(
-            label: Text(
-              status.replaceAll('_', ' '),
-              style: const TextStyle(color: Colors.white, fontSize: 10),
-            ),
-            backgroundColor: chipColor,
-            padding: const EdgeInsets.all(2),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        Chip(
+          label: Text(
+            status.replaceAll('_', ' '),
+            style: const TextStyle(color: Colors.white, fontSize: 10),
           ),
+          backgroundColor: chipColor,
+          padding: const EdgeInsets.all(2),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
-        if (actionButton != null) actionButton,
+        if (actionIcons.isNotEmpty)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              actionIcons[0],
+              const SizedBox(width: 4),
+              actionIcons[1],
+            ],
+          ),
       ],
     );
   }
@@ -894,32 +904,217 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     }
   }
 
-  Future<void> _confirmDirectClose(PostingPeriod period, String module) async {
-    final bool? confirm = await showDialog<bool>(
+  // ปิดงวด (CLOSED) — 2-step: warning → credential approval
+  Future<void> _confirmClose(
+      PostingPeriod period, String module, String fromStatus) async {
+    int step = 1;
+    final confirmCtrl = TextEditingController(); // username
+    final pwCtrl = TextEditingController();      // password
+    bool pwVisible = false;
+    String approvalError = '';
+    bool isApproving = false;
+
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการเปลี่ยนสถานะ'),
-        content: const Text(
-          'การเปลี่ยนสถานะ OPEN เป็น CLOSED '
-          'เพื่อป้องกันการแก้ไข/เพิ่มเติมรายการทุกกรณีของงวดและโมดูลนี้ '
-          'จะไม่สามารถย้อนกลับมาได้อีก',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('ยืนยัน', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDs) {
+          if (step == 1) {
+            return AlertDialog(
+              title: Row(children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 26),
+                const SizedBox(width: 8),
+                const Text('คำเตือน: ปิดงวดบัญชี'),
+              ]),
+              content: SizedBox(
+                width: 460,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        border: Border.all(color: Colors.red.shade200),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('งวดเดือนบัญชี: ${period.periodName}',
+                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 2),
+                          Text('โมดูล: $module'),
+                          const SizedBox(height: 2),
+                          Text('การเปลี่ยนสถานะ: $fromStatus → CLOSED',
+                              style: TextStyle(
+                                  color: Colors.red.shade700,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _warningRow(Icons.lock, 'ไม่สามารถบันทึก/แก้ไขรายการในงวดนี้ได้อีก'),
+                    _warningRow(Icons.block, 'ไม่สามารถย้อนสถานะกลับเป็น OPEN หรือ LOCKED ได้'),
+                    _warningRow(Icons.people_outline, 'ผู้ใช้ทุกคนจะไม่สามารถลงรายการในงวดนี้ได้'),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.orange.shade300),
+                      ),
+                      child: const Row(children: [
+                        Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'ควรตรวจสอบให้แน่ใจว่าลงรายการและกระทบยอดครบถ้วนแล้ว\nก่อนดำเนินการปิดงวดบัญชี',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('ยกเลิก'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => setDs(() => step = 2),
+                  icon: const Icon(Icons.arrow_forward, size: 16),
+                  label: const Text('ดำเนินการต่อ'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                ),
+              ],
+            );
+          }
+
+          // ── Step 2: credential approval ─────────────────────────────────
+          return AlertDialog(
+            title: Row(children: [
+              const Icon(Icons.verified_user, color: Colors.red, size: 22),
+              const SizedBox(width: 8),
+              const Text('ผู้อนุมัติการปิดงวดบัญชี'),
+            ]),
+            content: SizedBox(
+              width: 460,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'โปรดให้ผู้มีสิทธิ์อนุมัติกรอกข้อมูลเพื่อยืนยัน\n(ผู้ใช้ที่อยู่ในกลุ่มที่มีสิทธิ์อนุมัติการปิดงวดบัญชี)',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: confirmCtrl,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'ชื่อผู้ใช้',
+                      prefixIcon: Icon(Icons.person_outline),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (_) => setDs(() {}),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: pwCtrl,
+                    obscureText: !pwVisible,
+                    decoration: InputDecoration(
+                      labelText: 'รหัสผ่าน',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: IconButton(
+                        icon: Icon(pwVisible ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setDs(() => pwVisible = !pwVisible),
+                      ),
+                    ),
+                    onChanged: (_) => setDs(() {}),
+                  ),
+                  if (approvalError.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          approvalError,
+                          style: const TextStyle(color: Colors.red, fontSize: 13),
+                        ),
+                      ),
+                    ]),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isApproving ? null : () => Navigator.of(ctx).pop(false),
+                child: const Text('ยกเลิก'),
+              ),
+              ElevatedButton.icon(
+                onPressed: (confirmCtrl.text.trim().isNotEmpty &&
+                        pwCtrl.text.isNotEmpty &&
+                        !isApproving)
+                    ? () async {
+                        setDs(() {
+                          isApproving = true;
+                          approvalError = '';
+                        });
+                        try {
+                          await _detailService.verifyCloseApprover(
+                              confirmCtrl.text.trim(), pwCtrl.text);
+                          if (ctx.mounted) Navigator.of(ctx).pop(true);
+                        } catch (e) {
+                          setDs(() {
+                            approvalError = e.toString().replaceFirst('Exception: ', '');
+                            isApproving = false;
+                          });
+                        }
+                      }
+                    : null,
+                icon: isApproving
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.lock, size: 16),
+                label: const Text('ยืนยันปิดงวด'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              ),
+            ],
+          );
+        },
       ),
     );
-    if (confirm == true) {
+
+    confirmCtrl.dispose();
+    pwCtrl.dispose();
+    if (confirmed == true) {
       _updateStatus(period, module, 'CLOSED');
     }
+  }
+
+  Widget _warningRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(children: [
+        Icon(icon, size: 16, color: Colors.red.shade700),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+      ]),
+    );
   }
 
   Future<void> _confirmSoftClose(PostingPeriod period, String module) async {
@@ -946,35 +1141,6 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     );
     if (confirm == true) {
       _updateStatus(period, module, 'LOCKED');
-    }
-  }
-
-  Future<void> _confirmHardClose(PostingPeriod period, String module) async {
-    final bool? confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการเปลี่ยนสถานะ'),
-        content: const Text(
-          'การเปลี่ยนสถานะ LOCKED เป็น CLOSED '
-          'เพื่อป้องกันการแก้ไข/เพิ่มเติมรายการทุกกรณีของงวดและโมดูลนี้ '
-          'จะไม่สามารถย้อนกลับมาได้อีก',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child:
-                const Text('ยืนยัน', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      _updateStatus(period, module, 'CLOSED');
     }
   }
 

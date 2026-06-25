@@ -39,14 +39,12 @@ class Account {
   final int? parentId; // สำหรับผังบัญชีแบบ Tree
   final String
       accountType; // เช่น 'ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'
-  final String accountSubType; // เช่น Current Asset, Fixed Asset, COGS, etc.
-  final String normalBalance; // 'DEBIT' หรือ 'CREDIT'
+  final String normalBalance; // 'DR' หรือ 'CR'
   final bool
       isNormalAccount; // TRUE: บัญชีที่ลงรายการได้, FALSE: บัญชีรวม/บัญชีแม่
   final bool
       isControlAccount; // TRUE: บันทึกได้เฉพาะจากโมดูลอื่น (AR/AP/Inventory) ห้ามลงตรงใน GL
   final String currencyCode; // สกุลเงินหลักของบัญชี (อ้างอิงจาก cd_currency)
-  final String moduleLinkCode; // โค้ดเชื่อมโยงกับโมดูลอื่นๆ (เช่น 'AP', 'AR')
   final bool branchRequired;
   final bool isActive;
   final List<GlAccountDimRule> dimRules;
@@ -64,12 +62,10 @@ class Account {
     required this.accountNameEng,
     this.parentId,
     required this.accountType,
-    required this.accountSubType,
     required this.normalBalance,
     required this.isNormalAccount,
     this.isControlAccount = false,
     required this.currencyCode,
-    required this.moduleLinkCode,
     required this.branchRequired,
     required this.isActive,
     this.dimRules = const [],
@@ -90,12 +86,10 @@ class Account {
       accountNameEng: json['account_name_eng'] as String,
       parentId: json['parent_id'] as int?,
       accountType: json['account_type'] as String,
-      accountSubType: json['account_subtype'] as String,
       normalBalance: json['normal_balance'] as String,
       isNormalAccount: json['is_normal_account'] as bool,
       isControlAccount: json['is_control_account'] as bool? ?? false,
       currencyCode: json['currency_code'] as String,
-      moduleLinkCode: json['module_link_code'] as String,
       branchRequired: json['branch_required'] as bool? ?? false,
       isActive: json['is_active'] as bool,
       dimRules: (json['dim_rules'] as List?)
@@ -124,12 +118,10 @@ class Account {
       'account_name_eng': accountNameEng,
       'parent_id': parentId,
       'account_type': accountType,
-      'account_subtype': accountSubType,
       'normal_balance': normalBalance,
       'is_normal_account': isNormalAccount,
       'is_control_account': isControlAccount,
       'currency_code': currencyCode,
-      'module_link_code': moduleLinkCode,
       'branch_required': branchRequired,
       'is_active': isActive,
       'dim_rules': dimRules.map((r) => r.toJson()).toList(),

@@ -10,7 +10,6 @@ class ArAgingReportService {
   Future<List<Map<String, dynamic>>> getAgingReport({
     required String asOfDate,
     int? branchId,
-    int? customerGroupId,
     int? salespersonId,
     String? customerCodeFrom,
     String? customerCodeTo,
@@ -18,7 +17,6 @@ class ArAgingReportService {
     final headers = await _authService.getAuthHeader();
     final params = <String, String>{'as_of_date': asOfDate};
     if (branchId != null) params['branch_id'] = branchId.toString();
-    if (customerGroupId != null) params['customer_group_id'] = customerGroupId.toString();
     if (salespersonId != null) params['salesperson_id'] = salespersonId.toString();
     if (customerCodeFrom != null && customerCodeFrom.isNotEmpty) params['customer_code_from'] = customerCodeFrom;
     if (customerCodeTo != null && customerCodeTo.isNotEmpty) params['customer_code_to'] = customerCodeTo;

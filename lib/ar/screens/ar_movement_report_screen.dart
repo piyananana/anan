@@ -17,6 +17,7 @@ import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../widgets/ar_customer_group_multi_picker.dart';
 
 class ArMovementReportScreen extends StatefulWidget {
   const ArMovementReportScreen({super.key});
@@ -46,7 +47,7 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
   DateTime _dateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _dateTo   = DateTime.now();
   List<ArCustomerGroup> _customerGroups = [];
-  int? _selectedGroupId;
+  List<int> _selectedGroupIds = [];
   List<Salesperson> _salespersons = [];
   int? _selectedSalespersonId;
   String? _customerCodeFrom;
@@ -89,7 +90,7 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
       final raw = await _reportService.getMovementReport(
         dateFrom:          DateFormat('yyyy-MM-dd').format(_dateFrom),
         dateTo:            DateFormat('yyyy-MM-dd').format(_dateTo),
-        customerGroupId:   _selectedGroupId,
+        customerGroupIds:  _selectedGroupIds,
         salespersonId:     _selectedSalespersonId,
         customerCodeFrom:  _customerCodeFrom,
         customerCodeTo:    _customerCodeTo,
@@ -342,10 +343,13 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
 
     // Conditions line (row 3)
     final conditions = <String>[];
-    if (_selectedGroupId != null) {
-      final g = _customerGroups.firstWhere((g) => g.id == _selectedGroupId,
-          orElse: () => _customerGroups.first);
-      conditions.add('กลุ่มลูกค้า: ${g.groupCode} ${g.groupNameThai}');
+    if (_selectedGroupIds.isNotEmpty) {
+      final names = _selectedGroupIds.map((id) {
+        final g = _customerGroups.firstWhere((g) => g.id == id,
+            orElse: () => _customerGroups.first);
+        return '${g.groupCode} ${g.groupNameThai}';
+      }).join(', ');
+      conditions.add('กลุ่มลูกค้า: $names');
     }
     if (_selectedSalespersonId != null) {
       final sp = _salespersons.firstWhere((s) => s.id == _selectedSalespersonId,
@@ -821,28 +825,11 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
                                       const SizedBox(height: 12),
 
                                       // กลุ่มลูกค้า
-                                      DropdownButtonFormField<int?>(
-                                        isExpanded: true,
-                                        value: _selectedGroupId,
-                                        decoration: const InputDecoration(
-                                            labelText: 'กลุ่มลูกค้า',
-                                            border: OutlineInputBorder(),
-                                            isDense: true),
-                                        items: [
-                                          const DropdownMenuItem<int?>(
-                                              value: null,
-                                              child: Text('— ทุกกลุ่ม —')),
-                                          ..._customerGroups.map((g) =>
-                                              DropdownMenuItem<int?>(
-                                                value: g.id,
-                                                child: Text(
-                                                    '${g.groupCode}  ${g.groupNameThai}',
-                                                    overflow:
-                                                        TextOverflow.ellipsis),
-                                              )),
-                                        ],
+                                      ArCustomerGroupMultiPicker(
+                                        groups: _customerGroups,
+                                        selectedIds: _selectedGroupIds,
                                         onChanged: (v) => setState(
-                                            () => _selectedGroupId = v),
+                                            () => _selectedGroupIds = v),
                                       ),
 
                                       // พนักงานขาย

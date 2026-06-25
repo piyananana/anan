@@ -10,7 +10,7 @@ class ArReceiptPaymentReportService {
   Future<List<Map<String, dynamic>>> getReceiptPaymentReport({
     required String dateFrom,
     required String dateTo,
-    int? customerGroupId,
+    List<int>? customerGroupIds,
     int? salespersonId,
     String? customerCodeFrom,
     String? customerCodeTo,
@@ -22,7 +22,7 @@ class ArReceiptPaymentReportService {
       'date_to':   dateTo,
       'sort_by':   sortBy,
     };
-    if (customerGroupId != null)   params['customer_group_id']  = customerGroupId.toString();
+    if (customerGroupIds != null && customerGroupIds.isNotEmpty)   params['customer_group_id']  = customerGroupIds.join(',');
     if (salespersonId != null)     params['salesperson_id']      = salespersonId.toString();
     if (customerCodeFrom != null && customerCodeFrom.isNotEmpty) {
       params['customer_code_from'] = customerCodeFrom;

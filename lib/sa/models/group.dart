@@ -7,6 +7,7 @@ class Group {
   bool isActive;
   bool haveSubGroup;
   String? description;
+  bool canClosePeriod;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -17,6 +18,7 @@ class Group {
     this.isActive = true,
     this.haveSubGroup = true,
     this.description,
+    this.canClosePeriod = false,
     this.createdAt,
     this.updatedAt,
   });
@@ -29,6 +31,7 @@ class Group {
       isActive: json['is_active'] as bool,
       haveSubGroup: json['have_sub_group'] as bool,
       description: json['description'] as String?,
+      canClosePeriod: json['can_close_period'] as bool? ?? false,
       // createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
       // updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
     );
@@ -42,6 +45,7 @@ class Group {
       'is_active': isActive,
       'have_sub_group': haveSubGroup,
       'description': description,
+      'can_close_period': canClosePeriod,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };

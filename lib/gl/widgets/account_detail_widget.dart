@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../cd/models/currency.dart';
 import '../../cd/services/currency_service.dart';
-import '../../sa/models/anan_module.dart';
 import '../models/account.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
@@ -35,13 +34,10 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
   late TextEditingController _accountNameThaiController;
   late TextEditingController _accountNameEngController;
   late String _accountType;
-  late String
-      _accountSubType; // เลือกจาก parent_id != null และ !isNormalAccount
   late String _normalBalance;
   late bool _isNormalAccount;
   late bool _isControlAccount;
-  late String _currencyCode; // เลือกจาก cd_currency
-  late String _moduleLinkCode; // เลือกจาก sa_module_link
+  late String _currencyCode;
   late bool _branchRequired;
   late bool _isActive;
 
@@ -130,7 +126,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
     _accountCodeController =
         TextEditingController(text: _selected?.accountCode ?? '');
     _accountType = _selected?.accountType ?? 'ASSET';
-    _accountSubType = _selected?.accountSubType ?? '';
     _normalBalance = _selected?.normalBalance ?? 'DR';
     _currencyCode = _selected?.currencyCode ?? _baseCurrencyCode();
     _isActive = _selected?.isActive ?? true;
@@ -139,7 +134,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _accountNameEngController.clear();
       _isNormalAccount = true;
       _isControlAccount = false;
-      _moduleLinkCode = '';
       _branchRequired = false;
       _initDimRules(null);
     } else {
@@ -149,7 +143,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
           TextEditingController(text: _selected?.accountNameEng ?? '');
       _isNormalAccount = _selected?.isNormalAccount ?? true;
       _isControlAccount = _selected?.isControlAccount ?? false;
-      _moduleLinkCode = _selected?.moduleLinkCode ?? '';
       _branchRequired = _selected?.branchRequired ?? false;
       _initDimRules(_selected);
     }
@@ -165,7 +158,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _accountCodeController =
           TextEditingController(text: _selected?.accountCode ?? '');
       _accountType = _selected?.accountType ?? 'ASSET';
-      _accountSubType = _selected?.accountSubType ?? '';
       _normalBalance = _selected?.normalBalance ?? 'DR';
       _currencyCode = _selected?.currencyCode ?? _baseCurrencyCode();
       _isActive = _selected?.isActive ?? true;
@@ -175,7 +167,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
         _accountNameEngController.clear();
         _isNormalAccount = true;
         _isControlAccount = false;
-        _moduleLinkCode = '';
         _branchRequired = false;
         _initDimRules(null);
       } else {
@@ -185,7 +176,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
             TextEditingController(text: _selected?.accountNameEng ?? '');
         _isNormalAccount = _selected?.isNormalAccount ?? false;
         _isControlAccount = _selected?.isControlAccount ?? false;
-        _moduleLinkCode = _selected?.moduleLinkCode ?? '';
         _branchRequired = _selected?.branchRequired ?? false;
         _initDimRules(_selected);
       }
@@ -196,12 +186,10 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _accountNameThaiController.clear();
       _accountNameEngController.clear();
       _accountType = 'ASSET';
-      _accountSubType = '';
       _normalBalance = 'DR';
       _isNormalAccount = false;
       _isControlAccount = false;
       _currencyCode = _baseCurrencyCode();
-      _moduleLinkCode = '';
       _branchRequired = false;
       _isActive = true;
       _initDimRules(null);
@@ -213,12 +201,10 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
       _accountNameThaiController.clear();
       _accountNameEngController.clear();
       _accountType = _selected?.accountType ?? 'ASSET';
-      _accountSubType = '';
       _normalBalance = _selected?.normalBalance ?? 'DR';
       _isNormalAccount = true;
       _isControlAccount = false;
       _currencyCode = _baseCurrencyCode();
-      _moduleLinkCode = '';
       _branchRequired = false;
       _isActive = true;
       _initDimRules(null);
@@ -250,12 +236,10 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
           accountNameThai: _accountNameThaiController.text,
           accountNameEng: _accountNameEngController.text,
           accountType: _accountType,
-          accountSubType: _accountSubType,
           normalBalance: _normalBalance,
           isNormalAccount: _isNormalAccount,
           isControlAccount: _isControlAccount,
           currencyCode: _currencyCode,
-          moduleLinkCode: _moduleLinkCode,
           branchRequired: _branchRequired,
           isActive: _isActive,
           dimRules: _dimRules.entries
@@ -432,6 +416,30 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                     },
                   ),
                 ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _currencyCode,
+                    decoration: const InputDecoration(
+                      labelText: 'สกุลเงินหลัก',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _currencyLists.map((val) {
+                      return DropdownMenuItem(
+                        value: val.currencyCode,
+                        child: Text('${val.currencyCode} - ${val.currencyNameThai}'),
+                      );
+                    }).toList(),
+                    onChanged: readOnly ? null : (value) {
+                      if (value != null) {
+                        setState(() {
+                          _currencyCode = value;
+                        });
+                      }
+                    },
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -470,29 +478,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
             _isNormalAccount
                 ? Column(children: [
                     const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: _currencyCode,
-                      decoration: const InputDecoration(
-                        labelText: 'สกุลเงินหลัก',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _currencyLists.map((val) {
-                        return DropdownMenuItem(
-                          value: val.currencyCode,
-                          child: Text(
-                              '${val.currencyCode} - ${val.currencyNameThai}'),
-                        );
-                      }).toList(),
-                      onChanged: readOnly ? null : (value) {
-                        if (value != null) {
-                          setState(() {
-                            _currencyCode = value;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
                     Row(
                       children: [
                         Expanded(
@@ -509,36 +494,6 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         ),
                       ],
                     ),
-                    if (_isControlAccount) ...[
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: _moduleLinkCode,
-                      decoration: const InputDecoration(
-                        labelText: 'โมดูลที่เชื่อมโยง',
-                        border: OutlineInputBorder(),
-                      ),
-                      // items: _moduleLinkCodes.map((val) {
-                      //   return DropdownMenuItem(
-                      //     value: val,
-                      //     child: Text(val),
-                      //   );
-                      // }).toList(),
-                      items: sysModules.entries.map((e) {
-                        return DropdownMenuItem<String>(
-                          value: e.key,
-                          child: Text('${e.key} - ${e.value}'),
-                        );
-                      }).toList(),
-                      onChanged: readOnly ? null : (value) {
-                        if (value != null) {
-                          setState(() {
-                            _moduleLinkCode = value;
-                          });
-                        }
-                      },
-                    ),
-                    ], // end if (_isControlAccount)
                     ..._dimTypes.expand((t) {
                       final enabled = _dimRules[t.typeCode] ?? false;
                       return [

@@ -25,7 +25,7 @@ class GlDimensionPickerField extends StatelessWidget {
     final searchCtrl = TextEditingController();
     // แสดงเฉพาะ leaf nodes (ไม่มีลูก) — parent ไม่สามารถเลือกลงรายการได้
     final parentIds = values.map((v) => v.parentId).whereType<int>().toSet();
-    final sorted = values.where((v) => !parentIds.contains(v.id)).toList()
+    final sorted = values.where((v) => !parentIds.contains(v.id) && v.isActive).toList()
       ..sort((a, b) => a.valueCode.compareTo(b.valueCode));
     List<GlDimensionValue> filtered = List.from(sorted);
 

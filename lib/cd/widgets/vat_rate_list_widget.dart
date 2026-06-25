@@ -128,6 +128,7 @@ class VatRateListWidgetState extends State<VatRateListWidget>
 
   List<VatRate> _filtered() {
     List<VatRate> items = List.from(_lists);
+    if (widget.enableCardSelect) items = items.where((e) => e.isActive).toList();
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toUpperCase();
       items = items.where((r) {
@@ -217,7 +218,8 @@ class VatRateListWidgetState extends State<VatRateListWidget>
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8.0, vertical: 4.0),
-                          child: ListTile(
+                          child: Stack(children: [
+                          ListTile(
                             leading: CircleAvatar(
                               backgroundColor: item.isActive
                                   ? Colors.green.shade100
@@ -285,6 +287,16 @@ class VatRateListWidgetState extends State<VatRateListWidget>
                               ],
                             ),
                           ),
+                          if (!item.isActive)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(Icons.block, size: 72,
+                                      color: Colors.red.withOpacity(0.12)),
+                                ),
+                              ),
+                            ),
+                          ]),
                         );
                       },
                     ),

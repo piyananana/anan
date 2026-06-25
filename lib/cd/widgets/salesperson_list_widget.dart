@@ -122,6 +122,7 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
 
   List<Salesperson> get _filtered {
     List<Salesperson> items = List.from(_list);
+    if (widget.enableCardSelect) items = items.where((e) => e.isActive).toList();
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toUpperCase();
       items = items.where((s) {
@@ -208,7 +209,8 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
-                          child: ListTile(
+                          child: Stack(children: [
+                          ListTile(
                             title: Text(
                               '${item.salespersonCode} — ${item.salespersonNameThai}',
                               style: TextStyle(
@@ -261,6 +263,16 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
                               ],
                             ),
                           ),
+                          if (!item.isActive)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(Icons.block, size: 72,
+                                      color: Colors.red.withOpacity(0.12)),
+                                ),
+                              ),
+                            ),
+                          ]),
                         );
                       },
                     ),

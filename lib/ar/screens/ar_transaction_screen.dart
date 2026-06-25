@@ -90,6 +90,11 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
         children: [
           TabBar(
             controller: _tabController,
+            onTap: (index) {
+              if (index == 1) {
+                _tabController.animateTo(_currentTabIndex, duration: Duration.zero);
+              }
+            },
             dividerColor: Colors.grey,
             labelColor: Colors.teal[800],
             isScrollable: true,

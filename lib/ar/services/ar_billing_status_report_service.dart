@@ -11,7 +11,7 @@ class ArBillingStatusReportService {
     required String dateFrom,
     required String dateTo,
     int? branchId,
-    int? customerGroupId,
+    List<int>? customerGroupIds,
     String? customerCodeFrom,
     String? customerCodeTo,
     String statusFilter = 'all',   // 'all' | 'pending' | 'paid' | 'void'
@@ -26,8 +26,8 @@ class ArBillingStatusReportService {
     };
     if (branchId != null)
       params['branch_id'] = branchId.toString();
-    if (customerGroupId != null)
-      params['customer_group_id'] = customerGroupId.toString();
+    if (customerGroupIds != null && customerGroupIds.isNotEmpty)
+      params['customer_group_id'] = customerGroupIds.join(',');
     if (customerCodeFrom != null && customerCodeFrom.isNotEmpty)
       params['customer_code_from'] = customerCodeFrom;
     if (customerCodeTo != null && customerCodeTo.isNotEmpty)

@@ -89,6 +89,7 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
 
   List<BusinessType> _filterAndSort() {
     List<BusinessType> display = List.from(_lists);
+    if (widget.enableCardSelect) display = display.where((e) => e.isActive).toList();
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toUpperCase();
       display = display.where((row) {
@@ -227,7 +228,8 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8.0, vertical: 4.0),
-                          child: ListTile(
+                          child: Stack(children: [
+                          ListTile(
                             title: Text(
                               '${item.businessTypeCode} — ${item.businessTypeNameThai}',
                               style: TextStyle(
@@ -281,6 +283,16 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
                               ],
                             ),
                           ),
+                          if (!item.isActive)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Icon(Icons.block, size: 72,
+                                      color: Colors.red.withOpacity(0.12)),
+                                ),
+                              ),
+                            ),
+                          ]),
                         );
                       },
                     ),

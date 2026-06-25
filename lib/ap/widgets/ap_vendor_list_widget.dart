@@ -136,7 +136,8 @@ class ApVendorListWidgetState extends State<ApVendorListWidget>
                       final item = display[index];
                       return Card(
                         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        child: ListTile(
+                        child: Stack(children: [
+                        ListTile(
                           leading: CircleAvatar(
                             backgroundColor: item.isActive
                                 ? Colors.blue.shade100
@@ -186,6 +187,16 @@ class ApVendorListWidgetState extends State<ApVendorListWidget>
                           ),
                           onTap: () => widget.onCallback(item),
                         ),
+                        if (!item.isActive)
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: Center(
+                                child: Icon(Icons.block, size: 72,
+                                    color: Colors.red.withOpacity(0.12)),
+                              ),
+                            ),
+                          ),
+                        ]),
                       );
                     },
                   ),

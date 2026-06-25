@@ -17,6 +17,7 @@ import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../widgets/ar_customer_group_multi_picker.dart';
 
 class ArBillingStatusReportScreen extends StatefulWidget {
   const ArBillingStatusReportScreen({super.key});
@@ -51,7 +52,7 @@ class _ArBillingStatusReportScreenState
   DateTime _dateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _dateTo   = DateTime.now();
   int?    _selectedBranchId;
-  int?    _selectedGroupId;
+  List<int> _selectedGroupIds = [];
   String? _customerCodeFrom;
   String? _customerCodeTo;
   String  _fromLabel    = '';
@@ -89,7 +90,7 @@ class _ArBillingStatusReportScreenState
         dateFrom:         DateFormat('yyyy-MM-dd').format(_dateFrom),
         dateTo:           DateFormat('yyyy-MM-dd').format(_dateTo),
         branchId:         _selectedBranchId,
-        customerGroupId:  _selectedGroupId,
+        customerGroupIds: _selectedGroupIds,
         customerCodeFrom: _customerCodeFrom,
         customerCodeTo:   _customerCodeTo,
         statusFilter:     _statusFilter,
@@ -138,10 +139,13 @@ class _ArBillingStatusReportScreenState
           orElse: () => _branches.first);
       conditions.add('สาขา: ${b.branchCode} ${b.branchNameThai}');
     }
-    if (_selectedGroupId != null) {
-      final g = _customerGroups.firstWhere((g) => g.id == _selectedGroupId,
-          orElse: () => _customerGroups.first);
-      conditions.add('กลุ่ม: ${g.groupCode} ${g.groupNameThai}');
+    if (_selectedGroupIds.isNotEmpty) {
+      final names = _selectedGroupIds.map((id) {
+        final g = _customerGroups.firstWhere((g) => g.id == id,
+            orElse: () => _customerGroups.first);
+        return '${g.groupCode} ${g.groupNameThai}';
+      }).join(', ');
+      conditions.add('กลุ่ม: $names');
     }
     if ((_customerCodeFrom ?? '').isNotEmpty ||
         (_customerCodeTo ?? '').isNotEmpty) {
@@ -497,28 +501,12 @@ class _ArBillingStatusReportScreenState
                                     const SizedBox(height: 12),
 
                                     // กลุ่มลูกหนี้
-                                    DropdownButtonFormField<int?>(
-                                      isExpanded: true,
-                                      value: _selectedGroupId,
-                                      decoration: const InputDecoration(
-                                          labelText: 'กลุ่มลูกหนี้',
-                                          border: OutlineInputBorder(),
-                                          isDense: true),
-                                      items: [
-                                        const DropdownMenuItem<int?>(
-                                            value: null,
-                                            child: Text('— ทุกกลุ่ม —')),
-                                        ..._customerGroups.map((g) =>
-                                            DropdownMenuItem<int?>(
-                                              value: g.id,
-                                              child: Text(
-                                                  '${g.groupCode}  ${g.groupNameThai}',
-                                                  overflow:
-                                                      TextOverflow.ellipsis),
-                                            )),
-                                      ],
+                                    ArCustomerGroupMultiPicker(
+                                      groups: _customerGroups,
+                                      selectedIds: _selectedGroupIds,
+                                      label: 'กลุ่มลูกหนี้',
                                       onChanged: (v) => setState(
-                                          () => _selectedGroupId = v),
+                                          () => _selectedGroupIds = v),
                                     ),
                                     const SizedBox(height: 12),
 

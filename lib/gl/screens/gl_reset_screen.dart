@@ -17,6 +17,13 @@ class _GlResetScreenState extends State<GlResetScreen> {
   bool _deleteEntries = true;
   bool _resetDocNumbers = false;
 
+  // ข้อมูลหลัก (master data) — ปิดไว้เป็นค่าเริ่มต้นเพราะมีผลกว้างกว่าข้อมูลธุรกรรม
+  bool _resetFinancialReports = false;
+  bool _resetClosingConfig = false;
+  bool _resetDimensions = false;
+  bool _resetFiscalYears = false;
+  bool _resetChartOfAccounts = false;
+
   final _confirmCtrl = TextEditingController();
   bool _isLoadingCounts = false;
   bool _isExecuting = false;
@@ -60,7 +67,13 @@ class _GlResetScreenState extends State<GlResetScreen> {
 
   bool get _canExecute =>
       _confirmCtrl.text.trim() == 'ยืนยัน' &&
-      (_deleteEntries || _resetDocNumbers) &&
+      (_deleteEntries ||
+          _resetDocNumbers ||
+          _resetFinancialReports ||
+          _resetClosingConfig ||
+          _resetDimensions ||
+          _resetFiscalYears ||
+          _resetChartOfAccounts) &&
       !_isExecuting;
 
   Future<void> _execute() async {
@@ -88,6 +101,19 @@ class _GlResetScreenState extends State<GlResetScreen> {
             ],
             if (_resetDocNumbers)
               _confirmRow(Icons.format_list_numbered, 'Reset เลขที่เอกสาร GL', null),
+            if (_resetFinancialReports)
+              _confirmRow(Icons.description, 'แบบงบการเงิน (Financial Report Builder)',
+                  _counts?['gl_fin_report']),
+            if (_resetClosingConfig)
+              _confirmRow(Icons.event_note, 'ตั้งค่าปิดสิ้นปี + Adjusting Template', null),
+            if (_resetDimensions)
+              _confirmRow(Icons.dashboard_customize,
+                  'Dimension Framework (ประเภท/ค่ามิติ, Combination, ยอดสะสม)',
+                  _counts?['gl_dimension_value']),
+            if (_resetFiscalYears)
+              _confirmRow(Icons.calendar_month, 'ปีบัญชี/งวดบัญชี', _counts?['gl_fiscal_year']),
+            if (_resetChartOfAccounts)
+              _confirmRow(Icons.account_tree, 'ผังบัญชี (Chart of Accounts)', _counts?['gl_account']),
           ],
         ),
         actions: [
@@ -112,6 +138,11 @@ class _GlResetScreenState extends State<GlResetScreen> {
         body: json.encode({
           'deleteEntries': _deleteEntries,
           'resetDocNumbers': _resetDocNumbers,
+          'resetFinancialReports': _resetFinancialReports,
+          'resetClosingConfig': _resetClosingConfig,
+          'resetDimensions': _resetDimensions,
+          'resetFiscalYears': _resetFiscalYears,
+          'resetChartOfAccounts': _resetChartOfAccounts,
         }),
       );
 
@@ -188,6 +219,45 @@ class _GlResetScreenState extends State<GlResetScreen> {
     );
   }
 
+  Widget _masterDataCard({
+    required bool value,
+    required ValueChanged<bool?> onChanged,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required List<String> detailLines,
+  }) {
+    return Card(
+      elevation: 1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CheckboxListTile(
+            title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+            value: value,
+            activeColor: color,
+            controlAffinity: ListTileControlAffinity.leading,
+            onChanged: onChanged,
+          ),
+          if (value)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(56, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: detailLines
+                    .map((line) => Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Text('• $line', style: TextStyle(fontSize: 12, color: color)),
+                        ))
+                    .toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -240,8 +310,9 @@ class _GlResetScreenState extends State<GlResetScreen> {
                     ]),
                     const SizedBox(height: 8),
                     Text(
-                      'ฟังก์ชันนี้จะลบข้อมูลธุรกรรม GL ออกจากฐานข้อมูลอย่างถาวร '
-                      'ข้อมูลหลัก (ผังบัญชี, งวดบัญชี, แบบงบการเงิน, Dimension) จะยังคงอยู่ '
+                      'ฟังก์ชันนี้จะลบข้อมูลธุรกรรม GL และ/หรือข้อมูลหลัก '
+                      '(ผังบัญชี, ปีบัญชี/งวดบัญชี, Dimension, แบบงบการเงิน, ตั้งค่าปิดสิ้นปี) '
+                      'ตามที่เลือกไว้ด้านล่าง ออกจากฐานข้อมูลอย่างถาวร '
                       'ใช้สำหรับเริ่มต้นระบบใหม่หลังการทดสอบเท่านั้น',
                       style: TextStyle(color: Colors.red[900], fontSize: 13),
                     ),
@@ -298,6 +369,88 @@ class _GlResetScreenState extends State<GlResetScreen> {
                   activeColor: Colors.purple[700],
                   onChanged: (v) => setState(() => _resetDocNumbers = v ?? false),
                   controlAffinity: ListTileControlAffinity.leading,
+                ),
+
+                const SizedBox(height: 24),
+                const Text('เลือกข้อมูลหลักที่ต้องการลบ/รีเซ็ต',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(
+                  'ใช้สำหรับล้างข้อมูลตั้งต้น/ทดสอบก่อนใช้งานจริง — ไม่เลือกรายการใด การ์ดนั้นจะถูกย่อ',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+
+                _masterDataCard(
+                  title: 'แบบงบการเงิน (Financial Report Builder)',
+                  subtitle: 'gl_fin_report (${_counts?['gl_fin_report'] ?? '-'} รายการ)',
+                  value: _resetFinancialReports,
+                  color: Colors.blue[700]!,
+                  onChanged: (v) => setState(() => _resetFinancialReports = v ?? false),
+                  detailLines: const [
+                    'ลบรูปแบบรายงานทางการเงินทั้งหมด รวมแถวและคอลัมน์ของรายงาน (ลบตาม CASCADE)',
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                _masterDataCard(
+                  title: 'ตั้งค่าปิดสิ้นปี',
+                  subtitle: 'gl_closing_config (${_counts?['gl_closing_config'] ?? '-'}) + '
+                      'gl_adjusting_template (${_counts?['gl_adjusting_template'] ?? '-'} รายการ)',
+                  value: _resetClosingConfig,
+                  color: Colors.deepPurple[600]!,
+                  onChanged: (v) => setState(() => _resetClosingConfig = v ?? false),
+                  detailLines: const [
+                    'ลบการตั้งค่าบัญชีกำไรสะสม/สรุปกำไรขาดทุนสำหรับปิดสิ้นปี (ต้องตั้งค่าใหม่ก่อนใช้ Year-End Closing Wizard)',
+                    'ลบ Adjusting Template (รายการปรับปรุงบัญชีก่อนปิดสิ้นปี) ทั้งหมด',
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                _masterDataCard(
+                  title: 'Dimension Framework',
+                  subtitle: 'ประเภทมิติ (${_counts?['gl_dimension_type'] ?? '-'}) / '
+                      'ค่ามิติ (${_counts?['gl_dimension_value'] ?? '-'}) / '
+                      'Combination (${_counts?['gl_dim_combination'] ?? '-'}) / '
+                      'ยอดสะสม (${_counts?['gl_balance_accum'] ?? '-'})',
+                  value: _resetDimensions,
+                  color: Colors.teal[700]!,
+                  onChanged: (v) => setState(() => _resetDimensions = v ?? false),
+                  detailLines: const [
+                    'ลบยอดสะสมตามมิติ (gl_balance_accum) และชุดค่าผสมมิติ (gl_dim_combination)',
+                    'ลบกฎการบังคับมิติของบัญชี (gl_account_dim_rule) ทั้งหมด',
+                    'ลบค่ามิติและประเภทมิติทั้งหมด',
+                    'หากยังมีรายการ GL Entry/AR ที่อ้างอิงค่ามิติอยู่ ต้องล้างข้อมูลธุรกรรมก่อน ไม่เช่นนั้นจะลบไม่ได้',
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                _masterDataCard(
+                  title: 'ปีบัญชี/งวดบัญชี',
+                  subtitle: 'gl_fiscal_year (${_counts?['gl_fiscal_year'] ?? '-'} ปี) / '
+                      'gl_posting_period (${_counts?['gl_posting_period'] ?? '-'} งวด)',
+                  value: _resetFiscalYears,
+                  color: Colors.brown[600]!,
+                  onChanged: (v) => setState(() => _resetFiscalYears = v ?? false),
+                  detailLines: const [
+                    'ลบปีบัญชีทั้งหมด รวมงวดบัญชีของปีนั้นๆ (ลบตาม CASCADE)',
+                    'หากยังมีรายการ GL Entry/AP ที่อ้างอิงงวดบัญชีอยู่ ต้องล้างข้อมูลธุรกรรมก่อน ไม่เช่นนั้นจะลบไม่ได้',
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                _masterDataCard(
+                  title: 'ผังบัญชี (Chart of Accounts)',
+                  subtitle: 'gl_account (${_counts?['gl_account'] ?? '-'} รายการ)',
+                  value: _resetChartOfAccounts,
+                  color: Colors.red[700]!,
+                  onChanged: (v) => setState(() => _resetChartOfAccounts = v ?? false),
+                  detailLines: const [
+                    'ลบผังบัญชีทั้งหมด รวมกฎการบังคับมิติของบัญชี (gl_account_dim_rule ลบตาม CASCADE)',
+                    'แนะนำให้เลือก "Dimension Framework" ด้วย เพื่อล้างยอดสะสม (gl_balance_accum) ที่อ้างอิงบัญชีก่อน',
+                    'หากยังมีการอ้างอิงจากโมดูลอื่น (AP/AR/CM/CD/คลังสินค้า) หรือธุรกรรม GL จะลบไม่ได้ '
+                        'ต้องล้างข้อมูลที่อ้างอิงเหล่านั้นก่อน',
+                  ],
                 ),
 
                 const SizedBox(height: 24),

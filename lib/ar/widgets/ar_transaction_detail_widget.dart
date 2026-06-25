@@ -1609,6 +1609,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     return Form(
       key: _formKey,
       child: Column(children: [
+        _buildActionButtons(),
         // Scrollable content
         Expanded(
           child: SingleChildScrollView(
@@ -1638,15 +1639,6 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ],
             ),
           ),
-        ),
-        // Fixed action buttons
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border(top: BorderSide(color: Colors.grey[300]!)),
-          ),
-          child: _buildActionButtons(),
         ),
       ]),
     );
@@ -3085,7 +3077,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   Widget _buildActionButtons() {
     final isDraft = _status == 'Draft';
     final isPosted = _status == 'Posted';
-    return Row(children: [
+    return Container(
+      color: Colors.teal[50],
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(children: [
       if (!_isReadOnly && isDraft) ...[
         ElevatedButton.icon(
           onPressed: () => _save('Draft'),
@@ -3146,7 +3141,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         onPressed: widget.onCancel,
         child: const Text('กลับ'),
       ),
-    ]);
+    ]));
   }
 
   // ── GL Entry dialog ───────────────────────────────────────────────────────

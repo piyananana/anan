@@ -11,23 +11,25 @@ import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
 import '../../utils/file_download.dart';
 
-class ArCustomerImportScreen extends StatefulWidget {
+class ArCustomerBalanceImportScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
 
-  const ArCustomerImportScreen({super.key, required this.onFieldsChanged});
+  const ArCustomerBalanceImportScreen({super.key, required this.onFieldsChanged});
 
   @override
-  State<ArCustomerImportScreen> createState() => _ArCustomerImportScreenState();
+  State<ArCustomerBalanceImportScreen> createState() => _ArCustomerBalanceImportScreenState();
 }
 
-class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
+class _ArCustomerBalanceImportScreenState extends State<ArCustomerBalanceImportScreen> {
   // File state
   String? _fileName;
   Uint8List? _fileBytes;
   String? _fileExtension;
 
   // Template (loaded dynamically so it always matches the backend)
-  List<Map<String, dynamic>> _templateSheets = [];
+  String _sheetName = '';
+  List<Map<String, dynamic>> _templateColumns = [];
+  List<Map<String, dynamic>> _docTypes = [];
 
   // Validation result
   bool _isValidated = false;
@@ -45,7 +47,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTemplateSheets();
+    _loadTemplate();
   }
 
   @override
@@ -56,19 +58,22 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
 
   // ─── Template definition ─────────────────────────────────────────────────
 
-  Future<void> _loadTemplateSheets() async {
+  Future<void> _loadTemplate() async {
     try {
       final authService = context.read<AuthService>();
       final headers = await authService.getAuthHeader();
       final response = await http.get(
-        Uri.parse('${AppConfig.apiAr}/ar_customer/import/template'),
+        Uri.parse('${AppConfig.apiAr}/ar_customer_balance/import/template'),
         headers: headers,
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         if (!mounted) return;
+        final sheet = data['sheet'] as Map<String, dynamic>?;
         setState(() {
-          _templateSheets = List<Map<String, dynamic>>.from(data['sheets'] ?? []);
+          _sheetName = sheet?['name']?.toString() ?? '';
+          _templateColumns = List<Map<String, dynamic>>.from(sheet?['columns'] ?? []);
+          _docTypes = List<Map<String, dynamic>>.from(data['docTypes'] ?? []);
         });
       }
     } catch (_) {
@@ -105,7 +110,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
       final authService = context.read<AuthService>();
       final headers = await authService.getAuthHeader();
 
-      final uri = Uri.parse('${AppConfig.apiAr}/ar_customer/import/validate');
+      final uri = Uri.parse('${AppConfig.apiAr}/ar_customer_balance/import/validate');
       final request = http.MultipartRequest('POST', uri)
         ..headers.addAll(headers);
 
@@ -155,7 +160,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('ยืนยันการนำเข้า'),
         content: Text(
-            'ต้องการนำเข้าข้อมูลลูกหนี้ $_validRows รายการใช่หรือไม่?'),
+            'ต้องการนำเข้ายอดลูกหนี้คงเหลือ $_validRows รายการใช่หรือไม่?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -179,7 +184,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
       headers['Content-Type'] = 'application/json';
 
       final response = await http.post(
-        Uri.parse('${AppConfig.apiAr}/ar_customer/import/confirm'),
+        Uri.parse('${AppConfig.apiAr}/ar_customer_balance/import/confirm'),
         headers: headers,
         body: jsonEncode({'rows': _validatedData}),
       );
@@ -192,7 +197,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
         if (mounted) {
           _showSnack(
             'นำเข้าสำเร็จ $imported รายการ'
-            '${skipped > 0 ? '  |  ข้ามรหัสซ้ำ $skipped รายการ' : ''}'
+            '${skipped > 0 ? '  |  ข้ามรายการซ้ำ $skipped รายการ' : ''}'
             '${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}',
           );
           setState(() {
@@ -239,7 +244,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
         title: const Row(children: [
           Icon(Icons.upload_file, color: Colors.white),
           SizedBox(width: 8),
-          Text('นำเข้าข้อมูลลูกหนี้',
+          Text('นำเข้ายอดลูกหนี้คงเหลือ',
               style: TextStyle(color: Colors.white)),
         ]),
         actions: [
@@ -290,7 +295,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
                       : const Icon(Icons.check_circle_outline),
                   label: Text(_isImporting
                       ? 'กำลังนำเข้า...'
-                      : 'ยืนยันนำเข้าข้อมูล $_validRows รายการ'),
+                      : 'ยืนยันนำเข้ายอดลูกหนี้คงเหลือ $_validRows รายการ'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green.shade700,
                     foregroundColor: Colors.white,
@@ -312,11 +317,11 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
       final authService = context.read<AuthService>();
       final headers = await authService.getAuthHeader();
       final response = await http.get(
-        Uri.parse('${AppConfig.apiAr}/ar_customer/import/template/download'),
+        Uri.parse('${AppConfig.apiAr}/ar_customer_balance/import/template/download'),
         headers: headers,
       );
       if (response.statusCode == 200) {
-        await downloadFile(response.bodyBytes, 'ar_customer_template.xlsx');
+        await downloadFile(response.bodyBytes, 'ar_customer_balance_template.xlsx');
       } else {
         _showSnack('ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})', isError: true);
       }
@@ -331,7 +336,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
         leading: const Icon(Icons.table_chart_outlined, color: Color(0xFF303F9F)),
         title: const Text('เทมเพลตนำเข้าข้อมูล',
             style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: const Text('คลิกเพื่อดูรายละเอียดคอลัมน์ในแต่ละ sheet'),
+        subtitle: const Text('คลิกเพื่อดูรายละเอียดคอลัมน์และประเภทเอกสารที่ใช้ได้'),
         trailing: OutlinedButton.icon(
           onPressed: _downloadTemplate,
           icon: const Icon(Icons.download, size: 18),
@@ -343,69 +348,88 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
         ),
         initiallyExpanded: false,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              'เทมเพลตประกอบด้วย 8 sheet ตามหัวข้อข้อมูลลูกหนี้ ทุก sheet (ยกเว้น "ข้อมูลทั่วไป") '
-              'ใช้คอลัมน์ "old_customer_code" (รหัสเก่าลูกหนี้) เป็นตัวเชื่อมข้อมูลกับแถวใน sheet "ข้อมูลทั่วไป"\n'
+              'ไฟล์เทมเพลตมี 1 sheet คือ "$_sheetName" — 1 แถว = 1 เอกสารค้างชำระของลูกหนี้ 1 ราย '
+              '(ไม่มีผลกับบัญชีแยกประเภท GL — ใช้สำหรับตั้งยอดในระบบลูกหนี้เท่านั้น)\n'
               '★ = จำเป็นต้องระบุ',
-              style: TextStyle(color: Colors.red, fontSize: 12),
+              style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),
-          for (final sheet in _templateSheets) _buildTemplateSheetTile(sheet),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: DataTable(
+              columnSpacing: 16,
+              headingRowColor:
+                  WidgetStateProperty.all(const Color(0xFFE8EAF6)),
+              columns: const [
+                DataColumn(
+                    label: Text('ชื่อ Header',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('ความหมาย',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('จำเป็น',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('ตัวอย่าง',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+              ],
+              rows: _templateColumns
+                  .map((col) => DataRow(cells: [
+                        DataCell(Text(col['key']?.toString() ?? '',
+                            style: const TextStyle(
+                                fontFamily: 'monospace', fontSize: 12))),
+                        DataCell(Text(col['label']?.toString() ?? '')),
+                        DataCell((col['required'] as bool? ?? false)
+                            ? const Icon(Icons.star,
+                                color: Colors.red, size: 14)
+                            : const Text('-',
+                                style: TextStyle(color: Colors.grey))),
+                        DataCell(Text(col['example']?.toString() ?? '',
+                            style: const TextStyle(
+                                color: Colors.grey, fontSize: 12))),
+                      ]))
+                  .toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text('ประเภทเอกสารที่ใช้ได้สำหรับคอลัมน์ doc_code',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: DataTable(
+              columnSpacing: 16,
+              headingRowColor:
+                  WidgetStateProperty.all(const Color(0xFFE8EAF6)),
+              columns: const [
+                DataColumn(
+                    label: Text('doc_code',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('ชื่อประเภทเอกสาร',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+              ],
+              rows: _docTypes
+                  .map((d) => DataRow(cells: [
+                        DataCell(Text(d['doc_code']?.toString() ?? '',
+                            style: const TextStyle(
+                                fontFamily: 'monospace', fontSize: 12))),
+                        DataCell(Text(d['doc_name_thai']?.toString() ?? '')),
+                      ]))
+                  .toList(),
+            ),
+          ),
           const SizedBox(height: 8),
         ],
       ),
-    );
-  }
-
-  Widget _buildTemplateSheetTile(Map<String, dynamic> sheet) {
-    final columns = List<Map<String, dynamic>>.from(sheet['columns'] ?? []);
-    return ExpansionTile(
-      title: Text(sheet['name']?.toString() ?? '',
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: DataTable(
-            columnSpacing: 16,
-            headingRowColor:
-                WidgetStateProperty.all(const Color(0xFFE8EAF6)),
-            columns: const [
-              DataColumn(
-                  label: Text('ชื่อ Header',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(
-                  label: Text('ความหมาย',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(
-                  label: Text('จำเป็น',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(
-                  label: Text('ตัวอย่าง',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
-            ],
-            rows: columns
-                .map((col) => DataRow(cells: [
-                      DataCell(Text(col['key']?.toString() ?? '',
-                          style: const TextStyle(
-                              fontFamily: 'monospace', fontSize: 12))),
-                      DataCell(Text(col['label']?.toString() ?? '')),
-                      DataCell((col['required'] as bool? ?? false)
-                          ? const Icon(Icons.star,
-                              color: Colors.red, size: 14)
-                          : const Text('-',
-                              style: TextStyle(color: Colors.grey))),
-                      DataCell(Text(col['example']?.toString() ?? '',
-                          style: const TextStyle(
-                              color: Colors.grey, fontSize: 12))),
-                    ]))
-                .toList(),
-          ),
-        ),
-        const SizedBox(height: 8),
-      ],
     );
   }
 
@@ -558,9 +582,6 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
           'ตัวอย่างข้อมูลที่จะนำเข้า${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
-        const SizedBox(height: 4),
-        const Text('คลิกแถวเพื่อดูรายละเอียดทุกหัวข้อของลูกหนี้',
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
         const SizedBox(height: 8),
         Scrollbar(
           controller: _previewScrollCtrl,
@@ -573,37 +594,32 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
               headingRowColor: WidgetStateProperty.all(const Color(0xFFE8EAF6)),
               columns: const [
                 DataColumn(label: Text('รหัสลูกหนี้')),
-                DataColumn(label: Text('กลุ่มลูกค้า')),
-                DataColumn(label: Text('ชื่อ (ไทย)')),
-                DataColumn(label: Text('ชื่อ (อังกฤษ)')),
-                DataColumn(label: Text('เลขภาษี')),
-                DataColumn(label: Text('ประเภทธุรกิจ')),
+                DataColumn(label: Text('ประเภทเอกสาร')),
+                DataColumn(label: Text('เลขที่เอกสาร')),
+                DataColumn(label: Text('วันที่เอกสาร')),
+                DataColumn(label: Text('วันครบกำหนด')),
                 DataColumn(label: Text('สกุลเงิน')),
-                DataColumn(label: Text('เครดิต (ด/ว)')),
-                DataColumn(label: Text('ใช้งาน')),
+                DataColumn(label: Text('อัตราแลกเปลี่ยน')),
+                DataColumn(label: Text('ยอดคงเหลือ')),
+                DataColumn(label: Text('คำอธิบาย')),
               ],
               rows: _validatedData
                   .take(50)
                   .map((r) => DataRow(
-                        onSelectChanged: (_) => _showCustomerDetailDialog(r),
                         cells: [
-                          DataCell(Text(r['customer_code']?.toString() ?? '(อัตโนมัติ)')),
-                          DataCell(Text(_formatCellValue(r['customer_group_code']))),
-                          DataCell(ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 200),
-                            child: Text(r['customer_name_th']?.toString() ?? '',
-                                overflow: TextOverflow.ellipsis),
-                          )),
-                          DataCell(ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 200),
-                            child: Text(r['customer_name_en']?.toString() ?? '',
-                                overflow: TextOverflow.ellipsis),
-                          )),
-                          DataCell(Text(_formatCellValue(r['tax_id']))),
-                          DataCell(Text(_formatCellValue(r['business_type_code']))),
+                          DataCell(Text(_formatCellValue(r['customer_code']))),
+                          DataCell(Text(_formatCellValue(r['doc_code']))),
+                          DataCell(Text(_formatCellValue(r['doc_no']))),
+                          DataCell(Text(_formatCellValue(r['doc_date']))),
+                          DataCell(Text(_formatCellValue(r['due_date']))),
                           DataCell(Text(_formatCellValue(r['currency_code']))),
-                          DataCell(Text('${_fmtNum(r['credit_term_months'])}/${_fmtNum(r['credit_term_days'])}')),
-                          DataCell(Text(_formatCellValue(r['is_active']))),
+                          DataCell(Text(_fmtNum(r['exchange_rate']))),
+                          DataCell(Text(_fmtNum(r['amount']))),
+                          DataCell(ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 200),
+                            child: Text(_formatCellValue(r['description']),
+                                overflow: TextOverflow.ellipsis),
+                          )),
                         ],
                       ))
                   .toList(),
@@ -612,225 +628,6 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
         ),
       ],
     ]);
-  }
-
-  // ─── Customer detail dialog (tabbed, per ar_customer_detail_widget sections) ──
-
-  static const _billingConditionColumns = [
-    ['sort_order', 'ลำดับ'],
-    ['bill_with_delivery', 'วางบิลพร้อมส่งของ'],
-    ['billing_day_of_month', 'วันที่ในเดือน'],
-    ['billing_day_of_week', 'วันในสัปดาห์'],
-    ['billing_week_of_month', 'สัปดาห์ที่'],
-    ['billing_time_from', 'เวลาเริ่มวางบิล'],
-    ['billing_time_to', 'เวลาสิ้นสุดวางบิล'],
-    ['due_from_billing_date', 'คำนวณวันครบกำหนดจากวันวางบิล'],
-    ['remark', 'หมายเหตุ'],
-  ];
-
-  static const _paymentConditionColumns = [
-    ['sort_order', 'ลำดับ'],
-    ['payment_day_of_month', 'วันที่ในเดือน'],
-    ['payment_day_of_week', 'วันในสัปดาห์'],
-    ['payment_week_of_month', 'สัปดาห์ที่'],
-    ['payment_time_from', 'เวลาเริ่มรับชำระ'],
-    ['payment_time_to', 'เวลาสิ้นสุดรับชำระ'],
-    ['within_months_from_billing', 'ชำระภายใน (เดือน)'],
-    ['additional_days', 'วันเพิ่มเติม'],
-    ['remark', 'หมายเหตุ'],
-  ];
-
-  static const _addressColumns = [
-    ['address_type', 'ประเภทที่อยู่'],
-    ['address_no', 'บ้านเลขที่'],
-    ['address_building_village', 'อาคาร/หมู่บ้าน'],
-    ['address_alley', 'ซอย'],
-    ['address_road', 'ถนน'],
-    ['address_sub_district', 'ตำบล/แขวง'],
-    ['address_district', 'อำเภอ/เขต'],
-    ['address_province', 'จังหวัด'],
-    ['address_zip_code', 'รหัสไปรษณีย์'],
-    ['address_country', 'ประเทศ'],
-    ['is_default', 'ที่อยู่หลัก'],
-  ];
-
-  static const _contactColumns = [
-    ['contact_name', 'ชื่อผู้ติดต่อ'],
-    ['position', 'ตำแหน่ง'],
-    ['phone', 'โทรศัพท์'],
-    ['mobile', 'มือถือ'],
-    ['email', 'อีเมล'],
-    ['is_default', 'ผู้ติดต่อหลัก'],
-  ];
-
-  static const _bankAccountColumns = [
-    ['bank_name', 'ธนาคาร'],
-    ['branch_name', 'สาขา'],
-    ['account_number', 'เลขที่บัญชี'],
-    ['account_name', 'ชื่อบัญชี'],
-    ['account_type', 'ประเภทบัญชี'],
-    ['is_default', 'บัญชีหลัก'],
-  ];
-
-  void _showCustomerDetailDialog(Map<String, dynamic> row) {
-    const tabLabels = [
-      'ข้อมูลทั่วไป',
-      'เขตการขายและพนักงานขาย',
-      'เงื่อนไขการวางบิล',
-      'เงื่อนไขการรับชำระเงิน',
-      'ที่อยู่',
-      'ผู้ติดต่อ',
-      'บัญชีธนาคาร',
-      'รหัสบัญชีลูกหนี้',
-    ];
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        final size = MediaQuery.of(ctx).size;
-        return Dialog(
-          insetPadding: const EdgeInsets.all(24),
-          child: SizedBox(
-            width: size.width * 0.9,
-            height: size.height * 0.9,
-            child: DefaultTabController(
-              length: tabLabels.length,
-              child: Column(children: [
-                AppBar(
-                  automaticallyImplyLeading: false,
-                  backgroundColor: const Color(0xFF303F9F),
-                  foregroundColor: Colors.white,
-                  title: Text(
-                    '${row['customer_code']?.toString() ?? '(อัตโนมัติ)'} - ${row['customer_name_th']?.toString() ?? ''}',
-                    style: const TextStyle(fontSize: 15, color: Colors.white),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                  bottom: TabBar(
-                    isScrollable: true,
-                    indicatorColor: Colors.white,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.white70,
-                    tabs: tabLabels.map((l) => Tab(text: l)).toList(),
-                  ),
-                ),
-                Expanded(
-                  child: TabBarView(children: [
-                    _buildGeneralTab(row),
-                    _buildSalesTab(row),
-                    _buildListTable(
-                        row['billing_conditions'] as List? ?? [], _billingConditionColumns),
-                    _buildListTable(
-                        row['payment_conditions'] as List? ?? [], _paymentConditionColumns),
-                    _buildListTable(row['addresses'] as List? ?? [], _addressColumns),
-                    _buildListTable(row['contacts'] as List? ?? [], _contactColumns),
-                    _buildListTable(row['bank_accounts'] as List? ?? [], _bankAccountColumns),
-                    _buildArAccountTab(row),
-                  ]),
-                ),
-              ]),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildGeneralTab(Map<String, dynamic> row) {
-    final items = <List<String>>[
-      ['รหัสลูกหนี้', row['customer_code']?.toString() ?? '(อัตโนมัติ)'],
-      ['กลุ่มลูกค้า', _formatCellValue(row['customer_group_code'])],
-      ['รหัสลูกหนี้เก่า', _formatCellValue(row['old_customer_code'])],
-      ['ชื่อ (ไทย)', _formatCellValue(row['customer_name_th'])],
-      ['ชื่อ (อังกฤษ)', _formatCellValue(row['customer_name_en'])],
-      ['เลขประจำตัวผู้เสียภาษี', _formatCellValue(row['tax_id'])],
-      ['ประเภทธุรกิจ', _formatCellValue(row['business_type_code'])],
-      ['เครดิต (เดือน)', _formatCellValue(row['credit_term_months'])],
-      ['เครดิต (วัน)', _formatCellValue(row['credit_term_days'])],
-      ['วงเงินเครดิต', _formatCellValue(row['credit_limit'])],
-      ['ส่วนลด %', _formatCellValue(row['discount_percent'])],
-      ['สกุลเงิน', _formatCellValue(row['currency_code'])],
-      ['ใช้งาน', _formatCellValue(row['is_active'])],
-      ['ต้องวางบิลก่อนรับชำระ', _formatCellValue(row['requires_billing'])],
-      ['หมายเหตุ', _formatCellValue(row['remark'])],
-    ];
-    return _buildKeyValueTable(items);
-  }
-
-  Widget _buildSalesTab(Map<String, dynamic> row) {
-    final items = <List<String>>[
-      ['เขตการขาย', _formatCellValue(row['sales_territory_code'])],
-      ['พนักงานขาย', _formatCellValue(row['salesperson_code'])],
-      ['ผู้วางบิล', _formatCellValue(row['billing_collector_code'])],
-      ['ผู้รับชำระ', _formatCellValue(row['collection_collector_code'])],
-    ];
-    return _buildKeyValueTable(items);
-  }
-
-  Widget _buildArAccountTab(Map<String, dynamic> row) {
-    final items = <List<String>>[
-      ['รหัสบัญชีลูกหนี้', _formatCellValue(row['ar_account_code'])],
-    ];
-    return _buildKeyValueTable(items);
-  }
-
-  Widget _buildKeyValueTable(List<List<String>> items) {
-    return _DualScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Table(
-          defaultColumnWidth: const IntrinsicColumnWidth(),
-          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-          children: items
-              .map((kv) => TableRow(children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                      child: Text(kv[0], style: const TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minWidth: 240),
-                        child: Text(kv[1].isEmpty ? '-' : kv[1]),
-                      ),
-                    ),
-                  ]))
-              .toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildListTable(List<dynamic> rows, List<List<String>> columns) {
-    if (rows.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('ไม่มีข้อมูล', style: TextStyle(color: Colors.grey)),
-      );
-    }
-    return _DualScrollView(
-      child: DataTable(
-        columnSpacing: 16,
-        headingRowColor: WidgetStateProperty.all(const Color(0xFFE8EAF6)),
-        columns: columns
-            .map((c) => DataColumn(
-                label: Text(c[1], style: const TextStyle(fontWeight: FontWeight.bold))))
-            .toList(),
-        rows: rows.map((r) {
-          final map = r as Map<String, dynamic>;
-          return DataRow(
-            cells: columns
-                .map((c) => DataCell(Text(_formatCellValue(map[c[0]]))))
-                .toList(),
-          );
-        }).toList(),
-      ),
-    );
   }
 
   String _fmtNum(dynamic v) {
@@ -843,51 +640,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
   String _formatCellValue(dynamic val) {
     if (val == null) return '';
     if (val is bool) return val ? 'ใช่' : 'ไม่ใช่';
-    if (val is List) return val.map((e) => _fmtNum(e)).join(', ');
     if (val is num) return _fmtNum(val);
     return val.toString();
-  }
-}
-
-// ─── Dual scrollbar (vertical + horizontal) wrapper ─────────────────────────
-class _DualScrollView extends StatefulWidget {
-  final Widget child;
-
-  const _DualScrollView({required this.child});
-
-  @override
-  State<_DualScrollView> createState() => _DualScrollViewState();
-}
-
-class _DualScrollViewState extends State<_DualScrollView> {
-  final _verticalCtrl = ScrollController();
-  final _horizontalCtrl = ScrollController();
-
-  @override
-  void dispose() {
-    _verticalCtrl.dispose();
-    _horizontalCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scrollbar(
-      controller: _verticalCtrl,
-      thumbVisibility: true,
-      child: SingleChildScrollView(
-        controller: _verticalCtrl,
-        child: Scrollbar(
-          controller: _horizontalCtrl,
-          thumbVisibility: true,
-          notificationPredicate: (notif) => notif.depth == 0,
-          child: SingleChildScrollView(
-            controller: _horizontalCtrl,
-            scrollDirection: Axis.horizontal,
-            child: widget.child,
-          ),
-        ),
-      ),
-    );
   }
 }
