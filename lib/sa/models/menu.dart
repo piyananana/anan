@@ -80,6 +80,7 @@ import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
 import '../../ap/screens/ap_vendor_import_screen.dart';
 import '../../ap/screens/ap_vendor_running_screen.dart';
+import '../../ap/screens/ap_vendor_report_screen.dart';
 import '../../ap/screens/ap_transaction_screen.dart';
 import '../../ap/screens/ap_gl_account_setup_screen.dart';
 import '../../ap/screens/ap_payment_run_screen.dart';
@@ -221,6 +222,7 @@ class Menu {
     'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),
     'ApVendorImportScreen': (context) => ApVendorImportScreen(onFieldsChanged: () {}),
     'ApVendorRunningScreen': (context) => const ApVendorRunningScreen(),
+    'ApVendorReportScreen': (context) => const ApVendorReportScreen(),
     'ApTransactionScreen': (context) => const ApTransactionScreen(),
     'ApGlAccountSetupScreen': (context) => const ApGlAccountSetupScreen(),
     'ApPaymentRunScreen': (context) => const ApPaymentRunScreen(),

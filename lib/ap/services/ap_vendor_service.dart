@@ -60,6 +60,34 @@ class ApVendorService {
     }
   }
 
+  Future<List<ApVendor>> fetchReport({
+    List<int> groupIds = const [],
+    String? codeFrom,
+    String? codeTo,
+    String status = '',
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final params = <String, String>{};
+    if (groupIds.isNotEmpty) params['group_ids'] = groupIds.join(',');
+    if (codeFrom != null && codeFrom.isNotEmpty) params['code_from'] = codeFrom;
+    if (codeTo   != null && codeTo.isNotEmpty)   params['code_to']   = codeTo;
+    if (status.isNotEmpty) params['status'] = status;
+
+    final uri = Uri.parse('$baseUrl/ap_vendor/report')
+        .replace(queryParameters: params.isEmpty ? null : params);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List)
+          .map((e) => ApVendor.fromJson(e))
+          .toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    } else {
+      throw Exception('โหลดข้อมูลรายงานล้มเหลว: ${response.statusCode}');
+    }
+  }
+
   Future<ApVendor> addRow(ApVendor row) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(

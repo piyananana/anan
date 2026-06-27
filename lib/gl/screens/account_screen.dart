@@ -340,6 +340,7 @@ class _AccountScreenState extends State<AccountScreen>
                               enableViewButton: true,
                               enableDeleteButton: true,
                               enableCardSelect: false,
+                              showInactive: true,
                               onAddRoot: _onAddRoot,
                               onAddChild: _onAddChild,
                               onEdit: _onEdit,

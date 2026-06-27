@@ -42,6 +42,7 @@ class _ChartOfAccountsReportScreenState
   Set<String> _selectedAccountTypes = {};
   Account? _accountFrom;
   Account? _accountTo;
+  String _status = 'active';
   bool _pageBreakPerType = false;
   bool _showHeaderAccounts = true;
 
@@ -56,7 +57,8 @@ class _ChartOfAccountsReportScreenState
     1: const pw.FlexColumnWidth(4.0),
     2: const pw.FlexColumnWidth(1.0),
     3: const pw.FlexColumnWidth(0.9),
-    4: const pw.FlexColumnWidth(3.6),
+    4: const pw.FlexColumnWidth(0.9),
+    5: const pw.FlexColumnWidth(3.6),
   };
 
   List<Map<String, dynamic>> get _accountTypeOptionsList =>
@@ -75,7 +77,7 @@ class _ChartOfAccountsReportScreenState
     headers = await authService.getAuthHeader();
     _company = await _companyService.fetchCompany();
     try {
-      _accounts = await _accountService.fetchRows();
+      _accounts = await _accountService.fetchAllRows();
       final dimTypes = await _dimService.fetchActiveTypes();
       _dimTypeMap = {for (var d in dimTypes) d.typeCode: d};
       _calculateAccountLevels(_accounts);
@@ -148,6 +150,8 @@ class _ChartOfAccountsReportScreenState
     if (!_showHeaderAccounts) {
       ordered = ordered.where((a) => a.isNormalAccount).toList();
     }
+    if (_status == 'active')   ordered = ordered.where((a) =>  a.isActive).toList();
+    if (_status == 'inactive') ordered = ordered.where((a) => !a.isActive).toList();
 
     if (ordered.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -173,7 +177,6 @@ class _ChartOfAccountsReportScreenState
   // รวมค่าจาก switch ต่างๆ ในหน้า account_detail_widget ที่ "เปิดใช้งาน" คั่นด้วย " | "
   String _settingsText(Account a) {
     final List<String> parts = [];
-    if (!a.isActive) parts.add('หยุดใช้งาน');
     if (!a.isNormalAccount) parts.add('หัวบัญชี/บัญชีรวม');
     if (a.isControlAccount) parts.add('Control Account');
     if (a.branchRequired) parts.add('ระบุสาขา');
@@ -197,6 +200,7 @@ class _ChartOfAccountsReportScreenState
     }
     parts.add(
         'รหัสบัญชี: ${_accountFrom?.accountCode ?? 'ทั้งหมด'} - ${_accountTo?.accountCode ?? 'ทั้งหมด'}');
+    parts.add('สถานะ: ${_status == 'active' ? 'ใช้งาน' : _status == 'inactive' ? 'หยุดใช้งาน' : 'ทั้งหมด'}');
     if (!_showHeaderAccounts) {
       parts.add('ไม่รวมหัวบัญชี/บัญชีรวม');
     }
@@ -450,6 +454,7 @@ class _ChartOfAccountsReportScreenState
         'ชื่อบัญชี (ไทย/อังกฤษ)',
         'ยอดดุล',
         'สกุลเงิน',
+        'สถานะ',
         'การตั้งค่าต่างๆ',
       ];
       for (int c = 0; c < colHeaders.length; c++) {
@@ -472,7 +477,8 @@ class _ChartOfAccountsReportScreenState
           _xlCell(s, r, 1, '${'    ' * level}$nameText');
           _xlCell(s, r, 2, a.normalBalance == 'DR' ? 'เดบิต' : 'เครดิต');
           _xlCell(s, r, 3, a.currencyCode);
-          _xlCell(s, r, 4, _settingsText(a));
+          _xlCell(s, r, 4, a.isActive ? 'ใช้งาน' : 'หยุดใช้งาน');
+          _xlCell(s, r, 5, _settingsText(a));
           r++;
         }
       }
@@ -514,6 +520,7 @@ class _ChartOfAccountsReportScreenState
         cell('ชื่อบัญชี (ไทย/อังกฤษ)'),
         cell('ยอดดุล'),
         cell('สกุลเงิน'),
+        cell('สถานะ'),
         cell('การตั้งค่าต่างๆ'),
       ]),
     ]);
@@ -546,6 +553,7 @@ class _ChartOfAccountsReportScreenState
         ),
         cell(pw.Text(a.normalBalance == 'DR' ? 'เดบิต' : 'เครดิต', style: cellStyle)),
         cell(pw.Text(a.currencyCode, style: cellStyle)),
+        cell(pw.Text(a.isActive ? 'ใช้งาน' : 'หยุดใช้งาน', style: cellStyle)),
         cell(pw.Text(_settingsText(a), style: const pw.TextStyle(fontSize: 9))),
       ]),
     ]);
@@ -793,6 +801,20 @@ class _ChartOfAccountsReportScreenState
                                     ),
                                 ],
                               ),
+                            ),
+                            const SizedBox(height: 16),
+                            DropdownButtonFormField<String>(
+                              value: _status,
+                              decoration: const InputDecoration(
+                                labelText: 'สถานะ',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: '', child: Text('ทั้งหมด')),
+                                DropdownMenuItem(value: 'active', child: Text('ใช้งาน')),
+                                DropdownMenuItem(value: 'inactive', child: Text('หยุดใช้งาน')),
+                              ],
+                              onChanged: (v) => setState(() => _status = v ?? ''),
                             ),
                             const Divider(),
                             SwitchListTile(

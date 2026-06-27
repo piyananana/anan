@@ -11,6 +11,7 @@ class AccountListTreeWidget extends StatefulWidget {
   final bool enableViewButton;
   final bool enableDeleteButton;
   final bool enableCardSelect;
+  final bool showInactive;
   final void Function() onAddRoot;
   final void Function(Account) onAddChild;
   final Function(Account) onEdit;
@@ -26,6 +27,7 @@ class AccountListTreeWidget extends StatefulWidget {
     required this.enableViewButton,
     required this.enableDeleteButton,
     required this.enableCardSelect,
+    this.showInactive = false,
     required this.onAddRoot,
     required this.onAddChild,
     required this.onEdit,
@@ -96,7 +98,9 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
     });
     try {
       final dataService = Provider.of<AccountService>(context, listen: false);
-      final fetched = await dataService.fetchRows();
+      final fetched = widget.showInactive
+          ? await dataService.fetchAllRows()
+          : await dataService.fetchRows();
       setState(() {
         _lists = fetched;
         _isLoading = false;
@@ -155,10 +159,24 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
 
   // --- Build Methods ---
   Widget _buildNode(Account item, int level) {
-    final bool isHeader = item.isNormalAccount == false;
+    final bool isHeader   = item.isNormalAccount == false;
+    final bool isInactive = !item.isActive;
     final List<Account> children = _buildTree(_lists, item.id);
     final bool hasChildren = children.isNotEmpty;
-    final bool isExpanded = _expandedState[item.id] ?? false;
+    final bool isExpanded  = _expandedState[item.id] ?? false;
+
+    // สี/ความชัดตามสถานะ
+    final Color textColor   = isInactive ? Colors.grey.shade400 : Colors.black87;
+    final Color actionColor = isInactive ? Colors.grey.shade400 : Colors.blue;
+    final Color deleteColor = isInactive ? Colors.grey.shade400 : Colors.red;
+
+    // Icon แสดงประเภทบัญชี — inactive ใช้ Icons.block แทน
+    final IconData typeIcon = isInactive
+        ? Icons.block                // แสดงว่าหยุดใช้งาน
+        : (isHeader
+            ? Icons.summarize_outlined
+            : Icons.list_outlined);
+    final Color typeIconColor = isInactive ? Colors.grey.shade400 : Colors.black54;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,31 +196,34 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
             child: Row(
               children: [
                 if (isHeader && hasChildren)
-                  Icon(isExpanded ? Icons.arrow_drop_down : Icons.arrow_right),
+                  Icon(isExpanded ? Icons.arrow_drop_down : Icons.arrow_right,
+                      color: textColor),
                 if (!isHeader || !hasChildren) const SizedBox(width: 24),
-                Icon(isHeader
-                    ? Icons.summarize_outlined // folder
-                    : Icons.list_outlined), // insert_drive_file),
+                Icon(typeIcon, color: typeIconColor, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '${item.accountCode} ${item.accountNameThai}',
-                    style: const TextStyle(fontSize: 16),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: textColor,
+                      fontStyle: isInactive ? FontStyle.italic : FontStyle.normal,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 // Icon ปุ่ม Add สำหรับ Header
                 if (isHeader && widget.enableAddChildButton)
                   IconButton(
-                    icon: const Icon(Icons.add_circle_outline, size: 20),
+                    icon: Icon(Icons.add_circle_outline,
+                        size: 20, color: actionColor),
                     tooltip: 'เพิ่มรายการย่อย',
                     onPressed: () => widget.onAddChild(item),
                   ),
                 // Icon ปุ่ม Edit
                 widget.enableEditButton
                     ? IconButton(
-                        icon: const Icon(Icons.edit,
-                            color: Colors.blue, size: 20),
+                        icon: Icon(Icons.edit, color: actionColor, size: 20),
                         tooltip: 'แก้ไข',
                         onPressed: () => widget.onEdit(item),
                       )
@@ -210,18 +231,16 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                 // Icon ปุ่ม Delete
                 widget.enableDeleteButton
                     ? IconButton(
-                        icon: const Icon(Icons.delete,
-                            size: 20, color: Colors.red),
+                        icon: Icon(Icons.delete, size: 20, color: deleteColor),
                         tooltip: 'ลบ',
                         onPressed: () {
                           if (_buildTree(_lists, item.id).isNotEmpty &&
                               item.isNormalAccount == false) {
-                            // ป้องกันการลบหัวบัญชี
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                   content: Text(
                                       'ไม่สามารถลบรายการที่มีรายการย่อยได้ กรุณาลบรายการย่อยออกก่อน'),
-                                      backgroundColor: Colors.red,),
+                                  backgroundColor: Colors.red),
                             );
                           } else {
                             widget.onDelete(item);
@@ -243,7 +262,7 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                               const SnackBar(
                                   content: Text(
                                       'ไม่สามารถใช้ได้ เนื่องจากเป็นหัวบัญชี หรือ หยุดใช้'),
-                                      backgroundColor: Colors.red,),
+                                  backgroundColor: Colors.red),
                             );
                           }
                         },

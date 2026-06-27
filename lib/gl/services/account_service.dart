@@ -79,6 +79,23 @@ class AccountService {
     }
   }
 
+  Future<List<Account>> fetchAllRows() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(
+      Uri.parse('$baseUrl/gl_account/all'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      List jsonResponse = json.decode(response.body);
+      return jsonResponse.map((rows) => Account.fromJson(rows)).toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    } else {
+      throw Exception('การโหลดเมนูล้มเหลว: ${response.statusCode}');
+    }
+  }
+
   Future<List<Account>> fetchRowsControlAccount() async {
     final headers = await authService.getAuthHeader();
     final response = await http.get(
