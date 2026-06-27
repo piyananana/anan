@@ -24,6 +24,8 @@ import '../../cm/models/cm_payment_method.dart';
 import '../../cm/widgets/cm_payment_method_list_widget.dart';
 import '../../gl/services/gl_entry_service.dart';
 import '../../gl/models/gl_entry.dart' show GlEntryHeader, GlEntryDetail;
+import '../../cd/models/cd_wht_type.dart';
+import '../../cd/services/cd_wht_type_service.dart';
 
 class ApTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -119,6 +121,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
 
   // WHT rows (for Payment 80, Advance Payment 60)
   List<_WhtRow> _whtRows = [];
+  List<CdWhtType> _whtTypes = [];
 
   // Totals
   double _subtotalFc = 0;
@@ -191,6 +194,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         _periodService.fetchOpenGlPeriods(),
         _vatRateService.fetchRows(),
         _dimService.fetchActiveTypes(),
+        CdWhtTypeService().fetchActiveRows(),
       ]);
       _allowedDocTypes = results[0] as List<ModuleDocument>;
       _vendors = results[1] as List<ApVendor>;
@@ -199,6 +203,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       _openPeriods = results[4] as List<PostingPeriod>;
       _vatRates = (results[5] as List<VatRate>).where((v) => v.isActive).toList();
       _dimTypes = results[6] as List<GlDimensionType>;
+      _whtTypes = results[7] as List<CdWhtType>;
 
       final dimValueResults = await Future.wait(
         _dimTypes.map((t) => _dimService.fetchValuesByType(t.typeCode)),
@@ -318,7 +323,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
 
         for (final r in _paymentRows) r.dispose();
         _paymentRows = data.payments.map((p) => _PaymentRow.fromModel(p, isFc)).toList();
-        _whtRows = data.whts.map((w) => _WhtRow.fromModel(w)).toList();
+        _whtRows = data.whts.map((w) => _WhtRow.fromModel(w, _whtTypes)).toList();
       });
       _recalcTotals();
 
@@ -689,11 +694,13 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     }).toList();
 
     final whts = _whtRows.map((w) => ApTransactionWht(
-          whtType: w.whtTypeCtrl.text.isEmpty ? null : w.whtTypeCtrl.text,
-          whtRate: double.tryParse(w.rateCtrl.text) ?? 0,
+          whtTypeId:    w.selectedWhtType?.id,
+          whtType:      w.selectedWhtType?.whtName,
+          incomeType:   w.selectedWhtType?.incomeType,
+          whtRate:      w.selectedWhtType?.whtRate ?? 0,
           baseAmountLc: (double.tryParse(w.baseCtrl.text) ?? 0) * lc,
-          whtAmountLc: (double.tryParse(w.whtCtrl.text) ?? 0) * lc,
-          description: w.descCtrl.text.isEmpty ? null : w.descCtrl.text,
+          whtAmountLc:  (double.tryParse(w.whtCtrl.text) ?? 0) * lc,
+          description:  w.descCtrl.text.isEmpty ? null : w.descCtrl.text,
         )).toList();
 
     setState(() => _isLoading = true);
@@ -1318,26 +1325,38 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           else
             ...(_whtRows.asMap().entries.map((e) {
               final i = e.key; final w = e.value;
+              final rate = w.selectedWhtType?.whtRate ?? 0;
               return Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Row(children: [
-                  Expanded(flex: 2, child: TextFormField(
-                    controller: w.whtTypeCtrl,
+                  Expanded(flex: 3, child: DropdownButtonFormField<CdWhtType?>(
+                    value: w.selectedWhtType,
                     decoration: _fieldDeco('ประเภท WHT'),
-                    readOnly: _isReadOnly,
-                    onChanged: (_) => setState(() {}),
+                    isExpanded: true,
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('— เลือกประเภท —')),
+                      ..._whtTypes.map((t) => DropdownMenuItem(
+                        value: t,
+                        child: Text('${t.whtCode} — ${t.whtName}', overflow: TextOverflow.ellipsis),
+                      )),
+                    ],
+                    onChanged: _isReadOnly ? null : (t) {
+                      setState(() {
+                        w.selectedWhtType = t;
+                        final base = double.tryParse(w.baseCtrl.text) ?? 0;
+                        final r = t?.whtRate ?? 0;
+                        w.whtCtrl.text = (base * r / 100).toStringAsFixed(2);
+                      });
+                    },
                   )),
                   const SizedBox(width: 8),
-                  Expanded(flex: 1, child: TextFormField(
-                    controller: w.rateCtrl,
+                  SizedBox(width: 70, child: InputDecorator(
                     decoration: _fieldDeco('อัตรา (%)'),
-                    keyboardType: TextInputType.number, textAlign: TextAlign.right,
-                    readOnly: _isReadOnly,
-                    onChanged: (v) {
-                      final base = double.tryParse(w.baseCtrl.text) ?? 0;
-                      final rate = double.tryParse(v) ?? 0;
-                      setState(() => w.whtCtrl.text = (base * rate / 100).toStringAsFixed(2));
-                    },
+                    child: Text(
+                      rate > 0 ? '${rate.toStringAsFixed(2)}%' : '—',
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(fontSize: 14),
+                    ),
                   )),
                   const SizedBox(width: 8),
                   Expanded(flex: 2, child: TextFormField(
@@ -1347,7 +1366,6 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                     readOnly: _isReadOnly,
                     onChanged: (v) {
                       final base = double.tryParse(v) ?? 0;
-                      final rate = double.tryParse(w.rateCtrl.text) ?? 0;
                       setState(() => w.whtCtrl.text = (base * rate / 100).toStringAsFixed(2));
                     },
                   )),
@@ -1702,25 +1720,27 @@ class _PaymentRow {
 
 // ── Helper: WHT row ─────────────────────────────────────────────────────────
 class _WhtRow {
-  final TextEditingController whtTypeCtrl;
-  final TextEditingController rateCtrl;
+  CdWhtType? selectedWhtType;
   final TextEditingController baseCtrl;
   final TextEditingController whtCtrl;
   final TextEditingController descCtrl;
 
-  _WhtRow({String? whtType, double rate = 0, double base = 0, double wht = 0, String? desc})
-      : whtTypeCtrl = TextEditingController(text: whtType ?? ''),
-        rateCtrl = TextEditingController(text: rate > 0 ? rate.toStringAsFixed(2) : ''),
-        baseCtrl = TextEditingController(text: base > 0 ? base.toStringAsFixed(2) : ''),
-        whtCtrl = TextEditingController(text: wht > 0 ? wht.toStringAsFixed(2) : ''),
+  _WhtRow({this.selectedWhtType, double base = 0, double wht = 0, String? desc})
+      : baseCtrl = TextEditingController(text: base > 0 ? base.toStringAsFixed(2) : ''),
+        whtCtrl  = TextEditingController(text: wht  > 0 ? wht.toStringAsFixed(2)  : ''),
         descCtrl = TextEditingController(text: desc ?? '');
 
-  factory _WhtRow.fromModel(ApTransactionWht w) => _WhtRow(
-        whtType: w.whtType, rate: w.whtRate,
-        base: w.baseAmountLc, wht: w.whtAmountLc, desc: w.description,
-      );
+  static _WhtRow fromModel(ApTransactionWht w, List<CdWhtType> whtTypes) {
+    final matched = w.whtTypeId != null
+        ? whtTypes.cast<CdWhtType?>().firstWhere((t) => t!.id == w.whtTypeId, orElse: () => null)
+        : null;
+    return _WhtRow(
+      selectedWhtType: matched,
+      base: w.baseAmountLc, wht: w.whtAmountLc, desc: w.description,
+    );
+  }
 
   void dispose() {
-    whtTypeCtrl.dispose(); rateCtrl.dispose(); baseCtrl.dispose(); whtCtrl.dispose(); descCtrl.dispose();
+    baseCtrl.dispose(); whtCtrl.dispose(); descCtrl.dispose();
   }
 }

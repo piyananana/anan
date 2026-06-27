@@ -189,6 +189,7 @@ class ApVendor {
   final int? apAccountId;
   final String? apAccountCode;
   final String? apAccountNameThai;
+  final String? vendorType;
   final List<ApVendorAddress> addresses;
   final List<ApVendorContact> contacts;
   final List<ApVendorBankAccount> bankAccounts;
@@ -214,6 +215,7 @@ class ApVendor {
     this.apAccountId,
     this.apAccountCode,
     this.apAccountNameThai,
+    this.vendorType,
     this.addresses = const [],
     this.contacts = const [],
     this.bankAccounts = const [],
@@ -240,6 +242,7 @@ class ApVendor {
         apAccountId: json['ap_account_id'],
         apAccountCode: json['ap_account_code'],
         apAccountNameThai: json['ap_account_name_thai'],
+        vendorType: json['vendor_type'],
         addresses: (json['addresses'] as List<dynamic>? ?? [])
             .map((e) => ApVendorAddress.fromJson(e)).toList(),
         contacts: (json['contacts'] as List<dynamic>? ?? [])
@@ -263,6 +266,7 @@ class ApVendor {
         'is_active': isActive,
         'remark': remark,
         'ap_account_id': apAccountId,
+        'vendor_type': vendorType,
         'addresses': addresses.map((e) => e.toJson()).toList(),
         'contacts': contacts.map((e) => e.toJson()).toList(),
         'bank_accounts': bankAccounts.map((e) => e.toJson()).toList(),
@@ -276,6 +280,7 @@ class ApVendor {
     int? creditTermMonths, int? creditTermDays,
     String? currencyCode, bool? isActive, String? remark,
     int? apAccountId, String? apAccountCode, String? apAccountNameThai,
+    String? vendorType,
     List<ApVendorAddress>? addresses,
     List<ApVendorContact>? contacts,
     List<ApVendorBankAccount>? bankAccounts,
@@ -300,6 +305,7 @@ class ApVendor {
         apAccountId: apAccountId ?? this.apAccountId,
         apAccountCode: apAccountCode ?? this.apAccountCode,
         apAccountNameThai: apAccountNameThai ?? this.apAccountNameThai,
+        vendorType: vendorType ?? this.vendorType,
         addresses: addresses ?? this.addresses,
         contacts: contacts ?? this.contacts,
         bankAccounts: bankAccounts ?? this.bankAccounts,

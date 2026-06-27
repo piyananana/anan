@@ -464,7 +464,9 @@ class ApTransactionPayment {
 class ApTransactionWht {
   final int? id;
   final int? headerId;
+  final int? whtTypeId;
   final String? whtType;
+  final String? incomeType;
   final double whtRate;
   final double baseAmountLc;
   final double whtAmountLc;
@@ -472,7 +474,8 @@ class ApTransactionWht {
 
   ApTransactionWht({
     this.id, this.headerId,
-    this.whtType, this.whtRate = 0,
+    this.whtTypeId, this.whtType, this.incomeType,
+    this.whtRate = 0,
     this.baseAmountLc = 0, this.whtAmountLc = 0,
     this.description,
   });
@@ -481,7 +484,9 @@ class ApTransactionWht {
     double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
     return ApTransactionWht(
       id: json['id'], headerId: json['header_id'],
+      whtTypeId: json['wht_type_id'],
       whtType: json['wht_type'],
+      incomeType: json['income_type'],
       whtRate: toDouble(json['wht_rate']),
       baseAmountLc: toDouble(json['base_amount_lc']),
       whtAmountLc: toDouble(json['wht_amount_lc']),
@@ -491,7 +496,9 @@ class ApTransactionWht {
 
   Map<String, dynamic> toJson() => {
         if (id != null) 'id': id,
+        'wht_type_id': whtTypeId,
         'wht_type': whtType,
+        'income_type': incomeType,
         'wht_rate': whtRate,
         'base_amount_lc': baseAmountLc,
         'wht_amount_lc': whtAmountLc,
@@ -499,11 +506,14 @@ class ApTransactionWht {
       };
 
   ApTransactionWht copyWith({
-    int? id, int? headerId, String? whtType, double? whtRate,
-    double? baseAmountLc, double? whtAmountLc, String? description,
+    int? id, int? headerId, int? whtTypeId, String? whtType, String? incomeType,
+    double? whtRate, double? baseAmountLc, double? whtAmountLc, String? description,
   }) => ApTransactionWht(
         id: id ?? this.id, headerId: headerId ?? this.headerId,
-        whtType: whtType ?? this.whtType, whtRate: whtRate ?? this.whtRate,
+        whtTypeId: whtTypeId ?? this.whtTypeId,
+        whtType: whtType ?? this.whtType,
+        incomeType: incomeType ?? this.incomeType,
+        whtRate: whtRate ?? this.whtRate,
         baseAmountLc: baseAmountLc ?? this.baseAmountLc,
         whtAmountLc: whtAmountLc ?? this.whtAmountLc,
         description: description ?? this.description,

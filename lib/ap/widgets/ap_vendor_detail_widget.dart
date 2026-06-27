@@ -759,6 +759,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   int? _businessTypeId;
   String? _businessTypeCode;
   String? _businessTypeNameThai;
+  String? _vendorType;
   int? _apAccountId;
   String? _apAccountCode;
   String? _apAccountNameThai;
@@ -895,6 +896,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _businessTypeId        = v.businessTypeId;
     _businessTypeCode      = v.businessTypeCode;
     _businessTypeNameThai  = v.businessTypeNameThai;
+    _vendorType            = v.vendorType;
     _apAccountId           = v.apAccountId;
     _apAccountCode         = v.apAccountCode;
     _apAccountNameThai     = v.apAccountNameThai;
@@ -912,6 +914,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _vendorGroupId = null; _vendorGroupCode = null; _vendorGroupName = null;
     _vendorGroupIsAutoNumber = null; _autoCodeOverridden = false;
     _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null;
+    _vendorType = null;
     _apAccountId = null; _apAccountCode = null; _apAccountNameThai = null;
     _addresses = []; _contacts = []; _bankAccounts = [];
   }
@@ -935,6 +938,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
         businessTypeId: _businessTypeId,
         businessTypeCode: _businessTypeCode,
         businessTypeNameThai: _businessTypeNameThai,
+        vendorType: _vendorType,
         creditTermMonths: int.tryParse(_creditMonthsCtrl.text) ?? 0,
         creditTermDays: int.tryParse(_creditDaysCtrl.text) ?? 30,
         currencyCode: _selectedCurrencyCode ?? 'THB',
@@ -1396,22 +1400,45 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
             const SizedBox(width: 10),
             Expanded(child: _buildField('ชื่อเจ้าหนี้ (อังกฤษ)', _nameENCtrl)),
           ]),
-          _buildFkField(
-            label: 'ประเภทธุรกิจ',
-            hasValue: _businessTypeId != null,
-            displayText: '$_businessTypeCode — $_businessTypeNameThai',
-            onSearch: _pickBusinessType,
-            onClear: () => setState(() {
-              _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null;
-            }),
-          ),
-          _buildFkField(
-            label: 'กลุ่มผู้ขาย',
-            hasValue: _vendorGroupId != null,
-            displayText: '$_vendorGroupCode — $_vendorGroupName',
-            onSearch: _pickVendorGroup,
-            onClear: _clearGroup,
-          ),
+          Row(children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: DropdownButtonFormField<String?>(
+                  value: _vendorType,
+                  decoration: const InputDecoration(
+                    labelText: 'ประเภทผู้ขาย',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: null,           child: Text('— ไม่ระบุ —')),
+                    DropdownMenuItem(value: 'individual',   child: Text('บุคคลธรรมดา')),
+                    DropdownMenuItem(value: 'juristic',     child: Text('นิติบุคคล')),
+                  ],
+                  onChanged: _isReadOnly ? null : (v) => setState(() => _vendorType = v),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: _buildFkField(
+              label: 'ประเภทธุรกิจ',
+              hasValue: _businessTypeId != null,
+              displayText: '$_businessTypeCode — $_businessTypeNameThai',
+              onSearch: _pickBusinessType,
+              onClear: () => setState(() {
+                _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null;
+              }),
+            )),
+            const SizedBox(width: 10),
+            Expanded(child: _buildFkField(
+              label: 'กลุ่มผู้ขาย',
+              hasValue: _vendorGroupId != null,
+              displayText: '$_vendorGroupCode — $_vendorGroupName',
+              onSearch: _pickVendorGroup,
+              onClear: _clearGroup,
+            )),
+          ]),
           Row(children: [
             Expanded(child: _buildField('เครดิต (เดือน)', _creditMonthsCtrl,
                 keyboard: TextInputType.number,
