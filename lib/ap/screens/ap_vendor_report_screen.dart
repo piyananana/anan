@@ -178,6 +178,10 @@ class _ApVendorReportScreenState extends State<ApVendorReportScreen> {
         if ((v.taxId ?? '').isNotEmpty) {
           p.add('เลขผู้เสียภาษี: ${v.taxId}');
         }
+        final vtLabel = v.vendorType == 'individual' ? 'บุคคลธรรมดา'
+                      : v.vendorType == 'juristic'   ? 'นิติบุคคล'
+                      : null;
+        if (vtLabel != null) p.add('ประเภทผู้ขาย: $vtLabel');
         if ((v.businessTypeNameThai ?? '').isNotEmpty) {
           p.add('ประเภทธุรกิจ: ${v.businessTypeCode} ${v.businessTypeNameThai}');
         }
