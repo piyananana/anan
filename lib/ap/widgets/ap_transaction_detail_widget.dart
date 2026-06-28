@@ -1071,7 +1071,38 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   }
 
   // ── Detail Section (PI / CN / DN) ──────────────────────────────────────────
+  void _onDetailFieldChanged(_DetailRow r) {
+    final qty     = double.tryParse(r.qtyCtrl.text)     ?? 0;
+    final price   = double.tryParse(r.priceCtrl.text)   ?? 0;
+    final discPct = double.tryParse(r.discPctCtrl.text)  ?? 0;
+    final afterDisc = qty * price * (1 - discPct / 100);
+    final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+    r.totalCtrl.text = (afterDisc + vat).toStringAsFixed(2);
+    _recalcTotals();
+  }
+
+  void _onTotalChanged(_DetailRow r, String value) {
+    final total   = double.tryParse(value)              ?? 0;
+    final qty     = double.tryParse(r.qtyCtrl.text)     ?? 0;
+    final discPct = double.tryParse(r.discPctCtrl.text)  ?? 0;
+    final netFactor = 1 + (r.vatType == 'NOVAT' ? 0.0 : r.vatRate / 100);
+    final afterDisc  = total / netFactor;
+    final qtyFactor  = qty * (1 - discPct / 100);
+    r.priceCtrl.text = qtyFactor != 0 ? (afterDisc / qtyFactor).toStringAsFixed(4) : '0.0000';
+    _recalcTotals();
+  }
+
+  void _removeDetailRow(int i) {
+    setState(() { _detailRows[i].dispose(); _detailRows.removeAt(i); });
+    _recalcTotals();
+  }
+
   Widget _buildDetailSection() {
+    final inputBorder = _isReadOnly
+        ? InputBorder.none
+        : const UnderlineInputBorder(borderSide: BorderSide(color: Colors.blue, width: 1));
+    const focusBorder = UnderlineInputBorder(borderSide: BorderSide(color: Colors.blue, width: 2));
+
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1098,88 +1129,144 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
               child: Text('ยังไม่มีรายการ กดปุ่ม "เพิ่มรายการ" เพื่อเพิ่ม'),
             ))
           else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columnSpacing: 8, dataRowMinHeight: 40, dataRowMaxHeight: 48,
-                headingRowColor: WidgetStateProperty.all(Colors.blue[50]),
-                columns: const [
-                  DataColumn(label: Text('#')),
-                  DataColumn(label: Text('คำอธิบาย')),
-                  DataColumn(label: Text('บัญชีค่าใช้จ่าย')),
-                  DataColumn(label: Text('จำนวน'), numeric: true),
-                  DataColumn(label: Text('ราคา/หน่วย'), numeric: true),
-                  DataColumn(label: Text('ส่วนลด %'), numeric: true),
-                  DataColumn(label: Text('VAT')),
-                  DataColumn(label: Text('VAT รอตัด')),
-                  DataColumn(label: Text('รวม FC'), numeric: true),
-                  DataColumn(label: SizedBox()),
-                ],
-                rows: _detailRows.asMap().entries.map((e) {
-                  final i = e.key; final r = e.value;
-                  final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
-                  final price = double.tryParse(r.priceCtrl.text) ?? 0;
-                  final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
-                  final afterDisc = qty * price * (1 - discPct / 100);
-                  final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
-                  return DataRow(cells: [
-                    DataCell(Text('${i + 1}')),
-                    DataCell(SizedBox(width: 200, child: TextFormField(
-                      controller: r.descCtrl,
-                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), hintText: 'รายการ'),
-                      readOnly: _isReadOnly,
-                    ))),
-                    DataCell(_buildAccountCell(r, i)),
-                    DataCell(SizedBox(width: 80, child: TextFormField(
-                      controller: r.qtyCtrl,
-                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                      keyboardType: TextInputType.number, textAlign: TextAlign.right,
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                      readOnly: _isReadOnly,
-                      onChanged: (_) { setState(() => r.totalCtrl.text = (afterDisc + vat).toStringAsFixed(2)); _recalcTotals(); },
-                    ))),
-                    DataCell(SizedBox(width: 100, child: TextFormField(
-                      controller: r.priceCtrl,
-                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                      keyboardType: TextInputType.number, textAlign: TextAlign.right,
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                      readOnly: _isReadOnly,
-                      onChanged: (_) { setState(() => r.totalCtrl.text = (afterDisc + vat).toStringAsFixed(2)); _recalcTotals(); },
-                    ))),
-                    DataCell(SizedBox(width: 70, child: TextFormField(
-                      controller: r.discPctCtrl,
-                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), suffixText: '%'),
-                      keyboardType: TextInputType.number, textAlign: TextAlign.right,
-                      readOnly: _isReadOnly,
-                      onChanged: (_) { setState(() => r.totalCtrl.text = (afterDisc + vat).toStringAsFixed(2)); _recalcTotals(); },
-                    ))),
-                    DataCell(SizedBox(width: 100, child: DropdownButtonFormField<String>(
-                      value: r.vatType,
-                      isDense: true,
-                      items: vatTypeOptions.map((vt) => DropdownMenuItem(value: vt, child: Text(vatTypeLabels[vt] ?? vt))).toList(),
-                      onChanged: _isReadOnly ? null : (v) {
-                        if (v == null) return;
-                        setState(() {
-                          r.vatType = v;
-                          r.vatRate = v == 'NOVAT' ? 0 : (_vatRates.cast<VatRate?>().firstWhere((vr) => vr!.vatCode == v, orElse: () => null)?.rate ?? 7.0);
-                          r.totalCtrl.text = (afterDisc + (v == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100)).toStringAsFixed(2);
-                        });
-                        _recalcTotals();
-                      },
-                    ))),
-                    DataCell(Checkbox(
-                      value: r.isDeferredVat,
-                      onChanged: (_isReadOnly || r.vatType == 'NOVAT') ? null : (v) => setState(() => r.isDeferredVat = v ?? false),
-                    )),
-                    DataCell(Text(_fmt.format(afterDisc + vat), style: const TextStyle(fontWeight: FontWeight.w500))),
-                    DataCell(_isReadOnly ? const SizedBox() : IconButton(
-                      icon: const Icon(Icons.delete, size: 16, color: Colors.red),
-                      onPressed: () { setState(() { r.dispose(); _detailRows.removeAt(i); }); _recalcTotals(); },
-                    )),
-                  ]);
-                }).toList(),
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: DataTable(
+                    columnSpacing: 8, dataRowMinHeight: 36, dataRowMaxHeight: 52,
+                    headingRowColor: WidgetStateProperty.all(Colors.blue[50]),
+                    columns: [
+                      const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
+                      const DataColumn(label: Text('คำอธิบาย', style: TextStyle(fontWeight: FontWeight.bold))),
+                      const DataColumn(label: Text('บัญชีค่าใช้จ่าย', style: TextStyle(fontWeight: FontWeight.bold))),
+                      const DataColumn(label: Text('จำนวน', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      const DataColumn(label: Text('ราคา/หน่วย', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      const DataColumn(label: Text('ส่วนลด%', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      const DataColumn(label: Text('ยอดสุทธิ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      const DataColumn(label: Text('VAT', style: TextStyle(fontWeight: FontWeight.bold))),
+                      const DataColumn(label: Text('ยอด VAT', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      const DataColumn(label: Text('รวม', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), numeric: true),
+                      const DataColumn(label: Tooltip(message: 'VAT บันทึกตอนรับชำระ ไม่ใช่ตอนตั้งหนี้', child: Text('VAT\nรอตัด', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center))),
+                      if (!_isReadOnly) const DataColumn(label: SizedBox()),
+                    ],
+                    rows: _detailRows.asMap().entries.map((e) {
+                      final i = e.key; final r = e.value;
+                      final qty     = double.tryParse(r.qtyCtrl.text)    ?? 0;
+                      final price   = double.tryParse(r.priceCtrl.text)  ?? 0;
+                      final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
+                      final afterDisc = qty * price * (1 - discPct / 100);
+                      final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+                      return DataRow(cells: [
+                        DataCell(Text('${i + 1}', style: const TextStyle(fontSize: 12))),
+                        DataCell(SizedBox(width: 180, child: TextFormField(
+                          controller: r.descCtrl,
+                          decoration: InputDecoration(
+                            isDense: true, border: inputBorder, enabledBorder: inputBorder,
+                            focusedBorder: focusBorder, filled: !_isReadOnly, fillColor: Colors.white,
+                            hintText: _isReadOnly ? null : 'รายการ',
+                          ),
+                          style: const TextStyle(fontSize: 12),
+                          readOnly: _isReadOnly,
+                        ))),
+                        DataCell(_buildAccountCell(r, i)),
+                        DataCell(SizedBox(width: 70, child: TextFormField(
+                          controller: r.qtyCtrl,
+                          decoration: InputDecoration(
+                            isDense: true, border: inputBorder, enabledBorder: inputBorder, focusedBorder: focusBorder,
+                            filled: !_isReadOnly, fillColor: Colors.white,
+                          ),
+                          style: const TextStyle(fontSize: 12),
+                          keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                          readOnly: _isReadOnly,
+                          onChanged: (_) => _onDetailFieldChanged(r),
+                        ))),
+                        DataCell(SizedBox(width: 100, child: TextFormField(
+                          controller: r.priceCtrl,
+                          decoration: InputDecoration(
+                            isDense: true, border: inputBorder, enabledBorder: inputBorder, focusedBorder: focusBorder,
+                            filled: !_isReadOnly, fillColor: Colors.white,
+                          ),
+                          style: const TextStyle(fontSize: 12),
+                          keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                          readOnly: _isReadOnly,
+                          onChanged: (_) => _onDetailFieldChanged(r),
+                        ))),
+                        DataCell(SizedBox(width: 60, child: TextFormField(
+                          controller: r.discPctCtrl,
+                          decoration: InputDecoration(
+                            isDense: true, border: inputBorder, enabledBorder: inputBorder, focusedBorder: focusBorder,
+                            filled: !_isReadOnly, fillColor: Colors.white,
+                          ),
+                          style: const TextStyle(fontSize: 12),
+                          keyboardType: TextInputType.number, textAlign: TextAlign.right,
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                          readOnly: _isReadOnly,
+                          onChanged: (_) => _onDetailFieldChanged(r),
+                        ))),
+                        DataCell(Text(_fmt.format(afterDisc), style: const TextStyle(fontSize: 12))),
+                        DataCell(SizedBox(width: 120, child: _isReadOnly
+                            ? Text(vatTypeLabels[r.vatType] ?? r.vatType, style: const TextStyle(fontSize: 12))
+                            : DropdownButtonHideUnderline(child: DropdownButton<String>(
+                                value: r.vatType,
+                                isDense: true,
+                                isExpanded: true,
+                                style: const TextStyle(fontSize: 12, color: Colors.black),
+                                items: vatTypeOptions.map((vt) => DropdownMenuItem(value: vt, child: Text(vatTypeLabels[vt] ?? vt))).toList(),
+                                onChanged: (v) {
+                                  if (v == null) return;
+                                  setState(() {
+                                    r.vatType = v;
+                                    r.vatRate = v == 'NOVAT' ? 0 : (_vatRates.cast<VatRate?>().firstWhere((vr) => vr!.vatCode == v, orElse: () => null)?.rate ?? 7.0);
+                                  });
+                                  _onDetailFieldChanged(r);
+                                },
+                              )))),
+                        DataCell(Text(_fmt.format(vat), style: const TextStyle(fontSize: 12))),
+                        DataCell(SizedBox(width: 100, child: _isReadOnly
+                            ? Text(_fmt.format(double.tryParse(r.totalCtrl.text) ?? 0),
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                textAlign: TextAlign.right)
+                            : TextFormField(
+                                controller: r.totalCtrl,
+                                decoration: const InputDecoration(isDense: true, border: InputBorder.none),
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                                textAlign: TextAlign.right,
+                                onChanged: (v) => _onTotalChanged(r, v),
+                              ))),
+                        DataCell(Checkbox(
+                          value: r.isDeferredVat,
+                          tristate: false,
+                          visualDensity: VisualDensity.compact,
+                          onChanged: (r.vatType == 'NOVAT' || _isReadOnly) ? null : (v) => setState(() => r.isDeferredVat = v ?? false),
+                        )),
+                        if (!_isReadOnly)
+                          DataCell(IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                            onPressed: () => _removeDetailRow(i),
+                            visualDensity: VisualDensity.compact,
+                          )),
+                      ]);
+                    }).toList(),
+                  ),
+                ),
               ),
             ),
+        ],
+        if (_detailRows.isNotEmpty) ...[
+          const Divider(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'ยอดรวมสุทธิ: ${_fmt.format(_totalAmountFc)} ${_selectedCurrency?.currencyCode ?? 'THB'}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
         ],
       ]),
     ));
@@ -1252,6 +1339,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   // ── Apply Section (Payment invoice selection) ────────────────────────────
   Widget _buildApplySection() {
     final label = _isRA ? 'เลือกใบแจ้งหนี้ (RA)' : 'เลือกใบแจ้งหนี้ที่ชำระ';
+    final totalApplied = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
+    final currency = _selectedCurrency?.currencyCode ?? 'THB';
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1262,12 +1351,19 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             selected: _applyRows,
             ctrlMap: _applyCtrlMap,
           ),
+        const SizedBox(height: 8),
+        Text(
+          _isRA ? 'ยอดชำระ RA: ${_fmt.format(totalApplied)} $currency' : 'ยอดชำระ Invoice: ${_fmt.format(totalApplied)} $currency',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
       ]),
     ));
   }
 
   // ── Advance Deduction Section (for Payment) ───────────────────────────────
   Widget _buildAdvanceSection() {
+    final totalAdv = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
+    final currency = _selectedCurrency?.currencyCode ?? 'THB';
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1278,12 +1374,16 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             selected: _advanceRows,
             ctrlMap: _advanceCtrlMap,
           ),
+        const SizedBox(height: 8),
+        Text('ยอดหักมัดจำ: ${_fmt.format(totalAdv)} $currency', style: const TextStyle(fontWeight: FontWeight.bold)),
       ]),
     ));
   }
 
   // ── Advance Refund Section ─────────────────────────────────────────────────
   Widget _buildAdvanceRefundSection() {
+    final totalRef = _advanceRefundRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
+    final currency = _selectedCurrency?.currencyCode ?? 'THB';
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1294,6 +1394,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             selected: _advanceRefundRows,
             ctrlMap: _advanceRefundCtrlMap,
           ),
+        const SizedBox(height: 8),
+        Text('ยอดรับมัดจำคืน: ${_fmt.format(totalRef)} $currency', style: const TextStyle(fontWeight: FontWeight.bold)),
       ]),
     ));
   }
@@ -1638,36 +1740,181 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   // ── GL Entry Dialog ───────────────────────────────────────────────────────
   Future<void> _showGlEntryDialog() async {
     final isPosted = _status == 'Posted';
-    if (!isPosted || _glEntryId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Post เอกสารก่อนเพื่อดู GL Entry')),
-      );
-      return;
-    }
-    showDialog(context: context, barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()));
-    try {
-      final result = await _glEntryService.fetchEntryDetail(_glEntryId!);
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      final header = result['header'] as GlEntryHeader;
-      final details = result['details'] as List<GlEntryDetail>;
+    if (isPosted && _glEntryId != null) {
+      showDialog(context: context, barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()));
+      try {
+        final result = await _glEntryService.fetchEntryDetail(_glEntryId!);
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        final header = result['header'] as GlEntryHeader;
+        final details = result['details'] as List<GlEntryDetail>;
+        _showGlDialog(
+          title: 'GL Entry — รายการลงบัญชีจริง',
+          statusLabel: 'Posted',
+          statusColor: Colors.blue,
+          glDocNo: header.docNo,
+          refDocNo: _docNo,
+          docDate: header.docDate,
+          description: header.description,
+          lines: details.map((d) => _GlLine(d.accountCode, d.accountName, d.description, d.debitLc, d.creditLc, d.debitFc, d.creditFc)).toList(),
+          currencyCode: _selectedCurrency?.currencyCode ?? '',
+        );
+      } catch (e) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('โหลด GL ล้มเหลว: $e')));
+      }
+    } else {
+      // Draft: compute GL preview from current form data
       _showGlDialog(
-        title: 'GL Entry — รายการลงบัญชีจริง',
-        statusLabel: 'Posted',
-        statusColor: Colors.blue,
-        glDocNo: header.docNo,
+        title: 'ตัวอย่าง GL Entry (Draft)',
+        statusLabel: 'Draft Preview',
+        statusColor: Colors.orange[700]!,
+        glDocNo: '—',
         refDocNo: _docNo,
-        docDate: header.docDate,
-        description: header.description,
-        lines: details.map((d) => _GlLine(d.accountCode, d.accountName, d.description, d.debitLc, d.creditLc, d.debitFc, d.creditFc)).toList(),
+        docDate: _docDate,
+        description: _descCtrl.text,
+        lines: _computeGlPreview(),
         currencyCode: _selectedCurrency?.currencyCode ?? '',
       );
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('โหลด GL ล้มเหลว: $e')));
     }
+  }
+
+  // ── Client-side GL preview for Draft ──────────────────────────────────────
+  List<_GlLine> _computeGlPreview() {
+    final lines = <_GlLine>[];
+    final lc = _exchangeRate;
+    final isFcDoc = _selectedCurrency?.baseCurrencyFlag == false;
+    final setup = _docSetup;
+    if (setup == null) return lines;
+
+    final sysType = int.tryParse(_selectedDocType?.sysDocType ?? '');
+
+    String acctCode(int? id, String? fallback) {
+      if (id != null) {
+        try { return _accounts.firstWhere((a) => a.id == id).accountCode; } catch (_) {}
+      }
+      return fallback ?? '—';
+    }
+    String acctName(int? id, String? fallback) {
+      if (id != null) {
+        try { return _accounts.firstWhere((a) => a.id == id).accountNameThai; } catch (_) {}
+      }
+      return fallback ?? '';
+    }
+
+    final apCode = setup.apAccountCode ?? _selectedVendor?.apAccountCode ?? acctCode(_apAccountId ?? setup.apAccountId, '—');
+    final apName = setup.apAccountName ?? _selectedVendor?.apAccountNameThai ?? acctName(_apAccountId ?? setup.apAccountId, 'เจ้าหนี้การค้า');
+
+    String payAcctCode(_PaymentRow p) {
+      int? sid; String? sCode;
+      switch (p.paymentMethodType) {
+        case 'CHECK':    sid = setup.checkAccountId;    sCode = setup.checkAccountCode; break;
+        case 'TRANSFER': sid = setup.transferAccountId; sCode = setup.transferAccountCode; break;
+        default: break;
+      }
+      if (sCode != null) return sCode;
+      if (sid != null) return acctCode(sid, setup.cashAccountCode ?? '—');
+      return acctCode(p.glAccountId, setup.cashAccountCode ?? '—');
+    }
+    String payAcctName(_PaymentRow p) {
+      int? sid; String? sName;
+      switch (p.paymentMethodType) {
+        case 'CHECK':    sid = setup.checkAccountId;    sName = setup.checkAccountName; break;
+        case 'TRANSFER': sid = setup.transferAccountId; sName = setup.transferAccountName; break;
+        default: break;
+      }
+      if (sName != null && sName.isNotEmpty) return sName;
+      if (sid != null) return acctName(sid, setup.cashAccountName ?? 'Cash');
+      return acctName(p.glAccountId, setup.cashAccountName ?? 'Cash');
+    }
+
+    // ── PI (10) / DN (50) ────────────────────────────────────────────────
+    if (sysType == apDocTypePurchaseInvoice || sysType == apDocTypeDebitNote) {
+      for (final r in _detailRows) {
+        final qty      = double.tryParse(r.qtyCtrl.text)    ?? 0;
+        final price    = double.tryParse(r.priceCtrl.text)  ?? 0;
+        final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
+        final afterDisc = qty * price * (1 - discPct / 100);
+        final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+        final expCode  = acctCode(r.expenseAccountId, setup.expenseAccountCode);
+        final expName  = acctName(r.expenseAccountId, setup.expenseAccountName);
+        final desc     = r.descCtrl.text.isNotEmpty ? r.descCtrl.text : 'ค่าใช้จ่าย';
+        lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
+        if (vat > 0) {
+          final vatId  = r.isDeferredVat ? setup.vatPendingInputAccountId : setup.vatInputAccountId;
+          final vatFb  = r.isDeferredVat ? setup.vatPendingInputAccountCode : setup.vatInputAccountCode;
+          final vatNFb = r.isDeferredVat ? setup.vatPendingInputAccountName : setup.vatInputAccountName;
+          lines.add(_GlLine(acctCode(vatId, vatFb), acctName(vatId, vatNFb).isEmpty ? 'VAT Input' : acctName(vatId, vatNFb), 'ภาษีมูลค่าเพิ่ม', vat * lc, 0, isFcDoc ? vat : 0, 0));
+        }
+      }
+      lines.add(_GlLine(apCode, apName.isEmpty ? 'AP Account' : apName, 'เจ้าหนี้การค้า', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+    }
+    // ── CN (30) ─────────────────────────────────────────────────────────
+    else if (sysType == apDocTypeCreditNote) {
+      lines.add(_GlLine(apCode, apName.isEmpty ? 'AP Account' : apName, 'เจ้าหนี้การค้า', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+      for (final r in _detailRows) {
+        final qty      = double.tryParse(r.qtyCtrl.text)    ?? 0;
+        final price    = double.tryParse(r.priceCtrl.text)  ?? 0;
+        final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
+        final afterDisc = qty * price * (1 - discPct / 100);
+        final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+        final expCode  = acctCode(r.expenseAccountId, setup.expenseAccountCode);
+        final expName  = acctName(r.expenseAccountId, setup.expenseAccountName);
+        final desc     = r.descCtrl.text.isNotEmpty ? r.descCtrl.text : 'ค่าใช้จ่าย';
+        lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
+        if (vat > 0) {
+          final vatId  = r.isDeferredVat ? setup.vatPendingInputAccountId : setup.vatInputAccountId;
+          final vatFb  = r.isDeferredVat ? setup.vatPendingInputAccountCode : setup.vatInputAccountCode;
+          final vatNFb = r.isDeferredVat ? setup.vatPendingInputAccountName : setup.vatInputAccountName;
+          lines.add(_GlLine(acctCode(vatId, vatFb), acctName(vatId, vatNFb).isEmpty ? 'VAT Input' : acctName(vatId, vatNFb), 'ภาษีมูลค่าเพิ่ม', 0, vat * lc, 0, isFcDoc ? vat : 0));
+        }
+      }
+    }
+    // ── Advance Payment (60) ─────────────────────────────────────────────
+    else if (sysType == apDocTypeAdvancePayment) {
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', 'จ่ายมัดจำ', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+      if (_paymentRows.isEmpty) {
+        lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'ชำระ', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      } else {
+        for (final p in _paymentRows) {
+          final amt = double.tryParse(p.amountCtrl.text) ?? 0;
+          if (amt <= 0) continue;
+          lines.add(_GlLine(payAcctCode(p), payAcctName(p).isEmpty ? 'Cash' : payAcctName(p), p.paymentMethodName ?? 'ชำระ', 0, amt * lc, 0, isFcDoc ? amt : 0));
+        }
+      }
+    }
+    // ── Advance Refund (65) ──────────────────────────────────────────────
+    else if (sysType == apDocTypeAdvanceRefund) {
+      lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'รับมัดจำคืน', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', 'คืนมัดจำ', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+    }
+    // ── Payment (80) ─────────────────────────────────────────────────────
+    else if (sysType == apDocTypePayment) {
+      final totalWht = _whtRows.fold(0.0, (s, w) => s + (double.tryParse(w.whtCtrl.text) ?? 0));
+      final totalAdv = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
+      for (final a in _applyRows) {
+        lines.add(_GlLine(apCode, apName.isEmpty ? 'AP Account' : apName, 'ชำระ ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
+      }
+      if (totalWht > 0) {
+        lines.add(_GlLine(setup.whtPayableAccountCode ?? '—', setup.whtPayableAccountName ?? 'WHT Payable', 'ภาษีหัก ณ ที่จ่าย', 0, totalWht * lc, 0, isFcDoc ? totalWht : 0));
+      }
+      if (totalAdv > 0) {
+        lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', 'หักมัดจำ', 0, totalAdv * lc, 0, isFcDoc ? totalAdv : 0));
+      }
+      if (_paymentRows.isEmpty) {
+        final netCash = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc) - totalAdv - totalWht;
+        if (netCash > 0.005) lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'ชำระเงิน', 0, netCash * lc, 0, isFcDoc ? netCash : 0));
+      } else {
+        for (final p in _paymentRows) {
+          final amt = double.tryParse(p.amountCtrl.text) ?? 0;
+          if (amt <= 0) continue;
+          lines.add(_GlLine(payAcctCode(p), payAcctName(p).isEmpty ? 'Cash' : payAcctName(p), p.paymentMethodName ?? 'ชำระเงิน', 0, amt * lc, 0, isFcDoc ? amt : 0));
+        }
+      }
+    }
+    return lines;
   }
 
   void _showGlDialog({
