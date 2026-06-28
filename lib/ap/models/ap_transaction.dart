@@ -233,6 +233,8 @@ class ApTransactionDetail {
   final int? id;
   final int? headerId;
   final int lineNo;
+  final String? itemCode;
+  final String? itemName;
   final String? description;
   final double quantity;
   final double unitPriceFc;
@@ -254,6 +256,8 @@ class ApTransactionDetail {
   ApTransactionDetail({
     this.id, this.headerId,
     this.lineNo = 1,
+    this.itemCode,
+    this.itemName,
     this.description,
     this.quantity = 1,
     this.unitPriceFc = 0,
@@ -278,6 +282,8 @@ class ApTransactionDetail {
     return ApTransactionDetail(
       id: json['id'], headerId: json['header_id'],
       lineNo: json['line_no'] ?? 1,
+      itemCode: json['item_code'],
+      itemName: json['item_name'],
       description: json['description'],
       quantity: toDouble(json['quantity']) == 0 ? 1 : toDouble(json['quantity']),
       unitPriceFc: toDouble(json['unit_price_fc']),
@@ -302,6 +308,8 @@ class ApTransactionDetail {
         if (id != null) 'id': id,
         if (headerId != null) 'header_id': headerId,
         'line_no': lineNo,
+        if (itemCode != null) 'item_code': itemCode,
+        if (itemName != null) 'item_name': itemName,
         'description': description,
         'quantity': quantity,
         'unit_price_fc': unitPriceFc,

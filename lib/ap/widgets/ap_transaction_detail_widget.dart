@@ -647,14 +647,17 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       final disc = sub * discPct / 100;
       final afterDisc = sub - disc;
       final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+      final itemName = r.itemNameCtrl.text.isEmpty ? null : r.itemNameCtrl.text;
       return ApTransactionDetail(
         lineNo: i + 1,
-        description: r.descCtrl.text.isEmpty ? null : r.descCtrl.text,
+        itemCode: r.itemCodeCtrl.text.isEmpty ? null : r.itemCodeCtrl.text,
+        itemName: itemName,
+        description: itemName,
         quantity: qty, unitPriceFc: price,
         discountPercent: discPct, discountAmountFc: disc,
         subtotalFc: afterDisc, vatType: r.vatType, vatRate: r.vatRate,
         vatAmountFc: vat, totalAmountFc: afterDisc + vat,
-        expenseAccountId: r.expenseAccountId,
+        expenseAccountId: r.expenseAccountId ?? _docSetup?.expenseAccountId,
         subtotalLc: afterDisc * lc, vatAmountLc: vat * lc,
         totalAmountLc: (afterDisc + vat) * lc,
         isDeferredVat: r.isDeferredVat && r.vatType != 'NOVAT',
@@ -1139,8 +1142,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                     headingRowColor: WidgetStateProperty.all(Colors.blue[50]),
                     columns: [
                       const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
-                      const DataColumn(label: Text('คำอธิบาย', style: TextStyle(fontWeight: FontWeight.bold))),
-                      const DataColumn(label: Text('บัญชีค่าใช้จ่าย', style: TextStyle(fontWeight: FontWeight.bold))),
+                      const DataColumn(label: Text('รหัสสินค้า', style: TextStyle(fontWeight: FontWeight.bold))),
+                      const DataColumn(label: Text('ชื่อสินค้า/บริการ', style: TextStyle(fontWeight: FontWeight.bold))),
                       const DataColumn(label: Text('จำนวน', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       const DataColumn(label: Text('ราคา/หน่วย', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       const DataColumn(label: Text('ส่วนลด%', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
@@ -1160,17 +1163,25 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                       final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
                       return DataRow(cells: [
                         DataCell(Text('${i + 1}', style: const TextStyle(fontSize: 12))),
-                        DataCell(SizedBox(width: 180, child: TextFormField(
-                          controller: r.descCtrl,
+                        DataCell(SizedBox(width: 90, child: TextFormField(
+                          controller: r.itemCodeCtrl,
                           decoration: InputDecoration(
                             isDense: true, border: inputBorder, enabledBorder: inputBorder,
                             focusedBorder: focusBorder, filled: !_isReadOnly, fillColor: Colors.white,
-                            hintText: _isReadOnly ? null : 'รายการ',
                           ),
                           style: const TextStyle(fontSize: 12),
                           readOnly: _isReadOnly,
                         ))),
-                        DataCell(_buildAccountCell(r, i)),
+                        DataCell(SizedBox(width: 180, child: TextFormField(
+                          controller: r.itemNameCtrl,
+                          decoration: InputDecoration(
+                            isDense: true, border: inputBorder, enabledBorder: inputBorder,
+                            focusedBorder: focusBorder, filled: !_isReadOnly, fillColor: Colors.white,
+                            hintText: _isReadOnly ? null : 'ระบุรายการ',
+                          ),
+                          style: const TextStyle(fontSize: 12),
+                          readOnly: _isReadOnly,
+                        ))),
                         DataCell(SizedBox(width: 70, child: TextFormField(
                           controller: r.qtyCtrl,
                           decoration: InputDecoration(
@@ -1272,69 +1283,6 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     ));
   }
 
-  Widget _buildAccountCell(_DetailRow r, int i) {
-    final acct = r.expenseAccountId != null
-        ? _accounts.cast<Account?>().firstWhere((a) => a!.id == r.expenseAccountId, orElse: () => null)
-        : null;
-    return InkWell(
-      onTap: _isReadOnly ? null : () async {
-        final picked = await _showAccountPicker();
-        if (picked != null) setState(() => r.expenseAccountId = picked.id);
-      },
-      child: Container(
-        width: 160,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade400),
-          borderRadius: BorderRadius.circular(4),
-          color: _isReadOnly ? Colors.grey[100] : Colors.white,
-        ),
-        child: Text(acct != null ? '${acct.accountCode} ${acct.accountNameThai}' : 'คลิกเลือกบัญชี',
-            style: TextStyle(fontSize: 12, color: acct == null ? Colors.grey : null), overflow: TextOverflow.ellipsis),
-      ),
-    );
-  }
-
-  Future<Account?> _showAccountPicker() async {
-    final searchCtrl = TextEditingController();
-    return showDialog<Account>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setD) {
-        final query = searchCtrl.text.toLowerCase();
-        final filtered = _accounts.where((a) =>
-            a.isActive && a.isNormalAccount &&
-            (a.accountCode.toLowerCase().contains(query) ||
-            a.accountNameThai.toLowerCase().contains(query))).toList();
-        return Dialog(child: SizedBox(width: 500, height: 500, child: Column(children: [
-          AppBar(
-            title: const Text('เลือกบัญชี'),
-            backgroundColor: Colors.blue[700], foregroundColor: Colors.white,
-            automaticallyImplyLeading: false,
-            actions: [IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx))],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: TextField(
-              controller: searchCtrl,
-              decoration: const InputDecoration(labelText: 'ค้นหา', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), isDense: true),
-              onChanged: (_) => setD(() {}),
-            ),
-          ),
-          Expanded(child: ListView.builder(
-            itemCount: filtered.length,
-            itemBuilder: (_, i) {
-              final a = filtered[i];
-              return ListTile(
-                dense: true,
-                title: Text('${a.accountCode} ${a.accountNameThai}'),
-                onTap: () => Navigator.pop(ctx, a),
-              );
-            },
-          )),
-        ])));
-      }),
-    );
-  }
 
   // ── Apply Section (Payment invoice selection) ────────────────────────────
   Widget _buildApplySection() {
@@ -1767,6 +1715,19 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       }
     } else {
       // Draft: compute GL preview from current form data
+      if (_docSetup == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('กรุณาตั้งค่าผังบัญชี AP ก่อน (AP GL Account Setup) เพื่อดูตัวอย่าง GL')),
+        );
+        return;
+      }
+      final previewLines = _computeGlPreview();
+      if (previewLines.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ไม่มีข้อมูล GL — กรุณาป้อนรายการก่อน')),
+        );
+        return;
+      }
       _showGlDialog(
         title: 'ตัวอย่าง GL Entry (Draft)',
         statusLabel: 'Draft Preview',
@@ -1775,7 +1736,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         refDocNo: _docNo,
         docDate: _docDate,
         description: _descCtrl.text,
-        lines: _computeGlPreview(),
+        lines: previewLines,
         currencyCode: _selectedCurrency?.currencyCode ?? '',
       );
     }
@@ -1838,9 +1799,10 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
         final afterDisc = qty * price * (1 - discPct / 100);
         final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
-        final expCode  = acctCode(r.expenseAccountId, setup.expenseAccountCode);
-        final expName  = acctName(r.expenseAccountId, setup.expenseAccountName);
-        final desc     = r.descCtrl.text.isNotEmpty ? r.descCtrl.text : 'ค่าใช้จ่าย';
+        final expAccId = r.expenseAccountId ?? setup.expenseAccountId;
+        final expCode  = acctCode(expAccId, setup.expenseAccountCode);
+        final expName  = acctName(expAccId, setup.expenseAccountName);
+        final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : 'ค่าใช้จ่าย';
         lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
         if (vat > 0) {
           final vatId  = r.isDeferredVat ? setup.vatPendingInputAccountId : setup.vatInputAccountId;
@@ -1860,9 +1822,10 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
         final afterDisc = qty * price * (1 - discPct / 100);
         final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
-        final expCode  = acctCode(r.expenseAccountId, setup.expenseAccountCode);
-        final expName  = acctName(r.expenseAccountId, setup.expenseAccountName);
-        final desc     = r.descCtrl.text.isNotEmpty ? r.descCtrl.text : 'ค่าใช้จ่าย';
+        final expAccId = r.expenseAccountId ?? setup.expenseAccountId;
+        final expCode  = acctCode(expAccId, setup.expenseAccountCode);
+        final expName  = acctName(expAccId, setup.expenseAccountName);
+        final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : 'ค่าใช้จ่าย';
         lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
         if (vat > 0) {
           final vatId  = r.isDeferredVat ? setup.vatPendingInputAccountId : setup.vatInputAccountId;
@@ -2121,6 +2084,8 @@ class _GlLine {
 
 // ── Helper: detail row ──────────────────────────────────────────────────────
 class _DetailRow {
+  final TextEditingController itemCodeCtrl;
+  final TextEditingController itemNameCtrl;
   final TextEditingController descCtrl;
   final TextEditingController qtyCtrl;
   final TextEditingController priceCtrl;
@@ -2132,6 +2097,8 @@ class _DetailRow {
   bool isDeferredVat;
 
   _DetailRow({
+    String? itemCode,
+    String? itemName,
     String? desc,
     double qty = 1,
     double price = 0,
@@ -2141,21 +2108,27 @@ class _DetailRow {
     this.expenseAccountId,
     this.isDeferredVat = false,
     double totalFc = 0,
-  })  : descCtrl = TextEditingController(text: desc ?? ''),
+  })  : itemCodeCtrl = TextEditingController(text: itemCode ?? ''),
+        itemNameCtrl = TextEditingController(text: itemName ?? ''),
+        descCtrl = TextEditingController(text: desc ?? ''),
         qtyCtrl = TextEditingController(text: qty.toString()),
         priceCtrl = TextEditingController(text: price.toStringAsFixed(2)),
         discPctCtrl = TextEditingController(text: discPct.toStringAsFixed(2)),
         totalCtrl = TextEditingController(text: totalFc.toStringAsFixed(2));
 
   factory _DetailRow.fromModel(ApTransactionDetail d) => _DetailRow(
-        desc: d.description, qty: d.quantity, price: d.unitPriceFc,
+        itemCode: d.itemCode,
+        itemName: d.itemName ?? d.description,
+        desc: d.description,
+        qty: d.quantity, price: d.unitPriceFc,
         discPct: d.discountPercent, vatType: d.vatType, vatRate: d.vatRate,
         expenseAccountId: d.expenseAccountId, isDeferredVat: d.isDeferredVat,
         totalFc: d.totalAmountFc,
       );
 
   void dispose() {
-    descCtrl.dispose(); qtyCtrl.dispose(); priceCtrl.dispose();
+    itemCodeCtrl.dispose(); itemNameCtrl.dispose(); descCtrl.dispose();
+    qtyCtrl.dispose(); priceCtrl.dispose();
     discPctCtrl.dispose(); totalCtrl.dispose();
   }
 }
