@@ -502,33 +502,49 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   }
 
   Future<ApVendor?> _showVendorPicker() async {
+    final searchCtrl = TextEditingController();
+    List<ApVendor> filtered = List.from(_vendors);
     return showDialog<ApVendor>(
       context: context,
-      builder: (ctx) => Dialog(
-        child: SizedBox(
-          width: 600, height: 500,
-          child: Column(children: [
-            AppBar(
-              title: const Text('เลือกเจ้าหนี้'),
-              backgroundColor: Colors.blue[700],
-              foregroundColor: Colors.white,
-              automaticallyImplyLeading: false,
-              actions: [IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx))],
-            ),
-            Expanded(child: ListView.builder(
-              itemCount: _vendors.length,
-              itemBuilder: (_, i) {
-                final v = _vendors[i];
-                return ListTile(
-                  title: Text('${v.vendorCode}  ${v.vendorNameTh}'),
-                  subtitle: Text(v.taxId ?? ''),
-                  onTap: () => Navigator.pop(ctx, v),
-                );
-              },
-            )),
-          ]),
-        ),
-      ),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        void doFilter() {
+          final q = searchCtrl.text.toUpperCase();
+          setS(() => filtered = q.isEmpty
+              ? _vendors
+              : _vendors.where((v) =>
+                  v.vendorCode.toUpperCase().contains(q) ||
+                  v.vendorNameTh.toUpperCase().contains(q)).toList());
+        }
+        return Dialog(
+          child: SizedBox(
+            width: 600, height: 500,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: searchCtrl,
+                  decoration: const InputDecoration(labelText: 'ค้นหาเจ้าหนี้', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
+                  onChanged: (_) => doFilter(),
+                  autofocus: true,
+                ),
+              ),
+              Expanded(child: ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final v = filtered[i];
+                  return ListTile(
+                    dense: true,
+                    title: Text('${v.vendorCode} - ${v.vendorNameTh}', style: const TextStyle(fontSize: 13)),
+                    subtitle: v.taxId != null ? Text(v.taxId!, style: const TextStyle(fontSize: 11)) : null,
+                    onTap: () => Navigator.pop(ctx, v),
+                  );
+                },
+              )),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+            ]),
+          ),
+        );
+      }),
     );
   }
 
@@ -795,7 +811,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     return Form(
       key: _formKey,
       child: Column(children: [
-        _buildActionBar(),
+        _buildActionButtons(),
         Expanded(child: SingleChildScrollView(
           padding: const EdgeInsets.all(12),
           child: Column(children: [
@@ -808,114 +824,160 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             if (_hasPaymentRows) ...[const SizedBox(height: 8), _buildPaymentSection()],
             const SizedBox(height: 8),
             _buildTotalsRow(),
-            if (_glEntryId != null) ...[const SizedBox(height: 8), _buildGlPreview()],
           ]),
         )),
       ]),
     );
   }
 
-  Widget _buildActionBar() {
+  Widget _buildActionButtons() {
+    final isDraft = _status == 'Draft';
+    final isPosted = _status == 'Posted';
     return Container(
       color: Colors.blue[50],
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(children: [
-        if (!_isReadOnly) ...[
+        if (!_isReadOnly && isDraft) ...[
           ElevatedButton.icon(
             onPressed: () => _save('Draft'),
             icon: const Icon(Icons.save_outlined, size: 16),
             label: const Text('บันทึก Draft'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700], foregroundColor: Colors.white),
           ),
           const SizedBox(width: 8),
           ElevatedButton.icon(
             onPressed: () => _save('Post'),
             icon: const Icon(Icons.check_circle_outline, size: 16),
-            label: const Text('Post'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
+            label: const Text('Post เอกสาร'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
           ),
-        ],
-        if (_status == 'Posted') ...[
           const SizedBox(width: 8),
+          if (_transactionId != 0)
+            OutlinedButton.icon(
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('ลบ Draft'),
+                    content: const Text('ต้องการลบเอกสาร Draft นี้?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+                      ElevatedButton(onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: const Text('ลบ')),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await _service.deleteTransaction(_transactionId);
+                  if (mounted) widget.onSaveSuccess();
+                }
+              },
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: const Text('ลบ'),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+            ),
+        ],
+        if (isPosted)
           ElevatedButton.icon(
             onPressed: _void,
             icon: const Icon(Icons.cancel_outlined, size: 16),
-            label: const Text('Void'),
+            label: const Text('ยกเลิก (Void)'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
           ),
-        ],
         const Spacer(),
-        if (_status != 'Draft')
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            decoration: BoxDecoration(
-              color: _status == 'Posted' ? Colors.green[50] : Colors.red[50],
-              border: Border.all(color: _status == 'Posted' ? Colors.green : Colors.red),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(_status, style: TextStyle(color: _status == 'Posted' ? Colors.green[800] : Colors.red[800], fontWeight: FontWeight.bold)),
+        if (_selectedVendor != null && _selectedDocType != null) ...[
+          OutlinedButton.icon(
+            onPressed: _showGlEntryDialog,
+            icon: const Icon(Icons.account_balance_outlined, size: 16),
+            label: Text(isPosted ? 'GL Entry' : 'ตัวอย่าง GL'),
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.indigo[700]),
           ),
-        const SizedBox(width: 8),
-        OutlinedButton(onPressed: widget.onCancel, child: const Text('ปิด')),
+          const SizedBox(width: 8),
+        ],
+        TextButton(
+          onPressed: widget.onCancel,
+          child: const Text('กลับ'),
+        ),
       ]),
     );
   }
 
   Widget _buildHeaderSection() {
     return Card(child: Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _sectionHeader('ข้อมูลเอกสาร', _headerExpanded, () => setState(() => _headerExpanded = !_headerExpanded)),
+        // Row 0: Icon + Title + Expand + DocType + DocNo + DocDate + RefNo + Status badge
+        Row(children: [
+          const Icon(Icons.article_outlined, size: 18),
+          const SizedBox(width: 6),
+          Text('ข้อมูลหัวเอกสาร', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: Icon(_headerExpanded ? Icons.expand_less : Icons.expand_more, size: 18),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            onPressed: () => setState(() => _headerExpanded = !_headerExpanded),
+          ),
+          const SizedBox(width: 8),
+          Expanded(flex: 2, child: DropdownButtonFormField<ModuleDocument>(
+            value: _selectedDocType,
+            isExpanded: true,
+            decoration: _fieldDeco('ประเภทเอกสาร *'),
+            items: _allowedDocTypes.map((d) => DropdownMenuItem(
+              value: d,
+              child: Text('${d.docCode} ${d.docNameThai}', overflow: TextOverflow.ellipsis),
+            )).toList(),
+            onChanged: _isReadOnly ? null : (v) {
+              setState(() => _selectedDocType = v);
+              _resetForm();
+              _loadDocSetup();
+            },
+            validator: (v) => v == null ? 'กรุณาเลือก' : null,
+          )),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: TextFormField(
+            key: ValueKey('ap_docNo_${widget.resetKey}_$_transactionId'),
+            initialValue: _docNo == 'AUTO' ? '' : _docNo,
+            decoration: _fieldDeco(
+              _selectedDocType?.isAutoNumbering == true ? 'เลขที่อัตโนมัติ' : 'เลขที่เอกสาร',
+              forcedReadOnly: _selectedDocType?.isAutoNumbering == true,
+            ).copyWith(hintText: _selectedDocType?.isAutoNumbering == true ? '(ระบบกำหนดให้อัตโนมัติ)' : 'ระบุเลขที่'),
+            readOnly: _isReadOnly || (_selectedDocType?.isAutoNumbering == true),
+            onChanged: (v) => _docNo = v.isEmpty ? 'AUTO' : v,
+          )),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: InkWell(
+            onTap: _isReadOnly ? null : () => _selectDate(false),
+            child: InputDecorator(
+              decoration: _fieldDeco('วันที่เอกสาร *'),
+              child: Row(children: [
+                Expanded(child: Text(_dateFmt.format(_docDate))),
+                if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
+              ]),
+            ),
+          )),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: TextFormField(
+            controller: _refNoCtrl,
+            decoration: _fieldDeco('เลขที่อ้างอิง'),
+            readOnly: _isReadOnly,
+          )),
+          if (_status != 'Draft') ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: _status == 'Posted' ? Colors.green[50] : Colors.red[50],
+                border: Border.all(color: _status == 'Posted' ? Colors.green : Colors.red),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(_status, style: TextStyle(color: _status == 'Posted' ? Colors.green[800] : Colors.red[800], fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ]),
         if (_headerExpanded) ...[
           const SizedBox(height: 12),
-          // Row 1: DocType | DocNo | DocDate | RefNo
-          Row(children: [
-            Expanded(flex: 2, child: DropdownButtonFormField<ModuleDocument>(
-              value: _selectedDocType,
-              isExpanded: true,
-              decoration: _fieldDeco('ประเภทเอกสาร *'),
-              items: _allowedDocTypes.map((d) => DropdownMenuItem(
-                value: d,
-                child: Text('${d.docCode} ${d.docNameThai}', overflow: TextOverflow.ellipsis),
-              )).toList(),
-              onChanged: _isReadOnly ? null : (v) {
-                setState(() => _selectedDocType = v);
-                _resetForm();
-                _loadDocSetup();
-              },
-              validator: (v) => v == null ? 'กรุณาเลือก' : null,
-            )),
-            const SizedBox(width: 8),
-            Expanded(flex: 1, child: TextFormField(
-              key: ValueKey('ap_docNo_${widget.resetKey}_$_transactionId'),
-              initialValue: _docNo == 'AUTO' ? '' : _docNo,
-              decoration: _fieldDeco(
-                _selectedDocType?.isAutoNumbering == true ? 'เลขที่อัตโนมัติ' : 'เลขที่เอกสาร',
-                forcedReadOnly: _selectedDocType?.isAutoNumbering == true,
-              ).copyWith(hintText: _selectedDocType?.isAutoNumbering == true ? '(อัตโนมัติ)' : 'ระบุเลขที่'),
-              readOnly: _isReadOnly || (_selectedDocType?.isAutoNumbering == true),
-              onChanged: (v) => _docNo = v.isEmpty ? 'AUTO' : v,
-            )),
-            const SizedBox(width: 8),
-            Expanded(flex: 1, child: InkWell(
-              onTap: _isReadOnly ? null : () => _selectDate(false),
-              child: InputDecorator(
-                decoration: _fieldDeco('วันที่เอกสาร *'),
-                child: Row(children: [
-                  Expanded(child: Text(_dateFmt.format(_docDate))),
-                  if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
-                ]),
-              ),
-            )),
-            const SizedBox(width: 8),
-            Expanded(flex: 1, child: TextFormField(
-              controller: _refNoCtrl,
-              decoration: _fieldDeco('เลขที่อ้างอิง'),
-              readOnly: _isReadOnly,
-            )),
-          ]),
-          const SizedBox(height: 12),
-          // Row 2: Branch + Dims
+          // Row 1: Branch + Dims
           Row(children: [
             Expanded(flex: 1, child: InkWell(
               onTap: _isReadOnly ? null : _showBranchDialog,
@@ -942,7 +1004,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             }),
           ]),
           const SizedBox(height: 12),
-          // Row 3: Vendor | Currency | ExchangeRate | Description
+          // Row 2: Vendor | Currency | ExchangeRate | Description
           Row(children: [
             Expanded(flex: 3, child: InkWell(
               onTap: _isReadOnly ? null : () async {
@@ -1013,7 +1075,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _sectionHeader('รายการ', _detailExpanded, () => setState(() => _detailExpanded = !_detailExpanded),
+        _sectionHeader('รายละเอียดสินค้า/บริการ', _detailExpanded, () => setState(() => _detailExpanded = !_detailExpanded),
+          icon: Icons.list_alt,
           trailing: _isReadOnly ? null : TextButton.icon(
             onPressed: () {
               final defaultVat = _vatRates.isNotEmpty ? _vatRates.first : null;
@@ -1192,7 +1255,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _sectionHeader(label, _applyExpanded, () => setState(() => _applyExpanded = !_applyExpanded)),
+        _sectionHeader(label, _applyExpanded, () => setState(() => _applyExpanded = !_applyExpanded), icon: Icons.link),
         if (_applyExpanded)
           _buildInvoiceSelectionTable(
             open: _openInvoices,
@@ -1208,7 +1271,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _sectionHeader('หักมัดจำล่วงหน้า', _advanceExpanded, () => setState(() => _advanceExpanded = !_advanceExpanded)),
+        _sectionHeader('หักมัดจำล่วงหน้า', _advanceExpanded, () => setState(() => _advanceExpanded = !_advanceExpanded), icon: Icons.money_off),
         if (_advanceExpanded)
           _buildInvoiceSelectionTable(
             open: _openAdvances,
@@ -1224,7 +1287,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _sectionHeader('เลือกมัดจำที่จะรับคืน', _advanceExpanded, () => setState(() => _advanceExpanded = !_advanceExpanded)),
+        _sectionHeader('เลือกมัดจำที่จะรับคืน', _advanceExpanded, () => setState(() => _advanceExpanded = !_advanceExpanded), icon: Icons.undo),
         if (_advanceExpanded)
           _buildInvoiceSelectionTable(
             open: _openAdvancesForRefund,
@@ -1247,64 +1310,70 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         child: Text('ไม่มีรายการที่ค้างชำระ', style: TextStyle(color: Colors.grey)),
       );
     }
-    return Column(children: [
-      ...open.map((inv) {
-        final isSelected = selected.any((a) => a.appliedToId == inv.id);
-        final balance = isFc && inv.exchangeRate > 0 ? inv.balanceAmountLc / inv.exchangeRate : inv.balanceAmountLc;
-        ctrlMap.putIfAbsent(inv.id, () {
-          final existing = selected.cast<_ApplyRow?>().firstWhere((a) => a?.appliedToId == inv.id, orElse: () => null);
-          return TextEditingController(text: existing != null ? existing.appliedAmountLc.toStringAsFixed(2) : balance.toStringAsFixed(2));
-        });
-        return CheckboxListTile(
-          dense: true,
-          value: isSelected,
-          title: Row(children: [
-            Expanded(child: Text('${inv.docNo} (${inv.docDate != null ? _dateFmt.format(inv.docDate!) : ''})', style: const TextStyle(fontSize: 13))),
-            const SizedBox(width: 8),
-            Text('คงเหลือ: ${_fmt.format(inv.balanceAmountLc)}', style: const TextStyle(fontSize: 12, color: Colors.blue)),
-          ]),
-          subtitle: isSelected ? Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Row(children: [
-              const Text('ยอดชำระ: ', style: TextStyle(fontSize: 12)),
-              SizedBox(width: 120, child: TextFormField(
-                controller: ctrlMap[inv.id],
-                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-                keyboardType: TextInputType.number, textAlign: TextAlign.right,
-                readOnly: _isReadOnly,
-                onChanged: (v) {
-                  final idx = selected.indexWhere((a) => a.appliedToId == inv.id);
-                  if (idx >= 0) {
-                    selected[idx] = _ApplyRow(
-                      appliedToId: inv.id, appliedToDocNo: inv.docNo,
-                      appliedToDocDate: inv.docDate,
-                      appliedToTotal: isFc ? inv.balanceAmountLc / inv.exchangeRate : inv.balanceAmountLc,
-                      appliedAmountLc: double.tryParse(v) ?? 0,
-                    );
-                  }
-                  _recalcTotals();
-                },
-              )),
-            ]),
-          ) : null,
-          onChanged: _isReadOnly ? null : (checked) {
-            setState(() {
-              if (checked == true) {
-                selected.add(_ApplyRow(
-                  appliedToId: inv.id, appliedToDocNo: inv.docNo,
-                  appliedToDocDate: inv.docDate,
-                  appliedToTotal: balance,
-                  appliedAmountLc: double.tryParse(ctrlMap[inv.id]?.text ?? '') ?? balance,
-                ));
-              } else {
-                selected.removeWhere((a) => a.appliedToId == inv.id);
-              }
-            });
-            _recalcTotals();
-          },
-        );
-      }),
-    ]);
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+          child: DataTable(
+            headingRowColor: WidgetStateProperty.all(Colors.blue[50]),
+            columnSpacing: 12,
+            dataRowMinHeight: 36,
+            dataRowMaxHeight: 46,
+            columns: [
+              const DataColumn(label: Text('เลขที่เอกสาร', style: TextStyle(fontWeight: FontWeight.bold))),
+              const DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isFc ? 'ยอดรวม (FC)' : 'ยอดรวม', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+              DataColumn(label: Text(isFc ? 'คงเหลือ (FC)' : 'คงเหลือ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+              DataColumn(label: Text(isFc ? 'ชำระ (FC)' : 'ชำระ/หักกลบ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+            ],
+            rows: open.map((inv) {
+              final existing = selected.cast<_ApplyRow?>().firstWhere((a) => a?.appliedToId == inv.id, orElse: () => null);
+              final total = isFc && inv.exchangeRate > 0 ? inv.totalAmountLc / inv.exchangeRate : inv.totalAmountLc;
+              final balance = isFc && inv.exchangeRate > 0 ? inv.balanceAmountLc / inv.exchangeRate : inv.balanceAmountLc;
+              ctrlMap.putIfAbsent(inv.id, () => TextEditingController(
+                text: existing != null ? existing.appliedAmountLc.toStringAsFixed(2) : balance.toStringAsFixed(2),
+              ));
+              return DataRow(cells: [
+                DataCell(Text(inv.docNo, style: const TextStyle(fontSize: 12))),
+                DataCell(Text(inv.docDate != null ? _dateFmt.format(inv.docDate!) : '', style: const TextStyle(fontSize: 12))),
+                DataCell(Text(_fmt.format(total), style: const TextStyle(fontSize: 12))),
+                DataCell(Text(_fmt.format(balance), style: TextStyle(fontSize: 12, color: Colors.blue[700]))),
+                DataCell(SizedBox(width: 140, child: _isReadOnly
+                  ? Text(_fmt.format(existing?.appliedAmountLc ?? 0),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.right)
+                  : TextFormField(
+                      controller: ctrlMap[inv.id],
+                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
+                      style: const TextStyle(fontSize: 12),
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.right,
+                      onChanged: (v) {
+                        final amount = double.tryParse(v) ?? 0;
+                        final idx = selected.indexWhere((a) => a.appliedToId == inv.id);
+                        if (amount <= 0) {
+                          if (idx >= 0) setState(() { selected.removeAt(idx); _recalcTotals(); });
+                        } else {
+                          final row = _ApplyRow(
+                            appliedToId: inv.id, appliedToDocNo: inv.docNo,
+                            appliedToDocDate: inv.docDate,
+                            appliedToTotal: balance,
+                            appliedAmountLc: amount,
+                          );
+                          setState(() {
+                            if (idx >= 0) selected[idx] = row; else selected.add(row);
+                            _recalcTotals();
+                          });
+                        }
+                      },
+                    ))),
+              ]);
+            }).toList(),
+          ),
+        ),
+      ),
+    );
   }
 
   // ── WHT Section ───────────────────────────────────────────────────────────
@@ -1313,6 +1382,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _sectionHeader('ภาษีหัก ณ ที่จ่าย (WHT)', _whtExpanded, () => setState(() => _whtExpanded = !_whtExpanded),
+          icon: Icons.percent,
           trailing: _isReadOnly ? null : TextButton.icon(
             onPressed: () => setState(() => _whtRows.add(_WhtRow())),
             icon: const Icon(Icons.add, size: 16),
@@ -1410,6 +1480,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _sectionHeader('ช่องทางการชำระเงิน', _paymentExpanded, () => setState(() => _paymentExpanded = !_paymentExpanded),
+          icon: Icons.payment,
           trailing: _isReadOnly ? null : TextButton.icon(
             onPressed: () async {
               final method = await showDialog<CmPaymentMethod>(
@@ -1564,56 +1635,241 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     );
   }
 
-  // ── GL Preview ─────────────────────────────────────────────────────────────
-  Widget _buildGlPreview() {
-    if (_glEntryId == null) return const SizedBox.shrink();
-    return FutureBuilder<Map<String, dynamic>>(
-      future: _glEntryService.fetchEntryDetail(_glEntryId!),
-      builder: (ctx, snap) {
-        if (snap.connectionState == ConnectionState.waiting) return const CircularProgressIndicator();
-        if (snap.hasError || snap.data == null) return const SizedBox.shrink();
-        final header = snap.data!['header'] as GlEntryHeader;
-        final details = snap.data!['details'] as List<GlEntryDetail>;
-        return Card(child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('GL Entry: ${header.docNo}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            DataTable(
-              columnSpacing: 12, dataRowMinHeight: 28, dataRowMaxHeight: 36,
-              headingRowColor: WidgetStateProperty.all(Colors.grey[100]),
-              columns: const [
-                DataColumn(label: Text('บัญชี')),
-                DataColumn(label: Text('คำอธิบาย')),
-                DataColumn(label: Text('DR'), numeric: true),
-                DataColumn(label: Text('CR'), numeric: true),
-              ],
-              rows: details.map((d) => DataRow(cells: [
-                DataCell(Text('${d.accountCode} ${d.accountName}', style: const TextStyle(fontSize: 12))),
-                DataCell(Text(d.description ?? '', style: const TextStyle(fontSize: 12))),
-                DataCell(Text(d.debitLc > 0 ? _fmt.format(d.debitLc) : '', style: const TextStyle(fontSize: 12))),
-                DataCell(Text(d.creditLc > 0 ? _fmt.format(d.creditLc) : '', style: const TextStyle(fontSize: 12))),
-              ])).toList(),
-            ),
-          ]),
-        ));
-      },
+  // ── GL Entry Dialog ───────────────────────────────────────────────────────
+  Future<void> _showGlEntryDialog() async {
+    final isPosted = _status == 'Posted';
+    if (!isPosted || _glEntryId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post เอกสารก่อนเพื่อดู GL Entry')),
+      );
+      return;
+    }
+    showDialog(context: context, barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()));
+    try {
+      final result = await _glEntryService.fetchEntryDetail(_glEntryId!);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      final header = result['header'] as GlEntryHeader;
+      final details = result['details'] as List<GlEntryDetail>;
+      _showGlDialog(
+        title: 'GL Entry — รายการลงบัญชีจริง',
+        statusLabel: 'Posted',
+        statusColor: Colors.blue,
+        glDocNo: header.docNo,
+        refDocNo: _docNo,
+        docDate: header.docDate,
+        description: header.description,
+        lines: details.map((d) => _GlLine(d.accountCode, d.accountName, d.description, d.debitLc, d.creditLc, d.debitFc, d.creditFc)).toList(),
+        currencyCode: _selectedCurrency?.currencyCode ?? '',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('โหลด GL ล้มเหลว: $e')));
+    }
+  }
+
+  void _showGlDialog({
+    required String title,
+    required String statusLabel,
+    required Color statusColor,
+    required String glDocNo,
+    required String refDocNo,
+    required DateTime docDate,
+    required String description,
+    required List<_GlLine> lines,
+    String currencyCode = '',
+  }) {
+    final fmt = NumberFormat('#,##0.00');
+    final dateFmt = DateFormat('dd/MM/yyyy');
+    final totalDebit  = lines.fold(0.0, (s, l) => s + l.debit);
+    final totalCredit = lines.fold(0.0, (s, l) => s + l.credit);
+    final isBalanced  = (totalDebit - totalCredit).abs() < 0.005;
+    final hasFc = lines.any((l) => l.debitFc > 0 || l.creditFc > 0);
+    final fcLabel = currencyCode.isNotEmpty ? currencyCode : 'FC';
+    final lcLabel = _currencies.cast<Currency?>()
+        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
+
+    Widget cell(String text, {TextAlign align = TextAlign.left, bool bold = false, Color? color}) =>
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Text(text,
+              style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.bold : FontWeight.normal, color: color),
+              textAlign: align),
+        );
+
+    final headerRow = hasFc
+        ? TableRow(decoration: BoxDecoration(color: Colors.grey[200]), children: [
+            cell('#', bold: true, align: TextAlign.center), cell('รหัสบัญชี', bold: true),
+            cell('ชื่อบัญชี', bold: true), cell('รายละเอียด', bold: true),
+            cell('เดบิต ($fcLabel)', bold: true, align: TextAlign.right),
+            cell('เครดิต ($fcLabel)', bold: true, align: TextAlign.right),
+            cell('เดบิต ($lcLabel)', bold: true, align: TextAlign.right),
+            cell('เครดิต ($lcLabel)', bold: true, align: TextAlign.right),
+          ])
+        : TableRow(decoration: BoxDecoration(color: Colors.grey[200]), children: [
+            cell('#', bold: true, align: TextAlign.center), cell('รหัสบัญชี', bold: true),
+            cell('ชื่อบัญชี', bold: true), cell('รายละเอียด', bold: true),
+            cell('เดบิต', bold: true, align: TextAlign.right),
+            cell('เครดิต', bold: true, align: TextAlign.right),
+          ]);
+
+    final dataRows = lines.asMap().entries.map((e) {
+      final i = e.key; final l = e.value;
+      final bg = i.isOdd ? Colors.grey[50] : Colors.white;
+      return hasFc
+          ? TableRow(decoration: BoxDecoration(color: bg), children: [
+              cell('${i + 1}', align: TextAlign.center), cell(l.accountCode),
+              cell(l.accountName), cell(l.description),
+              cell(l.debitFc  > 0 ? fmt.format(l.debitFc)  : '', align: TextAlign.right, color: Colors.blue[700]),
+              cell(l.creditFc > 0 ? fmt.format(l.creditFc) : '', align: TextAlign.right, color: Colors.red[700]),
+              cell(l.debit  > 0 ? fmt.format(l.debit)  : '', align: TextAlign.right, color: Colors.blue[800]),
+              cell(l.credit > 0 ? fmt.format(l.credit) : '', align: TextAlign.right, color: Colors.red[800]),
+            ])
+          : TableRow(decoration: BoxDecoration(color: bg), children: [
+              cell('${i + 1}', align: TextAlign.center), cell(l.accountCode),
+              cell(l.accountName), cell(l.description),
+              cell(l.debit  > 0 ? fmt.format(l.debit)  : '', align: TextAlign.right, color: Colors.blue[700]),
+              cell(l.credit > 0 ? fmt.format(l.credit) : '', align: TextAlign.right, color: Colors.red[700]),
+            ]);
+    }).toList();
+
+    final totalsRow = hasFc
+        ? TableRow(decoration: BoxDecoration(color: Colors.grey[100]), children: [
+            cell(''), cell(''), cell(''),
+            cell('รวม', bold: true, align: TextAlign.right),
+            cell(fmt.format(lines.fold(0.0, (s, l) => s + l.debitFc)),  bold: true, align: TextAlign.right, color: Colors.blue[700]),
+            cell(fmt.format(lines.fold(0.0, (s, l) => s + l.creditFc)), bold: true, align: TextAlign.right, color: Colors.red[700]),
+            cell(fmt.format(totalDebit),  bold: true, align: TextAlign.right, color: Colors.blue[800]),
+            cell(fmt.format(totalCredit), bold: true, align: TextAlign.right, color: Colors.red[800]),
+          ])
+        : TableRow(decoration: BoxDecoration(color: Colors.grey[100]), children: [
+            cell(''), cell(''), cell(''),
+            cell('รวม', bold: true, align: TextAlign.right),
+            cell(fmt.format(totalDebit),  bold: true, align: TextAlign.right, color: Colors.blue[800]),
+            cell(fmt.format(totalCredit), bold: true, align: TextAlign.right, color: Colors.red[800]),
+          ]);
+
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: hasFc ? 1100 : 900, maxHeight: 720),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.account_balance_outlined, color: Colors.indigo[700], size: 20),
+                const SizedBox(width: 8),
+                Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                if (hasFc) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: Colors.indigo[50], borderRadius: BorderRadius.circular(8)),
+                    child: Text('สกุลเงิน: $fcLabel', style: TextStyle(fontSize: 11, color: Colors.indigo[700], fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: statusColor),
+                  ),
+                  child: Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+              ]),
+              const Divider(height: 20),
+              Wrap(spacing: 24, runSpacing: 6, children: [
+                _glInfoChip('GL Doc', glDocNo),
+                _glInfoChip('AP Doc', refDocNo),
+                _glInfoChip('วันที่', dateFmt.format(docDate)),
+                if (description.isNotEmpty) _glInfoChip('คำอธิบาย', description),
+              ]),
+              const SizedBox(height: 16),
+              Expanded(child: SingleChildScrollView(
+                child: Table(
+                  columnWidths: hasFc
+                      ? const {
+                          0: FixedColumnWidth(36), 1: FixedColumnWidth(90),
+                          2: FlexColumnWidth(1.8), 3: FlexColumnWidth(2.0),
+                          4: FixedColumnWidth(100), 5: FixedColumnWidth(100),
+                          6: FixedColumnWidth(100), 7: FixedColumnWidth(100),
+                        }
+                      : const {
+                          0: FixedColumnWidth(36), 1: FixedColumnWidth(100),
+                          2: FlexColumnWidth(2.0), 3: FlexColumnWidth(2.5),
+                          4: FixedColumnWidth(115), 5: FixedColumnWidth(115),
+                        },
+                  border: TableBorder.all(color: Colors.grey[300]!, width: 0.5),
+                  children: [headerRow, ...dataRows, totalsRow],
+                ),
+              )),
+              const SizedBox(height: 12),
+              Row(children: [
+                Icon(
+                  isBalanced ? Icons.check_circle_outline : Icons.warning_amber_outlined,
+                  color: isBalanced ? Colors.blue : Colors.orange,
+                  size: 18,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  isBalanced
+                      ? 'บาลานซ์ถูกต้อง (Balanced)'
+                      : 'ไม่บาลานซ์ — ส่วนต่าง ${fmt.format((totalDebit - totalCredit).abs())} $lcLabel',
+                  style: TextStyle(
+                    color: isBalanced ? Colors.blue : Colors.orange,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                const Spacer(),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('ปิด')),
+              ]),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _sectionHeader(String title, bool expanded, VoidCallback onToggle, {Widget? trailing}) {
+  Widget _glInfoChip(String label, String value) => Row(mainAxisSize: MainAxisSize.min, children: [
+    Text('$label: ', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+    Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+  ]);
+
+  Widget _sectionHeader(String title, bool expanded, VoidCallback onToggle, {Widget? trailing, IconData? icon}) {
     return Row(children: [
-      InkWell(
-        onTap: onToggle,
-        child: Row(children: [
-          Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 20, color: Colors.blue[700]),
-          const SizedBox(width: 4),
-          Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[800], fontSize: 15)),
-        ]),
+      if (icon != null) ...[
+        Icon(icon, size: 18),
+        const SizedBox(width: 6),
+      ],
+      Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+      const SizedBox(width: 4),
+      IconButton(
+        icon: Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 18),
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        onPressed: onToggle,
       ),
       if (trailing != null) ...[const Spacer(), trailing],
     ]);
   }
+}
+
+// ── Helper: GL line ─────────────────────────────────────────────────────────
+class _GlLine {
+  final String accountCode;
+  final String accountName;
+  final String description;
+  final double debit;
+  final double credit;
+  final double debitFc;
+  final double creditFc;
+  const _GlLine(this.accountCode, this.accountName, this.description, this.debit, this.credit, this.debitFc, this.creditFc);
 }
 
 // ── Helper: detail row ──────────────────────────────────────────────────────
