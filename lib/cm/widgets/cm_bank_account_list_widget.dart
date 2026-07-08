@@ -230,9 +230,12 @@ class CmBankAccountListWidgetState extends State<CmBankAccountListWidget>
                                 ),
                                 Text(
                                   [
+                                    item.cmTypeLabel,
                                     if (item.bankDisplay.isNotEmpty) item.bankDisplay,
                                     if ((item.accountNumber ?? '').isNotEmpty) item.accountNumber!,
-                                    cmAccountTypeOptions[item.accountType] ?? item.accountType,
+                                    if (!item.isPettyCash) cmAccountTypeOptions[item.accountType] ?? item.accountType,
+                                    if (item.isFcy) item.currencyCode,
+                                    if (item.isCheckAccount) 'เช็ค',
                                   ].join(' · '),
                                   style: const TextStyle(fontSize: 11, color: Colors.grey),
                                 ),

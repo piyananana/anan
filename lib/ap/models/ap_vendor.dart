@@ -183,6 +183,7 @@ class ApVendor {
   final String? businessTypeNameThai;
   final int creditTermMonths;
   final int creditTermDays;
+  final double creditLimit;
   final String currencyCode;
   final bool isActive;
   final String? remark;
@@ -209,6 +210,7 @@ class ApVendor {
     this.businessTypeNameThai,
     this.creditTermMonths = 0,
     this.creditTermDays = 30,
+    this.creditLimit = 0,
     this.currencyCode = 'THB',
     this.isActive = true,
     this.remark,
@@ -236,6 +238,7 @@ class ApVendor {
         businessTypeNameThai: json['business_type_name_thai'],
         creditTermMonths: json['credit_term_months'] ?? 0,
         creditTermDays: json['credit_term_days'] ?? 30,
+        creditLimit: double.tryParse(json['credit_limit']?.toString() ?? '') ?? 0.0,
         currencyCode: json['currency_code'] ?? 'THB',
         isActive: json['is_active'] ?? true,
         remark: json['remark'],
@@ -262,6 +265,7 @@ class ApVendor {
         'business_type_id': businessTypeId,
         'credit_term_months': creditTermMonths,
         'credit_term_days': creditTermDays,
+        'credit_limit': creditLimit,
         'currency_code': currencyCode,
         'is_active': isActive,
         'remark': remark,
@@ -278,6 +282,7 @@ class ApVendor {
     int? vendorGroupId, String? vendorGroupCode, String? vendorGroupName,
     int? businessTypeId, String? businessTypeCode, String? businessTypeNameThai,
     int? creditTermMonths, int? creditTermDays,
+    double? creditLimit,
     String? currencyCode, bool? isActive, String? remark,
     int? apAccountId, String? apAccountCode, String? apAccountNameThai,
     String? vendorType,
@@ -299,6 +304,7 @@ class ApVendor {
         businessTypeNameThai: businessTypeNameThai ?? this.businessTypeNameThai,
         creditTermMonths: creditTermMonths ?? this.creditTermMonths,
         creditTermDays: creditTermDays ?? this.creditTermDays,
+        creditLimit: creditLimit ?? this.creditLimit,
         currencyCode: currencyCode ?? this.currencyCode,
         isActive: isActive ?? this.isActive,
         remark: remark ?? this.remark,

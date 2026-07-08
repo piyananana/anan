@@ -23,7 +23,7 @@ import '../../gl/widgets/gl_dimension_picker_field.dart';
 import '../../cm/models/cm_payment_method.dart';
 import '../../cm/widgets/cm_payment_method_list_widget.dart';
 import '../../gl/services/gl_entry_service.dart';
-import '../../gl/models/gl_entry.dart' show GlEntryHeader, GlEntryDetail;
+import '../../gl/models/gl_entry.dart' show GlEntryDetail;
 import '../../cd/models/cd_wht_type.dart';
 import '../../cd/services/cd_wht_type_service.dart';
 
@@ -83,9 +83,17 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   UserBranch? _selectedBranch;
   bool _isReadOnly = false;
 
+  // GL section state
+  int? _glEntryId;
+  List<_GlEditRow> _glEditRows = [];
+  bool _glLoading = false;
+  bool _glSectionExpanded = true;
+  final ScrollController _glHeaderHScroll = ScrollController();
+  final ScrollController _glBodyHScroll   = ScrollController();
+  final ScrollController _glFooterHScroll = ScrollController();
+
   // Header values
   int _transactionId = 0;
-  int? _glEntryId;
   String _docNo = 'AUTO';
   DateTime _docDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
   DateTime? _dueDate;
@@ -155,9 +163,20 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   bool _whtExpanded     = true;
   bool _paymentExpanded = true;
 
+  void _syncGlHScroll() {
+    final offset = _glBodyHScroll.offset;
+    if (_glHeaderHScroll.hasClients && _glHeaderHScroll.offset != offset) {
+      _glHeaderHScroll.jumpTo(offset);
+    }
+    if (_glFooterHScroll.hasClients && _glFooterHScroll.offset != offset) {
+      _glFooterHScroll.jumpTo(offset);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _glBodyHScroll.addListener(_syncGlHScroll);
     _initMasterData();
   }
 
@@ -170,6 +189,10 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     for (final c in _advanceCtrlMap.values) c.dispose();
     for (final c in _advanceRefundCtrlMap.values) c.dispose();
     for (final r in _paymentRows) r.dispose();
+    for (final r in _glEditRows) r.dispose();
+    _glHeaderHScroll.dispose();
+    _glBodyHScroll.dispose();
+    _glFooterHScroll.dispose();
     super.dispose();
   }
 
@@ -179,7 +202,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     if (widget.transactionId != old.transactionId ||
         widget.viewOnly != old.viewOnly ||
         widget.resetKey != old.resetKey) {
-      _loadTransactionData();
+      _loadTransactionData().then((_) { if (mounted) _loadDocSetup(); });
     }
   }
 
@@ -234,7 +257,10 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     if (_selectedDocType == null) return;
     try {
       final setup = await _service.fetchSetupByDocCode(_selectedDocType!.docCode);
-      if (mounted) setState(() => _docSetup = setup);
+      if (mounted) {
+        setState(() => _docSetup = setup);
+        if (!_isReadOnly) _rebuildGlRows();
+      }
     } catch (_) {}
   }
 
@@ -326,6 +352,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         _whtRows = data.whts.map((w) => _WhtRow.fromModel(w, _whtTypes)).toList();
       });
       _recalcTotals();
+      if (h.status == 'Posted') _loadPostedGl();
 
       if (_hasApplySection && _selectedVendor?.id != null) {
         await _loadOpenInvoicesKeepApplied(_selectedVendor!.id!);
@@ -364,6 +391,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       _advanceRefundRows = []; _openAdvancesForRefund = [];
       for (final c in _advanceRefundCtrlMap.values) c.dispose(); _advanceRefundCtrlMap.clear();
       for (final r in _paymentRows) r.dispose(); _paymentRows = [];
+      for (final r in _glEditRows) r.dispose(); _glEditRows = [];
       _whtRows = [];
       _recalcTotals();
     });
@@ -399,6 +427,36 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       _beforeVatFc = beforeVat; _vatAmountFc = vatFc;
       _totalAmountFc = beforeVat + vatFc;
     });
+    if (!_isReadOnly) _rebuildGlRows();
+  }
+
+  void _rebuildGlRows() {
+    final lines = _computeGlPreview();
+    for (final r in _glEditRows) r.dispose();
+    setState(() {
+      _glEditRows = lines.map((l) => _GlEditRow.fromLine(l,
+        dimIds: Map<int, int?>.from(_dimSelections),
+        dimNames: Map<int, String?>.from(_dimNames),
+      )).toList();
+    });
+  }
+
+  Future<void> _loadPostedGl() async {
+    if (_glEntryId == null || !mounted) return;
+    setState(() => _glLoading = true);
+    try {
+      final result = await _glEntryService.fetchEntryDetail(_glEntryId!);
+      final details = result['details'] as List<GlEntryDetail>;
+      for (final r in _glEditRows) r.dispose();
+      if (mounted) {
+        setState(() {
+          _glEditRows = details.map(_GlEditRow.fromDetail).toList();
+          _glLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _glLoading = false);
+    }
   }
 
   bool _validatePeriod(DateTime date) {
@@ -827,6 +885,10 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             if (_hasPaymentRows) ...[const SizedBox(height: 8), _buildPaymentSection()],
             const SizedBox(height: 8),
             _buildTotalsRow(),
+            if (_selectedVendor != null && _selectedDocType != null) ...[
+              const SizedBox(height: 8),
+              _buildGlSection(),
+            ],
           ]),
         )),
       ]),
@@ -888,15 +950,6 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
           ),
         const Spacer(),
-        if (_selectedVendor != null && _selectedDocType != null) ...[
-          OutlinedButton.icon(
-            onPressed: _showGlEntryDialog,
-            icon: const Icon(Icons.account_balance_outlined, size: 16),
-            label: Text(isPosted ? 'GL Entry' : 'ตัวอย่าง GL'),
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.indigo[700]),
-          ),
-          const SizedBox(width: 8),
-        ],
         TextButton(
           onPressed: widget.onCancel,
           child: const Text('กลับ'),
@@ -931,8 +984,9 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
               child: Text('${d.docCode} ${d.docNameThai}', overflow: TextOverflow.ellipsis),
             )).toList(),
             onChanged: _isReadOnly ? null : (v) {
-              setState(() => _selectedDocType = v);
+              final newDocType = v;
               _resetForm();
+              setState(() => _selectedDocType = newDocType);
               _loadDocSetup();
             },
             validator: (v) => v == null ? 'กรุณาเลือก' : null,
@@ -1100,6 +1154,21 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     _recalcTotals();
   }
 
+  String _vatLabel(String vatCode) {
+    final v = _vatRates.cast<VatRate?>()
+        .firstWhere((x) => x?.vatCode == vatCode, orElse: () => null);
+    if (v != null) {
+      final rateStr = v.rate.toStringAsFixed(v.rate % 1 == 0 ? 0 : 2);
+      return '${v.vatCode}  $rateStr%';
+    }
+    return vatTypeLabels[vatCode] ?? vatCode;
+  }
+
+  String _safeVatCode(String vatCode) {
+    if (_vatRates.any((v) => v.vatCode == vatCode)) return vatCode;
+    return _vatRates.isNotEmpty ? _vatRates.first.vatCode : vatCode;
+  }
+
   Widget _buildDetailSection() {
     final inputBorder = _isReadOnly
         ? InputBorder.none
@@ -1220,18 +1289,25 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                         ))),
                         DataCell(Text(_fmt.format(afterDisc), style: const TextStyle(fontSize: 12))),
                         DataCell(SizedBox(width: 120, child: _isReadOnly
-                            ? Text(vatTypeLabels[r.vatType] ?? r.vatType, style: const TextStyle(fontSize: 12))
+                            ? Text(_vatLabel(r.vatType), style: const TextStyle(fontSize: 12))
                             : DropdownButtonHideUnderline(child: DropdownButton<String>(
-                                value: r.vatType,
+                                value: _safeVatCode(r.vatType),
                                 isDense: true,
                                 isExpanded: true,
                                 style: const TextStyle(fontSize: 12, color: Colors.black),
-                                items: vatTypeOptions.map((vt) => DropdownMenuItem(value: vt, child: Text(vatTypeLabels[vt] ?? vt))).toList(),
-                                onChanged: (v) {
-                                  if (v == null) return;
+                                items: _vatRates.map((v) {
+                                  final rateStr = v.rate.toStringAsFixed(v.rate % 1 == 0 ? 0 : 2);
+                                  return DropdownMenuItem<String>(
+                                    value: v.vatCode,
+                                    child: Text('${v.vatCode}  $rateStr%'),
+                                  );
+                                }).toList(),
+                                onChanged: (code) {
+                                  if (code == null) return;
+                                  final vr = _vatRates.cast<VatRate?>().firstWhere((v) => v?.vatCode == code, orElse: () => null);
                                   setState(() {
-                                    r.vatType = v;
-                                    r.vatRate = v == 'NOVAT' ? 0 : (_vatRates.cast<VatRate?>().firstWhere((vr) => vr!.vatCode == v, orElse: () => null)?.rate ?? 7.0);
+                                    r.vatType = code;
+                                    r.vatRate = vr?.rate ?? 0;
                                   });
                                   _onDetailFieldChanged(r);
                                 },
@@ -1254,7 +1330,10 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                           value: r.isDeferredVat,
                           tristate: false,
                           visualDensity: VisualDensity.compact,
-                          onChanged: (r.vatType == 'NOVAT' || _isReadOnly) ? null : (v) => setState(() => r.isDeferredVat = v ?? false),
+                          onChanged: (r.vatType == 'NOVAT' || _isReadOnly) ? null : (v) {
+                            setState(() => r.isDeferredVat = v ?? false);
+                            _rebuildGlRows();
+                          },
                         )),
                         if (!_isReadOnly)
                           DataCell(IconButton(
@@ -1648,6 +1727,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           if (_hasDetailRows) ...[
+            _totalsLine('ยอดรวมสินค้า${isFc ? ' (FC)' : ''}', _subtotalFc),
+            _totalsLine('ส่วนลดรวม${isFc ? ' (FC)' : ''}', _discountAmountFc),
             _totalsLine('ยอดรวมก่อน VAT${isFc ? ' (FC)' : ''}', _beforeVatFc),
             if (_vatAmountFc > 0) _totalsLine('VAT${isFc ? ' (FC)' : ''}', _vatAmountFc),
           ],
@@ -1685,61 +1766,317 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     );
   }
 
-  // ── GL Entry Dialog ───────────────────────────────────────────────────────
-  Future<void> _showGlEntryDialog() async {
-    final isPosted = _status == 'Posted';
-    if (isPosted && _glEntryId != null) {
-      showDialog(context: context, barrierDismissible: false,
-          builder: (_) => const Center(child: CircularProgressIndicator()));
-      try {
-        final result = await _glEntryService.fetchEntryDetail(_glEntryId!);
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        final header = result['header'] as GlEntryHeader;
-        final details = result['details'] as List<GlEntryDetail>;
-        _showGlDialog(
-          title: 'GL Entry — รายการลงบัญชีจริง',
-          statusLabel: 'Posted',
-          statusColor: Colors.blue,
-          glDocNo: header.docNo,
-          refDocNo: _docNo,
-          docDate: header.docDate,
-          description: header.description,
-          lines: details.map((d) => _GlLine(d.accountCode, d.accountName, d.description, d.debitLc, d.creditLc, d.debitFc, d.creditFc)).toList(),
-          currencyCode: _selectedCurrency?.currencyCode ?? '',
-        );
-      } catch (e) {
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('โหลด GL ล้มเหลว: $e')));
-      }
-    } else {
-      // Draft: compute GL preview from current form data
-      if (_docSetup == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรุณาตั้งค่าผังบัญชี AP ก่อน (AP GL Account Setup) เพื่อดูตัวอย่าง GL')),
-        );
-        return;
-      }
-      final previewLines = _computeGlPreview();
-      if (previewLines.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ไม่มีข้อมูล GL — กรุณาป้อนรายการก่อน')),
-        );
-        return;
-      }
-      _showGlDialog(
-        title: 'ตัวอย่าง GL Entry (Draft)',
-        statusLabel: 'Draft Preview',
-        statusColor: Colors.orange[700]!,
-        glDocNo: '—',
-        refDocNo: _docNo,
-        docDate: _docDate,
-        description: _descCtrl.text,
-        lines: previewLines,
-        currencyCode: _selectedCurrency?.currencyCode ?? '',
+  // ── GL Account search dialog ─────────────────────────────────────────────
+  Future<void> _showGlAccountSearchDialog(_GlEditRow r) async {
+    final searchCtrl = TextEditingController();
+    final available = _accounts.where((a) => a.isNormalAccount && a.isActive).toList();
+    List<Account> filtered = List.from(available);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          void doFilter(String q) {
+            setDlgState(() {
+              if (q.isEmpty) {
+                filtered = List.from(available);
+              } else {
+                final lq = q.toLowerCase();
+                filtered = available.where((a) =>
+                  a.accountCode.toLowerCase().contains(lq) ||
+                  a.accountNameThai.toLowerCase().contains(lq)).toList();
+              }
+            });
+          }
+          return AlertDialog(
+            title: const Text('เลือกรหัสบัญชี'),
+            content: SizedBox(
+              width: 520,
+              height: 420,
+              child: Column(children: [
+                TextField(
+                  controller: searchCtrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'ค้นหา รหัส / ชื่อบัญชี',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  onChanged: doFilter,
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: filtered.isEmpty
+                    ? const Center(child: Text('ไม่พบบัญชี'))
+                    : ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (_, i) {
+                          final a = filtered[i];
+                          final isSelected = r.acctCodeCtrl.text == a.accountCode;
+                          return ListTile(
+                            dense: true,
+                            selected: isSelected,
+                            selectedTileColor: Colors.indigo.shade50,
+                            leading: isSelected
+                              ? Icon(Icons.check_circle, color: Colors.indigo[700], size: 18)
+                              : const SizedBox(width: 18),
+                            title: Row(children: [
+                              SizedBox(width: 90, child: Text(a.accountCode,
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo[700]))),
+                              Expanded(child: Text(a.accountNameThai, overflow: TextOverflow.ellipsis)),
+                            ]),
+                            onTap: () {
+                              setState(() {
+                                r.acctCodeCtrl.text = a.accountCode;
+                                r.accountName = a.accountNameThai;
+                              });
+                              Navigator.of(ctx).pop();
+                            },
+                          );
+                        },
+                      ),
+                ),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+            ],
+          );
+        },
+      ),
+    );
+    searchCtrl.dispose();
+  }
+
+  // ── Inline GL Section ────────────────────────────────────────────────────
+  Widget _buildGlSection() {
+    final fmt = NumberFormat('#,##0.00');
+    final totalDebit  = _glEditRows.fold(0.0, (s, r) => s + r.debit);
+    final totalCredit = _glEditRows.fold(0.0, (s, r) => s + r.credit);
+    final isBalanced  = _glEditRows.isEmpty || (totalDebit - totalCredit).abs() < 0.005;
+    final hasFc = _glEditRows.any((r) => r.debitFc > 0 || r.creditFc > 0);
+    final lcLabel = _currencies.cast<Currency?>()
+        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
+    final fcLabel = _selectedCurrency?.currencyCode ?? 'FC';
+    final activeDims = _dimTypes.where((t) => t.slotNo >= 1 && t.slotNo <= 5).toList();
+    final isGlEditable = _status == 'Draft' && !_isReadOnly;
+
+    // trailing widget for _sectionHeader
+    final Widget sectionTrailing = Row(mainAxisSize: MainAxisSize.min, children: [
+      if (!_glLoading && _glEditRows.isNotEmpty) ...[
+        Icon(isBalanced ? Icons.check_circle_outline : Icons.warning_amber_outlined,
+          size: 14, color: isBalanced ? Colors.green[700] : Colors.red[700]),
+        const SizedBox(width: 4),
+        Text(isBalanced ? 'สมดุล' : 'ไม่สมดุล',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+            color: isBalanced ? Colors.green[700] : Colors.red[700])),
+        const SizedBox(width: 12),
+        Text('Dr: ${fmt.format(totalDebit)}  Cr: ${fmt.format(totalCredit)}',
+          style: const TextStyle(fontSize: 12, color: Colors.black54)),
+        const SizedBox(width: 12),
+      ],
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: _status == 'Posted' ? Colors.blue[100] : Colors.orange[100],
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          _status == 'Posted' ? 'GL จริง (Posted)' : 'ตัวอย่าง GL (Draft)',
+          style: TextStyle(fontSize: 11,
+            color: _status == 'Posted' ? Colors.blue[800] : Colors.orange[800])),
+      ),
+    ]);
+
+    // Table built with LayoutBuilder for flexible column widths
+    Widget tableContent;
+    if (_glLoading) {
+      tableContent = const Padding(padding: EdgeInsets.all(24),
+        child: Center(child: CircularProgressIndicator()));
+    } else if (_glEditRows.isEmpty) {
+      tableContent = Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text('ยังไม่มีรายการ — กรุณาป้อนรายการสินค้า/บริการด้านบน',
+          style: const TextStyle(color: Colors.grey, fontSize: 13)),
       );
+    } else {
+      const double wNo   = 36;
+      const double wCode = 130;
+      const double wAmt  = 120;
+      const double wDim  = 120;
+      const double wNameMin = 160;
+      const double wDescMin = 180;
+
+      tableContent = LayoutBuilder(builder: (context, constraints) {
+        final double fixedTotal = wNo + wCode + wAmt * (2 + (hasFc ? 2 : 0)) + wDim * activeDims.length;
+        final double remaining = constraints.maxWidth - fixedTotal;
+        final double wName, wDesc;
+        if (remaining > wNameMin + wDescMin) {
+          final extra = remaining - wNameMin - wDescMin;
+          wName = wNameMin + extra * 0.4;
+          wDesc = wDescMin + extra * 0.6;
+        } else {
+          wName = wNameMin;
+          wDesc = wDescMin;
+        }
+
+        Widget hdr(String t, {required double w, TextAlign align = TextAlign.left}) =>
+            Container(width: w, color: Colors.blue[50],
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              child: Text(t, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                textAlign: align, overflow: TextOverflow.ellipsis));
+
+        Widget buildRow(int i, _GlEditRow r) {
+          final hasErr = r.acctCodeCtrl.text.startsWith('!');
+          final bg = hasErr ? Colors.red[50]! : (i.isOdd ? Colors.grey[50]! : Colors.white);
+          return Container(color: bg, child: Row(children: [
+            SizedBox(width: wNo, child: Center(
+              child: Text('${i + 1}', style: const TextStyle(fontSize: 12, color: Colors.grey)))),
+            SizedBox(width: wCode, child: isGlEditable
+              ? InkWell(
+                  onTap: () => _showGlAccountSearchDialog(r),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    child: Row(children: [
+                      Expanded(child: Text(r.acctCodeCtrl.text,
+                        style: TextStyle(fontSize: 12,
+                          color: hasErr ? Colors.red[700] : Colors.indigo[800]),
+                        overflow: TextOverflow.ellipsis)),
+                      Icon(Icons.search, size: 13, color: Colors.grey[400]),
+                    ]),
+                  ))
+              : Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                  child: Text(r.acctCodeCtrl.text,
+                    style: TextStyle(fontSize: 12, color: hasErr ? Colors.red : null),
+                    overflow: TextOverflow.ellipsis))),
+            SizedBox(width: wName, child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: Text(r.accountName, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis))),
+            SizedBox(width: wDesc, child: isGlEditable
+              ? TextFormField(
+                  controller: r.descCtrl,
+                  style: const TextStyle(fontSize: 12),
+                  decoration: const InputDecoration(isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    border: InputBorder.none))
+              : Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                  child: Text(r.descCtrl.text, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis))),
+            if (hasFc) ...[
+              SizedBox(width: wAmt, child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                child: Text(r.debitFc  > 0 ? fmt.format(r.debitFc)  : '',
+                  style: TextStyle(fontSize: 12, color: Colors.blue[700]), textAlign: TextAlign.right))),
+              SizedBox(width: wAmt, child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                child: Text(r.creditFc > 0 ? fmt.format(r.creditFc) : '',
+                  style: TextStyle(fontSize: 12, color: Colors.red[700]), textAlign: TextAlign.right))),
+            ],
+            SizedBox(width: wAmt, child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: Text(r.debit  > 0 ? fmt.format(r.debit)  : '',
+                style: TextStyle(fontSize: 12, color: Colors.blue[800]), textAlign: TextAlign.right))),
+            SizedBox(width: wAmt, child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: Text(r.credit > 0 ? fmt.format(r.credit) : '',
+                style: TextStyle(fontSize: 12, color: Colors.red[800]), textAlign: TextAlign.right))),
+            for (final dt in activeDims)
+              SizedBox(width: wDim, child: GlDimensionPickerField(
+                dimType: dt, values: _dimValues[dt.typeCode] ?? [],
+                selected: () {
+                  final vid = r.dimIds[dt.slotNo];
+                  if (vid == null) return null;
+                  final vals = _dimValues[dt.typeCode] ?? [];
+                  try { return vals.firstWhere((v) => v.id == vid); } catch (_) { return null; }
+                }(),
+                readOnly: !isGlEditable, isDense: true,
+                onSelected: (v) => setState(() {
+                  r.dimIds[dt.slotNo]   = v?.id;
+                  r.dimCodes[dt.slotNo] = v?.valueCode;
+                  r.dimNames[dt.slotNo] = v?.valueNameThai;
+                }),
+              )),
+          ]));
+        }
+
+        final headerRow = Row(children: [
+          hdr('#', w: wNo, align: TextAlign.center),
+          hdr('รหัสบัญชี', w: wCode),
+          hdr('ชื่อบัญชี', w: wName),
+          hdr('รายละเอียด', w: wDesc),
+          if (hasFc) ...[
+            hdr('เดบิต ($fcLabel)', w: wAmt, align: TextAlign.right),
+            hdr('เครดิต ($fcLabel)', w: wAmt, align: TextAlign.right),
+          ],
+          hdr('เดบิต ($lcLabel)', w: wAmt, align: TextAlign.right),
+          hdr('เครดิต ($lcLabel)', w: wAmt, align: TextAlign.right),
+          for (final dt in activeDims) hdr(dt.nameThai, w: wDim),
+        ]);
+
+        final totalsRow = Row(children: [
+          SizedBox(width: wNo + wCode + wName),
+          Container(width: wDesc, padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            child: const Text('รวม', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.right)),
+          if (hasFc) ...[
+            Container(width: wAmt, padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              child: Text(fmt.format(_glEditRows.fold(0.0, (s, r) => s + r.debitFc)),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue[700]),
+                textAlign: TextAlign.right)),
+            Container(width: wAmt, padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              child: Text(fmt.format(_glEditRows.fold(0.0, (s, r) => s + r.creditFc)),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red[700]),
+                textAlign: TextAlign.right)),
+          ],
+          Container(width: wAmt, padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            child: Text(fmt.format(totalDebit),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue[800]),
+              textAlign: TextAlign.right)),
+          Container(width: wAmt, padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            child: Text(fmt.format(totalCredit),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red[800]),
+              textAlign: TextAlign.right)),
+        ]);
+
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            controller: _glHeaderHScroll,
+            physics: const NeverScrollableScrollPhysics(),
+            child: headerRow),
+          const Divider(height: 1, thickness: 1),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 340),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.vertical,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                controller: _glBodyHScroll,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  children: _glEditRows.asMap().entries.map((e) => buildRow(e.key, e.value)).toList())))),
+          const Divider(height: 1, thickness: 1),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            controller: _glFooterHScroll,
+            physics: const NeverScrollableScrollPhysics(),
+            child: totalsRow),
+        ]);
+      });
     }
+
+    return Card(child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader('รายการบัญชี GL', _glSectionExpanded,
+          () => setState(() => _glSectionExpanded = !_glSectionExpanded),
+          icon: Icons.account_balance_outlined,
+          trailing: sectionTrailing),
+        if (_glSectionExpanded) ...[
+          const SizedBox(height: 8),
+          tableContent,
+        ],
+      ]),
+    ));
   }
 
   // ── Client-side GL preview for Draft ──────────────────────────────────────
@@ -1748,9 +2085,56 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     final lc = _exchangeRate;
     final isFcDoc = _selectedCurrency?.baseCurrencyFlag == false;
     final setup = _docSetup;
-    if (setup == null) return lines;
-
     final sysType = int.tryParse(_selectedDocType?.sysDocType ?? '');
+
+    // When AP GL Account Setup is not configured yet, generate skeleton rows
+    // with error-prefix codes so user can see and manually fill them in.
+    if (setup == null) {
+      if (_totalAmountFc == 0 && _detailRows.isEmpty) return lines;
+      if (sysType == apDocTypePurchaseInvoice || sysType == apDocTypeDebitNote) {
+        for (final r in _detailRows) {
+          final qty      = double.tryParse(r.qtyCtrl.text) ?? 0;
+          final price    = double.tryParse(r.priceCtrl.text) ?? 0;
+          final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
+          final afterDisc = qty * price * (1 - discPct / 100);
+          final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+          final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : 'ค่าใช้จ่าย';
+          lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีค่าใช้จ่าย', 'ยังไม่ตั้งค่าบัญชี', desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
+          if (vat > 0) {
+            lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชี VAT', 'VAT Input', 'ภาษีมูลค่าเพิ่ม', vat * lc, 0, isFcDoc ? vat : 0, 0));
+          }
+        }
+        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีเจ้าหนี้', 'เจ้าหนี้การค้า', 'เจ้าหนี้การค้า', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      } else if (sysType == apDocTypeCreditNote) {
+        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีเจ้าหนี้', 'เจ้าหนี้การค้า', 'เจ้าหนี้การค้า', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        for (final r in _detailRows) {
+          final qty      = double.tryParse(r.qtyCtrl.text) ?? 0;
+          final price    = double.tryParse(r.priceCtrl.text) ?? 0;
+          final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
+          final afterDisc = qty * price * (1 - discPct / 100);
+          final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+          final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : 'ค่าใช้จ่าย';
+          lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีค่าใช้จ่าย', 'ยังไม่ตั้งค่าบัญชี', desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
+          if (vat > 0) {
+            lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชี VAT', 'VAT Input', 'ภาษีมูลค่าเพิ่ม', 0, vat * lc, 0, isFcDoc ? vat : 0));
+          }
+        }
+      } else if (sysType == apDocTypeAdvancePayment) {
+        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีมัดจำ', 'เงินมัดจำ', 'จ่ายมัดจำ', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีเงินสด', 'เงินสด/ธนาคาร', 'ชำระ', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      } else if (sysType == apDocTypeAdvanceRefund) {
+        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีเงินสด', 'เงินสด/ธนาคาร', 'รับมัดจำคืน', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีมัดจำ', 'เงินมัดจำ', 'คืนมัดจำ', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      } else if (sysType == apDocTypePayment) {
+        for (final a in _applyRows) {
+          lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีเจ้าหนี้', 'เจ้าหนี้การค้า', 'ชำระ ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
+        }
+        if (lines.isNotEmpty) {
+          lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีเงินสด', 'เงินสด/ธนาคาร', 'ชำระเงิน', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+        }
+      }
+      return lines;
+    }
 
     String acctCode(int? id, String? fallback) {
       if (id != null) {
@@ -1797,18 +2181,41 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         final qty      = double.tryParse(r.qtyCtrl.text)    ?? 0;
         final price    = double.tryParse(r.priceCtrl.text)  ?? 0;
         final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
-        final afterDisc = qty * price * (1 - discPct / 100);
+        final sub      = qty * price;
+        final disc     = sub * discPct / 100;
+        final afterDisc = sub - disc;
         final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
         final expAccId = r.expenseAccountId ?? setup.expenseAccountId;
         final expCode  = acctCode(expAccId, setup.expenseAccountCode);
         final expName  = acctName(expAccId, setup.expenseAccountName);
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : 'ค่าใช้จ่าย';
-        lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
+        if (setup.discountAccountId != null && disc > 0) {
+          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, sub * lc, 0, isFcDoc ? sub : 0, 0));
+          final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, '!ยังไม่ตั้งค่าบัญชีส่วนลด');
+          final discName = setup.discountAccountName ?? acctName(setup.discountAccountId, 'ส่วนลดรับ');
+          lines.add(_GlLine(discCode, discName.isEmpty ? 'ส่วนลดรับ' : discName, 'ส่วนลดรับ', 0, disc * lc, 0, isFcDoc ? disc : 0));
+        } else {
+          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
+        }
         if (vat > 0) {
-          final vatId  = r.isDeferredVat ? setup.vatPendingInputAccountId : setup.vatInputAccountId;
-          final vatFb  = r.isDeferredVat ? setup.vatPendingInputAccountCode : setup.vatInputAccountCode;
-          final vatNFb = r.isDeferredVat ? setup.vatPendingInputAccountName : setup.vatInputAccountName;
-          lines.add(_GlLine(acctCode(vatId, vatFb), acctName(vatId, vatNFb).isEmpty ? 'VAT Input' : acctName(vatId, vatNFb), 'ภาษีมูลค่าเพิ่ม', vat * lc, 0, isFcDoc ? vat : 0, 0));
+          String vatAcctCode, vatAcctName;
+          if (r.isDeferredVat) {
+            vatAcctCode = setup.vatPendingInputAccountCode ?? '!ยังไม่ตั้งค่า VAT รอตัด';
+            vatAcctName = setup.vatPendingInputAccountName ?? 'VAT รอตัดบัญชี';
+          } else {
+            final vr = _vatRates.cast<VatRate?>().firstWhere((v) => v?.vatCode == r.vatType, orElse: () => null);
+            if (vr?.glAccountCode != null && vr!.glAccountCode!.isNotEmpty) {
+              vatAcctCode = vr.glAccountCode!;
+              vatAcctName = vr.glAccountName ?? setup.vatInputAccountName ?? 'VAT Input';
+            } else if (setup.vatInputAccountCode != null && setup.vatInputAccountCode!.isNotEmpty) {
+              vatAcctCode = setup.vatInputAccountCode!;
+              vatAcctName = setup.vatInputAccountName ?? 'VAT Input';
+            } else {
+              vatAcctCode = '!ยังไม่ตั้งค่าบัญชี VAT';
+              vatAcctName = 'VAT Input';
+            }
+          }
+          lines.add(_GlLine(vatAcctCode, vatAcctName, 'ภาษีมูลค่าเพิ่ม', vat * lc, 0, isFcDoc ? vat : 0, 0));
         }
       }
       lines.add(_GlLine(apCode, apName.isEmpty ? 'AP Account' : apName, 'เจ้าหนี้การค้า', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
@@ -1820,18 +2227,41 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         final qty      = double.tryParse(r.qtyCtrl.text)    ?? 0;
         final price    = double.tryParse(r.priceCtrl.text)  ?? 0;
         final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
-        final afterDisc = qty * price * (1 - discPct / 100);
+        final sub      = qty * price;
+        final disc     = sub * discPct / 100;
+        final afterDisc = sub - disc;
         final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
         final expAccId = r.expenseAccountId ?? setup.expenseAccountId;
         final expCode  = acctCode(expAccId, setup.expenseAccountCode);
         final expName  = acctName(expAccId, setup.expenseAccountName);
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : 'ค่าใช้จ่าย';
-        lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
+        if (setup.discountAccountId != null && disc > 0) {
+          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, 0, sub * lc, 0, isFcDoc ? sub : 0));
+          final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, '!ยังไม่ตั้งค่าบัญชีส่วนลด');
+          final discName = setup.discountAccountName ?? acctName(setup.discountAccountId, 'ส่วนลดรับ');
+          lines.add(_GlLine(discCode, discName.isEmpty ? 'ส่วนลดรับ' : discName, 'ส่วนลดรับ', disc * lc, 0, isFcDoc ? disc : 0, 0));
+        } else {
+          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
+        }
         if (vat > 0) {
-          final vatId  = r.isDeferredVat ? setup.vatPendingInputAccountId : setup.vatInputAccountId;
-          final vatFb  = r.isDeferredVat ? setup.vatPendingInputAccountCode : setup.vatInputAccountCode;
-          final vatNFb = r.isDeferredVat ? setup.vatPendingInputAccountName : setup.vatInputAccountName;
-          lines.add(_GlLine(acctCode(vatId, vatFb), acctName(vatId, vatNFb).isEmpty ? 'VAT Input' : acctName(vatId, vatNFb), 'ภาษีมูลค่าเพิ่ม', 0, vat * lc, 0, isFcDoc ? vat : 0));
+          String vatAcctCode, vatAcctName;
+          if (r.isDeferredVat) {
+            vatAcctCode = setup.vatPendingInputAccountCode ?? '!ยังไม่ตั้งค่า VAT รอตัด';
+            vatAcctName = setup.vatPendingInputAccountName ?? 'VAT รอตัดบัญชี';
+          } else {
+            final vr = _vatRates.cast<VatRate?>().firstWhere((v) => v?.vatCode == r.vatType, orElse: () => null);
+            if (vr?.glAccountCode != null && vr!.glAccountCode!.isNotEmpty) {
+              vatAcctCode = vr.glAccountCode!;
+              vatAcctName = vr.glAccountName ?? setup.vatInputAccountName ?? 'VAT Input';
+            } else if (setup.vatInputAccountCode != null && setup.vatInputAccountCode!.isNotEmpty) {
+              vatAcctCode = setup.vatInputAccountCode!;
+              vatAcctName = setup.vatInputAccountName ?? 'VAT Input';
+            } else {
+              vatAcctCode = '!ยังไม่ตั้งค่าบัญชี VAT';
+              vatAcctName = 'VAT Input';
+            }
+          }
+          lines.add(_GlLine(vatAcctCode, vatAcctName, 'ภาษีมูลค่าเพิ่ม', 0, vat * lc, 0, isFcDoc ? vat : 0));
         }
       }
     }
@@ -1880,177 +2310,6 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     return lines;
   }
 
-  void _showGlDialog({
-    required String title,
-    required String statusLabel,
-    required Color statusColor,
-    required String glDocNo,
-    required String refDocNo,
-    required DateTime docDate,
-    required String description,
-    required List<_GlLine> lines,
-    String currencyCode = '',
-  }) {
-    final fmt = NumberFormat('#,##0.00');
-    final dateFmt = DateFormat('dd/MM/yyyy');
-    final totalDebit  = lines.fold(0.0, (s, l) => s + l.debit);
-    final totalCredit = lines.fold(0.0, (s, l) => s + l.credit);
-    final isBalanced  = (totalDebit - totalCredit).abs() < 0.005;
-    final hasFc = lines.any((l) => l.debitFc > 0 || l.creditFc > 0);
-    final fcLabel = currencyCode.isNotEmpty ? currencyCode : 'FC';
-    final lcLabel = _currencies.cast<Currency?>()
-        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
-
-    Widget cell(String text, {TextAlign align = TextAlign.left, bool bold = false, Color? color}) =>
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Text(text,
-              style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.bold : FontWeight.normal, color: color),
-              textAlign: align),
-        );
-
-    final headerRow = hasFc
-        ? TableRow(decoration: BoxDecoration(color: Colors.grey[200]), children: [
-            cell('#', bold: true, align: TextAlign.center), cell('รหัสบัญชี', bold: true),
-            cell('ชื่อบัญชี', bold: true), cell('รายละเอียด', bold: true),
-            cell('เดบิต ($fcLabel)', bold: true, align: TextAlign.right),
-            cell('เครดิต ($fcLabel)', bold: true, align: TextAlign.right),
-            cell('เดบิต ($lcLabel)', bold: true, align: TextAlign.right),
-            cell('เครดิต ($lcLabel)', bold: true, align: TextAlign.right),
-          ])
-        : TableRow(decoration: BoxDecoration(color: Colors.grey[200]), children: [
-            cell('#', bold: true, align: TextAlign.center), cell('รหัสบัญชี', bold: true),
-            cell('ชื่อบัญชี', bold: true), cell('รายละเอียด', bold: true),
-            cell('เดบิต', bold: true, align: TextAlign.right),
-            cell('เครดิต', bold: true, align: TextAlign.right),
-          ]);
-
-    final dataRows = lines.asMap().entries.map((e) {
-      final i = e.key; final l = e.value;
-      final bg = i.isOdd ? Colors.grey[50] : Colors.white;
-      return hasFc
-          ? TableRow(decoration: BoxDecoration(color: bg), children: [
-              cell('${i + 1}', align: TextAlign.center), cell(l.accountCode),
-              cell(l.accountName), cell(l.description),
-              cell(l.debitFc  > 0 ? fmt.format(l.debitFc)  : '', align: TextAlign.right, color: Colors.blue[700]),
-              cell(l.creditFc > 0 ? fmt.format(l.creditFc) : '', align: TextAlign.right, color: Colors.red[700]),
-              cell(l.debit  > 0 ? fmt.format(l.debit)  : '', align: TextAlign.right, color: Colors.blue[800]),
-              cell(l.credit > 0 ? fmt.format(l.credit) : '', align: TextAlign.right, color: Colors.red[800]),
-            ])
-          : TableRow(decoration: BoxDecoration(color: bg), children: [
-              cell('${i + 1}', align: TextAlign.center), cell(l.accountCode),
-              cell(l.accountName), cell(l.description),
-              cell(l.debit  > 0 ? fmt.format(l.debit)  : '', align: TextAlign.right, color: Colors.blue[700]),
-              cell(l.credit > 0 ? fmt.format(l.credit) : '', align: TextAlign.right, color: Colors.red[700]),
-            ]);
-    }).toList();
-
-    final totalsRow = hasFc
-        ? TableRow(decoration: BoxDecoration(color: Colors.grey[100]), children: [
-            cell(''), cell(''), cell(''),
-            cell('รวม', bold: true, align: TextAlign.right),
-            cell(fmt.format(lines.fold(0.0, (s, l) => s + l.debitFc)),  bold: true, align: TextAlign.right, color: Colors.blue[700]),
-            cell(fmt.format(lines.fold(0.0, (s, l) => s + l.creditFc)), bold: true, align: TextAlign.right, color: Colors.red[700]),
-            cell(fmt.format(totalDebit),  bold: true, align: TextAlign.right, color: Colors.blue[800]),
-            cell(fmt.format(totalCredit), bold: true, align: TextAlign.right, color: Colors.red[800]),
-          ])
-        : TableRow(decoration: BoxDecoration(color: Colors.grey[100]), children: [
-            cell(''), cell(''), cell(''),
-            cell('รวม', bold: true, align: TextAlign.right),
-            cell(fmt.format(totalDebit),  bold: true, align: TextAlign.right, color: Colors.blue[800]),
-            cell(fmt.format(totalCredit), bold: true, align: TextAlign.right, color: Colors.red[800]),
-          ]);
-
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: hasFc ? 1100 : 900, maxHeight: 720),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Icon(Icons.account_balance_outlined, color: Colors.indigo[700], size: 20),
-                const SizedBox(width: 8),
-                Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                const Spacer(),
-                if (hasFc) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: Colors.indigo[50], borderRadius: BorderRadius.circular(8)),
-                    child: Text('สกุลเงิน: $fcLabel', style: TextStyle(fontSize: 11, color: Colors.indigo[700], fontWeight: FontWeight.w600)),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: statusColor),
-                  ),
-                  child: Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
-                ),
-              ]),
-              const Divider(height: 20),
-              Wrap(spacing: 24, runSpacing: 6, children: [
-                _glInfoChip('GL Doc', glDocNo),
-                _glInfoChip('AP Doc', refDocNo),
-                _glInfoChip('วันที่', dateFmt.format(docDate)),
-                if (description.isNotEmpty) _glInfoChip('คำอธิบาย', description),
-              ]),
-              const SizedBox(height: 16),
-              Expanded(child: SingleChildScrollView(
-                child: Table(
-                  columnWidths: hasFc
-                      ? const {
-                          0: FixedColumnWidth(36), 1: FixedColumnWidth(90),
-                          2: FlexColumnWidth(1.8), 3: FlexColumnWidth(2.0),
-                          4: FixedColumnWidth(100), 5: FixedColumnWidth(100),
-                          6: FixedColumnWidth(100), 7: FixedColumnWidth(100),
-                        }
-                      : const {
-                          0: FixedColumnWidth(36), 1: FixedColumnWidth(100),
-                          2: FlexColumnWidth(2.0), 3: FlexColumnWidth(2.5),
-                          4: FixedColumnWidth(115), 5: FixedColumnWidth(115),
-                        },
-                  border: TableBorder.all(color: Colors.grey[300]!, width: 0.5),
-                  children: [headerRow, ...dataRows, totalsRow],
-                ),
-              )),
-              const SizedBox(height: 12),
-              Row(children: [
-                Icon(
-                  isBalanced ? Icons.check_circle_outline : Icons.warning_amber_outlined,
-                  color: isBalanced ? Colors.blue : Colors.orange,
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  isBalanced
-                      ? 'บาลานซ์ถูกต้อง (Balanced)'
-                      : 'ไม่บาลานซ์ — ส่วนต่าง ${fmt.format((totalDebit - totalCredit).abs())} $lcLabel',
-                  style: TextStyle(
-                    color: isBalanced ? Colors.blue : Colors.orange,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                const Spacer(),
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('ปิด')),
-              ]),
-            ]),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _glInfoChip(String label, String value) => Row(mainAxisSize: MainAxisSize.min, children: [
-    Text('$label: ', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-    Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-  ]);
-
   Widget _sectionHeader(String title, bool expanded, VoidCallback onToggle, {Widget? trailing, IconData? icon}) {
     return Row(children: [
       if (icon != null) ...[
@@ -2080,6 +2339,73 @@ class _GlLine {
   final double debitFc;
   final double creditFc;
   const _GlLine(this.accountCode, this.accountName, this.description, this.debit, this.credit, this.debitFc, this.creditFc);
+}
+
+// ── Helper: editable GL row for inline section ───────────────────────────────
+class _GlEditRow {
+  String accountName;
+  double debit;
+  double credit;
+  double debitFc;
+  double creditFc;
+  Map<int, int?> dimIds;
+  Map<int, String?> dimCodes;
+  Map<int, String?> dimNames;
+  final TextEditingController acctCodeCtrl;
+  final TextEditingController descCtrl;
+
+  _GlEditRow({
+    required String accountCode,
+    required this.accountName,
+    required String description,
+    required this.debit,
+    required this.credit,
+    required this.debitFc,
+    required this.creditFc,
+    Map<int, int?>? dimIds,
+    Map<int, String?>? dimCodes,
+    Map<int, String?>? dimNames,
+  })  : acctCodeCtrl = TextEditingController(text: accountCode),
+        descCtrl = TextEditingController(text: description),
+        dimIds = dimIds ?? {},
+        dimCodes = dimCodes ?? {},
+        dimNames = dimNames ?? {};
+
+  factory _GlEditRow.fromLine(_GlLine l, {
+    Map<int, int?>? dimIds,
+    Map<int, String?>? dimCodes,
+    Map<int, String?>? dimNames,
+  }) =>
+      _GlEditRow(
+        accountCode: l.accountCode,
+        accountName: l.accountName,
+        description: l.description,
+        debit: l.debit,
+        credit: l.credit,
+        debitFc: l.debitFc,
+        creditFc: l.creditFc,
+        dimIds: dimIds,
+        dimCodes: dimCodes,
+        dimNames: dimNames,
+      );
+
+  factory _GlEditRow.fromDetail(GlEntryDetail d) => _GlEditRow(
+        accountCode: d.accountCode,
+        accountName: d.accountName,
+        description: d.description,
+        debit: d.debitLc,
+        credit: d.creditLc,
+        debitFc: d.debitFc,
+        creditFc: d.creditFc,
+        dimIds:   {1: d.dim1Id,   2: d.dim2Id,   3: d.dim3Id,   4: d.dim4Id,   5: d.dim5Id},
+        dimCodes: {1: d.dim1Code, 2: d.dim2Code, 3: d.dim3Code, 4: d.dim4Code, 5: d.dim5Code},
+        dimNames: {1: d.dim1Name, 2: d.dim2Name, 3: d.dim3Name, 4: d.dim4Name, 5: d.dim5Name},
+      );
+
+  void dispose() {
+    acctCodeCtrl.dispose();
+    descCtrl.dispose();
+  }
 }
 
 // ── Helper: detail row ──────────────────────────────────────────────────────

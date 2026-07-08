@@ -81,6 +81,7 @@ class PostingPeriod {
   final String apStatus;
   final String arStatus;
   final String imStatus;
+  final String cmStatus;
 
   PostingPeriod({
     required this.id,
@@ -93,6 +94,7 @@ class PostingPeriod {
     required this.apStatus,
     required this.arStatus,
     required this.imStatus,
+    this.cmStatus = 'OPEN',
   });
 
   factory PostingPeriod.fromJson(Map<String, dynamic> json) {
@@ -105,10 +107,11 @@ class PostingPeriod {
       // periodEndDate: DateTime.parse(json['period_end_date']),
       periodStartDate: _parseDateSecurely(json['period_start_date']),
       periodEndDate: _parseDateSecurely(json['period_end_date']),
-      glStatus: json['gl_status'],
-      apStatus: json['ap_status'],
-      arStatus: json['ar_status'],
-      imStatus: json['im_status'],
+      glStatus: json['gl_status'] ?? 'OPEN',
+      apStatus: json['ap_status'] ?? 'OPEN',
+      arStatus: json['ar_status'] ?? 'OPEN',
+      imStatus: json['im_status'] ?? 'OPEN',
+      cmStatus: json['cm_status'] as String? ?? 'OPEN',
     );
   }
 
@@ -120,10 +123,11 @@ class PostingPeriod {
       'period_start_date': periodStartDate.toIso8601String().split('T')[0],
       'period_end_date': periodEndDate.toIso8601String().split('T')[0],
       // สถานะจะถูกจัดการแยกกันในการอัปเดต
-      'gl_status': glStatus, 
-      'ap_status': apStatus, 
+      'gl_status': glStatus,
+      'ap_status': apStatus,
       'ar_status': arStatus,
       'im_status': imStatus,
+      'cm_status': cmStatus,
     };
   }
 }

@@ -2,11 +2,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../cd/models/currency.dart';
+import '../../cd/services/currency_service.dart';
 import '../../gl/models/account.dart';
 import '../../gl/services/account_service.dart';
-import '../models/cm_bank.dart';
+import '../../cd/models/bank.dart';
 import '../models/cm_bank_account.dart';
-import '../services/cm_bank_service.dart';
+import '../../cd/services/bank_service.dart';
 
 class CmBankAccountDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -38,6 +40,9 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
   late TextEditingController _remarkCtrl;
 
   String _accountType = 'SAVING';
+  String _cmType      = 'BANK';
+  String _currencyCode = 'THB';
+  bool   _isCheckAccount = false;
   int? _bankId;
   String? _bankDisplay;
   int? _glAccountId;
@@ -58,10 +63,13 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
     _nameEn = TextEditingController(text: d?.accountNameEn ?? '');
     _accountNumberCtrl = TextEditingController(text: d?.accountNumber ?? '');
     _remarkCtrl = TextEditingController(text: d?.remark ?? '');
-    _accountType = d?.accountType ?? 'SAVING';
-    _bankId = d?.bankId;
+    _accountType    = d?.accountType    ?? 'SAVING';
+    _cmType         = d?.cmType         ?? 'BANK';
+    _currencyCode   = d?.currencyCode   ?? 'THB';
+    _isCheckAccount = d?.isCheckAccount ?? false;
+    _bankId      = d?.bankId;
     _bankDisplay = d?.bankDisplay.isNotEmpty == true ? d!.bankDisplay : null;
-    _glAccountId = d?.glAccountId;
+    _glAccountId   = d?.glAccountId;
     _glAccountCode = d?.glAccountCode;
     _glAccountName = d?.glAccountName;
     _isActive = d?.isActive ?? true;
@@ -77,12 +85,15 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
       _nameEn.text = widget.selected?.accountNameEn ?? '';
       _accountNumberCtrl.text = widget.selected?.accountNumber ?? '';
       _remarkCtrl.text = widget.selected?.remark ?? '';
-      _accountType = widget.selected?.accountType ?? 'SAVING';
-      _bankId = widget.selected?.bankId;
+      _accountType    = widget.selected?.accountType    ?? 'SAVING';
+      _cmType         = widget.selected?.cmType         ?? 'BANK';
+      _currencyCode   = widget.selected?.currencyCode   ?? 'THB';
+      _isCheckAccount = widget.selected?.isCheckAccount ?? false;
+      _bankId      = widget.selected?.bankId;
       _bankDisplay = widget.selected?.bankDisplay.isNotEmpty == true
           ? widget.selected!.bankDisplay
           : null;
-      _glAccountId = widget.selected?.glAccountId;
+      _glAccountId   = widget.selected?.glAccountId;
       _glAccountCode = widget.selected?.glAccountCode;
       _glAccountName = widget.selected?.glAccountName;
       _isActive = widget.selected?.isActive ?? true;
@@ -100,10 +111,45 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
     super.dispose();
   }
 
-  Future<void> _pickBank() async {
-    List<CmBank> banks;
+  Future<void> _pickCurrency() async {
+    List<Currency> currencies;
     try {
-      banks = await Provider.of<CmBankService>(context, listen: false).fetchRows();
+      currencies = await Provider.of<CurrencyService>(context, listen: false).fetchRows();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('โหลดสกุลเงินล้มเหลว: $e')));
+      return;
+    }
+    final active = currencies.where((c) => c.isActive).toList()
+      ..sort((a, b) => a.currencyCode.compareTo(b.currencyCode));
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('เลือกสกุลเงิน'),
+        content: SizedBox(
+          width: 380, height: 400,
+          child: ListView.builder(
+            itemCount: active.length,
+            itemBuilder: (_, i) {
+              final c = active[i];
+              return ListTile(
+                leading: Text(c.currencyCode, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                title: Text(c.currencyNameThai),
+                selected: c.currencyCode == _currencyCode,
+                onTap: () { setState(() => _currencyCode = c.currencyCode); Navigator.of(ctx).pop(); },
+              );
+            },
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก', style: TextStyle(color: Colors.red)))],
+      ),
+    );
+  }
+
+  Future<void> _pickBank() async {
+    List<Bank> banks;
+    try {
+      banks = await Provider.of<BankService>(context, listen: false).fetchRows();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -129,9 +175,9 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                   itemBuilder: (_, i) {
                     final b = active[i];
                     return ListTile(
-                      title: Text('${b.bankCode} — ${b.bankNameTh}'),
-                      subtitle: (b.bankNameEn ?? '').isNotEmpty
-                          ? Text(b.bankNameEn!)
+                      title: Text('${b.bankCode} — ${b.bankNameThai}'),
+                      subtitle: (b.bankNameEng ?? '').isNotEmpty
+                          ? Text(b.bankNameEng!)
                           : null,
                       onTap: () {
                         setState(() {
@@ -256,6 +302,9 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
             ? null
             : _accountNumberCtrl.text.trim(),
         accountType: _accountType,
+        cmType: _cmType,
+        currencyCode: _currencyCode,
+        isCheckAccount: _isCheckAccount,
         glAccountId: _glAccountId,
         isActive: _isActive,
         remark: _remarkCtrl.text.trim().isEmpty ? null : _remarkCtrl.text.trim(),
@@ -367,35 +416,84 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // เลขบัญชี / ประเภท
+            // ประเภทหลัก
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              value: _cmType,
+              decoration: const InputDecoration(
+                labelText: 'ประเภทหลัก *',
+                border: OutlineInputBorder(),
+              ),
+              items: cmCmTypeOptions.entries
+                  .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                  .toList(),
+              onChanged: ro ? null : (v) => setState(() => _cmType = v!),
+            ),
+            const SizedBox(height: 12),
+
+            // เลขบัญชี / ประเภทบัญชีธนาคาร (แสดงเฉพาะ BANK)
+            if (_cmType == 'BANK') ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _accountNumberCtrl,
+                      readOnly: ro,
+                      decoration: const InputDecoration(
+                        labelText: 'เลขที่บัญชี',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: _accountType,
+                      decoration: const InputDecoration(
+                        labelText: 'ประเภทบัญชี *',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: cmAccountTypeOptions.entries
+                          .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                          .toList(),
+                      onChanged: ro ? null : (v) => setState(() => _accountType = v!),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // สกุลเงิน + รับ/ออกเช็ค
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
-                    controller: _accountNumberCtrl,
-                    readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'เลขที่บัญชี',
-                      border: OutlineInputBorder(),
+                  child: InkWell(
+                    onTap: ro ? null : _pickCurrency,
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'สกุลเงิน *',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: ro ? null : const Icon(Icons.arrow_drop_down),
+                      ),
+                      child: Text(_currencyCode,
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    value: _accountType,
-                    decoration: const InputDecoration(
-                      labelText: 'ประเภทบัญชี *',
-                      border: OutlineInputBorder(),
+                  child: SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      side: BorderSide(color: Colors.grey.shade400),
                     ),
-                    items: cmAccountTypeOptions.entries
-                        .map((e) =>
-                            DropdownMenuItem(value: e.key, child: Text(e.value)))
-                        .toList(),
-                    onChanged: ro
-                        ? null
-                        : (v) => setState(() => _accountType = v!),
+                    dense: true,
+                    title: const Text('รองรับเช็ค', style: TextStyle(fontSize: 14)),
+                    value: _isCheckAccount,
+                    onChanged: ro ? null : (v) => setState(() => _isCheckAccount = v),
                   ),
                 ),
               ],

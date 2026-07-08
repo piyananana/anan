@@ -824,7 +824,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('FX Revaluation'),
+        title: const Text('ปรับมูลค่าหนี้ตามอัตราแลกเปลี่ยน'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),

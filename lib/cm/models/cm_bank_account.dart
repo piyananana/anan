@@ -9,7 +9,10 @@ class CmBankAccount {
   final String? bankNameTh;
   final String? bankShortName;
   final String? accountNumber;
-  final String accountType; // SAVING / CURRENT / FIXED
+  final String accountType;     // SAVING / CURRENT / FIXED (ประเภทบัญชีธนาคาร)
+  final String cmType;          // BANK / PETTY_CASH (ประเภทหลัก)
+  final String currencyCode;    // THB / USD / ...
+  final bool isCheckAccount;    // รองรับการออก/รับเช็ค
   final int? glAccountId;
   final String? glAccountCode;
   final String? glAccountName;
@@ -31,6 +34,9 @@ class CmBankAccount {
     this.bankShortName,
     this.accountNumber,
     required this.accountType,
+    this.cmType = 'BANK',
+    this.currencyCode = 'THB',
+    this.isCheckAccount = false,
     this.glAccountId,
     this.glAccountCode,
     this.glAccountName,
@@ -53,6 +59,9 @@ class CmBankAccount {
         bankShortName: json['bank_short_name'],
         accountNumber: json['account_number'],
         accountType: json['account_type'] ?? 'SAVING',
+        cmType: json['cm_type'] ?? 'BANK',
+        currencyCode: json['currency_code'] ?? 'THB',
+        isCheckAccount: json['is_check_account'] ?? false,
         glAccountId: json['gl_account_id'],
         glAccountCode: json['gl_account_code'],
         glAccountName: json['gl_account_name'],
@@ -72,6 +81,9 @@ class CmBankAccount {
         'bank_id': bankId,
         'account_number': accountNumber,
         'account_type': accountType,
+        'cm_type': cmType,
+        'currency_code': currencyCode,
+        'is_check_account': isCheckAccount,
         'gl_account_id': glAccountId,
         'is_active': isActive,
         'remark': remark,
@@ -83,11 +95,20 @@ class CmBankAccount {
     return bankCode ?? '';
   }
 
+  bool get isPettyCash => cmType == 'PETTY_CASH';
+  bool get isFcy       => currencyCode != 'THB';
+
   String get displayName => '$accountCode — $accountNameTh';
+  String get cmTypeLabel => cmCmTypeOptions[cmType] ?? cmType;
 }
 
+const Map<String, String> cmCmTypeOptions = {
+  'BANK':       'บัญชีธนาคาร (Bank)',
+  'PETTY_CASH': 'เงินสดย่อย (Petty Cash)',
+};
+
 const Map<String, String> cmAccountTypeOptions = {
-  'SAVING': 'ออมทรัพย์ (Saving)',
+  'SAVING':  'ออมทรัพย์ (Saving)',
   'CURRENT': 'กระแสรายวัน (Current)',
-  'FIXED': 'ฝากประจำ (Fixed)',
+  'FIXED':   'ฝากประจำ (Fixed)',
 };

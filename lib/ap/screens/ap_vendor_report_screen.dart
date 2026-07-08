@@ -194,6 +194,10 @@ class _ApVendorReportScreenState extends State<ApVendorReportScreen> {
           if (v.creditTermDays   > 0) '${v.creditTermDays} วัน',
         ].join(' ');
         if (credit.isNotEmpty) p.add('เครดิต: $credit');
+        if (v.creditLimit > 0) {
+          final fmtCL = NumberFormat('#,##0.00', 'en_US');
+          p.add('วงเงินเครดิต: ${fmtCL.format(v.creditLimit)}');
+        }
         p.add('สถานะ: ${v.isActive ? "ใช้งาน" : "ไม่ใช้งาน"}');
         if ((v.remark ?? '').isNotEmpty) p.add('หมายเหตุ: ${v.remark}');
         return [p.join('  |  ')];

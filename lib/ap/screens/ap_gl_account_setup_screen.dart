@@ -413,7 +413,7 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
   bool get _showAp         => !['60', '65', '70'].contains(_sdt);
   bool get _showExpense    => ['10', '30', '50'].contains(_sdt);
   bool get _showVat        => ['10', '30', '50', '60', '80'].contains(_sdt);
-  bool get _showVatPending => _sdt == '80';
+  bool get _showVatPending => _showVat;
   bool get _showDiscount   => ['10', '50'].contains(_sdt);
   bool get _showAdvance    => ['60', '65', '80'].contains(_sdt);
   bool get _showBank       => ['60', '65', '80'].contains(_sdt);

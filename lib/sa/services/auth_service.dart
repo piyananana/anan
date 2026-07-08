@@ -1,6 +1,8 @@
 import '../../config/app_config.dart';
 // lib/services/auth_service.dart
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -147,6 +149,7 @@ class AuthService with ChangeNotifier {
         'userName': userName,
         'password': password,
         'databaseName': databaseName,
+        'hostname': _getHostname(),
       }),
     );
 
@@ -214,7 +217,7 @@ class AuthService with ChangeNotifier {
         'Content-Type': 'application/json; charset=UTF-8',
         'X-Database-Name': _selectedDatabase ?? '',
       },
-      body: json.encode({'confirmToken': confirmToken, 'forceLogout': forceLogout}),
+      body: json.encode({'confirmToken': confirmToken, 'forceLogout': forceLogout, 'hostname': _getHostname()}),
     );
 
     if (response.statusCode != 200) {
@@ -362,6 +365,15 @@ class AuthService with ChangeNotifier {
         notifyListeners();
       }
     } catch (_) {}
+  }
+
+  static String _getHostname() {
+    if (kIsWeb) return 'web';
+    try {
+      return Platform.localHostname;
+    } catch (_) {
+      return 'unknown';
+    }
   }
 
   Future<void> _loadBranchesFromCache(SharedPreferences prefs) async {

@@ -288,23 +288,21 @@ class _StatusFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
         children: _statuses.map((s) {
           final active = s == selected;
-          return Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: ChoiceChip(
-              label: Text(s == 'All' ? 'ทั้งหมด' : (apPaymentRunStatusLabels[s] ?? s),
-                  style: TextStyle(fontSize: 11, color: active ? Colors.white : null)),
-              selected: active,
-              selectedColor: Colors.blue[600],
-              onSelected: (_) => onChanged(s),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+          return ChoiceChip(
+            label: Text(s == 'All' ? 'ทั้งหมด' : (apPaymentRunStatusLabels[s] ?? s),
+                style: TextStyle(fontSize: 11, color: active ? Colors.white : null)),
+            selected: active,
+            selectedColor: Colors.blue[600],
+            onSelected: (_) => onChanged(s),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           );
         }).toList(),
       ),

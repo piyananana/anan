@@ -425,7 +425,8 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
       3: FixedColumnWidth(90),
       4: FixedColumnWidth(90),
       5: FixedColumnWidth(90),
-      6: FixedColumnWidth(80),
+      6: FixedColumnWidth(90),
+      7: FixedColumnWidth(80),
     };
     final borderSide = BorderSide(width: 1, color: Colors.grey.shade500);
 
@@ -465,6 +466,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                 _tableHeaderCell('สถานะ GL'),
                 _tableHeaderCell('สถานะ AR'),
                 _tableHeaderCell('สถานะ AP'),
+                _tableHeaderCell('สถานะ CM'),
                 _tableHeaderCell('สถานะ IM'),
                 _tableHeaderCell('Actions'),
               ],
@@ -525,6 +527,10 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                   TableCell(child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Center(child: _buildStatusChip(period.apStatus, 'AP', period)),
+                  )),
+                  TableCell(child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Center(child: _buildStatusChip(period.cmStatus, 'CM', period)),
                   )),
                   TableCell(child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
@@ -741,6 +747,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         apStatus: period?.apStatus ?? 'LOCKED',
                         arStatus: period?.arStatus ?? 'LOCKED',
                         imStatus: period?.imStatus ?? 'LOCKED',
+                        cmStatus: period?.cmStatus ?? 'LOCKED',
                       );
 
                       try {

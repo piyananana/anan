@@ -72,21 +72,63 @@ import '../../ar/screens/ar_pre_close_check_screen.dart';
 import '../../ar/screens/ar_fx_revaluation_screen.dart';
 import '../../ar/screens/ar_allowance_run_screen.dart';
 
-import '../../cm/screens/cm_bank_screen.dart';
 import '../../cm/screens/cm_bank_account_screen.dart';
 import '../../cm/screens/cm_payment_method_screen.dart';
+import '../../cm/screens/cm_checkbook_screen.dart';
+import '../../cm/screens/cm_receipt_screen.dart';
+import '../../cm/screens/cm_payment_screen.dart';
+import '../../cm/screens/cm_petty_cash_screen.dart';
+import '../../cm/screens/cm_bank_statement_screen.dart';
+import '../../cm/screens/cm_bank_reconcile_screen.dart';
+import '../../cm/screens/cm_bank_fx_revaluation_screen.dart';
+import '../../cm/screens/cm_cash_position_screen.dart';
+import '../../cm/screens/cm_bank_transaction_report_screen.dart';
+import '../../cm/screens/cm_check_register_screen.dart';
+import '../../cm/screens/cm_inter_bank_transfer_screen.dart';
+import '../../cm/screens/cm_gl_account_setup_screen.dart';
+import '../../cm/screens/cm_pre_close_check_screen.dart';
+import '../../cm/screens/cm_reset_screen.dart';
+import '../../cm/screens/cm_bank_gl_reconcile_report_screen.dart';
+import '../../cm/screens/cm_dashboard_screen.dart';
+import '../../cm/screens/cm_year_end_screen.dart';
+import '../../cm/screens/cm_check_print_screen.dart';
+import '../../cm/screens/cm_check_print_config_screen.dart';
+import '../../cm/screens/cm_bank_opening_balance_screen.dart';
+import '../../cm/screens/cm_fx_gain_loss_report_screen.dart';
+import '../../cm/screens/cm_cash_flow_statement_screen.dart';
+import '../../cm/screens/cm_petty_cash_replenishment_screen.dart';
+import '../../cm/screens/cm_bank_file_export_screen.dart';
+import '../../cm/screens/cm_doc_number_screen.dart';
+import '../../cm/screens/cm_bank_statement_import_screen.dart';
+import '../../cm/screens/cm_post_dated_check_screen.dart';
+import '../../cm/screens/cm_bank_charge_screen.dart';
+import '../../cm/screens/cm_remittance_advice_screen.dart';
+import '../../cm/screens/cm_bulk_payment_screen.dart';
 
 import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
 import '../../ap/screens/ap_vendor_import_screen.dart';
+import '../../ap/screens/ap_vendor_balance_import_screen.dart';
 import '../../ap/screens/ap_vendor_running_screen.dart';
+import '../../ap/screens/ap_reset_screen.dart';
 import '../../ap/screens/ap_vendor_report_screen.dart';
 import '../../ap/screens/ap_wht_report_screen.dart';
 import '../../ap/screens/ap_transaction_screen.dart';
 import '../../ap/screens/ap_gl_account_setup_screen.dart';
 import '../../ap/screens/ap_payment_run_screen.dart';
+import '../../ap/screens/ap_aging_report_screen.dart';
+import '../../ap/screens/ap_due_report_screen.dart';
+import '../../ap/screens/ap_fx_gain_loss_report_screen.dart';
+import '../../ap/screens/ap_movement_report_screen.dart';
+import '../../ap/screens/ap_payment_report_screen.dart';
+import '../../ap/screens/ap_transaction_report_screen.dart';
+import '../../ap/screens/ap_credit_limit_report_screen.dart';
+import '../../ap/screens/ap_year_end_setup_screen.dart';
+import '../../ap/screens/ap_pre_close_check_screen.dart';
+import '../../ap/screens/ap_fx_revaluation_screen.dart';
 import '../../cm/screens/cm_bank_file_format_screen.dart';
 import '../screens/sa_smtp_config_screen.dart';
+import '../screens/sa_user_audit_log_screen.dart';
 
 class Menu {
   final int id;
@@ -215,21 +257,64 @@ class Menu {
     'ArFxRevaluationScreen':  (context) => const ArFxRevaluationScreen(),
     'ArAllowanceRunScreen':   (context) => const ArAllowanceRunScreen(),
 
-    'CmBankScreen': (context) => CmBankScreen(onFieldsChanged: () {}),
+    'CmBankScreen': (context) => BankScreen(onFieldsChanged: () {}),
     'CmBankAccountScreen': (context) => CmBankAccountScreen(onFieldsChanged: () {}),
     'CmPaymentMethodScreen': (context) => CmPaymentMethodScreen(onFieldsChanged: () {}),
+    'CmCheckbookScreen': (context) => const CmCheckbookScreen(),
+    'CmReceiptScreen':    (context) => const CmReceiptScreen(),
+    'CmPaymentScreen':    (context) => const CmPaymentScreen(),
+    'CmPettyCashScreen':       (context) => const CmPettyCashScreen(),
+    'CmBankStatementScreen':         (context) => const CmBankStatementScreen(),
+    'CmBankReconcileScreen':         (context) => const CmBankReconcileScreen(),
+    'CmBankFxRevaluationScreen':     (context) => const CmBankFxRevaluationScreen(),
+    'CmCashPositionScreen':          (context) => const CmCashPositionScreen(),
+    'CmBankTransactionReportScreen': (context) => const CmBankTransactionReportScreen(),
+    'CmCheckRegisterScreen':         (context) => const CmCheckRegisterScreen(),
+    'CmInterBankTransferScreen':         (context) => const CmInterBankTransferScreen(),
+    'CmGlAccountSetupScreen':            (context) => const CmGlAccountSetupScreen(),
+    'CmPreCloseCheckScreen':             (context) => const CmPreCloseCheckScreen(),
+    'CmResetScreen':                     (context) => const CmResetScreen(),
+    'CmBankGlReconcileReportScreen':     (context) => const CmBankGlReconcileReportScreen(),
+    'CmDashboardScreen':                 (context) => const CmDashboardScreen(),
+    'CmYearEndScreen':                   (context) => const CmYearEndScreen(),
+    'CmCheckPrintScreen':                (context) => const CmCheckPrintScreen(),
+    'CmCheckPrintConfigScreen':          (context) => const CmCheckPrintConfigScreen(),
+    'CmBankOpeningBalanceScreen':        (context) => const CmBankOpeningBalanceScreen(),
+    'CmFxGainLossReportScreen':          (context) => const CmFxGainLossReportScreen(),
+    'CmCashFlowStatementScreen':         (context) => const CmCashFlowStatementScreen(),
+    'CmPettyCashReplenishmentScreen':    (context) => const CmPettyCashReplenishmentScreen(),
+    'CmBankFileExportScreen':            (context) => const CmBankFileExportScreen(),
+    'CmDocNumberScreen':                 (context) => const CmDocNumberScreen(),
+    'CmBankStatementImportScreen':       (context) => const CmBankStatementImportScreen(),
+    'CmPostDatedCheckScreen':            (context) => const CmPostDatedCheckScreen(),
+    'CmBankChargeScreen':                (context) => const CmBankChargeScreen(),
+    'CmRemittanceAdviceScreen':          (context) => const CmRemittanceAdviceScreen(),
+    'CmBulkPaymentScreen':               (context) => const CmBulkPaymentScreen(),
 
     'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
     'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),
     'ApVendorImportScreen': (context) => ApVendorImportScreen(onFieldsChanged: () {}),
+    'ApVendorBalanceImportScreen': (context) => ApVendorBalanceImportScreen(onFieldsChanged: () {}),
+    'ApResetScreen': (context) => const ApResetScreen(),
     'ApVendorRunningScreen': (context) => const ApVendorRunningScreen(),
     'ApVendorReportScreen': (context) => const ApVendorReportScreen(),
     'ApWhtReportScreen':   (context) => const ApWhtReportScreen(),
     'ApTransactionScreen': (context) => const ApTransactionScreen(),
     'ApGlAccountSetupScreen': (context) => const ApGlAccountSetupScreen(),
     'ApPaymentRunScreen': (context) => const ApPaymentRunScreen(),
+    'ApAgingReportScreen':       (context) => const ApAgingReportScreen(),
+    'ApDueReportScreen':         (context) => const ApDueReportScreen(),
+    'ApFxGainLossReportScreen':  (context) => const ApFxGainLossReportScreen(),
+    'ApMovementReportScreen':    (context) => const ApMovementReportScreen(),
+    'ApPaymentReportScreen':     (context) => const ApPaymentReportScreen(),
+    'ApTransactionReportScreen':  (context) => const ApTransactionReportScreen(),
+    'ApCreditLimitReportScreen': (context) => const ApCreditLimitReportScreen(),
+    'ApYearEndSetupScreen':     (context) => const ApYearEndSetupScreen(),
+    'ApPreCloseCheckScreen':    (context) => const ApPreCloseCheckScreen(),
+    'ApFxRevaluationScreen':    (context) => const ApFxRevaluationScreen(),
     'CmBankFileFormatScreen': (context) => const CmBankFileFormatScreen(),
-    'SaSmtpConfigScreen':     (context) => const SaSmtpConfigScreen(),
+    'SaSmtpConfigScreen':        (context) => const SaSmtpConfigScreen(),
+    'SaUserAuditLogScreen':      (context) => const SaUserAuditLogScreen(),
     // 'PeriodScreen': (context) => const PeriodScreen(),
     // Add all your custom widgets here
     // 'YourCustomWidget1': (context) => const YourCustomWidget1(),

@@ -7,6 +7,7 @@ import '../services/menu_service.dart';
 import '../services/auth_service.dart';
 import '../services/inactivity_service.dart';
 import '../services/password_policy_service.dart';
+import '../widgets/dashboard_widget.dart';
 import '../widgets/menu_tree_view.dart';
 import '../widgets/change_password_dialog.dart';
 import '../widgets/confirm_logout_dialog.dart';
@@ -779,14 +780,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         ),
                                   Expanded(
                                     child: _openTabs.isEmpty
-                                        ? const Center(
-                                            child: Text(
-                                              'กรุณาเลือกเมนูจากด้านซ้ายเพื่อเปิดหน้าจอ',
-                                              style: TextStyle(
-                                                  fontSize: 20,
-                                                  color: Colors.grey),
-                                            ),
-                                          )
+                                        ? const DashboardWidget()
                                         : IndexedStack(
                                             index: _currentIndex,
                                             children:

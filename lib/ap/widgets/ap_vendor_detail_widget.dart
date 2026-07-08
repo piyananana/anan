@@ -734,6 +734,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   late TextEditingController _remarkCtrl;
   late TextEditingController _creditMonthsCtrl;
   late TextEditingController _creditDaysCtrl;
+  late TextEditingController _creditLimitCtrl;
 
   bool _isActive = true;
 
@@ -793,6 +794,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _remarkCtrl       = TextEditingController();
     _creditMonthsCtrl = TextEditingController(text: '0');
     _creditDaysCtrl   = TextEditingController(text: '30');
+    _creditLimitCtrl  = TextEditingController(text: '0');
   }
 
   @override
@@ -813,7 +815,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   void dispose() {
     _codeCtrl.dispose(); _oldCodeCtrl.dispose(); _nameTHCtrl.dispose();
     _nameENCtrl.dispose(); _taxIdCtrl.dispose(); _remarkCtrl.dispose();
-    _creditMonthsCtrl.dispose(); _creditDaysCtrl.dispose();
+    _creditMonthsCtrl.dispose(); _creditDaysCtrl.dispose(); _creditLimitCtrl.dispose();
     super.dispose();
   }
 
@@ -886,6 +888,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _remarkCtrl.text       = v.remark ?? '';
     _creditMonthsCtrl.text = '${v.creditTermMonths}';
     _creditDaysCtrl.text   = '${v.creditTermDays}';
+    _creditLimitCtrl.text  = '${v.creditLimit}';
     _isActive              = v.isActive;
     _selectedCurrencyCode  = v.currencyCode;
     _selectedCurrencyNameThai = null;
@@ -908,7 +911,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   void _clear() {
     _codeCtrl.clear(); _oldCodeCtrl.clear(); _nameTHCtrl.clear();
     _nameENCtrl.clear(); _taxIdCtrl.clear(); _remarkCtrl.clear();
-    _creditMonthsCtrl.text = '0'; _creditDaysCtrl.text = '30';
+    _creditMonthsCtrl.text = '0'; _creditDaysCtrl.text = '30'; _creditLimitCtrl.text = '0';
     _isActive = true;
     _selectedCurrencyCode = null; _selectedCurrencyNameThai = null;
     _vendorGroupId = null; _vendorGroupCode = null; _vendorGroupName = null;
@@ -941,6 +944,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
         vendorType: _vendorType,
         creditTermMonths: int.tryParse(_creditMonthsCtrl.text) ?? 0,
         creditTermDays: int.tryParse(_creditDaysCtrl.text) ?? 30,
+        creditLimit: double.tryParse(_creditLimitCtrl.text) ?? 0,
         currencyCode: _selectedCurrencyCode ?? 'THB',
         isActive: _isActive,
         remark: _remarkCtrl.text.trim().isEmpty ? null : _remarkCtrl.text.trim(),
@@ -1447,6 +1451,10 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
             Expanded(child: _buildField('เครดิต (วัน)', _creditDaysCtrl,
                 keyboard: TextInputType.number,
                 formatters: [FilteringTextInputFormatter.digitsOnly])),
+            const SizedBox(width: 10),
+            Expanded(child: _buildField('วงเงินเครดิต', _creditLimitCtrl,
+                keyboard: const TextInputType.numberWithOptions(decimal: true),
+                formatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))])),
             const SizedBox(width: 10),
             Expanded(
               child: Padding(
