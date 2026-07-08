@@ -13,6 +13,10 @@ class CmBankStatementService {
   final _auth = AuthService();
   final _base = AppConfig.apiCm;
 
+  String _err(String body) {
+    try { return (json.decode(body) as Map)['error']?.toString() ?? body; } catch (_) { return body; }
+  }
+
   // ── Statements ─────────────────────────────────────────────────────────────
 
   Future<List<CmBankStatement>> fetchStatements({
@@ -45,7 +49,7 @@ class CmBankStatementService {
       body: json.encode(body),
     );
     if (resp.statusCode == 201) return CmBankStatement.fromJson(json.decode(resp.body));
-    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    throw Exception(_err(resp.body));
   }
 
   Future<CmBankStatement> updateStatement(int id, Map<String, dynamic> body) async {
@@ -56,27 +60,27 @@ class CmBankStatementService {
       body: json.encode(body),
     );
     if (resp.statusCode == 200) return CmBankStatement.fromJson(json.decode(resp.body));
-    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    throw Exception(_err(resp.body));
   }
 
   Future<CmBankStatement> confirmStatement(int id) async {
     final headers = await _auth.getAuthHeader();
     final resp = await http.put(Uri.parse('$_base/cm_bank_statement/$id/confirm'), headers: headers);
     if (resp.statusCode == 200) return CmBankStatement.fromJson(json.decode(resp.body));
-    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    throw Exception(_err(resp.body));
   }
 
   Future<CmBankStatement> voidStatement(int id) async {
     final headers = await _auth.getAuthHeader();
     final resp = await http.put(Uri.parse('$_base/cm_bank_statement/$id/void'), headers: headers);
     if (resp.statusCode == 200) return CmBankStatement.fromJson(json.decode(resp.body));
-    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    throw Exception(_err(resp.body));
   }
 
   Future<void> deleteStatement(int id) async {
     final headers = await _auth.getAuthHeader();
     final resp = await http.delete(Uri.parse('$_base/cm_bank_statement/$id'), headers: headers);
-    if (resp.statusCode != 200) throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    if (resp.statusCode != 200) throw Exception(_err(resp.body));
   }
 
   // ── Lines ──────────────────────────────────────────────────────────────────
@@ -103,7 +107,7 @@ class CmBankStatementService {
       body: json.encode(body),
     );
     if (resp.statusCode == 201) return CmBankStatementLine.fromJson(json.decode(resp.body));
-    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    throw Exception(_err(resp.body));
   }
 
   Future<Map<String, dynamic>> bulkInsertLines(
@@ -118,7 +122,7 @@ class CmBankStatementService {
       body: json.encode({'lines': lines, if (fileName != null) 'file_name': fileName}),
     );
     if (resp.statusCode == 200) return json.decode(resp.body) as Map<String, dynamic>;
-    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    throw Exception(_err(resp.body));
   }
 
   Future<CmBankStatementLine> updateLine(int lineId, Map<String, dynamic> body) async {
@@ -129,7 +133,7 @@ class CmBankStatementService {
       body: json.encode(body),
     );
     if (resp.statusCode == 200) return CmBankStatementLine.fromJson(json.decode(resp.body));
-    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    throw Exception(_err(resp.body));
   }
 
   Future<void> deleteLine(int lineId) async {
@@ -138,7 +142,7 @@ class CmBankStatementService {
       Uri.parse('$_base/cm_bank_statement_line/$lineId'),
       headers: headers,
     );
-    if (resp.statusCode != 200) throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    if (resp.statusCode != 200) throw Exception(_err(resp.body));
   }
 
   // ── Reconcile ─────────────────────────────────────────────────────────────
@@ -178,7 +182,7 @@ class CmBankStatementService {
         'reconcile_date': reconcileDate,
       }),
     );
-    if (resp.statusCode != 200) throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    if (resp.statusCode != 200) throw Exception(_err(resp.body));
   }
 
   Future<void> unreconcileStatementLine(int statementLineId) async {
@@ -187,7 +191,7 @@ class CmBankStatementService {
       Uri.parse('$_base/cm_reconcile/statement_line/$statementLineId/unreconcile'),
       headers: headers,
     );
-    if (resp.statusCode != 200) throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+    if (resp.statusCode != 200) throw Exception(_err(resp.body));
   }
 
   Future<Map<String, dynamic>> getReconcileSummary({

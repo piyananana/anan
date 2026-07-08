@@ -923,7 +923,7 @@ class _ReplenishmentTabState extends State<_ReplenishmentTab> {
         _replenishments = list;
         if (_selected != null) {
           final found = list.where((r) => r.id == _selected!.id).firstOrNull;
-          if (found != null && found.id != _selected!.id) _loadDetailVouchers(found);
+          if (found != null) _loadDetailVouchers(found);
           _selected = found;
         }
       });

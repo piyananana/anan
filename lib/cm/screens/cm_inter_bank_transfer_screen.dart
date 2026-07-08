@@ -134,8 +134,8 @@ class _State extends State<CmInterBankTransferScreen>
       _selected   = tx;
       _isCreating = false;
       _fDate      = tx.transferDate;
-      _fFromAcc   = _accounts.firstWhere((a) => a.id == tx.fromBankAccountId, orElse: () => _accounts.first);
-      _fToAcc     = _accounts.firstWhere((a) => a.id == tx.toBankAccountId,   orElse: () => _accounts.first);
+      _fFromAcc   = _accounts.where((a) => a.id == tx.fromBankAccountId).firstOrNull;
+      _fToAcc     = _accounts.where((a) => a.id == tx.toBankAccountId).firstOrNull;
       _fAmountCtrl.text   = tx.amount.toString();
       _fRateCtrl.text     = tx.exchangeRate.toString();
       _fAmountLcCtrl.text = tx.amountLc.toString();
@@ -181,14 +181,14 @@ class _State extends State<CmInterBankTransferScreen>
         if (!mounted) return;
         setState(() { _isCreating = false; });
         await _loadList();
-        final created = _txList.firstWhere((t) => t.id == id, orElse: () => _txList.first);
-        setState(() { _selected = created; });
+        final created = _txList.where((t) => t.id == id).firstOrNull;
+        if (created != null) setState(() { _selected = created; });
       } else {
         await _txSvc.updateRow(_selected!.id!, body);
         await _loadList();
         if (mounted) {
-          final updated = _txList.firstWhere((t) => t.id == _selected!.id, orElse: () => _txList.first);
-          setState(() { _selected = updated; });
+          final updated = _txList.where((t) => t.id == _selected!.id).firstOrNull;
+          if (updated != null) setState(() { _selected = updated; });
         }
       }
     } catch (e) {
@@ -226,11 +226,13 @@ class _State extends State<CmInterBankTransferScreen>
           glDocCode: _fGlDoc?['doc_code'] ?? _selected!.glDocCode);
       await _loadList();
       if (mounted) {
-        final updated = _txList.firstWhere((t) => t.id == _selected!.id, orElse: () => _txList.first);
-        setState(() { _selected = updated; });
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Post GL สำเร็จ: ${updated.glDocNo ?? ''}'),
-                backgroundColor: Colors.green.shade700));
+        final updated = _txList.where((t) => t.id == _selected!.id).firstOrNull;
+        if (updated != null) {
+          setState(() { _selected = updated; });
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Post GL สำเร็จ: ${updated.glDocNo ?? ''}'),
+                  backgroundColor: Colors.green.shade700));
+        }
       }
     } catch (e) {
       _showError(e.toString());
@@ -260,8 +262,8 @@ class _State extends State<CmInterBankTransferScreen>
       await _txSvc.voidRow(_selected!.id!);
       await _loadList();
       if (mounted) {
-        final updated = _txList.firstWhere((t) => t.id == _selected!.id, orElse: () => _txList.first);
-        setState(() { _selected = updated; });
+        final updated = _txList.where((t) => t.id == _selected!.id).firstOrNull;
+        if (updated != null) setState(() { _selected = updated; });
       }
     } catch (e) {
       _showError(e.toString());

@@ -277,7 +277,7 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
                   leading: CircleAvatar(
                     radius: 16,
                     backgroundColor: selected ? _kColor : Colors.blueGrey.shade300,
-                    child: Text(b.currencyCode.substring(0, 1),
+                    child: Text(b.currencyCode.isNotEmpty ? b.currencyCode.substring(0, 1) : '?',
                         style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
                   ),
                   title: Text(b.accountCode,
