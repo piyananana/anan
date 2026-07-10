@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 
 class ApResetScreen extends StatefulWidget {
   const ApResetScreen({super.key});
@@ -254,11 +255,7 @@ class _ApResetScreenState extends State<ApResetScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.delete_forever, color: Colors.white, size: 22),
-          SizedBox(width: 8),
-          Text('ล้างข้อมูลธุรกรรม AP'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.red[900],
         foregroundColor: Colors.white,
         actions: [

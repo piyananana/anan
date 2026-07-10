@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import '../utils/menu_scope.dart';
 
 import '../models/anan_module.dart';
 import '../models/user.dart';
@@ -350,7 +351,7 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.admin_panel_settings, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการสิทธิ์เมนูของผู้ใช้')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

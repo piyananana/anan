@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/ar_collector.dart';
 import '../services/ar_collector_service.dart';
 import '../widgets/ar_collector_list_widget.dart';
@@ -139,11 +140,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.badge_outlined, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ผู้วางบิล/รับชำระ'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.indigo[700],
         foregroundColor: Colors.white,
         actions: [

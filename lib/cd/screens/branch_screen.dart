@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 // import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/branch.dart';
 import '../services/branch_service.dart';
 import '../widgets/branch_list_widget.dart';
@@ -281,7 +282,7 @@ class _BranchScreenState extends State<BranchScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.store, color: Colors.white, size: 20), SizedBox(width: 8), Text('สาขา')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

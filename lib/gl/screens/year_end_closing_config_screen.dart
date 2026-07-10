@@ -1,5 +1,6 @@
 // lib/gl/screens/year_end_closing_config_screen.dart
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/account.dart';
 import '../models/year_end_closing.dart';
 import '../services/account_service.dart';
@@ -140,7 +141,7 @@ class _YearEndClosingConfigScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.tune, color: Colors.white, size: 20), SizedBox(width: 8), Text('ตั้งค่าการปิดบัญชีสิ้นปี')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
         actions: [

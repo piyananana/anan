@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/cm_payment_method.dart';
 import '../services/cm_payment_method_service.dart';
 import '../widgets/cm_payment_method_list_widget.dart';
@@ -125,11 +126,7 @@ class _CmPaymentMethodScreenState extends State<CmPaymentMethodScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.payments, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ตั้งค่าประเภทการชำระเงิน'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepPurple[700],
         foregroundColor: Colors.white,
         actions: [

@@ -1,6 +1,7 @@
 // lib/cm/screens/cm_petty_cash_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../../gl/models/account.dart';
 import '../../gl/services/account_service.dart';
 import '../../sa/models/module_document.dart';
@@ -64,7 +65,7 @@ class _CmPettyCashScreenState extends State<CmPettyCashScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('เงินสดย่อย'),
+        title: const MenuTitle(),
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
         actions: [

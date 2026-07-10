@@ -1,5 +1,6 @@
 // lib/cm/screens/cm_reset_screen.dart
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../services/cm_reset_service.dart';
 
 const _kTheme = Color(0xFF1565C0);
@@ -97,7 +98,7 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
-        title: const Text('Reset ข้อมูล CM'),
+        title: const MenuTitle(),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),

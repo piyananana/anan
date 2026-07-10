@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../sa/utils/menu_scope.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
 import '../services/ap_movement_report_service.dart';
@@ -577,11 +578,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.swap_vert, size: 20, color: Colors.white),
-          SizedBox(width: 8),
-          Text('รายงานการเคลื่อนไหวเจ้าหนี้'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blueGrey[800],
         foregroundColor: Colors.white,
         actions: [

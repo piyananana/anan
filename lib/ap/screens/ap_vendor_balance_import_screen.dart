@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../../utils/file_download.dart';
 
 class ApVendorBalanceImportScreen extends StatefulWidget {
@@ -222,11 +223,7 @@ class _ApVendorBalanceImportScreenState extends State<ApVendorBalanceImportScree
       appBar: AppBar(
         backgroundColor: const Color(0xFF4527A0),
         foregroundColor: Colors.white,
-        title: const Row(children: [
-          Icon(Icons.upload_file, color: Colors.white),
-          SizedBox(width: 8),
-          Text('นำเข้ายอดเจ้าหนี้คงเหลือ', style: TextStyle(color: Colors.white)),
-        ]),
+        title: const MenuTitle(),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

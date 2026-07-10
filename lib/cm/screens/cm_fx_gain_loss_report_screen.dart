@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../../cm/models/cm_bank_account.dart';
 
 const _kTheme = Color(0xFF1565C0);
@@ -101,7 +102,7 @@ class _State extends State<CmFxGainLossReportScreen> with AutomaticKeepAliveClie
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
-        title: const Text('รายงาน FX Gain/Loss'),
+        title: const MenuTitle(),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),

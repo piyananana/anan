@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:excel/excel.dart';
 
+import '../../sa/utils/menu_scope.dart';
 import '../../utils/file_download.dart';
 
 import '../models/ap_vendor.dart';
@@ -480,11 +481,7 @@ class _ApFxGainLossReportScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.currency_exchange, size: 20, color: Colors.white),
-          SizedBox(width: 8),
-          Text('รายงานกำไร/ขาดทุนจากอัตราแลกเปลี่ยนเจ้าหนี้'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blueGrey[800],
         foregroundColor: Colors.white,
         actions: [

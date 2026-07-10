@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../utils/menu_scope.dart';
 import '../models/doc_number_branch.dart';
 import '../models/module_document.dart';
 import '../services/doc_number_branch_service.dart';
@@ -331,11 +332,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.format_list_numbered, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ตั้งค่าเลขที่เอกสารตามสาขา'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

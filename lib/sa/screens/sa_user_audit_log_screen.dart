@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import '../utils/menu_scope.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -336,8 +337,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF37474F),
         foregroundColor: Colors.white,
-        title: const Text('รายงานตรวจสอบการเข้าใช้งาน',
-            style: TextStyle(fontSize: 16)),
+        title: const MenuTitle(),
         actions: [
           TextButton.icon(
             onPressed: _showPdfPreview,

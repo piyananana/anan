@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -778,7 +779,7 @@ class _DailyTransactionReportScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.receipt_long, color: Colors.white, size: 20), SizedBox(width: 8), Text('บันทึกรายการบัญชี (Daily Transaction)')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.indigo[800],
         foregroundColor: Colors.white,
         actions: [

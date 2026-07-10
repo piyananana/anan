@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/vat_rate.dart';
 import '../services/vat_rate_service.dart';
 import '../widgets/vat_rate_list_widget.dart';
@@ -174,7 +175,7 @@ class _VatRateScreenState extends State<VatRateScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.percent, color: Colors.white, size: 20), SizedBox(width: 8), Text('อัตราภาษีมูลค่าเพิ่ม (VAT Rate)')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.teal[700],
         foregroundColor: Colors.white,
         actions: [

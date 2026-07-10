@@ -134,6 +134,7 @@ class Menu {
   final int id;
   final int? parentId;
   final String menuName;
+  final String menuNameEn;
   final String menuType; // 'folder', 'link', 'widget'
   final String?
       targetPath; // e.g., 'HomePage', 'ProductListScreen', '/products'
@@ -321,10 +322,14 @@ class Menu {
     // 'YourCustomWidget2': (context) => const YourCustomWidget2(),
   };
 
+  String localName(bool isEnglish) =>
+      isEnglish && menuNameEn.isNotEmpty ? menuNameEn : menuName;
+
   Menu({
     required this.id,
     this.parentId,
     required this.menuName,
+    this.menuNameEn = '',
     required this.menuType,
     this.targetPath,
     required this.sortOrder,
@@ -349,7 +354,8 @@ class Menu {
     return Menu(
         id: json['id'],
         parentId: json['parent_id'],
-        menuName: json['menu_name'],
+        menuName: json['menu_name'] ?? '',
+        menuNameEn: json['menu_name_en'] ?? '',
         menuType: json['menu_type'],
         targetPath: json['target_path'] ?? '',
         sortOrder: json['sort_order'],

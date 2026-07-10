@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/menu.dart';
 import '../services/menu_service.dart';
+import '../services/language_provider.dart';
 
 // Enum เพื่อบอกสถานะของ Node ใน TreeView
 enum NodeMode {
@@ -461,10 +462,12 @@ class _MenuScreenState extends State<MenuScreen>
                 Icon(isFolder ? Icons.folder : Icons.insert_drive_file),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    menu.menuName,
-                    style: const TextStyle(fontSize: 16),
-                    overflow: TextOverflow.ellipsis,
+                  child: Consumer<LanguageProvider>(
+                    builder: (ctx, lang, _) => Text(
+                      menu.localName(lang.isEnglish),
+                      style: const TextStyle(fontSize: 16),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
                 // Icon ปุ่ม Add สำหรับ Folder

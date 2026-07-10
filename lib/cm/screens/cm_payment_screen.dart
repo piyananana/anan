@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import '../../sa/utils/menu_scope.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -243,7 +244,7 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('รายการจ่ายเงิน (CM Payment)'),
+        title: const MenuTitle(),
         backgroundColor: _kColor,
         foregroundColor: Colors.white,
         actions: [

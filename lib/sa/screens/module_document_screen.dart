@@ -1,6 +1,7 @@
 // screens/module_document_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../utils/menu_scope.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/anan_module.dart';
@@ -281,7 +282,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.description, color: Colors.white, size: 20), SizedBox(width: 8), Text('ประเภทเอกสารและเลขที่')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
         actions: [

@@ -1,6 +1,7 @@
 // lib/ar/screens/ar_customer_running_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/ar_customer_running.dart';
 import '../services/ar_customer_running_service.dart';
 
@@ -144,11 +145,7 @@ class _ArCustomerRunningScreenState extends State<ArCustomerRunningScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.tag, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ตั้งค่ารหัสลูกหนี้อัตโนมัติ'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [

@@ -1,6 +1,7 @@
 // lib/cm/screens/cm_pre_close_check_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../services/cm_pre_close_check_service.dart';
 
 const _kTheme = Color(0xFF1565C0);
@@ -59,7 +60,7 @@ class _State extends State<CmPreCloseCheckScreen>
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
-        title: const Text('ตรวจสอบก่อนปิดงวด — CM'),
+        title: const MenuTitle(),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),

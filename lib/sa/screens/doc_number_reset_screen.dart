@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../utils/menu_scope.dart';
 import '../models/doc_number_branch.dart';
 import '../services/doc_number_branch_service.dart';
 import '../../cd/models/branch.dart';
@@ -138,11 +139,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.restart_alt, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('Reset เลขที่เอกสาร'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
       ),

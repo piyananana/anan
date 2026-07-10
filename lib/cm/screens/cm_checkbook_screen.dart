@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import '../../sa/utils/menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_checkbook.dart';
 import '../services/cm_bank_account_service.dart';
@@ -176,7 +177,7 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('สมุดเช็ค & ตำแหน่งพิมพ์'),
+        title: const MenuTitle(),
         backgroundColor: _kColor,
         foregroundColor: Colors.white,
         bottom: TabBar(

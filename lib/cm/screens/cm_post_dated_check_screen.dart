@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../services/cm_period_service.dart';
 
 const _kTheme   = Color(0xFF1565C0);
@@ -281,7 +282,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
         toolbarHeight: 40,
-        title: const Text('เช็คล่วงหน้า (Post-Dated Check)', style: TextStyle(fontSize: 15)),
+        title: const MenuTitle(),
         actions: [
           if (_isNew || (_selected != null && _selected!['status'] == 'Holding'))
             TextButton.icon(

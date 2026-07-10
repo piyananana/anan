@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../../gl/models/account.dart';
 import '../../gl/services/account_service.dart';
 import '../../sa/models/module_document.dart';
@@ -217,11 +218,7 @@ class _ApGlAccountSetupScreenState extends State<ApGlAccountSetupScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.settings_applications, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ตั้งค่ารหัสบัญชี GL สำหรับเจ้าหนี้'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [

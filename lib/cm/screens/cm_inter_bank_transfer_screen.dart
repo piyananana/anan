@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_inter_bank_transfer.dart';
 import '../services/cm_bank_account_service.dart';
@@ -313,7 +314,7 @@ class _State extends State<CmInterBankTransferScreen>
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
-        title: const Text('โอนเงินระหว่างบัญชี'),
+        title: const MenuTitle(),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),

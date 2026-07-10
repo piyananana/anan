@@ -4,6 +4,7 @@ import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../../sa/utils/menu_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -606,7 +607,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.account_balance, color: Colors.white, size: 20), SizedBox(width: 8), Text('งบดุล (Balance Sheet)')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

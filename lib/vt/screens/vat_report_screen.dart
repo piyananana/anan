@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 import '../services/vat_report_service.dart';
 import '../../sa/models/company.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../../sa/services/company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
@@ -309,11 +310,7 @@ class _VatReportScreenState extends State<VatReportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.receipt_long, size: 20, color: Colors.white),
-          SizedBox(width: 8),
-          Text('รายงานภาษีซื้อ / ภาษีขาย'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
         actions: [

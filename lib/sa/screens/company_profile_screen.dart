@@ -1,6 +1,7 @@
 // screens/company_profile_screen.dart
 
 import 'package:flutter/material.dart';
+import '../utils/menu_scope.dart';
 // import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show Uint8List, kIsWeb; // เพิ่ม kIsWeb
@@ -486,7 +487,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
     return Scaffold(
       backgroundColor: Colors.blueGrey[50],
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.business, color: Colors.white, size: 20), SizedBox(width: 8), Text('ข้อมูลองค์กร/บริษัท')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         // leading: IconButton(

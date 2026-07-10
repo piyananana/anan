@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 
 const _kTheme  = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -268,7 +269,7 @@ class _CmRemittanceAdviceScreenState extends State<CmRemittanceAdviceScreen>
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
         toolbarHeight: 40,
-        title: const Text('ใบแจ้งการชำระเงิน (Remittance Advice)', style: TextStyle(fontSize: 15)),
+        title: const MenuTitle(),
         actions: [
           if (_selected.isNotEmpty)
             TextButton.icon(

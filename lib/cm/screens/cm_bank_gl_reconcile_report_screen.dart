@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -76,7 +77,7 @@ class _State extends State<CmBankGlReconcileReportScreen>
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
-        title: const Text('กระทบยอด CM vs GL'),
+        title: const MenuTitle(),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),

@@ -5,6 +5,8 @@ import '../models/password_status.dart';
 import '../models/user.dart';
 import '../services/menu_service.dart';
 import '../services/auth_service.dart';
+import '../services/language_provider.dart';
+import '../utils/menu_scope.dart';
 import '../services/inactivity_service.dart';
 import '../services/password_policy_service.dart';
 import '../widgets/dashboard_widget.dart';
@@ -28,9 +30,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => HomeScreenState();
 }
 
-class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+class HomeScreenState extends State<HomeScreen> {
   // ตัวแปรสำหรับจัดการ Tab
-  late TabController _tabController;
   final List<Menu> _openTabs = []; // รายการของ Menu ที่เปิดเป็น Tab
   final Map<int, Widget> _cachedTabWidgets = {}; // cache widget ของแต่ละ tab
   int _currentIndex = 0; // Index ของ Tab ที่กำลัง Active
@@ -71,8 +72,6 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     // _allMenus = authService.userMenus;
 
     _loadUserAndMenus();
-    _tabController = TabController(length: _openTabs.length, vsync: this);
-    _tabController.addListener(_handleTabSelection);
   }
 
   @override
@@ -87,38 +86,19 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     InactivityService().stop();
-    _tabController.removeListener(_handleTabSelection);
-    _tabController.dispose();
-
     _searchController.dispose();
     super.dispose();
-  }
-
-  // ฟังก์ชันนี้จะถูกเรียกเมื่อมีการเปลี่ยนแปลง Tab
-  void _handleTabSelection() {
-    if (_tabController.indexIsChanging) {
-      setState(() {
-        _currentIndex = _tabController.index;
-      });
-    }
   }
 
   // --- Functions for Tab Management ---
 
   void _openTab(Menu menu) {
-    int existingIndex = _openTabs.indexWhere((tab) => tab.id == menu.id);
-
+    final existingIndex = _openTabs.indexWhere((tab) => tab.id == menu.id);
     if (existingIndex != -1) {
-      _tabController.animateTo(existingIndex); // สลับไปที่ Tab ที่มีอยู่แล้ว
+      setState(() => _currentIndex = existingIndex);
     } else {
       setState(() {
         _openTabs.add(menu);
-        _tabController = TabController(
-            length: _openTabs.length,
-            vsync: this,
-            initialIndex: _openTabs.length - 1);
-        _tabController.addListener(
-            _handleTabSelection); // ต้องเพิ่ม listener ใหม่เพราะ controller ถูกสร้างใหม่
         _currentIndex = _openTabs.length - 1;
       });
     }
@@ -126,39 +106,33 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _closeTab(int index) {
     if (index < 0 || index >= _openTabs.length) return;
-
     setState(() {
       final menuId = _openTabs[index].id;
       if (menuId != null) _cachedTabWidgets.remove(menuId);
       _openTabs.removeAt(index);
-
       if (_openTabs.isEmpty) {
-        // ถ้าไม่มี Tab เหลืออยู่
-        _tabController =
-            TabController(length: 0, vsync: this); // สร้างใหม่ด้วย length 0
-        _tabController
-            .removeListener(_handleTabSelection); // ต้อง remove listener ก่อน
         _currentIndex = 0;
       } else {
-        // คำนวณ Index ใหม่หลังจากลบ Tab
-        // หาก Index ที่ถูกลบ น้อยกว่าหรือเท่ากับ _currentIndex และ _currentIndex ไม่ใช่ 0
-        // ให้ลด _currentIndex ลง 1
         int newIndex = _currentIndex;
-        if (index <= _currentIndex && _currentIndex > 0) {
-          newIndex = _currentIndex - 1;
-        } else if (_openTabs.length <= newIndex) {
-          newIndex = _openTabs.length - 1;
-        }
-        newIndex = newIndex.clamp(0, _openTabs.length - 1);
+        if (index <= _currentIndex && _currentIndex > 0) newIndex = _currentIndex - 1;
+        _currentIndex = newIndex.clamp(0, _openTabs.length - 1);
+      }
+    });
+  }
 
-        _tabController
-            .removeListener(_handleTabSelection); // ต้อง remove listener ก่อน
-        _tabController.dispose(); // ทิ้ง controller เก่า
-
-        _tabController = TabController(
-            length: _openTabs.length, vsync: this, initialIndex: newIndex);
-        _tabController.addListener(_handleTabSelection); // เพิ่ม listener ใหม่
-        _currentIndex = newIndex;
+  void _reorderTab(int from, int to) {
+    if (to == from || to == from + 1) return;
+    setState(() {
+      final insertAt = to > from ? to - 1 : to;
+      final tab = _openTabs.removeAt(from);
+      _openTabs.insert(insertAt, tab);
+      if (_currentIndex == from) {
+        _currentIndex = insertAt;
+      } else {
+        int adj = _currentIndex;
+        if (from < adj) adj--;
+        if (insertAt <= adj) adj++;
+        _currentIndex = adj.clamp(0, _openTabs.length - 1);
       }
     });
   }
@@ -580,6 +554,27 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ),
               const SizedBox(width: 8),
+              // ── Language toggle ───────────────────────────────────────
+              Consumer<LanguageProvider>(
+                builder: (ctx, lang, _) => GestureDetector(
+                  onTap: lang.toggle,
+                  child: Container(
+                    padding: const EdgeInsets.all(1.0),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.orange),
+                      borderRadius: BorderRadius.circular(6.0),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+                      child: Text(
+                        lang.isEnglish ? '🇹🇭' : '🇬🇧',
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               // ── Pending approvals bell ────────────────────────────────
               GestureDetector(
                 onTap: _showPendingApprovalsDialog,
@@ -743,41 +738,16 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             Expanded(
                               child: Column(
                                 children: [
-                                  _openTabs.isEmpty
-                                      ? Container()
-                                      : TabBar(
-                                          onTap: (int index) {
-                                            setState(() {
-                                              _currentIndex = index;
-                                            });
-                                          },
-                                          controller: _tabController,
-                                          isScrollable: true,
-                                          indicatorColor: Colors.deepOrange,
-                                          labelColor: Colors.deepOrange[900],
-                                          unselectedLabelColor: Colors.black54,
-                                          tabs: _openTabs
-                                              .asMap()
-                                              .entries
-                                              .map((entry) {
-                                            int idx = entry.key;
-                                            Menu tabMenu = entry.value;
-                                            return Tab(
-                                              child: Row(
-                                                children: [
-                                                  Text(tabMenu.menuName),
-                                                  const SizedBox(width: 8),
-                                                  InkWell(
-                                                    onTap: () => _closeTab(idx),
-                                                    child: const Icon(
-                                                        Icons.close,
-                                                        size: 18),
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          }).toList(),
-                                        ),
+                                  Consumer<LanguageProvider>(
+                                    builder: (ctx, lang, _) => _CustomTabBar(
+                                      tabs: _openTabs,
+                                      currentIndex: _currentIndex,
+                                      isEnglish: lang.isEnglish,
+                                      onSelect: (i) => setState(() => _currentIndex = i),
+                                      onClose: _closeTab,
+                                      onMove: _reorderTab,
+                                    ),
+                                  ),
                                   Expanded(
                                     child: _openTabs.isEmpty
                                         ? const DashboardWidget()
@@ -791,8 +761,10 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                                 id,
                                                 () => KeyedSubtree(
                                                   key: ValueKey(id),
-                                                  child:
-                                                      menu.builder(context),
+                                                  child: MenuScope(
+                                                    menu: menu,
+                                                    child: menu.builder(context),
+                                                  ),
                                                 ),
                                               );
                                             }).toList(),
@@ -808,6 +780,287 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+}
+
+// ── Custom Tab Bar ────────────────────────────────────────────────────────────
+
+class _CustomTabBar extends StatefulWidget {
+  final List<Menu> tabs;
+  final int currentIndex;
+  final bool isEnglish;
+  final ValueChanged<int> onSelect;
+  final ValueChanged<int> onClose;
+  final void Function(int from, int to) onMove;
+
+  const _CustomTabBar({
+    required this.tabs,
+    required this.currentIndex,
+    required this.isEnglish,
+    required this.onSelect,
+    required this.onClose,
+    required this.onMove,
+  });
+
+  @override
+  State<_CustomTabBar> createState() => _CustomTabBarState();
+}
+
+class _CustomTabBarState extends State<_CustomTabBar> {
+  final ScrollController _scroll = ScrollController();
+  bool _showLeft = false;
+  bool _showRight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_updateArrows);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateArrows());
+  }
+
+  @override
+  void didUpdateWidget(_CustomTabBar old) {
+    super.didUpdateWidget(old);
+    if (widget.tabs.length > old.tabs.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) {
+          _scroll.animateTo(_scroll.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+        }
+        _updateArrows();
+      });
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _updateArrows());
+    }
+  }
+
+  @override
+  void dispose() {
+    _scroll.removeListener(_updateArrows);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _updateArrows() {
+    if (!_scroll.hasClients || !mounted) return;
+    setState(() {
+      _showLeft = _scroll.offset > 0;
+      _showRight = _scroll.offset < _scroll.position.maxScrollExtent - 0.5;
+    });
+  }
+
+  void _scrollBy(double delta) {
+    final target = (_scroll.offset + delta).clamp(0.0, _scroll.position.maxScrollExtent);
+    _scroll.animateTo(target, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+  }
+
+  void _scrollToTab(int index) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      const tabW = 160.0;
+      final left = index * tabW;
+      final right = left + tabW;
+      if (left < _scroll.offset) {
+        _scroll.animateTo(left, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+      } else if (right > _scroll.offset + _scroll.position.viewportDimension) {
+        _scroll.animateTo(right - _scroll.position.viewportDimension,
+            duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.tabs.isEmpty) return const SizedBox.shrink();
+
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: (_) { _updateArrows(); return false; },
+      child: Container(
+        height: 46,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _scroll,
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    // leading drop zone (index 0)
+                    _DropZone(dropIndex: 0, onMove: widget.onMove),
+                    for (int i = 0; i < widget.tabs.length; i++) ...[
+                      Draggable<int>(
+                        data: i,
+                        feedback: Material(
+                          elevation: 4,
+                          child: _TabItemContent(
+                            label: widget.tabs[i].localName(widget.isEnglish),
+                            isActive: i == widget.currentIndex,
+                            onClose: null,
+                          ),
+                        ),
+                        childWhenDragging: Opacity(
+                          opacity: 0.3,
+                          child: _TabItemContent(
+                            label: widget.tabs[i].localName(widget.isEnglish),
+                            isActive: i == widget.currentIndex,
+                            onClose: null,
+                          ),
+                        ),
+                        child: GestureDetector(
+                          onTap: () {
+                            widget.onSelect(i);
+                            _scrollToTab(i);
+                          },
+                          child: _TabItemContent(
+                            label: widget.tabs[i].localName(widget.isEnglish),
+                            isActive: i == widget.currentIndex,
+                            onClose: () => widget.onClose(i),
+                          ),
+                        ),
+                      ),
+                      // drop zone after each tab (index i+1)
+                      _DropZone(dropIndex: i + 1, onMove: widget.onMove),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            if (_showLeft || _showRight) ...[
+              _TabArrowButton(
+                icon: Icons.arrow_left,
+                enabled: _showLeft,
+                onTap: () => _scrollBy(-160),
+              ),
+              _TabArrowButton(
+                icon: Icons.arrow_right,
+                enabled: _showRight,
+                onTap: () => _scrollBy(160),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DropZone extends StatefulWidget {
+  final int dropIndex;
+  final void Function(int from, int to) onMove;
+  const _DropZone({required this.dropIndex, required this.onMove});
+
+  @override
+  State<_DropZone> createState() => _DropZoneState();
+}
+
+class _DropZoneState extends State<_DropZone> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return DragTarget<int>(
+      onWillAcceptWithDetails: (details) {
+        setState(() => _hovering = true);
+        return true;
+      },
+      onLeave: (_) => setState(() => _hovering = false),
+      onAcceptWithDetails: (details) {
+        setState(() => _hovering = false);
+        widget.onMove(details.data, widget.dropIndex);
+      },
+      builder: (context, candidateData, rejectedData) {
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: _hovering ? 6 : 2,
+          height: 46,
+          color: _hovering ? Colors.deepOrange : Colors.transparent,
+        );
+      },
+    );
+  }
+}
+
+class _TabItemContent extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final VoidCallback? onClose;
+
+  const _TabItemContent({
+    required this.label,
+    required this.isActive,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: isActive ? Colors.white : Colors.grey.shade100,
+        border: Border(
+          bottom: BorderSide(
+            color: isActive ? Colors.deepOrange : Colors.transparent,
+            width: 2,
+          ),
+          right: BorderSide(color: Colors.grey.shade300),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: isActive ? Colors.deepOrange.shade900 : Colors.black54,
+              fontSize: 13,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+          if (onClose != null) ...[
+            const SizedBox(width: 6),
+            InkWell(
+              onTap: onClose,
+              borderRadius: BorderRadius.circular(10),
+              child: const Icon(Icons.close, size: 16, color: Colors.black45),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TabArrowButton extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _TabArrowButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 28,
+        height: 46,
+        color: Colors.grey.shade100,
+        child: Icon(
+          icon,
+          size: 20,
+          color: enabled ? Colors.black54 : Colors.grey.shade300,
+        ),
+      ),
+    );
+  }
 }
 
 // ── Pending Approvals Dialog ──────────────────────────────────────────────────

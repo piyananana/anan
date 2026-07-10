@@ -1,6 +1,7 @@
 // lib/cm/screens/cm_bank_fx_revaluation_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../../gl/models/account.dart';
 import '../../gl/services/account_service.dart';
 import '../../sa/models/module_document.dart';
@@ -385,7 +386,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
-        title: const Text('Bank FX Revaluation'),
+        title: const MenuTitle(),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),

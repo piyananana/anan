@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
 
@@ -81,11 +82,7 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.tune, size: 20),
-          SizedBox(width: 8),
-          Text('ตั้งค่า Dimension ทางบัญชี'),
-        ]),
+        title: const MenuTitle(),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

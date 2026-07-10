@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/ar_year_end.dart';
 import '../services/ar_year_end_service.dart';
 
@@ -84,7 +85,7 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
     final r = _result;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ตรวจสอบก่อนปิดสิ้นปี'),
+        title: const MenuTitle(),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),

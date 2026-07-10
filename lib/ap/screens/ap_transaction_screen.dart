@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../widgets/ap_transaction_list_widget.dart';
 import '../widgets/ap_transaction_detail_widget.dart';
 
@@ -64,11 +65,7 @@ class _ApTransactionScreenState extends State<ApTransactionScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.receipt_long, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ธุรกรรมเจ้าหนี้การค้า (AP)'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blue[800],
         foregroundColor: Colors.white,
         actions: [

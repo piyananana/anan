@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:excel/excel.dart';
 
+import '../../sa/utils/menu_scope.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
 import '../services/ap_vendor_service.dart';
@@ -748,11 +749,7 @@ class _ApVendorReportScreenState extends State<ApVendorReportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.business, size: 20, color: Colors.white),
-          SizedBox(width: 8),
-          Text('รายงานข้อมูลผู้ขาย'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [

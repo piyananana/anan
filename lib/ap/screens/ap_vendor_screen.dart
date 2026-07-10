@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/ap_vendor.dart';
 import '../services/ap_vendor_service.dart';
 import '../widgets/ap_vendor_list_widget.dart';
@@ -184,11 +185,7 @@ class _ApVendorScreenState extends State<ApVendorScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.business, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('เจ้าหนี้การค้า (AP Vendor)'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [

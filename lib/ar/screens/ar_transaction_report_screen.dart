@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../sa/utils/menu_scope.dart';
 import '../models/ar_customer.dart';
 import '../models/ar_customer_group.dart';
 import '../services/ar_transaction_report_service.dart';
@@ -423,11 +424,7 @@ class _ArTransactionReportScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.assessment, size: 20, color: Colors.white),
-          SizedBox(width: 8),
-          Text('รายงานธุรกรรมลูกหนี้'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
         actions: [

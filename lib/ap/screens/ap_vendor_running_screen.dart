@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/ap_vendor_running.dart';
 import '../services/ap_vendor_running_service.dart';
 
@@ -139,11 +140,7 @@ class _ApVendorRunningScreenState extends State<ApVendorRunningScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.tag, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ตั้งค่ารหัสเจ้าหนี้อัตโนมัติ'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [

@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import 'package:intl/intl.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_bank_statement.dart';
@@ -250,7 +251,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
-        title: const Text('Bank Statement'),
+        title: const MenuTitle(),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),

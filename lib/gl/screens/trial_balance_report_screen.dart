@@ -4,6 +4,7 @@ import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../../sa/utils/menu_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -898,7 +899,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.fact_check, color: Colors.white, size: 20), SizedBox(width: 8), Text('งบทดลอง (Trial Balance)')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

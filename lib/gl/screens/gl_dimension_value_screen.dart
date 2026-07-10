@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
 import '../widgets/gl_dimension_value_list_widget.dart';
@@ -145,11 +146,7 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.tune, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ค่า GL Dimension'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.teal[700],
         foregroundColor: Colors.white,
         actions: [

@@ -1,5 +1,6 @@
 // lib/sa/screens/sa_smtp_config_screen.dart
 import 'package:flutter/material.dart';
+import '../utils/menu_scope.dart';
 import '../models/sa_smtp_config.dart';
 import '../services/sa_smtp_config_service.dart';
 
@@ -124,11 +125,7 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.email_outlined, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ตั้งค่า SMTP (อีเมล)'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blueGrey[700],
         foregroundColor: Colors.white,
         actions: [

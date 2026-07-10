@@ -5,6 +5,7 @@ import 'sa/screens/home_screen.dart';
 import 'sa/screens/login_screen.dart';
 
 import 'sa/services/auth_service.dart';
+import 'sa/services/language_provider.dart';
 import 'sa/services/backup_service.dart';
 import 'sa/services/company_service.dart';
 import 'sa/services/group_menu_service.dart';
@@ -59,6 +60,7 @@ class MyApp extends StatelessWidget {
       // ถ้าใช้ provider
       providers: [
         ChangeNotifierProvider<AuthService>(create: (_) => AuthService()),
+        ChangeNotifierProvider<LanguageProvider>(create: (_) => LanguageProvider()),
         Provider<BackupService>(create: (_) => BackupService()),
         Provider<CompanyService>(create: (_) => CompanyService()),
         Provider<GroupMenuService>(create: (_) => GroupMenuService()),

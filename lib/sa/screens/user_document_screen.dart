@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import '../utils/menu_scope.dart';
 import 'dart:collection'; // สำหรับ HashSet
 
 import '../models/anan_module.dart';
@@ -287,7 +288,7 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.folder_shared, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการสิทธิ์ประเภทเอกสารของผู้ใช้')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

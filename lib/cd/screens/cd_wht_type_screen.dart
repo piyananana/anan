@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/cd_wht_type.dart';
 import '../services/cd_wht_type_service.dart';
 import '../widgets/cd_wht_type_list_widget.dart';
@@ -127,11 +128,7 @@ class _CdWhtTypeScreenState extends State<CdWhtTypeScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.receipt_long, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ประเภทภาษีหัก ณ ที่จ่าย (WHT Type)'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.teal[700],
         foregroundColor: Colors.white,
         actions: [

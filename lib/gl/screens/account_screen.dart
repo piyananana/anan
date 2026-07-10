@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../sa/utils/menu_scope.dart';
 import '../models/account.dart';
 import '../services/account_service.dart';
 import '../widgets/account_list_tree_widget.dart';
@@ -281,7 +282,7 @@ class _AccountScreenState extends State<AccountScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.account_tree, color: Colors.white, size: 20), SizedBox(width: 8), Text('ผังบัญชี')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
         actions: [

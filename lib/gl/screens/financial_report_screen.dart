@@ -2,6 +2,7 @@
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -468,7 +469,7 @@ String _replaceVars(String text, pw.Context? context) {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Row(children: [Icon(Icons.summarize, color: Colors.white, size: 20), SizedBox(width: 8), Text('รายงานงบการเงิน (Financial Report)')]),
+          title: const MenuTitle(),
           backgroundColor: Colors.deepOrange[900],
           foregroundColor: Colors.white,
           actions: [

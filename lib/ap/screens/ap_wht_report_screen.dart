@@ -11,6 +11,7 @@ import '../../config/app_config.dart';
 import '../../sa/models/company.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
+import '../../sa/utils/menu_scope.dart';
 
 // ---------------------------------------------------------------------------
 // Data model (lightweight, only what the screen needs)
@@ -320,11 +321,7 @@ class _ApWhtReportScreenState extends State<ApWhtReportScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.receipt_long, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('รายงานภาษีหัก ณ ที่จ่าย (ภ.ง.ด.3/53)'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blue[900],
         foregroundColor: Colors.white,
       ),

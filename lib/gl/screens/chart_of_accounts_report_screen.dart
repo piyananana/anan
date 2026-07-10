@@ -3,6 +3,7 @@ import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../../sa/utils/menu_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -657,11 +658,7 @@ class _ChartOfAccountsReportScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.account_tree, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('รายงานผังบัญชี'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.indigo[900],
         foregroundColor: Colors.white,
         actions: [

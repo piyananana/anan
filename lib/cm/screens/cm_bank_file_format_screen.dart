@@ -1,6 +1,7 @@
 // lib/cm/screens/cm_bank_file_format_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/cm_bank_file_format.dart';
 import '../services/cm_bank_file_format_service.dart';
 
@@ -153,11 +154,7 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.account_balance_outlined, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('รูปแบบไฟล์ธนาคาร'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.teal[700],
         foregroundColor: Colors.white,
         actions: [

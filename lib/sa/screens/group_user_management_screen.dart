@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import '../utils/menu_scope.dart';
 
 import '../models/group.dart';
 import '../models/user.dart';
@@ -335,7 +336,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.group_add, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการผู้ใช้ตามกลุ่ม')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange.shade900,
         foregroundColor: Colors.white,
         actions: [

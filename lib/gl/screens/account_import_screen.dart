@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../../utils/file_download.dart';
 import '../models/account.dart';
 
@@ -240,11 +241,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF303F9F),
         foregroundColor: Colors.white,
-        title: const Row(children: [
-          Icon(Icons.upload_file, color: Colors.white),
-          SizedBox(width: 8),
-          Text('นำเข้าผังบัญชี', style: TextStyle(color: Colors.white)),
-        ]),
+        title: const MenuTitle(),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

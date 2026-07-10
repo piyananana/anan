@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../../cm/models/cm_bank_account.dart';
 import '../services/cm_period_service.dart';
 
@@ -347,7 +348,7 @@ class _State extends State<CmPettyCashReplenishmentScreen> with AutomaticKeepAli
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
-        title: const Text('เบิกชดเชยเงินสดย่อย'),
+        title: const MenuTitle(),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
         actions: [

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/ar_customer_group.dart';
 import '../services/ar_customer_group_service.dart';
 import '../widgets/ar_customer_group_list_widget.dart';
@@ -160,11 +161,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.groups, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('กลุ่มลูกค้า'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.teal[700],
         foregroundColor: Colors.white,
         actions: [

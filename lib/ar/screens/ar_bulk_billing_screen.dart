@@ -2,6 +2,7 @@ import 'dart:math' show max;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../sa/utils/menu_scope.dart';
 import '../models/ar_customer.dart';
 import '../models/ar_customer_group.dart';
 import '../models/ar_collector.dart';
@@ -406,11 +407,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.receipt, size: 20, color: Colors.white),
-          SizedBox(width: 8),
-          Text('สร้างใบวางบิลแบบกลุ่ม'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
       ),

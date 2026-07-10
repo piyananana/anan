@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../widgets/gl_entry_list_widget.dart';
 import '../widgets/gl_entry_detail_widget.dart';
 
@@ -65,7 +66,7 @@ class _GlEntryScreenState extends State<GlEntryScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.edit_note, color: Colors.white, size: 20), SizedBox(width: 8), Text('ธุรกรรมบัญชีแยกประเภท')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

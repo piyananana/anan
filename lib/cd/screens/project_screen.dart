@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 // import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/project.dart';
 import '../services/project_service.dart';
 import '../widgets/project_list_widget.dart';
@@ -281,7 +282,7 @@ class _ProjectScreenState extends State<ProjectScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.folder_special, color: Colors.white, size: 20), SizedBox(width: 8), Text('โครงการ')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

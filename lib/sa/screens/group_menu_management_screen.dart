@@ -1,6 +1,7 @@
 // screens/group_menu_management_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../utils/menu_scope.dart';
 
 import '../models/group.dart';
 import '../models/menu.dart';
@@ -283,7 +284,7 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.security, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการสิทธิ์ของกลุ่ม')]),
+        title: const MenuTitle(),
         // leading: IconButton(
         //   icon: const Icon(Icons.arrow_back),
         //   onPressed: () {

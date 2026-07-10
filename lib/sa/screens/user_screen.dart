@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import '../utils/menu_scope.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/user_service.dart';
@@ -186,7 +187,7 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.manage_accounts, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการผู้ใช้')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

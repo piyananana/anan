@@ -4,6 +4,7 @@ import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../../sa/utils/menu_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -590,7 +591,7 @@ class _IncomeStatementReportScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.trending_up, color: Colors.white, size: 20), SizedBox(width: 8), Text('งบกำไรขาดทุน (Income Statement)')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.green[800],
         foregroundColor: Colors.white,
         actions: [

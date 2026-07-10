@@ -14,6 +14,7 @@ import '../../cm/models/cm_bank_file_format.dart';
 import '../../cm/services/cm_bank_file_format_service.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../../utils/file_download.dart';
 
 // ── Column widths ────────────────────────────────────────────────────────────
@@ -137,11 +138,7 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.payments_outlined, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('AP Payment Run'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [

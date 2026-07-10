@@ -1,6 +1,7 @@
 // lib/cm/screens/cm_bank_reconcile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_bank_statement.dart';
 import '../services/cm_bank_account_service.dart';
@@ -139,7 +140,7 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
-        title: const Text('Bank Reconcile'),
+        title: const MenuTitle(),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),

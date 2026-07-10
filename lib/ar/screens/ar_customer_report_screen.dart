@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -896,11 +897,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.people_alt, size: 20, color: Colors.white),
-          SizedBox(width: 8),
-          Text('รายงานข้อมูลลูกค้า'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.orange[700],
         foregroundColor: Colors.white,
         actions: [

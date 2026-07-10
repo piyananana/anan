@@ -1,5 +1,6 @@
 // lib/sa/screens/sa_module_approver_screen.dart
 import 'dart:convert';
+import '../utils/menu_scope.dart';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
@@ -134,11 +135,7 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.approval, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text('ตั้งค่าผู้อนุมัติ'),
-        ]),
+        title: const MenuTitle(),
         backgroundColor: Colors.blueGrey[700],
         foregroundColor: Colors.white,
         actions: [

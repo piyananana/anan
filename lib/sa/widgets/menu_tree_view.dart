@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/menu.dart';
+import '../services/language_provider.dart';
 
 class MenuTreeView extends StatefulWidget {
   final List<Menu> menus;
@@ -87,10 +89,12 @@ class MenuTreeViewState extends State<MenuTreeView>
                     color: isFolder ? Colors.blue : Colors.green),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    menu.menuName,
-                    style: const TextStyle(fontSize: 16, color: Colors.black),
-                    overflow: TextOverflow.ellipsis,
+                  child: Consumer<LanguageProvider>(
+                    builder: (ctx, lang, _) => Text(
+                      menu.localName(lang.isEnglish),
+                      style: const TextStyle(fontSize: 16, color: Colors.black),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               ],

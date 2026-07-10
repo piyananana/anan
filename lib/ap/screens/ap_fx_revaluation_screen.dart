@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/ap_year_end.dart';
 import '../services/ap_year_end_service.dart';
 
@@ -813,7 +814,7 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ปรับมูลค่าเจ้าหนี้ตามอัตราแลกเปลี่ยน'),
+        title: const MenuTitle(),
         backgroundColor: _kIndigo,
         foregroundColor: Colors.white,
       ),

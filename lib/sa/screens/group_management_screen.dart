@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import '../utils/menu_scope.dart';
 
 import '../models/group.dart';
 import '../services/group_service.dart';
@@ -272,7 +273,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.group_work, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการกลุ่ม')]),
+        title: const MenuTitle(),
         // leading: IconButton(
         //   icon: const Icon(Icons.arrow_back),
         //   onPressed: () {

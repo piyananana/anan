@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import '../../sa/utils/menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_receipt.dart';
 import '../services/cm_bank_account_service.dart';
@@ -208,7 +209,7 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('รายการรับเงิน (CM Receipt)'),
+        title: const MenuTitle(),
         backgroundColor: _kColor,
         foregroundColor: Colors.white,
         actions: [

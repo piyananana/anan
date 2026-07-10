@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/period.dart';
 import '../models/year_end_closing.dart';
 import '../services/period_service.dart';
@@ -245,7 +246,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.lock_clock, color: Colors.white, size: 20), SizedBox(width: 8), Text('ปิดบัญชีสิ้นปี')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
         actions: [

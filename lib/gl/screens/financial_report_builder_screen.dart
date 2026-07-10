@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../models/account.dart';
 import '../models/gl_dimension.dart';
 import '../services/account_service.dart';
@@ -689,7 +690,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.design_services, color: Colors.white, size: 20), SizedBox(width: 8), Text('สร้างแบบงบการเงิน (Financial Report Builder)')]),
+        title: const MenuTitle(),
         backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [

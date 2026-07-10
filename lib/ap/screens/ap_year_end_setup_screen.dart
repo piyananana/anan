@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../sa/utils/menu_scope.dart';
 import '../../gl/models/account.dart';
 import '../../gl/services/account_service.dart';
 import '../../sa/models/module_document.dart';
@@ -327,7 +328,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ตั้งค่าการปิดสิ้นปี (AP)'),
+        title: const MenuTitle(),
         backgroundColor: _kIndigo,
         foregroundColor: Colors.white,
       ),
