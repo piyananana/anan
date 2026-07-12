@@ -146,10 +146,13 @@ class _LoginScreenState extends State<LoginScreen> {
     final cardHeight   = screenHeight * 0.7;
 
     return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: SizedBox(
+      body: Stack(
+        children: [
+          // ── Main login card ─────────────────────────────────────────────
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: SizedBox(
             width:  cardWidth,
             height: cardHeight,
             child: Card(
@@ -264,6 +267,33 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+      ),
+          // ── Language toggle (top-right) ──────────────────────────────────
+          Positioned(
+            top: 16,
+            right: 16,
+            child: Tooltip(
+              message: isEnglish ? 'Switch to Thai' : 'สลับเป็นภาษาอังกฤษ',
+              child: GestureDetector(
+                onTap: context.read<LanguageProvider>().toggle,
+                child: Container(
+                  padding: const EdgeInsets.all(1.0),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.orange),
+                    borderRadius: BorderRadius.circular(6.0),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Text(
+                      isEnglish ? 'ไทย' : 'ENG',
+                      style: const TextStyle(color: Colors.orange, fontSize: 16),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
