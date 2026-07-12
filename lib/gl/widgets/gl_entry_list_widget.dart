@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../../sa/models/module_document.dart';
 import '../../sa/models/user_branch.dart';
 import '../../sa/services/auth_service.dart';
@@ -218,6 +221,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   }
 
   Future<void> _deleteEntry(int id) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -226,10 +230,10 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('ยกเลิก')),
+              child: Text(l.cancel)),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('ลบ', style: TextStyle(color: Colors.red))),
+              child: Text(l.delete, style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -274,6 +278,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Column(
       children: [
         _buildFilterRow(),
@@ -301,6 +306,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   }
 
   Widget _buildFilterRow() {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
       child: Column(
@@ -461,7 +467,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                     });
                     _fetchEntries();
                   },
-                  child: const Text('ล้าง'),
+                  child: Text(l.clear),
                 ),
               ],
             ],

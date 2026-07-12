@@ -7,6 +7,8 @@ import '../../gl/services/account_service.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_payment_method.dart';
 import '../services/cm_bank_account_service.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 
 class CmPaymentMethodDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -319,6 +321,7 @@ class CmPaymentMethodDetailWidgetState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     if (widget.isPlaceholder) {
       return const Center(
           child: Text('เลือกประเภทการชำระเงินเพื่อแก้ไข หรือกดปุ่ม + เพื่อเพิ่มใหม่'));
@@ -529,7 +532,7 @@ class CmPaymentMethodDetailWidgetState
                   child: ElevatedButton.icon(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
+                    label: Text(l.cancel),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade600,
                       foregroundColor: Colors.white,

@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../sa/utils/menu_scope.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import 'package:provider/provider.dart';
 import '../models/ar_customer.dart';
 import '../models/ar_customer_group.dart';
 import '../models/ar_collector.dart';
@@ -242,6 +245,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
   // ─── create bulk BC ──────────────────────────────────────────────────────────
 
   Future<void> _createBulkBilling() async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     if (_selectedBcDocId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('กรุณาเลือกประเภทเอกสารวางบิล')));
@@ -267,13 +271,13 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('ยกเลิก')),
+              child: Text(l.cancel)),
           ElevatedButton(
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.teal[800],
                   foregroundColor: Colors.white),
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('ยืนยัน')),
+              child: Text(l.confirm)),
         ],
       ),
     );
@@ -384,7 +388,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                       backgroundColor: Colors.teal[800],
                       foregroundColor: Colors.white),
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('ปิด')),
+                  child: Text(l.close)),
             ],
           ),
         );
@@ -405,6 +409,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -1017,6 +1022,7 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -1110,7 +1116,7 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
                 children: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('ยกเลิก')),
+                      child: Text(l.cancel)),
                 ],
               ),
             ),

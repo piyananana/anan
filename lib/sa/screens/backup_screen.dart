@@ -537,9 +537,12 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/backup_schedule.dart';
 import '../services/auth_service.dart';
 import '../services/backup_service.dart';
+import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
 import '../../config/app_config.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -925,6 +928,7 @@ class _BackupScreenState extends State<BackupScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
 
     if (_isLoading && _schedules.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -1323,13 +1327,14 @@ class _BackupScreenState extends State<BackupScreen>
   }
 
   Widget _buildActionButtons(BackupSchedule schedule) {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     return Row(
       children: [
         ElevatedButton(
           onPressed: schedule.isRunning
               ? null
               : () => _saveSchedule(schedule.scheduleType),
-          child: const Text('บันทึก'),
+          child: Text(l.save),
         ),
         const SizedBox(width: 8),
         ElevatedButton(
@@ -1457,6 +1462,7 @@ class _BackupScreenState extends State<BackupScreen>
   }
 
   Future<void> _doUploadRestore() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_uploadFile == null || _uploadTargetDatabase == null) return;
 
     final confirmed = await showDialog<bool>(
@@ -1479,7 +1485,7 @@ class _BackupScreenState extends State<BackupScreen>
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -1616,6 +1622,7 @@ class _BackupScreenState extends State<BackupScreen>
 
   // *** เมธอดใหม่: แสดงหน้าต่างยืนยันการเรียกคืนข้อมูล ***
   void _showRestoreConfirmation(String filename, String backupType) {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     showDialog(
       context: context,
       builder: (context) {
@@ -1629,7 +1636,7 @@ class _BackupScreenState extends State<BackupScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ยกเลิก'),
+              child: Text(l.cancel),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -1637,7 +1644,7 @@ class _BackupScreenState extends State<BackupScreen>
                 await _restoreData(filename, backupType);
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('ยืนยัน'),
+              child: Text(l.confirm),
             ),
           ],
         );

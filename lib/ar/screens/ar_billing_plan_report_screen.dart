@@ -6,6 +6,9 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../sa/utils/menu_scope.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import 'package:provider/provider.dart';
 import '../models/ar_customer.dart';
 import '../models/ar_customer_group.dart';
 import '../models/ar_collector.dart';
@@ -417,6 +420,7 @@ class _ArBillingPlanReportScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -906,6 +910,7 @@ class _BillingPlanCustomerSearchDialogState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Dialog(
       child: SizedBox(
         width: 520,
@@ -1006,7 +1011,7 @@ class _BillingPlanCustomerSearchDialogState
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('ยกเลิก'),
+                    child: Text(l.cancel),
                   ),
                 ],
               ),

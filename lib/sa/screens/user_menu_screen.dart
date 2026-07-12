@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
 import '../utils/menu_scope.dart';
 
 import '../models/anan_module.dart';
@@ -179,20 +181,22 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
   }
 
   Future<void> _onDelete(User user) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบสิทธิ์'),
-        content:
-            Text('คุณแน่ใจหรือไม่ที่จะลบสิทธิ์เมนูทั้งหมดของผู้ใช้ "${user.firstName} ${user.lastName}" ?'),
+        title: Text(l.isEnglish ? 'Confirm Delete Permissions' : 'ยืนยันการลบสิทธิ์'),
+        content: Text(l.isEnglish
+            ? 'Remove all menu permissions for "${user.firstName} ${user.lastName}"?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบสิทธิ์เมนูทั้งหมดของผู้ใช้ "${user.firstName} ${user.lastName}" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ'),
+            child: Text(l.delete),
           ),
         ],
       ),
@@ -225,30 +229,33 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
   }
 
   Future<void> _onSave() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedNode == null || _mode != Mode.edit) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('ไม่มีผู้ใช้ที่เลือกหรือไม่ได้อยู่ในโหมดแก้ไข')),
+        SnackBar(content: Text(l.isEnglish
+            ? 'No user selected or not in edit mode'
+            : 'ไม่มีผู้ใช้ที่เลือกหรือไม่ได้อยู่ในโหมดแก้ไข')),
       );
       return;
     }
 
     if (_stagedGrantedPerms.isEmpty) {
-      // ถามผู้ใช้ก่อนว่าต้องการลบสิทธิ์ทั้งหมดจริงหรือไม่
       final bool? confirmDelete = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('ยืนยันการลบสิทธิ์ทั้งหมด'),
-          content: Text('คุณต้องการลบสิทธิ์เข้าถึงเมนูทั้งหมดของ ${_selectedNode!.userName} ใช่หรือไม่?'),
+          title: Text(l.isEnglish ? 'Confirm Delete All Permissions' : 'ยืนยันการลบสิทธิ์ทั้งหมด'),
+          content: Text(l.isEnglish
+              ? 'Remove all menu permissions for ${_selectedNode!.userName}?'
+              : 'คุณต้องการลบสิทธิ์เข้าถึงเมนูทั้งหมดของ ${_selectedNode!.userName} ใช่หรือไม่?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('ยกเลิก'),
+              child: Text(l.cancel),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('ลบ', style: TextStyle(color: Colors.white)),
+              child: Text(l.delete, style: const TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -270,14 +277,16 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
         // ถ้า Map ว่างเปล่า ให้เรียก API ลบทั้งหมด
         await masterService.deleteUserMenu(_selectedNode!.id);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('ลบสิทธิ์ทั้งหมดของผู้ใช้ ${_selectedNode!.userName} สำเร็จ')),
+          SnackBar(content: Text(l.isEnglish
+              ? 'All permissions for ${_selectedNode!.userName} deleted'
+              : 'ลบสิทธิ์ทั้งหมดของผู้ใช้ ${_selectedNode!.userName} สำเร็จ')),
         );
       } else {
         await masterService.updateUserMenu(_selectedNode!.id, _stagedGrantedPerms);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('บันทึกสิทธิ์สำหรับผู้ใช้ ${_selectedNode!.userName} สำเร็จ')),
+          SnackBar(content: Text(l.isEnglish
+              ? 'Permissions saved for ${_selectedNode!.userName}'
+              : 'บันทึกสิทธิ์สำหรับผู้ใช้ ${_selectedNode!.userName} สำเร็จ')),
         );
       }
 
@@ -348,6 +357,7 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
 
     return Scaffold(
       appBar: AppBar(
@@ -357,26 +367,24 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.refresh,
             onPressed: _fetchUsersAndMenus,
           ),
           IconButton(
             icon: const Icon(Icons.cleaning_services_outlined, color: Colors.white),
             onPressed: _onClearRightPanel,
-            tooltip: 'เคลียร์ Panel ขวา',
+            tooltip: l.isEnglish ? 'Clear Panel' : 'เคลียร์ Panel ขวา',
           ),
           IconButton(
             icon: const Icon(Icons.copy_all, color: Colors.white),
             onPressed: _showCopyDialog,
-            tooltip: 'คัดลอกสิทธิ์จากผู้ใช้อื่น',
+            tooltip: l.isEnglish ? 'Copy Permissions from Another User' : 'คัดลอกสิทธิ์จากผู้ใช้อื่น',
           ),
           _selectedNode != null ?
           IconButton(
             icon: const Icon(Icons.save_outlined, color: Colors.white),
-            onPressed: _mode == Mode.edit
-                ? _onSave
-                : null, // บันทึกได้เฉพาะตอนอยู่ในโหมดแก้ไข
-            tooltip: 'บันทึกสิทธิ์',
+            onPressed: _mode == Mode.edit ? _onSave : null,
+            tooltip: l.isEnglish ? 'Save Permissions' : 'บันทึกสิทธิ์',
           )
           : const SizedBox.shrink(),
           const SizedBox(width: 8),
@@ -407,7 +415,9 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
                             padding: EdgeInsets.zero,
                             onPressed: () => setState(
                                 () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                            tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                            tooltip: _isLeftPanelExpanded
+                                ? (l.isEnglish ? 'Collapse List' : 'ย่อรายการ')
+                                : (l.isEnglish ? 'Expand List' : 'ขยายรายการ'),
                           ),
                         ),
                         AnimatedContainer(
@@ -461,14 +471,14 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
     );
   }
 
-  // Helper method สำหรับสร้างเนื้อหาใน Panel ด้านขวา
   Widget _buildRightPanelContent() {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedNode == null || _mode == Mode.none) {
-      return const Center(child: Text('เลือกผู้ใช้เพื่อจัดการสิทธิ์'));
+      return Center(child: Text(l.isEnglish ? 'Select a user to manage permissions' : 'เลือกผู้ใช้เพื่อจัดการสิทธิ์'));
     }
 
     if (_allMenus.isEmpty) {
-      return const Center(child: Text('ไม่พบรายการเมนูในระบบ'));
+      return Center(child: Text(l.isEnglish ? 'No menu items found in the system' : 'ไม่พบรายการเมนูในระบบ'));
     }
 
     return Column(
@@ -476,7 +486,9 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: Text(
-            'สิทธิ์เมนูสำหรับ: ${_selectedNode!.userName}',
+            l.isEnglish
+                ? 'Menu Permissions for: ${_selectedNode!.userName}'
+                : 'สิทธิ์เมนูสำหรับ: ${_selectedNode!.userName}',
             style: Theme.of(context).textTheme.titleLarge,
           ),
         ),
@@ -590,13 +602,14 @@ class _CopyPermissionsDialogState extends State<_CopyPermissionsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     final canCopy = _fromUser != null && _toUser != null && !_isCopying;
 
     return AlertDialog(
-      title: const Row(children: [
-        Icon(Icons.copy_all, color: Colors.deepOrange),
-        SizedBox(width: 8),
-        Text('คัดลอกสิทธิ์เมนู'),
+      title: Row(children: [
+        const Icon(Icons.copy_all, color: Colors.deepOrange),
+        const SizedBox(width: 8),
+        Text(l.isEnglish ? 'Copy Menu Permissions' : 'คัดลอกสิทธิ์เมนู'),
       ]),
       content: SizedBox(
         width: 420,
@@ -608,9 +621,9 @@ class _CopyPermissionsDialogState extends State<_CopyPermissionsDialog> {
             DropdownButtonFormField<User>(
               isExpanded: true,
               value: _fromUser,
-              decoration: const InputDecoration(
-                labelText: 'คัดลอกจาก (ต้นทาง)',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.isEnglish ? 'Copy From (Source)' : 'คัดลอกจาก (ต้นทาง)',
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
               items: _fromCandidates
@@ -628,9 +641,9 @@ class _CopyPermissionsDialogState extends State<_CopyPermissionsDialog> {
             DropdownButtonFormField<User>(
               isExpanded: true,
               value: _toUser,
-              decoration: const InputDecoration(
-                labelText: 'คัดลอกไปยัง (ปลายทาง)',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.isEnglish ? 'Copy To (Destination)' : 'คัดลอกไปยัง (ปลายทาง)',
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
               items: _toCandidates
@@ -645,11 +658,14 @@ class _CopyPermissionsDialogState extends State<_CopyPermissionsDialog> {
             const SizedBox(height: 16),
 
             // Mode
-            const Text('วิธีการคัดลอก', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(l.isEnglish ? 'Copy Mode' : 'วิธีการคัดลอก',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
             RadioListTile<bool>(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: const Text('แทนที่สิทธิ์เดิม (ได้รับเฉพาะสิทธิ์ที่คัดลอก)'),
+              title: Text(l.isEnglish
+                  ? 'Replace existing (keep only copied permissions)'
+                  : 'แทนที่สิทธิ์เดิม (ได้รับเฉพาะสิทธิ์ที่คัดลอก)'),
               value: true,
               groupValue: _replaceExisting,
               onChanged: _isCopying ? null : (v) => setState(() => _replaceExisting = v!),
@@ -657,7 +673,9 @@ class _CopyPermissionsDialogState extends State<_CopyPermissionsDialog> {
             RadioListTile<bool>(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: const Text('รวมกับสิทธิ์เดิม (ได้รับสิทธิ์เดิม + สิทธิ์ที่คัดลอก)'),
+              title: Text(l.isEnglish
+                  ? 'Merge with existing (original + copied permissions)'
+                  : 'รวมกับสิทธิ์เดิม (ได้รับสิทธิ์เดิม + สิทธิ์ที่คัดลอก)'),
               value: false,
               groupValue: _replaceExisting,
               onChanged: _isCopying ? null : (v) => setState(() => _replaceExisting = v!),
@@ -673,7 +691,7 @@ class _CopyPermissionsDialogState extends State<_CopyPermissionsDialog> {
       actions: [
         TextButton(
           onPressed: _isCopying ? null : () => Navigator.pop(context),
-          child: const Text('ยกเลิก'),
+          child: Text(l.cancel),
         ),
         ElevatedButton.icon(
           icon: _isCopying
@@ -681,7 +699,9 @@ class _CopyPermissionsDialogState extends State<_CopyPermissionsDialog> {
                   width: 16, height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Icon(Icons.copy_all, size: 18),
-          label: Text(_isCopying ? 'กำลังคัดลอก...' : 'คัดลอก'),
+          label: Text(_isCopying
+              ? (l.isEnglish ? 'Copying...' : 'กำลังคัดลอก...')
+              : (l.isEnglish ? 'Copy' : 'คัดลอก')),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.deepOrange[700],
             foregroundColor: Colors.white,

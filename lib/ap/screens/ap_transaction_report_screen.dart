@@ -4,7 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:provider/provider.dart';
 
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
@@ -348,6 +351,7 @@ class _ApTransactionReportScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -728,6 +732,7 @@ class _TxnRptVendorSearchDialogState extends State<_TxnRptVendorSearchDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -785,7 +790,7 @@ class _TxnRptVendorSearchDialogState extends State<_TxnRptVendorSearchDialog> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('ยกเลิก')),
+              TextButton(onPressed: () => Navigator.pop(context), child: Text(l.cancel)),
             ]),
           ),
         ]),

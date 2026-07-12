@@ -1,6 +1,9 @@
 // lib/ap/screens/ap_vendor_group_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/ap_vendor_group.dart';
 import '../services/ap_vendor_group_service.dart';
@@ -47,14 +50,15 @@ class _ApVendorGroupScreenState extends State<ApVendorGroupScreen>
   }
 
   Future<void> _onDelete(ApVendorGroup row) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('ยืนยันการลบ'),
         content: Text('ลบ "${row.groupCode} (${row.groupNameThai})" ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('ยกเลิก')),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('ลบ', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(l.delete, style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -86,6 +90,7 @@ class _ApVendorGroupScreenState extends State<ApVendorGroupScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

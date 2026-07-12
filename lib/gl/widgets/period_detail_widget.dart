@@ -1,7 +1,10 @@
 // widgets/zipcode_detail_form.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../models/period.dart';
 import '../services/period_service.dart';
 
@@ -154,6 +157,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     if (widget.isPlaceholder) {
       return const Center(
         child: Text(
@@ -381,7 +385,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                       child: ElevatedButton.icon(
                         onPressed: widget.onCancel,
                         icon: const Icon(Icons.cancel),
-                        label: const Text('ยกเลิก'),
+                        label: Text(l.cancel),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.grey.shade600,
                           foregroundColor: Colors.white,
@@ -605,6 +609,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     await showDialog(
       context: context,
       builder: (BuildContext context) {
+        final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
         return StatefulBuilder(
             builder: (BuildContext context, StateSetter setDialogState) {
               return AlertDialog(
@@ -721,7 +726,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('ยกเลิก')),
+                      child: Text(l.cancel)),
                   ElevatedButton(
                     onPressed: () async {
                       if (periodName.isEmpty || startDate.isAfter(endDate)) {
@@ -775,7 +780,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         );
                       }
                     },
-                    child: Text(period == null ? 'เพิ่ม' : 'บันทึก'),
+                    child: Text(period == null ? l.add : l.save),
                   ),
                 ],
               );
@@ -869,6 +874,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
   }
 
   void _deletePeriod(int periodId) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final bool confirm = await showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -878,10 +884,10 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
             actions: [
               TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('ยกเลิก')),
+                  child: Text(l.cancel)),
               TextButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('ลบ')),
+                  child: Text(l.delete)),
             ],
           ),
         ) ??
@@ -914,6 +920,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
   // ปิดงวด (CLOSED) — 2-step: warning → credential approval
   Future<void> _confirmClose(
       PostingPeriod period, String module, String fromStatus) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     int step = 1;
     final confirmCtrl = TextEditingController(); // username
     final pwCtrl = TextEditingController();      // password
@@ -991,7 +998,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text('ยกเลิก'),
+                  child: Text(l.cancel),
                 ),
                 ElevatedButton.icon(
                   onPressed: () => setDs(() => step = 2),
@@ -1067,7 +1074,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
             actions: [
               TextButton(
                 onPressed: isApproving ? null : () => Navigator.of(ctx).pop(false),
-                child: const Text('ยกเลิก'),
+                child: Text(l.cancel),
               ),
               ElevatedButton.icon(
                 onPressed: (confirmCtrl.text.trim().isNotEmpty &&
@@ -1125,6 +1132,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
   }
 
   Future<void> _confirmSoftClose(PostingPeriod period, String module) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1137,11 +1145,11 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ยืนยัน'),
+            child: Text(l.confirm),
           ),
         ],
       ),

@@ -2,6 +2,9 @@
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../../sa/utils/menu_scope.dart';
 import 'package:intl/intl.dart';
 import '../models/cm_bank_account.dart';
@@ -152,6 +155,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   }
 
   Future<void> _voidStatement() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedStatement == null) return;
     final ok = await showDialog<bool>(
       context: context,
@@ -159,8 +163,8 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
         title: const Text('ยืนยันการยกเลิก'),
         content: const Text('ต้องการยกเลิก Bank Statement นี้ใช่หรือไม่?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: const Text('ยืนยัน')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: Text(l.confirm)),
         ],
       ),
     );
@@ -174,6 +178,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   }
 
   Future<void> _deleteStatement() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedStatement == null) return;
     final ok = await showDialog<bool>(
       context: context,
@@ -181,8 +186,8 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
         title: const Text('ยืนยันการลบ'),
         content: const Text('ต้องการลบ Bank Statement และรายการทั้งหมดใช่หรือไม่?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: const Text('ลบ')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: Text(l.delete)),
         ],
       ),
     );
@@ -247,6 +252,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
@@ -711,6 +717,7 @@ class _StatementFormDialogState extends State<_StatementFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return AlertDialog(
       title: Text(widget.existing != null ? 'แก้ไข Statement' : 'สร้าง Bank Statement'),
       content: SizedBox(
@@ -763,11 +770,11 @@ class _StatementFormDialogState extends State<_StatementFormDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
           onPressed: _saving ? null : _save,
-          child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('บันทึก'),
+          child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : Text(l.save),
         ),
       ],
     );
@@ -844,6 +851,7 @@ class _LineFormDialogState extends State<_LineFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return AlertDialog(
       title: Text(widget.existing != null ? 'แก้ไขรายการ' : 'เพิ่มรายการ'),
       content: SizedBox(
@@ -877,11 +885,11 @@ class _LineFormDialogState extends State<_LineFormDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
           onPressed: _saving ? null : _save,
-          child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('บันทึก'),
+          child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : Text(l.save),
         ),
       ],
     );
@@ -1046,6 +1054,7 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     final lines = _buildLines();
     final colCount = _numCols;
     return AlertDialog(
@@ -1170,7 +1179,7 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('ยกเลิก')),
+        TextButton(onPressed: () => Navigator.pop(context, null), child: Text(l.cancel)),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
           onPressed: (lines != null && lines.isNotEmpty) ? () => Navigator.pop(context, lines) : null,

@@ -9,6 +9,8 @@ import 'package:provider/provider.dart';
 
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../../utils/file_download.dart';
 
@@ -148,6 +150,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
   // ─── Confirm import ───────────────────────────────────────────────────────
 
   Future<void> _confirmImport() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_validatedData.isEmpty) return;
 
     final confirm = await showDialog<bool>(
@@ -158,12 +161,12 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('ยืนยัน', style: TextStyle(color: Colors.white)),
+            child: Text(l.confirm, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -231,6 +234,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _appColor,

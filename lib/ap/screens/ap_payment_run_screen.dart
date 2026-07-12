@@ -14,6 +14,8 @@ import '../../cm/models/cm_bank_file_format.dart';
 import '../../cm/services/cm_bank_file_format_service.dart';
 import '../../sa/services/auth_service.dart';
 import '../../sa/services/company_service.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../../utils/file_download.dart';
 
@@ -136,6 +138,7 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -407,6 +410,7 @@ class _DetailPanelState extends State<_DetailPanel> {
   }
 
   Future<void> _submit() async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -967,6 +971,7 @@ class _DetailPanelState extends State<_DetailPanel> {
   // ── Post GL ───────────────────────────────────────────────────────────────
 
   Future<void> _postGl() async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final run = widget.run;
     if (run == null) return;
 
@@ -1076,6 +1081,7 @@ class _DetailPanelState extends State<_DetailPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     final status = widget.run?.status ?? 'Draft';
     final canVoid = widget.run != null && ['Draft', 'Submitted'].contains(status);
 
@@ -1554,6 +1560,7 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Dialog(
       child: SizedBox(
         width: 900,
@@ -1775,6 +1782,7 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
   }
 
   Future<void> _doAction(bool isApprove) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final currentUserId =
         Provider.of<AuthService>(context, listen: false).currentUser?.id;
     final approvals = widget.run.approvals;

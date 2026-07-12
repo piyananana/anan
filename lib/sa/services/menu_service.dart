@@ -102,6 +102,7 @@ class MenuService {
   Future<Menu> addMenu({
     int? parentId,
     required String menuName,
+    String menuNameEn = '',
     required String menuType,
     String? targetPath,
     int? sortOrder,
@@ -116,6 +117,7 @@ class MenuService {
       body: jsonEncode(<String, dynamic>{
         'parent_id': parentId,
         'menu_name': menuName,
+        'menu_name_en': menuNameEn,
         'menu_type': menuType,
         'target_path': targetPath,
         'sort_order': sortOrder,
@@ -139,6 +141,7 @@ class MenuService {
   Future<Menu> updateMenu(
     int id, {
     required String menuName,
+    String menuNameEn = '',
     required String menuType,
     String? targetPath,
     required int sortOrder,
@@ -153,6 +156,7 @@ class MenuService {
       headers: headers,
       body: jsonEncode(<String, dynamic>{
         'menu_name': menuName,
+        'menu_name_en': menuNameEn,
         'menu_type': menuType,
         'target_path': targetPath,
         'sort_order': sortOrder,

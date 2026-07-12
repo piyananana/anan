@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/ap_year_end.dart';
 import '../services/ap_year_end_service.dart';
@@ -812,6 +815,7 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

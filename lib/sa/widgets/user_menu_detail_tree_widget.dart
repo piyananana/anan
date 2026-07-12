@@ -1,8 +1,10 @@
 // widgets/user_menu_detail_tree_widget.dart
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/menu.dart';
 import '../models/menu_permission.dart';
+import '../services/language_provider.dart';
 
 class UserMenuDetailTreeWidget extends StatefulWidget {
   final List<Menu> lists;
@@ -148,24 +150,30 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
     return false;
   }
 
-  Widget _buildPermissionRow(int menuId) {
+  Widget _buildPermissionRow(int menuId, bool isEnglish) {
     final perm = _currentPermissions[menuId]!;
 
-    Widget permCheckbox(String label, bool value, ValueChanged<bool?> onChanged) {
+    Widget permCheckbox(
+        String labelTh, String labelEn, bool value, ValueChanged<bool?> onChanged) {
+      final label = isEnglish ? labelEn : labelTh;
       return InkWell(
         onTap: () => onChanged(!value),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Checkbox(
-              value: value,
-              onChanged: onChanged,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            ),
-            Text(label, style: const TextStyle(fontSize: 11)),
-            const SizedBox(width: 4),
-          ],
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Checkbox(
+                value: value,
+                onChanged: onChanged,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+              Text(label, style: const TextStyle(fontSize: 11)),
+              const SizedBox(width: 4),
+            ],
+          ),
         ),
       );
     }
@@ -177,43 +185,57 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
       });
     }
 
-    return Wrap(
-      spacing: 2,
-      children: [
-        permCheckbox('ดู', perm.canView,
-            (v) => updatePerm(perm.copyWith(canView: v ?? perm.canView))),
-        permCheckbox('สร้าง', perm.canCreate,
-            (v) => updatePerm(perm.copyWith(canCreate: v ?? perm.canCreate))),
-        permCheckbox('แก้ไข', perm.canEdit,
-            (v) => updatePerm(perm.copyWith(canEdit: v ?? perm.canEdit))),
-        permCheckbox('ลบ', perm.canDelete,
-            (v) => updatePerm(perm.copyWith(canDelete: v ?? perm.canDelete))),
-        permCheckbox('อนุมัติ', perm.canApprove,
-            (v) => updatePerm(perm.copyWith(canApprove: v ?? perm.canApprove))),
-        permCheckbox('พิมพ์', perm.canPrint,
-            (v) => updatePerm(perm.copyWith(canPrint: v ?? perm.canPrint))),
-        permCheckbox('ส่งออก', perm.canExport,
-            (v) => updatePerm(perm.copyWith(canExport: v ?? perm.canExport))),
-      ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.shade50,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.blueGrey.shade100),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: Wrap(
+        spacing: 0,
+        runSpacing: 0,
+        children: [
+          permCheckbox('ดู', 'View', perm.canView,
+              (v) => updatePerm(perm.copyWith(canView: v ?? perm.canView))),
+          permCheckbox('สร้าง', 'Create', perm.canCreate,
+              (v) => updatePerm(perm.copyWith(canCreate: v ?? perm.canCreate))),
+          permCheckbox('แก้ไข', 'Edit', perm.canEdit,
+              (v) => updatePerm(perm.copyWith(canEdit: v ?? perm.canEdit))),
+          permCheckbox('ลบ', 'Delete', perm.canDelete,
+              (v) => updatePerm(perm.copyWith(canDelete: v ?? perm.canDelete))),
+          permCheckbox('อนุมัติ', 'Approve', perm.canApprove,
+              (v) => updatePerm(perm.copyWith(canApprove: v ?? perm.canApprove))),
+          permCheckbox('พิมพ์', 'Print', perm.canPrint,
+              (v) => updatePerm(perm.copyWith(canPrint: v ?? perm.canPrint))),
+          permCheckbox('ส่งออก', 'Export', perm.canExport,
+              (v) => updatePerm(perm.copyWith(canExport: v ?? perm.canExport))),
+        ],
+      ),
     );
   }
 
-  Widget _buildNodeItem(Menu row, int level) {
+  Widget _buildNodeItem(Menu row, int level, bool isEnglish) {
     if (!widget.isEditing) {
       if (!_hasAnyGrantedInSubtree(row)) {
         return const SizedBox.shrink();
       }
     }
 
+    final bool isFolder = row.menuType == 'folder';
     bool? checkboxState = _getCheckboxState(row);
+
+    // Show permission row only for non-folder items that have been granted
     final bool showPerms =
-        widget.isEditing && _currentPermissions.containsKey(row.id);
+        widget.isEditing &&
+        !isFolder &&
+        _currentPermissions.containsKey(row.id);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: EdgeInsets.only(left: level * 16.0),
+          padding: EdgeInsets.only(left: level * 16.0, top: 1, bottom: 1),
           child: Row(
             children: [
               if (widget.isEditing)
@@ -226,33 +248,35 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
                 ),
               Flexible(
                 child: Text(
-                  row.menuName,
+                  row.localName(isEnglish),
                   style: TextStyle(
-                    fontWeight: row.children.isNotEmpty
-                        ? FontWeight.bold
-                        : FontWeight.normal,
+                    fontWeight: isFolder ? FontWeight.bold : FontWeight.normal,
                     color: Colors.black,
                   ),
                 ),
               ),
               if (showPerms) ...[
                 const SizedBox(width: 8),
-                Flexible(child: _buildPermissionRow(row.id)),
+                Flexible(child: _buildPermissionRow(row.id, isEnglish)),
               ],
             ],
           ),
         ),
         ...row.children
-            .map((child) => _buildNodeItem(child, level + 1))
-            .toList(),
+            .map((child) => _buildNodeItem(child, level + 1, isEnglish)),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+
     if (widget.lists.isEmpty) {
-      return const Center(child: Text('ไม่พบรายการเมนูในระบบ'));
+      return Center(
+          child: Text(isEnglish
+              ? 'No menu items found in the system'
+              : 'ไม่พบรายการเมนูในระบบ'));
     }
 
     final List<Menu> topLevelMenusToDisplay = widget.isEditing
@@ -262,15 +286,17 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
             .toList();
 
     if (topLevelMenusToDisplay.isEmpty && !widget.isEditing) {
-      return const Center(
-          child: Text('ผู้ใช้ยังไม่ได้รับสิทธิ์เข้าถึงเมนูใดๆ'));
+      return Center(
+          child: Text(isEnglish
+              ? 'User has no menu access permissions'
+              : 'ผู้ใช้ยังไม่ได้รับสิทธิ์เข้าถึงเมนูใดๆ'));
     }
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: topLevelMenusToDisplay
-            .map((menu) => _buildNodeItem(menu, 0))
+            .map((menu) => _buildNodeItem(menu, 0, isEnglish))
             .toList(),
       ),
     );

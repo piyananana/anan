@@ -1,6 +1,8 @@
 // widgets/user_detail_form.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../../cd/models/currency.dart';
 import '../../cd/services/currency_service.dart';
 import '../models/account.dart';
@@ -279,6 +281,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     if (widget.isPlaceholder) {
       return const Center(
         child: Text(
@@ -548,7 +551,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                   child: ElevatedButton.icon(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
+                    label: Text(l.cancel),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade600,
                       foregroundColor: Colors.white,

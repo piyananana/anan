@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import '../services/language_provider.dart';
 import '../services/sa_dashboard_service.dart';
 
 // ─── Public entry point ───────────────────────────────────────────────────────
@@ -94,25 +96,25 @@ class _DashboardWidgetState extends State<DashboardWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Container(
       color: Colors.blueGrey.shade50,
       child: Column(
         children: [
-          _buildHeader(),
-          Expanded(child: _buildBody()),
+          _buildHeader(isEnglish),
+          Expanded(child: _buildBody(isEnglish)),
           if (!_loading && _error.isEmpty) _buildIndicator(),
         ],
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
       child: Row(
         children: [
-          const Icon(Icons.dashboard_rounded,
-              color: Color(0xFF455A64), size: 20),
+          const Icon(Icons.dashboard_rounded, color: Color(0xFF455A64), size: 20),
           const SizedBox(width: 8),
           Text(
             'Dashboard',
@@ -123,28 +125,28 @@ class _DashboardWidgetState extends State<DashboardWidget> {
                 ),
           ),
           const Spacer(),
-          // show pause icon when hovered
           AnimatedOpacity(
             opacity: _isHovered ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 200),
-            child: const Tooltip(
-              message: 'หยุด auto scroll',
-              child: Padding(
+            child: Tooltip(
+              message: isEnglish ? 'Pause auto scroll' : 'หยุด auto scroll',
+              child: const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 4),
                 child: Icon(Icons.pause_circle_outline_rounded,
                     size: 18, color: Color(0xFF90A4AE)),
               ),
             ),
           ),
-          const Tooltip(
-            message: 'อัปเดตอัตโนมัติทุก $_refreshIntervalSec วินาที',
-            child: Icon(Icons.sync_rounded,
-                size: 16, color: Color(0xFFB0BEC5)),
+          Tooltip(
+            message: isEnglish
+                ? 'Auto-refresh every $_refreshIntervalSec seconds'
+                : 'อัปเดตอัตโนมัติทุก $_refreshIntervalSec วินาที',
+            child: const Icon(Icons.sync_rounded, size: 16, color: Color(0xFFB0BEC5)),
           ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 20),
             onPressed: () => _load(),
-            tooltip: 'รีเฟรชทันที',
+            tooltip: isEnglish ? 'Refresh now' : 'รีเฟรชทันที',
             color: const Color(0xFF78909C),
           ),
         ],
@@ -152,7 +154,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(bool isEnglish) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error.isNotEmpty) {
       return Center(
@@ -166,7 +168,7 @@ class _DashboardWidgetState extends State<DashboardWidget> {
             OutlinedButton.icon(
               onPressed: () => _load(),
               icon: const Icon(Icons.refresh),
-              label: const Text('ลองใหม่'),
+              label: Text(isEnglish ? 'Retry' : 'ลองใหม่'),
             ),
           ],
         ),
@@ -175,14 +177,9 @@ class _DashboardWidgetState extends State<DashboardWidget> {
 
     return LayoutBuilder(
       builder: (_, constraints) {
-        final cardSz = math.min(
-          constraints.maxWidth,
-          constraints.maxHeight,
-        );
-
-        Widget page(Widget card) => Center(
-              child: SizedBox.square(dimension: cardSz, child: card),
-            );
+        final cardSz = math.min(constraints.maxWidth, constraints.maxHeight);
+        Widget page(Widget card) =>
+            Center(child: SizedBox.square(dimension: cardSz, child: card));
 
         return MouseRegion(
           onEnter: (_) => setState(() => _isHovered = true),
@@ -191,9 +188,9 @@ class _DashboardWidgetState extends State<DashboardWidget> {
             controller: _pageCtrl,
             onPageChanged: (p) => setState(() => _currentPage = p),
             children: [
-              page(_UserStatsCard(stats: _stats!)),
-              page(_DbSizeCard(info: _sizeInfo!)),
-              page(const _SessionTimerCard()),
+              page(_UserStatsCard(stats: _stats!, isEnglish: isEnglish)),
+              page(_DbSizeCard(info: _sizeInfo!, isEnglish: isEnglish)),
+              page(_SessionTimerCard(isEnglish: isEnglish)),
             ],
           ),
         );
@@ -289,16 +286,16 @@ class _CardFrame extends StatelessWidget {
 
 class _UserStatsCard extends StatelessWidget {
   final UserStats stats;
-  const _UserStatsCard({required this.stats});
+  final bool isEnglish;
+  const _UserStatsCard({required this.stats, required this.isEnglish});
 
   @override
   Widget build(BuildContext context) {
     return _CardFrame(
-      title: 'ผู้ใช้งาน',
+      title: isEnglish ? 'Users' : 'ผู้ใช้งาน',
       icon: Icons.people_alt_rounded,
       child: Column(
         children: [
-          // donut chart — takes majority of height
           Expanded(
             flex: 6,
             child: Center(
@@ -310,29 +307,28 @@ class _UserStatsCard extends StatelessWidget {
                     activeOffline: stats.activeOffline,
                     inactive:      stats.inactive,
                     total:         stats.total,
+                    isEnglish:     isEnglish,
                   ),
                 ),
               ),
             ),
           ),
           const SizedBox(height: 12),
-          // summary totals row
           _summaryRow(stats.total, stats.active, stats.inactive),
           const SizedBox(height: 16),
-          // legend
           Expanded(
             flex: 3,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _legendItem(const Color(0xFF00C853),
-                    'กำลัง Login', stats.online),
+                    isEnglish ? 'Online' : 'กำลัง Login', stats.online, isEnglish),
                 const SizedBox(height: 8),
                 _legendItem(const Color(0xFF2979FF),
-                    'Active (ยังไม่ได้ Login)', stats.activeOffline),
+                    isEnglish ? 'Active (Offline)' : 'Active (ยังไม่ได้ Login)', stats.activeOffline, isEnglish),
                 const SizedBox(height: 8),
                 _legendItem(const Color(0xFF90A4AE),
-                    'Inactive', stats.inactive),
+                    'Inactive', stats.inactive, isEnglish),
               ],
             ),
           ),
@@ -345,7 +341,7 @@ class _UserStatsCard extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _statChip('ทั้งหมด',  total,    const Color(0xFF37474F)),
+        _statChip(isEnglish ? 'Total'    : 'ทั้งหมด',  total,    const Color(0xFF37474F)),
         _divider(),
         _statChip('Active',   active,   const Color(0xFF2979FF)),
         _divider(),
@@ -373,7 +369,7 @@ class _UserStatsCard extends StatelessWidget {
     );
   }
 
-  Widget _legendItem(Color color, String label, int count) {
+  Widget _legendItem(Color color, String label, int count, bool isEnglish) {
     return Row(
       children: [
         Container(
@@ -383,17 +379,15 @@ class _UserStatsCard extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(label,
-              style: const TextStyle(
-                  fontSize: 14, color: Color(0xFF455A64))),
+              style: const TextStyle(fontSize: 14, color: Color(0xFF455A64))),
         ),
         Text('$count',
             style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
+                fontSize: 16, fontWeight: FontWeight.w800,
                 color: Color(0xFF263238))),
         const SizedBox(width: 3),
-        const Text('คน',
-            style: TextStyle(fontSize: 12, color: Color(0xFF90A4AE))),
+        Text(isEnglish ? 'ppl' : 'คน',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF90A4AE))),
       ],
     );
   }
@@ -402,10 +396,11 @@ class _UserStatsCard extends StatelessWidget {
 // Donut chart painter
 class _DonutPainter extends CustomPainter {
   final int online, activeOffline, inactive, total;
+  final bool isEnglish;
 
-  static const Color _cOnline   = Color(0xFF00C853); // vivid green
-  static const Color _cActive   = Color(0xFF2979FF); // vivid blue
-  static const Color _cInactive = Color(0xFF90A4AE); // blue-grey
+  static const Color _cOnline   = Color(0xFF00C853);
+  static const Color _cActive   = Color(0xFF2979FF);
+  static const Color _cInactive = Color(0xFF90A4AE);
   static const Color _cEmpty    = Color(0xFFE0E0E0);
 
   const _DonutPainter({
@@ -413,6 +408,7 @@ class _DonutPainter extends CustomPainter {
     required this.activeOffline,
     required this.inactive,
     required this.total,
+    this.isEnglish = false,
   });
 
   @override
@@ -473,7 +469,7 @@ class _DonutPainter extends CustomPainter {
     // center: total count
     _drawText(canvas, '$total', 40, FontWeight.w800,
         Offset(cx, cy - 14), const Color(0xFF212121));
-    _drawText(canvas, 'คน', 15, FontWeight.w500,
+    _drawText(canvas, isEnglish ? 'ppl' : 'คน', 15, FontWeight.w500,
         Offset(cx, cy + 20), const Color(0xFF607D8B));
   }
 
@@ -493,7 +489,8 @@ class _DonutPainter extends CustomPainter {
   bool shouldRepaint(_DonutPainter o) =>
       o.online != online ||
       o.activeOffline != activeOffline ||
-      o.inactive != inactive;
+      o.inactive != inactive ||
+      o.isEnglish != isEnglish;
 }
 
 // ─── Card 2: DB Size by Module ────────────────────────────────────────────────
@@ -521,19 +518,21 @@ class _DbSizeCard extends StatelessWidget {
   static String _moduleName(String code) =>
       _moduleNames[code.toLowerCase()] ?? code.toUpperCase();
 
-  const _DbSizeCard({required this.info});
+  final bool isEnglish;
+  const _DbSizeCard({required this.info, required this.isEnglish});
 
   @override
   Widget build(BuildContext context) {
     return _CardFrame(
-      title: 'ขนาดข้อมูล (ตามโมดูล)',
+      title: isEnglish ? 'Data Size (by Module)' : 'ขนาดข้อมูล (ตามโมดูล)',
       icon: Icons.storage_rounded,
       child: info.modules.isEmpty
-          ? const Center(child: Text('ไม่มีข้อมูล', style: TextStyle(color: Colors.grey)))
+          ? Center(child: Text(isEnglish ? 'No data' : 'ไม่มีข้อมูล',
+              style: const TextStyle(color: Colors.grey)))
           : Column(
               children: [
                 Expanded(child: _buildBars()),
-                _buildFooter(),
+                _buildFooter(isEnglish),
               ],
             ),
     );
@@ -602,7 +601,7 @@ class _DbSizeCard extends StatelessWidget {
     );
   }
 
-  Widget _buildFooter() {
+  Widget _buildFooter(bool isEnglish) {
     final modTotal = info.modulesTotalBytes;
     final dbTotal  = info.dbTotalBytes;
     // fraction of DB space used by public-schema tables (0..1)
@@ -617,9 +616,11 @@ class _DbSizeCard extends StatelessWidget {
         // summary numbers
         Row(
           children: [
-            _footerStat(Icons.table_rows_rounded, 'ยอดรวมข้อมูล',   modTotal, const Color(0xFF455A64)),
+            _footerStat(Icons.table_rows_rounded,
+                isEnglish ? 'Tables Total'    : 'ยอดรวมข้อมูล',  modTotal, const Color(0xFF455A64)),
             const SizedBox(width: 12),
-            _footerStat(Icons.dns_rounded,        'ขนาด Database', dbTotal,  const Color(0xFF1565C0)),
+            _footerStat(Icons.dns_rounded,
+                isEnglish ? 'Database Size'   : 'ขนาด Database', dbTotal,  const Color(0xFF1565C0)),
           ],
         ),
         const SizedBox(height: 8),
@@ -646,7 +647,9 @@ class _DbSizeCard extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'ข้อมูล tables ใช้ ${(usedFrac * 100).toStringAsFixed(1)}% ของ Database',
+          isEnglish
+              ? 'Tables use ${(usedFrac * 100).toStringAsFixed(1)}% of Database'
+              : 'ข้อมูล tables ใช้ ${(usedFrac * 100).toStringAsFixed(1)}% ของ Database',
           style: const TextStyle(fontSize: 11, color: Color(0xFF90A4AE)),
         ),
       ],
@@ -693,7 +696,8 @@ class _DbSizeCard extends StatelessWidget {
 // ─── Card 3: Session Timer ────────────────────────────────────────────────────
 
 class _SessionTimerCard extends StatefulWidget {
-  const _SessionTimerCard();
+  const _SessionTimerCard({required this.isEnglish});
+  final bool isEnglish;
 
   @override
   State<_SessionTimerCard> createState() => _SessionTimerCardState();
@@ -762,9 +766,10 @@ class _SessionTimerCardState extends State<_SessionTimerCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = widget.isEnglish;
     if (!_loaded) {
       return _CardFrame(
-        title: 'Session ปัจจุบัน',
+        title: isEnglish ? 'Current Session' : 'Session ปัจจุบัน',
         icon: Icons.timer_rounded,
         child: Center(
           child: _hasError
@@ -773,8 +778,11 @@ class _SessionTimerCardState extends State<_SessionTimerCard> {
                   children: [
                     Icon(Icons.error_outline, color: Colors.red.shade300, size: 32),
                     const SizedBox(height: 8),
-                    const Text('ไม่สามารถอ่านข้อมูล Session',
-                        style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text(
+                        isEnglish
+                            ? 'Unable to read Session data'
+                            : 'ไม่สามารถอ่านข้อมูล Session',
+                        style: const TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 )
               : const CircularProgressIndicator(),
@@ -803,13 +811,14 @@ class _SessionTimerCardState extends State<_SessionTimerCard> {
             : const Color(0xFF43A047);
 
     return _CardFrame(
-      title: 'Session ปัจจุบัน',
+      title: isEnglish ? 'Current Session' : 'Session ปัจจุบัน',
       icon: Icons.timer_rounded,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // ── Session duration (large clock) ──
-          Text('เวลาที่ใช้งาน',
+          Text(
+              isEnglish ? 'Elapsed Time' : 'เวลาที่ใช้งาน',
               style: TextStyle(fontSize: 13, color: Colors.blueGrey.shade400)),
           const SizedBox(height: 6),
           Text(
@@ -822,18 +831,25 @@ class _SessionTimerCardState extends State<_SessionTimerCard> {
             ),
           ),
           Text(
-            'Login เมื่อ ${DateFormat('HH:mm:ss').format(_loginAt!)}',
+            isEnglish
+                ? 'Logged in at ${DateFormat('HH:mm:ss').format(_loginAt!)}'
+                : 'Login เมื่อ ${DateFormat('HH:mm:ss').format(_loginAt!)}',
             style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade400),
           ),
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 12),
           // ── Remaining session time ──
-          Text('เวลาคงเหลือก่อน Session หมดอายุ',
+          Text(
+              isEnglish
+                  ? 'Time remaining before Session expires'
+                  : 'เวลาคงเหลือก่อน Session หมดอายุ',
               style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade400)),
           const SizedBox(height: 6),
           Text(
-            isExpired ? 'หมดอายุแล้ว' : _hms(remaining),
+            isExpired
+                ? (isEnglish ? 'Expired' : 'หมดอายุแล้ว')
+                : _hms(remaining),
             style: TextStyle(
                 fontSize: 32, fontWeight: FontWeight.w600, color: remColor),
           ),
@@ -850,8 +866,12 @@ class _SessionTimerCardState extends State<_SessionTimerCard> {
           const SizedBox(height: 4),
           Text(
             isExpired
-                ? 'Session หมดอายุ — กรุณา Login ใหม่'
-                : 'หมดอายุ ${DateFormat('HH:mm').format(_expiresAt!)} น.',
+                ? (isEnglish
+                    ? 'Session expired — please log in again'
+                    : 'Session หมดอายุ — กรุณา Login ใหม่')
+                : (isEnglish
+                    ? 'Expires at ${DateFormat('HH:mm').format(_expiresAt!)}'
+                    : 'หมดอายุ ${DateFormat('HH:mm').format(_expiresAt!)} น.'),
             style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade400),
           ),
         ],

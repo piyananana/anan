@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 
 class ApResetScreen extends StatefulWidget {
@@ -74,6 +77,7 @@ class _ApResetScreenState extends State<ApResetScreen> {
       !_isExecuting;
 
   Future<void> _execute() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -112,7 +116,7 @@ class _ApResetScreenState extends State<ApResetScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
@@ -253,6 +257,7 @@ class _ApResetScreenState extends State<ApResetScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

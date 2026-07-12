@@ -129,6 +129,7 @@ import '../../ap/screens/ap_fx_revaluation_screen.dart';
 import '../../cm/screens/cm_bank_file_format_screen.dart';
 import '../screens/sa_smtp_config_screen.dart';
 import '../screens/sa_user_audit_log_screen.dart';
+import '../screens/sa_audit_log_reset_screen.dart';
 
 class Menu {
   final int id;
@@ -316,6 +317,7 @@ class Menu {
     'CmBankFileFormatScreen': (context) => const CmBankFileFormatScreen(),
     'SaSmtpConfigScreen':        (context) => const SaSmtpConfigScreen(),
     'SaUserAuditLogScreen':      (context) => const SaUserAuditLogScreen(),
+    'SaAuditLogResetScreen':     (context) => const SaAuditLogResetScreen(),
     // 'PeriodScreen': (context) => const PeriodScreen(),
     // Add all your custom widgets here
     // 'YourCustomWidget1': (context) => const YourCustomWidget1(),

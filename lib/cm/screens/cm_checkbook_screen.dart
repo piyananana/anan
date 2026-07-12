@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:provider/provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_checkbook.dart';
@@ -157,24 +160,28 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
     } catch (e) { _showErr(e.toString()); }
   }
 
-  Future<bool> _confirm(String msg) async => await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('ยืนยัน'),
-      content: Text(msg),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ยืนยัน', style: TextStyle(color: Colors.red))),
-      ],
-    ),
-  ) ?? false;
+  Future<bool> _confirm(String msg) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    return await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ยืนยัน'),
+        content: Text(msg),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
+          TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: Text(l.confirm, style: const TextStyle(color: Colors.red))),
+        ],
+      ),
+    ) ?? false;
+  }
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -496,6 +503,7 @@ class _CheckbookFormState extends State<_CheckbookForm> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Container(
       color: Colors.blue.shade50,
       padding: const EdgeInsets.all(12),
@@ -559,14 +567,14 @@ class _CheckbookFormState extends State<_CheckbookForm> {
           ),
           const SizedBox(height: 10),
           Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            TextButton(onPressed: widget.onCancel, child: const Text('ยกเลิก')),
+            TextButton(onPressed: widget.onCancel, child: Text(l.cancel)),
             const SizedBox(width: 8),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: widget.kColor),
               onPressed: _saving ? null : _submit,
               child: _saving
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text(widget.initial.id == null ? 'เพิ่ม' : 'บันทึก'),
+                  : Text(widget.initial.id == null ? l.add : l.save),
             ),
           ]),
         ]),
@@ -736,6 +744,7 @@ class _PrintConfigFormState extends State<_PrintConfigForm> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     final pw = _n(_wCtrl);
     final ph = _n(_hCtrl);
 
@@ -800,7 +809,7 @@ class _PrintConfigFormState extends State<_PrintConfigForm> {
 
           // Buttons
           Row(children: [
-            TextButton(onPressed: widget.onCancel, child: const Text('ยกเลิก')),
+            TextButton(onPressed: widget.onCancel, child: Text(l.cancel)),
             const SizedBox(width: 8),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: widget.kColor),

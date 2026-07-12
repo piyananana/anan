@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
@@ -80,6 +83,7 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -114,6 +118,7 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
   }
 
   Widget _buildSlotCard(int slotNo) {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final isActive = _active[slotNo] ?? false;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -162,7 +167,7 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
               const SizedBox(width: 12),
               ElevatedButton.icon(
                 icon: const Icon(Icons.save, size: 16),
-                label: const Text('บันทึก'),
+                label: Text(l.save),
                 onPressed: () => _save(slotNo),
               ),
             ]),

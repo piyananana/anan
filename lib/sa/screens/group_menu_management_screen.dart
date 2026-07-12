@@ -1,6 +1,8 @@
 // screens/group_menu_management_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
 import '../utils/menu_scope.dart';
 
 import '../models/group.dart';
@@ -193,30 +195,33 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
   }
 
   Future<void> _onSave() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedNode == null || _nodeMode != NodeMode.edit) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('ไม่มีกลุ่มที่เลือกหรือไม่ได้อยู่ในโหมดแก้ไข')),
+        SnackBar(content: Text(l.isEnglish
+            ? 'No group selected or not in edit mode'
+            : 'ไม่มีกลุ่มที่เลือกหรือไม่ได้อยู่ในโหมดแก้ไข')),
       );
       return;
     }
 
     if (_stagedGrantedPerms.isEmpty) {
-      // ถามผู้ใช้ก่อนว่าต้องการลบสิทธิ์ทั้งหมดจริงหรือไม่
       final bool? confirmDelete = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('ยืนยันการลบสิทธิ์ทั้งหมด'),
-          content: Text('คุณต้องการลบสิทธิ์เข้าถึงเมนูทั้งหมดของ ${_selectedNode!.name} ใช่หรือไม่?'),
+          title: Text(l.isEnglish ? 'Confirm Delete All Permissions' : 'ยืนยันการลบสิทธิ์ทั้งหมด'),
+          content: Text(l.isEnglish
+              ? 'Remove all menu permissions for ${_selectedNode!.name}?'
+              : 'คุณต้องการลบสิทธิ์เข้าถึงเมนูทั้งหมดของ ${_selectedNode!.name} ใช่หรือไม่?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('ยกเลิก'),
+              child: Text(l.cancel),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('ลบ', style: TextStyle(color: Colors.white)),
+              child: Text(l.delete, style: const TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -238,14 +243,16 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
         // ถ้า Map ว่างเปล่า ให้เรียก API ลบทั้งหมด
         await masterService.deleteGroupMenu(_selectedNode!.id);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('ลบสิทธิ์ทั้งหมดของกลุ่ม ${_selectedNode?.name} สำเร็จ')),
+          SnackBar(content: Text(l.isEnglish
+              ? 'All permissions for ${_selectedNode?.name} deleted'
+              : 'ลบสิทธิ์ทั้งหมดของกลุ่ม ${_selectedNode?.name} สำเร็จ')),
         );
       } else {
         await masterService.updateGroupMenu(_selectedNode?.id, _stagedGrantedPerms);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('บันทึกสิทธิ์สำหรับกลุ่ม ${_selectedNode?.name} สำเร็จ')),
+          SnackBar(content: Text(l.isEnglish
+              ? 'Permissions saved for ${_selectedNode?.name}'
+              : 'บันทึกสิทธิ์สำหรับกลุ่ม ${_selectedNode?.name} สำเร็จ')),
         );
       }
 
@@ -270,7 +277,8 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+
     // ต้องตรวจสอบสถานะการโหลดก่อนสร้าง UI
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -300,16 +308,14 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.refresh,
             onPressed: _fetchData,
           ),
-          _selectedNode != null && _nodeMode == NodeMode.edit 
+          _selectedNode != null && _nodeMode == NodeMode.edit
             ? IconButton(
                 icon: const Icon(Icons.save_outlined, color: Colors.white),
-                onPressed: _nodeMode == NodeMode.edit
-                    ? _onSave
-                    : null, // บันทึกได้เฉพาะตอนอยู่ในโหมดแก้ไข
-                tooltip: 'บันทึกสิทธิ์',
+                onPressed: _nodeMode == NodeMode.edit ? _onSave : null,
+                tooltip: l.isEnglish ? 'Save Permissions' : 'บันทึกสิทธิ์',
               )
             : const SizedBox.shrink(),
           const SizedBox(width: 8),
@@ -334,7 +340,9 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (l.isEnglish ? 'Collapse List' : 'ย่อรายการ')
+                      : (l.isEnglish ? 'Expand List' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(
@@ -354,7 +362,7 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
                           Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: Text(
-                              'โครงสร้างกลุ่ม',
+                              l.isEnglish ? 'Group Structure' : 'โครงสร้างกลุ่ม',
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                           ),
@@ -399,6 +407,7 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
 
   // --- Build Methods ---
   Widget _buildNode(Group rowData, int level) {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final bool isFolder = rowData.haveSubGroup;
     final List<Group> children = _buildTree(_currentList, rowData.id);
     final bool hasChildren = children.isNotEmpty;
@@ -441,13 +450,12 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
                 // Icon ปุ่ม Edit
                 IconButton(
                   icon: const Icon(Icons.visibility, color: Colors.green, size: 20),
-                  tooltip: 'ดูสิทธิ์',
+                  tooltip: l.isEnglish ? 'View Permissions' : 'ดูสิทธิ์',
                   onPressed: () => _onView(rowData),
                 ),
                 IconButton(
                   icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                  tooltip: 'แก้ไข',
-                  // onPressed: () => _setEditMode(rowData),
+                  tooltip: l.edit,
                   onPressed: () => _onEdit(rowData),
                 ),
               ],
@@ -464,14 +472,14 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
     );
   }
 
-  // Helper method สำหรับสร้างเนื้อหาใน Panel ด้านขวา
   Widget _buildRightPanelContent() {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedNode == null || _nodeMode == NodeMode.none) {
-      return const Center(child: Text('เลือกกลุ่มเพื่อจัดการสิทธิ์'));
+      return Center(child: Text(l.isEnglish ? 'Select a group to manage permissions' : 'เลือกกลุ่มเพื่อจัดการสิทธิ์'));
     }
 
     if (_allMenus.isEmpty) {
-      return const Center(child: Text('ไม่พบรายการเมนูในระบบ'));
+      return Center(child: Text(l.isEnglish ? 'No menu items found in the system' : 'ไม่พบรายการเมนูในระบบ'));
     }
 
     return Column(
@@ -479,7 +487,9 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: Text(
-            'สิทธิ์เมนูสำหรับ: ${_selectedNode!.name}',
+            l.isEnglish
+                ? 'Menu Permissions for: ${_selectedNode!.name}'
+                : 'สิทธิ์เมนูสำหรับ: ${_selectedNode!.name}',
             style: Theme.of(context).textTheme.titleLarge,
           ),
         ),

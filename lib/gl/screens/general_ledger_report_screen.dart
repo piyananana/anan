@@ -4,8 +4,11 @@ import 'package:anan/sa/models/company.dart';
 import 'package:anan/sa/services/company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -142,6 +145,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
   // --- Dialog ค้นหาบัญชี ---
   Future<void> _showAccountSearchDialog(bool isFrom) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final searchCtrl = TextEditingController();
     List<Account> filtered = List.from(_controlAccounts);
     final current = isFrom ? _accountFrom : _accountTo;
@@ -246,7 +250,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('ปิด'),
+                child: Text(l.close),
               ),
             ],
           );
@@ -823,6 +827,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

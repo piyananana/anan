@@ -3,8 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../services/cm_period_service.dart';
 
@@ -107,6 +110,7 @@ class _CmBulkPaymentScreenState extends State<CmBulkPaymentScreen>
       .fold(0.0, (s, inv) => s + ((inv['remaining_amount'] as num?)?.toDouble() ?? 0));
 
   Future<void> _runBulkPayment() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_fBankAccId == null) { _showErr('กรุณาเลือกบัญชีธนาคาร'); return; }
     if (_selected.isEmpty) { _showErr('กรุณาเลือกใบแจ้งหนี้อย่างน้อย 1 รายการ'); return; }
     if (!await CmPeriodService.canPost(context, _fPaymentDate)) return;
@@ -125,11 +129,11 @@ class _CmBulkPaymentScreenState extends State<CmBulkPaymentScreen>
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('ยืนยัน'),
+            child: Text(l.confirm),
           ),
         ],
       ),
@@ -182,6 +186,7 @@ class _CmBulkPaymentScreenState extends State<CmBulkPaymentScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,

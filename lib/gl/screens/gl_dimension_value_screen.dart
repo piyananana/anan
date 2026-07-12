@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
@@ -62,6 +65,7 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
   }
 
   Future<void> _onDelete(GlDimensionType type, GlDimensionValue v) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -77,10 +81,10 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('ยกเลิก')),
+              child: Text(l.cancel)),
           ElevatedButton.icon(
             icon: const Icon(Icons.delete, size: 16),
-            label: const Text('ลบ'),
+            label: Text(l.delete),
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx, true),
@@ -143,6 +147,7 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
 
     return Scaffold(
       appBar: AppBar(

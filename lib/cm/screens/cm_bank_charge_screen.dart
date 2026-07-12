@@ -3,8 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../services/cm_period_service.dart';
 
@@ -172,6 +175,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
   }
 
   Future<void> _post(Map<String, dynamic> row) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     DateTime chargeDate = DateTime.now();
     try { chargeDate = DateTime.parse(row['charge_date'].toString()); } catch (_) {}
     if (!await CmPeriodService.canPost(context, chargeDate)) return;
@@ -182,7 +186,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
         content: Text('ต้องการบันทึก GL สำหรับรายการ ${_typeLabels[row['charge_type']] ?? ''} '
             '${_fmt.format((row['amount'] as num?)?.toDouble() ?? 0)} บาท?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
@@ -202,17 +206,18 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
   }
 
   Future<void> _void(Map<String, dynamic> row) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('ยืนยันยกเลิก'),
         content: const Text('ต้องการยกเลิกรายการนี้?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('ยืนยัน'),
+            child: Text(l.confirm),
           ),
         ],
       ),
@@ -228,17 +233,18 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
   }
 
   Future<void> _delete(Map<String, dynamic> row) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('ยืนยันลบ'),
         content: const Text('ต้องการลบรายการนี้?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('ลบ'),
+            child: Text(l.delete),
           ),
         ],
       ),
@@ -268,6 +274,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
@@ -516,6 +523,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
   }
 
   Widget _buildDetail(Map<String, dynamic> row) {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final status = row['status'] as String? ?? '';
     DateTime? dt;
     try { dt = DateTime.parse(row['charge_date'].toString()); } catch (_) {}
@@ -564,7 +572,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
             OutlinedButton(
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
               onPressed: () => _delete(row),
-              child: const Text('ลบ'),
+              child: Text(l.delete),
             ),
           ],
           if (status == 'Posted')

@@ -6,6 +6,9 @@ import 'package:anan/gl/services/account_service.dart';
 import 'package:anan/sa/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../models/account.dart';
 import '../models/gl_dimension.dart';
 import '../models/gl_entry.dart';
@@ -459,6 +462,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   // ── Picker dialogs ───────────────────────────────────────────────────────
 
   Future<Account?> _showAccountDialog() async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final searchCtrl = TextEditingController();
     final available = _accounts.where((a) => a.isNormalAccount && !a.isControlAccount && a.isActive).toList();
     List<Account> filtered = List.from(available);
@@ -504,7 +508,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 },
               )),
               const Divider(height: 1),
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ปิด')),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.close)),
             ]),
           ),
         );
@@ -515,6 +519,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   }
 
   Future<Branch?> _showBranchDialog() async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     // แสดงเฉพาะสาขาที่ user มีสิทธิ์ (ถ้ากำหนดไว้) มิฉะนั้นแสดงทั้งหมด
     final allowedIds = AuthService().allowedBranches.map((b) => b.branchId).toSet();
     final source = allowedIds.isEmpty
@@ -574,7 +579,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     style: TextButton.styleFrom(foregroundColor: Colors.grey),
                   ),
                 const Spacer(),
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ปิด')),
+                TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.close)),
               ]),
             ]),
           ),
@@ -1235,6 +1240,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     return Form(
       key: _formKey,

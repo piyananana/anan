@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/menu.dart';
 import '../services/menu_service.dart';
 import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
+import '../utils/menu_scope.dart';
 
 // Enum เพื่อบอกสถานะของ Node ใน TreeView
 enum NodeMode {
@@ -43,6 +45,7 @@ class _MenuScreenState extends State<MenuScreen>
 
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _menuNameController = TextEditingController();
+  final TextEditingController _menuNameEnController = TextEditingController();
   final TextEditingController _targetPathController = TextEditingController();
   final TextEditingController _sortOrderController = TextEditingController();
   String _menuType = 'folder'; // Default
@@ -66,6 +69,7 @@ class _MenuScreenState extends State<MenuScreen>
   @override
   void dispose() {
     _menuNameController.dispose();
+    _menuNameEnController.dispose();
     _targetPathController.dispose();
     _sortOrderController.dispose();
     _contentDataController.dispose();
@@ -127,6 +131,7 @@ class _MenuScreenState extends State<MenuScreen>
 
   void _clearForm() {
     _menuNameController.clear();
+    _menuNameEnController.clear();
     _targetPathController.clear();
     _sortOrderController.clear();
     _contentDataController.clear();
@@ -182,6 +187,7 @@ class _MenuScreenState extends State<MenuScreen>
       _nodeMode = NodeMode.edit;
       _selectedNode = menu;
       _menuNameController.text = menu.menuName;
+      _menuNameEnController.text = menu.menuNameEn;
       _targetPathController.text = menu.targetPath ?? '';
       _sortOrderController.text = menu.sortOrder.toString();
       _menuType = menu.menuType;
@@ -222,6 +228,7 @@ class _MenuScreenState extends State<MenuScreen>
         final newMenu = await masterService.addMenu(
           parentId: _nodeMode == NodeMode.addChild ? _parentIdForNewNode : null,
           menuName: _menuNameController.text,
+          menuNameEn: _menuNameEnController.text,
           menuType: _menuType,
           targetPath: _targetPathController.text.isEmpty ? null : _targetPathController.text,
           sortOrder: int.tryParse(_sortOrderController.text),
@@ -234,6 +241,7 @@ class _MenuScreenState extends State<MenuScreen>
         final updatedMenu = await masterService.updateMenu(
           _selectedNode!.id,
           menuName: _menuNameController.text,
+          menuNameEn: _menuNameEnController.text,
           menuType: _menuType,
           targetPath: _targetPathController.text.isEmpty ? null : _targetPathController.text,
           sortOrder: int.tryParse(_sortOrderController.text) ?? _selectedNode!.sortOrder,
@@ -259,31 +267,33 @@ class _MenuScreenState extends State<MenuScreen>
   }
 
   Future<void> _confirmDeleteMenu(Menu menu) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_buildTree(_currentList, menu.id).isNotEmpty &&
         menu.menuType == 'folder') {
-      // ป้องกันการลบ Folder ที่มีเมนูย่อย
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                'ไม่สามารถลบ Folder ที่มีเมนูย่อยได้ กรุณาลบเมนูย่อยออกก่อน')),
+        SnackBar(content: Text(l.isEnglish
+            ? 'Cannot delete a folder that has sub-menus. Please delete sub-menus first.'
+            : 'ไม่สามารถลบ Folder ที่มีเมนูย่อยได้ กรุณาลบเมนูย่อยออกก่อน')),
       );
       return;
     }
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext ctx) {
         return AlertDialog(
-          title: const Text('ยืนยันการลบเมนู'),
-          content: Text('คุณแน่ใจหรือไม่ว่าต้องการลบเมนู "${menu.menuName}"?'),
+          title: Text(l.isEnglish ? 'Confirm Delete Menu' : 'ยืนยันการลบเมนู'),
+          content: Text(l.isEnglish
+              ? 'Are you sure you want to delete "${menu.localName(l.isEnglish)}"?'
+              : 'คุณแน่ใจหรือไม่ว่าต้องการลบเมนู "${menu.menuName}"?'),
           actions: [
             TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('ยกเลิก')),
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(l.cancel)),
             ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
+              onPressed: () => Navigator.of(ctx).pop(true),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('ลบ', style: TextStyle(color: Colors.white)),
+              child: Text(l.delete, style: const TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -297,35 +307,39 @@ class _MenuScreenState extends State<MenuScreen>
         _clearForm();
         await _refreshAllMenus();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('ลบเมนู "${menu.menuName}" สำเร็จ')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(l.isEnglish
+                  ? 'Menu "${menu.localName(l.isEnglish)}" deleted successfully'
+                  : 'ลบเมนู "${menu.menuName}" สำเร็จ')));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')));
+              content: Text('${l.isEnglish ? 'Error deleting' : 'เกิดข้อผิดพลาดในการลบ'}: ${e.toString()}')));
         }
       }
     }
   }
 
   Future<void> _confirmDeleteAllNode() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext ctx) {
         return AlertDialog(
-          title: const Text('ยืนยันการลบเมนูทั้งหมด'),
-          content: const Text(
-              'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลเมนูทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้!'),
+          title: Text(l.isEnglish ? 'Confirm Delete All Menus' : 'ยืนยันการลบเมนูทั้งหมด'),
+          content: Text(l.isEnglish
+              ? 'Are you sure you want to delete ALL menu data? This action cannot be undone!'
+              : 'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลเมนูทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้!'),
           actions: [
             TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('ยกเลิก')),
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(l.cancel)),
             ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
+              onPressed: () => Navigator.of(ctx).pop(true),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('ลบทั้งหมด',
-                  style: TextStyle(color: Colors.white)),
+              child: Text(l.isEnglish ? 'Delete All' : 'ลบทั้งหมด',
+                  style: const TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -433,7 +447,7 @@ class _MenuScreenState extends State<MenuScreen>
   }
 
   // --- Build Methods ---
-  Widget _buildNode(Menu menu, int level) {
+  Widget _buildNode(Menu menu, int level, AppL10n l) {
     final bool isFolder = menu.menuType == 'folder';
     final List<Menu> children = _buildTree(_currentList, menu.id);
     final bool hasChildren = children.isNotEmpty;
@@ -474,19 +488,17 @@ class _MenuScreenState extends State<MenuScreen>
                 if (isFolder)
                   IconButton(
                     icon: const Icon(Icons.add_circle_outline, size: 20),
-                    tooltip: 'เพิ่มเมนูย่อย',
+                    tooltip: l.isEnglish ? 'Add Sub Menu' : 'เพิ่มเมนูย่อย',
                     onPressed: () => _setAddChildMode(menu),
                   ),
-                // Icon ปุ่ม Edit
                 IconButton(
                   icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                  tooltip: 'แก้ไขเมนู',
+                  tooltip: l.isEnglish ? 'Edit Menu' : 'แก้ไขเมนู',
                   onPressed: () => _setEditMode(menu),
                 ),
-                // Icon ปุ่ม Delete
                 IconButton(
                   icon: const Icon(Icons.delete, size: 20, color: Colors.red),
-                  tooltip: 'ลบเมนู',
+                  tooltip: l.isEnglish ? 'Delete Menu' : 'ลบเมนู',
                   onPressed: () => _confirmDeleteMenu(menu),
                 ),
               ],
@@ -496,13 +508,13 @@ class _MenuScreenState extends State<MenuScreen>
         if (isExpanded && hasChildren)
           Column(
             children:
-                children.map((child) => _buildNode(child, level + 1)).toList(),
+                children.map((child) => _buildNode(child, level + 1, l)).toList(),
           ),
       ],
     );
   }
 
-  Widget _buildDetailForm() {
+  Widget _buildDetailForm(AppL10n l) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -512,35 +524,43 @@ class _MenuScreenState extends State<MenuScreen>
           children: [
             Text(
               _nodeMode == NodeMode.addRoot
-                  ? 'เพิ่มเมนูหลัก'
+                  ? (l.isEnglish ? 'Add Root Menu' : 'เพิ่มเมนูหลัก')
                   : _nodeMode == NodeMode.addChild
-                      ? 'เพิ่มเมนูย่อย: ${_selectedNode?.menuName ?? ''}'
+                      ? '${l.isEnglish ? 'Add Sub Menu' : 'เพิ่มเมนูย่อย'}: ${_selectedNode?.localName(l.isEnglish) ?? ''}'
                       : _nodeMode == NodeMode.edit
-                          ? 'แก้ไขเมนู: ${_selectedNode?.menuName ?? ''}'
-                          : 'เลือกเมนูหรือเพิ่มเมนูใหม่',
+                          ? '${l.isEnglish ? 'Edit Menu' : 'แก้ไขเมนู'}: ${_selectedNode?.localName(l.isEnglish) ?? ''}'
+                          : (l.isEnglish ? 'Select a menu or add a new one' : 'เลือกเมนูหรือเพิ่มเมนูใหม่'),
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
             TextFormField(
               controller: _menuNameController,
-              decoration: const InputDecoration(
-                labelText: 'ชื่อเมนู',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.isEnglish ? 'Menu Name (TH)' : 'ชื่อเมนู (ไทย)',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'กรุณาป้อนชื่อเมนู';
+                  return l.isEnglish ? 'Please enter menu name' : 'กรุณาป้อนชื่อเมนู';
                 }
                 return null;
               },
             ),
             const SizedBox(height: 16),
+            TextFormField(
+              controller: _menuNameEnController,
+              decoration: InputDecoration(
+                labelText: l.isEnglish ? 'Menu Name (EN)' : 'ชื่อเมนู (อังกฤษ)',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               isExpanded: true,
               value: _menuType,
-              decoration: const InputDecoration(
-                labelText: 'ประเภทเมนู',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.isEnglish ? 'Menu Type' : 'ประเภทเมนู',
+                border: const OutlineInputBorder(),
               ),
               items: const [
                 DropdownMenuItem(value: 'folder', child: Text('Folder')),
@@ -563,14 +583,13 @@ class _MenuScreenState extends State<MenuScreen>
             if (_menuType != 'folder')
               TextFormField(
                 controller: _targetPathController,
-                decoration: const InputDecoration(
-                  labelText: 'Widget/Class Name หรือ Link Path',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.isEnglish ? 'Widget/Class Name or Link Path' : 'Widget/Class Name หรือ Link Path',
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (value) {
                   if (_menuType != 'folder' && value == null) {
-                    // (value == null || value.isEmpty)) {
-                    return 'กรุณาป้อน Widget/Class Name หรือ Link Path';
+                    return l.isEnglish ? 'Please enter Widget/Class Name or Link Path' : 'กรุณาป้อน Widget/Class Name หรือ Link Path';
                   }
                   return null;
                 },
@@ -581,9 +600,9 @@ class _MenuScreenState extends State<MenuScreen>
               DropdownButtonFormField<String>(
                 isExpanded: true,
                 value: _contentType,
-                decoration: const InputDecoration(
-                  labelText: 'ประเภท Content',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.isEnglish ? 'Content Type' : 'ประเภท Content',
+                  border: const OutlineInputBorder(),
                 ),
                 items: const [
                   DropdownMenuItem(value: 'widget', child: Text('Widget Name')),
@@ -632,16 +651,16 @@ class _MenuScreenState extends State<MenuScreen>
             TextFormField(
               controller: _sortOrderController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'ลำดับการแสดงผล',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.isEnglish ? 'Sort Order' : 'ลำดับการแสดงผล',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'กรุณาป้อนลำดับ';
+                  return l.isEnglish ? 'Please enter sort order' : 'กรุณาป้อนลำดับ';
                 }
                 if (int.tryParse(value) == null) {
-                  return 'ต้องเป็นตัวเลขเท่านั้น';
+                  return l.isEnglish ? 'Must be a number' : 'ต้องเป็นตัวเลขเท่านั้น';
                 }
                 return null;
               },
@@ -650,24 +669,26 @@ class _MenuScreenState extends State<MenuScreen>
             if (_nodeMode == NodeMode.edit)
               Row(
                 children: [
-                  const Text('สถานะ: '),
+                  Text(l.isEnglish ? 'Status: ' : 'สถานะ: '),
                   Switch(
                     value: _isActive,
                     onChanged: (v) => setState(() => _isActive = v),
                   ),
-                  Text(_isActive ? 'Active' : 'Inactive'),
+                  Text(_isActive ? l.active : l.inactive),
                 ],
               ),
             Row(
               children: [
-                const Text('เมนูระบบ (System): '),
+                Text(l.isEnglish ? 'System Menu: ' : 'เมนูระบบ (System): '),
                 Switch(
                   value: _isSystem,
                   activeColor: Colors.red,
                   onChanged: (v) => setState(() => _isSystem = v),
                 ),
                 Text(
-                  _isSystem ? 'เฉพาะ Developer' : 'ทั่วไป',
+                  _isSystem
+                      ? (l.isEnglish ? 'Developer Only' : 'เฉพาะ Developer')
+                      : (l.isEnglish ? 'General' : 'ทั่วไป'),
                   style: TextStyle(
                     color: _isSystem ? Colors.red : Colors.grey,
                     fontWeight: _isSystem ? FontWeight.bold : FontWeight.normal,
@@ -682,14 +703,14 @@ class _MenuScreenState extends State<MenuScreen>
                 if (_nodeMode != NodeMode.none)
                   TextButton(
                     onPressed: _clearForm,
-                    child: const Text('ยกเลิก'),
+                    child: Text(l.cancel),
                   ),
                 const SizedBox(width: 10),
                 ElevatedButton(
                   onPressed: _nodeMode == NodeMode.none ? null : _submitMenu,
                   child: Text(_nodeMode == NodeMode.edit
-                      ? 'บันทึกการแก้ไข'
-                      : 'บันทึกข้อมูลใหม่'),
+                      ? (l.isEnglish ? 'Save Changes' : 'บันทึกการแก้ไข')
+                      : (l.isEnglish ? 'Save New' : 'บันทึกข้อมูลใหม่')),
                 ),
               ],
             ),
@@ -703,6 +724,7 @@ class _MenuScreenState extends State<MenuScreen>
   Widget build(BuildContext context) {
     // *** สำคัญ: ต้องเรียก super.build(context); ที่จุดเริ่มต้นของ build method ***
     super.build(context); // This is crucial for AutomaticKeepAliveClientMixin
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
 
     // ต้องตรวจสอบสถานะการโหลดก่อนสร้าง UI
     if (_isLoading) {
@@ -717,7 +739,7 @@ class _MenuScreenState extends State<MenuScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [Icon(Icons.menu_book, color: Colors.white, size: 20), SizedBox(width: 8), Text('จัดการเมนู')]),
+        title: const MenuTitle(),
         // leading: IconButton(
         //   icon: const Icon(Icons.arrow_back),
         //   onPressed: () {
@@ -733,7 +755,7 @@ class _MenuScreenState extends State<MenuScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
             onPressed: _refreshAllMenus,
           ),
           // ปุ่ม Import/Export
@@ -746,12 +768,12 @@ class _MenuScreenState extends State<MenuScreen>
           else ...[
             IconButton(
               icon: const Icon(Icons.upload_file),
-              tooltip: 'Import จาก Excel',
+              tooltip: l.isEnglish ? 'Import from Excel' : 'Import จาก Excel',
               onPressed: _importData,
             ),
             IconButton(
               icon: const Icon(Icons.download),
-              tooltip: 'Export ไป Excel',
+              tooltip: l.isEnglish ? 'Export to Excel' : 'Export ไป Excel',
               onPressed: _exportData,
             ),
           ],
@@ -765,7 +787,7 @@ class _MenuScreenState extends State<MenuScreen>
           // else
           IconButton(
             icon: const Icon(Icons.delete_sweep),
-            tooltip: 'ลบทั้งหมด',
+            tooltip: l.isEnglish ? 'Delete All' : 'ลบทั้งหมด',
             onPressed: _confirmDeleteAllNode,
           ),
           const SizedBox(width: 8),
@@ -790,7 +812,9 @@ class _MenuScreenState extends State<MenuScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (l.isEnglish ? 'Collapse' : 'ย่อรายการ')
+                      : (l.isEnglish ? 'Expand' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(
@@ -814,7 +838,7 @@ class _MenuScreenState extends State<MenuScreen>
                               child: ElevatedButton.icon(
                                 onPressed: _setAddRootMode,
                                 icon: const Icon(Icons.add),
-                                label: const Text('เพิ่มเมนูหลักใหม่'),
+                                label: Text(l.isEnglish ? 'Add Root Menu' : 'เพิ่มเมนูหลักใหม่'),
                               ),
                             ),
                           ),
@@ -822,7 +846,7 @@ class _MenuScreenState extends State<MenuScreen>
                             child: ListView.builder(
                               itemCount: topLevelMenus.length,
                               itemBuilder: (context, index) {
-                                return _buildNode(topLevelMenus[index], 0);
+                                return _buildNode(topLevelMenus[index], 0, l);
                               },
                             ),
                           ),
@@ -851,9 +875,11 @@ class _MenuScreenState extends State<MenuScreen>
                 ),
               Expanded(
                 child: _selectedNode == null && _nodeMode == NodeMode.none
-                    ? const Center(
-                        child: Text('กรุณาเลือกเมนู หรือ ปุ่มการทำงานด้านซ้าย'))
-                    : _buildDetailForm(),
+                    ? Center(
+                        child: Text(l.isEnglish
+                            ? 'Please select a menu or use the left panel buttons'
+                            : 'กรุณาเลือกเมนู หรือ ปุ่มการทำงานด้านซ้าย'))
+                    : _buildDetailForm(l),
               ),
             ],
           );

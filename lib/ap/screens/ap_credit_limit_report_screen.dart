@@ -5,6 +5,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'package:provider/provider.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
@@ -332,6 +335,7 @@ class _ApCreditLimitReportScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -755,6 +759,7 @@ class _CreditLimitVendorSearchDialogState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,

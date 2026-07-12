@@ -200,18 +200,18 @@ class _LoginScreenState extends State<LoginScreen> {
                           mainAxisAlignment: MainAxisAlignment
                               .center, // จัดกลางแนวตั้งในพื้นที่ Expanded
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.lock_person,
                               size: 72,
-                              color: Colors.blueAccent,
+                              color: Colors.green.shade900,
                             ),
                             const SizedBox(height: 10), //25
-                            const Text(
-                              'เข้าสู่ระบบ',
+                            Text(
+                              'เข้าสู่ระบบ (Login)',
                               style: TextStyle(
-                                fontSize: 42,
+                                fontSize: 30,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.blueGrey,
+                                color: Colors.green.shade900,
                               ),
                             ),
                             // Dropdown สำหรับเลือกฐานข้อมูล
@@ -219,7 +219,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             DropdownButtonFormField<String>(
                               isExpanded: true,
                               decoration: const InputDecoration(
-                                labelText: 'ฐานข้อมูล',
+                                labelText: 'ฐานข้อมูล (Database)',
                                 border: OutlineInputBorder(),
                               ),
                               value: _selectedDatabase,
@@ -236,7 +236,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               },
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'กรุณาเลือกฐานข้อมูล';
+                                  return 'กรุณาเลือกฐานข้อมูล (Please select a database)';
                                 }
                                 return null;
                               },
@@ -247,7 +247,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               autofocus: true,
                               textInputAction: TextInputAction.next,
                               decoration: const InputDecoration(
-                                labelText: 'ชื่อผู้ใช้งาน',
+                                labelText: 'ชื่อผู้ใช้งาน (User Name)',
                                 border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.person),
                               ),
@@ -259,7 +259,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               textInputAction: TextInputAction.done,
                               onSubmitted: (_) => _login(),
                               decoration: const InputDecoration(
-                                labelText: 'รหัสผ่าน',
+                                labelText: 'รหัสผ่าน (Password)',
                                 border: OutlineInputBorder(),
                                 prefixIcon: Icon(Icons.lock),
                               ),
@@ -280,7 +280,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           borderRadius: BorderRadius.circular(8.0),
                                         ),
                                       ),
-                                      child: const Text('เข้าสู่ระบบ'),
+                                      child: const Text('เข้าสู่ระบบ (Login)'),
                                     ),
                                   ),
                             if (_errorMessage != null)

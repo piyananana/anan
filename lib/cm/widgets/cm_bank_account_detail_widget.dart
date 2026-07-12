@@ -9,6 +9,8 @@ import '../../gl/services/account_service.dart';
 import '../../cd/models/bank.dart';
 import '../models/cm_bank_account.dart';
 import '../../cd/services/bank_service.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 
 class CmBankAccountDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -322,6 +324,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     if (widget.isPlaceholder) {
       return const Center(child: Text('เลือกบัญชีธนาคารเพื่อแก้ไข หรือกดปุ่ม + เพื่อเพิ่มใหม่'));
     }
@@ -586,7 +589,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                   child: ElevatedButton.icon(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
+                    label: Text(l.cancel),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade600,
                       foregroundColor: Colors.white,

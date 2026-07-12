@@ -1,6 +1,9 @@
 // lib/cm/screens/cm_bank_fx_revaluation_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../../gl/models/account.dart';
 import '../../gl/services/account_service.dart';
@@ -265,6 +268,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
   }
 
   Future<void> _postExisting() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selected == null) return;
     final ok = await showDialog<bool>(
       context: context,
@@ -272,7 +276,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
         title: const Text('ยืนยัน Post GL'),
         content: const Text('ต้องการบันทึก GL Entry สำหรับ FX Revaluation นี้ใช่หรือไม่?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
@@ -299,6 +303,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
   }
 
   Future<void> _voidSelected() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selected == null) return;
     final ok = await showDialog<bool>(
       context: context,
@@ -306,7 +311,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
         title: const Text('ยืนยันการยกเลิก'),
         content: const Text('ต้องการยกเลิก FX Revaluation นี้ใช่หรือไม่?\nระบบจะสร้าง GL Entry ย้อนกลับโดยอัตโนมัติ'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
@@ -331,6 +336,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
   }
 
   Future<void> _deleteSelected() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selected == null) return;
     final ok = await showDialog<bool>(
       context: context,
@@ -338,11 +344,11 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
         title: const Text('ยืนยันการลบ'),
         content: const Text('ต้องการลบรายการนี้ใช่หรือไม่?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('ลบ'),
+            child: Text(l.delete),
           ),
         ],
       ),
@@ -382,6 +388,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
@@ -544,6 +551,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
 
   // ── Form panel ─────────────────────────────────────────────────────────────
   Widget _buildFormPanel() {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final isEdit = _isEditing;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -557,7 +565,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
               Text(isEdit ? 'แก้ไข FX Revaluation' : 'สร้าง FX Revaluation',
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
               const Spacer(),
-              TextButton(onPressed: _cancelForm, child: const Text('ยกเลิก')),
+              TextButton(onPressed: _cancelForm, child: Text(l.cancel)),
             ],
           ),
         ),
@@ -1048,6 +1056,7 @@ class _AccountPickerDialogState extends State<_AccountPickerDialog> {
   String _q = '';
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final filtered = _q.isEmpty
         ? widget.accounts
         : widget.accounts.where((a) =>
@@ -1083,7 +1092,7 @@ class _AccountPickerDialogState extends State<_AccountPickerDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('ยกเลิก')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(l.cancel)),
       ],
     );
   }

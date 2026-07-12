@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
 import '../utils/menu_scope.dart';
 import '../models/doc_number_branch.dart';
 import '../services/doc_number_branch_service.dart';
@@ -75,6 +78,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
   }
 
   Future<void> _reset() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedDocType == null) return;
     final newVal = int.tryParse(_newValueCtrl.text);
     if (newVal == null || newVal < 1) {
@@ -96,7 +100,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
           'เลขที่เอกสารที่สร้างก่อนหน้านี้จะไม่เปลี่ยนแปลง แต่เลขถัดไปจะเริ่มจากค่าใหม่',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -137,6 +141,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

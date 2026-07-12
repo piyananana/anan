@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../services/cm_bank_account_service.dart';
@@ -52,6 +54,7 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
       });
 
   Future<void> _onDelete(CmBankAccount row) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final service = Provider.of<CmBankAccountService>(context, listen: false);
     final confirm = await showDialog<bool>(
       context: context,
@@ -61,10 +64,10 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('ยกเลิก')),
+              child: Text(l.cancel)),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('ลบ', style: TextStyle(color: Colors.red))),
+              child: Text(l.delete, style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -123,6 +126,7 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

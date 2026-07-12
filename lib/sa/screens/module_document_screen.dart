@@ -1,6 +1,8 @@
 // screens/module_document_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
 import '../utils/menu_scope.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -129,6 +131,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
   }
 
   Future<void> _deleteRows() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -139,10 +142,10 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('ยกเลิก')),
+                child: Text(l.cancel)),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('ลบ'),
+              child: Text(l.delete),
             ),
           ],
         );
@@ -197,6 +200,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
   }
 
   Future<void> _onDelete(ModuleDocument row) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -206,10 +210,10 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('ยกเลิก')),
+                child: Text(l.cancel)),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('ลบ'),
+              child: Text(l.delete),
             ),
           ],
       ),
@@ -279,6 +283,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context); // This is crucial for AutomaticKeepAliveClientMixin
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
 
     return Scaffold(
       appBar: AppBar(

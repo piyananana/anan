@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/cm_bank_account.dart';
 
@@ -211,6 +214,7 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
   }
 
   Future<void> _import() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selAccount == null) { _showError('กรุณาเลือกบัญชีธนาคาร'); return; }
     if (_previewRows.isEmpty) { _showError('ไม่มีข้อมูลที่จะนำเข้า'); return; }
 
@@ -221,11 +225,11 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
         content: Text('นำเข้า ${_previewRows.length} รายการ เข้า ${_selAccount!.accountNameTh} ใช่หรือไม่?\n'
             'ระบบจะสร้าง Bank Statement ใหม่ (Draft)'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('นำเข้า'),
+            child: Text(l.import_),
           ),
         ],
       ),
@@ -282,6 +286,7 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
 import '../utils/menu_scope.dart';
 import '../models/doc_number_branch.dart';
 import '../models/module_document.dart';
@@ -290,6 +293,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
   }
 
   Future<void> _deleteConfig(ModuleDocument doc) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedBranch == null) return;
     final confirm = await showDialog<bool>(
       context: context,
@@ -298,11 +302,11 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
         content: Text('ลบการตั้งค่าสาขาสำหรับ "${doc.docCode} ${doc.docNameThai}" ?\n'
             'ระบบจะกลับไปใช้ counter ทั้งระบบแทน'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('ลบ', style: TextStyle(color: Colors.white)),
+            child: Text(l.delete, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -330,6 +334,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -575,6 +580,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
   // ─────────────────────────── Right panel ───────────────────────────
 
   Widget _buildRightPanel() {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_activeDoc == null) {
       return Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -727,14 +733,14 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
                 ? const SizedBox(width: 16, height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.save, size: 18),
-            label: const Text('บันทึก'),
+            label: Text(l.save),
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepOrange[700], foregroundColor: Colors.white),
           ),
           const SizedBox(width: 12),
           OutlinedButton(
             onPressed: () => setState(() { _activeDoc = null; _activeCfg = null; }),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
         ]),
       ]),

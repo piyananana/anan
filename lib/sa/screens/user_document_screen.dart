@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
 import '../utils/menu_scope.dart';
 import 'dart:collection'; // สำหรับ HashSet
 
@@ -152,6 +154,7 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
   }
 
   Future<void> _onDelete(User row) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -161,11 +164,11 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ'),
+            child: Text(l.delete),
           ),
         ],
       ),
@@ -198,6 +201,7 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
   }
 
   Future<void> _onSave() async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selected == null || _mode != Mode.edit) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -216,12 +220,12 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('ยกเลิก'),
+              child: Text(l.cancel),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('ลบ', style: TextStyle(color: Colors.white)),
+              child: Text(l.delete, style: const TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -285,6 +289,7 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
 
     return Scaffold(
       appBar: AppBar(

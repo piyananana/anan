@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
 import '../utils/menu_scope.dart';
 
 import '../models/group.dart';
@@ -226,6 +228,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
 
   // ลบผู้ใช้ทั้งหมดจากกลุ่ม
   Future<void> _onDelete(Group rowData) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -236,7 +239,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('ยกเลิก'),
+              child: Text(l.cancel),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
@@ -266,6 +269,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
 
   // คัดลอกสิทธิ์เมนูจากกลุ่มไปยังผู้ใช้ (ปุ่ม "คัดลอกสิทธิ์")
   Future<void> _onCopyGroupMenuToUser(User user) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedNode == null) {
       _showSnackBar('กรุณาเลือกกลุ่มก่อน', Colors.orange);
       return;
@@ -280,7 +284,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('ยกเลิก'),
+              child: Text(l.cancel),
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
@@ -322,7 +326,8 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+
     // ต้องตรวจสอบสถานะการโหลดก่อนสร้าง UI
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());

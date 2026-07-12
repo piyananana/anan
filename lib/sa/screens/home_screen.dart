@@ -246,7 +246,7 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildDeveloperBootstrap() {
+  Widget _buildDeveloperBootstrap(bool isEnglish) {
     return DefaultTabController(
       length: 3,
       child: Column(
@@ -254,10 +254,10 @@ class HomeScreenState extends State<HomeScreen> {
           TabBar(
             labelColor: Colors.green.shade900,
             indicatorColor: Colors.green.shade900,
-            tabs: const [
-              Tab(icon: Icon(Icons.menu_book_outlined), text: 'จัดการเมนู'),
-              Tab(icon: Icon(Icons.people_outline), text: 'จัดการผู้ใช้'),
-              Tab(icon: Icon(Icons.manage_accounts_outlined), text: 'สิทธิ์เมนูผู้ใช้'),
+            tabs: [
+              Tab(icon: const Icon(Icons.menu_book_outlined),   text: isEnglish ? 'Menu Management'       : 'จัดการเมนู'),
+              Tab(icon: const Icon(Icons.people_outline),        text: isEnglish ? 'User Management'       : 'จัดการผู้ใช้'),
+              Tab(icon: const Icon(Icons.manage_accounts_outlined), text: isEnglish ? 'User Menu Permissions' : 'สิทธิ์เมนูผู้ใช้'),
             ],
           ),
           Expanded(
@@ -392,22 +392,25 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   // ฟังก์ชันสำหรับสร้างแถบแจ้งเตือนรหัสผ่าน
-  Widget _buildPasswordExpirationBanner(BuildContext context) {
+  Widget _buildPasswordExpirationBanner(BuildContext context, bool isEnglish) {
     if (_currentPasswordStatus == null) return const SizedBox.shrink();
 
     String message = '';
-    Color backgroundColor = Colors.amber; // Default for warning
+    Color backgroundColor = Colors.amber;
 
     if (_currentPasswordStatus!.isPasswordExpired) {
-      message = 'รหัสผ่านของคุณหมดอายุแล้ว! กรุณาเปลี่ยนรหัสผ่านทันที';
+      message = isEnglish
+          ? 'Your password has expired! Please change it immediately.'
+          : 'รหัสผ่านของคุณหมดอายุแล้ว! กรุณาเปลี่ยนรหัสผ่านทันที';
       backgroundColor = Colors.red.shade700;
     } else if (_currentPasswordStatus!.daysUntilExpiration != null &&
         _currentPasswordStatus!.daysUntilExpiration! > 0) {
-      message =
-          'รหัสผ่านของคุณจะหมดอายุในอีก ${_currentPasswordStatus!.daysUntilExpiration} วัน';
+      message = isEnglish
+          ? 'Your password will expire in ${_currentPasswordStatus!.daysUntilExpiration} days'
+          : 'รหัสผ่านของคุณจะหมดอายุในอีก ${_currentPasswordStatus!.daysUntilExpiration} วัน';
       backgroundColor = Colors.orange.shade700;
     } else {
-      return const SizedBox.shrink(); // ไม่มีแจ้งเตือน
+      return const SizedBox.shrink();
     }
 
     return MaterialBanner(
@@ -445,21 +448,20 @@ class HomeScreenState extends State<HomeScreen> {
                 _currentPasswordStatus = null; // ซ่อน Banner หลังคลิก
               });
             },
-            child: const Text('เปลี่ยนรหัสผ่าน',
-                style: TextStyle(color: Colors.white)),
+            child: Text(isEnglish ? 'Change Password' : 'เปลี่ยนรหัสผ่าน',
+                style: const TextStyle(color: Colors.white)),
           ),
           widget.passwordStatus!.forceChangePassword
-              ? const SizedBox.shrink() // ไม่แสดงปุ่มถ้าบังคับเปลี่ยนรหัสผ่าน
+              ? const SizedBox.shrink()
               : TextButton(
                   onPressed: () {
-                    // Dismiss the banner (for forced changes)
                     ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
                     setState(() {
-                      _currentPasswordStatus = null; // ซ่อน Banner หลังคลิก
+                      _currentPasswordStatus = null;
                     });
                   },
-                  child:
-                      const Text('ปิด', style: TextStyle(color: Colors.white)),
+                  child: Text(isEnglish ? 'Dismiss' : 'ปิด',
+                      style: const TextStyle(color: Colors.white)),
                 ),
         ]),
       ],
@@ -473,12 +475,11 @@ class HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     
     // ใช้ Consumer เพื่อ rebuild เฉพาะ AppBar เมื่อข้อมูลเปลี่ยน
-    return Consumer<AuthService>(
-      builder: (context, authService, child) {
+    return Consumer2<AuthService, LanguageProvider>(
+      builder: (context, authService, lang, child) {
         final currentCompany = authService.company;
-        // final currentCompany = _company;
         return Scaffold(
-          bottomNavigationBar: _buildPasswordExpirationBanner(context),
+          bottomNavigationBar: _buildPasswordExpirationBanner(context, lang.isEnglish),
           appBar: AppBar(
             // title: const Text('ANAN System'),
             title: Row(
@@ -508,7 +509,13 @@ class HomeScreenState extends State<HomeScreen> {
                   ),
                 const SizedBox(width: 8), // ช่องว่าง
                 // แสดงชื่อบริษัท ถ้ามี
-                Text(currentCompany?.thaiName ?? '** ไม่มีชื่อบริษัท **'),
+                Text(
+                  lang.isEnglish
+                      ? (currentCompany?.englishName?.isNotEmpty == true
+                          ? currentCompany!.englishName!
+                          : currentCompany?.thaiName ?? '** No Company **')
+                      : (currentCompany?.thaiName ?? '** ไม่มีชื่อบริษัท **'),
+                ),
               ],
             ),
             backgroundColor: Colors.green.shade900,
@@ -555,8 +562,9 @@ class HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 8),
               // ── Language toggle ───────────────────────────────────────
-              Consumer<LanguageProvider>(
-                builder: (ctx, lang, _) => GestureDetector(
+              Tooltip(
+                message: lang.isEnglish ? 'Switch to Thai' : 'สลับเป็นภาษาอังกฤษ',
+                child: GestureDetector(
                   onTap: lang.toggle,
                   child: Container(
                     padding: const EdgeInsets.all(1.0),
@@ -565,10 +573,10 @@ class HomeScreenState extends State<HomeScreen> {
                       borderRadius: BorderRadius.circular(6.0),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+                      padding: const EdgeInsets.all(8.0),
                       child: Text(
-                        lang.isEnglish ? '🇹🇭' : '🇬🇧',
-                        style: const TextStyle(fontSize: 20),
+                        lang.isEnglish ? 'ไทย' : 'ENG',
+                        style: const TextStyle(color: Colors.orange, fontSize: 16,),
                       ),
                     ),
                   ),
@@ -576,7 +584,11 @@ class HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 8),
               // ── Pending approvals bell ────────────────────────────────
-              GestureDetector(
+              Tooltip(
+                message: lang.isEnglish
+                    ? 'Pending Approvals${_pendingCount > 0 ? ' ($_pendingCount)' : ''}'
+                    : 'รายการรออนุมัติ${_pendingCount > 0 ? ' ($_pendingCount)' : ''}',
+                child: GestureDetector(
                 onTap: _showPendingApprovalsDialog,
                 child: Container(
                   padding: const EdgeInsets.all(1.0),
@@ -619,6 +631,7 @@ class HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
+              ), // end Tooltip (bell)
               const SizedBox(width: 8),
               // ── เปลี่ยนรหัสผ่าน ───────────────────────────────────────
               Container(
@@ -630,7 +643,7 @@ class HomeScreenState extends State<HomeScreen> {
                 child: IconButton(
                   icon: const Icon(Icons.password_outlined, color: Colors.orange),
                   onPressed: _showChangePasswordDialog,
-                  tooltip: 'เปลี่ยนรหัสผ่าน',
+                  tooltip: lang.isEnglish ? 'Change Password' : 'เปลี่ยนรหัสผ่าน',
                 ),
               ),
               const SizedBox(width: 8), // ช่องว่าง
@@ -643,10 +656,9 @@ class HomeScreenState extends State<HomeScreen> {
                       BorderRadius.circular(6.0), // กำหนดความโค้งของขอบ
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.logout_outlined,
-                      color: Colors.orange), // ไอคอนเปลี่ยนรหัสผ่าน
+                  icon: const Icon(Icons.logout_outlined, color: Colors.orange),
                   onPressed: _showConfirmLogoutDialog,
-                  tooltip: 'ออกจากระบบ',
+                  tooltip: lang.isEnglish ? 'Logout' : 'ออกจากระบบ',
                 ),
               ),
               const SizedBox(width: 8), // เพื่อให้มีพื้นที่ขอบขวาเล็กน้อย
@@ -657,7 +669,7 @@ class HomeScreenState extends State<HomeScreen> {
               : _error.isNotEmpty
                   ? Center(child: Text('Error: $_error'))
                   : _allMenus.isEmpty && (_currentUser?.isDeveloper ?? false)
-                      ? _buildDeveloperBootstrap()
+                      ? _buildDeveloperBootstrap(lang.isEnglish)
                       : _allMenus.isEmpty
                           ? const Center(child: CircularProgressIndicator())
                           : Row(
@@ -676,8 +688,8 @@ class HomeScreenState extends State<HomeScreen> {
                                 ),
                                 onPressed: _toggleMenuSize,
                                 tooltip: _isMenuExpanded
-                                    ? 'ย่อช่องเมนู'
-                                    : 'ขยายช่องเมนู',
+                                    ? (lang.isEnglish ? 'Collapse Menu' : 'ย่อช่องเมนู')
+                                    : (lang.isEnglish ? 'Expand Menu' : 'ขยายช่องเมนู'),
                               ),
                             ),
                             // Menu panel — animated width, always mounted
@@ -738,15 +750,13 @@ class HomeScreenState extends State<HomeScreen> {
                             Expanded(
                               child: Column(
                                 children: [
-                                  Consumer<LanguageProvider>(
-                                    builder: (ctx, lang, _) => _CustomTabBar(
-                                      tabs: _openTabs,
-                                      currentIndex: _currentIndex,
-                                      isEnglish: lang.isEnglish,
-                                      onSelect: (i) => setState(() => _currentIndex = i),
-                                      onClose: _closeTab,
-                                      onMove: _reorderTab,
-                                    ),
+                                  _CustomTabBar(
+                                    tabs: _openTabs,
+                                    currentIndex: _currentIndex,
+                                    isEnglish: lang.isEnglish,
+                                    onSelect: (i) => setState(() => _currentIndex = i),
+                                    onClose: _closeTab,
+                                    onMove: _reorderTab,
                                   ),
                                   Expanded(
                                     child: _openTabs.isEmpty
@@ -1092,22 +1102,25 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
   }
 
   Future<void> _act(ApPaymentRun run, bool approve) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final remarksCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(approve ? 'อนุมัติ Payment Run' : 'ปฏิเสธ Payment Run'),
+        title: Text(approve
+            ? (isEnglish ? 'Approve Payment Run' : 'อนุมัติ Payment Run')
+            : (isEnglish ? 'Reject Payment Run'  : 'ปฏิเสธ Payment Run')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('เลขที่: ${run.runNumber ?? '-'}'),
+            Text('${isEnglish ? 'No.' : 'เลขที่'}: ${run.runNumber ?? '-'}'),
             const SizedBox(height: 12),
             TextField(
               controller: remarksCtrl,
-              decoration: const InputDecoration(
-                labelText: 'หมายเหตุ',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Remarks' : 'หมายเหตุ',
+                border: const OutlineInputBorder(),
               ),
               maxLines: 3,
             ),
@@ -1116,14 +1129,16 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ยกเลิก'),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: approve
                 ? null
                 : ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(approve ? 'อนุมัติ' : 'ปฏิเสธ'),
+            child: Text(approve
+                ? (isEnglish ? 'Approve' : 'อนุมัติ')
+                : (isEnglish ? 'Reject'  : 'ปฏิเสธ')),
           ),
         ],
       ),
@@ -1149,6 +1164,7 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final fmt = (DateTime d) =>
         '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
     final numFmt = (double v) =>
@@ -1159,7 +1175,7 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
       title: Row(children: [
         const Icon(Icons.notifications_active, color: Colors.orange),
         const SizedBox(width: 8),
-        const Text('รายการรออนุมัติ'),
+        Text(isEnglish ? 'Pending Approvals' : 'รายการรออนุมัติ'),
         const Spacer(),
         Text('(${_runs.length})', style: const TextStyle(color: Colors.grey)),
       ]),
@@ -1167,11 +1183,12 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
       content: SizedBox(
         width: 600,
         child: _runs.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
                 child: Center(
-                  child: Text('ไม่มีรายการรออนุมัติ',
-                      style: TextStyle(color: Colors.grey)),
+                  child: Text(
+                      isEnglish ? 'No pending approvals' : 'ไม่มีรายการรออนุมัติ',
+                      style: const TextStyle(color: Colors.grey)),
                 ),
               )
             : Column(
@@ -1195,28 +1212,24 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
                     color: Colors.blueGrey[100],
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 6),
-                    child: const Row(children: [
+                    child: Row(children: [
                       SizedBox(
                           width: 140,
-                          child: Text('เลขที่',
-                              style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
+                          child: Text(isEnglish ? 'Run No.' : 'เลขที่',
+                              style: const TextStyle(fontWeight: FontWeight.bold))),
                       SizedBox(
                           width: 100,
-                          child: Text('วันที่',
-                              style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
+                          child: Text(isEnglish ? 'Date' : 'วันที่',
+                              style: const TextStyle(fontWeight: FontWeight.bold))),
                       Expanded(
-                          child: Text('รายละเอียด',
-                              style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
+                          child: Text(isEnglish ? 'Description' : 'รายละเอียด',
+                              style: const TextStyle(fontWeight: FontWeight.bold))),
                       SizedBox(
                           width: 110,
-                          child: Text('จำนวนเงิน',
+                          child: Text(isEnglish ? 'Amount' : 'จำนวนเงิน',
                               textAlign: TextAlign.right,
-                              style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
-                      SizedBox(width: 180),
+                              style: const TextStyle(fontWeight: FontWeight.bold))),
+                      const SizedBox(width: 180),
                     ]),
                   ),
                   const Divider(height: 1),
@@ -1277,7 +1290,7 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
                                           icon: const Icon(
                                               Icons.check_circle_outline,
                                               size: 14),
-                                          label: const Text('อนุมัติ'),
+                                          label: Text(isEnglish ? 'Approve' : 'อนุมัติ'),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor:
                                                 Colors.green[700],
@@ -1299,7 +1312,7 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
                                           icon: const Icon(
                                               Icons.cancel_outlined,
                                               size: 14),
-                                          label: const Text('ปฏิเสธ'),
+                                          label: Text(isEnglish ? 'Reject' : 'ปฏิเสธ'),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.red[700],
                                             foregroundColor: Colors.white,
@@ -1327,7 +1340,7 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('ปิด'),
+          child: Text(isEnglish ? 'Close' : 'ปิด'),
         ),
       ],
     );

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/account.dart';
 import '../models/gl_dimension.dart';
@@ -96,6 +99,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== REPORT DIALOG =====
   void _showReportDialog([Map<String, dynamic>? report]) {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final isEdit = report != null;
     final codeCtrl = TextEditingController(text: report?['report_code'] ?? '');
     final nameCtrl = TextEditingController(text: report?['report_name_thai'] ?? '');
@@ -168,7 +172,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel)),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900], foregroundColor: Colors.white),
               onPressed: () async {
@@ -209,6 +213,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== ROW DIALOG =====
   Future<Account?> _pickAccountInDialog(BuildContext ctx, Account? current) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final searchCtrl = TextEditingController();
     List<Account> filtered = List.from(_accounts);
     Account? picked;
@@ -309,7 +314,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx2).pop(),
-              child: const Text('ปิด'),
+              child: Text(l.close),
             ),
           ],
         );
@@ -320,6 +325,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   }
 
   void _showRowDialog([Map<String, dynamic>? row]) {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final isEdit = row != null;
     final seqCtrl = TextEditingController(text: isEdit ? (row['row_seq_no'] ?? '').toString() : '');
     String rowType = row?['row_type'] ?? 'BODY';
@@ -502,7 +508,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel)),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900], foregroundColor: Colors.white),
               onPressed: () async {
@@ -541,6 +547,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== COLUMN DIALOG =====
   void _showColumnDialog(int rowId, [Map<String, dynamic>? col]) {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final isEdit = col != null;
     final seqCtrl = TextEditingController(text: isEdit ? (col['column_seq_no'] ?? '').toString() : '');
     String colType = col?['column_type'] ?? 'TEXT';
@@ -646,7 +653,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel)),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900], foregroundColor: Colors.white),
               onPressed: () async {
@@ -688,6 +695,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   // ===== BUILD =====
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -764,6 +772,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== LEFT PANEL =====
   Widget _buildLeftPanel() {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -776,7 +785,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
               const Spacer(),
               ElevatedButton.icon(
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('เพิ่ม'),
+                label: Text(l.add),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.deepOrange[900]),
                 onPressed: () => _showReportDialog(),
               ),
@@ -886,6 +895,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== ROW ITEM =====
   Widget _buildRowItem(Map<String, dynamic> row) {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final List<dynamic> columns = row['columns'] ?? [];
     final String rowType = row['row_type'] ?? 'BODY';
     final int seqNo = row['row_seq_no'] ?? 0;
@@ -921,11 +931,11 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     title: const Text('ยืนยันลบ'),
                     content: Text('ต้องการลบบรรทัดที่ $seqNo และคอลัมน์ทั้งหมดในบรรทัดนี้?'),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
                         onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('ลบ'),
+                        child: Text(l.delete),
                       ),
                     ],
                   ),

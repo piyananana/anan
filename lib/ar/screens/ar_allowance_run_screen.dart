@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../sa/utils/menu_scope.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import 'package:provider/provider.dart';
 import '../models/ar_year_end.dart';
 import '../services/ar_year_end_service.dart';
 
@@ -148,21 +151,24 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
     } catch (e) { if (mounted) _showError(e.toString()); }
   }
 
-  Future<bool> _confirm(String msg) async => await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('ยืนยัน'),
-      content: Text(msg),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-          child: const Text('ยืนยัน'),
-        ),
-      ],
-    ),
-  ) ?? false;
+  Future<bool> _confirm(String msg) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    return await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ยืนยัน'),
+        content: Text(msg),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+            child: Text(l.confirm),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
 
   void _showError(String msg) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
@@ -641,6 +647,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     super.build(context);
     return Scaffold(
       appBar: AppBar(

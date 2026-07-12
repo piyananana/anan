@@ -1,8 +1,11 @@
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -224,6 +227,7 @@ class _DailyTransactionReportScreenState
     required Set<String> selected,
     required Function(Set<String>) onChanged,
   }) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     Set<String> temp = Set.from(selected);
     await showDialog(
       context: context,
@@ -276,7 +280,7 @@ class _DailyTransactionReportScreenState
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('ยกเลิก')),
+                child: Text(l.cancel)),
             ElevatedButton(
                 onPressed: () {
                   onChanged(temp);
@@ -777,6 +781,7 @@ class _DailyTransactionReportScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

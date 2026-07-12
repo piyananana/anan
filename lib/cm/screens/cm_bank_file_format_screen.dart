@@ -1,6 +1,9 @@
 // lib/cm/screens/cm_bank_file_format_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/cm_bank_file_format.dart';
 import '../services/cm_bank_file_format_service.dart';
@@ -98,16 +101,17 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
   }
 
   Future<void> _onDelete(CmBankFileFormat row) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('ยืนยันการลบ'),
         content: Text('ลบรูปแบบไฟล์ "${row.formatName}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('ลบ', style: TextStyle(color: Colors.red))),
+              child: Text(l.delete, style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -152,6 +156,7 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -872,6 +877,7 @@ class _ColSettingsDialogState extends State<_ColSettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final col = widget.col;
     final def = widget.fieldDef;
     return AlertDialog(
@@ -942,7 +948,7 @@ class _ColSettingsDialogState extends State<_ColSettingsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('ปิด'),
+          child: Text(l.close),
         ),
       ],
     );

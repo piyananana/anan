@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/account.dart';
 import '../services/account_service.dart';
@@ -129,6 +131,7 @@ class _AccountScreenState extends State<AccountScreen>
   }
 
   Future<void> _deleteRows() async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -139,10 +142,10 @@ class _AccountScreenState extends State<AccountScreen>
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('ยกเลิก')),
+                child: Text(l.cancel)),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('ลบ'),
+              child: Text(l.delete),
             ),
           ],
         );
@@ -197,6 +200,7 @@ class _AccountScreenState extends State<AccountScreen>
   }
 
   Future<void> _onDelete(Account row) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -206,10 +210,10 @@ class _AccountScreenState extends State<AccountScreen>
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('ยกเลิก')),
+                child: Text(l.cancel)),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('ลบ'),
+              child: Text(l.delete),
             ),
           ],
       ),
@@ -279,6 +283,7 @@ class _AccountScreenState extends State<AccountScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context); // This is crucial for AutomaticKeepAliveClientMixin
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
 
     return Scaffold(
       appBar: AppBar(

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/utils/app_l10n.dart';
+import '../../sa/services/language_provider.dart';
 import '../models/gl_dimension.dart';
 
 enum GlDimValueMode { none, add, addChild, edit, view }
@@ -101,6 +104,7 @@ class GlDimensionValueDetailWidgetState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     if (widget.isPlaceholder || widget.mode == GlDimValueMode.none) {
       return const Center(
         child: Text('เลือกรายการจากด้านซ้าย หรือกดปุ่ม + เพื่อเพิ่มข้อมูลใหม่',
@@ -211,7 +215,7 @@ class GlDimensionValueDetailWidgetState
               Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                 OutlinedButton(
                   onPressed: _isSaving ? null : widget.onCancel,
-                  child: const Text('ยกเลิก'),
+                  child: Text(l.cancel),
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(

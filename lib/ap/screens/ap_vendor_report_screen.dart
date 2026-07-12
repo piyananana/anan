@@ -5,7 +5,10 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:excel/excel.dart';
+import 'package:provider/provider.dart';
 
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
@@ -747,6 +750,7 @@ class _ApVendorReportScreenState extends State<ApVendorReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -893,6 +897,7 @@ class _VendorPickerDialogState extends State<_VendorPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -968,7 +973,7 @@ class _VendorPickerDialogState extends State<_VendorPickerDialog> {
             child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('ยกเลิก')),
+                  child: Text(l.cancel)),
             ]),
           ),
         ]),
@@ -1010,6 +1015,7 @@ class _MultiPickerDialogState<T> extends State<_MultiPickerDialog<T>> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     return Dialog(
       child: SizedBox(
         width: 400, height: 480,
@@ -1063,7 +1069,7 @@ class _MultiPickerDialogState<T> extends State<_MultiPickerDialog<T>> {
               Row(children: [
                 TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('ยกเลิก')),
+                    child: Text(l.cancel)),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context, _selected),

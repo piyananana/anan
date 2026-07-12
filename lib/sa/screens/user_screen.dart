@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
 import '../utils/menu_scope.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
@@ -105,6 +107,7 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
   }
 
   Future<void> _onDeleteUser(User user) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -113,11 +116,11 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ'),
+            child: Text(l.delete),
           ),
         ],
       ),
@@ -184,6 +187,7 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
 
     return Scaffold(
       appBar: AppBar(

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
 import '../../sa/utils/menu_scope.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../models/ar_collector.dart';
 import '../services/ar_collector_service.dart';
 import '../widgets/ar_collector_list_widget.dart';
@@ -69,6 +71,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
   }
 
   Future<void> _onDelete(ArCollector row) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -78,10 +81,10 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('ยกเลิก')),
+              child: Text(l.cancel)),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('ลบ')),
+              child: Text(l.delete)),
         ],
       ),
     );
@@ -137,6 +140,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     super.build(context);
     return Scaffold(
       appBar: AppBar(

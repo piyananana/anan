@@ -10,6 +10,8 @@ import 'package:provider/provider.dart';
 
 import '../../config/app_config.dart';
 import '../../sa/services/auth_service.dart';
+import '../../sa/services/language_provider.dart';
+import '../../sa/utils/app_l10n.dart';
 import '../../sa/utils/menu_scope.dart';
 import '../../utils/file_download.dart';
 

@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import '../services/language_provider.dart';
+import '../utils/app_l10n.dart';
 import '../utils/menu_scope.dart';
 
 import '../models/group.dart';
@@ -207,6 +209,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
   }
 
   Future<void> _confirmDeleteData(Group rowData) async {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_buildTree(_currentList, rowData.id).isNotEmpty && rowData.haveSubGroup) {
       // ป้องกันการลบ Folder ที่มีเมนูย่อย
       ScaffoldMessenger.of(context).showSnackBar(
@@ -222,11 +225,11 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
           title: const Text('ยืนยันการลบข้อมูล'),
           content: Text('คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูล "${rowData.name}"?'),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(l.cancel)),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('ลบ', style: TextStyle(color: Colors.white)),
+              child: Text(l.delete, style: const TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -259,7 +262,8 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+
     // ต้องตรวจสอบสถานะการโหลดก่อนสร้าง UI
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -471,6 +475,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
   }
 
   Widget _buildDetailForm() {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -580,7 +585,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
                 if (_formMode != NodeMode.none)
                   TextButton(
                     onPressed: _clearForm,
-                    child: const Text('ยกเลิก'),
+                    child: Text(l.cancel),
                   ),
                 const SizedBox(width: 10),
                 ElevatedButton(
