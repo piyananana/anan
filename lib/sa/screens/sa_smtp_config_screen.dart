@@ -1,8 +1,10 @@
 // lib/sa/screens/sa_smtp_config_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../utils/menu_scope.dart';
 import '../models/sa_smtp_config.dart';
 import '../services/sa_smtp_config_service.dart';
+import '../services/language_provider.dart';
 
 class SaSmtpConfigScreen extends StatefulWidget {
   const SaSmtpConfigScreen({super.key});
@@ -76,16 +78,18 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
       }
     } catch (e) {
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('โหลดข้อมูลล้มเหลว: $e'),
-                backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Failed to load: $e' : 'โหลดข้อมูลล้มเหลว: $e'),
+            backgroundColor: Colors.red));
       }
     }
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() => _isSaving = true);
     try {
       final cfg = SaSmtpConfig(
@@ -105,15 +109,15 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
           _config = saved;
           _passwordCtrl.clear();
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('บันทึกสำเร็จ'),
-                backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ'),
+            backgroundColor: Colors.green));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาด: $e'),
-                backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'),
+            backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -123,6 +127,7 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -131,7 +136,7 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
         actions: [
           IconButton(
               icon: const Icon(Icons.refresh),
-              tooltip: 'รีเฟรช',
+              tooltip: isEnglish ? 'Refresh' : 'รีเฟรช',
               onPressed: _loading ? null : _load),
         ],
       ),
@@ -147,20 +152,23 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // ── Server settings ──────────────────────────────────
-                      _sectionHeader('การตั้งค่าเซิร์ฟเวอร์', Icons.dns_outlined),
+                      _sectionHeader(
+                        isEnglish ? 'Server Settings' : 'การตั้งค่าเซิร์ฟเวอร์',
+                        Icons.dns_outlined,
+                      ),
                       const SizedBox(height: 12),
                       Row(children: [
                         Flexible(
                           flex: 3,
                           child: TextFormField(
                             controller: _hostCtrl,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'SMTP Host *',
                               hintText: 'smtp.gmail.com',
-                              border: OutlineInputBorder(),
+                              border: const OutlineInputBorder(),
                             ),
                             validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'กรุณาป้อน SMTP Host'
+                                ? (isEnglish ? 'Enter SMTP Host' : 'กรุณาป้อน SMTP Host')
                                 : null,
                           ),
                         ),
@@ -170,14 +178,18 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
                           child: TextFormField(
                             controller: _portCtrl,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Port *',
                               hintText: '587',
-                              border: OutlineInputBorder(),
+                              border: const OutlineInputBorder(),
                             ),
                             validator: (v) {
-                              if (v == null || v.isEmpty) return 'ระบุ Port';
-                              if (int.tryParse(v) == null) return 'ต้องเป็นตัวเลข';
+                              if (v == null || v.isEmpty) {
+                                return isEnglish ? 'Enter Port' : 'ระบุ Port';
+                              }
+                              if (int.tryParse(v) == null) {
+                                return isEnglish ? 'Must be a number' : 'ต้องเป็นตัวเลข';
+                              }
                               return null;
                             },
                           ),
@@ -186,7 +198,10 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
                       const SizedBox(height: 16),
 
                       // ── Auth settings ────────────────────────────────────
-                      _sectionHeader('การตรวจสอบสิทธิ์', Icons.lock_outlined),
+                      _sectionHeader(
+                        isEnglish ? 'Authentication' : 'การตรวจสอบสิทธิ์',
+                        Icons.lock_outlined,
+                      ),
                       const SizedBox(height: 12),
                       Row(children: [
                         Expanded(
@@ -206,7 +221,9 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
                             obscureText: _obscurePassword,
                             decoration: InputDecoration(
                               labelText: _config != null
-                                  ? 'Password (เว้นว่างเพื่อคงรหัสเดิม)'
+                                  ? (isEnglish
+                                      ? 'Password (leave blank to keep current)'
+                                      : 'Password (เว้นว่างเพื่อคงรหัสเดิม)')
                                   : 'Password',
                               border: const OutlineInputBorder(),
                               suffixIcon: IconButton(
@@ -223,7 +240,10 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
                       const SizedBox(height: 16),
 
                       // ── Sender info ──────────────────────────────────────
-                      _sectionHeader('ข้อมูลผู้ส่ง', Icons.person_outlined),
+                      _sectionHeader(
+                        isEnglish ? 'Sender Info' : 'ข้อมูลผู้ส่ง',
+                        Icons.person_outlined,
+                      ),
                       const SizedBox(height: 12),
                       Row(children: [
                         Expanded(
@@ -240,10 +260,10 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
                         Expanded(
                           child: TextFormField(
                             controller: _fromNameCtrl,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'From Name',
-                              hintText: 'บริษัท ตัวอย่าง จำกัด',
-                              border: OutlineInputBorder(),
+                              hintText: isEnglish ? 'Example Company Ltd.' : 'บริษัท ตัวอย่าง จำกัด',
+                              border: const OutlineInputBorder(),
                             ),
                           ),
                         ),
@@ -251,7 +271,10 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
                       const SizedBox(height: 16),
 
                       // ── Options ──────────────────────────────────────────
-                      _sectionHeader('ตัวเลือก', Icons.settings_outlined),
+                      _sectionHeader(
+                        isEnglish ? 'Options' : 'ตัวเลือก',
+                        Icons.settings_outlined,
+                      ),
                       const SizedBox(height: 12),
                       Row(children: [
                         Expanded(
@@ -260,8 +283,8 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
                               borderRadius: BorderRadius.circular(4),
                               side: BorderSide(color: Colors.grey.shade400),
                             ),
-                            title: const Text('ใช้ TLS/STARTTLS'),
-                            subtitle: const Text('แนะนำให้เปิดใช้งาน'),
+                            title: const Text('TLS/STARTTLS'),
+                            subtitle: Text(isEnglish ? 'Recommended to enable' : 'แนะนำให้เปิดใช้งาน'),
                             value: _useTls,
                             onChanged: (v) => setState(() => _useTls = v),
                           ),
@@ -273,8 +296,10 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
                               borderRadius: BorderRadius.circular(4),
                               side: BorderSide(color: Colors.grey.shade400),
                             ),
-                            title: const Text('สถานะ'),
-                            subtitle: Text(_isActive ? 'ใช้งาน' : 'หยุดใช้'),
+                            title: Text(isEnglish ? 'Status' : 'สถานะ'),
+                            subtitle: Text(_isActive
+                                ? (isEnglish ? 'Active' : 'ใช้งาน')
+                                : (isEnglish ? 'Inactive' : 'หยุดใช้')),
                             value: _isActive,
                             onChanged: (v) => setState(() => _isActive = v),
                           ),
@@ -294,7 +319,9 @@ class _SaSmtpConfigScreenState extends State<SaSmtpConfigScreen>
                                   child: CircularProgressIndicator(
                                       strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.save),
-                          label: Text(_isSaving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'),
+                          label: Text(_isSaving
+                              ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
+                              : (isEnglish ? 'Save Settings' : 'บันทึกการตั้งค่า')),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blueGrey[700],
                             foregroundColor: Colors.white,

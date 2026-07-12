@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../utils/menu_scope.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -10,6 +11,7 @@ import '../models/company.dart';
 import '../services/auth_service.dart';
 import '../services/company_service.dart';
 import '../services/sa_user_audit_log_service.dart';
+import '../services/language_provider.dart';
 
 class SaUserAuditLogScreen extends StatefulWidget {
   const SaUserAuditLogScreen({super.key});
@@ -85,8 +87,9 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาด: $e')));
+            SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -113,10 +116,10 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
     }
   }
 
-  String _statusLabel(AuditLogRow row) {
-    if (row.isActive) return 'ยังอยู่';
+  String _statusLabel(AuditLogRow row, bool isEnglish) {
+    if (row.isActive) return isEnglish ? 'Active' : 'ยังอยู่';
     switch (row.logoutType) {
-      case 'normal':  return 'ปกติ';
+      case 'normal':  return isEnglish ? 'Normal' : 'ปกติ';
       case 'timeout': return 'Timeout';
       case 'forced':  return 'Kicked';
       default:        return row.logoutType ?? '-';
@@ -303,7 +306,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
     return doc.save();
   }
 
-  void _showPdfPreview() {
+  void _showPdfPreview(bool isEnglish) {
     showDialog(
       context: context,
       builder: (ctx) => Dialog.fullscreen(
@@ -311,7 +314,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
           appBar: AppBar(
             backgroundColor: const Color(0xFF37474F),
             foregroundColor: Colors.white,
-            title: const Text('รายงานตรวจสอบการเข้าใช้งาน'),
+            title: Text(isEnglish ? 'Audit Log Report' : 'รายงานตรวจสอบการเข้าใช้งาน'),
             leading: IconButton(
               icon: const Icon(Icons.close),
               onPressed: () => Navigator.pop(ctx),
@@ -332,6 +335,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final totalPages = _total == 0 ? 1 : (_total / _limit).ceil();
     return Scaffold(
       appBar: AppBar(
@@ -340,25 +344,26 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
         title: const MenuTitle(),
         actions: [
           TextButton.icon(
-            onPressed: _showPdfPreview,
+            onPressed: () => _showPdfPreview(isEnglish),
             icon:  const Icon(Icons.print_rounded, color: Colors.white70, size: 18),
-            label: const Text('พิมพ์รายงาน PDF',
-                style: TextStyle(color: Colors.white70, fontSize: 13)),
+            label: Text(
+                isEnglish ? 'Print PDF' : 'พิมพ์รายงาน PDF',
+                style: const TextStyle(color: Colors.white70, fontSize: 13)),
           ),
           const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
-          _buildFilterBar(),
-          Expanded(child: _buildTable()),
-          _buildPaginationBar(totalPages),
+          _buildFilterBar(isEnglish),
+          Expanded(child: _buildTable(isEnglish)),
+          _buildPaginationBar(totalPages, isEnglish),
         ],
       ),
     );
   }
 
-  Widget _buildFilterBar() {
+  Widget _buildFilterBar(bool isEnglish) {
     return Card(
       margin:    const EdgeInsets.fromLTRB(8, 8, 8, 4),
       elevation: 1,
@@ -370,7 +375,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             _DatePickerBtn(
-              label:   'Login ตั้งแต่',
+              label:   isEnglish ? 'Login From' : 'Login ตั้งแต่',
               date:    _dateFrom,
               onPick: () async {
                 final d = await showDatePicker(
@@ -384,7 +389,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
               onClear: () => setState(() => _dateFrom = null),
             ),
             _DatePickerBtn(
-              label:   'ถึงวันที่',
+              label:   isEnglish ? 'To Date' : 'ถึงวันที่',
               date:    _dateTo,
               onPick: () async {
                 final d = await showDatePicker(
@@ -401,15 +406,17 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
               width: 190,
               child: DropdownButtonFormField<int?>(
                 value: _selectedUserId,
-                decoration: const InputDecoration(
-                  labelText: 'ผู้ใช้',
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'User' : 'ผู้ใช้',
                   isDense:   true,
-                  border:    OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  border:    const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 ),
                 isExpanded: true,
                 items: [
-                  const DropdownMenuItem<int?>(value: null, child: Text('ทุกคน')),
+                  DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text(isEnglish ? 'All Users' : 'ทุกคน')),
                   ..._userList.map((u) => DropdownMenuItem<int?>(
                     value: u['id'] as int?,
                     child: Text(
@@ -422,40 +429,48 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
               ),
             ),
             SizedBox(
-              width: 140,
+              width: 150,
               child: DropdownButtonFormField<String>(
                 value: _logoutType,
-                decoration: const InputDecoration(
-                  labelText: 'สถานะ',
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Status' : 'สถานะ',
                   isDense:   true,
-                  border:    OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  border:    const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 ),
-                items: const [
-                  DropdownMenuItem(value: 'all',     child: Text('ทั้งหมด')),
-                  DropdownMenuItem(value: 'active',  child: Text('ยังอยู่')),
-                  DropdownMenuItem(value: 'normal',  child: Text('ปกติ')),
-                  DropdownMenuItem(value: 'timeout', child: Text('Timeout')),
-                  DropdownMenuItem(value: 'forced',  child: Text('Kicked')),
+                items: [
+                  DropdownMenuItem(value: 'all',     child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
+                  DropdownMenuItem(value: 'active',  child: Text(isEnglish ? 'Active' : 'ยังอยู่')),
+                  DropdownMenuItem(value: 'normal',  child: Text(isEnglish ? 'Normal' : 'ปกติ')),
+                  const DropdownMenuItem(value: 'timeout', child: Text('Timeout')),
+                  const DropdownMenuItem(value: 'forced',  child: Text('Kicked')),
                 ],
                 onChanged: (v) => setState(() => _logoutType = v ?? 'all'),
               ),
             ),
             SizedBox(
-              width: 220,
+              width: 230,
               child: DropdownButtonFormField<String>(
                 value: _sortBy,
-                decoration: const InputDecoration(
-                  labelText: 'เรียงลำดับ',
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Sort By' : 'เรียงลำดับ',
                   isDense:   true,
-                  border:    OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  border:    const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 ),
-                items: const [
-                  DropdownMenuItem(value: 'login_desc',    child: Text('Login ล่าสุด → เก่าสุด')),
-                  DropdownMenuItem(value: 'login_asc',     child: Text('Login เก่าสุด → ล่าสุด')),
-                  DropdownMenuItem(value: 'duration_desc', child: Text('Duration มาก → น้อย')),
-                  DropdownMenuItem(value: 'duration_asc',  child: Text('Duration น้อย → มาก')),
+                items: [
+                  DropdownMenuItem(
+                      value: 'login_desc',
+                      child: Text(isEnglish ? 'Login: Newest first' : 'Login ล่าสุด → เก่าสุด')),
+                  DropdownMenuItem(
+                      value: 'login_asc',
+                      child: Text(isEnglish ? 'Login: Oldest first' : 'Login เก่าสุด → ล่าสุด')),
+                  DropdownMenuItem(
+                      value: 'duration_desc',
+                      child: Text(isEnglish ? 'Duration: High → Low' : 'Duration มาก → น้อย')),
+                  DropdownMenuItem(
+                      value: 'duration_asc',
+                      child: Text(isEnglish ? 'Duration: Low → High' : 'Duration น้อย → มาก')),
                 ],
                 onChanged: (v) => setState(() => _sortBy = v ?? 'login_desc'),
               ),
@@ -463,7 +478,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
             ElevatedButton.icon(
               onPressed: () => _load(resetPage: true),
               icon:  const Icon(Icons.search_rounded, size: 18),
-              label: const Text('ค้นหา'),
+              label: Text(isEnglish ? 'Search' : 'ค้นหา'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF37474F),
                 foregroundColor: Colors.white,
@@ -475,21 +490,21 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
     );
   }
 
-  Widget _buildTable() {
+  Widget _buildTable(bool isEnglish) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
     if (_rows.isEmpty) {
-      return const Center(
-          child: Text('ไม่พบข้อมูล', style: TextStyle(color: Colors.grey)));
+      return Center(
+          child: Text(
+              isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+              style: const TextStyle(color: Colors.grey)));
     }
 
-    // Column flex weights — identical between frozen header and data rows
     const flex = [2, 12, 7, 11, 9, 9, 12, 7, 7];
-    const hdrs = [
-      '#', 'วันที่-เวลา Login', 'รหัสผู้ใช้', 'ชื่อผู้ใช้',
-      'ชื่อเครื่อง', 'IP Address', 'วันที่-เวลา Logout', 'สถานะ', 'ระยะเวลา',
-    ];
+    final hdrs = isEnglish
+        ? ['#', 'Login Date/Time', 'Username', 'Full Name', 'Hostname', 'IP Address', 'Logout Date/Time', 'Status', 'Duration']
+        : ['#', 'วันที่-เวลา Login', 'รหัสผู้ใช้', 'ชื่อผู้ใช้', 'ชื่อเครื่อง', 'IP Address', 'วันที่-เวลา Logout', 'สถานะ', 'ระยะเวลา'];
     const hStyle = TextStyle(
         fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white);
     const cStyle = TextStyle(fontSize: 12);
@@ -541,7 +556,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
                     dCell(4, Text(r.hostname   ?? '-', style: cStyle, overflow: TextOverflow.ellipsis)),
                     dCell(5, Text(r.ipAddress  ?? '-', style: cStyle)),
                     dCell(6, Text(r.logoutAtStr ?? '-', style: cStyle)),
-                    dCell(7, _StatusChip(row: r, color: _statusColor(r), label: _statusLabel(r))),
+                    dCell(7, _StatusChip(color: _statusColor(r), label: _statusLabel(r, isEnglish))),
                     dCell(8, Text(_fmtDuration(r.durationSecondsDisplay), style: cStyle)),
                   ],
                 ),
@@ -553,7 +568,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
     );
   }
 
-  Widget _buildPaginationBar(int totalPages) {
+  Widget _buildPaginationBar(int totalPages, bool isEnglish) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -562,25 +577,25 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
       ),
       child: Row(
         children: [
-          Text('รวม $_total รายการ',
+          Text(isEnglish ? 'Total $_total records' : 'รวม $_total รายการ',
               style: const TextStyle(fontSize: 12, color: Colors.grey)),
           const Spacer(),
           TextButton(
             onPressed: _page > 1
                 ? () { setState(() => _page--); _load(); }
                 : null,
-            child: const Text('< ก่อนหน้า'),
+            child: Text(isEnglish ? '< Prev' : '< ก่อนหน้า'),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text('หน้า $_page/$totalPages',
+            child: Text(isEnglish ? 'Page $_page/$totalPages' : 'หน้า $_page/$totalPages',
                 style: const TextStyle(fontSize: 12)),
           ),
           TextButton(
             onPressed: _page < totalPages
                 ? () { setState(() => _page++); _load(); }
                 : null,
-            child: const Text('ถัดไป >'),
+            child: Text(isEnglish ? 'Next >' : 'ถัดไป >'),
           ),
         ],
       ),
@@ -642,11 +657,10 @@ class _DatePickerBtn extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  final AuditLogRow row;
   final Color  color;
   final String label;
 
-  const _StatusChip({required this.row, required this.color, required this.label});
+  const _StatusChip({required this.color, required this.label});
 
   @override
   Widget build(BuildContext context) {
