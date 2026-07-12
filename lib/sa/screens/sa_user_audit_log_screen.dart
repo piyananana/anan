@@ -128,47 +128,63 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
 
   // ─── PDF ─────────────────────────────────────────────────────────────────
 
-  Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+  Future<Uint8List> _generatePdf(PdfPageFormat format, bool isEnglish) async {
     final doc          = pw.Document();
     final fontData     = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
     final font         = pw.Font.ttf(fontData);
     final fontBold     = pw.Font.ttf(fontBoldData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
+    final companyName  = _company?.thaiName ?? (isEnglish ? '(Company name not specified)' : '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
     String dateRangeLine;
     if (_dateFrom != null && _dateTo != null) {
-      dateRangeLine = 'วันที่ ${DateFormat('dd/MM/yyyy').format(_dateFrom!)} ถึง ${DateFormat('dd/MM/yyyy').format(_dateTo!)}';
+      dateRangeLine = isEnglish
+          ? 'Date: ${DateFormat('dd/MM/yyyy').format(_dateFrom!)} to ${DateFormat('dd/MM/yyyy').format(_dateTo!)}'
+          : 'วันที่ ${DateFormat('dd/MM/yyyy').format(_dateFrom!)} ถึง ${DateFormat('dd/MM/yyyy').format(_dateTo!)}';
     } else if (_dateFrom != null) {
-      dateRangeLine = 'ตั้งแต่วันที่ ${DateFormat('dd/MM/yyyy').format(_dateFrom!)}';
+      dateRangeLine = isEnglish
+          ? 'From: ${DateFormat('dd/MM/yyyy').format(_dateFrom!)}'
+          : 'ตั้งแต่วันที่ ${DateFormat('dd/MM/yyyy').format(_dateFrom!)}';
     } else if (_dateTo != null) {
-      dateRangeLine = 'ถึงวันที่ ${DateFormat('dd/MM/yyyy').format(_dateTo!)}';
+      dateRangeLine = isEnglish
+          ? 'To: ${DateFormat('dd/MM/yyyy').format(_dateTo!)}'
+          : 'ถึงวันที่ ${DateFormat('dd/MM/yyyy').format(_dateTo!)}';
     } else {
-      dateRangeLine = 'ทุกวัน';
+      dateRangeLine = isEnglish ? 'All dates' : 'ทุกวัน';
     }
 
+    final allUsersLabel = isEnglish ? 'All Users' : 'ทุกคน';
     final userLabel = _selectedUserId == null
-        ? 'ทุกคน'
+        ? allUsersLabel
         : (_userList.firstWhere(
                 (u) => u['id'] == _selectedUserId,
-                orElse: () => {})['user_name'] as String? ?? 'ทุกคน');
+                orElse: () => {})['user_name'] as String? ?? allUsersLabel);
 
-    const logoutLabels = {
-      'all': 'ทั้งหมด', 'active': 'ยังอยู่',
-      'normal': 'ปกติ', 'timeout': 'Timeout', 'forced': 'Kicked',
-    };
-    const sortLabels = {
-      'login_desc':    'Login ล่าสุด > เก่าสุด',
-      'login_asc':     'Login เก่าสุด > ล่าสุด',
-      'duration_desc': 'Duration มาก > น้อย',
-      'duration_asc':  'Duration น้อย > มาก',
-    };
+    final logoutLabels = isEnglish
+        ? {'all': 'All', 'active': 'Active', 'normal': 'Normal', 'timeout': 'Timeout', 'forced': 'Kicked'}
+        : {'all': 'ทั้งหมด', 'active': 'ยังอยู่', 'normal': 'ปกติ', 'timeout': 'Timeout', 'forced': 'Kicked'};
+    final sortLabels = isEnglish
+        ? {
+            'login_desc':    'Login: Newest first',
+            'login_asc':     'Login: Oldest first',
+            'duration_desc': 'Duration: High > Low',
+            'duration_asc':  'Duration: Low > High',
+          }
+        : {
+            'login_desc':    'Login ล่าสุด > เก่าสุด',
+            'login_asc':     'Login เก่าสุด > ล่าสุด',
+            'duration_desc': 'Duration มาก > น้อย',
+            'duration_asc':  'Duration น้อย > มาก',
+          };
+    final userLbl   = isEnglish ? 'User' : 'ผู้ใช้';
+    final statusLbl = isEnglish ? 'Status' : 'สถานะ';
+    final sortLbl   = isEnglish ? 'Sort' : 'เรียงโดย';
     final conditionLine =
-        'ผู้ใช้: $userLabel   สถานะ: ${logoutLabels[_logoutType] ?? _logoutType}'
-        '   เรียงโดย: ${sortLabels[_sortBy] ?? _sortBy}';
+        '$userLbl: $userLabel   $statusLbl: ${logoutLabels[_logoutType] ?? _logoutType}'
+        '   $sortLbl: ${sortLabels[_sortBy] ?? _sortBy}';
 
     // Fetch all matching rows for PDF
     List<AuditLogRow> pdfRows = _rows;
@@ -199,12 +215,16 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
           pw.Expanded(flex: 3, child: pw.Text(companyName, style: fs12)),
           pw.Expanded(
               flex: 7,
-              child: pw.Text('รายงานตรวจสอบการเข้าใช้งาน',
+              child: pw.Text(
+                  isEnglish ? 'Audit Log Report' : 'รายงานตรวจสอบการเข้าใช้งาน',
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
           pw.Expanded(
               flex: 3,
-              child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+              child: pw.Text(
+                  isEnglish
+                      ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}'
+                      : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
                   textAlign: pw.TextAlign.right, style: fs12)),
         ]),
         pw.SizedBox(height: 4),
@@ -214,7 +234,8 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
               child: pw.Text(dateRangeLine,
                   textAlign: pw.TextAlign.center, style: fs12)),
           pw.Expanded(flex: 3,
-              child: pw.Text('พิมพ์โดย $userName',
+              child: pw.Text(
+                  isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
                   textAlign: pw.TextAlign.right, style: fs12)),
         ]),
         pw.SizedBox(height: 4),
@@ -223,7 +244,8 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
               child: pw.Text(conditionLine,
                   textAlign: pw.TextAlign.left, style: fs10)),
           pw.Expanded(flex: 3,
-              child: pw.Text('พิมพ์เมื่อ $printDateStr',
+              child: pw.Text(
+                  isEnglish ? 'Printed at $printDateStr' : 'พิมพ์เมื่อ $printDateStr',
                   textAlign: pw.TextAlign.right, style: fs12)),
         ]),
         pw.SizedBox(height: 4),
@@ -263,23 +285,27 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
             children: [
               pw.TableRow(children: [
                 hCell('#'),
-                hCell('วันที่-เวลา Login',   a: pw.TextAlign.left),
-                hCell('รหัสผู้ใช้',          a: pw.TextAlign.left),
-                hCell('ชื่อผู้ใช้',          a: pw.TextAlign.left),
-                hCell('ชื่อเครื่อง',         a: pw.TextAlign.left),
-                hCell('IP Address',          a: pw.TextAlign.left),
-                hCell('วันที่-เวลา Logout',  a: pw.TextAlign.left),
-                hCell('สถานะ'),
-                hCell('ระยะเวลา',            a: pw.TextAlign.right),
+                hCell(isEnglish ? 'Login Date/Time'   : 'วันที่-เวลา Login',  a: pw.TextAlign.left),
+                hCell(isEnglish ? 'Username'          : 'รหัสผู้ใช้',         a: pw.TextAlign.left),
+                hCell(isEnglish ? 'Full Name'         : 'ชื่อผู้ใช้',         a: pw.TextAlign.left),
+                hCell(isEnglish ? 'Hostname'          : 'ชื่อเครื่อง',        a: pw.TextAlign.left),
+                hCell('IP Address',                                             a: pw.TextAlign.left),
+                hCell(isEnglish ? 'Logout Date/Time'  : 'วันที่-เวลา Logout', a: pw.TextAlign.left),
+                hCell(isEnglish ? 'Status'            : 'สถานะ'),
+                hCell(isEnglish ? 'Duration'          : 'ระยะเวลา',           a: pw.TextAlign.right),
               ]),
               ...pdfRows.asMap().entries.map((entry) {
                 final i = entry.key;
                 final r = entry.value;
-                final statusStr = r.isActive       ? 'ยังอยู่'
-                    : r.logoutType == 'normal'     ? 'ปกติ'
-                    : r.logoutType == 'timeout'    ? 'Timeout'
-                    : r.logoutType == 'forced'     ? 'Kicked'
-                    : r.logoutType                 ?? '-';
+                final statusStr = r.isActive
+                    ? (isEnglish ? 'Active'  : 'ยังอยู่')
+                    : r.logoutType == 'normal'
+                        ? (isEnglish ? 'Normal'  : 'ปกติ')
+                        : r.logoutType == 'timeout'
+                            ? 'Timeout'
+                            : r.logoutType == 'forced'
+                                ? 'Kicked'
+                                : r.logoutType ?? '-';
                 return pw.TableRow(
                   decoration: i.isOdd
                       ? const pw.BoxDecoration(color: PdfColors.grey100)
@@ -321,7 +347,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
             ),
           ),
           body: PdfPreview(
-            build:                _generatePdf,
+            build:                (format) => _generatePdf(format, isEnglish),
             initialPageFormat:    PdfPageFormat.a4.landscape,
             canChangeOrientation: false,
             canDebug:             false,
