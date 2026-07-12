@@ -135,7 +135,11 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
     final font         = pw.Font.ttf(fontData);
     final fontBold     = pw.Font.ttf(fontBoldData);
 
-    final companyName  = _company?.thaiName ?? (isEnglish ? '(Company name not specified)' : '(ไม่ระบุชื่อบริษัท)');
+    final companyName = isEnglish
+        ? (_company?.englishName?.isNotEmpty == true
+            ? _company!.englishName!
+            : _company?.thaiName ?? '(Company name not specified)')
+        : (_company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
