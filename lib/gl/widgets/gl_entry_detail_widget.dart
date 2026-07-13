@@ -1,7 +1,7 @@
-﻿import 'package:anan/cd/models/branch.dart';
-import 'package:anan/cd/models/currency.dart';
-import 'package:anan/cd/services/branch_service.dart';
-import 'package:anan/cd/services/currency_service.dart';
+﻿import 'package:anan/cd/models/cd_branch.dart';
+import 'package:anan/cd/models/cd_currency.dart';
+import 'package:anan/cd/services/cd_branch_service.dart';
+import 'package:anan/cd/services/cd_currency_service.dart';
 import 'package:anan/gl/services/account_service.dart';
 import 'package:anan/sa/services/sa_auth_service.dart';
 import 'package:flutter/material.dart';

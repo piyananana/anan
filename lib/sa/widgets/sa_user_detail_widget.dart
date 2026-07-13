@@ -4,8 +4,8 @@ import '../models/sa_user.dart';
 import '../models/sa_user_branch.dart';
 import '../services/sa_language_provider.dart';
 import '../services/sa_user_branch_service.dart';
-import '../../cd/models/branch.dart';
-import '../../cd/services/branch_service.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
 
 class UserDetailForm extends StatefulWidget {
   final User? editUser;

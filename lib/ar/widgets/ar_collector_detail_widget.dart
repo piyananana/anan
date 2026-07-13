@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../models/ar_collector.dart';
-import '../../cd/models/branch.dart';
-import '../../cd/models/business_unit.dart';
-import '../../cd/services/branch_service.dart';
-import '../../cd/services/business_unit_service.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/models/cd_business_unit.dart';
+import '../../cd/services/cd_branch_service.dart';
+import '../../cd/services/cd_business_unit_service.dart';
 
 class ArCollectorDetailWidget extends StatefulWidget {
   final Mode mode;

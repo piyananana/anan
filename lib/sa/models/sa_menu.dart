@@ -15,16 +15,16 @@ import '../screens/sa_user_document_screen.dart';
 import '../screens/sa_user_menu_screen.dart';
 import '../screens/sa_user_screen.dart';
 
-import '../../cd/screens/branch_screen.dart';
-import '../../cd/screens/business_type_screen.dart';
-import '../../cd/screens/business_unit_screen.dart';
-import '../../cd/screens/currency_screen.dart';
-import '../../cd/screens/project_screen.dart';
-import '../../cd/screens/zipcode_screen.dart';
-import '../../cd/screens/vat_rate_screen.dart';
-import '../../cd/screens/bank_screen.dart';
-import '../../cd/screens/sales_territory_screen.dart';
-import '../../cd/screens/salesperson_screen.dart';
+import '../../cd/screens/cd_branch_screen.dart';
+import '../../cd/screens/cd_business_type_screen.dart';
+import '../../cd/screens/cd_business_unit_screen.dart';
+import '../../cd/screens/cd_currency_screen.dart';
+import '../../cd/screens/cd_project_screen.dart';
+import '../../cd/screens/cd_zipcode_screen.dart';
+import '../../cd/screens/cd_vat_rate_screen.dart';
+import '../../cd/screens/cd_bank_screen.dart';
+import '../../cd/screens/cd_sales_territory_screen.dart';
+import '../../cd/screens/cd_salesperson_screen.dart';
 import '../../cd/screens/cd_wht_type_screen.dart';
 
 import '../../gl/screens/account_screen.dart';

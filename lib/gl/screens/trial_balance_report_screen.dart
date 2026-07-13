@@ -16,7 +16,7 @@ import '../../gl/services/period_service.dart';
 import '../../gl/services/trial_balance_report_service.dart';
 
 // Master Data Services
-import '../../cd/services/branch_service.dart';
+import '../../cd/services/cd_branch_service.dart';
 import '../../gl/models/gl_dimension.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../sa/models/sa_user_branch.dart';

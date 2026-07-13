@@ -1,8 +1,8 @@
-// lib/cm/widgets/cm_bank_list_widget.dart
+﻿// lib/cm/widgets/cm_bank_list_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../cd/models/bank.dart';
-import '../../cd/services/bank_service.dart';
+import '../../cd/models/cd_bank.dart';
+import '../../cd/services/cd_bank_service.dart';
 
 class BankListWidget extends StatefulWidget {
   final bool enableAddButton;

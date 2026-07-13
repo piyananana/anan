@@ -18,15 +18,15 @@ import 'sa/services/sa_user_document_service.dart';
 import 'sa/services/sa_user_menu_service.dart';
 import 'sa/services/sa_user_service.dart';
 
-import 'cd/services/branch_service.dart';
-import 'cd/services/business_type_service.dart';
-import 'cd/services/business_unit_service.dart';
-import 'cd/services/currency_service.dart';
-import 'cd/services/project_service.dart';
-import 'cd/services/zipcode_service.dart';
-import 'cd/services/vat_rate_service.dart';
-import 'cd/services/bank_service.dart';
-import 'cd/services/bank_branch_service.dart';
+import 'cd/services/cd_branch_service.dart';
+import 'cd/services/cd_business_type_service.dart';
+import 'cd/services/cd_business_unit_service.dart';
+import 'cd/services/cd_currency_service.dart';
+import 'cd/services/cd_project_service.dart';
+import 'cd/services/cd_zipcode_service.dart';
+import 'cd/services/cd_vat_rate_service.dart';
+import 'cd/services/cd_bank_service.dart';
+import 'cd/services/cd_bank_branch_service.dart';
 
 import 'gl/services/account_service.dart';
 import 'gl/services/gl_entry_service.dart';
@@ -40,8 +40,8 @@ import 'ar/services/ar_customer_group_service.dart';
 import 'ar/services/ar_customer_running_service.dart';
 import 'ar/services/ar_collector_service.dart';
 
-import 'cd/services/sales_territory_service.dart';
-import 'cd/services/salesperson_service.dart';
+import 'cd/services/cd_sales_territory_service.dart';
+import 'cd/services/cd_salesperson_service.dart';
 import 'cd/services/cd_wht_type_service.dart';
 
 import 'cm/services/cm_bank_account_service.dart';

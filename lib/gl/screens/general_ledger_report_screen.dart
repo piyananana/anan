@@ -20,7 +20,7 @@ import '../../gl/models/account.dart';
 import '../../gl/services/account_service.dart';
 import '../../gl/services/general_ledger_report_service.dart';
 
-import '../../cd/services/branch_service.dart';
+import '../../cd/services/cd_branch_service.dart';
 import '../../gl/models/gl_dimension.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../sa/models/sa_user_branch.dart';

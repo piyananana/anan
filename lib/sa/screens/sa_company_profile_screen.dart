@@ -10,8 +10,8 @@ import '../models/sa_company.dart';
 import '../services/sa_company_service.dart';
 import '../services/sa_language_provider.dart';
 import '../utils/sa_platform_file_picker.dart';
-import '../../cd/models/zipcode.dart';
-import '../../cd/widgets/zipcode_list_widget.dart';
+import '../../cd/models/cd_zipcode.dart';
+import '../../cd/widgets/cd_zipcode_list_widget.dart';
 
 class CompanyProfileScreen extends StatefulWidget {
   final VoidCallback? onExit;

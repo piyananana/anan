@@ -7,8 +7,8 @@ import '../utils/sa_menu_scope.dart';
 import '../models/sa_doc_number_branch.dart';
 import '../models/sa_module_document.dart';
 import '../services/sa_doc_number_branch_service.dart';
-import '../../cd/models/branch.dart';
-import '../../cd/services/branch_service.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
 
 class DocNumberBranchSetupScreen extends StatefulWidget {
   const DocNumberBranchSetupScreen({super.key});
