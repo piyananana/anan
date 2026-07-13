@@ -1,10 +1,10 @@
-// lib/sa/screens/sa_smtp_config_screen.dart
+﻿// lib/sa/screens/sa_smtp_config_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../utils/menu_scope.dart';
+import '../utils/sa_menu_scope.dart';
 import '../models/sa_smtp_config.dart';
 import '../services/sa_smtp_config_service.dart';
-import '../services/language_provider.dart';
+import '../services/sa_language_provider.dart';
 
 class SaSmtpConfigScreen extends StatefulWidget {
   const SaSmtpConfigScreen({super.key});

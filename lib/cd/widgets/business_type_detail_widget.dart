@@ -1,6 +1,6 @@
-// widgets/business_type_detail_widget.dart
+﻿// widgets/business_type_detail_widget.dart
 import 'package:flutter/material.dart';
-import '../../sa/models/anan_module.dart';
+import '../../sa/models/sa_anan_module.dart';
 import '../models/business_type.dart';
 
 class BusinessTypeDetailWidget extends StatefulWidget {

@@ -1,10 +1,10 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 import 'package:flutter/services.dart';
-import 'package:anan/sa/models/company.dart';
-import 'package:anan/sa/services/company_service.dart';
+import 'package:anan/sa/models/sa_company.dart';
+import 'package:anan/sa/services/sa_company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -14,8 +14,8 @@ import 'package:intl/intl.dart';
 import '../../gl/models/period.dart';
 import '../../gl/services/period_service.dart';
 import '../../gl/services/balance_sheet_report_service.dart';
-import '../../sa/models/user_branch.dart';
-import '../../sa/services/auth_service.dart';
+import '../../sa/models/sa_user_branch.dart';
+import '../../sa/services/sa_auth_service.dart';
 
 class BalanceSheetReportScreen extends StatefulWidget {
   const BalanceSheetReportScreen({super.key});

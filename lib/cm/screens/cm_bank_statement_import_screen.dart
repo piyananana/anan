@@ -1,4 +1,4 @@
-// lib/cm/screens/cm_bank_statement_import_screen.dart
+﻿// lib/cm/screens/cm_bank_statement_import_screen.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -6,10 +6,10 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
-import '../../sa/services/auth_service.dart';
-import '../../sa/utils/app_l10n.dart';
-import '../../sa/services/language_provider.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/services/sa_auth_service.dart';
+import '../../sa/utils/sa_app_l10n.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 
 const _kTheme = Color(0xFF1565C0);

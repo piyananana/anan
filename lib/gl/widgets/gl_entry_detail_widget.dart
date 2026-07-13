@@ -1,14 +1,14 @@
-import 'package:anan/cd/models/branch.dart';
+﻿import 'package:anan/cd/models/branch.dart';
 import 'package:anan/cd/models/currency.dart';
 import 'package:anan/cd/services/branch_service.dart';
 import 'package:anan/cd/services/currency_service.dart';
 import 'package:anan/gl/services/account_service.dart';
-import 'package:anan/sa/services/auth_service.dart';
+import 'package:anan/sa/services/sa_auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../../sa/utils/app_l10n.dart';
-import '../../sa/services/language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/account.dart';
 import '../models/gl_dimension.dart';
 import '../models/gl_entry.dart';
@@ -17,7 +17,7 @@ import '../services/gl_dimension_service.dart';
 import '../services/gl_entry_service.dart';
 import '../services/period_service.dart';
 import 'gl_dimension_picker_field.dart';
-import '../../sa/models/module_document.dart';
+import '../../sa/models/sa_module_document.dart';
 
 class GlEntryDetailWidget extends StatefulWidget {
   final int? entryId;

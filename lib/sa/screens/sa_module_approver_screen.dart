@@ -1,6 +1,6 @@
-// lib/sa/screens/sa_module_approver_screen.dart
+﻿// lib/sa/screens/sa_module_approver_screen.dart
 import 'dart:convert';
-import '../utils/menu_scope.dart';
+import '../utils/sa_menu_scope.dart';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
@@ -8,10 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/sa_module_approver.dart';
-import '../models/user.dart';
+import '../models/sa_user.dart';
 import '../services/sa_module_approver_service.dart';
-import '../services/user_service.dart';
-import '../services/language_provider.dart';
+import '../services/sa_user_service.dart';
+import '../services/sa_language_provider.dart';
 
 // ── constants ─────────────────────────────────────────────────────────────────
 const _modules = [

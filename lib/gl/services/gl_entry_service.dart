@@ -1,9 +1,9 @@
-import '../../../config/app_config.dart';
+﻿import '../../../config/app_config.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../../sa/services/auth_service.dart';
+import '../../sa/services/sa_auth_service.dart';
 import '../models/gl_entry.dart';
-import '../../sa/models/module_document.dart'; // Import ModuleDocument model
+import '../../sa/models/sa_module_document.dart'; // Import ModuleDocument model
 
 class GlEntryService {
   // final String baseUrl = 'http://localhost:3000/api/gl'; // ปรับ IP

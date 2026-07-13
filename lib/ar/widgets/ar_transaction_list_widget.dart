@@ -1,13 +1,13 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/ar_transaction.dart';
 import '../services/ar_transaction_service.dart';
 import '../../gl/models/gl_dimension.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
-import '../../sa/models/module_document.dart';
-import '../../sa/models/user_branch.dart';
-import '../../sa/services/auth_service.dart';
+import '../../sa/models/sa_module_document.dart';
+import '../../sa/models/sa_user_branch.dart';
+import '../../sa/services/sa_auth_service.dart';
 
 class ArTransactionListWidget extends StatefulWidget {
   final VoidCallback onAddPressed;

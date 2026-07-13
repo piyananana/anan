@@ -1,6 +1,6 @@
-// lib/cm/screens/cm_reset_screen.dart
+﻿// lib/cm/screens/cm_reset_screen.dart
 import 'package:flutter/material.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../services/cm_reset_service.dart';
 
 const _kTheme = Color(0xFF1565C0);

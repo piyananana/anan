@@ -1,8 +1,8 @@
-// File: screens/gl/financial_report_screen.dart
+﻿// File: screens/gl/financial_report_screen.dart
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -14,10 +14,10 @@ import '../../gl/services/period_service.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
 import '../services/financial_report_service.dart';
-import '../../sa/models/company.dart';
-import '../../sa/models/user_branch.dart';
-import '../../sa/services/company_service.dart';
-import '../../sa/services/auth_service.dart';
+import '../../sa/models/sa_company.dart';
+import '../../sa/models/sa_user_branch.dart';
+import '../../sa/services/sa_company_service.dart';
+import '../../sa/services/sa_auth_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
 

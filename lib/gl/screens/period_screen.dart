@@ -1,12 +1,12 @@
-// screens/zipcode_screen.dart
+﻿// screens/zipcode_screen.dart
 
 // import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 // import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
-import '../../sa/models/anan_module.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/models/sa_anan_module.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../models/period.dart';
 import '../services/period_service.dart';
 import '../widgets/period_list_widget.dart';

@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
-import '../../sa/utils/menu_scope.dart';
+﻿import 'package:flutter/material.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../widgets/ar_transaction_list_widget.dart';
 import '../widgets/ar_transaction_detail_widget.dart';
 

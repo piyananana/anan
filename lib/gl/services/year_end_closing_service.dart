@@ -1,8 +1,8 @@
-// lib/gl/services/year_end_closing_service.dart
+﻿// lib/gl/services/year_end_closing_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../config/app_config.dart';
-import '../../sa/services/auth_service.dart';
+import '../../sa/services/sa_auth_service.dart';
 import '../models/year_end_closing.dart';
 
 class YearEndClosingService {

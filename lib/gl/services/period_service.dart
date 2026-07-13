@@ -1,8 +1,8 @@
-import '../../../config/app_config.dart';
+﻿import '../../../config/app_config.dart';
 // File: gl/services/gl_period_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../../sa/services/auth_service.dart';
+import '../../sa/services/sa_auth_service.dart';
 import '../models/period.dart';
 
 class PeriodService {
@@ -249,7 +249,7 @@ class PeriodService {
 // // File: gl/services/gl_period_service.dart
 // import 'dart:convert';
 // import 'package:http/http.dart' as http;
-// import '../../sa/services/auth_service.dart';
+// import '../../sa/services/sa_auth_service.dart';
 // import '../models/period.dart';
 // // import '../models/gl_posting_period.dart';
 

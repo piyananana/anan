@@ -1,10 +1,10 @@
-// lib/ar/screens/ar_collector_screen.dart
+﻿// lib/ar/screens/ar_collector_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../sa/models/anan_module.dart';
-import '../../sa/utils/menu_scope.dart';
-import '../../sa/services/language_provider.dart';
-import '../../sa/utils/app_l10n.dart';
+import '../../sa/models/sa_anan_module.dart';
+import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/ar_collector.dart';
 import '../services/ar_collector_service.dart';
 import '../widgets/ar_collector_list_widget.dart';

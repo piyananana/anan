@@ -1,7 +1,7 @@
-// lib/ar/widgets/ar_collector_detail_widget.dart
+﻿// lib/ar/widgets/ar_collector_detail_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../sa/models/anan_module.dart';
+import '../../sa/models/sa_anan_module.dart';
 import '../models/ar_collector.dart';
 import '../../cd/models/branch.dart';
 import '../../cd/models/business_unit.dart';

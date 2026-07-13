@@ -1,8 +1,8 @@
-// lib/cd/widgets/sales_territory_detail_widget.dart
+﻿// lib/cd/widgets/sales_territory_detail_widget.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../sa/models/anan_module.dart';
+import '../../sa/models/sa_anan_module.dart';
 import '../models/sales_territory.dart';
 import '../services/sales_territory_service.dart';
 

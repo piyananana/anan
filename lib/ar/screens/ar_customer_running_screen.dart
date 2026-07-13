@@ -1,7 +1,7 @@
-// lib/ar/screens/ar_customer_running_screen.dart
+﻿// lib/ar/screens/ar_customer_running_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../models/ar_customer_running.dart';
 import '../services/ar_customer_running_service.dart';
 

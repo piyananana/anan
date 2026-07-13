@@ -1,10 +1,10 @@
-// lib/cm/screens/cm_bank_file_format_screen.dart
+﻿// lib/cm/screens/cm_bank_file_format_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../sa/utils/app_l10n.dart';
-import '../../sa/services/language_provider.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/utils/sa_app_l10n.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_file_format.dart';
 import '../services/cm_bank_file_format_service.dart';
 

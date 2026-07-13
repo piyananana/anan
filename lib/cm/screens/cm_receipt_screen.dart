@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_receipt.dart';
 import '../services/cm_bank_account_service.dart';

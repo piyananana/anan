@@ -1,10 +1,10 @@
-// lib/cm/screens/cm_bank_account_screen.dart
+﻿// lib/cm/screens/cm_bank_account_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../sa/models/anan_module.dart';
-import '../../sa/utils/app_l10n.dart';
-import '../../sa/services/language_provider.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/models/sa_anan_module.dart';
+import '../../sa/utils/sa_app_l10n.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../services/cm_bank_account_service.dart';
 import '../widgets/cm_bank_account_list_widget.dart';

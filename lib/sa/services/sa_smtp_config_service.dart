@@ -1,8 +1,8 @@
-// lib/sa/services/sa_smtp_config_service.dart
+﻿// lib/sa/services/sa_smtp_config_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
-import 'auth_service.dart';
+import 'sa_auth_service.dart';
 import '../models/sa_smtp_config.dart';
 
 class SaSmtpConfigService {

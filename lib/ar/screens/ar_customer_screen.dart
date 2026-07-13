@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import '../../sa/models/anan_module.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/models/sa_anan_module.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../models/ar_customer.dart';
 import '../services/ar_customer_service.dart';
 import '../widgets/ar_customer_list_widget.dart';

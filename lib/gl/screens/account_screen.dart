@@ -1,12 +1,12 @@
-// screens/account_screen.dart
+﻿// screens/account_screen.dart
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import '../../sa/services/language_provider.dart';
-import '../../sa/utils/app_l10n.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../models/account.dart';
 import '../services/account_service.dart';
 import '../widgets/account_list_tree_widget.dart';

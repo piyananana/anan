@@ -1,12 +1,12 @@
-// screens/branch_screen.dart
+﻿// screens/branch_screen.dart
 
 // import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 // import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
-import '../../sa/models/anan_module.dart';
-import '../../sa/utils/menu_scope.dart';
+import '../../sa/models/sa_anan_module.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../models/branch.dart';
 import '../services/branch_service.dart';
 import '../widgets/branch_list_widget.dart';

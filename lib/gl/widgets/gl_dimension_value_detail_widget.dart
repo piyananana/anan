@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../sa/utils/app_l10n.dart';
-import '../../sa/services/language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/gl_dimension.dart';
 
 enum GlDimValueMode { none, add, addChild, edit, view }

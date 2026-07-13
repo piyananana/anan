@@ -1,8 +1,8 @@
-// lib/ar/services/ar_gl_account_setup_service.dart
+﻿// lib/ar/services/ar_gl_account_setup_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
-import '../../sa/services/auth_service.dart';
+import '../../sa/services/sa_auth_service.dart';
 import '../models/ar_gl_account_setup.dart';
 
 class ArGlAccountSetupService {

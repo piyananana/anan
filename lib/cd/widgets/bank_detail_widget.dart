@@ -1,7 +1,7 @@
-// lib/cd/widgets/bank_detail_widget.dart
+﻿// lib/cd/widgets/bank_detail_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../sa/models/anan_module.dart';
+import '../../sa/models/sa_anan_module.dart';
 import '../models/bank.dart';
 import '../models/bank_branch.dart';
 import '../services/bank_branch_service.dart';
