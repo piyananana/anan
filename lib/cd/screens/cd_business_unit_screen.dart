@@ -10,6 +10,8 @@ import '../models/cd_business_unit.dart';
 import '../services/cd_business_unit_service.dart';
 import '../widgets/cd_business_unit_list_tree_widget.dart';
 import '../widgets/cd_business_unit_detail_widget.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 
 class BusinessUnitScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
@@ -53,6 +55,7 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
 
 // --- ปรับปรุง: Import/Export Logic ---
   Future<void> _importData() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() {
       _isImportOrExport = true;
     });
@@ -78,13 +81,13 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
         widget.onFieldsChanged(); // แจ้ง Home Screen ด้วย
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Import สำเร็จ!'),),
+            SnackBar(content: Text(isEnglish ? 'Import successful!' : 'Import สำเร็จ!'),),
           );
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ยกเลิกการเลือกไฟล์')),
+            SnackBar(content: Text(isEnglish ? 'File selection cancelled' : 'ยกเลิกการเลือกไฟล์')),
           );
         }
       }
@@ -103,6 +106,7 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
   }
 
   Future<void> _exportData() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() {
       _isImportOrExport = true;
     });
@@ -111,8 +115,10 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
           .exportDataExcel();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads'),),
+          SnackBar(
+              content: Text(isEnglish
+                  ? 'Export successful! File saved in Downloads'
+                  : 'Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads'),),
         );
       }
     } catch (e) {
@@ -130,20 +136,23 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
   }
 
   Future<void> _deleteRows() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('ยืนยันการลบทั้งหมด'),
-          content: const Text(
-              'คุณแน่ใจหรือไม่ว่าต้องการลบทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้!'),
+          title: Text(isEnglish ? 'Confirm Delete All' : 'ยืนยันการลบทั้งหมด'),
+          content: Text(isEnglish
+              ? 'Are you sure you want to delete all? This action cannot be undone!'
+              : 'คุณแน่ใจหรือไม่ว่าต้องการลบทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้!'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('ยกเลิก')),
+                child: Text(l.cancel)),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('ลบ'),
+              child: Text(l.delete),
             ),
           ],
         );
@@ -158,7 +167,7 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('ลบทั้งหมดสำเร็จ'),));
+              SnackBar(content: Text(isEnglish ? 'Deleted all successfully' : 'ลบทั้งหมดสำเร็จ'),));
         }
       } catch (e) {
         if (mounted) {
@@ -198,19 +207,22 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
   }
 
   Future<void> _onDelete(BusinessUnit row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-          title: const Text('ยืนยันการลบ'),
-          content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบ "${row.buCode} ${row.buNameThai}"?'),
+          title: Text(l.confirmDelete),
+          content: Text(isEnglish
+              ? 'Are you sure you want to delete "${row.buCode} ${row.buNameThai}"?'
+              : 'คุณแน่ใจหรือไม่ที่จะลบ "${row.buCode} ${row.buNameThai}"?'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('ยกเลิก')),
+                child: Text(l.cancel)),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('ลบ'),
+              child: Text(l.delete),
             ),
           ],
       ),
@@ -224,7 +236,9 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('ลบ "${row.buCode} ${row.buNameThai}" สำเร็จ')));
+              SnackBar(content: Text(isEnglish
+                  ? 'Deleted "${row.buCode} ${row.buNameThai}" successfully'
+                  : 'ลบ "${row.buCode} ${row.buNameThai}" สำเร็จ')));
         }
       } catch (e) {
         if (mounted) {
@@ -236,20 +250,25 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
   }
 
   Future<void> _onSubmit(BusinessUnit row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final dataService = Provider.of<BusinessUnitService>(context, listen: false);
       if (_mode == Mode.addRoot || _mode == Mode.addChild) {
         await dataService.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เพิ่มข้อมูล "${row.buCode} ${row.buNameThai}" สำเร็จ')),
+            SnackBar(content: Text(isEnglish
+                ? 'Added "${row.buCode} ${row.buNameThai}" successfully'
+                : 'เพิ่มข้อมูล "${row.buCode} ${row.buNameThai}" สำเร็จ')),
           );
         }
       } else if (_mode == Mode.edit && _selectedData != null) {
         await dataService.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('บันทึกข้อมูล "${row.buCode} ${row.buNameThai}" สำเร็จ')),
+            SnackBar(content: Text(isEnglish
+                ? 'Saved "${row.buCode} ${row.buNameThai}" successfully'
+                : 'บันทึกข้อมูล "${row.buCode} ${row.buNameThai}" สำเร็จ')),
           );
         }
       }
@@ -280,6 +299,8 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context); // This is crucial for AutomaticKeepAliveClientMixin
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
 
     return Scaffold(
       appBar: AppBar(
@@ -289,7 +310,7 @@ class _BusinessUnitScreenState extends State<BusinessUnitScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.refresh,
             onPressed: () {
               _listWidgetKey.currentState?.refresh();
               _onCancel();

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_salesperson.dart';
 import '../services/cd_salesperson_service.dart';
 import '../widgets/cd_salesperson_list_widget.dart';
@@ -61,19 +63,24 @@ class _SalespersonScreenState extends State<SalespersonScreen>
   }
 
   Future<void> _onDelete(Salesperson row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
+    final displayName = (isEnglish && (row.salespersonNameEng?.isNotEmpty ?? false))
+        ? row.salespersonNameEng!
+        : row.salespersonNameThai;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
+        title: Text(l.confirmDelete),
         content: Text(
-            'ลบ "${row.salespersonCode} (${row.salespersonNameThai})" ใช่หรือไม่?'),
+            '${isEnglish ? 'Delete' : 'ลบ'} "${row.salespersonCode} ($displayName)" ${isEnglish ? '?' : 'ใช่หรือไม่?'}'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('ยกเลิก')),
+              child: Text(l.cancel)),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('ลบ')),
+              child: Text(l.delete)),
         ],
       ),
     );
@@ -85,30 +92,32 @@ class _SalespersonScreenState extends State<SalespersonScreen>
       _onCancel();
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+            .showSnackBar(SnackBar(content: Text(l.deletedSuccess)));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('ลบล้มเหลว: $e')));
+            .showSnackBar(SnackBar(content: Text('${isEnglish ? 'Delete failed' : 'ลบล้มเหลว'}: $e')));
       }
     }
   }
 
   Future<void> _onSubmit(Salesperson row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     try {
       final svc = Provider.of<SalespersonService>(context, listen: false);
       if (_selected == null) {
         await svc.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
         }
       } else {
         await svc.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(l.savedSuccess)));
         }
       }
       _listKey.currentState?.refresh();
@@ -117,7 +126,7 @@ class _SalespersonScreenState extends State<SalespersonScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e')));
+            .showSnackBar(SnackBar(content: Text('${isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'}: $e')));
       }
     }
   }
@@ -130,6 +139,8 @@ class _SalespersonScreenState extends State<SalespersonScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -138,7 +149,7 @@ class _SalespersonScreenState extends State<SalespersonScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.refresh,
             onPressed: () {
               _listKey.currentState?.refresh();
               _onCancel();
@@ -169,7 +180,7 @@ class _SalespersonScreenState extends State<SalespersonScreen>
                   onPressed: () => setState(
                       () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
                   tooltip:
-                      _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                      _isLeftPanelExpanded ? (isEnglish ? 'Collapse' : 'ย่อรายการ') : (isEnglish ? 'Expand' : 'ขยายรายการ'),
                 ),
               ),
               // left panel

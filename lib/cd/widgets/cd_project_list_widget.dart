@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/cd_project.dart';
 import '../services/cd_project_service.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 
 class ProjectListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -39,14 +41,15 @@ class ProjectListWidget extends StatefulWidget {
   // เมธอด static สำหรับแสดง Dialog
   static Future<void> search(BuildContext context,
       {required void Function(Project) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
           // กำหนดขนาดให้ใหญ่ขึ้นเพื่อให้ใช้งานสะดวก
           contentPadding: EdgeInsets.zero,
-          title: const Text('ค้นหา โครงการ',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          title: Text(isEnglish ? 'Search Project' : 'ค้นหา โครงการ',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           content: Container(
             width: 500, // กำหนดความกว้างที่เหมาะสม
             height: 600, // กำหนดความสูงที่เหมาะสม
@@ -71,7 +74,7 @@ class ProjectListWidget extends StatefulWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+              child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -170,7 +173,7 @@ class ProjectListWidgetState extends State<ProjectListWidget>
     });
   }
 
-  Widget _buildListHeader() {
+  Widget _buildListHeader(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
@@ -178,34 +181,34 @@ class ProjectListWidgetState extends State<ProjectListWidget>
           widget.enableAddButton
               ? IconButton(
                   icon: const Icon(Icons.add),
-                  tooltip: 'เพิ่มข้อมูลใหม่',
+                  tooltip: isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่',
                   onPressed: () => widget.onAdd(),
                 )
               : const SizedBox.shrink(),
           widget.enableSortButton
               ? PopupMenuButton<String>(
                   icon: const Icon(Icons.sort),
-                  tooltip: 'จัดเรียง',
+                  tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
                   onSelected: (result) {
                     _onSortSelected(result);
                   },
                   itemBuilder: (BuildContext context) =>
                       <PopupMenuEntry<String>>[
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'name_asc',
-                      child: Text('ชื่อโครงการ (น้อยไปมาก)'),
+                      child: Text(isEnglish ? 'Project Name (A-Z)' : 'ชื่อโครงการ (น้อยไปมาก)'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'name_desc',
-                      child: Text('ชื่อโครงการ (มากไปน้อย)'),
+                      child: Text(isEnglish ? 'Project Name (Z-A)' : 'ชื่อโครงการ (มากไปน้อย)'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'code_asc',
-                      child: Text('รหัสโครงการ (น้อยไปมาก)'),
+                      child: Text(isEnglish ? 'Project Code (A-Z)' : 'รหัสโครงการ (น้อยไปมาก)'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'code_desc',
-                      child: Text('รหัสโครงการ (มากไปน้อย)'),
+                      child: Text(isEnglish ? 'Project Code (Z-A)' : 'รหัสโครงการ (มากไปน้อย)'),
                     ),
                   ],
                 )
@@ -213,12 +216,12 @@ class ProjectListWidgetState extends State<ProjectListWidget>
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา โครงการ',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
+              decoration: InputDecoration(
+                hintText: isEnglish ? 'Search Project' : 'ค้นหา โครงการ',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                 // border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (value) {
                 setState(() {
@@ -239,15 +242,17 @@ class ProjectListWidgetState extends State<ProjectListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
 
     _searchResult = _filterAndSort();
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${_lists.length} แถว'
-        : 'พบ ${_searchResult.length} จาก ${_lists.length} แถว';
+        ? (isEnglish ? 'Total ${_lists.length} rows' : 'ทั้งหมด ${_lists.length} แถว')
+        : (isEnglish ? 'Found ${_searchResult.length} of ${_lists.length} rows' : 'พบ ${_searchResult.length} จาก ${_lists.length} แถว');
 
     return Column(
       children: [
-        _buildListHeader(),
+        _buildListHeader(isEnglish),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           child: Align(
@@ -260,11 +265,14 @@ class ProjectListWidgetState extends State<ProjectListWidget>
           child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _searchResult.isEmpty
-              ? const Center(child: Text('ไม่พบโครงการ'))
+              ? Center(child: Text(isEnglish ? 'No project found' : 'ไม่พบโครงการ'))
               : ListView.builder(
                   itemCount: _searchResult.length,
                   itemBuilder: (context, index) {
                     final item = _searchResult[index];
+                    final displayName = isEnglish && item.projectNameEng.isNotEmpty
+                        ? item.projectNameEng
+                        : item.projectNameThai;
                     return Card(
                       margin: const EdgeInsets.symmetric(
                           horizontal: 8.0, vertical: 4.0),
@@ -275,7 +283,7 @@ class ProjectListWidgetState extends State<ProjectListWidget>
                         // // ),
                         // // title: Text(item.item),
                         title: Text(
-                            '${item.projectCode} ${item.projectNameThai}',
+                            '${item.projectCode} $displayName',
                         ),
                         subtitle: Text(
                             '${_dateFormat.format(item.startDate!.toLocal())} - ${_dateFormat.format(item.endDate!.toLocal())}'),

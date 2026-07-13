@@ -11,6 +11,8 @@ import '../models/cd_project.dart';
 import '../services/cd_project_service.dart';
 import '../widgets/cd_project_list_widget.dart';
 import '../widgets/cd_project_detail_widget.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 
 class ProjectScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
@@ -104,6 +106,7 @@ class _ProjectScreenState extends State<ProjectScreen>
   // }
 
   Future<void> _exportData() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() {
       _isImportOrExport = true;
     });
@@ -112,8 +115,10 @@ class _ProjectScreenState extends State<ProjectScreen>
           .exportDataExcel();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads')),
+          SnackBar(
+              content: Text(isEnglish
+                  ? 'Export successful! File saved in Downloads'
+                  : 'Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads')),
         );
       }
     } catch (e) {
@@ -131,19 +136,23 @@ class _ProjectScreenState extends State<ProjectScreen>
   }
 
   Future<void> _deleteRows() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: const Text('คุณแน่ใจหรือไม่ที่จะลบทั้งหมด ?'),
+        title: Text(isEnglish ? 'Confirm Delete All' : 'ยืนยันการลบทั้งหมด'),
+        content: Text(isEnglish
+            ? 'Are you sure you want to delete all? This action cannot be undone!'
+            : 'คุณแน่ใจหรือไม่ที่จะลบทั้งหมด ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ'),
+            child: Text(l.delete),
           ),
         ],
       ),
@@ -157,7 +166,7 @@ class _ProjectScreenState extends State<ProjectScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ลบทั้งหมด สำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'Deleted all successfully' : 'ลบทั้งหมด สำเร็จ')),
           );
         }
       } catch (e) {
@@ -193,20 +202,23 @@ class _ProjectScreenState extends State<ProjectScreen>
   }
 
   Future<void> _onDelete(Project row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบ "${row.projectCode} (${row.projectNameThai})" ?'),
+        title: Text(l.confirmDelete),
+        content: Text(isEnglish
+            ? 'Are you sure you want to delete "${row.projectCode} ${row.projectNameThai}"?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบ "${row.projectCode} (${row.projectNameThai})" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ'),
+            child: Text(l.delete),
           ),
         ],
       ),
@@ -220,7 +232,7 @@ class _ProjectScreenState extends State<ProjectScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ลบสำเร็จ')),
+            SnackBar(content: Text(l.deletedSuccess)),
           );
         }
       } catch (e) {
@@ -234,20 +246,22 @@ class _ProjectScreenState extends State<ProjectScreen>
   }
 
   Future<void> _onSubmit(Project row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     try {
       final dataService = Provider.of<ProjectService>(context, listen: false);
       if (_selectedData == null) {
         await dataService.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('เพิ่มสำเร็จ')),
+            SnackBar(content: Text(l.savedSuccess)),
           );
         }
       } else {
         await dataService.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('บันทึกสำเร็จ')),
+            SnackBar(content: Text(l.savedSuccess)),
           );
         }
       }
@@ -279,6 +293,8 @@ class _ProjectScreenState extends State<ProjectScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
 
     return Scaffold(
       appBar: AppBar(
@@ -288,7 +304,7 @@ class _ProjectScreenState extends State<ProjectScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.refresh,
             onPressed: () {
               _listWidgetKey.currentState?.refresh();
               _onCancel();
@@ -315,7 +331,7 @@ class _ProjectScreenState extends State<ProjectScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse' : 'ย่อรายการ') : (isEnglish ? 'Expand' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(

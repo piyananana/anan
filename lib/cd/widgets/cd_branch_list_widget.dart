@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/cd_branch.dart';
 import '../services/cd_branch_service.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 
 class BranchListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -39,14 +41,15 @@ class BranchListWidget extends StatefulWidget {
   // เมธอด static สำหรับแสดง Dialog
   static Future<void> search(BuildContext context,
       {required void Function(Branch) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
           // กำหนดขนาดให้ใหญ่ขึ้นเพื่อให้ใช้งานสะดวก
           contentPadding: EdgeInsets.zero,
-          title: const Text('ค้นหา สาขา',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          title: Text(isEnglish ? 'Search Branch' : 'ค้นหา สาขา',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           content: Container(
             width: 500, // กำหนดความกว้างที่เหมาะสม
             height: 600, // กำหนดความสูงที่เหมาะสม
@@ -71,7 +74,7 @@ class BranchListWidget extends StatefulWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+              child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -169,6 +172,7 @@ class BranchListWidgetState extends State<BranchListWidget>
   }
 
   Widget _buildListHeader() {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
@@ -176,34 +180,34 @@ class BranchListWidgetState extends State<BranchListWidget>
           widget.enableAddButton
               ? IconButton(
                   icon: const Icon(Icons.add),
-                  tooltip: 'เพิ่มข้อมูลใหม่',
+                  tooltip: isEnglish ? 'Add New Branch' : 'เพิ่มข้อมูลใหม่',
                   onPressed: () => widget.onAdd(),
                 )
               : const SizedBox.shrink(),
           widget.enableSortButton
               ? PopupMenuButton<String>(
                   icon: const Icon(Icons.sort),
-                  tooltip: 'จัดเรียง',
+                  tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
                   onSelected: (result) {
                     _onSortSelected(result);
                   },
                   itemBuilder: (BuildContext context) =>
                       <PopupMenuEntry<String>>[
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'name_asc',
-                      child: Text('ชื่อสาขา (น้อยไปมาก)'),
+                      child: Text(isEnglish ? 'Branch Name (A-Z)' : 'ชื่อสาขา (น้อยไปมาก)'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'name_desc',
-                      child: Text('ชื่อสาขา (มากไปน้อย)'),
+                      child: Text(isEnglish ? 'Branch Name (Z-A)' : 'ชื่อสาขา (มากไปน้อย)'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'code_asc',
-                      child: Text('รหัสสาขา (น้อยไปมาก)'),
+                      child: Text(isEnglish ? 'Branch Code (A-Z)' : 'รหัสสาขา (น้อยไปมาก)'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'code_desc',
-                      child: Text('รหัสสาขา (มากไปน้อย)'),
+                      child: Text(isEnglish ? 'Branch Code (Z-A)' : 'รหัสสาขา (มากไปน้อย)'),
                     ),
                   ],
                 )
@@ -211,12 +215,12 @@ class BranchListWidgetState extends State<BranchListWidget>
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา สาขา',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
+              decoration: InputDecoration(
+                hintText: isEnglish ? 'Search Branch' : 'ค้นหา สาขา',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                 // border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (value) {
                 setState(() {
@@ -237,11 +241,13 @@ class BranchListWidgetState extends State<BranchListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
 
     _searchResult = _filterAndSort();
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${_lists.length} แถว'
-        : 'พบ ${_searchResult.length} จาก ${_lists.length} แถว';
+        ? (isEnglish ? 'Total ${_lists.length} rows' : 'ทั้งหมด ${_lists.length} แถว')
+        : (isEnglish ? 'Found ${_searchResult.length} of ${_lists.length} rows' : 'พบ ${_searchResult.length} จาก ${_lists.length} แถว');
 
     return Column(
       children: [
@@ -258,7 +264,7 @@ class BranchListWidgetState extends State<BranchListWidget>
           child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _searchResult.isEmpty
-              ? const Center(child: Text('ไม่พบสาขา'))
+              ? Center(child: Text(l.noData))
               : ListView.builder(
                   itemCount: _searchResult.length,
                   itemBuilder: (context, index) {
@@ -274,7 +280,7 @@ class BranchListWidgetState extends State<BranchListWidget>
                         // // ),
                         // // title: Text(item.item),
                         title: Text(
-                            '${item.branchCode} ${item.branchNameThai}',
+                            '${item.branchCode} ${isEnglish && item.branchNameEng.isNotEmpty ? item.branchNameEng : item.branchNameThai}',
                         ),
                         subtitle: Text(
                             '${item.addressDistrict} ${item.addressProvince}'),

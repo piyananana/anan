@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_zipcode.dart';
 import '../services/cd_zipcode_service.dart';
 import '../widgets/cd_zipcode_list_widget.dart';
@@ -54,6 +56,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
   bool get wantKeepAlive => true;
 
   Future<void> _importData() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() {
       _isImportOrExport = true;
     });
@@ -79,13 +82,13 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
         widget.onFieldsChanged(); // แจ้ง Home Screen ด้วย
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Import สำเร็จ!')),
+            SnackBar(content: Text(isEnglish ? 'Import successful!' : 'Import สำเร็จ!')),
           );
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ยกเลิกการเลือกไฟล์')),
+            SnackBar(content: Text(isEnglish ? 'File selection cancelled' : 'ยกเลิกการเลือกไฟล์')),
           );
         }
       }
@@ -93,7 +96,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Import: ${e.toString()}')),
+              content: Text('${isEnglish ? 'An error occurred during Import' : 'เกิดข้อผิดพลาดในการ Import'}: ${e.toString()}')),
         );
       }
     } finally {

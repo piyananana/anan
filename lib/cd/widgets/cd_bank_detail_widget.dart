@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_bank.dart';
 import '../models/cd_bank_branch.dart';
 import '../services/cd_bank_branch_service.dart';
@@ -151,6 +153,7 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
     // Capture service & messenger before any await
     final service = Provider.of<BankBranchService>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
 
     // Use a dedicated StatefulWidget dialog — avoids GlobalKey<FormState>
     // being created in an async closure, which can trigger _dependents.isEmpty
@@ -174,13 +177,13 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
       if (!mounted) return;
       await _loadBranches();
       messenger.showSnackBar(
-        const SnackBar(content: Text('บันทึกสาขาสำเร็จ')),
+        SnackBar(content: Text(isEnglish ? 'Branch saved successfully' : 'บันทึกสาขาสำเร็จ')),
       );
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-            content: Text('บันทึกสาขาล้มเหลว: $e'),
+            content: Text(isEnglish ? 'Failed to save branch: $e' : 'บันทึกสาขาล้มเหลว: $e'),
             backgroundColor: Colors.red),
       );
     }
@@ -190,19 +193,20 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
     // Capture service & messenger before any await
     final service = Provider.of<BankBranchService>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text('ลบสาขา "${branch.branchName}" ?'),
+        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(isEnglish ? 'Delete branch "${branch.branchName}" ?' : 'ลบสาขา "${branch.branchName}" ?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('ยกเลิก')),
+              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('ลบ', style: TextStyle(color: Colors.red))),
+              child: Text(isEnglish ? 'Delete' : 'ลบ', style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -212,12 +216,12 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
       await service.deleteRow(branch.id!);
       if (!mounted) return;
       await _loadBranches();
-      messenger.showSnackBar(const SnackBar(content: Text('ลบสาขาสำเร็จ')));
+      messenger.showSnackBar(SnackBar(content: Text(isEnglish ? 'Branch deleted successfully' : 'ลบสาขาสำเร็จ')));
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-            content: Text('ลบสาขาล้มเหลว: $e'),
+            content: Text(isEnglish ? 'Failed to delete branch: $e' : 'ลบสาขาล้มเหลว: $e'),
             backgroundColor: Colors.red),
       );
     }
@@ -225,9 +229,14 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+
     if (widget.isPlaceholder) {
-      return const Center(
-        child: Text('เลือกธนาคารเพื่อแก้ไข หรือกดปุ่ม + เพื่อเพิ่มธนาคารใหม่'),
+      return Center(
+        child: Text(isEnglish
+            ? 'Select a bank to edit, or press + to add a new bank'
+            : 'เลือกธนาคารเพื่อแก้ไข หรือกดปุ่ม + เพื่อเพิ่มธนาคารใหม่'),
       );
     }
 
@@ -242,10 +251,10 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
         children: [
           Text(
             widget.mode == Mode.view
-                ? 'ดูข้อมูล'
+                ? (isEnglish ? 'View Bank' : 'ดูข้อมูลธนาคาร')
                 : widget.mode == Mode.edit
-                    ? 'แก้ไขข้อมูล'
-                    : 'เพิ่มข้อมูลใหม่',
+                    ? (isEnglish ? 'Edit Bank' : 'แก้ไขธนาคาร')
+                    : (isEnglish ? 'Add New Bank' : 'เพิ่มธนาคารใหม่'),
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 16),
@@ -263,12 +272,12 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
                         controller: _bankCodeCtrl,
                         style:
                             const TextStyle(fontWeight: FontWeight.bold),
-                        decoration: const InputDecoration(
-                          labelText: 'รหัสธนาคาร *',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Bank Code *' : 'รหัสธนาคาร *',
+                          border: const OutlineInputBorder(),
                         ),
                         validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'โปรดระบุรหัสธนาคาร'
+                            ? (isEnglish ? 'Please enter bank code' : 'โปรดระบุรหัสธนาคาร')
                             : null,
                       ),
                     ),
@@ -278,9 +287,9 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
                       child: TextFormField(
                         readOnly: readOnly,
                         controller: _shortNameCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'ชื่อย่อ',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Short Name' : 'ชื่อย่อ',
+                          border: const OutlineInputBorder(),
                         ),
                       ),
                     ),
@@ -306,12 +315,12 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
                       child: TextFormField(
                         readOnly: readOnly,
                         controller: _bankNameThaiCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'ชื่อธนาคาร (ไทย) *',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Bank Name (Thai) *' : 'ชื่อธนาคาร (ไทย) *',
+                          border: const OutlineInputBorder(),
                         ),
                         validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'โปรดระบุชื่อธนาคาร'
+                            ? (isEnglish ? 'Please enter bank name' : 'โปรดระบุชื่อธนาคาร')
                             : null,
                       ),
                     ),
@@ -320,9 +329,9 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
                       child: TextFormField(
                         readOnly: readOnly,
                         controller: _bankNameEngCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'ชื่อธนาคาร (อังกฤษ)',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Bank Name (English)' : 'ชื่อธนาคาร (อังกฤษ)',
+                          border: const OutlineInputBorder(),
                         ),
                       ),
                     ),

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/cd_sales_territory.dart';
 import '../services/cd_sales_territory_service.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 
 class SalesTerritoryListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -42,12 +44,13 @@ class SalesTerritoryListWidget extends StatefulWidget {
 
   static Future<void> search(BuildContext context,
       {required void Function(SalesTerritory) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('ค้นหา เขตการขาย',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Search Sales Territory' : 'ค้นหา เขตการขาย',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Container(
           width: 520,
           height: 600,
@@ -73,7 +76,7 @@ class SalesTerritoryListWidget extends StatefulWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+            child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -145,7 +148,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
         (t.territoryNameEng?.toUpperCase().contains(upper) ?? false);
   }
 
-  Widget _buildNode(SalesTerritory item, int level, List<SalesTerritory> allFiltered) {
+  Widget _buildNode(SalesTerritory item, int level, List<SalesTerritory> allFiltered, bool isEnglish) {
     final children = _childrenOf(item.id, allFiltered);
     final hasChildren = children.isNotEmpty;
     final isExpanded = _expandedState[item.id] ?? true;
@@ -190,7 +193,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    '${item.territoryCode}  ${item.territoryNameThai}',
+                    '${item.territoryCode}  ${isEnglish && item.territoryNameEng != null && item.territoryNameEng!.isNotEmpty ? item.territoryNameEng! : item.territoryNameThai}',
                     style: TextStyle(
                       fontSize: 14,
                       color: item.isActive ? null : Colors.grey,
@@ -202,12 +205,12 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
                 ),
                 // inactive chip
                 if (!item.isActive)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 2),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 2),
                     child: Chip(
-                      label: Text('หยุดใช้',
-                          style: TextStyle(fontSize: 10)),
-                      backgroundColor: Color(0xFFEEEEEE),
+                      label: Text(isEnglish ? 'Inactive' : 'หยุดใช้',
+                          style: const TextStyle(fontSize: 10)),
+                      backgroundColor: const Color(0xFFEEEEEE),
                       padding: EdgeInsets.zero,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,
@@ -217,7 +220,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
                 if (widget.enableAddChildButton)
                   IconButton(
                     icon: const Icon(Icons.add_circle_outline, size: 18),
-                    tooltip: 'เพิ่มเขตย่อย',
+                    tooltip: isEnglish ? 'Add Sub-territory' : 'เพิ่มเขตย่อย',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     onPressed: () => widget.onAddChild(item),
@@ -227,7 +230,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
                   IconButton(
                     icon: const Icon(Icons.visibility,
                         color: Colors.green, size: 18),
-                    tooltip: 'ดู',
+                    tooltip: isEnglish ? 'View' : 'ดู',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     onPressed: () => widget.onView(item),
@@ -237,7 +240,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
                   IconButton(
                     icon: const Icon(Icons.edit,
                         color: Colors.blue, size: 18),
-                    tooltip: 'แก้ไข',
+                    tooltip: isEnglish ? 'Edit' : 'แก้ไข',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     onPressed: () => widget.onEdit(item),
@@ -247,15 +250,16 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
                   IconButton(
                     icon: const Icon(Icons.delete,
                         color: Colors.red, size: 18),
-                    tooltip: 'ลบ',
+                    tooltip: isEnglish ? 'Delete' : 'ลบ',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     onPressed: () {
                       if (hasChildren) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                                'ไม่สามารถลบรายการที่มีรายการย่อยได้ กรุณาลบรายการย่อยออกก่อน'),
+                          SnackBar(
+                            content: Text(isEnglish
+                                ? 'Cannot delete item with sub-items. Please delete sub-items first.'
+                                : 'ไม่สามารถลบรายการที่มีรายการย่อยได้ กรุณาลบรายการย่อยออกก่อน'),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -283,7 +287,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
         if (isExpanded && hasChildren)
           Column(
             children: children
-                .map((child) => _buildNode(child, level + 1, allFiltered))
+                .map((child) => _buildNode(child, level + 1, allFiltered, isEnglish))
                 .toList(),
           ),
       ],
@@ -293,6 +297,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
 
     // When searching, flatten the list to only matching items + their ancestors
     final List<SalesTerritory> displayList;
@@ -375,7 +380,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
                   : ListView.builder(
                       itemCount: topLevel.length,
                       itemBuilder: (ctx, i) =>
-                          _buildNode(topLevel[i], 0, effectiveList),
+                          _buildNode(topLevel[i], 0, effectiveList, isEnglish),
                     ),
         ),
       ],

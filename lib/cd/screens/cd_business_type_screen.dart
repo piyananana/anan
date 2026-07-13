@@ -7,6 +7,8 @@ import '../models/cd_business_type.dart';
 import '../services/cd_business_type_service.dart';
 import '../widgets/cd_business_type_list_widget.dart';
 import '../widgets/cd_business_type_detail_widget.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 
 class BusinessTypeScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
@@ -59,20 +61,23 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
   }
 
   Future<void> _onDelete(BusinessType row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบ "${row.businessTypeCode} (${row.businessTypeNameThai})" ?'),
+        title: Text(l.confirmDelete),
+        content: Text(isEnglish
+            ? 'Are you sure you want to delete "${row.businessTypeCode} ${row.businessTypeNameThai}"?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบ "${row.businessTypeCode} (${row.businessTypeNameThai})" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ'),
+            child: Text(l.delete),
           ),
         ],
       ),
@@ -86,7 +91,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ลบสำเร็จ')),
+            SnackBar(content: Text(l.deletedSuccess)),
           );
         }
       } catch (e) {
@@ -100,6 +105,8 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
   }
 
   Future<void> _onSubmit(BusinessType row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     try {
       final service =
           Provider.of<BusinessTypeService>(context, listen: false);
@@ -107,13 +114,13 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
         await service.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(l.savedSuccess)));
         }
       } else {
         await service.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(l.savedSuccess)));
         }
       }
       _listWidgetKey.currentState?.refresh();
@@ -146,6 +153,8 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
 
     return Scaffold(
       appBar: AppBar(
@@ -155,7 +164,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.refresh,
             onPressed: () {
               _listWidgetKey.currentState?.refresh();
               _onCancel();
@@ -185,7 +194,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () => setState(
                       () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse' : 'ย่อรายการ') : (isEnglish ? 'Expand' : 'ขยายรายการ'),
                 ),
               ),
               // Left panel (list)

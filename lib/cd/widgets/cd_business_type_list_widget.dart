@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/cd_business_type.dart';
 import '../services/cd_business_type_service.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 
 class BusinessTypeListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -37,13 +39,14 @@ class BusinessTypeListWidget extends StatefulWidget {
 
   static Future<void> search(BuildContext context,
       {required void Function(BusinessType) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
           contentPadding: EdgeInsets.zero,
-          title: const Text('ค้นหา ประเภทธุรกิจ',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          title: Text(isEnglish ? 'Search Business Type' : 'ค้นหา ประเภทธุรกิจ',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           content: Container(
             width: 500,
             height: 600,
@@ -68,7 +71,7 @@ class BusinessTypeListWidget extends StatefulWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+              child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
             ),
           ],
         );

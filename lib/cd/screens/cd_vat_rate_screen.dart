@@ -3,6 +3,8 @@
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_vat_rate.dart';
 import '../services/cd_vat_rate_service.dart';
 import '../widgets/cd_vat_rate_list_widget.dart';
@@ -52,21 +54,23 @@ class _VatRateScreenState extends State<VatRateScreen>
       });
 
   Future<void> _onDelete(VatRate row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final svc = Provider.of<VatRateService>(context, listen: false);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
+        title: Text(l.confirmDelete),
         content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบอัตราภาษี "${row.vatCode} ${row.vatNameTh}" ?'),
+            '${isEnglish ? 'Are you sure you want to delete VAT rate' : 'คุณแน่ใจหรือไม่ที่จะลบอัตราภาษี'} "${row.vatCode} ${row.vatNameTh}" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ', style: TextStyle(color: Colors.red)),
+            child: Text(l.delete, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -79,31 +83,33 @@ class _VatRateScreenState extends State<VatRateScreen>
       _onCancel();
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+            .showSnackBar(SnackBar(content: Text(l.deletedSuccess)));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
+          SnackBar(content: Text('${isEnglish ? 'An error occurred while deleting' : 'เกิดข้อผิดพลาดในการลบ'}: ${e.toString()}')),
         );
       }
     }
   }
 
   Future<void> _onSubmit(VatRate row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     try {
       final svc = Provider.of<VatRateService>(context, listen: false);
       if (_selectedData == null) {
         await svc.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
         }
       } else {
         await svc.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(l.savedSuccess)));
         }
       }
       _listKey.currentState?.refresh();
@@ -114,7 +120,7 @@ class _VatRateScreenState extends State<VatRateScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content:
-                  Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
+                  Text('${isEnglish ? 'An error occurred while saving' : 'เกิดข้อผิดพลาดในการบันทึก'}: ${e.toString()}')),
         );
       }
     }
@@ -173,6 +179,8 @@ class _VatRateScreenState extends State<VatRateScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -181,7 +189,7 @@ class _VatRateScreenState extends State<VatRateScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.refresh,
             onPressed: () {
               _listKey.currentState?.refresh();
               _onCancel();
@@ -208,7 +216,7 @@ class _VatRateScreenState extends State<VatRateScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse' : 'ย่อรายการ') : (isEnglish ? 'Expand' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(

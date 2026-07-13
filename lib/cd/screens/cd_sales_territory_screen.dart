@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_sales_territory.dart';
 import '../services/cd_sales_territory_service.dart';
 import '../widgets/cd_sales_territory_list_widget.dart';
@@ -67,19 +69,24 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
       });
 
   Future<void> _onDelete(SalesTerritory row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
+    final displayName = (isEnglish && (row.territoryNameEng?.isNotEmpty ?? false))
+        ? row.territoryNameEng!
+        : row.territoryNameThai;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
+        title: Text(l.confirmDelete),
         content: Text(
-            'ลบ "${row.territoryCode} (${row.territoryNameThai})" ใช่หรือไม่?'),
+            '${isEnglish ? 'Delete' : 'ลบ'} "${row.territoryCode} ($displayName)" ${isEnglish ? '?' : 'ใช่หรือไม่?'}'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('ยกเลิก')),
+              child: Text(l.cancel)),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('ลบ')),
+              child: Text(l.delete)),
         ],
       ),
     );
@@ -91,17 +98,19 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
       _onCancel();
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+            .showSnackBar(SnackBar(content: Text(l.deletedSuccess)));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('ลบล้มเหลว: $e')));
+            .showSnackBar(SnackBar(content: Text('${isEnglish ? 'Delete failed' : 'ลบล้มเหลว'}: $e')));
       }
     }
   }
 
   Future<void> _onSubmit(SalesTerritory row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     try {
       final svc =
           Provider.of<SalesTerritoryService>(context, listen: false);
@@ -109,13 +118,13 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
         await svc.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
         }
       } else {
         await svc.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(l.savedSuccess)));
         }
       }
       _listKey.currentState?.refresh();
@@ -128,7 +137,7 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e')));
+            .showSnackBar(SnackBar(content: Text('${isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'}: $e')));
       }
     }
   }
@@ -142,6 +151,8 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -150,7 +161,7 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.refresh,
             onPressed: () {
               _listKey.currentState?.refresh();
               _onCancel();
@@ -181,7 +192,7 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
                   onPressed: () => setState(
                       () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
                   tooltip:
-                      _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                      _isLeftPanelExpanded ? (isEnglish ? 'Collapse' : 'ย่อรายการ') : (isEnglish ? 'Expand' : 'ขยายรายการ'),
                 ),
               ),
               // left panel

@@ -7,6 +7,8 @@ import '../models/cd_bank.dart';
 import '../services/cd_bank_service.dart';
 import '../widgets/cd_bank_list_widget.dart';
 import '../widgets/cd_bank_detail_widget.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 
 class BankScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
@@ -55,19 +57,23 @@ class _BankScreenState extends State<BankScreen>
   Future<void> _onDelete(Bank row) async {
     // Capture service before any await to avoid async context issues
     final service = Provider.of<BankService>(context, listen: false);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
+        title: Text(l.confirmDelete),
         content: Text(
-            'ลบธนาคาร "${row.bankCode} — ${row.bankNameThai}" ?\n\nการลบธนาคารจะลบข้อมูลสาขาทั้งหมดของธนาคารนี้ด้วย'),
+            isEnglish
+                ? 'Are you sure you want to delete "${row.bankCode} ${row.shortName ?? row.bankNameEng}"?'
+                : 'คุณแน่ใจหรือไม่ที่จะลบ "${row.bankCode} ${row.bankNameThai}"?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('ยกเลิก')),
+              child: Text(l.cancel)),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('ลบ', style: TextStyle(color: Colors.red))),
+              child: Text(l.delete, style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -78,7 +84,7 @@ class _BankScreenState extends State<BankScreen>
       _onCancel();
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+            .showSnackBar(SnackBar(content: Text(l.deletedSuccess)));
       }
     } catch (e) {
       if (mounted) {
@@ -92,6 +98,8 @@ class _BankScreenState extends State<BankScreen>
   }
 
   Future<void> _onSubmit(Bank row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     try {
       final service = Provider.of<BankService>(context, listen: false);
       if (_mode == Mode.add) {
@@ -104,7 +112,7 @@ class _BankScreenState extends State<BankScreen>
         });
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
         }
       } else {
         await service.updateRow(row);
@@ -112,7 +120,7 @@ class _BankScreenState extends State<BankScreen>
         setState(() => _selectedData = row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(l.savedSuccess)));
         }
       }
       widget.onFieldsChanged();
@@ -141,6 +149,8 @@ class _BankScreenState extends State<BankScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -149,7 +159,7 @@ class _BankScreenState extends State<BankScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.refresh,
             onPressed: () {
               _listKey.currentState?.refresh();
               _onCancel();
@@ -179,7 +189,7 @@ class _BankScreenState extends State<BankScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () => setState(
                       () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse' : 'ย่อรายการ') : (isEnglish ? 'Expand' : 'ขยายรายการ'),
                 ),
               ),
               // Left panel: bank list

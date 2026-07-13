@@ -5,6 +5,8 @@ import '../models/cd_bank.dart';
 import '../models/cd_bank_branch.dart';
 import '../services/cd_bank_service.dart';
 import '../services/cd_bank_branch_service.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 
 class BankListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -40,12 +42,13 @@ class BankListWidget extends StatefulWidget {
   /// Dialog สำหรับเลือกธนาคาร
   static Future<void> search(BuildContext context,
       {required void Function(Bank) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('ค้นหา ธนาคาร',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Search Bank' : 'ค้นหา ธนาคาร',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Container(
           width: 520,
           height: 580,
@@ -70,7 +73,7 @@ class BankListWidget extends StatefulWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+            child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -163,6 +166,7 @@ class BankListWidgetState extends State<BankListWidget>
   bool get wantKeepAlive => true;
 
   Widget _buildListHeader() {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
@@ -170,29 +174,29 @@ class BankListWidgetState extends State<BankListWidget>
           if (widget.enableAddButton)
             IconButton(
               icon: const Icon(Icons.add),
-              tooltip: 'เพิ่มข้อมูลใหม่',
+              tooltip: isEnglish ? 'Add New Bank' : 'เพิ่มข้อมูลใหม่',
               onPressed: widget.onAdd,
             ),
           if (widget.enableSortButton)
             PopupMenuButton<String>(
               icon: const Icon(Icons.sort),
-              tooltip: 'จัดเรียง',
+              tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
               onSelected: (value) => setState(() => _sortBy = value),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
-                PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
-                PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (ก-ฮ)')),
-                PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (ฮ-ก)')),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'code_asc', child: Text(isEnglish ? 'Code (A-Z)' : 'รหัส (น้อยไปมาก)')),
+                PopupMenuItem(value: 'code_desc', child: Text(isEnglish ? 'Code (Z-A)' : 'รหัส (มากไปน้อย)')),
+                PopupMenuItem(value: 'name_asc', child: Text(isEnglish ? 'Name (A-Z)' : 'ชื่อ (ก-ฮ)')),
+                PopupMenuItem(value: 'name_desc', child: Text(isEnglish ? 'Name (Z-A)' : 'ชื่อ (ฮ-ก)')),
               ],
             ),
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา (รหัส / ชื่อธนาคาร)',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: isEnglish ? 'Search (Code / Bank Name)' : 'ค้นหา (รหัส / ชื่อธนาคาร)',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (value) => setState(() => _searchQuery = value),
             ),
@@ -205,10 +209,12 @@ class BankListWidgetState extends State<BankListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final displayList = _filterAndSort();
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${_lists.length} แถว'
-        : 'พบ ${displayList.length} จาก ${_lists.length} แถว';
+        ? (isEnglish ? 'Total ${_lists.length} rows' : 'ทั้งหมด ${_lists.length} แถว')
+        : (isEnglish ? 'Found ${displayList.length} of ${_lists.length} rows' : 'พบ ${displayList.length} จาก ${_lists.length} แถว');
 
     return Column(
       children: [
@@ -225,7 +231,7 @@ class BankListWidgetState extends State<BankListWidget>
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : displayList.isEmpty
-                  ? const Center(child: Text('ไม่พบข้อมูลธนาคาร'))
+                  ? Center(child: Text(l.noData))
                   : ListView.builder(
                       itemCount: displayList.length,
                       itemBuilder: (context, index) {
@@ -245,7 +251,7 @@ class BankListWidgetState extends State<BankListWidget>
                                   )
                                 : null,
                             title: Text(
-                              '${item.bankCode} — ${item.bankNameThai}',
+                              '${item.bankCode} — ${isEnglish && item.bankNameEng.isNotEmpty ? item.bankNameEng : item.bankNameThai}',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: item.isActive ? null : Colors.grey,
@@ -258,12 +264,12 @@ class BankListWidgetState extends State<BankListWidget>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (!item.isActive)
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 4),
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 4),
                                     child: Chip(
-                                      label: Text('หยุดใช้',
-                                          style: TextStyle(fontSize: 11)),
-                                      backgroundColor: Color(0xFFEEEEEE),
+                                      label: Text(isEnglish ? 'Inactive' : 'หยุดใช้',
+                                          style: const TextStyle(fontSize: 11)),
+                                      backgroundColor: const Color(0xFFEEEEEE),
                                     ),
                                   ),
                                 if (widget.enableViewButton)
@@ -372,11 +378,14 @@ class _BankBranchSearchDialogState extends State<_BankBranchSearchDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final list = _filtered;
     return AlertDialog(
       contentPadding: EdgeInsets.zero,
       title: Text(
-        widget.bankId != null ? 'ค้นหา สาขาธนาคาร' : 'ค้นหา สาขาธนาคาร (ทั้งหมด)',
+        widget.bankId != null
+            ? (isEnglish ? 'Search Bank Branch' : 'ค้นหา สาขาธนาคาร')
+            : (isEnglish ? 'Search Bank Branch (All)' : 'ค้นหา สาขาธนาคาร (ทั้งหมด)'),
         style: const TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SizedBox(
@@ -389,11 +398,11 @@ class _BankBranchSearchDialogState extends State<_BankBranchSearchDialog> {
               child: TextField(
                 controller: _searchController,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา (รหัสสาขา / ชื่อสาขา)',
-                  prefixIcon: Icon(Icons.search),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search (Branch Code / Branch Name)' : 'ค้นหา (รหัสสาขา / ชื่อสาขา)',
+                  prefixIcon: const Icon(Icons.search),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (v) => setState(() => _searchQuery = v),
               ),
@@ -402,7 +411,7 @@ class _BankBranchSearchDialogState extends State<_BankBranchSearchDialog> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : list.isEmpty
-                      ? const Center(child: Text('ไม่พบข้อมูลสาขา'))
+                      ? Center(child: Text(isEnglish ? 'No branch found' : 'ไม่พบข้อมูลสาขา'))
                       : ListView.builder(
                           itemCount: list.length,
                           itemBuilder: (context, index) {
@@ -419,7 +428,7 @@ class _BankBranchSearchDialogState extends State<_BankBranchSearchDialog> {
                                 subtitle: Text(
                                   [
                                     if (item.branchCode != null)
-                                      'รหัส: ${item.branchCode}',
+                                      '${isEnglish ? 'Code' : 'รหัส'}: ${item.branchCode}',
                                     if (item.bankDisplay.isNotEmpty)
                                       item.bankDisplay,
                                   ].join('  '),
@@ -444,7 +453,7 @@ class _BankBranchSearchDialogState extends State<_BankBranchSearchDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+          child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
         ),
       ],
     );
