@@ -93,13 +93,20 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
         _isLoading = false;
       });
     } catch (e) {
+      final isEnglish = mounted
+          ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+          : false;
       setState(() {
-        _errorLoading = 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
+        _errorLoading = isEnglish
+            ? 'Cannot load data: ${e.toString()}'
+            : 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_errorLoading)),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorLoading)),
+        );
+      }
     }
   }
 
@@ -174,6 +181,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
   Future<void> _submitData() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final service = Provider.of<GroupService>(context, listen: false);
     String? message;
 
@@ -191,29 +199,37 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
       );
       if (_formMode == NodeMode.addRoot || _formMode == NodeMode.addChild) {
         final newData = await service.createData(data);
-        message = 'เพิ่มข้อมูล "${newData.name}" สำเร็จ';
+        message = isEnglish
+            ? 'Added "${newData.name}" successfully'
+            : 'เพิ่มข้อมูล "${newData.name}" สำเร็จ';
       } else if (_formMode == NodeMode.edit && _selectedNode != null) {
         final updatedData = await service.updateData(data);
-        message = 'แก้ไขข้อมูล "${updatedData.name}" สำเร็จ';
+        message = isEnglish
+            ? 'Updated "${updatedData.name}" successfully'
+            : 'แก้ไขข้อมูล "${updatedData.name}" สำเร็จ';
       }
       _clearForm();
-      await _refreshAllData(); // โหลดข้อมูลใหม่หลังจากเพิ่ม/แก้ไข
+      await _refreshAllData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message!)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: ${e.toString()}')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+            ? 'Error: ${e.toString()}'
+            : 'เกิดข้อผิดพลาด: ${e.toString()}')));
       }
     }
   }
 
   Future<void> _confirmDeleteData(Group rowData) async {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     if (_buildTree(_currentList, rowData.id).isNotEmpty && rowData.haveSubGroup) {
-      // ป้องกันการลบ Folder ที่มีเมนูย่อย
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่สามารถลบรายการที่มีรายการย่อยได้ กรุณาลบรายการย่อยออกก่อน')),
+        SnackBar(content: Text(isEnglish
+            ? 'Cannot delete an item with sub-items. Please delete sub-items first.'
+            : 'ไม่สามารถลบรายการที่มีรายการย่อยได้ กรุณาลบรายการย่อยออกก่อน')),
       );
       return;
     }
@@ -222,8 +238,10 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('ยืนยันการลบข้อมูล'),
-          content: Text('คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูล "${rowData.name}"?'),
+          title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบข้อมูล'),
+          content: Text(isEnglish
+              ? 'Are you sure you want to delete "${rowData.name}"?'
+              : 'คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูล "${rowData.name}"?'),
           actions: [
             TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(l.cancel)),
             ElevatedButton(
@@ -242,11 +260,15 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
         _clearForm();
         await _refreshAllData();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ลบข้อมูล "${rowData.name}" สำเร็จ')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+              ? 'Deleted "${rowData.name}" successfully'
+              : 'ลบข้อมูล "${rowData.name}" สำเร็จ')));
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+              ? 'Error deleting: ${e.toString()}'
+              : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')));
         }
       }
     }
@@ -262,7 +284,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
 
     // ต้องตรวจสอบสถานะการโหลดก่อนสร้าง UI
     if (_isLoading) {
@@ -293,7 +315,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: _refreshAllData,
           ),
         ],
@@ -317,7 +339,9 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                      : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(
@@ -341,7 +365,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
                               child: ElevatedButton.icon(
                                 onPressed: _setAddRootMode,
                                 icon: const Icon(Icons.add),
-                                label: const Text('เพิ่มรายกาารหลัก'),
+                                label: Text(isEnglish ? 'Add Main Group' : 'เพิ่มรายการหลัก'),
                               ),
                             ),
                           ),
@@ -378,8 +402,10 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
                 ),
               Expanded(
                 child: _selectedNode == null && _formMode == NodeMode.none
-                    ? const Center(
-                        child: Text('กรุณาเลือกกลุ่ม หรือ ปุ่มการทำงานจากด้านซ้าย'))
+                    ? Center(
+                        child: Text(isEnglish
+                            ? 'Please select a group or use the buttons on the left'
+                            : 'กรุณาเลือกกลุ่ม หรือ ปุ่มการทำงานจากด้านซ้าย'))
                     : _buildDetailForm(),
               ),
             ],
@@ -391,6 +417,7 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
 
   // --- Build Methods ---
   Widget _buildNode(Group rowData, int level) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final bool isFolder = rowData.haveSubGroup;
     final List<Group> children = _buildTree(_currentList, rowData.id);
     final bool hasChildren = children.isNotEmpty;
@@ -430,23 +457,20 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    // Icon ปุ่ม Add สำหรับ Folder
                     if (isFolder)
                       IconButton(
                         icon: const Icon(Icons.add_circle_outline, size: 20),
-                        tooltip: 'เพิ่มรายการย่อย',
+                        tooltip: isEnglish ? 'Add Sub-item' : 'เพิ่มรายการย่อย',
                         onPressed: () => _setAddChildMode(rowData),
                       ),
-                    // Icon ปุ่ม Edit
                     IconButton(
                       icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                      tooltip: 'แก้ไข',
+                      tooltip: isEnglish ? 'Edit' : 'แก้ไข',
                       onPressed: () => _setEditMode(rowData),
                     ),
-                    // Icon ปุ่ม Delete
                     IconButton(
                       icon: const Icon(Icons.delete, size: 20, color: Colors.red),
-                      tooltip: 'ลบ',
+                      tooltip: isEnglish ? 'Delete' : 'ลบ',
                       onPressed: () => _confirmDeleteData(rowData),
                     ),
                   ],
@@ -475,7 +499,8 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
   }
 
   Widget _buildDetailForm() {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -485,70 +510,72 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
           children: [
             Text(
               _formMode == NodeMode.addRoot
-                  ? 'เพิ่มรายการหลัก'
+                  ? (isEnglish ? 'Add Main Group' : 'เพิ่มรายการหลัก')
                   : _formMode == NodeMode.addChild
-                      ? 'เพิ่มรายการย่อย: ${_parentNameForNew ?? ''}'
+                      ? (isEnglish
+                          ? 'Add Sub-group: ${_parentNameForNew ?? ''}'
+                          : 'เพิ่มรายการย่อย: ${_parentNameForNew ?? ''}')
                       : _formMode == NodeMode.edit
-                          ? 'แก้ไข: ${_selectedNode?.name ?? ''}'
-                          : 'เลือกรายการหรือเพิ่มรายการหลักใหม่',
+                          ? (isEnglish
+                              ? 'Edit: ${_selectedNode?.name ?? ''}'
+                              : 'แก้ไข: ${_selectedNode?.name ?? ''}')
+                          : (isEnglish
+                              ? 'Select or add a main group'
+                              : 'เลือกรายการหรือเพิ่มรายการหลักใหม่'),
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
             TextFormField(
               controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'ชื่อ',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Name' : 'ชื่อ',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'กรุณาป้อนชื่อ';
+                  return isEnglish ? 'Please enter a name' : 'กรุณาป้อนชื่อ';
                 }
                 return null;
               },
             ),
             const SizedBox(height: 16),
             SwitchListTile(
-              title: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
+              title: Text(isEnglish
+                  ? 'Status: ${_isActive ? 'Active' : 'Inactive'}'
+                  : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
               value: _isActive,
-              onChanged: (bool value) {
-                setState(() {
-                  _isActive = value;
-                });
-              },
+              onChanged: (bool value) => setState(() => _isActive = value),
             ),
             SwitchListTile(
-              title: Text(_haveSubGroup ? 'มีใต้สังกัด' : 'ไม่มีใต้สังกัด'),
+              title: Text(isEnglish
+                  ? (_haveSubGroup ? 'Has sub-groups' : 'No sub-groups')
+                  : (_haveSubGroup ? 'มีใต้สังกัด' : 'ไม่มีใต้สังกัด')),
               value: _haveSubGroup,
-              onChanged: (bool value) {
-                setState(() {
-                  _haveSubGroup = value;
-                });
-              },
+              onChanged: (bool value) => setState(() => _haveSubGroup = value),
             ),
             SwitchListTile(
-              title: const Text('สิทธิ์อนุมัติการปิดงวดบัญชี'),
-              subtitle: const Text(
-                'กลุ่มนี้สามารถอนุมัติการเปลี่ยนสถานะงวดบัญชีเป็น CLOSED ได้',
-                style: TextStyle(fontSize: 12),
+              title: Text(isEnglish
+                  ? 'Period closing approval permission'
+                  : 'สิทธิ์อนุมัติการปิดงวดบัญชี'),
+              subtitle: Text(
+                isEnglish
+                    ? 'This group can approve changing the accounting period status to CLOSED'
+                    : 'กลุ่มนี้สามารถอนุมัติการเปลี่ยนสถานะงวดบัญชีเป็น CLOSED ได้',
+                style: const TextStyle(fontSize: 12),
               ),
               secondary: Icon(
                 Icons.lock,
                 color: _canClosePeriod ? Colors.red : Colors.grey,
               ),
               value: _canClosePeriod,
-              onChanged: (bool value) {
-                setState(() {
-                  _canClosePeriod = value;
-                });
-              },
+              onChanged: (bool value) => setState(() => _canClosePeriod = value),
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'คำอธิบาย',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Description' : 'คำอธิบาย',
+                border: const OutlineInputBorder(),
               ),
               maxLines: 3,
             ),
@@ -590,7 +617,9 @@ class _GroupManagementScreenState extends State<GroupManagementScreen> with Auto
                 const SizedBox(width: 10),
                 ElevatedButton(
                   onPressed: _formMode == NodeMode.none ? null : _submitData,
-                  child: Text(_formMode == NodeMode.edit ? 'บันทึกการแก้ไข' : 'บันทึกข้อมูลใหม่'),
+                  child: Text(_formMode == NodeMode.edit
+                      ? (isEnglish ? 'Save Changes' : 'บันทึกการแก้ไข')
+                      : (isEnglish ? 'Save New' : 'บันทึกข้อมูลใหม่')),
                 ),
               ],
             ),

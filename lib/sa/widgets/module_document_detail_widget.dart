@@ -5,10 +5,12 @@ import 'dart:convert';
 import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../sa/models/anan_module.dart';
 import '../models/module_document.dart';
 import '../models/sa_module_approver.dart';
 import '../models/user.dart';
+import '../services/language_provider.dart';
 import '../services/sa_module_approver_service.dart';
 import '../services/user_service.dart';
 
@@ -336,6 +338,9 @@ class ModuleDocumentDetailWidgetState
             })
         .toList();
 
+    final isEnglish = mounted
+        ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+        : false;
     try {
       final newDetail = ModuleDocument(
         id: widget.mode == Mode.edit ? widget.selected!.id : 0,
@@ -370,7 +375,7 @@ class ModuleDocumentDetailWidgetState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาด: $e'),
+              content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'),
               backgroundColor: Colors.red),
         );
       }
@@ -472,22 +477,27 @@ class ModuleDocumentDetailWidgetState
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+
     if (widget.isPlaceholder) {
-      return const Center(
-        child: Text(
-            'เลือกประเภทเอกสารหรือโมดูลเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มข้อมูลใหม่'),
+      return Center(
+        child: Text(isEnglish
+            ? 'Select a document type or module to edit/delete, or press + to add new'
+            : 'เลือกประเภทเอกสารหรือโมดูลเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มข้อมูลใหม่'),
       );
     }
 
     final bool readOnly = widget.mode == Mode.view;
 
     final String title = widget.mode == Mode.view
-        ? 'ดูข้อมูล'
+        ? (isEnglish ? 'View' : 'ดูข้อมูล')
         : widget.mode == Mode.edit
-            ? 'แก้ไขข้อมูล'
+            ? (isEnglish ? 'Edit' : 'แก้ไขข้อมูล')
             : widget.mode == Mode.addChild
-                ? 'เพิ่มข้อมูลย่อย: ${_selected?.docCode} ${_selected?.docNameThai}'
-                : 'เพิ่มข้อมูลโมดูลหลัก';
+                ? (isEnglish
+                    ? 'Add Sub-item: ${_selected?.docCode} ${_selected?.docNameEng ?? _selected?.docNameThai}'
+                    : 'เพิ่มข้อมูลย่อย: ${_selected?.docCode} ${_selected?.docNameThai}')
+                : (isEnglish ? 'Add Main Module' : 'เพิ่มข้อมูลโมดูลหลัก');
 
     final bool showApprovers = _isDocType &&
         _sysModule.isNotEmpty &&
@@ -525,10 +535,10 @@ class ModuleDocumentDetailWidgetState
                       : const Icon(Icons.save, size: 16),
                   label: Text(
                       _isSaving
-                          ? 'กำลังบันทึก...'
+                          ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
                           : widget.mode == Mode.edit
-                              ? 'บันทึก'
-                              : 'เพิ่ม',
+                              ? (isEnglish ? 'Save' : 'บันทึก')
+                              : (isEnglish ? 'Add' : 'เพิ่ม'),
                       style: const TextStyle(fontSize: 13)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
@@ -544,7 +554,7 @@ class ModuleDocumentDetailWidgetState
               ElevatedButton.icon(
                 onPressed: widget.onCancel,
                 icon: const Icon(Icons.cancel, size: 16),
-                label: const Text('ยกเลิก', style: TextStyle(fontSize: 13)),
+                label: Text(isEnglish ? 'Cancel' : 'ยกเลิก', style: const TextStyle(fontSize: 13)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white54,
                   foregroundColor: Colors.deepOrange[900],
@@ -575,13 +585,15 @@ class ModuleDocumentDetailWidgetState
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 24),
                     textAlign: TextAlign.center,
-                    decoration: const InputDecoration(
-                      labelText: 'รหัสประเภทเอกสาร/รหัสโมดูล',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Document Type Code / Module Code' : 'รหัสประเภทเอกสาร/รหัสโมดูล',
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'กรุณาป้อนรหัสประเภทเอกสารหรือโมดูล';
+                        return isEnglish
+                            ? 'Please enter a document type or module code'
+                            : 'กรุณาป้อนรหัสประเภทเอกสารหรือโมดูล';
                       }
                       return null;
                     },
@@ -595,13 +607,13 @@ class ModuleDocumentDetailWidgetState
                         child: TextFormField(
                           readOnly: readOnly,
                           controller: _docNameThaiController,
-                          decoration: const InputDecoration(
-                            labelText: 'ชื่อ (ภาษาไทย)',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Name (Thai)' : 'ชื่อ (ภาษาไทย)',
+                            border: const OutlineInputBorder(),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'กรุณาป้อนชื่อ (ภาษาไทย)';
+                              return isEnglish ? 'Please enter a Thai name' : 'กรุณาป้อนชื่อ (ภาษาไทย)';
                             }
                             return null;
                           },
@@ -612,13 +624,13 @@ class ModuleDocumentDetailWidgetState
                         child: TextFormField(
                           readOnly: readOnly,
                           controller: _docNameEngController,
-                          decoration: const InputDecoration(
-                            labelText: 'ชื่อ (ภาษาอังกฤษ)',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Name (English)' : 'ชื่อ (ภาษาอังกฤษ)',
+                            border: const OutlineInputBorder(),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'กรุณาป้อนชื่อ (ภาษาอังกฤษ)';
+                              return isEnglish ? 'Please enter an English name' : 'กรุณาป้อนชื่อ (ภาษาอังกฤษ)';
                             }
                             return null;
                           },
@@ -636,16 +648,16 @@ class ModuleDocumentDetailWidgetState
                           readOnly: readOnly,
                           controller: _sortOrderController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'ลำดับ',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Sort Order' : 'ลำดับ',
+                            border: const OutlineInputBorder(),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'กรุณาป้อนลำดับ';
+                              return isEnglish ? 'Please enter sort order' : 'กรุณาป้อนลำดับ';
                             }
                             if (int.tryParse(value) == null) {
-                              return 'ต้องเป็นตัวเลขเท่านั้น';
+                              return isEnglish ? 'Must be a number' : 'ต้องเป็นตัวเลขเท่านั้น';
                             }
                             return null;
                           },
@@ -658,8 +670,9 @@ class ModuleDocumentDetailWidgetState
                             borderRadius: BorderRadius.circular(4.0),
                             side: BorderSide(color: Colors.grey.shade700),
                           ),
-                          title: Text(
-                              'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
+                          title: Text(isEnglish
+                              ? 'Status: ${_isActive ? 'Active' : 'Inactive'}'
+                              : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                           trailing: Switch(
                             value: _isActive,
                             onChanged: readOnly
@@ -679,24 +692,32 @@ class ModuleDocumentDetailWidgetState
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: _isDocType ? 'ประเภทเอกสาร' : 'หัวข้อ',
+                          value: _isDocType
+                              ? (isEnglish ? 'Document Type' : 'ประเภทเอกสาร')
+                              : (isEnglish ? 'Header' : 'หัวข้อ'),
                           isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'ชนิดข้อมูล',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Data Type' : 'ชนิดข้อมูล',
+                            border: const OutlineInputBorder(),
                           ),
-                          items: ['ประเภทเอกสาร', 'หัวข้อ'].map((entry) {
-                            return DropdownMenuItem(
-                              value: entry,
-                              child: Text(entry),
-                            );
-                          }).toList(),
+                          items: [
+                            DropdownMenuItem(
+                              value: isEnglish ? 'Document Type' : 'ประเภทเอกสาร',
+                              child: Text(isEnglish ? 'Document Type' : 'ประเภทเอกสาร'),
+                            ),
+                            DropdownMenuItem(
+                              value: isEnglish ? 'Header' : 'หัวข้อ',
+                              child: Text(isEnglish ? 'Header' : 'หัวข้อ'),
+                            ),
+                          ],
                           onChanged: readOnly
                               ? null
                               : (value) {
                                   if (value != null) {
                                     setState(() {
-                                      _isDocType = value == 'ประเภทเอกสาร';
+                                      _isDocType = isEnglish
+                                          ? value == 'Document Type'
+                                          : value == 'ประเภทเอกสาร';
                                     });
                                   }
                                 },
@@ -707,9 +728,9 @@ class ModuleDocumentDetailWidgetState
                         child: DropdownButtonFormField<String>(
                           value: _sysModule,
                           isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'โมดูล',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Module' : 'โมดูล',
+                            border: const OutlineInputBorder(),
                           ),
                           items: sysModules.entries.map((entry) {
                             return DropdownMenuItem(
@@ -748,13 +769,16 @@ class ModuleDocumentDetailWidgetState
                             isExpanded: true,
                             decoration: InputDecoration(
                               labelText: _sysDocTypes.isNotEmpty
-                                  ? 'ประเภทเอกสารหลักของ ${sysModules[_sysModule]}'
-                                  : 'ประเภทเอกสารหลัก',
+                                  ? (isEnglish
+                                      ? 'Main Doc Type of ${sysModules[_sysModule]}'
+                                      : 'ประเภทเอกสารหลักของ ${sysModules[_sysModule]}')
+                                  : (isEnglish ? 'Main Document Type' : 'ประเภทเอกสารหลัก'),
                               border: const OutlineInputBorder(),
                             ),
                             items: [
-                              const DropdownMenuItem(
-                                  value: '', child: Text('- ไม่ระบุ -')),
+                              DropdownMenuItem(
+                                  value: '',
+                                  child: Text(isEnglish ? '- None -' : '- ไม่ระบุ -')),
                               ..._sysDocTypes.entries.map((entry) {
                                 return DropdownMenuItem(
                                   value: entry.key,
@@ -784,8 +808,9 @@ class ModuleDocumentDetailWidgetState
                               borderRadius: BorderRadius.circular(4.0),
                               side: BorderSide(color: Colors.grey.shade700),
                             ),
-                            title: Text(
-                                'เลขที่เอกสารอัตโนมัติ: ${_isAutoNumbering ? 'ใช่' : 'ไม่'}'),
+                            title: Text(isEnglish
+                                ? 'Auto Document No: ${_isAutoNumbering ? 'Yes' : 'No'}'
+                                : 'เลขที่เอกสารอัตโนมัติ: ${_isAutoNumbering ? 'ใช่' : 'ไม่'}'),
                             trailing: Switch(
                               value: _isAutoNumbering,
                               onChanged: readOnly
@@ -810,13 +835,13 @@ class ModuleDocumentDetailWidgetState
                             child: TextFormField(
                               readOnly: readOnly,
                               controller: _formatPrefixController,
-                              decoration: const InputDecoration(
-                                labelText: 'คำนำหน้า',
-                                border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                labelText: isEnglish ? 'Prefix' : 'คำนำหน้า',
+                                border: const OutlineInputBorder(),
                               ),
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'กรุณาป้อนคำนำหน้า';
+                                  return isEnglish ? 'Please enter a prefix' : 'กรุณาป้อนคำนำหน้า';
                                 }
                                 return null;
                               },
@@ -832,9 +857,9 @@ class ModuleDocumentDetailWidgetState
                             child: DropdownButtonFormField<String>(
                               isExpanded: true,
                               value: _formatSuffixDate,
-                              decoration: const InputDecoration(
-                                labelText: 'คำต่อ(ปีเดือนวัน)',
-                                border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                labelText: isEnglish ? 'Date Suffix (YYYYMMDD)' : 'คำต่อ(ปีเดือนวัน)',
+                                border: const OutlineInputBorder(),
                               ),
                               items: [
                                 '',
@@ -867,9 +892,9 @@ class ModuleDocumentDetailWidgetState
                             child: TextFormField(
                               readOnly: readOnly,
                               controller: _formatSeparatorController,
-                              decoration: const InputDecoration(
-                                labelText: 'อักษรคั่น',
-                                border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                labelText: isEnglish ? 'Separator' : 'อักษรคั่น',
+                                border: const OutlineInputBorder(),
                               ),
                               onChanged: (value) {
                                 setState(() {
@@ -883,9 +908,9 @@ class ModuleDocumentDetailWidgetState
                             child: DropdownButtonFormField<int>(
                               isExpanded: true,
                               value: _runningLength,
-                              decoration: const InputDecoration(
-                                labelText: 'ความยาวเลขที่',
-                                border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                labelText: isEnglish ? 'Number Length' : 'ความยาวเลขที่',
+                                border: const OutlineInputBorder(),
                               ),
                               items: [3, 4, 5, 6, 7, 8, 9].map((val) {
                                 return DropdownMenuItem(
@@ -927,17 +952,17 @@ class ModuleDocumentDetailWidgetState
                               controller: _nextRunningNumberController,
                               textAlign: TextAlign.right,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'เลขที่ถัดไป',
-                                border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                labelText: isEnglish ? 'Next Number' : 'เลขที่ถัดไป',
+                                border: const OutlineInputBorder(),
                               ),
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'กรุณาป้อนเลขที่อัตโนมัติถัดไป';
+                                  return isEnglish ? 'Please enter the next auto number' : 'กรุณาป้อนเลขที่อัตโนมัติถัดไป';
                                 }
                                 if (int.tryParse(value) == null ||
                                     int.tryParse(value)! <= 0) {
-                                  return 'ต้องเป็นตัวเลขมากกว่าศูนย์เท่านั้น';
+                                  return isEnglish ? 'Must be a number greater than zero' : 'ต้องเป็นตัวเลขมากกว่าศูนย์เท่านั้น';
                                 }
                                 return null;
                               },
@@ -958,9 +983,9 @@ class ModuleDocumentDetailWidgetState
                         style: const TextStyle(
                             fontSize: 24, fontWeight: FontWeight.bold),
                         textAlign: TextAlign.center,
-                        decoration: const InputDecoration(
-                          labelText: 'ตัวอย่างเลขที่เอกสารอัตโนมัติ',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Sample Auto Document No.' : 'ตัวอย่างเลขที่เอกสารอัตโนมัติ',
+                          border: const OutlineInputBorder(),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -984,10 +1009,10 @@ class ModuleDocumentDetailWidgetState
   // ── Approver section ──────────────────────────────────────────────────────
 
   Widget _buildApproverSection() {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Section header
         InkWell(
           onTap: () => setState(
               () => _approverSectionExpanded = !_approverSectionExpanded),
@@ -1010,7 +1035,7 @@ class ModuleDocumentDetailWidgetState
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'ผู้อนุมัติ',
+                  isEnglish ? 'Approvers' : 'ผู้อนุมัติ',
                   style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.deepOrange[800]),
@@ -1027,7 +1052,7 @@ class ModuleDocumentDetailWidgetState
                   IconButton(
                     icon: Icon(Icons.add_circle_outline,
                         color: Colors.deepOrange[700], size: 22),
-                    tooltip: 'เพิ่มผู้อนุมัติ',
+                    tooltip: isEnglish ? 'Add Approver' : 'เพิ่มผู้อนุมัติ',
                     onPressed: _addApproverRow,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -1036,7 +1061,6 @@ class ModuleDocumentDetailWidgetState
             ),
           ),
         ),
-        // Section body
         if (_approverSectionExpanded)
           Container(
             decoration: BoxDecoration(
@@ -1049,16 +1073,18 @@ class ModuleDocumentDetailWidgetState
                   const BorderRadius.vertical(bottom: Radius.circular(4)),
             ),
             child: _approverRows.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('ยังไม่มีผู้อนุมัติ',
-                        style: TextStyle(color: Colors.grey),
-                        textAlign: TextAlign.center),
+                ? Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      isEnglish ? 'No approvers yet' : 'ยังไม่มีผู้อนุมัติ',
+                      style: const TextStyle(color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
                   )
                 : Column(
                     children: [
                       for (int i = 0; i < _approverRows.length; i++)
-                        _buildApproverRow(_approverRows[i], i),
+                        _buildApproverRow(_approverRows[i], i, isEnglish),
                     ],
                   ),
           ),
@@ -1066,7 +1092,7 @@ class ModuleDocumentDetailWidgetState
     );
   }
 
-  Widget _buildApproverRow(_ApproverRow row, int index) {
+  Widget _buildApproverRow(_ApproverRow row, int index, bool isEnglish) {
     final readOnly = widget.mode == Mode.view;
     return Container(
       decoration: BoxDecoration(
@@ -1090,12 +1116,12 @@ class ModuleDocumentDetailWidgetState
                   readOnly: readOnly,
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
-                  decoration: const InputDecoration(
-                    labelText: 'ลำดับ',
+                  decoration: InputDecoration(
+                    labelText: isEnglish ? 'Level' : 'ลำดับ',
                     isDense: true,
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                     contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                   ),
                 ),
               ),
@@ -1120,7 +1146,7 @@ class ModuleDocumentDetailWidgetState
                         Expanded(
                           child: Text(
                             row.userDisplayName.isEmpty
-                                ? '- เลือกผู้อนุมัติ -'
+                                ? (isEnglish ? '- Select Approver -' : '- เลือกผู้อนุมัติ -')
                                 : row.userDisplayName,
                             style: TextStyle(
                                 color: row.userDisplayName.isEmpty
@@ -1146,7 +1172,9 @@ class ModuleDocumentDetailWidgetState
                   children: [
                     Expanded(
                       child: Text(
-                        row.isActive ? 'ใช้งาน' : 'หยุดใช้',
+                        isEnglish
+                            ? (row.isActive ? 'Active' : 'Inactive')
+                            : (row.isActive ? 'ใช้งาน' : 'หยุดใช้'),
                         style: const TextStyle(fontSize: 14),
                       ),
                     ),
@@ -1164,7 +1192,7 @@ class ModuleDocumentDetailWidgetState
                 IconButton(
                   icon: const Icon(Icons.delete_outline,
                       color: Colors.red, size: 20),
-                  tooltip: 'ลบผู้อนุมัติ',
+                  tooltip: isEnglish ? 'Remove Approver' : 'ลบผู้อนุมัติ',
                   onPressed: () => _removeApproverRow(index),
                   padding: EdgeInsets.zero,
                   constraints:
@@ -1187,8 +1215,8 @@ class ModuleDocumentDetailWidgetState
                   icon: const Icon(Icons.upload, size: 16),
                   label: Text(
                     row.signatureImage == null
-                        ? 'อัปโหลดลายเซ็น'
-                        : 'เปลี่ยนลายเซ็น',
+                        ? (isEnglish ? 'Upload Signature' : 'อัปโหลดลายเซ็น')
+                        : (isEnglish ? 'Change Signature' : 'เปลี่ยนลายเซ็น'),
                     style: const TextStyle(fontSize: 12),
                   ),
                   onPressed: () => _uploadSignature(row),
@@ -1228,6 +1256,7 @@ class _UserPickerDialogState extends State<_UserPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final filtered = widget.users.where((u) {
       if (_search.isEmpty) return true;
       final q = _search.toLowerCase();
@@ -1251,12 +1280,14 @@ class _UserPickerDialogState extends State<_UserPickerDialog> {
                   const Icon(Icons.person_search,
                       color: Colors.white, size: 18),
                   const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text('เลือกผู้อนุมัติ',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15)),
+                  Expanded(
+                    child: Text(
+                      isEnglish ? 'Select Approver' : 'เลือกผู้อนุมัติ',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15),
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close,
@@ -1272,10 +1303,10 @@ class _UserPickerDialogState extends State<_UserPickerDialog> {
               padding: const EdgeInsets.all(8.0),
               child: TextField(
                 autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'ค้นหา',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Search' : 'ค้นหา',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
                 onChanged: (v) => setState(() => _search = v),
@@ -1283,9 +1314,11 @@ class _UserPickerDialogState extends State<_UserPickerDialog> {
             ),
             Expanded(
               child: filtered.isEmpty
-                  ? const Center(
-                      child: Text('ไม่พบผู้ใช้',
-                          style: TextStyle(color: Colors.grey)))
+                  ? Center(
+                      child: Text(
+                        isEnglish ? 'No users found' : 'ไม่พบผู้ใช้',
+                        style: const TextStyle(color: Colors.grey),
+                      ))
                   : ListView.builder(
                       itemCount: filtered.length,
                       itemBuilder: (_, i) {

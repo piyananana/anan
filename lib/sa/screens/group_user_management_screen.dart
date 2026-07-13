@@ -102,13 +102,20 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
         _isLoading = false;
       });
     } catch (e) {
+      final isEnglish = mounted
+          ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+          : false;
       setState(() {
-        _errorLoading = 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
+        _errorLoading = isEnglish
+            ? 'Cannot load data: ${e.toString()}'
+            : 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_errorLoading)),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorLoading)),
+        );
+      }
     }
   }
 
@@ -196,16 +203,24 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
     //     .where((u) => u!.isMember)
     //     .map((u) => u!.id)
     //     .toList();
+    final isEnglish = mounted
+        ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+        : false;
     try {
       if (user.isMember) {
         await _groupUserService.createGroupUserByUserId(
             _selectedNode!.id!, user.id);
-        _showSnackBar(
-            'เพิ่ม "${user.userName}" เข้ากลุ่มแล้ว (เมนูกลุ่มถูกเพิ่มเข้าสิทธิ์ที่มีอยู่)', Colors.green);
+        _showSnackBar(isEnglish
+            ? 'Added "${user.userName}" to group (group menus added to existing permissions)'
+            : 'เพิ่ม "${user.userName}" เข้ากลุ่มแล้ว (เมนูกลุ่มถูกเพิ่มเข้าสิทธิ์ที่มีอยู่)',
+            Colors.green);
       } else {
         await _groupUserService.deleteGroupUserByUserId(
             _selectedNode!.id!, user.id);
-        _showSnackBar('ลบผู้ใช้ "${user.userName}" ออกจากกลุ่มแล้ว (สิทธิ์เมนูยังคงอยู่)', Colors.green);
+        _showSnackBar(isEnglish
+            ? 'Removed "${user.userName}" from group (menu permissions remain)'
+            : 'ลบผู้ใช้ "${user.userName}" ออกจากกลุ่มแล้ว (สิทธิ์เมนูยังคงอยู่)',
+            Colors.green);
       }
       // // ถ้าผู้ใช้ถูกยกเลิกการเลือก ให้ลบสิทธิ์เมนูด้วย
       // if (!newValue) {
@@ -228,14 +243,16 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
 
   // ลบผู้ใช้ทั้งหมดจากกลุ่ม
   Future<void> _onDelete(Group rowData) async {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('ยืนยันการลบผู้ใช้ทั้งหมด'),
-          content: Text(
-              'คุณแน่ใจหรือไม่ที่ต้องการลบผู้ใช้ทั้งหมดออกจากกลุ่ม "${rowData.name}"?'),
+          title: Text(isEnglish ? 'Confirm Remove All Users' : 'ยืนยันการลบผู้ใช้ทั้งหมด'),
+          content: Text(isEnglish
+              ? 'Are you sure you want to remove all users from group "${rowData.name}"?'
+              : 'คุณแน่ใจหรือไม่ที่ต้องการลบผู้ใช้ทั้งหมดออกจากกลุ่ม "${rowData.name}"?'),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -245,7 +262,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
               onPressed: () => Navigator.of(context).pop(true),
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red, foregroundColor: Colors.white),
-              child: const Text('ลบทั้งหมด'),
+              child: Text(isEnglish ? 'Remove All' : 'ลบทั้งหมด'),
             ),
           ],
         );
@@ -255,32 +272,38 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
     if (confirm == true) {
       try {
         await _groupUserService.deleteGroupUsers(rowData.id!);
-        _showSnackBar('ลบผู้ใช้ทั้งหมดจากกลุ่ม ${rowData.name} เรียบร้อยแล้ว',
+        _showSnackBar(isEnglish
+            ? 'All users removed from group ${rowData.name}'
+            : 'ลบผู้ใช้ทั้งหมดจากกลุ่ม ${rowData.name} เรียบร้อยแล้ว',
             Colors.green);
         if (_selectedNode?.id == rowData.id) {
-          // ถ้าเป็นกลุ่มที่กำลังแสดงอยู่ ให้รีเฟรช panel
           _fetchDataForDetail();
         }
       } catch (e) {
-        _showSnackBar('Failed to delete all users from group: $e', Colors.red);
+        _showSnackBar(isEnglish
+            ? 'Failed to delete all users from group: $e'
+            : 'เกิดข้อผิดพลาดในการลบผู้ใช้ทั้งหมดจากกลุ่ม: $e',
+            Colors.red);
       }
     }
   }
 
   // คัดลอกสิทธิ์เมนูจากกลุ่มไปยังผู้ใช้ (ปุ่ม "คัดลอกสิทธิ์")
   Future<void> _onCopyGroupMenuToUser(User user) async {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     if (_selectedNode == null) {
-      _showSnackBar('กรุณาเลือกกลุ่มก่อน', Colors.orange);
+      _showSnackBar(isEnglish ? 'Please select a group first' : 'กรุณาเลือกกลุ่มก่อน', Colors.orange);
       return;
     }
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('คัดลอกสิทธิ์เมนู'),
-          content: Text(
-              'คุณต้องการคัดลอกสิทธิ์เมนูของกลุ่ม "${_selectedNode!.name}" ไปทับสิทธิ์ปัจจุบันของ "${user.userName}" หรือไม่?'),
+          title: Text(isEnglish ? 'Copy Menu Permissions' : 'คัดลอกสิทธิ์เมนู'),
+          content: Text(isEnglish
+              ? 'Do you want to copy menu permissions from group "${_selectedNode!.name}" to overwrite the current permissions of "${user.userName}"?'
+              : 'คุณต้องการคัดลอกสิทธิ์เมนูของกลุ่ม "${_selectedNode!.name}" ไปทับสิทธิ์ปัจจุบันของ "${user.userName}" หรือไม่?'),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -288,7 +311,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('คัดลอก'),
+              child: Text(isEnglish ? 'Copy' : 'คัดลอก'),
             ),
           ],
         );
@@ -299,11 +322,15 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
       try {
         await _groupUserService.copyGroupMenuToUser(
             _selectedNode!.id!, user.id);
-        _showSnackBar(
-            'สิทธิ์เมนูถูกคัดลอกไปยังผู้ใช้ ${user.userName} เรียบร้อยแล้ว',
+        _showSnackBar(isEnglish
+            ? 'Menu permissions copied to user ${user.userName} successfully'
+            : 'สิทธิ์เมนูถูกคัดลอกไปยังผู้ใช้ ${user.userName} เรียบร้อยแล้ว',
             Colors.green);
       } catch (e) {
-        _showSnackBar('Failed to copy group menu to user: $e', Colors.red);
+        _showSnackBar(isEnglish
+            ? 'Failed to copy group menu to user: $e'
+            : 'เกิดข้อผิดพลาดในการคัดลอกสิทธิ์: $e',
+            Colors.red);
       }
     }
   }
@@ -326,7 +353,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
 
     // ต้องตรวจสอบสถานะการโหลดก่อนสร้าง UI
     if (_isLoading) {
@@ -347,7 +374,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: _fetchData,
           ),
         ],
@@ -371,7 +398,9 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                      : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(
@@ -391,7 +420,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
                           Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: Text(
-                              'โครงสร้างกลุ่ม',
+                              isEnglish ? 'Group Structure' : 'โครงสร้างกลุ่ม',
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                           ),
@@ -436,6 +465,7 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
 
   // --- Build Methods ---
   Widget _buildNode(Group rowData, int level) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final bool isFolder = rowData.haveSubGroup;
     final List<Group> children = _buildTree(_currentList, rowData.id);
     final bool hasChildren = children.isNotEmpty;
@@ -473,22 +503,19 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                // Icon ปุ่ม Edit
                 IconButton(
                   icon: const Icon(Icons.visibility, color: Colors.green, size: 20),
-                  tooltip: 'ดูสมาชิกกลุ่ม',
+                  tooltip: isEnglish ? 'View group members' : 'ดูสมาชิกกลุ่ม',
                   onPressed: () => _onView(rowData),
                 ),
                 IconButton(
                   icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                  tooltip: 'แก้ไข',
-                  // onPressed: () => _setEditMode(rowData),
+                  tooltip: isEnglish ? 'Edit' : 'แก้ไข',
                   onPressed: () => _onEdit(rowData),
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete_forever, color: Colors.red, size: 20),
-                  tooltip: 'ลบผู้ใช้ทั้งหมดจากกลุ่ม',
-                  // onPressed: () => _setEditMode(rowData),
+                  tooltip: isEnglish ? 'Remove all users from group' : 'ลบผู้ใช้ทั้งหมดจากกลุ่ม',
                   onPressed: () => _onDelete(rowData),
                 ),
               ],
@@ -504,27 +531,31 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
     );
   }
 
-  // Helper method สำหรับสร้างเนื้อหาใน Panel ด้านขวา
   Widget _buildRightPanelContent() {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+
     if (_selectedNode == null || _nodeMode == NodeMode.empty) {
-      return const Center(child: Text('เลือกกลุ่มเพื่อจัดการสิทธิ์'));
+      return Center(child: Text(isEnglish
+          ? 'Select a group to manage permissions'
+          : 'เลือกกลุ่มเพื่อจัดการสิทธิ์'));
     }
 
     if (_allUsers.isEmpty) {
-      return const Center(child: Text('ไม่พบรายการเมนูในระบบ'));
+      return Center(child: Text(isEnglish
+          ? 'No users found in the system'
+          : 'ไม่พบรายการเมนูในระบบ'));
     }
 
     return Column(
       children: [
-        // ส่วนหัว Panel ขวา
         AppBar(
-          automaticallyImplyLeading: false, // ไม่ต้องมีปุ่ม Back
+          automaticallyImplyLeading: false,
           backgroundColor: Colors.blue.shade700,
           foregroundColor: Colors.white,
           title: Text(
             _selectedNode == null
-                ? 'เลือกกลุ่มเพื่อจัดการผู้ใช้'
-                : 'ผู้ใช้: ${_selectedNode!.name}',
+                ? (isEnglish ? 'Select a group to manage users' : 'เลือกกลุ่มเพื่อจัดการผู้ใช้')
+                : (isEnglish ? 'Users: ${_selectedNode!.name}' : 'ผู้ใช้: ${_selectedNode!.name}'),
             style: const TextStyle(fontSize: 18),
             overflow: TextOverflow.ellipsis,
           ),
@@ -540,30 +571,33 @@ class _GroupUserManagementScreenState extends State<GroupUserManagementScreen> w
                 },
                 itemBuilder: (BuildContext context) =>
                     <PopupMenuEntry<SortOption>>[
-                  const PopupMenuItem<SortOption>(
+                  PopupMenuItem<SortOption>(
                     value: SortOption.userName,
-                    child: Text('เรียงตามผู้ใช้'),
+                    child: Text(isEnglish ? 'Sort by Username' : 'เรียงตามผู้ใช้'),
                   ),
-                  const PopupMenuItem<SortOption>(
+                  PopupMenuItem<SortOption>(
                     value: SortOption.firstName,
-                    child: Text('เรียงตามชื่อจริง'),
+                    child: Text(isEnglish ? 'Sort by First Name' : 'เรียงตามชื่อจริง'),
                   ),
-                  const PopupMenuItem<SortOption>(
+                  PopupMenuItem<SortOption>(
                     value: SortOption.lastName,
-                    child: Text('เรียงตามนามสกุล'),
+                    child: Text(isEnglish ? 'Sort by Last Name' : 'เรียงตามนามสกุล'),
                   ),
                 ],
               ),
           ],
         ),
-        // Body Panel ขวา
         Expanded(
           child: _isLoadingDetail
               ? const Center(child: CircularProgressIndicator())
               : _selectedNode == null
-                  ? const Center(child: Text('กรุณาเลือกกลุ่มจาก Panel ซ้าย'))
+                  ? Center(child: Text(isEnglish
+                      ? 'Please select a group from the left panel'
+                      : 'กรุณาเลือกกลุ่มจาก Panel ซ้าย'))
                   : _detailInPanel.isEmpty
-                      ? const Center(child: Text('ไม่พบผู้ใช้ในกลุ่มนี้'))
+                      ? Center(child: Text(isEnglish
+                          ? 'No users found in this group'
+                          : 'ไม่พบผู้ใช้ในกลุ่มนี้'))
                       : ListView.builder(
                           itemCount: _detailInPanel.length,
                           itemBuilder: (context, index) {

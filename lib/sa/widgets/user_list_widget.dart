@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/user.dart';
+import '../services/language_provider.dart';
 
 class UserListPanel extends StatefulWidget {
   final List<User> users;
@@ -66,7 +68,7 @@ class _UserListPanelState extends State<UserListPanel> {
     return items;
   }
 
-  Widget _buildListHeader() {
+  Widget _buildListHeader(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
@@ -74,29 +76,31 @@ class _UserListPanelState extends State<UserListPanel> {
           if (widget.enableAddButton)
             IconButton(
               icon: const Icon(Icons.add),
-              tooltip: 'เพิ่มผู้ใช้ใหม่',
+              tooltip: isEnglish ? 'Add New User' : 'เพิ่มผู้ใช้ใหม่',
               onPressed: widget.onAdd,
             ),
           if (widget.enableSortButton)
             PopupMenuButton<String>(
               icon: const Icon(Icons.sort),
-              tooltip: 'จัดเรียง',
+              tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
               onSelected: (v) => setState(() => _sortBy = v),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'userName_asc', child: Text('Username (น้อยไปมาก)')),
-                PopupMenuItem(value: 'userName_desc', child: Text('Username (มากไปน้อย)')),
-                PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
-                PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'userName_asc',  child: Text(isEnglish ? 'Username (A→Z)' : 'Username (น้อยไปมาก)')),
+                PopupMenuItem(value: 'userName_desc', child: Text(isEnglish ? 'Username (Z→A)' : 'Username (มากไปน้อย)')),
+                PopupMenuItem(value: 'name_asc',      child: Text(isEnglish ? 'Name (A→Z)' : 'ชื่อ (น้อยไปมาก)')),
+                PopupMenuItem(value: 'name_desc',     child: Text(isEnglish ? 'Name (Z→A)' : 'ชื่อ (มากไปน้อย)')),
               ],
             ),
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา (รหัสผู้ใช้, ชื่อ, นามสกุล, ประเภทผู้ใช้)',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: isEnglish
+                    ? 'Search (username, first name, last name, type)'
+                    : 'ค้นหา (รหัสผู้ใช้, ชื่อ, นามสกุล, ประเภทผู้ใช้)',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (v) => setState(() => _searchQuery = v),
             ),
@@ -108,14 +112,17 @@ class _UserListPanelState extends State<UserListPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final items = _filterAndSort();
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${widget.users.length} แถว'
-        : 'พบ ${items.length} จาก ${widget.users.length} แถว';
+        ? (isEnglish ? 'Total ${widget.users.length} rows' : 'ทั้งหมด ${widget.users.length} แถว')
+        : (isEnglish
+            ? 'Found ${items.length} of ${widget.users.length} rows'
+            : 'พบ ${items.length} จาก ${widget.users.length} แถว');
 
     return Column(
       children: [
-        _buildListHeader(),
+        _buildListHeader(isEnglish),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           child: Align(
@@ -126,7 +133,7 @@ class _UserListPanelState extends State<UserListPanel> {
         ),
         Expanded(
           child: items.isEmpty
-              ? const Center(child: Text('ไม่พบผู้ใช้'))
+              ? Center(child: Text(isEnglish ? 'No users found' : 'ไม่พบผู้ใช้'))
               : ListView.builder(
                   itemCount: items.length,
                   itemBuilder: (context, index) {
@@ -139,8 +146,9 @@ class _UserListPanelState extends State<UserListPanel> {
                           ListTile(
                             title: Text(
                                 '${user.firstName} ${user.lastName} (${user.userName})'),
-                            subtitle: Text(
-                                'อีเมล: ${user.email ?? '(ไม่มี)'}\nสถานะ: ${user.status}, ประเภท: ${user.userType}'),
+                            subtitle: Text(isEnglish
+                                ? 'Email: ${user.email ?? '(none)'}\nStatus: ${user.status}, Type: ${user.userType}'
+                                : 'อีเมล: ${user.email ?? '(ไม่มี)'}\nสถานะ: ${user.status}, ประเภท: ${user.userType}'),
                             isThreeLine: true,
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,

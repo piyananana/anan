@@ -80,8 +80,13 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
         _isLoading = false;
       });
     } catch (e) {
+      final isEnglish = mounted
+          ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+          : false;
       setState(() {
-        _error = 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
+        _error = isEnglish
+            ? 'Cannot load data: ${e.toString()}'
+            : 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
         _isLoading = false;
       });
       if (mounted) {
@@ -112,8 +117,11 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
       });
     } catch (e) {
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ไม่สามารถโหลดสิทธิ์ผู้ใช้: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish
+              ? 'Cannot load user permissions: ${e.toString()}'
+              : 'ไม่สามารถโหลดสิทธิ์ผู้ใช้: ${e.toString()}')),
         );
       }
       setState(() {
@@ -142,8 +150,11 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
       });
     } catch (e) {
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ไม่สามารถโหลดสิทธิ์ผู้ใช้: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish
+              ? 'Cannot load user permissions: ${e.toString()}'
+              : 'ไม่สามารถโหลดสิทธิ์ผู้ใช้: ${e.toString()}')),
         );
       }
       setState(() {
@@ -154,13 +165,15 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
   }
 
   Future<void> _onDelete(User row) async {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบสิทธิ์'),
-        content:
-            Text('คุณแน่ใจหรือไม่ที่จะลบสิทธิ์เมนูทั้งหมดของผู้ใช้ "${row.firstName} ${row.lastName}" ?'),
+        title: Text(isEnglish ? 'Confirm Delete Permissions' : 'ยืนยันการลบสิทธิ์'),
+        content: Text(isEnglish
+            ? 'Are you sure you want to delete all document permissions for user "${row.firstName} ${row.lastName}"?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบสิทธิ์เมนูทั้งหมดของผู้ใช้ "${row.firstName} ${row.lastName}" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -179,21 +192,20 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
         final detailService =
             Provider.of<UserDocumentService>(context, listen: false);
         await detailService.deleteRowsByUserId(row.id);
-        _onClearRightPanel(); // เคลียร์ panel ขวาหลังจากลบ
+        _onClearRightPanel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ลบสิทธิ์ผู้ใช้สำเร็จ')),
+            SnackBar(content: Text(isEnglish
+                ? 'User permissions deleted successfully'
+                : 'ลบสิทธิ์ผู้ใช้สำเร็จ')),
           );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ไม่พบเมนูผู้ใช้ที่เลือก')));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content:
-                    Text('เกิดข้อผิดพลาดในการลบสิทธิ์ผู้ใช้: ${e.toString()}')),
+            SnackBar(content: Text(isEnglish
+                ? 'Error deleting user permissions: ${e.toString()}'
+                : 'เกิดข้อผิดพลาดในการลบสิทธิ์ผู้ใช้: ${e.toString()}')),
           );
         }
       }
@@ -201,22 +213,25 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
   }
 
   Future<void> _onSave() async {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     if (_selected == null || _mode != Mode.edit) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('ไม่มีผู้ใช้ที่เลือกหรือไม่ได้อยู่ในโหมดแก้ไข')),
+        SnackBar(content: Text(isEnglish
+            ? 'No user selected or not in edit mode'
+            : 'ไม่มีผู้ใช้ที่เลือกหรือไม่ได้อยู่ในโหมดแก้ไข')),
       );
       return;
     }
 
     if (_stagedGrantedIds.isEmpty) {
-      // ถามผู้ใช้ก่อนว่าต้องการลบสิทธิ์ทั้งหมดจริงหรือไม่
       final bool? confirmDelete = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('ยืนยันการลบสิทธิ์ทั้งหมด'),
-          content: Text('คุณต้องการลบสิทธิ์เข้าถึงเมนูทั้งหมดของ ${_selected!.userName} ใช่หรือไม่?'),
+          title: Text(isEnglish ? 'Confirm Remove All Permissions' : 'ยืนยันการลบสิทธิ์ทั้งหมด'),
+          content: Text(isEnglish
+              ? 'Do you want to remove all menu access permissions for ${_selected!.userName}?'
+              : 'คุณต้องการลบสิทธิ์เข้าถึงเมนูทั้งหมดของ ${_selected!.userName} ใช่หรือไม่?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -232,7 +247,7 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
       );
 
       if (confirmDelete != true) {
-        return; // ผู้ใช้ยกเลิกการลบ
+        return;
       }
     }
 
@@ -244,32 +259,35 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
       final detailService =
           Provider.of<UserDocumentService>(context, listen: false);
       if (_stagedGrantedIds.isEmpty) {
-        // ถ้า Set ว่างเปล่า ให้เรียก API ลบทั้งหมด
         await detailService.deleteRowsByUserId(_selected!.id);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('ลบสิทธิ์ทั้งหมดของผู้ใช้ ${_selected!.userName} สำเร็จ')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish
+                ? 'All permissions for user ${_selected!.userName} removed'
+                : 'ลบสิทธิ์ทั้งหมดของผู้ใช้ ${_selected!.userName} สำเร็จ')),
+          );
+        }
       } else {
         await detailService.updateRowsByUserId(_selected!.id, _stagedGrantedIds);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('บันทึกสิทธิ์สำหรับผู้ใช้ ${_selected!.userName} สำเร็จ')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish
+                ? 'Permissions saved for user ${_selected!.userName}'
+                : 'บันทึกสิทธิ์สำหรับผู้ใช้ ${_selected!.userName} สำเร็จ')),
+          );
+        }
       }
 
-      // รีเฟรชข้อมูลหลังจากบันทึก
-      // await _fetchUserPermissions(_selected!.id);
-      _onView(
-          _selected!); // Refresh to view mode with new permissions
+      _onView(_selected!);
 
     } catch (e) {
-      print('Error saving user menu: $e'); // Log เพื่อดูรายละเอียดใน Debug Console
-      // _showSnackBar('เกิดข้อผิดพลาดในการบันทึกสิทธิ์: ${e.toString()}', Colors.red);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('เกิดข้อผิดพลาดในการบันทึกสิทธิ์: ${e.toString()}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(isEnglish
+              ? 'Error saving permissions: ${e.toString()}'
+              : 'เกิดข้อผิดพลาดในการบันทึกสิทธิ์: ${e.toString()}')),
+        );
+      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -289,7 +307,7 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
 
     return Scaffold(
       appBar: AppBar(
@@ -299,21 +317,19 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: _fetchLists,
           ),
           IconButton(
             icon: const Icon(Icons.cleaning_services_outlined, color: Colors.white),
             onPressed: _onClearRightPanel,
-            tooltip: 'เคลียร์ Panel ขวา',
+            tooltip: isEnglish ? 'Clear right panel' : 'เคลียร์ Panel ขวา',
           ),
           _selected != null ?
           IconButton(
             icon: const Icon(Icons.save_outlined, color: Colors.white),
-            onPressed: _mode == Mode.edit
-                ? _onSave
-                : null, // บันทึกได้เฉพาะตอนอยู่ในโหมดแก้ไข
-            tooltip: 'บันทึกสิทธิ์',
+            onPressed: _mode == Mode.edit ? _onSave : null,
+            tooltip: isEnglish ? 'Save permissions' : 'บันทึกสิทธิ์',
           )
           : const SizedBox.shrink(),
           const SizedBox(width: 8),
@@ -344,7 +360,9 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
                             padding: EdgeInsets.zero,
                             onPressed: () => setState(
                                 () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                            tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                            tooltip: _isLeftPanelExpanded
+                                ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                                : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                           ),
                         ),
                         AnimatedContainer(
@@ -398,14 +416,19 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
     );
   }
 
-  // Helper method สำหรับสร้างเนื้อหาใน Panel ด้านขวา
   Widget _buildDetailRightPanel() {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+
     if (_selected == null || _mode == Mode.none) {
-      return const Center(child: Text('เลือกผู้ใช้เพื่อจัดการสิทธิ์'));
+      return Center(child: Text(isEnglish
+          ? 'Select a user to manage permissions'
+          : 'เลือกผู้ใช้เพื่อจัดการสิทธิ์'));
     }
 
     if (_lists.isEmpty) {
-      return const Center(child: Text('ไม่พบรายการประเภทเอกสารในระบบ'));
+      return Center(child: Text(isEnglish
+          ? 'No document types found in the system'
+          : 'ไม่พบรายการประเภทเอกสารในระบบ'));
     }
 
     return Column(
@@ -413,7 +436,9 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: Text(
-            'สิทธิ์ประเภทเอกสารสำหรับ: ${_selected!.userName}',
+            isEnglish
+                ? 'Document Permissions for: ${_selected!.userName}'
+                : 'สิทธิ์ประเภทเอกสารสำหรับ: ${_selected!.userName}',
             style: Theme.of(context).textTheme.titleLarge,
           ),
         ),

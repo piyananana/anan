@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../models/user_branch.dart';
+import '../services/language_provider.dart';
 import '../services/user_branch_service.dart';
 import '../../cd/models/branch.dart';
 import '../../cd/services/branch_service.dart';
@@ -133,17 +135,19 @@ class _UserDetailFormState extends State<UserDetailForm> {
           .toList();
       await _userBranchService.updateByUserId(user!.id, toSave);
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('บันทึกสาขาสำเร็จ'),
+          SnackBar(
+              content: Text(isEnglish ? 'Branch saved successfully' : 'บันทึกสาขาสำเร็จ'),
               backgroundColor: Colors.green),
         );
       }
     } catch (e) {
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('บันทึกสาขาล้มเหลว: $e'),
+              content: Text(isEnglish ? 'Save branch failed: $e' : 'บันทึกสาขาล้มเหลว: $e'),
               backgroundColor: Colors.red),
         );
       }
@@ -173,10 +177,18 @@ class _UserDetailFormState extends State<UserDetailForm> {
 
     if (!mounted) return;
 
+    final isEnglish = mounted
+        ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+        : false;
+
     if (loadError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('โหลดข้อมูลสาขาล้มเหลว: $loadError'),
-            backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(isEnglish
+              ? 'Load branch data failed: $loadError'
+              : 'โหลดข้อมูลสาขาล้มเหลว: $loadError'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -189,7 +201,11 @@ class _UserDetailFormState extends State<UserDetailForm> {
 
     if (available.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่มีสาขาที่เพิ่มได้อีกแล้ว')),
+        SnackBar(
+          content: Text(isEnglish
+              ? 'No more branches available to add'
+              : 'ไม่มีสาขาที่เพิ่มได้อีกแล้ว'),
+        ),
       );
       return;
     }
@@ -217,10 +233,10 @@ class _UserDetailFormState extends State<UserDetailForm> {
           }
 
           return AlertDialog(
-            title: const Row(children: [
-              Icon(Icons.business, size: 20, color: Colors.teal),
-              SizedBox(width: 8),
-              Text('เลือกสาขา'),
+            title: Row(children: [
+              const Icon(Icons.business, size: 20, color: Colors.teal),
+              const SizedBox(width: 8),
+              Text(isEnglish ? 'Select Branch' : 'เลือกสาขา'),
             ]),
             content: SizedBox(
               width: 420,
@@ -229,22 +245,24 @@ class _UserDetailFormState extends State<UserDetailForm> {
                 TextField(
                   controller: searchCtrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา รหัส / ชื่อ',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search code / name' : 'ค้นหา รหัส / ชื่อ',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                     contentPadding:
-                        EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   ),
                   onChanged: doFilter,
                 ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: filtered.isEmpty
-                      ? const Center(
-                          child: Text('ไม่พบข้อมูล',
-                              style: TextStyle(color: Colors.grey)))
+                      ? Center(
+                          child: Text(
+                            isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+                            style: const TextStyle(color: Colors.grey),
+                          ))
                       : ListView.builder(
                           itemCount: filtered.length,
                           itemBuilder: (_, i) {
@@ -279,7 +297,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
             actions: [
               TextButton(
                   onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('ปิด')),
+                  child: Text(isEnglish ? 'Close' : 'ปิด')),
             ],
           );
         },
@@ -289,7 +307,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
   }
 
   Widget _buildBranchSection() {
-    // superadmin ที่ยังไม่ได้บันทึก → แสดง card พร้อมคำแนะนำ
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final notSavedYet = user == null || user!.id <= 0;
     if (notSavedYet) {
       return Card(
@@ -304,14 +322,20 @@ class _UserDetailFormState extends State<UserDetailForm> {
           child: Row(children: [
             Icon(Icons.business, size: 18, color: Colors.teal[700]),
             const SizedBox(width: 8),
-            Text('สาขาที่มีสิทธิ์',
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal[800])),
+            Text(
+              isEnglish ? 'Allowed Branches' : 'สาขาที่มีสิทธิ์',
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.teal[800]),
+            ),
             const SizedBox(width: 16),
-            Text('— กรุณาบันทึกผู้ใช้ก่อน เพื่อกำหนดสาขา',
-                style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+            Text(
+              isEnglish
+                  ? '— Please save the user first before assigning branches'
+                  : '— กรุณาบันทึกผู้ใช้ก่อน เพื่อกำหนดสาขา',
+              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            ),
           ]),
         ),
       );
@@ -332,17 +356,19 @@ class _UserDetailFormState extends State<UserDetailForm> {
             Row(children: [
               Icon(Icons.business, size: 18, color: Colors.teal[700]),
               const SizedBox(width: 8),
-              Text('สาขาที่มีสิทธิ์',
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.teal[800])),
+              Text(
+                isEnglish ? 'Allowed Branches' : 'สาขาที่มีสิทธิ์',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal[800]),
+              ),
               const Spacer(),
               if (!_isViewing)
                 TextButton.icon(
                   onPressed: _showAddBranchDialog,
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('เพิ่มสาขา'),
+                  label: Text(isEnglish ? 'Add Branch' : 'เพิ่มสาขา'),
                   style:
                       TextButton.styleFrom(foregroundColor: Colors.teal[700]),
                 ),
@@ -360,9 +386,11 @@ class _UserDetailFormState extends State<UserDetailForm> {
                   Icon(Icons.warning_amber_rounded,
                       size: 16, color: Colors.orange[700]),
                   const SizedBox(width: 8),
-                  Text('ยังไม่ได้กำหนดสาขา',
-                      style: TextStyle(
-                          color: Colors.orange[700], fontSize: 13)),
+                  Text(
+                    isEnglish ? 'No branch assigned yet' : 'ยังไม่ได้กำหนดสาขา',
+                    style: TextStyle(
+                        color: Colors.orange[700], fontSize: 13),
+                  ),
                 ]),
               )
             else
@@ -396,11 +424,13 @@ class _UserDetailFormState extends State<UserDetailForm> {
                             color: Colors.teal.shade100,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text('หลัก',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.teal[800],
-                                  fontWeight: FontWeight.w500)),
+                          child: Text(
+                            isEnglish ? 'Main' : 'หลัก',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.teal[800],
+                                fontWeight: FontWeight.w500),
+                          ),
                         ),
                       if (!_isViewing)
                         IconButton(
@@ -409,7 +439,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
                           onPressed: () => _removeBranch(branch),
                           padding: const EdgeInsets.all(4),
                           constraints: const BoxConstraints(),
-                          tooltip: 'ลบ',
+                          tooltip: isEnglish ? 'Remove' : 'ลบ',
                         ),
                     ]),
                   );
@@ -428,7 +458,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.save, size: 16),
-                  label: const Text('บันทึกสาขา'),
+                  label: Text(isEnglish ? 'Save Branches' : 'บันทึกสาขา'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal[700],
                     foregroundColor: Colors.white,
@@ -462,6 +492,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Form(
@@ -471,22 +502,24 @@ class _UserDetailFormState extends State<UserDetailForm> {
           children: [
             Text(
               _isViewing
-                  ? 'ดูข้อมูลผู้ใช้'
+                  ? (isEnglish ? 'View User' : 'ดูข้อมูลผู้ใช้')
                   : _isEditing
-                      ? 'แก้ไขผู้ใช้'
-                      : 'เพิ่มผู้ใช้ใหม่',
+                      ? (isEnglish ? 'Edit User' : 'แก้ไขผู้ใช้')
+                      : (isEnglish ? 'Add New User' : 'เพิ่มผู้ใช้ใหม่'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
             TextFormField(
               readOnly: !widget.adminMode && (_isEditing || _isViewing),
               controller: _usernameController,
-              decoration: const InputDecoration(
-                labelText: 'ผู้ใช้',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Username' : 'ผู้ใช้',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
-                if (value == null || value.isEmpty) return 'กรุณาป้อนผู้ใช้';
+                if (value == null || value.isEmpty) {
+                  return isEnglish ? 'Please enter a username' : 'กรุณาป้อนผู้ใช้';
+                }
                 return null;
               },
             ),
@@ -494,12 +527,14 @@ class _UserDetailFormState extends State<UserDetailForm> {
             TextFormField(
               readOnly: _isViewing,
               controller: _firstNameController,
-              decoration: const InputDecoration(
-                labelText: 'ชื่อจริง',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'First Name' : 'ชื่อจริง',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
-                if (value == null || value.isEmpty) return 'กรุณาป้อนชื่อจริง';
+                if (value == null || value.isEmpty) {
+                  return isEnglish ? 'Please enter a first name' : 'กรุณาป้อนชื่อจริง';
+                }
                 return null;
               },
             ),
@@ -507,12 +542,14 @@ class _UserDetailFormState extends State<UserDetailForm> {
             TextFormField(
               readOnly: _isViewing,
               controller: _lastNameController,
-              decoration: const InputDecoration(
-                labelText: 'นามสกุล',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Last Name' : 'นามสกุล',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
-                if (value == null || value.isEmpty) return 'กรุณาป้อนนามสกุล';
+                if (value == null || value.isEmpty) {
+                  return isEnglish ? 'Please enter a last name' : 'กรุณาป้อนนามสกุล';
+                }
                 return null;
               },
             ),
@@ -520,9 +557,9 @@ class _UserDetailFormState extends State<UserDetailForm> {
             TextFormField(
               readOnly: _isViewing,
               controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'อีเมล',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Email' : 'อีเมล',
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 16),
@@ -531,8 +568,8 @@ class _UserDetailFormState extends State<UserDetailForm> {
               controller: _passwordController,
               decoration: InputDecoration(
                 labelText: _isEditing
-                    ? 'รหัสผ่าน (เว้นว่างหากไม่เปลี่ยน)'
-                    : 'รหัสผ่าน',
+                    ? (isEnglish ? 'Password (leave blank to keep unchanged)' : 'รหัสผ่าน (เว้นว่างหากไม่เปลี่ยน)')
+                    : (isEnglish ? 'Password' : 'รหัสผ่าน'),
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -544,7 +581,7 @@ class _UserDetailFormState extends State<UserDetailForm> {
               obscureText: !_showPassword,
               validator: (value) {
                 if (!_isEditing && (value == null || value.isEmpty)) {
-                  return 'กรุณาป้อนรหัสผ่าน';
+                  return isEnglish ? 'Please enter a password' : 'กรุณาป้อนรหัสผ่าน';
                 }
                 return null;
               },
@@ -553,9 +590,9 @@ class _UserDetailFormState extends State<UserDetailForm> {
             DropdownButtonFormField<String>(
               isExpanded: true,
               value: _status,
-              decoration: const InputDecoration(
-                labelText: 'สถานะ',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Status' : 'สถานะ',
+                border: const OutlineInputBorder(),
               ),
               items: const [
                 DropdownMenuItem(value: 'active', child: Text('active')),
@@ -571,9 +608,9 @@ class _UserDetailFormState extends State<UserDetailForm> {
             DropdownButtonFormField<String>(
               isExpanded: true,
               value: _resolvedUserType,
-              decoration: const InputDecoration(
-                labelText: 'ประเภทผู้ใช้',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'User Type' : 'ประเภทผู้ใช้',
+                border: const OutlineInputBorder(),
               ),
               items: _allowedUserTypes
                   .map((type) =>
@@ -598,12 +635,14 @@ class _UserDetailFormState extends State<UserDetailForm> {
                 if (!_isViewing)
                   ElevatedButton(
                     onPressed: _submitForm,
-                    child: Text(_isEditing ? 'บันทึก' : 'เพิ่ม'),
+                    child: Text(_isEditing
+                        ? (isEnglish ? 'Save' : 'บันทึก')
+                        : (isEnglish ? 'Add' : 'เพิ่ม')),
                   ),
                 const SizedBox(width: 16),
                 OutlinedButton(
                   onPressed: widget.onCancel,
-                  child: const Text('ยกเลิก'),
+                  child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
                 ),
               ],
             ),

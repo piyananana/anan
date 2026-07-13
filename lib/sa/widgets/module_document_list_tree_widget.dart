@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/module_document.dart';
+import '../services/language_provider.dart';
 import '../services/module_document_service.dart';
 
 class ModuleDocumentListTreeWidget extends StatefulWidget {
@@ -37,20 +38,21 @@ class ModuleDocumentListTreeWidget extends StatefulWidget {
   @override
   State<ModuleDocumentListTreeWidget> createState() => ModuleDocumentListTreeWidgetState();
 
-  // เมธอด static สำหรับแสดง Dialog
   static Future<void> search(BuildContext context,
       {required void Function(ModuleDocument) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          // กำหนดขนาดให้ใหญ่ขึ้นเพื่อให้ใช้งานสะดวก
           contentPadding: EdgeInsets.zero,
-          title: const Text('ค้นหา ประเภทเอกสาร',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          title: Text(
+            isEnglish ? 'Search Document Type' : 'ค้นหา ประเภทเอกสาร',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
           content: Container(
-            width: 500, // กำหนดความกว้างที่เหมาะสม
-            height: 600, // กำหนดความสูงที่เหมาะสม
+            width: 500,
+            height: 600,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(10.0),
@@ -73,7 +75,8 @@ class ModuleDocumentListTreeWidget extends StatefulWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+              child: Text(isEnglish ? 'Close' : 'ปิด',
+                  style: const TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -102,8 +105,13 @@ class ModuleDocumentListTreeWidgetState extends State<ModuleDocumentListTreeWidg
         _isLoading = false;
       });
     } catch (e) {
+      final isEnglish = mounted
+          ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+          : false;
       setState(() {
-        _error = 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
+        _error = isEnglish
+            ? 'Cannot load data: ${e.toString()}'
+            : 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
         _isLoading = false;
       });
       if (mounted) {
@@ -129,17 +137,17 @@ class ModuleDocumentListTreeWidgetState extends State<ModuleDocumentListTreeWidg
     super.dispose();
   }
 
-  Widget _buildListHeader() {
+  Widget _buildListHeader(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
         children: [
           widget.enableAddRootButton
-              ? Expanded(child: 
+              ? Expanded(child:
                   ElevatedButton.icon(
                     onPressed: () => widget.onAddRoot(),
                     icon: const Icon(Icons.add),
-                    label: const Text('เพิ่มโมดูลหลัก')
+                    label: Text(isEnglish ? 'Add Main Module' : 'เพิ่มโมดูลหลัก'),
                   )
               )
               : const SizedBox.shrink(),
@@ -154,8 +162,7 @@ class ModuleDocumentListTreeWidgetState extends State<ModuleDocumentListTreeWidg
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   }
 
-  // --- Build Methods ---
-  Widget _buildNode(ModuleDocument item, int level) {
+  Widget _buildNode(ModuleDocument item, int level, bool isEnglish) {
     final bool isHeader = item.isDocType == false;
     final List<ModuleDocument> children = _buildTree(_lists, item.id);
     final bool hasChildren = children.isNotEmpty;
@@ -192,37 +199,35 @@ class ModuleDocumentListTreeWidgetState extends State<ModuleDocumentListTreeWidg
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                // Icon ปุ่ม Add สำหรับ Header
                 if (isHeader && widget.enableAddChildButton)
                   IconButton(
                     icon: const Icon(Icons.add_circle_outline, size: 20),
-                    tooltip: 'เพิ่มรายการย่อย',
+                    tooltip: isEnglish ? 'Add Sub-item' : 'เพิ่มรายการย่อย',
                     onPressed: () => widget.onAddChild(item),
                   ),
-                // Icon ปุ่ม Edit
                 widget.enableEditButton
                     ? IconButton(
                         icon: const Icon(Icons.edit,
                             color: Colors.blue, size: 20),
-                        tooltip: 'แก้ไข',
+                        tooltip: isEnglish ? 'Edit' : 'แก้ไข',
                         onPressed: () => widget.onEdit(item),
                       )
                     : const SizedBox.shrink(),
-                // Icon ปุ่ม Delete
                 widget.enableDeleteButton
                     ? IconButton(
                         icon: const Icon(Icons.delete,
                             size: 20, color: Colors.red),
-                        tooltip: 'ลบ',
+                        tooltip: isEnglish ? 'Delete' : 'ลบ',
                         onPressed: () {
                           if (_buildTree(_lists, item.id).isNotEmpty &&
                               item.isDocType == false) {
-                            // ป้องกันการลบหัวบัญชี
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'ไม่สามารถลบรายการที่มีรายการย่อยได้ กรุณาลบรายการย่อยออกก่อน'),
-                                      backgroundColor: Colors.red,),
+                              SnackBar(
+                                content: Text(isEnglish
+                                    ? 'Cannot delete an item with sub-items. Please delete sub-items first.'
+                                    : 'ไม่สามารถลบรายการที่มีรายการย่อยได้ กรุณาลบรายการย่อยออกก่อน'),
+                                backgroundColor: Colors.red,
+                              ),
                             );
                           } else {
                             widget.onDelete(item);
@@ -230,7 +235,6 @@ class ModuleDocumentListTreeWidgetState extends State<ModuleDocumentListTreeWidg
                         },
                       )
                     : const SizedBox.shrink(),
-                // Icon ปุ่ม search
                 widget.enableCardSelect
                     ? IconButton(
                         icon: const Icon(Icons.arrow_right_outlined,
@@ -241,10 +245,12 @@ class ModuleDocumentListTreeWidgetState extends State<ModuleDocumentListTreeWidg
                             Navigator.of(context).pop();
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'ไม่สามารถใช้ได้ เนื่องจากเป็นประเภทหลัก หรือ หยุดใช้'),
-                                      backgroundColor: Colors.red,),
+                              SnackBar(
+                                content: Text(isEnglish
+                                    ? 'Cannot select: this is a main type or inactive'
+                                    : 'ไม่สามารถใช้ได้ เนื่องจากเป็นประเภทหลัก หรือ หยุดใช้'),
+                                backgroundColor: Colors.red,
+                              ),
                             );
                           }
                         },
@@ -257,7 +263,7 @@ class ModuleDocumentListTreeWidgetState extends State<ModuleDocumentListTreeWidg
         if (isExpanded && hasChildren)
           Column(
             children:
-                children.map((child) => _buildNode(child, level + 1)).toList(),
+                children.map((child) => _buildNode(child, level + 1, isEnglish)).toList(),
           ),
       ],
     );
@@ -270,12 +276,12 @@ class ModuleDocumentListTreeWidgetState extends State<ModuleDocumentListTreeWidg
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final List<ModuleDocument> topLevelLists = _buildTree(_lists, null);
 
     return Column(
       children: [
-        _buildListHeader(),
+        _buildListHeader(isEnglish),
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -283,7 +289,7 @@ class ModuleDocumentListTreeWidgetState extends State<ModuleDocumentListTreeWidg
                   child: ListView.builder(
                     itemCount: topLevelLists.length,
                     itemBuilder: (context, index) {
-                      return _buildNode(topLevelLists[index], 0);
+                      return _buildNode(topLevelLists[index], 0, isEnglish);
                     },
                   ),
                 ),

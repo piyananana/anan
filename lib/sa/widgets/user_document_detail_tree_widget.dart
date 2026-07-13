@@ -1,8 +1,10 @@
 // widgets/permission_menu_treeview.dart
 
 import 'package:flutter/material.dart';
-import 'dart:collection'; // สำหรับ HashSet
-import '../models/module_document.dart'; // ตรวจสอบให้แน่ใจว่า path ถูกต้อง
+import 'dart:collection';
+import 'package:provider/provider.dart';
+import '../models/module_document.dart';
+import '../services/language_provider.dart';
 
 class UserDocumentDetailTreeWidget extends StatefulWidget {
   final List<ModuleDocument> lists; // ประเภทเอกสารทั้งหมดที่มีในระบบ
@@ -231,20 +233,24 @@ class _UserDocumentDetailTreeWidgetState
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+
     if (widget.lists.isEmpty) {
-      return const Center(child: Text('ไม่พบรายการประเภทเอกสารในระบบ'));
+      return Center(child: Text(isEnglish
+          ? 'No document types found in the system'
+          : 'ไม่พบรายการประเภทเอกสารในระบบ'));
     }
 
-    // กรองประเภทเอกสารระดับบนสุดที่จะแสดง
     final List<ModuleDocument> topLevelToDisplay = widget.isEditing
-        ? _listRows // ในโหมดแก้ไข แสดงประเภทเอกสารระดับบนสุดทั้งหมด
+        ? _listRows
         : _listRows
             .where((row) => _hasAnyGrantedInSubtree(row))
-            .toList(); // ในโหมด View แสดงเฉพาะประเภทเอกสารระดับบนสุดที่มีการให้สิทธิ์ใน subtree
+            .toList();
 
     if (topLevelToDisplay.isEmpty && !widget.isEditing) {
-      return const Center(
-          child: Text('ผู้ใช้ยังไม่ได้รับสิทธิ์เข้าถึงประเภทเอกสารใดๆ'));
+      return Center(child: Text(isEnglish
+          ? 'User has not been granted access to any document types'
+          : 'ผู้ใช้ยังไม่ได้รับสิทธิ์เข้าถึงประเภทเอกสารใดๆ'));
     }
 
     return SingleChildScrollView(

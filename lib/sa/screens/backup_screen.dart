@@ -688,12 +688,13 @@ class _BackupScreenState extends State<BackupScreen>
   }
 
   Future<void> _startInstantBackup() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
-      _showSnackBar('กำลังเริ่มการสำรองข้อมูลทันที...', Colors.blue);
+      _showSnackBar(isEnglish ? 'Starting instant backup...' : 'กำลังเริ่มการสำรองข้อมูลทันที...', Colors.blue);
       await _backupService.startInstantBackup();
       _fetchInstantBackupStatus();
     } catch (e) {
-      _showSnackBar('เกิดข้อผิดพลาดในการเริ่มการสำรองข้อมูล: $e', Colors.red);
+      _showSnackBar(isEnglish ? 'Error starting backup: $e' : 'เกิดข้อผิดพลาดในการเริ่มการสำรองข้อมูล: $e', Colors.red);
     }
   }
 
@@ -734,12 +735,13 @@ class _BackupScreenState extends State<BackupScreen>
   }
 
   Future<void> _stopInstantBackup() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
-      _showSnackBar('กำลังหยุดการสำรองข้อมูลทันที...', Colors.blue);
+      _showSnackBar(isEnglish ? 'Stopping instant backup...' : 'กำลังหยุดการสำรองข้อมูลทันที...', Colors.blue);
       await _backupService.stopInstantBackup();
       _fetchInstantBackupStatus();
     } catch (e) {
-      _showSnackBar('เกิดข้อผิดพลาดในการหยุดการสำรองข้อมูล: $e', Colors.red);
+      _showSnackBar(isEnglish ? 'Error stopping backup: $e' : 'เกิดข้อผิดพลาดในการหยุดการสำรองข้อมูล: $e', Colors.red);
     }
   }
 
@@ -813,6 +815,7 @@ class _BackupScreenState extends State<BackupScreen>
   }
 
   Future<void> _saveSchedule(String scheduleType) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final scheduleToSave =
           _schedules.firstWhere((s) => s.scheduleType == scheduleType);
@@ -840,95 +843,120 @@ class _BackupScreenState extends State<BackupScreen>
       }
 
       await _backupService.saveSchedule(scheduleToSave.id, scheduleToSave);
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('บันทึกการตั้งค่าสำเร็จ')));
-      _fetchData(); // Refresh data
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Settings saved successfully' : 'บันทึกการตั้งค่าสำเร็จ')));
+      }
+      _fetchData();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการบันทึก: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error saving: $e' : 'เกิดข้อผิดพลาดในการบันทึก: $e')));
+      }
     }
   }
 
   Future<void> _startSchedule(String scheduleType) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final schedule =
           _schedules.firstWhere((s) => s.scheduleType == scheduleType);
       await _backupService.startSchedule(schedule.id);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('เริ่มการทำงานแล้ว')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Schedule started' : 'เริ่มการทำงานแล้ว')));
+      }
       _fetchData();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการเริ่ม: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error starting: $e' : 'เกิดข้อผิดพลาดในการเริ่ม: $e')));
+      }
     }
   }
 
   Future<void> _stopSchedule(String scheduleType) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final schedule =
           _schedules.firstWhere((s) => s.scheduleType == scheduleType);
       await _backupService.stopSchedule(schedule.id);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('หยุดการทำงานแล้ว')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Schedule stopped' : 'หยุดการทำงานแล้ว')));
+      }
       _fetchData();
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาดในการหยุด: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error stopping: $e' : 'เกิดข้อผิดพลาดในการหยุด: $e')));
+      }
     }
   }
 
-  // *** เมธอดใหม่: จัดการการดาวน์โหลดไฟล์
   Future<void> _downloadFile(String filename) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('กำลังดาวน์โหลดไฟล์...')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'Downloading file...' : 'กำลังดาวน์โหลดไฟล์...')));
       if (kIsWeb) {
-        // สำหรับเว็บ: ใช้ url_launcher เพื่อสั่งดาวน์โหลดโดยตรง
         final downloadUrl =
             Uri.parse('$baseUrl/backup/files/download/$filename');
         await launchUrl(downloadUrl, webOnlyWindowName: '_blank');
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content:
-                Text('ดาวน์โหลดสำเร็จ (เบราว์เซอร์จะจัดการการบันทึกไฟล์)')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(isEnglish
+                  ? 'Download started (browser will handle saving)'
+                  : 'ดาวน์โหลดสำเร็จ (เบราว์เซอร์จะจัดการการบันทึกไฟล์)')));
+        }
       } else {
-        // สำหรับ Mobile และ Desktop: ใช้ path_provider
         final response = await _backupService.downloadBackupFile(filename);
 
         final directory = await getDownloadsDirectory();
         if (directory == null) {
-          throw Exception('ไม่สามารถเข้าถึง Downloads directory ได้');
+          throw Exception(isEnglish
+              ? 'Cannot access Downloads directory'
+              : 'ไม่สามารถเข้าถึง Downloads directory ได้');
         }
 
         final savePath = path.join(directory.path, filename);
         final file = File(savePath);
 
         await file.writeAsBytes(response.bodyBytes);
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('ดาวน์โหลดสำเร็จ: ${file.path}')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(isEnglish ? 'Download saved: ${file.path}' : 'ดาวน์โหลดสำเร็จ: ${file.path}')));
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการดาวน์โหลด: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error downloading: $e' : 'เกิดข้อผิดพลาดในการดาวน์โหลด: $e')));
+      }
     }
   }
 
-  // *** เมธอดใหม่: จัดการการลบไฟล์
   Future<void> _deleteFile(String filename) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       await _backupService.deleteBackupFile(filename);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('ลบไฟล์สำเร็จ')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'File deleted successfully' : 'ลบไฟล์สำเร็จ')));
+      }
       _fetchData();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการลบไฟล์: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error deleting file: $e' : 'เกิดข้อผิดพลาดในการลบไฟล์: $e')));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
 
     if (_isLoading && _schedules.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -952,50 +980,53 @@ class _BackupScreenState extends State<BackupScreen>
           _buildUploadRestoreCard(),
           const SizedBox(height: 16),
             _buildScheduleCard(
-              'สำรองข้อมูลปัจจุบัน',
+              isEnglish ? 'Instant Backup' : 'สำรองข้อมูลปัจจุบัน',
               lastBackup: _instantLastBackup,
               status: _instantStatus,
               onStart: _startInstantBackup,
               onStop: _stopInstantBackup,
               isRunning: _isInstantBackupRunning,
             ),
-            // _buildRestoreCard(
-            //   'เรียกคืนข้อมูลปัจจุบัน',
-            //   _instantFiles,
-            // ),
           _buildRestoreSection(
-              'เรียกคืนข้อมูลปัจจุบัน',
+              isEnglish ? 'Restore Instant Data' : 'เรียกคืนข้อมูลปัจจุบัน',
               _instantFiles,
               _selectedInstantFile,
               (file) => setState(() => _selectedInstantFile = file),
-              (filename) => _showRestoreConfirmation(filename, 'ปัจจุบัน')),
+              (filename) => _showRestoreConfirmation(filename,
+                  isEnglish ? 'Instant' : 'ปัจจุบัน')),
           const SizedBox(height: 16),
-          _buildBackupSection('สำรองข้อมูลรายวัน', dailySchedule),
-          // const SizedBox(height: 1),
+          _buildBackupSection(
+              isEnglish ? 'Daily Backup' : 'สำรองข้อมูลรายวัน',
+              dailySchedule),
           _buildRestoreSection(
-              'เรียกคืนข้อมูลรายวัน',
+              isEnglish ? 'Restore Daily Data' : 'เรียกคืนข้อมูลรายวัน',
               _dailyFiles,
               _selectedDailyFile,
               (file) => setState(() => _selectedDailyFile = file),
-              (filename) => _showRestoreConfirmation(filename, 'รายวัน')),
+              (filename) => _showRestoreConfirmation(filename,
+                  isEnglish ? 'Daily' : 'รายวัน')),
           const SizedBox(height: 16),
-          _buildBackupSection('สำรองข้อมูลรายเดือน', monthlySchedule),
-          // const SizedBox(height: 1),
+          _buildBackupSection(
+              isEnglish ? 'Monthly Backup' : 'สำรองข้อมูลรายเดือน',
+              monthlySchedule),
           _buildRestoreSection(
-              'เรียกคืนข้อมูลรายเดือน',
+              isEnglish ? 'Restore Monthly Data' : 'เรียกคืนข้อมูลรายเดือน',
               _monthlyFiles,
               _selectedMonthlyFile,
               (file) => setState(() => _selectedMonthlyFile = file),
-              (filename) => _showRestoreConfirmation(filename, 'รายเดือน')),
+              (filename) => _showRestoreConfirmation(filename,
+                  isEnglish ? 'Monthly' : 'รายเดือน')),
           const SizedBox(height: 16),
-          _buildBackupSection('สำรองข้อมูลรายปี', yearlySchedule),
-          // const SizedBox(height: 1),
+          _buildBackupSection(
+              isEnglish ? 'Yearly Backup' : 'สำรองข้อมูลรายปี',
+              yearlySchedule),
           _buildRestoreSection(
-              'เรียกข้อมูลคืนรายปี',
+              isEnglish ? 'Restore Yearly Data' : 'เรียกข้อมูลคืนรายปี',
               _yearlyFiles,
               _selectedYearlyFile,
               (file) => setState(() => _selectedYearlyFile = file),
-              (filename) => _showRestoreConfirmation(filename, 'รายปี')),
+              (filename) => _showRestoreConfirmation(filename,
+                  isEnglish ? 'Yearly' : 'รายปี')),
         ],
       ),
     );
@@ -1030,20 +1061,30 @@ class _BackupScreenState extends State<BackupScreen>
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const Divider(),
-            Row(
-              children: [
-                const Text('สถานะ: '),
-                Text(
-                  status ?? 'รอเริ่ม',
-                  style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.bold,
+            Builder(builder: (context) {
+              final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(isEnglish ? 'Status: ' : 'สถานะ: '),
+                      Text(
+                        status ?? (isEnglish ? 'Not started' : 'รอเริ่ม'),
+                        style: TextStyle(
+                          color: statusColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            Text('สำรองข้อมูลล่าสุด: ${lastBackup ?? 'ยังไม่ได้สำรอง'}'),
+                  const SizedBox(height: 5),
+                  Text(isEnglish
+                      ? 'Last backup: ${lastBackup ?? 'Not backed up yet'}'
+                      : 'สำรองข้อมูลล่าสุด: ${lastBackup ?? 'ยังไม่ได้สำรอง'}'),
+                ],
+              );
+            }),
             if (onStart != null && onStop != null && isRunning != null)
               Padding(
                 padding: const EdgeInsets.only(top: 15),
@@ -1055,7 +1096,12 @@ class _BackupScreenState extends State<BackupScreen>
                     // padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                     // textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  child: Text(isRunning ? 'หยุด' : 'เริ่ม'),
+                  child: Builder(builder: (context) {
+                    final ie = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+                    return Text(isRunning
+                        ? (ie ? 'Stop' : 'หยุด')
+                        : (ie ? 'Start' : 'เริ่ม'));
+                  }),
                 ),
               ),
           ],
@@ -1089,23 +1135,18 @@ class _BackupScreenState extends State<BackupScreen>
   }
 
   Widget _buildScheduleForm(BackupSchedule schedule) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     if (schedule.scheduleType == 'daily') {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('เลือกวัน:', style: TextStyle(fontSize: 16)),
+          Text(isEnglish ? 'Select days:' : 'เลือกวัน:', style: const TextStyle(fontSize: 16)),
           Wrap(
             spacing: 8.0,
             children: List.generate(7, (index) {
-              final days = [
-                'อาทิตย์',
-                'จันทร์',
-                'อังคาร',
-                'พุธ',
-                'พฤหัสบดี',
-                'ศุกร์',
-                'เสาร์'
-              ];
+              final days = isEnglish
+                  ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                  : ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
               return ChoiceChip(
                 label: Text(days[index]),
                 selected: _dailyDaysOfWeek[index],
@@ -1121,7 +1162,7 @@ class _BackupScreenState extends State<BackupScreen>
           ),
           const SizedBox(height: 16),
           _buildTimePicker(
-            label: 'เลือกเวลา:',
+            label: isEnglish ? 'Select time:' : 'เลือกเวลา:',
             time: _dailyTime,
             onTimeChanged: schedule.isRunning
                 ? null
@@ -1133,24 +1174,13 @@ class _BackupScreenState extends State<BackupScreen>
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('เลือกเดือน:', style: TextStyle(fontSize: 16)),
+          Text(isEnglish ? 'Select months:' : 'เลือกเดือน:', style: const TextStyle(fontSize: 16)),
           Wrap(
             spacing: 8.0,
             children: List.generate(12, (index) {
-              final months = [
-                'ม.ค.',
-                'ก.พ.',
-                'มี.ค.',
-                'เม.ย.',
-                'พ.ค.',
-                'มิ.ย.',
-                'ก.ค.',
-                'ส.ค.',
-                'ก.ย.',
-                'ต.ค.',
-                'พ.ย.',
-                'ธ.ค.'
-              ];
+              final months = isEnglish
+                  ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                  : ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
               return ChoiceChip(
                 label: Text(months[index]),
                 selected: _monthlyMonths[index],
@@ -1166,7 +1196,7 @@ class _BackupScreenState extends State<BackupScreen>
           ),
           const SizedBox(height: 16),
           _buildDropdownPicker(
-            label: 'เลือกวันที่:',
+            label: isEnglish ? 'Select day:' : 'เลือกวันที่:',
             value: _monthlyDayOfMonth,
             items: List.generate(31, (index) => index + 1),
             onChanged: schedule.isRunning
@@ -1175,7 +1205,7 @@ class _BackupScreenState extends State<BackupScreen>
           ),
           const SizedBox(height: 16),
           _buildTimePicker(
-            label: 'เลือกเวลา:',
+            label: isEnglish ? 'Select time:' : 'เลือกเวลา:',
             time: _monthlyTime,
             onTimeChanged: schedule.isRunning
                 ? null
@@ -1188,7 +1218,7 @@ class _BackupScreenState extends State<BackupScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildDatePicker(
-            label: 'เลือกวันที่:',
+            label: isEnglish ? 'Select date:' : 'เลือกวันที่:',
             date: _yearlyDate,
             onDateChanged: schedule.isRunning
                 ? null
@@ -1196,7 +1226,7 @@ class _BackupScreenState extends State<BackupScreen>
           ),
           const SizedBox(height: 16),
           _buildTimePicker(
-            label: 'เลือกเวลา:',
+            label: isEnglish ? 'Select time:' : 'เลือกเวลา:',
             time: _yearlyTime,
             onTimeChanged: schedule.isRunning
                 ? null
@@ -1286,6 +1316,7 @@ class _BackupScreenState extends State<BackupScreen>
   }
 
   Widget _buildStatusIndicator(BackupSchedule schedule) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     if (schedule.isRunning) {
       if (schedule.progressPercent == 100.0) {
         _fetchData();
@@ -1293,8 +1324,8 @@ class _BackupScreenState extends State<BackupScreen>
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('สถานะการทำงาน:',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(isEnglish ? 'Operation status:' : 'สถานะการทำงาน:',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           LinearProgressIndicator(
             value: schedule.progressPercent / 100,
@@ -1310,15 +1341,19 @@ class _BackupScreenState extends State<BackupScreen>
       );
     }
 
-    String message = schedule.message ?? 'ยังไม่ได้เริ่ม';
+    String message = schedule.message ?? (isEnglish ? 'Not started yet' : 'ยังไม่ได้เริ่ม');
     if (schedule.lastBackupTime != null) {
       final lastBackupString = DateFormat('dd MMM yyyy HH:mm')
           .format(schedule.lastBackupTime!.toLocal());
-      message = 'สำรองข้อมูลครั้งล่าสุด: $lastBackupString';
+      message = isEnglish
+          ? 'Last backup: $lastBackupString'
+          : 'สำรองข้อมูลครั้งล่าสุด: $lastBackupString';
     }
 
     return Text(
-      'สถานะ: ${schedule.isRunning ? 'กำลังทำงาน...' : message}',
+      isEnglish
+          ? 'Status: ${schedule.isRunning ? 'Running...' : message}'
+          : 'สถานะ: ${schedule.isRunning ? 'กำลังทำงาน...' : message}',
       style: TextStyle(
         fontSize: 16,
         color: schedule.isRunning ? Colors.green : Colors.grey[600],
@@ -1327,7 +1362,8 @@ class _BackupScreenState extends State<BackupScreen>
   }
 
   Widget _buildActionButtons(BackupSchedule schedule) {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     return Row(
       children: [
         ElevatedButton(
@@ -1341,7 +1377,7 @@ class _BackupScreenState extends State<BackupScreen>
           onPressed: schedule.isRunning
               ? null
               : () => _startSchedule(schedule.scheduleType),
-          child: const Text('เริ่ม'),
+          child: Text(isEnglish ? 'Start' : 'เริ่ม'),
         ),
         const SizedBox(width: 8),
         ElevatedButton(
@@ -1349,7 +1385,7 @@ class _BackupScreenState extends State<BackupScreen>
               ? () => _stopSchedule(schedule.scheduleType)
               : null,
           style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-          child: const Text('หยุด'),
+          child: Text(isEnglish ? 'Stop' : 'หยุด'),
         ),
       ],
     );
@@ -1361,16 +1397,7 @@ class _BackupScreenState extends State<BackupScreen>
       String? selectedFile,
       Function(String?) onFileSelected,
       Function(String) onRestorePressed) {
-    String? selectedFile;
-    if (title.contains('รายวัน')) {
-      selectedFile = _selectedDailyFile;
-    } else if (title.contains('รายเดือน')) {
-      selectedFile = _selectedMonthlyFile;
-    } else if (title.contains('รายปี')) {
-      selectedFile = _selectedYearlyFile;
-    } else if (title.contains('ปัจจุบัน')) {
-      selectedFile = _selectedInstantFile;
-    }
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
 
     return Card(
       elevation: 4,
@@ -1385,7 +1412,9 @@ class _BackupScreenState extends State<BackupScreen>
             ),
             const Divider(),
             if (files.isEmpty)
-              const Text('ไม่มีไฟล์สำรองข้อมูลที่สามารถเรียกคืนได้')
+              Text(isEnglish
+                  ? 'No backup files available to restore'
+                  : 'ไม่มีไฟล์สำรองข้อมูลที่สามารถเรียกคืนได้')
             else
               ...files.map((file) {
                 String displayDate = file;
@@ -1403,7 +1432,7 @@ class _BackupScreenState extends State<BackupScreen>
                   }
                 }
                 return RadioListTile<String>(
-                  title: Text('ไฟล์: $displayDate'),
+                  title: Text('${isEnglish ? 'File' : 'ไฟล์'}: $displayDate'),
                   value: file,
                   groupValue: selectedFile,
                   onChanged: (value) => onFileSelected(value),
@@ -1412,21 +1441,21 @@ class _BackupScreenState extends State<BackupScreen>
                     children: [
                       IconButton(
                         icon: const Icon(Icons.restore, color: Colors.red),
-                        tooltip: "เรียกคืนข้อมูล",
+                        tooltip: isEnglish ? 'Restore data' : 'เรียกคืนข้อมูล',
                         onPressed: file == selectedFile
                             ? () => onRestorePressed(file)
                             : null,
                       ),
                       IconButton(
                         icon: const Icon(Icons.download),
-                        tooltip: "ดาวน์โหลดไฟล์",
+                        tooltip: isEnglish ? 'Download file' : 'ดาวน์โหลดไฟล์',
                         onPressed: file == selectedFile
                             ? () => _downloadFile(file)
                             : null,
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.grey),
-                        tooltip: "ลบไฟล์",
+                        tooltip: isEnglish ? 'Delete file' : 'ลบไฟล์',
                         onPressed: file == selectedFile
                             ? () => _deleteFile(file)
                             : null,
@@ -1462,26 +1491,29 @@ class _BackupScreenState extends State<BackupScreen>
   }
 
   Future<void> _doUploadRestore() async {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     if (_uploadFile == null || _uploadTargetDatabase == null) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.red),
-          SizedBox(width: 8),
-          Text('ยืนยันการ Restore'),
+        title: Row(children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.red),
+          const SizedBox(width: 8),
+          Text(isEnglish ? 'Confirm Restore' : 'ยืนยันการ Restore'),
         ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('ข้อมูลในฐานข้อมูลปลายทางจะถูกแทนที่ทั้งหมด',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            Text(isEnglish
+                ? 'All data in the target database will be replaced'
+                : 'ข้อมูลในฐานข้อมูลปลายทางจะถูกแทนที่ทั้งหมด',
+                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text('ไฟล์: ${_uploadFile!.name}'),
-            Text('ฐานข้อมูลปลายทาง: $_uploadTargetDatabase'),
+            Text('${isEnglish ? 'File' : 'ไฟล์'}: ${_uploadFile!.name}'),
+            Text('${isEnglish ? 'Target database' : 'ฐานข้อมูลปลายทาง'}: $_uploadTargetDatabase'),
           ],
         ),
         actions: [
@@ -1489,7 +1521,8 @@ class _BackupScreenState extends State<BackupScreen>
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('ยืนยัน Restore', style: TextStyle(color: Colors.white)),
+            child: Text(isEnglish ? 'Confirm Restore' : 'ยืนยัน Restore',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1502,7 +1535,9 @@ class _BackupScreenState extends State<BackupScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Restore ไปยัง "$_uploadTargetDatabase" สำเร็จ'),
+            content: Text(isEnglish
+                ? 'Restore to "$_uploadTargetDatabase" completed'
+                : 'Restore ไปยัง "$_uploadTargetDatabase" สำเร็จ'),
             backgroundColor: Colors.green,
           ),
         );
@@ -1511,7 +1546,9 @@ class _BackupScreenState extends State<BackupScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -1520,6 +1557,7 @@ class _BackupScreenState extends State<BackupScreen>
   }
 
   Widget _buildUploadRestoreCard() {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return Card(
       elevation: 4,
       color: Colors.orange.shade50,
@@ -1535,14 +1573,16 @@ class _BackupScreenState extends State<BackupScreen>
             Row(children: [
               Icon(Icons.upload_file, color: Colors.orange.shade800),
               const SizedBox(width: 8),
-              Text('Restore จากไฟล์ที่ดาวน์โหลด',
+              Text(isEnglish ? 'Restore from Downloaded File' : 'Restore จากไฟล์ที่ดาวน์โหลด',
                   style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Colors.orange.shade900)),
             ]),
             const SizedBox(height: 4),
-            Text('สำหรับ restore ข้อมูลจากฐานข้อมูล A ไปยังฐานข้อมูล B',
+            Text(isEnglish
+                ? 'For restoring data from database A to database B'
+                : 'สำหรับ restore ข้อมูลจากฐานข้อมูล A ไปยังฐานข้อมูล B',
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
             const Divider(height: 20),
 
@@ -1556,7 +1596,7 @@ class _BackupScreenState extends State<BackupScreen>
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    _uploadFile?.name ?? 'ยังไม่ได้เลือกไฟล์',
+                    _uploadFile?.name ?? (isEnglish ? 'No file selected' : 'ยังไม่ได้เลือกไฟล์'),
                     style: TextStyle(
                       color: _uploadFile != null ? Colors.black87 : Colors.grey,
                       fontSize: 13,
@@ -1569,7 +1609,7 @@ class _BackupScreenState extends State<BackupScreen>
               ElevatedButton.icon(
                 onPressed: _isUploadRestoring ? null : _pickUploadFile,
                 icon: const Icon(Icons.folder_open, size: 18),
-                label: const Text('เลือกไฟล์'),
+                label: Text(isEnglish ? 'Browse' : 'เลือกไฟล์'),
               ),
             ]),
             const SizedBox(height: 12),
@@ -1578,9 +1618,9 @@ class _BackupScreenState extends State<BackupScreen>
             DropdownButtonFormField<String>(
               isExpanded: true,
               value: _uploadTargetDatabase,
-              decoration: const InputDecoration(
-                labelText: 'ฐานข้อมูลปลายทาง',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Target database' : 'ฐานข้อมูลปลายทาง',
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
               items: _availableDatabases
@@ -1606,7 +1646,9 @@ class _BackupScreenState extends State<BackupScreen>
                         width: 18, height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.restore),
-                label: Text(_isUploadRestoring ? 'กำลัง Restore...' : 'Restore ไปยังฐานข้อมูลที่เลือก'),
+                label: Text(_isUploadRestoring
+                    ? (isEnglish ? 'Restoring...' : 'กำลัง Restore...')
+                    : (isEnglish ? 'Restore to selected database' : 'Restore ไปยังฐานข้อมูลที่เลือก')),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange.shade700,
                   foregroundColor: Colors.white,
@@ -1622,16 +1664,22 @@ class _BackupScreenState extends State<BackupScreen>
 
   // *** เมธอดใหม่: แสดงหน้าต่างยืนยันการเรียกคืนข้อมูล ***
   void _showRestoreConfirmation(String filename, String backupType) {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('ยืนยันการเรียกข้อมูลคืน $backupType'),
-          content: const Text(
-            'คำเตือน: การดำเนินการนี้จะแทนที่ข้อมูลปัจจุบันด้วยข้อมูลสำรองที่เลือก\n'
-            'คุณควรสำรองข้อมูลปัจจุบันไว้ก่อนดำเนินการนี้',
-            style: TextStyle(color: Colors.red),
+          title: Text(isEnglish
+              ? 'Confirm $backupType Restore'
+              : 'ยืนยันการเรียกข้อมูลคืน $backupType'),
+          content: Text(
+            isEnglish
+                ? 'Warning: This operation will replace the current data with the selected backup.\n'
+                  'You should back up the current data before proceeding.'
+                : 'คำเตือน: การดำเนินการนี้จะแทนที่ข้อมูลปัจจุบันด้วยข้อมูลสำรองที่เลือก\n'
+                  'คุณควรสำรองข้อมูลปัจจุบันไว้ก่อนดำเนินการนี้',
+            style: const TextStyle(color: Colors.red),
           ),
           actions: [
             TextButton(
@@ -1652,17 +1700,25 @@ class _BackupScreenState extends State<BackupScreen>
     );
   }
 
-  // *** เมธอดใหม่: ทำการเรียกคืนข้อมูลจริง ***
   Future<void> _restoreData(String filename, String backupType) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('กำลังเรียกข้อมูลคืน $backupType...')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish
+              ? 'Restoring $backupType data...'
+              : 'กำลังเรียกข้อมูลคืน $backupType...')));
       await _backupService.restoreBackup(filename);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('เรียกข้อมูลคืนสำเร็จ')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Restore completed successfully' : 'เรียกข้อมูลคืนสำเร็จ')));
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการเรียกข้อมูลคืน: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'Error restoring data: $e'
+                : 'เกิดข้อผิดพลาดในการเรียกข้อมูลคืน: $e')));
+      }
     }
   }
 }

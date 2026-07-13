@@ -1,9 +1,11 @@
 // widgets/change_password_dialog.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/password_policy.dart';
 import '../screens/home_screen.dart';
 import '../services/auth_service.dart';
+import '../services/language_provider.dart';
 import '../services/password_policy_service.dart';
 import 'password_strength_meter.dart';
 
@@ -35,6 +37,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
   PasswordPolicy? _passwordPolicy;
   bool _isLoadingPolicy = true;
   String? _policyError;
+  bool _isEnglish = false;
 
   // Future<void> _submitChangePassword() async {
   //   if (_formKey.currentState!.validate()) {
@@ -93,37 +96,37 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
 
   String? _validateNewPassword(String? value) {
     if (value == null || value.isEmpty) {
-      return 'กรุณากรอกรหัสผ่านใหม่';
+      return _isEnglish ? 'Please enter a new password' : 'กรุณากรอกรหัสผ่านใหม่';
     }
     if (_passwordPolicy == null) {
-      return 'กำลังโหลดนโยบายรหัสผ่าน...';
+      return _isEnglish ? 'Loading password policy...' : 'กำลังโหลดนโยบายรหัสผ่าน...';
     }
-
     if (value.length < _passwordPolicy!.minLength) {
-      return 'รหัสผ่านต้องมีความยาวอย่างน้อย ${_passwordPolicy!.minLength} ตัวอักษร';
+      return _isEnglish
+          ? 'Password must be at least ${_passwordPolicy!.minLength} characters'
+          : 'รหัสผ่านต้องมีความยาวอย่างน้อย ${_passwordPolicy!.minLength} ตัวอักษร';
     }
     if (_passwordPolicy!.requireUppercase && !value.contains(RegExp(r'[A-Z]'))) {
-      return 'ต้องมีตัวอักษรพิมพ์ใหญ่อย่างน้อย 1 ตัว';
+      return _isEnglish ? 'Must contain at least 1 uppercase letter' : 'ต้องมีตัวอักษรพิมพ์ใหญ่อย่างน้อย 1 ตัว';
     }
     if (_passwordPolicy!.requireLowercase && !value.contains(RegExp(r'[a-z]'))) {
-      return 'ต้องมีตัวอักษรพิมพ์เล็กอย่างน้อย 1 ตัว';
+      return _isEnglish ? 'Must contain at least 1 lowercase letter' : 'ต้องมีตัวอักษรพิมพ์เล็กอย่างน้อย 1 ตัว';
     }
     if (_passwordPolicy!.requireDigits && !value.contains(RegExp(r'[0-9]'))) {
-      return 'ต้องมีตัวเลขอย่างน้อย 1 ตัว';
+      return _isEnglish ? 'Must contain at least 1 digit' : 'ต้องมีตัวเลขอย่างน้อย 1 ตัว';
     }
     if (_passwordPolicy!.requireSpecialChars && !value.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
-      // สามารถกำหนด regex สำหรับอักขระพิเศษที่อนุญาตได้
-      return 'ต้องมีตัวอักษรพิเศษอย่างน้อย 1 ตัว';
+      return _isEnglish ? 'Must contain at least 1 special character' : 'ต้องมีตัวอักษรพิเศษอย่างน้อย 1 ตัว';
     }
-    return null; // Valid
+    return null;
   }
 
   String? _validateConfirmNewPassword(String? value) {
     if (value == null || value.isEmpty) {
-      return 'กรุณายืนยันรหัสผ่านใหม่';
+      return _isEnglish ? 'Please confirm the new password' : 'กรุณายืนยันรหัสผ่านใหม่';
     }
     if (value != _newPasswordController.text) {
-      return 'รหัสผ่านใหม่และการยืนยันไม่ตรงกัน';
+      return _isEnglish ? 'New password and confirmation do not match' : 'รหัสผ่านใหม่และการยืนยันไม่ตรงกัน';
     }
     return null;
   }
@@ -160,7 +163,9 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
         }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาด: ${e.toString().replaceFirst('Exception: ', '')}')),
+          SnackBar(content: Text(_isEnglish
+              ? 'Error: ${e.toString().replaceFirst('Exception: ', '')}'
+              : 'เกิดข้อผิดพลาด: ${e.toString().replaceFirst('Exception: ', '')}')),
         );
       }
     }
@@ -168,13 +173,16 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
+    _isEnglish = context.watch<LanguageProvider>().isEnglish;
     return AlertDialog(
-      title: const Text('เปลี่ยนรหัสผ่าน'),
-      content: 
+      title: Text(_isEnglish ? 'Change Password' : 'เปลี่ยนรหัสผ่าน'),
+      content:
         _isLoadingPolicy
           ? const Center(child: CircularProgressIndicator())
           : _policyError != null
-            ? Center(child: Text('ไม่สามารถโหลดนโยบายรหัสผ่านได้: $_policyError'))
+            ? Center(child: Text(_isEnglish
+                ? 'Cannot load password policy: $_policyError'
+                : 'ไม่สามารถโหลดนโยบายรหัสผ่านได้: $_policyError'))
             : Center(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(16.0),
@@ -186,24 +194,26 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (widget.forceChange)
-                              const Padding(
-                                padding: EdgeInsets.only(bottom: 20),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 20),
                                 child: Text(
-                                  'รหัสผ่านของคุณหมดอายุแล้ว กรุณาเปลี่ยนรหัสผ่านเพื่อดำเนินการต่อ',
-                                  style: TextStyle(color: Colors.red, fontSize: 16),
+                                  _isEnglish
+                                      ? 'Your password has expired. Please change it to continue.'
+                                      : 'รหัสผ่านของคุณหมดอายุแล้ว กรุณาเปลี่ยนรหัสผ่านเพื่อดำเนินการต่อ',
+                                  style: const TextStyle(color: Colors.red, fontSize: 16),
                                   textAlign: TextAlign.center,
                                 ),
                               ),
                             TextFormField(
                               controller: _currentPasswordController,
-                              decoration: const InputDecoration(
-                                labelText: 'รหัสผ่านปัจจุบัน',
-                                border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                labelText: _isEnglish ? 'Current Password' : 'รหัสผ่านปัจจุบัน',
+                                border: const OutlineInputBorder(),
                               ),
                               obscureText: true,
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'กรุณากรอกรหัสผ่านปัจจุบัน';
+                                  return _isEnglish ? 'Please enter your current password' : 'กรุณากรอกรหัสผ่านปัจจุบัน';
                                 }
                                 return null;
                               },
@@ -211,10 +221,12 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _newPasswordController,
-                              decoration: const InputDecoration(
-                                labelText: 'รหัสผ่านใหม่',
-                                border: OutlineInputBorder(),
-                                hintText: 'ตัวอย่าง: P@ssw0rd123 (8+ ตัว, พิมพ์ใหญ่, เล็ก, ตัวเลข, พิเศษ)',
+                              decoration: InputDecoration(
+                                labelText: _isEnglish ? 'New Password' : 'รหัสผ่านใหม่',
+                                border: const OutlineInputBorder(),
+                                hintText: _isEnglish
+                                    ? 'e.g. P@ssw0rd123 (8+ chars, upper, lower, digit, special)'
+                                    : 'ตัวอย่าง: P@ssw0rd123 (8+ ตัว, พิมพ์ใหญ่, เล็ก, ตัวเลข, พิเศษ)',
                               ),
                               obscureText: true,
                               onChanged: (value) {
@@ -228,13 +240,14 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                             PasswordStrengthMeter(
                               password: _newPasswordController.text,
                               policy: _passwordPolicy,
+                              isEnglish: _isEnglish,
                             ),
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _confirmPasswordController,
-                              decoration: const InputDecoration(
-                                labelText: 'ยืนยันรหัสผ่านใหม่',
-                                border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                labelText: _isEnglish ? 'Confirm New Password' : 'ยืนยันรหัสผ่านใหม่',
+                                border: const OutlineInputBorder(),
                               ),
                               obscureText: true,
                               validator: _validateConfirmNewPassword,
@@ -245,18 +258,18 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(vertical: 15),
                               ),
-                              child: const Text('บันทึกรหัสผ่าน'),
+                              child: Text(_isEnglish ? 'Save Password' : 'บันทึกรหัสผ่าน'),
                             ),
-                            !widget.forceChange 
-                              ? const SizedBox(height: 8) 
+                            !widget.forceChange
+                              ? const SizedBox(height: 8)
                               : const SizedBox.shrink(),
-                            !widget.forceChange 
+                            !widget.forceChange
                               ? ElevatedButton(
-                                onPressed: () => Navigator.of(context).pop(false), // ปิด dialog โดยไม่ทำอะไร
+                                onPressed: () => Navigator.of(context).pop(false),
                                 style: ElevatedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(vertical: 15),
                                 ),
-                                child: const Text('ยกเลิก'),
+                                child: Text(_isEnglish ? 'Cancel' : 'ยกเลิก'),
                               )
                               : const SizedBox.shrink(),
                           ],

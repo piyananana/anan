@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../services/language_provider.dart';
 
 class SessionConflictDialog extends StatefulWidget {
   final DateTime? sessionStartedAt;
@@ -19,7 +21,7 @@ class SessionConflictDialog extends StatefulWidget {
 }
 
 class _SessionConflictDialogState extends State<SessionConflictDialog> {
-  static const int _totalSeconds = 120; // confirmToken อายุ 2 นาที
+  static const int _totalSeconds = 120;
   late int _remaining;
   Timer? _timer;
 
@@ -32,7 +34,7 @@ class _SessionConflictDialogState extends State<SessionConflictDialog> {
       setState(() => _remaining--);
       if (_remaining <= 0) {
         _timer?.cancel();
-        if (mounted) widget.onCancel(); // หมดเวลา = ยกเลิก
+        if (mounted) widget.onCancel();
       }
     });
   }
@@ -51,35 +53,46 @@ class _SessionConflictDialogState extends State<SessionConflictDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final fmt = DateFormat('dd/MM/yyyy HH:mm');
     final sessionInfo = widget.sessionStartedAt != null
-        ? 'เริ่มเมื่อ ${fmt.format(widget.sessionStartedAt!.toLocal())}'
-        : 'ไม่ทราบเวลา';
+        ? (isEnglish
+            ? 'Started at ${fmt.format(widget.sessionStartedAt!.toLocal())}'
+            : 'เริ่มเมื่อ ${fmt.format(widget.sessionStartedAt!.toLocal())}')
+        : (isEnglish ? 'Unknown time' : 'ไม่ทราบเวลา');
 
     return AlertDialog(
-      title: const Row(children: [
-        Icon(Icons.devices, color: Colors.orange, size: 28),
-        SizedBox(width: 10),
-        Flexible(child: Text('มีการ Login อยู่แล้ว')),
+      title: Row(children: [
+        const Icon(Icons.devices, color: Colors.orange, size: 28),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(isEnglish ? 'Already Logged In' : 'มีการ Login อยู่แล้ว'),
+        ),
       ]),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'บัญชีนี้กำลัง Login อยู่ที่อีกเครื่องหนึ่ง',
-            style: TextStyle(fontWeight: FontWeight.w500),
+          Text(
+            isEnglish
+                ? 'This account is logged in on another device'
+                : 'บัญชีนี้กำลัง Login อยู่ที่อีกเครื่องหนึ่ง',
+            style: const TextStyle(fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 4),
           Text(sessionInfo,
               style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           const SizedBox(height: 16),
-          const Text('ต้องการ Logout เครื่องนั้นและ Login ที่เครื่องนี้หรือไม่?'),
+          Text(isEnglish
+              ? 'Do you want to logout that device and login here?'
+              : 'ต้องการ Logout เครื่องนั้นและ Login ที่เครื่องนี้หรือไม่?'),
           const SizedBox(height: 16),
           Center(
             child: Column(children: [
-              Text('ยกเลิกอัตโนมัติใน',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+              Text(
+                isEnglish ? 'Auto-cancel in' : 'ยกเลิกอัตโนมัติใน',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
               Text(
                 _timeStr,
                 style: TextStyle(
@@ -98,11 +111,11 @@ class _SessionConflictDialogState extends State<SessionConflictDialog> {
             _timer?.cancel();
             widget.onCancel();
           },
-          child: const Text('ไม่ (ยกเลิก)'),
+          child: Text(isEnglish ? 'No (Cancel)' : 'ไม่ (ยกเลิก)'),
         ),
         ElevatedButton.icon(
           icon: const Icon(Icons.logout, size: 18),
-          label: const Text('ใช่ (Logout เครื่องนั้น)'),
+          label: Text(isEnglish ? 'Yes (Logout That Device)' : 'ใช่ (Logout เครื่องนั้น)'),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.orange[700],
             foregroundColor: Colors.white,
