@@ -3,10 +3,10 @@ import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
-import '../models/account.dart';
+import '../models/gl_account.dart';
 import '../models/gl_dimension.dart';
-import '../services/account_service.dart';
-import '../services/financial_report_builder_service.dart';
+import '../services/gl_account_service.dart';
+import '../services/gl_financial_report_builder_service.dart';
 import '../services/gl_dimension_service.dart';
 import '../widgets/gl_dimension_picker_field.dart';
 

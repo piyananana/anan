@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../sa/utils/sa_menu_scope.dart';
-import '../../gl/models/account.dart';
-import '../../gl/services/account_service.dart';
+import '../../gl/models/gl_account.dart';
+import '../../gl/services/gl_account_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_module_document_service.dart';
 import '../models/cm_bank_account.dart';

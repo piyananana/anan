@@ -1,4 +1,4 @@
-﻿// screens/account_screen.dart
+﻿// screens/gl_account_screen.dart
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -7,10 +7,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
-import '../models/account.dart';
-import '../services/account_service.dart';
-import '../widgets/account_list_tree_widget.dart';
-import '../widgets/account_detail_widget.dart';
+import '../models/gl_account.dart';
+import '../services/gl_account_service.dart';
+import '../widgets/gl_account_list_tree_widget.dart';
+import '../widgets/gl_account_detail_widget.dart';
 
 class AccountScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;

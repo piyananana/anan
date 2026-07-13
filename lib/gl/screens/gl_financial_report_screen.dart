@@ -1,4 +1,4 @@
-﻿// File: screens/gl/financial_report_screen.dart
+﻿// File: screens/gl/gl_financial_report_screen.dart
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -8,12 +8,12 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
-import '../../gl/models/period.dart';
+import '../../gl/models/gl_period.dart';
 import '../../gl/models/gl_dimension.dart';
-import '../../gl/services/period_service.dart';
+import '../../gl/services/gl_period_service.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
-import '../services/financial_report_service.dart';
+import '../services/gl_financial_report_service.dart';
 import '../../sa/models/sa_company.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_company_service.dart';

@@ -8,10 +8,10 @@ import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/gl_dimension.dart';
 import '../models/gl_entry.dart';
-import '../models/period.dart';
+import '../models/gl_period.dart';
 import '../services/gl_dimension_service.dart';
 import '../services/gl_entry_service.dart';
-import '../services/period_service.dart';
+import '../services/gl_period_service.dart';
 import '../widgets/gl_dimension_picker_field.dart';
 
 class GlEntryListWidget extends StatefulWidget {

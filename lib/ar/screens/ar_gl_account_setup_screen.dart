@@ -1,8 +1,8 @@
 ﻿// lib/ar/screens/ar_gl_account_setup_screen.dart
 import 'package:flutter/material.dart';
 import '../../sa/utils/sa_menu_scope.dart';
-import '../../gl/models/account.dart';
-import '../../gl/services/account_service.dart';
+import '../../gl/models/gl_account.dart';
+import '../../gl/services/gl_account_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_module_document_service.dart';
 import '../models/ar_gl_account_setup.dart';

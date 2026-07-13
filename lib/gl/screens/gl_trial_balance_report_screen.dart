@@ -11,9 +11,9 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 
-import '../../gl/models/period.dart';
-import '../../gl/services/period_service.dart';
-import '../../gl/services/trial_balance_report_service.dart';
+import '../../gl/models/gl_period.dart';
+import '../../gl/services/gl_period_service.dart';
+import '../../gl/services/gl_trial_balance_report_service.dart';
 
 // Master Data Services
 import '../../cd/services/cd_branch_service.dart';

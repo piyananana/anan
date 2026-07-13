@@ -28,12 +28,12 @@ import 'cd/services/cd_vat_rate_service.dart';
 import 'cd/services/cd_bank_service.dart';
 import 'cd/services/cd_bank_branch_service.dart';
 
-import 'gl/services/account_service.dart';
+import 'gl/services/gl_account_service.dart';
 import 'gl/services/gl_entry_service.dart';
-import 'gl/services/financial_report_service.dart';
-import 'gl/services/general_ledger_report_service.dart';
-import 'gl/services/period_service.dart';
-import 'gl/services/trial_balance_report_service.dart';
+import 'gl/services/gl_financial_report_service.dart';
+import 'gl/services/gl_general_ledger_report_service.dart';
+import 'gl/services/gl_period_service.dart';
+import 'gl/services/gl_trial_balance_report_service.dart';
 
 import 'ar/services/ar_customer_service.dart';
 import 'ar/services/ar_customer_group_service.dart';

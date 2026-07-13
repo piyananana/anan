@@ -1,4 +1,4 @@
-﻿// screens/account_screen.dart
+﻿// screens/gl_account_screen.dart
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';

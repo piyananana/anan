@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../sa/models/sa_anan_module.dart';
-import '../../gl/models/account.dart';
-import '../../gl/services/account_service.dart';
+import '../../gl/models/gl_account.dart';
+import '../../gl/services/gl_account_service.dart';
 import '../models/ap_vendor_group.dart';
 
 class _Section extends StatefulWidget {

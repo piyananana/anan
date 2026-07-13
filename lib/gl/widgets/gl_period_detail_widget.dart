@@ -5,8 +5,8 @@ import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../models/period.dart';
-import '../services/period_service.dart';
+import '../models/gl_period.dart';
+import '../services/gl_period_service.dart';
 
 class PeriodDetailWidget extends StatefulWidget {
   final Mode mode;

@@ -1,8 +1,8 @@
 ﻿// widgets/cd_zipcode_list_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/account.dart';
-import '../services/account_service.dart';
+import '../models/gl_account.dart';
+import '../services/gl_account_service.dart';
 
 class AccountListTreeWidget extends StatefulWidget {
   final bool enableAddRootButton;

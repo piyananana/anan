@@ -7,10 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_menu_scope.dart';
-import '../models/period.dart';
-import '../services/period_service.dart';
-import '../widgets/period_list_widget.dart';
-import '../widgets/period_detail_widget.dart';
+import '../models/gl_period.dart';
+import '../services/gl_period_service.dart';
+import '../widgets/gl_period_list_widget.dart';
+import '../widgets/gl_period_detail_widget.dart';
 
 class PeriodScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
@@ -487,11 +487,11 @@ class _PeriodScreenState extends State<PeriodScreen>
 
 // // File: gl/screens/gl_period_screen.dart
 // import 'package:flutter/material.dart';
-// import '../models/period.dart';
+// import '../models/gl_period.dart';
 // // import '../models/gl_fiscal_year.dart';
 // // import '../models/gl_posting_period.dart';
-// import '../services/period_service.dart';
-// import '../widgets/period_detail_widget.dart'; 
+// import '../services/gl_period_service.dart';
+// import '../widgets/gl_period_detail_widget.dart'; 
 
 // class PeriodScreen extends StatefulWidget {
 //   const PeriodScreen({super.key});

@@ -1,4 +1,4 @@
-// File: gl/models/period.dart
+﻿// File: gl/models/gl_period.dart
 // เพิ่มฟังก์ชัน Helper นี้ไว้นอก Class หรือใน Class ก็ได้
 DateTime _parseDateSecurely(String? dateStr) {
   if (dateStr == null || dateStr.isEmpty) {

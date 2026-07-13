@@ -1,12 +1,12 @@
-﻿// lib/gl/screens/year_end_closing_screen.dart
+﻿// lib/gl/screens/gl_year_end_closing_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
-import '../models/period.dart';
-import '../models/year_end_closing.dart';
-import '../services/period_service.dart';
-import '../services/year_end_closing_service.dart';
+import '../models/gl_period.dart';
+import '../models/gl_year_end_closing.dart';
+import '../services/gl_period_service.dart';
+import '../services/gl_year_end_closing_service.dart';
 
 class YearEndClosingScreen extends StatefulWidget {
   const YearEndClosingScreen({super.key});

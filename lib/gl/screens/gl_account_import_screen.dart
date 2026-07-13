@@ -13,7 +13,7 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/file_download.dart';
-import '../models/account.dart';
+import '../models/gl_account.dart';
 
 class AccountImportScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;

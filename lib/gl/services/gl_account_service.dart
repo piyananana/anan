@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
 import 'package:file_picker/file_picker.dart'; // Import FilePicker for PlatformFile
 import 'dart:html' as html;
 
-import '../models/account.dart';
+import '../models/gl_account.dart';
 import '../../sa/services/sa_auth_service.dart';
 
 class AccountService {

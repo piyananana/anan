@@ -5,7 +5,7 @@ import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
-import '../models/account.dart';
+import '../models/gl_account.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
 

@@ -11,26 +11,24 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 
-import '../../gl/models/period.dart';
-import '../../gl/services/period_service.dart';
-import '../../gl/services/income_statement_report_service.dart';
+import '../../gl/models/gl_period.dart';
+import '../../gl/services/gl_period_service.dart';
+import '../../gl/services/gl_balance_sheet_report_service.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
 
-class IncomeStatementReportScreen extends StatefulWidget {
-  const IncomeStatementReportScreen({super.key});
+class BalanceSheetReportScreen extends StatefulWidget {
+  const BalanceSheetReportScreen({super.key});
 
   @override
-  State<IncomeStatementReportScreen> createState() =>
-      _IncomeStatementReportScreenState();
+  State<BalanceSheetReportScreen> createState() =>
+      _BalanceSheetReportScreenState();
 }
 
-class _IncomeStatementReportScreenState
-    extends State<IncomeStatementReportScreen> {
+class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
   final CompanyService _companyService = CompanyService();
   final PeriodService _periodService = PeriodService();
-  final IncomeStatementReportService _reportService =
-      IncomeStatementReportService();
+  final BalanceSheetReportService _reportService = BalanceSheetReportService();
   final AuthService authService = AuthService();
   late Map<String, String> headers;
 
@@ -101,7 +99,7 @@ class _IncomeStatementReportScreenState
       _reportData = [];
     });
     try {
-      final data = await _reportService.getIncomeStatement(
+      final data = await _reportService.getBalanceSheet(
         fiscalYearId: _selectedYear!.id,
         periodId: _selectedPeriod?.id,
         branchId: _selectedBranchId,
@@ -148,20 +146,30 @@ class _IncomeStatementReportScreenState
     }
   }
 
+  // ---- Display Filter Logic ----
+
+  /// Returns (shownRows, leafIds):
+  /// - shownRows: header accounts + control accounts that have at least one
+  ///              header sibling (same parent)
+  /// - leafIds: shown accounts that have NO shown children
+  ///            → these are the ones that display an amount
   (List<Map<String, dynamic>>, Set<int>) _computeDisplayFilter(
       List<Map<String, dynamic>> rows) {
+    // Group accounts by parent_id (null = root)
     final Map<int?, List<Map<String, dynamic>>> byParent = {};
     for (var row in rows) {
       final parentId = row['parent_id'] as int?;
       byParent.putIfAbsent(parentId, () => []).add(row);
     }
 
+    // Determine which accounts to show
     final Set<int> shownIds = {};
     for (var row in rows) {
       final id = row['account_id'] as int;
       if (row['is_header'] == true) {
-        shownIds.add(id);
+        shownIds.add(id); // always show header accounts
       } else {
+        // Control account: show only if at least one sibling is a header
         final parentId = row['parent_id'] as int?;
         final siblings = byParent[parentId] ?? [];
         if (siblings.any((s) => s['is_header'] == true)) {
@@ -170,6 +178,7 @@ class _IncomeStatementReportScreenState
       }
     }
 
+    // Build children map (account_id → list of children ids)
     final Map<int, List<int>> childIds = {};
     for (var row in rows) {
       final parentId = row['parent_id'] as int?;
@@ -178,6 +187,7 @@ class _IncomeStatementReportScreenState
       }
     }
 
+    // Leaf = shown account with NO shown children → displays amount
     final Set<int> leafIds = {};
     for (var id in shownIds) {
       final children = childIds[id] ?? [];
@@ -199,40 +209,38 @@ class _IncomeStatementReportScreenState
     setState(() {});
     try {
       final ex = Excel.createExcel();
-      ex.rename('Sheet1', 'IncomeStatement');
-      final s = ex['IncomeStatement'];
+      ex.rename('Sheet1', 'BalanceSheet');
+      final s = ex['BalanceSheet'];
       final hdrBg = ExcelColor.fromHexString('#92D050');
       final totBg = ExcelColor.fromHexString('#BDD7EE');
       final secBg = ExcelColor.fromHexString('#D9E1F2');
 
-      double rawBal(Map<String, dynamic> row) {
-        final bal = double.tryParse(row['end_balance'].toString()) ?? 0.0;
-        return row['normal_balance'] == 'DEBIT' ? bal : -bal;
-      }
-      double revenueDisplay(Map<String, dynamic> row) => -rawBal(row);
-      double expenseDisplay(Map<String, dynamic> row) => rawBal(row);
-
-      final allRevenue = _reportData.where((r) => r['account_type'] == 'REVENUE').toList();
-      final allExpense = _reportData.where((r) => r['account_type'] == 'EXPENSE').toList();
+      double endBal(Map<String, dynamic> row) =>
+          double.tryParse(row['end_balance'].toString()) ?? 0.0;
 
       final _asOfLabel = _selectedPeriod != null
           ? 'ณ วันที่: ${DateFormat('dd/MM/yyyy').format(_selectedPeriod!.periodEndDate)}'
           : 'ปี: ${_selectedYear?.fyCode ?? ''}';
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'งบกำไรขาดทุน (Income Statement)', bold: true);
+      _xlCell(s, 1, 0, 'งบดุล (Balance Sheet)', bold: true);
       _xlCell(s, 2, 0, '$_asOfLabel  |  พิมพ์: $_ts');
 
       int r = 3;
       _xlCell(s, r, 0, 'รหัส/ชื่อบัญชี', bg: hdrBg, bold: true);
-      _xlCell(s, r, 1, 'จำนวนเงิน', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 1, 'ยอดคงเหลือ', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       r++;
 
+      final allAsset    = _reportData.where((row) => row['account_type'] == 'ASSET').toList();
+      final allLiability = _reportData.where((row) => row['account_type'] == 'LIABILITY').toList();
+      final allEquity   = _reportData.where((row) => row['account_type'] == 'EQUITY').toList();
+
       for (final group in [
-        ('รายได้ (REVENUE)', allRevenue, true),
-        ('ค่าใช้จ่าย (EXPENSE)', allExpense, false),
+        ('สินทรัพย์ (ASSET)', allAsset),
+        ('หนี้สิน (LIABILITY)', allLiability),
+        ('ส่วนของเจ้าของ (EQUITY)', allEquity),
       ]) {
-        final (label, rows, isRevenue) = group;
+        final (label, rows) = group;
         _xlCell(s, r, 0, label, bg: secBg, bold: true);
         _xlCell(s, r, 1, '', bg: secBg);
         r++;
@@ -242,7 +250,7 @@ class _IncomeStatementReportScreenState
           final isHeader = row['is_header'] == true;
           final code = row['account_code']?.toString() ?? '';
           final name = row['account_name_thai']?.toString() ?? '';
-          final bal = isRevenue ? revenueDisplay(row) : expenseDisplay(row);
+          final bal  = endBal(row);
           if (!isHeader) sectionTotal += bal;
           _xlCell(s, r, 0, '$code $name', bold: isHeader);
           _xlCell(s, r, 1, bal == 0 ? TextCellValue('') : DoubleCellValue(bal), align: HorizontalAlign.Right, bold: isHeader);
@@ -257,7 +265,7 @@ class _IncomeStatementReportScreenState
       final bytes = ex.encode();
       if (bytes == null) return;
       final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      await downloadFile(bytes, 'งบกำไรขาดทุน_$ts.xlsx');
+      await downloadFile(bytes, 'งบดุล_$ts.xlsx');
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
@@ -288,25 +296,19 @@ class _IncomeStatementReportScreenState
     final printDateStr =
         DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
+    // "ณ วันที่" label
     String asOfLabel;
     if (_selectedPeriod != null) {
       asOfLabel =
           "ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_selectedPeriod!.periodEndDate)}";
     } else if (_periods.length > 1) {
       asOfLabel =
-          "สำหรับปีสิ้นสุด ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_periods.last.periodEndDate)}";
+          "ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_periods.last.periodEndDate)}";
     } else {
       asOfLabel = "ปี ${_selectedYear?.fyCode ?? ''}";
     }
 
     final fmt = NumberFormat("#,##0.00", "en_US");
-
-    String fmtAmt(dynamic val) {
-      final double v = double.tryParse(val.toString()) ?? 0.0;
-      if (v.abs() < 0.001) return "";
-      if (v < 0) return "(${fmt.format(v.abs())})";
-      return fmt.format(v);
-    }
 
     String fmtTotal(double v) {
       if (v < 0) return "(${fmt.format(v.abs())})";
@@ -314,53 +316,60 @@ class _IncomeStatementReportScreenState
     }
 
     // Group by account type
-    final allRevenue =
-        _reportData.where((r) => r['account_type'] == 'REVENUE').toList();
-    final allExpense =
-        _reportData.where((r) => r['account_type'] == 'EXPENSE').toList();
+    final allAsset =
+        _reportData.where((r) => r['account_type'] == 'ASSET').toList();
+    final allLiability =
+        _reportData.where((r) => r['account_type'] == 'LIABILITY').toList();
+    final allEquity =
+        _reportData.where((r) => r['account_type'] == 'EQUITY').toList();
 
-    // rawBal = debit_amount − credit_amount  (ตรงจากตาราง gl_balance_accum)
-    // backend ส่ง end_balance = DEBIT_normal ? (dr−cr) : −(dr−cr)
-    // ดังนั้น: rawBal = DEBIT ? end_balance : −end_balance
-    double rawBal(Map<String, dynamic> row) {
-      final bal = double.tryParse(row['end_balance'].toString()) ?? 0.0;
-      return row['normal_balance'] == 'DEBIT' ? bal : -bal;
-    }
+    // end_balance จาก backend ถูก sign-adjust ตาม normal_balance แล้ว:
+    //   DEBIT normal  → end_balance = dr−cr (บวกเมื่อมียอด)
+    //   CREDIT normal → end_balance = cr−dr (บวกเมื่อมียอด)
+    // ดังนั้นใช้ end_balance ตรงๆ สำหรับทุกหมวด
+    double endBal(Map<String, dynamic> row) =>
+        double.tryParse(row['end_balance'].toString()) ?? 0.0;
 
-    // REVENUE display = −rawBal  (rawBal < 0 → display บวก = รายได้)
-    // EXPENSE display = +rawBal  (rawBal > 0 → display บวก = ค่าใช้จ่าย)
-    double revenueDisplay(Map<String, dynamic> row) => -rawBal(row);
-    double expenseDisplay(Map<String, dynamic> row) => rawBal(row);
+    // section total = sum ของ end_balance ของ control accounts ทั้งหมดในหมวด
+    double sumSection(List<Map<String, dynamic>> rows) =>
+        rows
+            .where((r) => r['is_header'] == false)
+            .fold(0.0, (s, r) => s + endBal(r));
 
-    // Section totals (control accounts only)
-    final totalRevenue = allRevenue
-        .where((r) => r['is_header'] == false)
-        .fold(0.0, (s, r) => s + revenueDisplay(r));
-    final totalExpense = allExpense
-        .where((r) => r['is_header'] == false)
-        .fold(0.0, (s, r) => s + expenseDisplay(r));
-
-    // Net income: Σ rawBal ของทุก P&L account
-    // ถ้าลบ = กำไร (แสดงบวก), ถ้าบวก = ขาดทุน (วงเล็บ)
-    final netRaw = [...allRevenue, ...allExpense]
-        .where((r) => r['is_header'] == false)
-        .fold(0.0, (s, r) => s + rawBal(r));
-    final netIncome = -netRaw; // บวก = กำไร, ลบ = ขาดทุน (วงเล็บ)
+    final totalAsset     = sumSection(allAsset);
+    final totalLiability = sumSection(allLiability);
+    final totalEquity    = sumSection(allEquity);
+    // LIABILITY และ EQUITY เป็น credit-normal: ถ้า sum end_balance ติดลบ
+    // หมายความว่ามียอด credit อยู่ ต้องแสดงเป็นบวก
+    final rawTotalLE = totalLiability + totalEquity;
+    final totalLiabilityEquity = rawTotalLE < 0 ? -rawTotalLE : rawTotalLE;
 
     // Apply display filter per section
-    final (revenueRows, revenueLeafs) = _computeDisplayFilter(allRevenue);
-    final (expenseRows, expenseLeafs) = _computeDisplayFilter(allExpense);
+    final (assetRows, assetLeafs) = _computeDisplayFilter(allAsset);
+    final (liabilityRows, liabilityLeafs) = _computeDisplayFilter(allLiability);
+    final (equityRows, equityLeafs) = _computeDisplayFilter(allEquity);
 
-    // Build account rows — displayFn กำหนดค่าที่แสดงต่อแถว
     List<pw.Widget> buildAccountRows(
         List<Map<String, dynamic>> rows,
-        Set<int> showAmountIds,
-        double Function(Map<String, dynamic>) displayFn) {
+        Set<int> showAmountIds) {
       return rows.map((row) {
         final id = row['account_id'] as int;
         final level = _accountLevels[id] ?? 0;
         final indent = level * 12.0;
         final showAmt = showAmountIds.contains(id);
+        const textStyle = pw.TextStyle(fontSize: 12);
+
+        final displayVal = showAmt ? endBal(row) : 0.0;
+        String amtStr = "";
+        if (showAmt) {
+          if (displayVal.abs() < 0.001) {
+            amtStr = "";
+          } else if (displayVal < 0) {
+            amtStr = "(${fmt.format(displayVal.abs())})";
+          } else {
+            amtStr = fmt.format(displayVal);
+          }
+        }
 
         return pw.Table(
           columnWidths: const {
@@ -376,17 +385,14 @@ class _IncomeStatementReportScreenState
                       left: indent, top: 3, bottom: 3, right: 4),
                   child: pw.Text(
                     "${row['account_name_thai']}",
-                    style: const pw.TextStyle(fontSize: 12),
+                    style: textStyle,
                   ),
                 ),
                 pw.Padding(
                   padding: const pw.EdgeInsets.symmetric(vertical: 3),
                   child: pw.Align(
                     alignment: pw.Alignment.centerRight,
-                    child: pw.Text(
-                      showAmt ? fmtAmt(displayFn(row)) : "",
-                      style: const pw.TextStyle(fontSize: 12),
-                    ),
+                    child: pw.Text(amtStr, style: textStyle),
                   ),
                 ),
               ],
@@ -396,7 +402,7 @@ class _IncomeStatementReportScreenState
       }).toList();
     }
 
-    // Section header widget
+    // Section header widget (colored background)
     pw.Widget buildSectionHeader(String title) {
       return pw.Container(
         width: double.infinity,
@@ -409,7 +415,7 @@ class _IncomeStatementReportScreenState
       );
     }
 
-    // Section total row
+    // Section total row (top border + bold)
     pw.Widget buildSectionTotal(String label, double total) {
       return pw.Padding(
         padding: const pw.EdgeInsets.only(top: 2, bottom: 8),
@@ -452,9 +458,8 @@ class _IncomeStatementReportScreenState
       );
     }
 
-    // Net income row (thick top border)
-    pw.Widget buildNetIncomeRow(double total) {
-      final label = total >= 0 ? "กำไรสุทธิ (Net Income)" : "ขาดทุนสุทธิ (Net Loss)";
+    // Grand total row (double top border)
+    pw.Widget buildGrandTotal(double total) {
       return pw.Padding(
         padding: const pw.EdgeInsets.only(top: 4),
         child: pw.Table(
@@ -473,7 +478,7 @@ class _IncomeStatementReportScreenState
                 ),
                 child: pw.Align(
                   alignment: pw.Alignment.centerRight,
-                  child: pw.Text(label,
+                  child: pw.Text("รวมหนี้สินและส่วนของเจ้าของ",
                       style: pw.TextStyle(
                           fontWeight: pw.FontWeight.bold, fontSize: 12)),
                 ),
@@ -511,7 +516,7 @@ class _IncomeStatementReportScreenState
           pw.Expanded(
               flex: 7,
               child: pw.Text(
-                "งบกำไรขาดทุน (Income Statement)",
+                "งบดุล (Balance Sheet)",
                 textAlign: pw.TextAlign.center,
                 style:
                     pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
@@ -559,10 +564,10 @@ class _IncomeStatementReportScreenState
       build: (context) {
         final List<pw.Widget> widgets = [];
 
-        // --- REVENUE section ---
-        widgets.add(buildSectionHeader("รายได้ (Revenue)"));
-        widgets.addAll(buildAccountRows(revenueRows, revenueLeafs, revenueDisplay));
-        widgets.add(buildSectionTotal("รวมรายได้", totalRevenue));
+        // --- ASSET section ---
+        widgets.add(buildSectionHeader("สินทรัพย์ (Assets)"));
+        widgets.addAll(buildAccountRows(assetRows, assetLeafs));
+        widgets.add(buildSectionTotal("รวมสินทรัพย์", totalAsset));
 
         if (_pageBreakPerType) {
           widgets.add(pw.NewPage());
@@ -570,13 +575,24 @@ class _IncomeStatementReportScreenState
           widgets.add(pw.SizedBox(height: 8));
         }
 
-        // --- EXPENSE section ---
-        widgets.add(buildSectionHeader("ค่าใช้จ่าย (Expense)"));
-        widgets.addAll(buildAccountRows(expenseRows, expenseLeafs, expenseDisplay));
-        widgets.add(buildSectionTotal("รวมค่าใช้จ่าย", totalExpense));
+        // --- LIABILITY section ---
+        widgets.add(buildSectionHeader("หนี้สิน (Liabilities)"));
+        widgets.addAll(buildAccountRows(liabilityRows, liabilityLeafs));
+        widgets.add(buildSectionTotal("รวมหนี้สิน", totalLiability));
 
-        // --- Net Income ---
-        widgets.add(buildNetIncomeRow(netIncome));
+        if (_pageBreakPerType) {
+          widgets.add(pw.NewPage());
+        } else {
+          widgets.add(pw.SizedBox(height: 8));
+        }
+
+        // --- EQUITY section ---
+        widgets.add(buildSectionHeader("ส่วนของเจ้าของ (Equity)"));
+        widgets.addAll(buildAccountRows(equityRows, equityLeafs));
+        widgets.add(buildSectionTotal("รวมส่วนของเจ้าของ", totalEquity));
+
+        // --- Grand total ---
+        widgets.add(buildGrandTotal(totalLiabilityEquity));
 
         return widgets;
       },
@@ -592,7 +608,7 @@ class _IncomeStatementReportScreenState
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
-        backgroundColor: Colors.green[800],
+        backgroundColor: Colors.deepOrange[900],
         foregroundColor: Colors.white,
         actions: [
           if (_isExporting)
@@ -623,7 +639,7 @@ class _IncomeStatementReportScreenState
         children: [
           Container(
             width: 36,
-            color: Colors.green[800],
+            color: Colors.deepOrange[900],
             child: IconButton(
               icon: Icon(
                 _isFilterExpanded ? Icons.filter_list_off : Icons.filter_list,
@@ -717,7 +733,7 @@ class _IncomeStatementReportScreenState
                     SwitchListTile(
                       title: const Text('ขึ้นหน้าใหม่ทุกหมวดบัญชี'),
                       subtitle:
-                          const Text('แยกรายได้/ค่าใช้จ่ายคนละหน้า'),
+                          const Text('แยกสินทรัพย์/หนี้สิน/ทุนคนละหน้า'),
                       value: _pageBreakPerType,
                       onChanged: (v) =>
                           setState(() => _pageBreakPerType = v),
@@ -731,7 +747,7 @@ class _IncomeStatementReportScreenState
                         icon: const Icon(Icons.picture_as_pdf),
                         label: const Text('ประมวลผลรายงาน'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[800],
+                          backgroundColor: Colors.deepOrange[900],
                           foregroundColor: Colors.white,
                         ),
                         onPressed: _isLoading ? null : _generateReport,

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
-import '../../gl/models/account.dart';
-import '../../gl/services/account_service.dart';
+import '../../gl/models/gl_account.dart';
+import '../../gl/services/gl_account_service.dart';
 import '../models/ar_customer.dart';
 import '../models/ar_customer_group.dart';
 import 'ar_customer_detail_widget.dart'

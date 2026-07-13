@@ -1,4 +1,4 @@
-// lib/gl/models/year_end_closing.dart
+﻿// lib/gl/models/gl_year_end_closing.dart
 
 class ClosingConfig {
   final int? id;

@@ -3,7 +3,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../sa/services/sa_auth_service.dart';
-import '../models/period.dart';
+import '../models/gl_period.dart';
 
 class PeriodService {
   final String baseUrl = AppConfig.apiGl;
@@ -250,7 +250,7 @@ class PeriodService {
 // import 'dart:convert';
 // import 'package:http/http.dart' as http;
 // import '../../sa/services/sa_auth_service.dart';
-// import '../models/period.dart';
+// import '../models/gl_period.dart';
 // // import '../models/gl_posting_period.dart';
 
 // class PeriodService {

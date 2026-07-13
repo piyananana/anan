@@ -13,8 +13,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 
-import '../models/account.dart';
-import '../services/account_service.dart';
+import '../models/gl_account.dart';
+import '../services/gl_account_service.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
 import '../../sa/services/sa_auth_service.dart';

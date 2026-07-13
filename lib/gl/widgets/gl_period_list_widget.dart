@@ -1,8 +1,8 @@
 ﻿// widgets/cd_zipcode_list_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/period.dart';
-import '../services/period_service.dart';
+import '../models/gl_period.dart';
+import '../services/gl_period_service.dart';
 
 class PeriodListWidget extends StatefulWidget {
   final bool enableAddButton;
