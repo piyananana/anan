@@ -63,7 +63,7 @@ import '../../ar/screens/ar_receipt_payment_report_screen.dart';
 import '../../ar/screens/ar_credit_limit_report_screen.dart';
 import '../../ar/screens/ar_customer_report_screen.dart';
 import '../../ar/screens/ar_fx_gain_loss_report_screen.dart';
-import '../../vt/screens/vat_report_screen.dart';
+import '../../vt/screens/vt_vat_report_screen.dart';
 import '../../ar/screens/ar_collector_screen.dart';
 import '../../ar/screens/ar_gl_account_setup_screen.dart';
 import '../../ar/screens/ar_reset_screen.dart';
