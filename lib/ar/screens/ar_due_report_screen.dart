@@ -11,6 +11,8 @@ import '../models/ar_customer_group.dart';
 import '../services/ar_aging_report_service.dart';
 import '../services/ar_customer_service.dart';
 import '../services/ar_customer_group_service.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
 import '../../cd/models/cd_salesperson.dart';
 import '../../cd/services/cd_salesperson_service.dart';
 import '../../sa/models/sa_company.dart';
@@ -37,6 +39,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
   final ArCustomerGroupService _groupService = ArCustomerGroupService();
   final ArCustomerService _customerService = ArCustomerService();
   final SalespersonService _salespersonService = SalespersonService();
+  final BranchService _branchService = BranchService();
   final TextEditingController _monthsIntervalCtrl =
       TextEditingController(text: '1');
 
@@ -53,6 +56,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
   DateTime _asOfDate = DateTime.now();
   List<UserBranch> _allowedBranches = [];
+  List<Branch> _allBranches = [];
   int? _selectedBranchId;
 
   // Customer filters
@@ -141,13 +145,27 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
       _companyService.fetchCompany(),
       _groupService.fetchActiveRows(),
       _salespersonService.fetchRows(),
+      _branchService.fetchRows(),
     ]);
     _company = results[0] as Company?;
     _customerGroups = results[1] as List<ArCustomerGroup>;
     _salespersons = (results[2] as List<Salesperson>)
         .where((s) => s.isActive)
         .toList();
+    _allBranches = results[3] as List<Branch>;
     if (mounted) setState(() {});
+  }
+
+  // UserBranch (allowed branches) has no English name — resolve it from the
+  // full bilingual Branch list by branchId.
+  String _resolveBranchName(int? branchId, String fallbackThai, bool isEnglish) {
+    if (isEnglish) {
+      final match = _allBranches.where((b) => b.id == branchId);
+      if (match.isNotEmpty && match.first.branchNameEng.isNotEmpty) {
+        return match.first.branchNameEng;
+      }
+    }
+    return fallbackThai;
   }
 
   Future<void> _generateReport() async {
@@ -291,7 +309,9 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
       for (final cust in _reportData) {
         final code = cust['customer_code'] as String? ?? '';
-        final name = cust['customer_name_th'] as String? ?? '';
+        final nameTh = cust['customer_name_th'] as String? ?? '';
+        final nameEn = _customerDetailMap[code]?.customerNameEn;
+        final name = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
         final invoices = (cust['invoices'] as List?) ?? [];
         final custBuckets = List<double>.filled(totalBuckets, 0.0);
         for (final inv in invoices) {
@@ -382,7 +402,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
           (b) => b.branchId == _selectedBranchId,
           orElse: () => _allowedBranches.first);
       conditions.add(
-          '${isEnglish ? 'Branch' : 'สาขา'}: ${b.branchCode} ${b.branchNameThai}');
+          '${isEnglish ? 'Branch' : 'สาขา'}: ${b.branchCode} ${_resolveBranchName(b.branchId, b.branchNameThai, isEnglish)}');
     }
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
@@ -445,9 +465,10 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
       }
       final code   = c['customer_code'] as String? ?? '';
       final detail = _customerDetailMap[code];
+      final nameEn = detail?.customerNameEn;
       return (
         code:         code,
-        name:         c['customer_name_th'] as String? ?? '',
+        name:         isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (c['customer_name_th'] as String? ?? ''),
         buckets:      buckets,
         total:        buckets.fold(0.0, (s, v) => s + v),
         invoices:     (c['invoices'] as List? ?? [])
@@ -851,7 +872,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                           DropdownMenuItem<int?>(
                                             value: b.branchId,
                                             child: Text(
-                                                '${b.branchCode}  ${b.branchNameThai}',
+                                                '${b.branchCode}  ${_resolveBranchName(b.branchId, b.branchNameThai, isEnglish)}',
                                                 overflow:
                                                     TextOverflow.ellipsis),
                                           )),
@@ -1058,9 +1079,10 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(
-                                  child: Text(
-                                      'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(
+                                  child: Text(isEnglish
+                                      ? 'Please select conditions and click Generate'
+                                      : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),

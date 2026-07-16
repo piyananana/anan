@@ -3649,7 +3649,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           refDocNo: header.refDocNo?.isNotEmpty == true ? header.refDocNo! : _docNo,
           docDate: header.docDate,
           description: header.description,
-          lines: details.map((d) => _GlLine(d.accountCode, d.accountName, d.description, d.debitLc, d.creditLc, d.debitFc, d.creditFc)).toList(),
+          lines: details.map((d) => _GlLine(d.accountCode, isEnglish && d.accountNameEng.isNotEmpty ? d.accountNameEng : d.accountName, d.description, d.debitLc, d.creditLc, d.debitFc, d.creditFc)).toList(),
           currencyCode: _selectedCurrency?.currencyCode ?? '',
         );
       } catch (e) {
@@ -3915,6 +3915,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final isFcDoc = _selectedCurrency?.baseCurrencyFlag == false;
     final setup = _docSetup;
     final sysType = int.tryParse(_selectedDocType?.sysDocType ?? '');
+    final cashFallback = isEnglish ? 'Cash' : 'เงินสด';
+    final advanceFallback = isEnglish ? 'Advance' : 'เงินมัดจำ';
 
     if (setup == null) {
       if (_totalAmountFc == 0 && _detailRows.isEmpty && _applyRows.isEmpty && _advanceRefundRows.isEmpty) return lines;
@@ -4030,10 +4032,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         ?? _selectedCustomer?.groupArAccountCode
         ?? _selectedCustomer?.arAccountCode
         ?? acctCode(arAccountId, '—');
-    final arName = setup.arAccountName
+    final arName = acctName(arAccountId, setup.arAccountName
         ?? _selectedCustomer?.groupArAccountNameThai
         ?? _selectedCustomer?.arAccountNameThai
-        ?? acctName(arAccountId, 'AR Account');
+        ?? (isEnglish ? 'AR Account' : 'บัญชีลูกหนี้'));
 
     // Resolve payment GL account: per-type setup → CM (p.glAccountId) → cash default
     String paymentAcctCode(_PaymentRow p) {
@@ -4072,12 +4074,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         case 'BILL_OF_EXCHANGE': setupId = setup.billOfExchangeAccountId;  setupName = setup.billOfExchangeAccountName; break;
         default: break;
       }
-      if (setupName != null && setupName.isNotEmpty) return setupName;
       if (setupId != null) {
-        final n = acctName(setupId, null);
-        return n.isEmpty ? (setup.cashAccountName ?? 'Cash') : n;
+        final n = acctName(setupId, setupName);
+        return n.isEmpty ? (setup.cashAccountName ?? cashFallback) : n;
       }
-      return acctName(p.glAccountId, setup.cashAccountName ?? 'Cash');
+      if (setupName != null && setupName.isNotEmpty) return setupName;
+      return acctName(p.glAccountId, setup.cashAccountName ?? cashFallback);
     }
 
     // ── Invoice (10) / DN (30) / DN-with-bill (35) ────────────────────────
@@ -4094,30 +4096,32 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         final revCode  = acctCode(r.revenueAccountId, setup.revenueAccountCode);
         final revName  = acctName(r.revenueAccountId, setup.revenueAccountName);
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : revenueDefaultDesc);
+        final revenueFallback = isEnglish ? 'Revenue' : 'รายได้';
         if (setup.discountAccountId != null && disc > 0) {
-          lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, 0, sub * lc, 0, isFcDoc ? sub : 0));
+          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, 0, sub * lc, 0, isFcDoc ? sub : 0));
           final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, notSetupDiscountLabel);
-          final discName = setup.discountAccountName ?? acctName(setup.discountAccountId, discountPaidLabel);
+          final discName = acctName(setup.discountAccountId, setup.discountAccountName ?? discountPaidLabel);
           lines.add(_GlLine(discCode, discName.isEmpty ? discountPaidLabel : discName, discountPaidLabel, disc * lc, 0, isFcDoc ? disc : 0, 0));
         } else {
-          lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
+          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
         }
         if (vat > 0) {
+          final vatOutputFallback = isEnglish ? 'VAT Output' : 'ภาษีขาย';
           String vatAcctCode, vatAcctName;
           if (r.isDeferredVat) {
             vatAcctCode = setup.vatPendingOutputAccountCode ?? notSetupVatPendingLabel;
-            vatAcctName = setup.vatPendingOutputAccountName ?? deferredVatLabel;
+            vatAcctName = acctName(setup.vatPendingOutputAccountId, setup.vatPendingOutputAccountName ?? deferredVatLabel);
           } else {
             final vr = _vatRates.cast<VatRate?>().firstWhere((v) => v?.vatCode == r.vatType, orElse: () => null);
             if (vr?.glAccountCode != null && vr!.glAccountCode!.isNotEmpty) {
               vatAcctCode = vr.glAccountCode!;
-              vatAcctName = vr.glAccountName ?? setup.vatOutputAccountName ?? 'VAT Output';
+              vatAcctName = acctName(vr.glAccountId, vr.glAccountName ?? setup.vatOutputAccountName ?? vatOutputFallback);
             } else if (setup.vatOutputAccountCode != null && setup.vatOutputAccountCode!.isNotEmpty) {
               vatAcctCode = setup.vatOutputAccountCode!;
-              vatAcctName = setup.vatOutputAccountName ?? 'VAT Output';
+              vatAcctName = acctName(setup.vatOutputAccountId, setup.vatOutputAccountName ?? vatOutputFallback);
             } else {
               vatAcctCode = notSetupVatLabel2;
-              vatAcctName = 'VAT Output';
+              vatAcctName = vatOutputFallback;
             }
           }
           lines.add(_GlLine(vatAcctCode, vatAcctName, vatDesc2, 0, vat * lc, 0, isFcDoc ? vat : 0));
@@ -4138,30 +4142,32 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         final revCode  = acctCode(r.revenueAccountId, setup.revenueAccountCode);
         final revName  = acctName(r.revenueAccountId, setup.revenueAccountName);
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : revenueDefaultDesc);
+        final revenueFallback = isEnglish ? 'Revenue' : 'รายได้';
         if (setup.discountAccountId != null && disc > 0) {
-          lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, sub * lc, 0, isFcDoc ? sub : 0, 0));
+          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, sub * lc, 0, isFcDoc ? sub : 0, 0));
           final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, notSetupDiscountLabel);
-          final discName = setup.discountAccountName ?? acctName(setup.discountAccountId, discountPaidLabel);
+          final discName = acctName(setup.discountAccountId, setup.discountAccountName ?? discountPaidLabel);
           lines.add(_GlLine(discCode, discName.isEmpty ? discountPaidLabel : discName, discountPaidLabel, 0, disc * lc, 0, isFcDoc ? disc : 0));
         } else {
-          lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
+          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
         }
         if (vat > 0) {
+          final vatOutputFallback = isEnglish ? 'VAT Output' : 'ภาษีขาย';
           String vatAcctCode, vatAcctName;
           if (r.isDeferredVat) {
             vatAcctCode = setup.vatPendingOutputAccountCode ?? notSetupVatPendingLabel;
-            vatAcctName = setup.vatPendingOutputAccountName ?? deferredVatLabel;
+            vatAcctName = acctName(setup.vatPendingOutputAccountId, setup.vatPendingOutputAccountName ?? deferredVatLabel);
           } else {
             final vr = _vatRates.cast<VatRate?>().firstWhere((v) => v?.vatCode == r.vatType, orElse: () => null);
             if (vr?.glAccountCode != null && vr!.glAccountCode!.isNotEmpty) {
               vatAcctCode = vr.glAccountCode!;
-              vatAcctName = vr.glAccountName ?? setup.vatOutputAccountName ?? 'VAT Output';
+              vatAcctName = acctName(vr.glAccountId, vr.glAccountName ?? setup.vatOutputAccountName ?? vatOutputFallback);
             } else if (setup.vatOutputAccountCode != null && setup.vatOutputAccountCode!.isNotEmpty) {
               vatAcctCode = setup.vatOutputAccountCode!;
-              vatAcctName = setup.vatOutputAccountName ?? 'VAT Output';
+              vatAcctName = acctName(setup.vatOutputAccountId, setup.vatOutputAccountName ?? vatOutputFallback);
             } else {
               vatAcctCode = notSetupVatLabel2;
-              vatAcctName = 'VAT Output';
+              vatAcctName = vatOutputFallback;
             }
           }
           lines.add(_GlLine(vatAcctCode, vatAcctName, vatDesc2, vat * lc, 0, isFcDoc ? vat : 0, 0));
@@ -4171,7 +4177,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     // ── CN-with-bill (55) ────────────────────────────────────────────────
     else if (sysType == arDocTypeCreditNoteWithBill) {
       final revCode = setup.revenueAccountCode ?? '—';
-      final revName = setup.revenueAccountName ?? 'Revenue';
+      final revName = acctName(setup.revenueAccountId, setup.revenueAccountName ?? (isEnglish ? 'Revenue' : 'รายได้'));
       for (final a in _applyRows) {
         lines.add(_GlLine(revCode, revName, '$creditNoteDesc ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
       }
@@ -4180,24 +4186,24 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     // ── Advance Receipt (60) ────────────────────────────────────────────
     else if (sysType == arDocTypeAdvanceReceipt) {
       if (_paymentRows.isEmpty) {
-        lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', advanceReceivedDesc2, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        lines.add(_GlLine(setup.cashAccountCode ?? '—', acctName(setup.cashAccountId, setup.cashAccountName ?? cashFallback), advanceReceivedDesc2, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
       } else {
         for (final p in _paymentRows) {
           final amt = double.tryParse(p.amountCtrl.text) ?? 0;
           lines.add(_GlLine(
             paymentAcctCode(p),
-            paymentAcctName(p).isEmpty ? 'Cash' : paymentAcctName(p),
+            paymentAcctName(p).isEmpty ? cashFallback : paymentAcctName(p),
             p.paymentMethodName ?? advanceReceivedDesc2,
             amt * lc, 0, isFcDoc ? amt : 0, 0,
           ));
         }
       }
-      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', advanceReceivedLabel2, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceFallback), advanceReceivedLabel2, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
     }
     // ── Advance Refund (65) ──────────────────────────────────────────────
     else if (sysType == arDocTypeAdvanceRefund) {
-      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', advanceRefundDesc2, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
-      lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', payAdvanceRefundDesc2, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceFallback), advanceRefundDesc2, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+      lines.add(_GlLine(setup.cashAccountCode ?? '—', acctName(setup.cashAccountId, setup.cashAccountName ?? cashFallback), payAdvanceRefundDesc2, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
     }
     // ── Receipt (80) ────────────────────────────────────────────────────
     else if (sysType == arDocTypeReceipt) {
@@ -4230,7 +4236,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       // DR: Cash/Bank per payment method (or single cash line)
       if (_paymentRows.isEmpty) {
         if (totalCashLc > 0.005) {
-          lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', receivePaymentDesc2, totalCashLc, 0, isFcReceipt ? _totalAmountFc : 0, 0));
+          lines.add(_GlLine(setup.cashAccountCode ?? '—', acctName(setup.cashAccountId, setup.cashAccountName ?? cashFallback), receivePaymentDesc2, totalCashLc, 0, isFcReceipt ? _totalAmountFc : 0, 0));
         }
       } else {
         for (final p in _paymentRows) {
@@ -4238,7 +4244,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           if (amt <= 0) continue;
           lines.add(_GlLine(
             paymentAcctCode(p),
-            paymentAcctName(p).isEmpty ? 'Cash' : paymentAcctName(p),
+            paymentAcctName(p).isEmpty ? cashFallback : paymentAcctName(p),
             p.paymentMethodName ?? receivePaymentDesc2,
             amt * lc, 0, isFcReceipt ? amt : 0, 0,
           ));
@@ -4248,7 +4254,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       // DR: เงินมัดจำรับ (ตัดมัดจำ)
       if (totalAdvanceDeducted > 0.005) {
         lines.add(_GlLine(
-          setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance',
+          setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceFallback),
           advanceDeductDesc, totalAdvanceDeducted * lc, 0, isFcReceipt ? totalAdvanceDeducted : 0, 0,
         ));
       }
@@ -4268,14 +4274,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         if (fxNet >= 0.005 && setup.fxGainAccountId != null) {
           lines.add(_GlLine(
             setup.fxGainAccountCode ?? acctCode(setup.fxGainAccountId, '—'),
-            setup.fxGainAccountName?.isNotEmpty == true ? setup.fxGainAccountName! : acctName(setup.fxGainAccountId, fxGainName),
+            acctName(setup.fxGainAccountId, setup.fxGainAccountName ?? fxGainName),
             fxGainDesc,
             0, fxNet,
           ));
         } else if (fxNet <= -0.005 && setup.fxLossAccountId != null) {
           lines.add(_GlLine(
             setup.fxLossAccountCode ?? acctCode(setup.fxLossAccountId, '—'),
-            setup.fxLossAccountName?.isNotEmpty == true ? setup.fxLossAccountName! : acctName(setup.fxLossAccountId, fxLossName),
+            acctName(setup.fxLossAccountId, setup.fxLossAccountName ?? fxLossName),
             fxLossDesc,
             fxNet.abs(), 0,
           ));
@@ -4286,12 +4292,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       if (deferredVatLc > 0.005 && setup.vatPendingOutputAccountId != null && setup.vatOutputAccountId != null) {
         lines.add(_GlLine(
           setup.vatPendingOutputAccountCode ?? acctCode(setup.vatPendingOutputAccountId, '—'),
-          setup.vatPendingOutputAccountName ?? acctName(setup.vatPendingOutputAccountId, deferredVatRecognizedName),
+          acctName(setup.vatPendingOutputAccountId, setup.vatPendingOutputAccountName ?? deferredVatRecognizedName),
           deferredVatRecognizeDesc, deferredVatLc, 0,
         ));
         lines.add(_GlLine(
           setup.vatOutputAccountCode ?? acctCode(setup.vatOutputAccountId, '—'),
-          setup.vatOutputAccountName ?? acctName(setup.vatOutputAccountId, 'VAT Output'),
+          acctName(setup.vatOutputAccountId, setup.vatOutputAccountName ?? (isEnglish ? 'VAT Output' : 'ภาษีขาย')),
           deferredVatRecognizedDesc, 0, deferredVatLc,
         ));
       }

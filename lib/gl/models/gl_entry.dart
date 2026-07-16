@@ -145,7 +145,8 @@ class GlEntryDetail {
   int id;
   int accountId;
   String accountCode; // Display
-  String accountName; // Display
+  String accountName; // Display (Thai)
+  String accountNameEng; // Display (English)
   String description;
   // double debit;
   // double credit;
@@ -167,6 +168,7 @@ class GlEntryDetail {
     required this.accountId,
     this.accountCode = '',
     this.accountName = '',
+    this.accountNameEng = '',
     this.description = '',
     this.debitFc = 0.0,
     this.creditFc = 0.0,
@@ -185,6 +187,7 @@ class GlEntryDetail {
       accountId:   json['account_id'] ?? 0,
       accountCode: json['account_code'] ?? '',
       accountName: json['account_name_thai'] ?? '',
+      accountNameEng: json['account_name_eng'] ?? '',
       description: json['description'] ?? '',
       debitFc:     double.tryParse(json['debit_fc'].toString()) ?? 0.0,
       creditFc:    double.tryParse(json['credit_fc'].toString()) ?? 0.0,
@@ -212,123 +215,3 @@ class GlEntryDetail {
         'dim5_id':     dim5Id,
       };
 }
-
-// class GlEntryHeader {
-//   final int id;
-//   int docId;
-//   String docNo;
-//   String docCode; // Display
-//   String docName; // Display
-//   DateTime docDate;
-//   DateTime postingDate;
-//   String refNo;
-//   String description;
-//   String status; // Draft, Posted, Deleted
-//   double totalDebit;
-//   double totalCredit;
-//   int periodId;
-//   int currencyId;
-//   double exchangeRate;
-
-//   // สำหรับการแสดงผล/แก้ไข
-//   bool isAutoNumbering;
-
-//   GlEntryHeader({
-//     this.id = 0,
-//     required this.docId,
-//     this.docNo = '',
-//     this.docCode = '',
-//     this.docName = '',
-//     required this.docDate,
-//     required this.postingDate,
-//     this.refNo = '',
-//     this.description = '',
-//     this.status = 'Draft',
-//     this.totalDebit = 0.0,
-//     this.totalCredit = 0.0,
-//     this.periodId = 0,
-//     this.currencyId = 1,
-//     this.exchangeRate = 1.0,
-//     this.isAutoNumbering = false,
-//   });
-
-//   factory GlEntryHeader.fromJson(Map<String, dynamic> json) {
-//     return GlEntryHeader(
-//       id: json['id'] ?? 0,
-//       docId: json['doc_id'] ?? 0,
-//       docNo: json['doc_no'] ?? '',
-//       docCode: json['doc_code'] ?? '',
-//       docName: json['doc_name_thai'] ?? '',
-//       docDate: json['doc_date'] != null ? DateTime.parse(json['doc_date']) : DateTime.now(),
-//       postingDate: json['posting_date'] != null ? DateTime.parse(json['posting_date']) : DateTime.now(),
-//       refNo: json['ref_no'] ?? '',
-//       description: json['description'] ?? '',
-//       status: json['status'] ?? 'Draft',
-//       totalDebit: double.tryParse(json['total_debit_lc'].toString()) ?? 0.0,
-//       totalCredit: double.tryParse(json['total_credit_lc'].toString()) ?? 0.0,
-//       periodId: json['period_id'] ?? 0,
-//       currencyId: json['currency_id'] ?? 1,
-//       exchangeRate: double.tryParse(json['exchange_rate'].toString()) ?? 1.0,
-//       isAutoNumbering: json['is_auto_numbering'] ?? false,
-//     );
-//   }
-
-//   Map<String, dynamic> toJson() {
-//     return {
-//       'doc_id': docId,
-//       'doc_no': docNo,
-//       'doc_date': docDate.toIso8601String(),
-//       'posting_date': postingDate.toIso8601String(),
-//       'ref_no': refNo,
-//       'description': description,
-//       'period_id': periodId,
-//       'currency_id': currencyId,
-//       'exchange_rate': exchangeRate,
-//       'total_debit': totalDebit,
-//       'total_credit': totalCredit,
-//       'created_by': 1, // Replace with actual user ID
-//       'updated_by': 1,
-//     };
-//   }
-// }
-
-// class GlEntryDetail {
-//   int id;
-//   int accountId;
-//   String accountCode; // Display
-//   String accountName; // Display
-//   String description;
-//   double debit;
-//   double credit;
-//   int? branchId;
-//   int? projectId;
-//   int? businessUnitId;
-
-//   GlEntryDetail({
-//     this.id = 0,
-//     required this.accountId,
-//     this.accountCode = '',
-//     this.accountName = '',
-//     this.description = '',
-//     this.debit = 0.0,
-//     this.credit = 0.0,
-//     this.branchId,
-//     this.projectId,
-//     this.businessUnitId,
-//   });
-
-//   factory GlEntryDetail.fromJson(Map<String, dynamic> json) {
-//     return GlEntryDetail(
-//       id: json['id'] ?? 0,
-//       accountId: json['account_id'] ?? 0,
-//       accountCode: json['account_code'] ?? '',
-//       accountName: json['account_name_thai'] ?? '',
-//       description: json['description'] ?? '',
-//       debit: double.tryParse(json['debit_lc'].toString()) ?? 0.0,
-//       credit: double.tryParse(json['credit_lc'].toString()) ?? 0.0,
-//       branchId: json['branch_id'],
-//       projectId: json['project_id'],
-//       businessUnitId: json['business_unit_id'],
-//     );
-//   }
-// }

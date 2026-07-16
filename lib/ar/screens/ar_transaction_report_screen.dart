@@ -174,7 +174,7 @@ class _ArTransactionReportScreenState
     if (_selectedBranchId != null) {
       final b = _branches.firstWhere((b) => b.id == _selectedBranchId,
           orElse: () => _branches.first);
-      conditions.add('${isEnglish ? 'Branch' : 'สาขา'}: ${b.branchCode} ${b.branchNameThai}');
+      conditions.add('${isEnglish ? 'Branch' : 'สาขา'}: ${b.branchCode} ${isEnglish && b.branchNameEng.isNotEmpty ? b.branchNameEng : b.branchNameThai}');
     }
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
@@ -318,7 +318,8 @@ class _ArTransactionReportScreenState
     for (final cust in _reportData) {
       totalCustomers++;
       final code = cust['customer_code'] as String? ?? '';
-      final name = cust['customer_name_th'] as String? ?? '';
+      final nameEn = cust['customer_name_en'] as String?;
+      final name = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (cust['customer_name_th'] as String? ?? '');
       final amts = [
         (cust['inv_amount'] as num?)?.toDouble() ?? 0,
         (cust['dn_amount']  as num?)?.toDouble() ?? 0,
@@ -565,7 +566,7 @@ class _ArTransactionReportScreenState
                                             DropdownMenuItem<int?>(
                                               value: b.id,
                                               child: Text(
-                                                  '${b.branchCode}  ${b.branchNameThai}',
+                                                  '${b.branchCode}  ${isEnglish && b.branchNameEng.isNotEmpty ? b.branchNameEng : b.branchNameThai}',
                                                   overflow:
                                                       TextOverflow.ellipsis),
                                             )),
@@ -884,7 +885,8 @@ class _ArTransactionReportScreenState
       for (final cust in _reportData) {
         totalCustomers++;
         final code = cust['customer_code']   as String? ?? '';
-        final name = cust['customer_name_th'] as String? ?? '';
+        final nameEn = cust['customer_name_en'] as String?;
+        final name = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (cust['customer_name_th'] as String? ?? '');
         final amts = [
           (cust['inv_amount'] as num?)?.toDouble() ?? 0,
           (cust['dn_amount']  as num?)?.toDouble() ?? 0,

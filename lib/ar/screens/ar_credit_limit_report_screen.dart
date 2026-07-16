@@ -269,7 +269,8 @@ class _ArCreditLimitReportScreenState
     for (final row in _reportData) {
       totalCustomers++;
       final code        = row['customer_code']    as String? ?? '';
-      final name        = row['customer_name_th'] as String? ?? '';
+      final nameEn      = row['customer_name_en'] as String?;
+      final name        = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (row['customer_name_th'] as String? ?? '');
       final limit       = (row['credit_limit']    as num?)?.toDouble() ?? 0;
       final outstanding = (row['outstanding']     as num?)?.toDouble() ?? 0;
       final remaining   = (row['remaining']       as num?)?.toDouble() ?? 0;
@@ -681,7 +682,8 @@ class _ArCreditLimitReportScreenState
       for (final r in _reportData) {
         totalCustomers++;
         final code        = r['customer_code']    as String? ?? '';
-        final name        = r['customer_name_th'] as String? ?? '';
+        final nameEn      = r['customer_name_en'] as String?;
+        final name        = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (r['customer_name_th'] as String? ?? '');
         final limit       = (r['credit_limit']    as num?)?.toDouble() ?? 0;
         final outstanding = (r['outstanding']     as num?)?.toDouble() ?? 0;
         final remaining   = (r['remaining']       as num?)?.toDouble() ?? 0;

@@ -14,6 +14,8 @@ import '../models/ar_customer_group.dart';
 import '../services/ar_aging_report_service.dart';
 import '../services/ar_customer_service.dart';
 import '../services/ar_customer_group_service.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
 import '../../cd/models/cd_salesperson.dart';
 import '../../cd/services/cd_salesperson_service.dart';
 import '../../sa/models/sa_company.dart';
@@ -38,6 +40,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
   final ArCustomerGroupService _groupService = ArCustomerGroupService();
   final ArCustomerService _customerService = ArCustomerService();
   final SalespersonService _salespersonService = SalespersonService();
+  final BranchService _branchService = BranchService();
   final TextEditingController _daysIntervalCtrl =
       TextEditingController(text: '30');
 
@@ -54,6 +57,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
   DateTime _asOfDate = DateTime.now();
   List<UserBranch> _allowedBranches = [];
+  List<Branch> _allBranches = [];
   int? _selectedBranchId;
 
   // Customer filters
@@ -124,13 +128,27 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       _companyService.fetchCompany(),
       _groupService.fetchActiveRows(),
       _salespersonService.fetchRows(),
+      _branchService.fetchRows(),
     ]);
     _company = results[0] as Company?;
     _customerGroups = results[1] as List<ArCustomerGroup>;
     _salespersons = (results[2] as List<Salesperson>)
         .where((s) => s.isActive)
         .toList();
+    _allBranches = results[3] as List<Branch>;
     if (mounted) setState(() {});
+  }
+
+  // UserBranch (allowed branches) has no English name — resolve it from the
+  // full bilingual Branch list by branchId.
+  String _resolveBranchName(int? branchId, String fallbackThai, bool isEnglish) {
+    if (isEnglish) {
+      final match = _allBranches.where((b) => b.id == branchId);
+      if (match.isNotEmpty && match.first.branchNameEng.isNotEmpty) {
+        return match.first.branchNameEng;
+      }
+    }
+    return fallbackThai;
   }
 
   Future<void> _generateReport() async {
@@ -350,7 +368,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       final b = _allowedBranches.firstWhere(
           (b) => b.branchId == _selectedBranchId,
           orElse: () => _allowedBranches.first);
-      conditions.add('${isEnglish ? "Branch" : "สาขา"}: ${b.branchCode} ${b.branchNameThai}');
+      conditions.add('${isEnglish ? "Branch" : "สาขา"}: ${b.branchCode} ${_resolveBranchName(b.branchId, b.branchNameThai, isEnglish)}');
     }
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
@@ -805,7 +823,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                           DropdownMenuItem<int?>(
                                             value: b.branchId,
                                             child: Text(
-                                                '${b.branchCode}  ${b.branchNameThai}',
+                                                '${b.branchCode}  ${_resolveBranchName(b.branchId, b.branchNameThai, l.isEnglish)}',
                                                 overflow:
                                                     TextOverflow.ellipsis),
                                           )),
@@ -1015,9 +1033,10 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(
-                                  child: Text(
-                                      'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(
+                                  child: Text(l.isEnglish
+                                      ? 'Please select conditions and click Generate'
+                                      : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),

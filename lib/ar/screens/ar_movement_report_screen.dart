@@ -161,7 +161,8 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
 
       for (final cust in _reportData) {
         final code = cust['customer_code'] as String? ?? '';
-        final name = cust['customer_name_th'] as String? ?? '';
+        final nameEn = cust['customer_name_en'] as String?;
+        final name = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (cust['customer_name_th'] as String? ?? '');
         final openBal = (cust['opening_balance'] as num?)?.toDouble() ?? 0.0;
 
         // Opening balance row
@@ -457,7 +458,8 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
         pw.TextStyle italic) {
       final openingBal = (customer['opening_balance'] as num?)?.toDouble() ?? 0;
       final code = customer['customer_code'] as String? ?? '';
-      final name = customer['customer_name_th'] as String? ?? '';
+      final custNameEn = customer['customer_name_en'] as String?;
+      final name = isEnglish && (custNameEn ?? '').isNotEmpty ? custNameEn! : (customer['customer_name_th'] as String? ?? '');
 
       // ใช้ paired view ถ้า matchDocs = true
       final rawTxns = (customer['transactions'] as List? ?? [])
@@ -989,9 +991,10 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
                           ? const Center(
                               child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(
-                                  child: Text(
-                                      'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(
+                                  child: Text(isEnglish
+                                      ? 'Please select conditions and click Generate'
+                                      : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
