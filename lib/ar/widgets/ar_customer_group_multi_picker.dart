@@ -9,14 +9,14 @@ class ArCustomerGroupMultiPicker extends StatelessWidget {
   final List<ArCustomerGroup> groups;
   final List<int> selectedIds;
   final ValueChanged<List<int>> onChanged;
-  final String label;
+  final String? label;
 
   const ArCustomerGroupMultiPicker({
     super.key,
     required this.groups,
     required this.selectedIds,
     required this.onChanged,
-    this.label = 'กลุ่มลูกค้า',
+    this.label,
   });
 
   Future<void> _pick(BuildContext context) async {
@@ -37,9 +37,10 @@ class ArCustomerGroupMultiPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final hasValue = selectedIds.isNotEmpty;
+    final effectiveLabel = label ?? (isEnglish ? 'Customer Groups' : 'กลุ่มลูกค้า');
     return InputDecorator(
       decoration: InputDecoration(
-        labelText: label,
+        labelText: effectiveLabel,
         border: const OutlineInputBorder(),
         isDense: true,
         suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [

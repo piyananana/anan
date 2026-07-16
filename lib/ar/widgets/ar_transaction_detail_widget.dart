@@ -14,6 +14,8 @@ import '../../cd/services/cd_currency_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
 import '../../gl/models/gl_period.dart';
 import '../../gl/services/gl_period_service.dart';
 import '../../cd/models/cd_vat_rate.dart';
@@ -57,6 +59,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   final CurrencyService _currencyService = CurrencyService();
   final PeriodService _periodService = PeriodService();
   final AuthService _authService = AuthService();
+  final BranchService _branchService = BranchService();
+  List<Branch> _allBranches = [];
   final VatRateService _vatRateService = VatRateService();
   final ArGlAccountSetupService _glSetupService = ArGlAccountSetupService();
   final GlEntryService _glEntryService = GlEntryService();
@@ -224,6 +228,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         _periodService.fetchOpenGlPeriods(),
         _vatRateService.fetchRows(),
         _dimService.fetchActiveTypes(),
+        _branchService.fetchRows(),
       ]);
       _allowedDocTypes = results[0] as List<ModuleDocument>;
       _customers = results[1] as List<ArCustomer>;
@@ -232,6 +237,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       _openPeriods = results[4] as List<PostingPeriod>;
       _vatRates = (results[5] as List<VatRate>).where((v) => v.isActive).toList();
       _dimTypes = results[6] as List<GlDimensionType>;
+      _allBranches = results[7] as List<Branch>;
 
       // Load values for each active dimension type
       final dimValueResults = await Future.wait(
@@ -1539,6 +1545,18 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     return _vatRates.isNotEmpty ? _vatRates.first.vatCode : vatCode;
   }
 
+  // UserBranch (allowed branches) has no English name — resolve it from the
+  // full bilingual Branch list (loaded in _initMasterData) by branchId.
+  String _resolveBranchName(int? branchId, String fallbackThai, bool isEnglish) {
+    if (isEnglish) {
+      final match = _allBranches.where((b) => b.id == branchId);
+      if (match.isNotEmpty && match.first.branchNameEng.isNotEmpty) {
+        return match.first.branchNameEng;
+      }
+    }
+    return fallbackThai;
+  }
+
   // ---- Show branch picker dialog ----
   Future<void> _showBranchDialog() async {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
@@ -1568,7 +1586,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               leading: _selectedBranch?.branchId == b.branchId
                   ? const Icon(Icons.check_circle, color: Colors.teal, size: 18)
                   : const SizedBox(width: 18),
-              title: Text('${b.branchCode}  ${b.branchNameThai}',
+              title: Text('${b.branchCode}  ${_resolveBranchName(b.branchId, b.branchNameThai, isEnglish)}',
                   style: const TextStyle(fontSize: 14)),
               onTap: () => Navigator.of(ctx).pop(b),
             )).toList(),
@@ -1879,7 +1897,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   ),
                   child: Text(
                     _selectedBranch != null
-                        ? '${_selectedBranch!.branchCode}  ${_selectedBranch!.branchNameThai}'
+                        ? '${_selectedBranch!.branchCode}  ${_resolveBranchName(_selectedBranch!.branchId, _selectedBranch!.branchNameThai, isEnglish)}'
                         : (isEnglish ? '— Not specified —' : '— ไม่ระบุสาขา —'),
                     style: TextStyle(
                         color: _selectedBranch == null ? Colors.grey[500] : null,

@@ -600,14 +600,19 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                                         : 'ประเภทเอกสารวางบิล',
                                     border: const OutlineInputBorder(),
                                     isDense: true),
-                                items: _bcDocTypes.map((d) =>
-                                    DropdownMenuItem<int?>(
+                                items: _bcDocTypes.map((d) {
+                                  final nameEng = d['doc_name_eng'] as String?;
+                                  final name = l.isEnglish && (nameEng?.isNotEmpty ?? false)
+                                      ? nameEng!
+                                      : (d['doc_name_thai'] ?? '');
+                                  return DropdownMenuItem<int?>(
                                       value: d['id'] as int?,
                                       child: Text(
-                                          '${d['doc_code'] ?? ''}  ${d['doc_name_thai'] ?? ''}',
+                                          '${d['doc_code'] ?? ''}  $name',
                                           overflow:
                                               TextOverflow.ellipsis),
-                                    )).toList(),
+                                    );
+                                }).toList(),
                                 onChanged: (v) =>
                                     setState(() => _selectedBcDocId = v),
                               ),
