@@ -219,6 +219,7 @@ class _MenuScreenState extends State<MenuScreen>
 
   Future<void> _submitMenu() async {
     if (!_formKey.currentState!.validate()) return;
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
 
     final masterService = Provider.of<MenuService>(context, listen: false);
     String? message;
@@ -236,7 +237,7 @@ class _MenuScreenState extends State<MenuScreen>
           contentType: _contentType,
           contentData: _contentDataController.text.isEmpty ? null : _contentDataController.text,
         );
-        message = 'เพิ่มเมนู "${newMenu.menuName}" สำเร็จ';
+        message = isEnglish ? 'Menu "${newMenu.localName(isEnglish)}" added successfully' : 'เพิ่มเมนู "${newMenu.menuName}" สำเร็จ';
       } else if (_nodeMode == NodeMode.edit && _selectedNode != null) {
         final updatedMenu = await masterService.updateMenu(
           _selectedNode!.id,
@@ -250,7 +251,7 @@ class _MenuScreenState extends State<MenuScreen>
           contentType: _contentType,
           contentData: _contentDataController.text.isEmpty ? null : _contentDataController.text,
         );
-        message = 'แก้ไขเมนู "${updatedMenu.menuName}" สำเร็จ';
+        message = isEnglish ? 'Menu "${updatedMenu.localName(isEnglish)}" updated successfully' : 'แก้ไขเมนู "${updatedMenu.menuName}" สำเร็จ';
       }
       _clearForm();
       await _refreshAllMenus(); // โหลดเมนูใหม่หลังจากเพิ่ม/แก้ไข
@@ -261,7 +262,7 @@ class _MenuScreenState extends State<MenuScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาด: ${e.toString()}')));
+            SnackBar(content: Text(isEnglish ? 'Error: ${e.toString()}' : 'เกิดข้อผิดพลาด: ${e.toString()}')));
       }
     }
   }
@@ -353,12 +354,12 @@ class _MenuScreenState extends State<MenuScreen>
         await _refreshAllMenus();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('ลบเมนูทั้งหมดสำเร็จ')));
+              SnackBar(content: Text(l.isEnglish ? 'All menus deleted successfully' : 'ลบเมนูทั้งหมดสำเร็จ')));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')));
+              content: Text(l.isEnglish ? 'Error deleting all: ${e.toString()}' : 'เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')));
         }
       }
     }
@@ -373,6 +374,7 @@ class _MenuScreenState extends State<MenuScreen>
 
 // --- ปรับปรุง: Import/Export Logic ---
   Future<void> _importData() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() {
       _isImportingOrExporting = true;
     });
@@ -396,13 +398,13 @@ class _MenuScreenState extends State<MenuScreen>
         await _refreshAllMenus(); // <-- เรียก _refreshAllMenus ที่ถูกปรับปรุง
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Import เมนูสำเร็จ!')),
+            SnackBar(content: Text(isEnglish ? 'Menu import successful!' : 'Import เมนูสำเร็จ!')),
           );
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ยกเลิกการเลือกไฟล์')),
+            SnackBar(content: Text(isEnglish ? 'File selection canceled' : 'ยกเลิกการเลือกไฟล์')),
           );
         }
       }
@@ -410,7 +412,7 @@ class _MenuScreenState extends State<MenuScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Import: ${e.toString()}')),
+              content: Text(isEnglish ? 'Error importing: ${e.toString()}' : 'เกิดข้อผิดพลาดในการ Import: ${e.toString()}')),
         );
       }
     } finally {
@@ -421,6 +423,7 @@ class _MenuScreenState extends State<MenuScreen>
   }
 
   Future<void> _exportData() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() {
       _isImportingOrExporting = true;
     });
@@ -428,15 +431,15 @@ class _MenuScreenState extends State<MenuScreen>
       await Provider.of<MenuService>(context, listen: false).exportMenu();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Export เมนูสำเร็จ! ไฟล์ถูกบันทึกใน Downloads')),
+          SnackBar(
+              content: Text(isEnglish ? 'Menu export successful! File saved to Downloads' : 'Export เมนูสำเร็จ! ไฟล์ถูกบันทึกใน Downloads')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Export: ${e.toString()}')),
+              content: Text(isEnglish ? 'Error exporting: ${e.toString()}' : 'เกิดข้อผิดพลาดในการ Export: ${e.toString()}')),
         );
       }
     } finally {

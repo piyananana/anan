@@ -104,20 +104,29 @@ class GlDimensionValueDetailWidgetState
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     if (widget.isPlaceholder || widget.mode == GlDimValueMode.none) {
-      return const Center(
-        child: Text('เลือกรายการจากด้านซ้าย หรือกดปุ่ม + เพื่อเพิ่มข้อมูลใหม่',
-            style: TextStyle(color: Colors.grey)),
+      return Center(
+        child: Text(
+            isEnglish
+                ? 'Select an item from the left, or press + to add new data'
+                : 'เลือกรายการจากด้านซ้าย หรือกดปุ่ม + เพื่อเพิ่มข้อมูลใหม่',
+            style: const TextStyle(color: Colors.grey)),
       );
     }
 
-    final typeName = widget.selectedType?.nameThai ?? 'Dimension';
+    final selectedType = widget.selectedType;
+    final typeName = selectedType == null
+        ? 'Dimension'
+        : (isEnglish && (selectedType.nameEng ?? '').isNotEmpty
+            ? selectedType.nameEng!
+            : selectedType.nameThai);
     final String title = switch (widget.mode) {
-      GlDimValueMode.add      => 'เพิ่ม $typeName',
-      GlDimValueMode.addChild => 'เพิ่ม $typeName (ย่อย)',
-      GlDimValueMode.edit     => 'แก้ไข $typeName',
-      GlDimValueMode.view     => 'ดู $typeName',
+      GlDimValueMode.add      => isEnglish ? 'Add $typeName' : 'เพิ่ม $typeName',
+      GlDimValueMode.addChild => isEnglish ? 'Add $typeName (Child)' : 'เพิ่ม $typeName (ย่อย)',
+      GlDimValueMode.edit     => isEnglish ? 'Edit $typeName' : 'แก้ไข $typeName',
+      GlDimValueMode.view     => isEnglish ? 'View $typeName' : 'ดู $typeName',
       _                       => typeName,
     };
 
@@ -151,10 +160,11 @@ class GlDimensionValueDetailWidgetState
                 child: TextFormField(
                   controller: _codeCtrl,
                   readOnly: _isReadOnly || widget.mode == GlDimValueMode.edit,
-                  decoration: _fieldDeco('รหัส', required: true),
+                  decoration: _fieldDeco(isEnglish ? 'Code' : 'รหัส', required: true),
                   textCapitalization: TextCapitalization.characters,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'กรุณาระบุรหัส' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? (isEnglish ? 'Please enter a code' : 'กรุณาระบุรหัส')
+                      : null,
                 ),
               ),
               const SizedBox(width: 12),
@@ -162,9 +172,10 @@ class GlDimensionValueDetailWidgetState
                 child: TextFormField(
                   controller: _nameTh,
                   readOnly: _isReadOnly,
-                  decoration: _fieldDeco('ชื่อภาษาไทย', required: true),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'กรุณาระบุชื่อ' : null,
+                  decoration: _fieldDeco(isEnglish ? 'Thai Name' : 'ชื่อภาษาไทย', required: true),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? (isEnglish ? 'Please enter a name' : 'กรุณาระบุชื่อ')
+                      : null,
                 ),
               ),
             ]),
@@ -174,7 +185,7 @@ class GlDimensionValueDetailWidgetState
             TextFormField(
               controller: _nameEng,
               readOnly: _isReadOnly,
-              decoration: _fieldDeco('ชื่อภาษาอังกฤษ'),
+              decoration: _fieldDeco(isEnglish ? 'English Name' : 'ชื่อภาษาอังกฤษ'),
             ),
             const SizedBox(height: 14),
 
@@ -183,12 +194,14 @@ class GlDimensionValueDetailWidgetState
               DropdownButtonFormField<int?>(
                 isExpanded: true,
                 value: _parentId,
-                decoration: _fieldDeco('ระดับบน (Parent)'),
+                decoration: _fieldDeco(isEnglish ? 'Parent Level' : 'ระดับบน (Parent)'),
                 items: [
-                  const DropdownMenuItem<int?>(value: null, child: Text('— ไม่มี (ระดับบนสุด) —')),
+                  DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text(isEnglish ? '— None (Top Level) —' : '— ไม่มี (ระดับบนสุด) —')),
                   ...parents.map((p) => DropdownMenuItem<int?>(
                         value: p.id,
-                        child: Text('${p.valueCode} — ${p.valueNameThai}'),
+                        child: Text('${p.valueCode} — ${isEnglish && (p.valueNameEng ?? '').isNotEmpty ? p.valueNameEng! : p.valueNameThai}'),
                       )),
                 ],
                 onChanged: _isReadOnly ? null : (v) => setState(() => _parentId = v),
@@ -202,7 +215,10 @@ class GlDimensionValueDetailWidgetState
                 onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v),
               ),
               const SizedBox(width: 8),
-              Text(_isActive ? 'เปิดใช้งาน' : 'ปิดใช้งาน',
+              Text(
+                  _isActive
+                      ? (isEnglish ? 'Enabled' : 'เปิดใช้งาน')
+                      : (isEnglish ? 'Disabled' : 'ปิดใช้งาน'),
                   style: TextStyle(
                     color: _isActive ? Colors.green[700] : Colors.grey,
                     fontWeight: FontWeight.w500,
@@ -226,7 +242,9 @@ class GlDimensionValueDetailWidgetState
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.save, size: 18),
-                  label: Text(_isSaving ? 'กำลังบันทึก...' : 'บันทึก'),
+                  label: Text(_isSaving
+                      ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
+                      : l.save),
                 ),
               ]),
           ],

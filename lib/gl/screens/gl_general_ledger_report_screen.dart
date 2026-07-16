@@ -72,6 +72,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   bool _reportGenerated = false;
   bool _isExporting = false;
   bool _isFilterExpanded = true;
+  bool _isEnglish = false;
   double _filterPanelWidth = 350.0;
   bool _isDraggingDivider = false;
 
@@ -128,7 +129,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         }
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading master: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error loading master data: $e' : 'เกิดข้อผิดพลาดในการโหลดข้อมูลหลัก: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -146,6 +147,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   // --- Dialog ค้นหาบัญชี ---
   Future<void> _showAccountSearchDialog(bool isFrom) async {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     final searchCtrl = TextEditingController();
     List<Account> filtered = List.from(_controlAccounts);
     final current = isFrom ? _accountFrom : _accountTo;
@@ -163,14 +165,15 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                 filtered = _controlAccounts
                     .where((a) =>
                         a.accountCode.toLowerCase().contains(lq) ||
-                        a.accountNameThai.toLowerCase().contains(lq))
+                        a.accountNameThai.toLowerCase().contains(lq) ||
+                        a.accountNameEng.toLowerCase().contains(lq))
                     .toList();
               }
             });
           }
 
           return AlertDialog(
-            title: Text(isFrom ? 'เลือกบัญชีเริ่มต้น' : 'เลือกบัญชีสิ้นสุด'),
+            title: Text(isFrom ? (isEnglish ? 'Select Start Account' : 'เลือกบัญชีเริ่มต้น') : (isEnglish ? 'Select End Account' : 'เลือกบัญชีสิ้นสุด')),
             content: SizedBox(
               width: 520,
               height: 420,
@@ -179,18 +182,18 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                   TextField(
                     controller: searchCtrl,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                    decoration: InputDecoration(
+                      hintText: isEnglish ? 'Search code / name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                     ),
                     onChanged: doFilter,
                   ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: filtered.isEmpty
-                        ? const Center(child: Text('ไม่พบบัญชี'))
+                        ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี'))
                         : ListView.builder(
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
@@ -215,7 +218,10 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                                             color: Colors.deepOrange[900]),
                                       ),
                                     ),
-                                    Expanded(child: Text(a.accountNameThai)),
+                                    Expanded(
+                                        child: Text(isEnglish && a.accountNameEng.isNotEmpty
+                                            ? a.accountNameEng
+                                            : a.accountNameThai)),
                                     const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
@@ -225,8 +231,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
-                                        accountTypeOptions[a.accountType] ??
-                                            a.accountType,
+                                        accountTypeLabel(a.accountType, isEnglish),
                                         style: const TextStyle(
                                             fontSize: 11, color: Colors.grey),
                                       ),
@@ -262,7 +267,8 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
   Future<void> _generateReport() async {
     if (_selectedYear == null) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกปีบัญชี')));
+       final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a fiscal year' : 'กรุณาเลือกปีบัญชี')));
        return;
     }
     setState(() { _isLoading = true; _reportGenerated = false; });
@@ -286,8 +292,9 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
       if (_beginningBalances.isEmpty && _transactions.isEmpty) {
         if (mounted) {
+          final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ไม่พบข้อมูลในปีบัญชีที่เลือก')),
+            SnackBar(content: Text(isEnglish ? 'No data found for selected fiscal year' : 'ไม่พบข้อมูลในปีบัญชีที่เลือก')),
           );
         }
         return;
@@ -295,7 +302,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
       setState(() { _reportGenerated = true; });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -317,6 +324,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
   // --- Excel Export ---
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -336,25 +344,25 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
       }
 
       final _periodLabel = _selectedPeriod != null
-          ? 'งวด ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}'
-          : 'ปี ${_selectedYear?.fyCode ?? ''}';
+          ? (isEnglish ? 'Period ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}' : 'งวด ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}')
+          : (isEnglish ? 'Year ${_selectedYear?.fyCode ?? ''}' : 'ปี ${_selectedYear?.fyCode ?? ''}');
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'บัญชีแยกประเภท (General Ledger)', bold: true);
-      _xlCell(s, 2, 0, '$_periodLabel  |  พิมพ์: $_ts');
+      _xlCell(s, 0, 0, _company?.displayName(_isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, _isEnglish ? 'General Ledger' : 'บัญชีแยกประเภท (General Ledger)', bold: true);
+      _xlCell(s, 2, 0, '$_periodLabel  |  ${isEnglish ? 'Printed: $_ts' : 'พิมพ์: $_ts'}');
 
       int r = 3;
-      _xlCell(s, r, 0, 'รหัสบัญชี', bg: hdrBg, bold: true);
-      _xlCell(s, r, 1, 'วันที่', bg: hdrBg, bold: true);
-      _xlCell(s, r, 2, 'ประเภท', bg: hdrBg, bold: true);
-      _xlCell(s, r, 3, 'เลขที่เอกสาร', bg: hdrBg, bold: true);
-      _xlCell(s, r, 4, 'ลำดับ', bg: hdrBg, bold: true);
-      _xlCell(s, r, 5, 'อ้างอิง', bg: hdrBg, bold: true);
-      _xlCell(s, r, 6, 'คำอธิบาย', bg: hdrBg, bold: true);
-      _xlCell(s, r, 7, 'เดบิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 8, 'เครดิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 9, 'คงเหลือ', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 10, 'สาขา/มิติ', bg: hdrBg, bold: true);
+      _xlCell(s, r, 0, isEnglish ? 'Account Code' : 'รหัสบัญชี', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, isEnglish ? 'Date' : 'วันที่', bg: hdrBg, bold: true);
+      _xlCell(s, r, 2, isEnglish ? 'Type' : 'ประเภท', bg: hdrBg, bold: true);
+      _xlCell(s, r, 3, isEnglish ? 'Doc No.' : 'เลขที่เอกสาร', bg: hdrBg, bold: true);
+      _xlCell(s, r, 4, isEnglish ? 'Line' : 'ลำดับ', bg: hdrBg, bold: true);
+      _xlCell(s, r, 5, isEnglish ? 'Reference' : 'อ้างอิง', bg: hdrBg, bold: true);
+      _xlCell(s, r, 6, isEnglish ? 'Description' : 'คำอธิบาย', bg: hdrBg, bold: true);
+      _xlCell(s, r, 7, isEnglish ? 'Debit' : 'เดบิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 8, isEnglish ? 'Credit' : 'เครดิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 9, isEnglish ? 'Balance' : 'คงเหลือ', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 10, isEnglish ? 'Branch/Dim' : 'สาขา/มิติ', bg: hdrBg, bold: true);
       r++;
 
       final groupedData = _groupTransactions();
@@ -363,11 +371,17 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
       List<Map<String, dynamic>> entries = [];
       groupedData.forEach((key, transactions) {
         final firstTx = transactions.first;
+        final accNameEng = firstTx['account_name_eng']?.toString().isNotEmpty == true
+            ? firstTx['account_name_eng'].toString()
+            : firstTx['account_name_thai'].toString();
+        final accDisplayName = isEnglish
+            ? "${firstTx['account_code']} $accNameEng"
+            : "${firstTx['account_code']} ${firstTx['account_name_thai']}";
         entries.add({
           'key': key,
           'accId': firstTx['account_id'] as int,
           'accCode': firstTx['account_code'] as String? ?? '',
-          'accName': "${firstTx['account_code']} ${firstTx['account_name_thai']}",
+          'accName': accDisplayName,
           'brId': firstTx['branch_id'] as int?,
           'dim1Id': firstTx['dim1_id'] as int?, 'dim2Id': firstTx['dim2_id'] as int?,
           'dim3Id': firstTx['dim3_id'] as int?, 'dim4Id': firstTx['dim4_id'] as int?,
@@ -386,10 +400,16 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         final String key = "${bAccId}_${bBrId ?? 0}_${bDim1 ?? 0}_${bDim2 ?? 0}_${bDim3 ?? 0}_${bDim4 ?? 0}_${bDim5 ?? 0}";
         if (txKeys.contains(key)) continue;
         final acc = _accountMap[bAccId];
+        final accNameEng2 = b['account_name_eng']?.toString().isNotEmpty == true
+            ? b['account_name_eng'].toString()
+            : (acc?.accountNameThai ?? '');
+        final accDisplay2 = acc != null
+            ? "${acc.accountCode} ${isEnglish ? accNameEng2 : acc.accountNameThai}"
+            : "Account $bAccId";
         entries.add({
           'key': key, 'accId': bAccId,
           'accCode': acc?.accountCode ?? '',
-          'accName': acc != null ? "${acc.accountCode} ${acc.accountNameThai}" : "Account $bAccId",
+          'accName': accDisplay2,
           'brId': bBrId, 'dim1Id': bDim1, 'dim2Id': bDim2, 'dim3Id': bDim3, 'dim4Id': bDim4, 'dim5Id': bDim5,
           'transactions': <Map<String, dynamic>>[],
           'begDr': double.tryParse(b['amount_dr']?.toString() ?? '0') ?? 0,
@@ -457,7 +477,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         // Opening balance row
         _xlCell(s, r, 0, '', bg: detBg);
         _xlCell(s, r, 1, '', bg: detBg);
-        _xlCell(s, r, 2, 'ยอดยกมา', bg: detBg, bold: true);
+        _xlCell(s, r, 2, isEnglish ? 'Opening Balance' : 'ยอดยกมา', bg: detBg, bold: true);
         for (int c = 3; c <= 8; c++) _xlCell(s, r, c, '', bg: detBg);
         _xlCell(s, r, 9, DoubleCellValue(runningBalance), bg: detBg, bold: true, align: HorizontalAlign.Right);
         _xlCell(s, r, 10, dimStr, bg: detBg);
@@ -484,7 +504,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         }
 
         // Total row
-        _xlCell(s, r, 0, 'รวม $accName', bg: totBg, bold: true);
+        _xlCell(s, r, 0, isEnglish ? 'Total $accName' : 'รวม $accName', bg: totBg, bold: true);
         for (int c = 1; c <= 6; c++) _xlCell(s, r, c, '', bg: totBg);
         _xlCell(s, r, 7, DoubleCellValue(sumDr), bg: totBg, bold: true, align: HorizontalAlign.Right);
         _xlCell(s, r, 8, DoubleCellValue(sumCr), bg: totBg, bold: true, align: HorizontalAlign.Right);
@@ -515,21 +535,24 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
   // --- สร้าง PDF ---
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish = _isEnglish;
     final doc = pw.Document();
     final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
     final font = pw.Font.ttf(fontData);
     final fontBold = pw.Font.ttf(fontBoldData);
 
-    String companyName = _company != null ? _company!.thaiName : "(ไม่ระบุชื่อบริษัท)";
-    final String userName = headers['UserName'] ?? "(ไม่ระบุชื่อ)";
+    String companyName = _company != null ? _company!.displayName(isEnglish) : (isEnglish ? "(No company name)" : "(ไม่ระบุชื่อบริษัท)");
+    final String userName = headers['UserName'] ?? (isEnglish ? "(Unknown user)" : "(ไม่ระบุชื่อ)");
     final String printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-    
-    String periodLine = _selectedPeriod != null
-        ? "วันที่ ${_selectedPeriod!.periodEndDate.day} ${_selectedPeriod!.periodName} ${_selectedYear!.fyCode}"
-        : "ปี ${_selectedYear?.fyCode}";
 
-    String conditionLine = "* บัญชี: ${_accountFrom?.accountCode ?? 'ทั้งหมด'} - ${_accountTo?.accountCode ?? 'ทั้งหมด'}";
+    String periodLine = _selectedPeriod != null
+        ? (isEnglish ? "As of ${_selectedPeriod!.periodEndDate.day} ${_selectedPeriod!.periodName} ${_selectedYear!.fyCode}" : "วันที่ ${_selectedPeriod!.periodEndDate.day} ${_selectedPeriod!.periodName} ${_selectedYear!.fyCode}")
+        : (isEnglish ? "Year ${_selectedYear?.fyCode}" : "ปี ${_selectedYear?.fyCode}");
+
+    String conditionLine = isEnglish
+        ? "* Account: ${_accountFrom?.accountCode ?? 'All'} - ${_accountTo?.accountCode ?? 'All'}"
+        : "* บัญชี: ${_accountFrom?.accountCode ?? 'ทั้งหมด'} - ${_accountTo?.accountCode ?? 'ทั้งหมด'}";
     final fmt = NumberFormat("#,##0.00", "en_US");
 
     // ฟังก์ชันสร้าง Header ของหน้า
@@ -540,8 +563,8 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
               pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
-              pw.Expanded(flex: 7, child: pw.Text("บัญชีแยกประเภท (General Ledger)", textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
-              pw.Expanded(flex: 3, child: pw.Text("หน้า ${context.pageNumber}/${context.pagesCount}", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12)))
+              pw.Expanded(flex: 7, child: pw.Text(isEnglish ? "General Ledger" : "บัญชีแยกประเภท (General Ledger)", textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
+              pw.Expanded(flex: 3, child: pw.Text(isEnglish ? "Page ${context.pageNumber}/${context.pagesCount}" : "หน้า ${context.pageNumber}/${context.pagesCount}", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12)))
             ],
           ),
           pw.SizedBox(height: 4),
@@ -550,7 +573,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             children: [
               pw.Expanded(flex: 3, child: pw.Text("", style: const pw.TextStyle(fontSize: 12))),
               pw.Expanded(flex: 7, child: pw.Text(periodLine, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 12))),
-              pw.Expanded(flex: 3, child: pw.Text("พิมพ์โดย $userName", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12)))
+              pw.Expanded(flex: 3, child: pw.Text(isEnglish ? "Printed by $userName" : "พิมพ์โดย $userName", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12)))
             ],
           ),
           pw.SizedBox(height: 4),
@@ -558,7 +581,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
               pw.Expanded(flex: 10, child: pw.Text(conditionLine, textAlign: pw.TextAlign.left, style: const pw.TextStyle(fontSize: 10))),
-              pw.Expanded(flex: 3, child: pw.Text("พิมพ์เมื่อ $printDateStr", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12)))
+              pw.Expanded(flex: 3, child: pw.Text(isEnglish ? "Printed $printDateStr" : "พิมพ์เมื่อ $printDateStr", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12)))
             ],
           ),
           pw.SizedBox(height: 4),
@@ -574,7 +597,9 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             children: [
               pw.TableRow(
                 decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-                children: ["วันที่เอกสาร", "ประเภท\nเอกสาร", "เลขที่ใบสำคัญ", "ลำดับ", "ประเภท\nอ้างอิง", "เลขที่อ้างอิง", "วันที่อ้างอิง", "อธิบายรายการ", "เดบิต", "เครดิต", "ยกมา/สะสม\n/ยกไป"]
+                children: (isEnglish
+                    ? ["Doc Date", "Doc\nType", "Voucher No.", "Line", "Ref\nType", "Ref No.", "Ref Date", "Description", "Debit", "Credit", "B/F/Acc\n/C/F"]
+                    : ["วันที่เอกสาร", "ประเภท\nเอกสาร", "เลขที่ใบสำคัญ", "ลำดับ", "ประเภท\nอ้างอิง", "เลขที่อ้างอิง", "วันที่อ้างอิง", "อธิบายรายการ", "เดบิต", "เครดิต", "ยกมา/สะสม\n/ยกไป"])
                     .map((t) => pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Text(t, textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))))
                     .toList(),
               ),
@@ -613,11 +638,14 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
       groupedData.forEach((key, transactions) {
         final firstTx = transactions.first;
+        final accName = isEnglish
+            ? (firstTx['account_name_eng']?.toString().isNotEmpty == true ? firstTx['account_name_eng'].toString() : firstTx['account_name_thai'].toString())
+            : firstTx['account_name_thai'].toString();
         entries.add({
           'key': key,
           'accId': firstTx['account_id'] as int,
           'accCode': firstTx['account_code'] as String? ?? '',
-          'accName': "${firstTx['account_code']} ${firstTx['account_name_thai']}",
+          'accName': "${firstTx['account_code']} $accName",
           'brId': firstTx['branch_id'] as int?,
           'dim1Id': firstTx['dim1_id'] as int?,
           'dim2Id': firstTx['dim2_id'] as int?,
@@ -642,11 +670,14 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         if (txKeys.contains(key)) continue;
 
         final acc = _accountMap[bAccId];
+        final bAccName = isEnglish
+            ? (b['account_name_eng']?.toString().isNotEmpty == true ? b['account_name_eng'].toString() : (acc?.accountNameThai ?? ''))
+            : (acc?.accountNameThai ?? '');
         entries.add({
           'key': key,
           'accId': bAccId,
           'accCode': acc?.accountCode ?? '',
-          'accName': acc != null ? "${acc.accountCode} ${acc.accountNameThai}" : "Account $bAccId",
+          'accName': acc != null ? "${acc.accountCode} $bAccName" : "Account $bAccId",
           'brId': bBrId,
           'dim1Id': bDim1, 'dim2Id': bDim2, 'dim3Id': bDim3, 'dim4Id': bDim4, 'dim5Id': bDim5,
           'transactions': <Map<String, dynamic>>[],
@@ -707,11 +738,14 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         final dimIds = [dim1Id, dim2Id, dim3Id, dim4Id, dim5Id];
         String brCode = brId != null ? (_branchMap[brId] ?? '') : '';
         final dimParts = <String>[];
-        if (brCode.isNotEmpty) dimParts.add('สาขา: $brCode');
+        if (brCode.isNotEmpty) dimParts.add(isEnglish ? 'Branch: $brCode' : 'สาขา: $brCode');
         for (final dt in _activeDimTypes) {
           final id = dimIds[dt.slotNo - 1];
           final code = id != null ? (_dimValueMap[id] ?? '') : '';
-          if (code.isNotEmpty) dimParts.add('${dt.nameThai}: $code');
+          if (code.isNotEmpty) {
+            final label = isEnglish ? (dt.nameEng != null && dt.nameEng!.isNotEmpty ? dt.nameEng! : dt.nameThai) : dt.nameThai;
+            dimParts.add('$label: $code');
+          }
         }
         String dims = dimParts.join(' / ');
 
@@ -724,7 +758,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
               children: [
                 pw.Padding(
                   padding: const pw.EdgeInsets.all(4),
-                  child: pw.Text("รหัส/ชื่อบัญชี: $accName ${dims.isNotEmpty ? '($dims)' : ''}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))
+                  child: pw.Text("${isEnglish ? 'Code/Account' : 'รหัส/ชื่อบัญชี'}: $accName ${dims.isNotEmpty ? '($dims)' : ''}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))
                 ),
                 pw.Padding(
                   padding: const pw.EdgeInsets.all(4),
@@ -780,7 +814,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
           children: [
             pw.TableRow(
               children: [
-                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text("ยอดรวมเดบิต / เครดิต / ยกไป", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(isEnglish ? "Total Debit / Credit / Carry Fwd" : "ยอดรวมเดบิต / เครดิต / ยกไป", textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
                 pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(transactions.isEmpty ? '' : fmt.format(sumDr), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
                 pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(transactions.isEmpty ? '' : fmt.format(sumCr), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
                 pw.Padding(padding: const pw.EdgeInsets.all(3), child: pw.Text(fmt.format(runningBalance), textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
@@ -827,7 +861,8 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -848,7 +883,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
             onPressed: _loadMasterData,
           ),
         ],
@@ -871,7 +906,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
               ),
               padding: EdgeInsets.zero,
               onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
-              tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+              tooltip: _isFilterExpanded ? (isEnglish ? 'Collapse Filter' : 'ย่อเงื่อนไข') : (isEnglish ? 'Expand Filter' : 'ขยายเงื่อนไข'),
             ),
           ),
           AnimatedContainer(
@@ -891,13 +926,13 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('เงื่อนไขรายงาน', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<FiscalYear>(
                       isExpanded: true,
                       value: _selectedYear,
                       items: _fiscalYears.map((fy) => DropdownMenuItem(value: fy, child: Text(fy.fyCode))).toList(),
-                      decoration: const InputDecoration(labelText: 'ปีบัญชี', border: OutlineInputBorder()),
+                      decoration: InputDecoration(labelText: isEnglish ? 'Fiscal Year' : 'ปีบัญชี', border: const OutlineInputBorder()),
                       onChanged: (val) async {
                         if (val != null) {
                            setState(() => _selectedYear = val);
@@ -910,10 +945,10 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                       isExpanded: true,
                       value: _selectedPeriod,
                       items: [
-                        const DropdownMenuItem<PostingPeriod>(value: null, child: Text('ทุกงวด (ตั้งแต่ต้นปี)')),
+                        DropdownMenuItem<PostingPeriod>(value: null, child: Text(isEnglish ? 'All Periods (From Year Start)' : 'ทุกงวด (ตั้งแต่ต้นปี)')),
                         ..._periods.skip(1).map((p) => DropdownMenuItem(value: p, child: Text("${p.periodNumber} - ${p.periodName}"))),
                       ],
-                      decoration: const InputDecoration(labelText: 'งวดเดือน', border: OutlineInputBorder()),
+                      decoration: InputDecoration(labelText: isEnglish ? 'Period' : 'งวดเดือน', border: const OutlineInputBorder()),
                       onChanged: (val) => setState(() => _selectedPeriod = val),
                     ),
                     const SizedBox(height: 16),
@@ -921,9 +956,9 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                       DropdownButtonFormField<int?>(
                         value: _selectedBranchId,
                         isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'สาขา', border: OutlineInputBorder()),
+                        decoration: InputDecoration(labelText: isEnglish ? 'Branch' : 'สาขา', border: const OutlineInputBorder()),
                         items: [
-                          const DropdownMenuItem<int?>(value: null, child: Text('— ทุกสาขา —')),
+                          DropdownMenuItem<int?>(value: null, child: Text(isEnglish ? '— All Branches —' : '— ทุกสาขา —')),
                           ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
                             value: b.branchId,
                             child: Text('${b.branchCode}  ${b.branchNameThai}', overflow: TextOverflow.ellipsis),
@@ -935,11 +970,11 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                     ],
                     const SizedBox(height: 16),
                     InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'รหัสบัญชี (จาก)',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'Account (From)' : 'รหัสบัญชี (จาก)',
+                        border: const OutlineInputBorder(),
                         contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
                       child: Row(
                         children: [
@@ -949,12 +984,12 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                                     '${_accountFrom!.accountCode} — ${_accountFrom!.accountNameThai}',
                                     style: const TextStyle(fontWeight: FontWeight.bold),
                                   )
-                                : const Text('— ทั้งหมด —',
-                                    style: TextStyle(color: Colors.grey)),
+                                : Text(isEnglish ? '— All —' : '— ทั้งหมด —',
+                                    style: const TextStyle(color: Colors.grey)),
                           ),
                           IconButton(
                             icon: Icon(Icons.search, color: Colors.deepOrange[900]),
-                            tooltip: 'ค้นหาบัญชีเริ่มต้น',
+                            tooltip: isEnglish ? 'Search Start Account' : 'ค้นหาบัญชีเริ่มต้น',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
                             onPressed: () => _showAccountSearchDialog(true),
@@ -963,7 +998,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                             IconButton(
                               icon: const Icon(Icons.clear,
                                   color: Colors.red, size: 18),
-                              tooltip: 'ล้าง',
+                              tooltip: isEnglish ? 'Clear' : 'ล้าง',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                               onPressed: () =>
@@ -975,11 +1010,11 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                     const SizedBox(height: 16),
 
                     InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'รหัสบัญชี (ถึง)',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'Account (To)' : 'รหัสบัญชี (ถึง)',
+                        border: const OutlineInputBorder(),
                         contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
                       child: Row(
                         children: [
@@ -989,12 +1024,12 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                                     '${_accountTo!.accountCode} — ${_accountTo!.accountNameThai}',
                                     style: const TextStyle(fontWeight: FontWeight.bold),
                                   )
-                                : const Text('— ทั้งหมด —',
-                                    style: TextStyle(color: Colors.grey)),
+                                : Text(isEnglish ? '— All —' : '— ทั้งหมด —',
+                                    style: const TextStyle(color: Colors.grey)),
                           ),
                           IconButton(
                             icon: Icon(Icons.search, color: Colors.deepOrange[900]),
-                            tooltip: 'ค้นหาบัญชีสิ้นสุด',
+                            tooltip: isEnglish ? 'Search End Account' : 'ค้นหาบัญชีสิ้นสุด',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
                             onPressed: () => _showAccountSearchDialog(false),
@@ -1003,7 +1038,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                             IconButton(
                               icon: const Icon(Icons.clear,
                                   color: Colors.red, size: 18),
-                              tooltip: 'ล้าง',
+                              tooltip: isEnglish ? 'Clear' : 'ล้าง',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                               onPressed: () =>
@@ -1015,14 +1050,14 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                     const SizedBox(height: 16),
 
                     SwitchListTile(
-                      title: const Text('พิมพ์เฉพาะที่มียอดยกมาหรือมีรายการเคลื่อนไหว'),
+                      title: Text(isEnglish ? 'Show only accounts with balance or transactions' : 'พิมพ์เฉพาะที่มียอดยกมาหรือมีรายการเคลื่อนไหว'),
                       value: _hideZero,
                       onChanged: (v) => setState(() => _hideZero = v),
                       contentPadding: EdgeInsets.zero,
                     ),
 
                     SwitchListTile(
-                      title: const Text('ขึ้นหน้าใหม่ทุกรหัสบัญชี'),
+                      title: Text(isEnglish ? 'Page break per account' : 'ขึ้นหน้าใหม่ทุกรหัสบัญชี'),
                       value: _pageBreakPerAccount,
                       onChanged: (v) => setState(() => _pageBreakPerAccount = v),
                       contentPadding: EdgeInsets.zero,
@@ -1035,7 +1070,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                       height: 50,
                       child: ElevatedButton.icon(
                         icon: const Icon(Icons.picture_as_pdf),
-                        label: const Text('ประมวลผลรายงาน'),
+                        label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900], foregroundColor: Colors.white),
                         onPressed: _generateReport,
                       ),
@@ -1074,7 +1109,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             child: Container(
               color: Colors.grey[200],
               child: !_reportGenerated
-                  ? const Center(child: Text("กรุณาเลือกเงื่อนไขและกดประมวลผล"))
+                  ? Center(child: Text(isEnglish ? 'Select conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                   : PdfPreview(
                       build: (format) => _generatePdf(format),
                       initialPageFormat: PdfPageFormat.a4.landscape,

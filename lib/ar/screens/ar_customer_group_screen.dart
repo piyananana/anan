@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/ar_customer_group.dart';
 import '../services/ar_customer_group_service.dart';
 import '../widgets/ar_customer_group_list_widget.dart';
@@ -70,20 +72,22 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
   }
 
   Future<void> _onDelete(ArCustomerGroup row) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบ "${row.groupCode} (${row.groupNameThai})" ?'),
+        title: Text(l.confirmDelete),
+        content: Text(l.isEnglish
+            ? 'Delete "${row.groupCode} (${row.groupNameEng.isNotEmpty ? row.groupNameEng : row.groupNameThai})"?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบ "${row.groupCode} (${row.groupNameThai})" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ'),
+            child: Text(l.delete),
           ),
         ],
       ),
@@ -97,13 +101,15 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(l.deletedSuccess)));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
+                content: Text(l.isEnglish
+                    ? 'Delete failed: ${e.toString()}'
+                    : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
           );
         }
       }
@@ -111,20 +117,24 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
   }
 
   Future<void> _onSubmit(ArCustomerGroup row) async {
+    final isEnglish =
+        Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final service =
           Provider.of<ArCustomerGroupService>(context, listen: false);
       if (_selectedData == null) {
         await service.addRow(row);
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content:
+                  Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
         }
       } else {
         await service.updateRow(row);
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+                  isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
         }
       }
       _listWidgetKey.currentState?.refresh();
@@ -134,8 +144,9 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content:
-                  Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
+              content: Text(isEnglish
+                  ? 'Error saving: ${e.toString()}'
+                  : 'เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
         );
       }
     }
@@ -157,6 +168,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     super.build(context);
 
     return Scaffold(
@@ -167,7 +179,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: () {
               _listWidgetKey.currentState?.refresh();
               _onCancel();
@@ -198,7 +210,9 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () => setState(
                       () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (l.isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                      : (l.isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
               // Left panel (list)

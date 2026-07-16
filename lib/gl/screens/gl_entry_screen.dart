@@ -1,5 +1,7 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../widgets/gl_entry_list_widget.dart';
 import '../widgets/gl_entry_detail_widget.dart';
 
@@ -64,6 +66,7 @@ class _GlEntryScreenState extends State<GlEntryScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -72,7 +75,7 @@ class _GlEntryScreenState extends State<GlEntryScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: () => setState(() {
               _shouldRefreshList = true;
               _selectedEntryId = null;
@@ -96,9 +99,9 @@ class _GlEntryScreenState extends State<GlEntryScreen>
             labelColor: Colors.deepOrange[900],
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: const [
-              Tab(text: 'ค้นหา/แก้ไข/เพิ่มธุรกรรม'),
-              Tab(text: 'รายละเอียดธุรกรรม'),
+            tabs: [
+              Tab(text: isEnglish ? 'Search / Edit / Add Transaction' : 'ค้นหา/แก้ไข/เพิ่มธุรกรรม'),
+              Tab(text: isEnglish ? 'Transaction Details' : 'รายละเอียดธุรกรรม'),
             ],
           ),
           Expanded(

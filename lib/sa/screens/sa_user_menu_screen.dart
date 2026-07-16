@@ -128,8 +128,9 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
       });
     } catch (e) {
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ไม่สามารถโหลดสิทธิ์ผู้ใช้: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish ? 'Failed to load user permissions: ${e.toString()}' : 'ไม่สามารถโหลดสิทธิ์ผู้ใช้: ${e.toString()}')),
         );
       }
       setState(() {
@@ -169,8 +170,9 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
       });
     } catch (e) {
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ไม่สามารถโหลดสิทธิ์ผู้ใช้: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish ? 'Failed to load user permissions: ${e.toString()}' : 'ไม่สามารถโหลดสิทธิ์ผู้ใช้: ${e.toString()}')),
         );
       }
       setState(() {
@@ -210,18 +212,18 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
         _onClearRightPanel(); // เคลียร์ panel ขวาหลังจากลบ
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ลบสิทธิ์ผู้ใช้สำเร็จ')),
+            SnackBar(content: Text(l.isEnglish ? 'User permissions deleted successfully' : 'ลบสิทธิ์ผู้ใช้สำเร็จ')),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ไม่พบเมนูผู้ใช้ที่เลือก')));
+            SnackBar(content: Text(l.isEnglish ? 'Selected user menu not found' : 'ไม่พบเมนูผู้ใช้ที่เลือก')));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
                 content:
-                    Text('เกิดข้อผิดพลาดในการลบสิทธิ์ผู้ใช้: ${e.toString()}')),
+                    Text(l.isEnglish ? 'Error deleting user permissions: ${e.toString()}' : 'เกิดข้อผิดพลาดในการลบสิทธิ์ผู้ใช้: ${e.toString()}')),
           );
         }
       }
@@ -297,10 +299,9 @@ class _UserMenuScreenState extends State<UserMenuScreen> with AutomaticKeepAlive
 
     } catch (e) {
       print('Error saving user menu: $e'); // Log เพื่อดูรายละเอียดใน Debug Console
-      // _showSnackBar('เกิดข้อผิดพลาดในการบันทึกสิทธิ์: ${e.toString()}', Colors.red);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('เกิดข้อผิดพลาดในการบันทึกสิทธิ์: ${e.toString()}')),
+            content: Text(l.isEnglish ? 'Error saving permissions: ${e.toString()}' : 'เกิดข้อผิดพลาดในการบันทึกสิทธิ์: ${e.toString()}')),
       );
     } finally {
       setState(() {

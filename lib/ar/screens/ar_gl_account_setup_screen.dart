@@ -1,6 +1,8 @@
 ﻿// lib/ar/screens/ar_gl_account_setup_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
 import '../../sa/models/sa_module_document.dart';
@@ -24,12 +26,14 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
   List<ArGlAccountSetup> _rows    = [];
   List<Account>          _accounts = [];
   List<ModuleDocument>   _glDocs  = [];   // GL doc types สำหรับ picker
+  List<ModuleDocument>   _allDocs = [];   // ทุก doc type (ทุกโมดูล) — ใช้หาชื่ออังกฤษของ AR doc
 
   bool   _isLoading          = true;
   String _selectedDocCode    = '';
   bool   _isDraggingDivider  = false;
   bool   _isLeftPanelExpanded = true;
   double _leftPanelWidth     = 320.0;
+  bool   _isEnglish          = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -41,6 +45,7 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
   }
 
   Future<void> _loadAll() async {
+    final isEnglish = _isEnglish;
     setState(() => _isLoading = true);
     try {
       final results = await Future.wait([
@@ -53,7 +58,8 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
         _accounts = (results[1] as List<Account>)
             .where((a) => a.isActive && a.isNormalAccount).toList()
           ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
-        _glDocs   = (results[2] as List<ModuleDocument>)
+        _allDocs  = results[2] as List<ModuleDocument>;
+        _glDocs   = _allDocs
             .where((d) => d.isDocType && d.sysModule == '01' && d.isActive).toList()
           ..sort((a, b) => a.docCode.compareTo(b.docCode));
         _isLoading = false;
@@ -65,15 +71,30 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('โหลดข้อมูลล้มเหลว: $e')));
+          SnackBar(content: Text(isEnglish ? 'Failed to load data: $e' : 'โหลดข้อมูลล้มเหลว: $e')));
     }
   }
 
   ArGlAccountSetup? get _selected =>
       _rows.where((r) => r.docCode == _selectedDocCode).firstOrNull;
 
+  String _resolveDocName(String docCode, String? fallback) {
+    if (_isEnglish) {
+      final match = _allDocs.where((d) => d.docCode == docCode);
+      if (match.isNotEmpty && match.first.docNameEng.isNotEmpty) {
+        return match.first.docNameEng;
+      }
+    }
+    return fallback ?? '';
+  }
+
   // ── Account picker dialog ─────────────────────────────────────────────────
-  Future<Account?> _pickAccount({String title = 'เลือกบัญชี GL'}) async {
+  Future<Account?> _pickAccount({String title = ''}) async {
+    final isEnglish =
+        Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final dialogTitle = title.isNotEmpty
+        ? title
+        : (isEnglish ? 'Select GL Account' : 'เลือกบัญชี GL');
     final searchCtrl = TextEditingController();
     List<Account> filtered = List.from(_accounts);
     Account? picked;
@@ -88,23 +109,24 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
                 ? List.from(_accounts)
                 : _accounts.where((a) =>
                     a.accountCode.toLowerCase().contains(lq) ||
-                    a.accountNameThai.toLowerCase().contains(lq)).toList();
+                    a.accountNameThai.toLowerCase().contains(lq) ||
+                    a.accountNameEng.toLowerCase().contains(lq)).toList();
           });
         }
 
         return AlertDialog(
-          title: Text(title),
+          title: Text(dialogTitle),
           content: SizedBox(
             width: 520, height: 420,
             child: Column(children: [
               TextField(
                 controller: searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search code / account name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   isDense: true,
                 ),
                 onChanged: doFilter,
@@ -116,9 +138,12 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final a = filtered[i];
+                    final name = isEnglish && a.accountNameEng.isNotEmpty
+                        ? a.accountNameEng
+                        : a.accountNameThai;
                     return ListTile(
                       dense: true,
-                      title: Text('${a.accountCode}  ${a.accountNameThai}',
+                      title: Text('${a.accountCode}  $name',
                           style: const TextStyle(fontSize: 13)),
                       onTap: () { picked = a; Navigator.of(ctx).pop(); },
                     );
@@ -128,7 +153,7 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ],
         );
       }),
@@ -139,6 +164,8 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
 
   // ── GL Doc picker ─────────────────────────────────────────────────────────
   Future<ModuleDocument?> _pickGlDoc() async {
+    final isEnglish =
+        Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final searchCtrl = TextEditingController();
     List<ModuleDocument> filtered = List.from(_glDocs);
     ModuleDocument? picked;
@@ -147,18 +174,18 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
         return AlertDialog(
-          title: const Text('เลือกประเภทเอกสาร GL'),
+          title: Text(isEnglish ? 'Select GL Document Type' : 'เลือกประเภทเอกสาร GL'),
           content: SizedBox(
             width: 480, height: 380,
             child: Column(children: [
               TextField(
                 controller: searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search' : 'ค้นหา',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   isDense: true,
                 ),
                 onChanged: (q) {
@@ -168,7 +195,8 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
                         ? List.from(_glDocs)
                         : _glDocs.where((d) =>
                             d.docCode.toLowerCase().contains(lq) ||
-                            d.docNameThai.toLowerCase().contains(lq)).toList();
+                            d.docNameThai.toLowerCase().contains(lq) ||
+                            d.docNameEng.toLowerCase().contains(lq)).toList();
                   });
                 },
               ),
@@ -179,9 +207,12 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final d = filtered[i];
+                    final name = isEnglish && d.docNameEng.isNotEmpty
+                        ? d.docNameEng
+                        : d.docNameThai;
                     return ListTile(
                       dense: true,
-                      title: Text('${d.docCode}  ${d.docNameThai}',
+                      title: Text('${d.docCode}  $name',
                           style: const TextStyle(fontSize: 13)),
                       onTap: () { picked = d; Navigator.of(ctx).pop(); },
                     );
@@ -191,7 +222,7 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ],
         );
       }),
@@ -202,6 +233,7 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
 
   // ── Save ──────────────────────────────────────────────────────────────────
   Future<void> _onSave(ArGlAccountSetup updated) async {
+    final isEnglish = _isEnglish;
     try {
       final saved = await _svc.upsertRow(updated);
       // อัปเดต row ใน list
@@ -210,10 +242,10 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
         if (idx >= 0) _rows[idx] = saved; else _rows.add(saved);
       });
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('บันทึกสำเร็จ')));
+          SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('บันทึกล้มเหลว: $e')));
+          SnackBar(content: Text(isEnglish ? 'Save failed: $e' : 'บันทึกล้มเหลว: $e')));
     }
   }
 
@@ -221,6 +253,8 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -229,7 +263,7 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            tooltip: 'โหลดใหม่',
+            tooltip: isEnglish ? 'Reload' : 'โหลดใหม่',
             onPressed: _loadAll,
           ),
         ],
@@ -252,7 +286,9 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
                     padding: EdgeInsets.zero,
                     onPressed: () =>
                         setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                    tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                    tooltip: _isLeftPanelExpanded
+                        ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                        : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                   ),
                 ),
                 // Left: doc_code list
@@ -288,12 +324,15 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
                 // Right: setup form
                 Expanded(
                   child: _selected == null
-                      ? const Center(child: Text('เลือกประเภทเอกสาร AR ด้านซ้าย'))
+                      ? Center(child: Text(isEnglish
+                          ? 'Select an AR document type on the left'
+                          : 'เลือกประเภทเอกสาร AR ด้านซ้าย'))
                       : _ArGlSetupForm(
                           key: ValueKey(_selected!.docCode),
                           setup: _selected!,
                           accounts: _accounts,
                           glDocs: _glDocs,
+                          docNameResolver: _resolveDocName,
                           onPickAccount: _pickAccount,
                           onPickGlDoc: _pickGlDoc,
                           onSave: _onSave,
@@ -337,7 +376,7 @@ class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
               ),
             ),
             subtitle: Text(
-              row.docNameThai ?? '—',
+              row.docNameThai != null ? _resolveDocName(row.docCode, row.docNameThai) : '—',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               overflow: TextOverflow.ellipsis,
             ),
@@ -358,6 +397,7 @@ class _ArGlSetupForm extends StatefulWidget {
   final ArGlAccountSetup setup;
   final List<Account> accounts;
   final List<ModuleDocument> glDocs;
+  final String Function(String docCode, String? fallback) docNameResolver;
   final Future<Account?> Function({String title}) onPickAccount;
   final Future<ModuleDocument?> Function() onPickGlDoc;
   final Future<void> Function(ArGlAccountSetup) onSave;
@@ -367,6 +407,7 @@ class _ArGlSetupForm extends StatefulWidget {
     required this.setup,
     required this.accounts,
     required this.glDocs,
+    required this.docNameResolver,
     required this.onPickAccount,
     required this.onPickGlDoc,
     required this.onSave,
@@ -397,6 +438,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
   int?    _vatPendingOutputAccountId;  String? _vatPendingOutputAccountCode;  String? _vatPendingOutputAccountName;
   int?    _glDocId;                    String? _glDocCode;                    String? _glDocName;
   bool    _isSaving = false;
+  bool    _isEnglish = false;
 
   @override
   void initState() {
@@ -444,6 +486,29 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
 
   void _clearAccount(void Function() clear) => setState(clear);
 
+  // ── Resolve display name (Thai/Eng) by looking up the current master lists ──
+  String? _resolveAccountName(int? accountId, String? fallback) {
+    if (accountId == null) return fallback;
+    if (_isEnglish) {
+      final match = widget.accounts.where((a) => a.id == accountId);
+      if (match.isNotEmpty && match.first.accountNameEng.isNotEmpty) {
+        return match.first.accountNameEng;
+      }
+    }
+    return fallback;
+  }
+
+  String? _resolveGlDocName(int? docId, String? fallback) {
+    if (docId == null) return fallback;
+    if (_isEnglish) {
+      final match = widget.glDocs.where((d) => d.id == docId);
+      if (match.isNotEmpty && match.first.docNameEng.isNotEmpty) {
+        return match.first.docNameEng;
+      }
+    }
+    return fallback;
+  }
+
   // ── Build account field ───────────────────────────────────────────────────
   Widget _accountField({
     required String label,
@@ -479,7 +544,9 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
             ]),
           ),
           child: Text(
-            accountId != null ? '$accountCode  $accountName' : '— ไม่ระบุ —',
+            accountId != null
+                ? '$accountCode  ${_resolveAccountName(accountId, accountName)}'
+                : (_isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
             style: TextStyle(
               fontSize: 13,
               color: accountId != null ? null : Colors.grey.shade500,
@@ -492,40 +559,42 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
 
   // ── Journal preview ───────────────────────────────────────────────────────
   Widget _buildJournalPreview() {
+    final isEnglish = _isEnglish;
+    String nm(int? id, String? fallback) => _resolveAccountName(id, fallback) ?? '';
     final lines = <_JournalLine>[];
     switch (_sdt) {
       case '10':
       case '30':
       case '35':
-        if (_arAccountId != null)       lines.add(_JournalLine('Dr', _arAccountCode!, _arAccountName!));
-        if (_revenueAccountId != null)  lines.add(_JournalLine('  Cr', _revenueAccountCode!, '$_revenueAccountName (ต่อ line)'));
-        if (_vatOutputAccountId != null)lines.add(_JournalLine('  Cr', _vatOutputAccountCode!, _vatOutputAccountName!));
-        if (_discountAccountId != null) lines.add(_JournalLine('Dr', _discountAccountCode!, '$_discountAccountName (ถ้ามีส่วนลด)'));
+        if (_arAccountId != null)       lines.add(_JournalLine('Dr', _arAccountCode!, nm(_arAccountId, _arAccountName)));
+        if (_revenueAccountId != null)  lines.add(_JournalLine('  Cr', _revenueAccountCode!, '${nm(_revenueAccountId, _revenueAccountName)} ${isEnglish ? '(per line)' : '(ต่อ line)'}'));
+        if (_vatOutputAccountId != null)lines.add(_JournalLine('  Cr', _vatOutputAccountCode!, nm(_vatOutputAccountId, _vatOutputAccountName)));
+        if (_discountAccountId != null) lines.add(_JournalLine('Dr', _discountAccountCode!, '${nm(_discountAccountId, _discountAccountName)} ${isEnglish ? '(if discount applies)' : '(ถ้ามีส่วนลด)'}'));
         break;
       case '50':
       case '55':
-        if (_revenueAccountId != null)  lines.add(_JournalLine('Dr', _revenueAccountCode!, _revenueAccountName!));
-        if (_vatOutputAccountId != null)lines.add(_JournalLine('Dr', _vatOutputAccountCode!, _vatOutputAccountName!));
-        if (_arAccountId != null)       lines.add(_JournalLine('  Cr', _arAccountCode!, _arAccountName!));
+        if (_revenueAccountId != null)  lines.add(_JournalLine('Dr', _revenueAccountCode!, nm(_revenueAccountId, _revenueAccountName)));
+        if (_vatOutputAccountId != null)lines.add(_JournalLine('Dr', _vatOutputAccountCode!, nm(_vatOutputAccountId, _vatOutputAccountName)));
+        if (_arAccountId != null)       lines.add(_JournalLine('  Cr', _arAccountCode!, nm(_arAccountId, _arAccountName)));
         break;
       case '60':
-        if (_cashAccountId != null)     lines.add(_JournalLine('Dr', _cashAccountCode!, _cashAccountName!));
-        if (_advanceAccountId != null)  lines.add(_JournalLine('  Cr', _advanceAccountCode!, _advanceAccountName!));
-        if (_vatOutputAccountId != null)lines.add(_JournalLine('  Cr', _vatOutputAccountCode!, '$_vatOutputAccountName (ถ้ามี VAT)'));
+        if (_cashAccountId != null)     lines.add(_JournalLine('Dr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
+        if (_advanceAccountId != null)  lines.add(_JournalLine('  Cr', _advanceAccountCode!, nm(_advanceAccountId, _advanceAccountName)));
+        if (_vatOutputAccountId != null)lines.add(_JournalLine('  Cr', _vatOutputAccountCode!, '${nm(_vatOutputAccountId, _vatOutputAccountName)} ${isEnglish ? '(if VAT applies)' : '(ถ้ามี VAT)'}'));
         break;
       case '65':
-        if (_advanceAccountId != null)  lines.add(_JournalLine('Dr', _advanceAccountCode!, _advanceAccountName!));
-        if (_cashAccountId != null)     lines.add(_JournalLine('  Cr', _cashAccountCode!, _cashAccountName!));
+        if (_advanceAccountId != null)  lines.add(_JournalLine('Dr', _advanceAccountCode!, nm(_advanceAccountId, _advanceAccountName)));
+        if (_cashAccountId != null)     lines.add(_JournalLine('  Cr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
         break;
       case '80':
-        if (_cashAccountId != null)              lines.add(_JournalLine('Dr', _cashAccountCode!, _cashAccountName!));
-        if (_whtAccountId != null)               lines.add(_JournalLine('Dr', _whtAccountCode!, '$_whtAccountName (WHT)'));
-        if (_advanceAccountId != null)           lines.add(_JournalLine('Dr', _advanceAccountCode!, '$_advanceAccountName (ตัดมัดจำ)'));
-        if (_fxLossAccountId != null)            lines.add(_JournalLine('Dr', _fxLossAccountCode!, '$_fxLossAccountName (ขาดทุน FX)'));
-        if (_vatPendingOutputAccountId != null)  lines.add(_JournalLine('Dr', _vatPendingOutputAccountCode!, '$_vatPendingOutputAccountName (รับรู้ VAT รอตัด)'));
-        if (_arAccountId != null)                lines.add(_JournalLine('  Cr', _arAccountCode!, _arAccountName!));
-        if (_vatOutputAccountId != null)         lines.add(_JournalLine('  Cr', _vatOutputAccountCode!, '$_vatOutputAccountName (VAT รอตัด ที่รับรู้)'));
-        if (_fxGainAccountId != null)            lines.add(_JournalLine('  Cr', _fxGainAccountCode!, '$_fxGainAccountName (กำไร FX)'));
+        if (_cashAccountId != null)              lines.add(_JournalLine('Dr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
+        if (_whtAccountId != null)               lines.add(_JournalLine('Dr', _whtAccountCode!, '${nm(_whtAccountId, _whtAccountName)} (WHT)'));
+        if (_advanceAccountId != null)           lines.add(_JournalLine('Dr', _advanceAccountCode!, '${nm(_advanceAccountId, _advanceAccountName)} ${isEnglish ? '(offset advance)' : '(ตัดมัดจำ)'}'));
+        if (_fxLossAccountId != null)            lines.add(_JournalLine('Dr', _fxLossAccountCode!, '${nm(_fxLossAccountId, _fxLossAccountName)} ${isEnglish ? '(FX loss)' : '(ขาดทุน FX)'}'));
+        if (_vatPendingOutputAccountId != null)  lines.add(_JournalLine('Dr', _vatPendingOutputAccountCode!, '${nm(_vatPendingOutputAccountId, _vatPendingOutputAccountName)} ${isEnglish ? '(recognize deferred VAT)' : '(รับรู้ VAT รอตัด)'}'));
+        if (_arAccountId != null)                lines.add(_JournalLine('  Cr', _arAccountCode!, nm(_arAccountId, _arAccountName)));
+        if (_vatOutputAccountId != null)         lines.add(_JournalLine('  Cr', _vatOutputAccountCode!, '${nm(_vatOutputAccountId, _vatOutputAccountName)} ${isEnglish ? '(deferred VAT recognized)' : '(VAT รอตัด ที่รับรู้)'}'));
+        if (_fxGainAccountId != null)            lines.add(_JournalLine('  Cr', _fxGainAccountCode!, '${nm(_fxGainAccountId, _fxGainAccountName)} ${isEnglish ? '(FX gain)' : '(กำไร FX)'}'));
         break;
     }
     if (lines.isEmpty) return const SizedBox.shrink();
@@ -541,7 +610,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('ตัวอย่าง Journal Entry',
+          Text(isEnglish ? 'Journal Entry Preview' : 'ตัวอย่าง Journal Entry',
               style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
@@ -604,6 +673,8 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     final s = widget.setup;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -614,14 +685,13 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(s.docCode,
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              // Text('${s.docNameThai ?? ''}  •  ${s.sysDocTypeName}',
-              Text(s.docNameThai ?? '',
+              Text(widget.docNameResolver(s.docCode, s.docNameThai), overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
             ]),
           ),
           if (s.isConfigured)
             Chip(
-              label: const Text('มีการตั้งค่า', style: TextStyle(fontSize: 11)),
+              label: Text(isEnglish ? 'Configured' : 'มีการตั้งค่า', style: const TextStyle(fontSize: 11)),
               backgroundColor: Colors.green.shade100,
               side: const BorderSide(color: Colors.transparent),
               visualDensity: VisualDensity.compact,
@@ -630,7 +700,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
         const SizedBox(height: 16),
 
         // ── ประเภทเอกสาร GL ──────────────────────────────────────────────
-        _SectionHeader(title: 'ประเภทเอกสาร GL (สำหรับ Post)'),
+        _SectionHeader(title: isEnglish ? 'GL Document Type (for Posting)' : 'ประเภทเอกสาร GL (สำหรับ Post)'),
         InkWell(
           onTap: () async {
             final d = await widget.onPickGlDoc();
@@ -642,7 +712,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
           },
           child: InputDecorator(
             decoration: InputDecoration(
-              labelText: 'ประเภทเอกสาร GL',
+              labelText: isEnglish ? 'GL Document Type' : 'ประเภทเอกสาร GL',
               border: const OutlineInputBorder(),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -660,7 +730,9 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
               ]),
             ),
             child: Text(
-              _glDocId != null ? '$_glDocCode  $_glDocName' : '— ไม่ระบุ —',
+              _glDocId != null
+                  ? '$_glDocCode  ${_resolveGlDocName(_glDocId, _glDocName)}'
+                  : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
               style: TextStyle(fontSize: 13, color: _glDocId != null ? null : Colors.grey.shade500),
             ),
           ),
@@ -668,11 +740,13 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
         const SizedBox(height: 16),
 
         // ── รหัสบัญชี (แสดงตาม sys_doc_type) ────────────────────────────
-        _SectionHeader(title: 'รหัสบัญชี'),
+        _SectionHeader(title: isEnglish ? 'Account Codes' : 'รหัสบัญชี'),
 
         if (_showAr)
           _accountField(
-            label: 'ลูกหนี้การค้า (AR Account) *ถ้าไม่ระบุ จะใช้รหัสบัญชีจากกลุ่มลูกหนี้หรือลูกหนี้โดยตรงแทน',
+            label: isEnglish
+                ? 'Accounts Receivable (AR Account) *If not specified, the account code from the customer group or customer will be used instead'
+                : 'ลูกหนี้การค้า (AR Account) *ถ้าไม่ระบุ จะใช้รหัสบัญชีจากกลุ่มลูกหนี้หรือลูกหนี้โดยตรงแทน',
             accountId: _arAccountId, accountCode: _arAccountCode, accountName: _arAccountName,
             onPick: (a) { _arAccountId = a.id; _arAccountCode = a.accountCode; _arAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _arAccountId = null; _arAccountCode = null; _arAccountName = null; }),
@@ -680,7 +754,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
 
         if (_showRevenue)
           _accountField(
-            label: 'รายได้ขาย (Revenue — default)',
+            label: isEnglish ? 'Sales Revenue (Revenue — default)' : 'รายได้ขาย (Revenue — default)',
             accountId: _revenueAccountId, accountCode: _revenueAccountCode, accountName: _revenueAccountName,
             onPick: (a) { _revenueAccountId = a.id; _revenueAccountCode = a.accountCode; _revenueAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _revenueAccountId = null; _revenueAccountCode = null; _revenueAccountName = null; }),
@@ -688,13 +762,13 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
 
         if (_showVat) ...[
           _accountField(
-            label: 'ภาษีขาย (VAT Output)',
+            label: isEnglish ? 'Output VAT (VAT Output)' : 'ภาษีขาย (VAT Output)',
             accountId: _vatOutputAccountId, accountCode: _vatOutputAccountCode, accountName: _vatOutputAccountName,
             onPick: (a) { _vatOutputAccountId = a.id; _vatOutputAccountCode = a.accountCode; _vatOutputAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _vatOutputAccountId = null; _vatOutputAccountCode = null; _vatOutputAccountName = null; }),
           ),
           _accountField(
-            label: 'ภาษีขายรอตัดบัญชี (Deferred VAT Output)',
+            label: isEnglish ? 'Deferred Output VAT (Deferred VAT Output)' : 'ภาษีขายรอตัดบัญชี (Deferred VAT Output)',
             accountId: _vatPendingOutputAccountId, accountCode: _vatPendingOutputAccountCode, accountName: _vatPendingOutputAccountName,
             onPick: (a) { _vatPendingOutputAccountId = a.id; _vatPendingOutputAccountCode = a.accountCode; _vatPendingOutputAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _vatPendingOutputAccountId = null; _vatPendingOutputAccountCode = null; _vatPendingOutputAccountName = null; }),
@@ -703,7 +777,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
 
         if (_showDiscount)
           _accountField(
-            label: 'ส่วนลดจ่าย (Discount)',
+            label: isEnglish ? 'Discount Given (Discount)' : 'ส่วนลดจ่าย (Discount)',
             accountId: _discountAccountId, accountCode: _discountAccountCode, accountName: _discountAccountName,
             onPick: (a) { _discountAccountId = a.id; _discountAccountCode = a.accountCode; _discountAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _discountAccountId = null; _discountAccountCode = null; _discountAccountName = null; }),
@@ -711,7 +785,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
 
         if (_showAdvance)
           _accountField(
-            label: 'เงินมัดจำรับ (Advance)',
+            label: isEnglish ? 'Advance Received (Advance)' : 'เงินมัดจำรับ (Advance)',
             accountId: _advanceAccountId, accountCode: _advanceAccountCode, accountName: _advanceAccountName,
             onPick: (a) { _advanceAccountId = a.id; _advanceAccountCode = a.accountCode; _advanceAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _advanceAccountId = null; _advanceAccountCode = null; _advanceAccountName = null; }),
@@ -719,40 +793,42 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
 
         if (_showCash)
           _accountField(
-            label: 'เงินสด / ธนาคาร (Cash/Bank — default)',
+            label: isEnglish ? 'Cash / Bank (Cash/Bank — default)' : 'เงินสด / ธนาคาร (Cash/Bank — default)',
             accountId: _cashAccountId, accountCode: _cashAccountCode, accountName: _cashAccountName,
             onPick: (a) { _cashAccountId = a.id; _cashAccountCode = a.accountCode; _cashAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _cashAccountId = null; _cashAccountCode = null; _cashAccountName = null; }),
           ),
 
         if (_showCash) ...[
-          _SectionHeader(title: 'บัญชีรับชำระตามวิธีชำระ (ถ้าไม่ระบุ จะใช้บัญชีจากโมดูล CM หรือบัญชี Cash/Bank ด้านบน)'),
-          _accountField(label: 'เช็ค (CHECK)', accountId: _checkAccountId, accountCode: _checkAccountCode, accountName: _checkAccountName,
+          _SectionHeader(title: isEnglish
+              ? 'Receipt accounts by payment method (If not specified, the account from the CM module or the Cash/Bank account above will be used)'
+              : 'บัญชีรับชำระตามวิธีชำระ (ถ้าไม่ระบุ จะใช้บัญชีจากโมดูล CM หรือบัญชี Cash/Bank ด้านบน)'),
+          _accountField(label: isEnglish ? 'Check (CHECK)' : 'เช็ค (CHECK)', accountId: _checkAccountId, accountCode: _checkAccountCode, accountName: _checkAccountName,
             onPick: (a) { _checkAccountId = a.id; _checkAccountCode = a.accountCode; _checkAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _checkAccountId = null; _checkAccountCode = null; _checkAccountName = null; })),
-          _accountField(label: 'โอนเงิน (TRANSFER)', accountId: _transferAccountId, accountCode: _transferAccountCode, accountName: _transferAccountName,
+          _accountField(label: isEnglish ? 'Transfer (TRANSFER)' : 'โอนเงิน (TRANSFER)', accountId: _transferAccountId, accountCode: _transferAccountCode, accountName: _transferAccountName,
             onPick: (a) { _transferAccountId = a.id; _transferAccountCode = a.accountCode; _transferAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _transferAccountId = null; _transferAccountCode = null; _transferAccountName = null; })),
-          _accountField(label: 'บัตรเครดิต (CREDIT CARD)', accountId: _creditCardAccountId, accountCode: _creditCardAccountCode, accountName: _creditCardAccountName,
+          _accountField(label: isEnglish ? 'Credit Card (CREDIT CARD)' : 'บัตรเครดิต (CREDIT CARD)', accountId: _creditCardAccountId, accountCode: _creditCardAccountCode, accountName: _creditCardAccountName,
             onPick: (a) { _creditCardAccountId = a.id; _creditCardAccountCode = a.accountCode; _creditCardAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _creditCardAccountId = null; _creditCardAccountCode = null; _creditCardAccountName = null; })),
-          _accountField(label: 'บัตรเดบิต (DEBIT CARD)', accountId: _debitCardAccountId, accountCode: _debitCardAccountCode, accountName: _debitCardAccountName,
+          _accountField(label: isEnglish ? 'Debit Card (DEBIT CARD)' : 'บัตรเดบิต (DEBIT CARD)', accountId: _debitCardAccountId, accountCode: _debitCardAccountCode, accountName: _debitCardAccountName,
             onPick: (a) { _debitCardAccountId = a.id; _debitCardAccountCode = a.accountCode; _debitCardAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _debitCardAccountId = null; _debitCardAccountCode = null; _debitCardAccountName = null; })),
-          _accountField(label: 'QR Code / พร้อมเพย์ (QR_CODE)', accountId: _qrCodeAccountId, accountCode: _qrCodeAccountCode, accountName: _qrCodeAccountName,
+          _accountField(label: isEnglish ? 'QR Code / PromptPay (QR_CODE)' : 'QR Code / พร้อมเพย์ (QR_CODE)', accountId: _qrCodeAccountId, accountCode: _qrCodeAccountCode, accountName: _qrCodeAccountName,
             onPick: (a) { _qrCodeAccountId = a.id; _qrCodeAccountCode = a.accountCode; _qrCodeAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _qrCodeAccountId = null; _qrCodeAccountCode = null; _qrCodeAccountName = null; })),
           _accountField(label: 'Mobile Banking / Internet Banking (MOBILE_BANKING)', accountId: _mobileBankingAccountId, accountCode: _mobileBankingAccountCode, accountName: _mobileBankingAccountName,
             onPick: (a) { _mobileBankingAccountId = a.id; _mobileBankingAccountCode = a.accountCode; _mobileBankingAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _mobileBankingAccountId = null; _mobileBankingAccountCode = null; _mobileBankingAccountName = null; })),
-          _accountField(label: 'ตั๋วแลกเงิน (BILL OF EXCHANGE)', accountId: _billOfExchangeAccountId, accountCode: _billOfExchangeAccountCode, accountName: _billOfExchangeAccountName,
+          _accountField(label: isEnglish ? 'Bill of Exchange (BILL OF EXCHANGE)' : 'ตั๋วแลกเงิน (BILL OF EXCHANGE)', accountId: _billOfExchangeAccountId, accountCode: _billOfExchangeAccountCode, accountName: _billOfExchangeAccountName,
             onPick: (a) { _billOfExchangeAccountId = a.id; _billOfExchangeAccountCode = a.accountCode; _billOfExchangeAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _billOfExchangeAccountId = null; _billOfExchangeAccountCode = null; _billOfExchangeAccountName = null; })),
         ],
 
         if (_showWht)
           _accountField(
-            label: 'ภาษีหัก ณ ที่จ่าย (WHT — default)',
+            label: isEnglish ? 'Withholding Tax (WHT — default)' : 'ภาษีหัก ณ ที่จ่าย (WHT — default)',
             accountId: _whtAccountId, accountCode: _whtAccountCode, accountName: _whtAccountName,
             onPick: (a) { _whtAccountId = a.id; _whtAccountCode = a.accountCode; _whtAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _whtAccountId = null; _whtAccountCode = null; _whtAccountName = null; }),
@@ -760,13 +836,13 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
 
         if (_showFx) ...[
           _accountField(
-            label: 'กำไรจากอัตราแลกเปลี่ยน (FX Gain)',
+            label: isEnglish ? 'Exchange Rate Gain (FX Gain)' : 'กำไรจากอัตราแลกเปลี่ยน (FX Gain)',
             accountId: _fxGainAccountId, accountCode: _fxGainAccountCode, accountName: _fxGainAccountName,
             onPick: (a) { _fxGainAccountId = a.id; _fxGainAccountCode = a.accountCode; _fxGainAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _fxGainAccountId = null; _fxGainAccountCode = null; _fxGainAccountName = null; }),
           ),
           _accountField(
-            label: 'ขาดทุนจากอัตราแลกเปลี่ยน (FX Loss)',
+            label: isEnglish ? 'Exchange Rate Loss (FX Loss)' : 'ขาดทุนจากอัตราแลกเปลี่ยน (FX Loss)',
             accountId: _fxLossAccountId, accountCode: _fxLossAccountCode, accountName: _fxLossAccountName,
             onPick: (a) { _fxLossAccountId = a.id; _fxLossAccountCode = a.accountCode; _fxLossAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _fxLossAccountId = null; _fxLossAccountCode = null; _fxLossAccountName = null; }),
@@ -786,7 +862,9 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
                   ? const SizedBox(height: 20, width: 20,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.save),
-              label: Text(_isSaving ? 'กำลังบันทึก...' : 'บันทึก'),
+              label: Text(_isSaving
+                  ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
+                  : (isEnglish ? 'Save' : 'บันทึก')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade700,
                 foregroundColor: Colors.white,

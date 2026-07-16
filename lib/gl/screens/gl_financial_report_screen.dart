@@ -2,6 +2,8 @@
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -40,6 +42,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   bool _isFilterExpanded = true;
   double _filterPanelWidth = 350.0;
   bool _isDraggingDivider = false;
+  bool _isEnglish = false;
   Company? _company;
   Map<String, String>? _headers;
 
@@ -105,7 +108,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error loading master: $e')));
+            .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error loading master data: $e' : 'เกิดข้อผิดพลาดในการโหลดข้อมูลหลัก: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -137,7 +140,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       setState(() => _reportData = data);
     } catch (e) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error: $e')));
+          .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -172,7 +175,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
 String _replaceVars(String text, pw.Context? context) {
     if (text.isEmpty) return "";
     
-    final String companyName = _company?.thaiName ?? "";
+    final String companyName = _company?.displayName(_isEnglish) ?? "";
     final String reportName = _reportData?['report_name']?.toString() ?? "";
     final String periodName = _selectedPeriod?.periodName ?? "";
     final String fiscalYear = _selectedYear?.fyCode ?? "";
@@ -366,9 +369,9 @@ String _replaceVars(String text, pw.Context? context) {
 
       final _periodLabel = _selectedPeriod?.periodName ?? _selectedYear?.fyCode ?? '';
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 0, 0, _company?.displayName(_isEnglish) ?? '', bold: true);
       _xlCell(s, 1, 0, reportName, bold: true);
-      _xlCell(s, 2, 0, '$_periodLabel  |  พิมพ์: $_ts');
+      _xlCell(s, 2, 0, '$_periodLabel  |  ${_isEnglish ? 'Printed: $_ts' : 'พิมพ์: $_ts'}');
 
       int r = 3;
       for (final rowData in bodyRows) {
@@ -465,6 +468,8 @@ String _replaceVars(String text, pw.Context? context) {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -487,7 +492,7 @@ String _replaceVars(String text, pw.Context? context) {
               ),
             IconButton(
               icon: const Icon(Icons.refresh),
-              tooltip: 'รีเฟรชรายการ',
+              tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
               onPressed: _loadMasterData,
             ),
           ],
@@ -512,7 +517,9 @@ String _replaceVars(String text, pw.Context? context) {
                       ),
                       padding: EdgeInsets.zero,
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (isEnglish ? 'Collapse Filter' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand Filter' : 'ขยายเงื่อนไข'),
                     ),
                   ),
                   AnimatedContainer(
@@ -532,8 +539,8 @@ String _replaceVars(String text, pw.Context? context) {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('เงื่อนไขรายงาน',
-                                style: TextStyle(
+                            Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                style: const TextStyle(
                                     fontWeight: FontWeight.bold, fontSize: 16)),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<Map<String, dynamic>>(
@@ -543,12 +550,12 @@ String _replaceVars(String text, pw.Context? context) {
                                   .map((r) => DropdownMenuItem(
                                       value: r,
                                       child: Text(
-                                          "${r['report_code']} - ${r['report_name_thai']}",
+                                          "${r['report_code']} - ${isEnglish ? (r['report_name_eng'] ?? r['report_name_thai']) : r['report_name_thai']}",
                                           overflow: TextOverflow.ellipsis)))
                                   .toList(),
-                              decoration: const InputDecoration(
-                                  labelText: 'งบการเงิน',
-                                  border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                  labelText: isEnglish ? 'Financial Statement' : 'งบการเงิน',
+                                  border: const OutlineInputBorder(),
                                   isDense: true),
                               onChanged: (val) =>
                                   setState(() => _selectedReport = val),
@@ -561,9 +568,9 @@ String _replaceVars(String text, pw.Context? context) {
                                   .map((fy) => DropdownMenuItem(
                                       value: fy, child: Text(fy.fyCode)))
                                   .toList(),
-                              decoration: const InputDecoration(
-                                  labelText: 'ปีบัญชี',
-                                  border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                  labelText: isEnglish ? 'Fiscal Year' : 'ปีบัญชี',
+                                  border: const OutlineInputBorder(),
                                   isDense: true),
                               onChanged: (val) async {
                                 if (val != null) {
@@ -582,9 +589,9 @@ String _replaceVars(String text, pw.Context? context) {
                                       child: Text(
                                           "${p.periodNumber} - ${p.periodName}")))
                                   .toList(),
-                              decoration: const InputDecoration(
-                                  labelText: 'งวดเดือน',
-                                  border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                  labelText: isEnglish ? 'Period' : 'งวดเดือน',
+                                  border: const OutlineInputBorder(),
                                   isDense: true),
                               onChanged: (val) =>
                                   setState(() => _selectedPeriod = val),
@@ -594,12 +601,12 @@ String _replaceVars(String text, pw.Context? context) {
                               DropdownButtonFormField<int?>(
                                 value: _selectedBranchId,
                                 isExpanded: true,
-                                decoration: const InputDecoration(
-                                    labelText: 'สาขา',
-                                    border: OutlineInputBorder(),
+                                decoration: InputDecoration(
+                                    labelText: isEnglish ? 'Branch' : 'สาขา',
+                                    border: const OutlineInputBorder(),
                                     isDense: true),
                                 items: [
-                                  const DropdownMenuItem<int?>(value: null, child: Text('— ทุกสาขา —')),
+                                  DropdownMenuItem<int?>(value: null, child: Text(isEnglish ? '— All Branches —' : '— ทุกสาขา —')),
                                   ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
                                       value: b.branchId,
                                       child: Text('${b.branchCode}  ${b.branchNameThai}',
@@ -631,7 +638,7 @@ String _replaceVars(String text, pw.Context? context) {
                               height: 50,
                               child: ElevatedButton.icon(
                                 icon: const Icon(Icons.analytics),
-                                label: const Text('ประมวลผลรายงาน'),
+                                label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                 style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.deepOrange[900],
                                     foregroundColor: Colors.white),
@@ -675,9 +682,9 @@ String _replaceVars(String text, pw.Context? context) {
                           TabBar(
                             labelColor: Colors.deepOrange[900],
                             indicatorColor: Colors.deepOrange[900],
-                            tabs: const [
-                              Tab(text: "ตัวอย่างก่อนพิมพ์ (PDF)"),
-                              Tab(text: "ตารางข้อมูล"),
+                            tabs: [
+                              Tab(text: isEnglish ? 'Print Preview (PDF)' : 'ตัวอย่างก่อนพิมพ์ (PDF)'),
+                              Tab(text: isEnglish ? 'Data Table' : 'ตารางข้อมูล'),
                             ],
                           ),
                           Expanded(
@@ -685,9 +692,10 @@ String _replaceVars(String text, pw.Context? context) {
                                 ? const Center(
                                     child: CircularProgressIndicator())
                                 : _reportData == null
-                                    ? const Center(
-                                        child: Text(
-                                            'กรุณาเลือกเงื่อนไขและกด "ประมวลผลรายงาน"'))
+                                    ? Center(
+                                        child: Text(isEnglish
+                                            ? 'Select conditions and click "Generate Report"'
+                                            : 'กรุณาเลือกเงื่อนไขและกด "ประมวลผลรายงาน"'))
                                     : TabBarView(
                                         children: [
                                           _buildPdfTab(),

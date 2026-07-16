@@ -47,6 +47,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
   bool _isDraggingDivider = false;
   int _pdfKey = 0;
   bool _isExporting = false;
+  bool _isEnglish = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -97,11 +98,11 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
   // Labels: index 0 = ยังไม่ครบกำหนด, 1..N-1 = ranges, N = เกิน
   List<String> get _dynamicBucketLabels {
     final I = _columnInterval;
-    final labels = <String>['ยังไม่ครบกำหนด'];
+    final labels = <String>[_isEnglish ? 'Not yet due' : 'ยังไม่ครบกำหนด'];
     for (int i = 0; i < _overdueColumnCount - 1; i++) {
       labels.add('${i * I + 1}-${(i + 1) * I}');
     }
-    labels.add('เกิน ${(_overdueColumnCount - 1) * I}');
+    labels.add('${_isEnglish ? "Over" : "เกิน"} ${(_overdueColumnCount - 1) * I}');
     return labels;
   }
 
@@ -133,6 +134,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
   }
 
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     setState(() {
       _isLoading = true;
       _reportData = [];
@@ -194,8 +196,10 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       }
 
       if (filtered.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('ไม่พบข้อมูลลูกหนี้คงค้าง ณ วันที่ที่เลือก')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'No outstanding receivable data found as of the selected date'
+                : 'ไม่พบข้อมูลลูกหนี้คงค้าง ณ วันที่ที่เลือก')));
       }
 
       setState(() {
@@ -205,8 +209,9 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -220,6 +225,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
   // ─── Excel ────────────────────────────────────────────────────────────────────
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -234,18 +240,19 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       final totalBuckets = _totalBuckets;
 
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานลูกหนี้คงค้างตามอายุหนี้', bold: true);
-      _xlCell(s, 2, 0, 'ณ วันที่: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  พิมพ์: $_ts');
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, isEnglish ? 'AR Aging Report' : 'รายงานลูกหนี้คงค้างตามอายุหนี้', bold: true);
+      _xlCell(s, 2, 0,
+          '${isEnglish ? "As of" : "ณ วันที่"}: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  ${isEnglish ? "Printed" : "พิมพ์"}: $_ts');
 
       int r = 3;
       // Header row
-      _xlCell(s, r, 0, 'รหัสลูกหนี้', bg: hdrBg, bold: true);
-      _xlCell(s, r, 1, 'ชื่อลูกหนี้', bg: hdrBg, bold: true);
+      _xlCell(s, r, 0, isEnglish ? 'Customer Code' : 'รหัสลูกหนี้', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, isEnglish ? 'Customer Name' : 'ชื่อลูกหนี้', bg: hdrBg, bold: true);
       for (int b = 0; b < totalBuckets; b++) {
         _xlCell(s, r, 2 + b, bucketLabels[b], bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       }
-      _xlCell(s, r, 2 + totalBuckets, 'รวม', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 2 + totalBuckets, isEnglish ? 'Total' : 'รวม', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       r++;
 
       final grandBuckets = List<double>.filled(totalBuckets, 0.0);
@@ -253,7 +260,9 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
       for (final cust in _reportData) {
         final code = cust['customer_code'] as String? ?? '';
-        final name = cust['customer_name_th'] as String? ?? '';
+        final nameTh = cust['customer_name_th'] as String? ?? '';
+        final nameEn = _customerDetailMap[code]?.customerNameEn;
+        final name = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
         final invoices = (cust['invoices'] as List?) ?? [];
         final custBuckets = List<double>.filled(totalBuckets, 0.0);
         for (final inv in invoices) {
@@ -284,7 +293,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       }
 
       // Grand total
-      _xlCell(s, r, 0, 'รวมทั้งสิ้น', bg: totBg, bold: true);
+      _xlCell(s, r, 0, isEnglish ? 'Grand Total' : 'รวมทั้งสิ้น', bg: totBg, bold: true);
       _xlCell(s, r, 1, '', bg: totBg);
       for (int b = 0; b < totalBuckets; b++) {
         _xlCell(s, r, 2 + b, DoubleCellValue(grandBuckets[b]), bg: totBg, bold: true, align: HorizontalAlign.Right);
@@ -294,7 +303,8 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       final bytes = ex.encode();
       if (bytes == null) return;
       final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      await downloadFile(bytes, 'รายงานลูกหนี้คงค้างตามอายุหนี้_$ts.xlsx');
+      await downloadFile(bytes,
+          isEnglish ? 'AR_Aging_Report_$ts.xlsx' : 'รายงานลูกหนี้คงค้างตามอายุหนี้_$ts.xlsx');
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
@@ -314,6 +324,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
   // ─── PDF ──────────────────────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish         = _isEnglish;
     final doc              = pw.Document();
     final fontData         = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData     = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -322,10 +333,10 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
     final fontBold         = pw.Font.ttf(fontBoldData);
     final fontItalic       = pw.Font.ttf(fontItalicData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
-    final userName     = _headers?['UserName'] ?? '(ไม่ระบุชื่อ)';
+    final companyName  = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
+    final userName     = _headers?['UserName'] ?? (isEnglish ? '(No name)' : '(ไม่ระบุชื่อ)');
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-    final asOfLine     = 'ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_asOfDate)}';
+    final asOfLine     = '${isEnglish ? "As of" : "ณ วันที่"} ${DateFormat('dd/MM/yyyy').format(_asOfDate)}';
 
     // Snapshot settings for this render
     final bucketLabels = _dynamicBucketLabels;
@@ -339,32 +350,43 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       final b = _allowedBranches.firstWhere(
           (b) => b.branchId == _selectedBranchId,
           orElse: () => _allowedBranches.first);
-      conditions.add('สาขา: ${b.branchCode} ${b.branchNameThai}');
+      conditions.add('${isEnglish ? "Branch" : "สาขา"}: ${b.branchCode} ${b.branchNameThai}');
     }
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
         final g = _customerGroups.firstWhere((g) => g.id == id,
             orElse: () => _customerGroups.first);
-        return '${g.groupCode} ${g.groupNameThai}';
+        final gName = isEnglish && g.groupNameEng.isNotEmpty ? g.groupNameEng : g.groupNameThai;
+        return '${g.groupCode} $gName';
       }).join(', ');
-      conditions.add('กลุ่มลูกค้า: $names');
+      conditions.add('${isEnglish ? "Customer Group" : "กลุ่มลูกค้า"}: $names');
     }
     if (_selectedSalespersonId != null) {
       final sp = _salespersons.firstWhere(
           (s) => s.id == _selectedSalespersonId,
           orElse: () => _salespersons.first);
-      conditions.add('พนักงานขาย: ${sp.salespersonCode} ${sp.salespersonNameThai}');
+      final spName = isEnglish && (sp.salespersonNameEng ?? '').isNotEmpty
+          ? sp.salespersonNameEng!
+          : sp.salespersonNameThai;
+      conditions.add('${isEnglish ? "Salesperson" : "พนักงานขาย"}: ${sp.salespersonCode} $spName');
     }
     if ((_customerCodeFrom ?? '').isNotEmpty || (_customerCodeTo ?? '').isNotEmpty) {
+      final all = isEnglish ? '(All)' : '(ทั้งหมด)';
       final from = _customerCodeFrom ?? '';
       final to = _customerCodeTo ?? '';
-      conditions.add('รหัสลูกค้า: ${from.isEmpty ? '(ทั้งหมด)' : from} – ${to.isEmpty ? '(ทั้งหมด)' : to}');
+      conditions.add('${isEnglish ? "Customer Code" : "รหัสลูกค้า"}: ${from.isEmpty ? all : from} – ${to.isEmpty ? all : to}');
     }
-    conditions.add('คอลัมน์ครบกำหนด: $_overdueColumnCount คอลัมน์  ทุก $_columnInterval วัน');
+    conditions.add(isEnglish
+        ? 'Overdue columns: $_overdueColumnCount column(s)  every $_columnInterval day(s)'
+        : 'คอลัมน์ครบกำหนด: $_overdueColumnCount คอลัมน์  ทุก $_columnInterval วัน');
     if (sortOrder != 'none') {
-      conditions.add('เรียงยอดหนี้: ${sortOrder == 'desc' ? 'มากไปน้อย' : 'น้อยไปมาก'}');
+      conditions.add(isEnglish
+          ? 'Sort by balance: ${sortOrder == 'desc' ? 'Descending' : 'Ascending'}'
+          : 'เรียงยอดหนี้: ${sortOrder == 'desc' ? 'มากไปน้อย' : 'น้อยไปมาก'}');
     }
-    if (showDetail) conditions.add('แสดงรายละเอียดใบแจ้งหนี้');
+    if (showDetail) {
+      conditions.add(isEnglish ? 'Show invoice details' : 'แสดงรายละเอียดใบแจ้งหนี้');
+    }
     final conditionLine = '* ${conditions.join(' | ')}';
 
     final numFmt = NumberFormat('#,##0.00', 'en_US');
@@ -390,9 +412,11 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
       }
       final code   = c['customer_code'] as String? ?? '';
       final detail = _customerDetailMap[code];
+      final nameTh = c['customer_name_th'] as String? ?? '';
+      final nameEn = detail?.customerNameEn;
       return (
         code:         code,
-        name:         c['customer_name_th'] as String? ?? '',
+        name:         isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh,
         buckets:      buckets,
         total:        buckets.fold(0.0, (s, v) => s + v),
         invoices:     (c['invoices'] as List? ?? [])
@@ -445,13 +469,13 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                         style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 7,
-                    child: pw.Text('รายงานลูกหนี้คงค้างตามอายุหนี้',
+                    child: pw.Text(isEnglish ? 'AR Aging Report' : 'รายงานลูกหนี้คงค้างตามอายุหนี้',
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(
                             fontSize: 16, fontWeight: pw.FontWeight.bold))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+                    child: pw.Text('${isEnglish ? "Page" : "หน้า"} ${ctx.pageNumber}/${ctx.pagesCount}',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12))),
               ],
@@ -471,7 +495,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                         style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text('พิมพ์โดย $userName',
+                    child: pw.Text('${isEnglish ? "Printed by" : "พิมพ์โดย"} $userName',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12))),
               ],
@@ -488,7 +512,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                         style: const pw.TextStyle(fontSize: 10))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text('พิมพ์เมื่อ $printDateStr',
+                    child: pw.Text('${isEnglish ? "Printed" : "พิมพ์เมื่อ"} $printDateStr',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12))),
               ],
@@ -568,9 +592,9 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
             final bucket   = _bucketDynamic(days);
 
             final dateParts = <String>[];
-            if (docDate.isNotEmpty) dateParts.add('แจ้ง:$docDate');
-            if (billDate.isNotEmpty) dateParts.add('บิล:$billDate');
-            if (dueDate.isNotEmpty) dateParts.add('ครบ:$dueDate');
+            if (docDate.isNotEmpty) dateParts.add('${isEnglish ? "Doc" : "แจ้ง"}:$docDate');
+            if (billDate.isNotEmpty) dateParts.add('${isEnglish ? "Bill" : "บิล"}:$billDate');
+            if (dueDate.isNotEmpty) dateParts.add('${isEnglish ? "Due" : "ครบ"}:$dueDate');
             final dateText = dateParts.join('  ');
 
             final bks = List<double>.filled(totalBuckets, 0);
@@ -660,6 +684,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    _isEnglish = l.isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -700,7 +725,9 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                           color: Colors.white,
                           size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (l.isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                          : (l.isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
                       onPressed: () =>
                           setState(() => _isFilterExpanded = !_isFilterExpanded),
                     ),
@@ -728,8 +755,8 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const Text('เงื่อนไขรายงาน',
-                                          style: TextStyle(
+                                      Text(l.isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                          style: const TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 16)),
                                       const SizedBox(height: 16),
@@ -748,9 +775,9 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                     }
                                   },
                                   child: InputDecorator(
-                                    decoration: const InputDecoration(
-                                      labelText: 'ณ วันที่',
-                                      border: OutlineInputBorder(),
+                                    decoration: InputDecoration(
+                                      labelText: l.isEnglish ? 'As of' : 'ณ วันที่',
+                                      border: const OutlineInputBorder(),
                                       isDense: true,
                                       suffixIcon: Icon(
                                           Icons.calendar_today, size: 16),
@@ -766,14 +793,14 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                   DropdownButtonFormField<int?>(
                                     isExpanded: true,
                                     value: _selectedBranchId,
-                                    decoration: const InputDecoration(
-                                        labelText: 'สาขา',
-                                        border: OutlineInputBorder(),
+                                    decoration: InputDecoration(
+                                        labelText: l.isEnglish ? 'Branch' : 'สาขา',
+                                        border: const OutlineInputBorder(),
                                         isDense: true),
                                     items: [
-                                      const DropdownMenuItem<int?>(
+                                      DropdownMenuItem<int?>(
                                           value: null,
-                                          child: Text('— ทุกสาขา —')),
+                                          child: Text(l.isEnglish ? '— All Branches —' : '— ทุกสาขา —')),
                                       ..._allowedBranches.map((b) =>
                                           DropdownMenuItem<int?>(
                                             value: b.branchId,
@@ -802,14 +829,14 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                 DropdownButtonFormField<int?>(
                                   isExpanded: true,
                                   value: _selectedSalespersonId,
-                                  decoration: const InputDecoration(
-                                      labelText: 'พนักงานขาย',
-                                      border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                      labelText: l.isEnglish ? 'Salesperson' : 'พนักงานขาย',
+                                      border: const OutlineInputBorder(),
                                       isDense: true),
                                   items: [
-                                    const DropdownMenuItem<int?>(
+                                    DropdownMenuItem<int?>(
                                         value: null,
-                                        child: Text('— ทั้งหมด —')),
+                                        child: Text(l.isEnglish ? '— All —' : '— ทั้งหมด —')),
                                     ..._salespersons.map((s) =>
                                         DropdownMenuItem<int?>(
                                           value: s.id,
@@ -826,7 +853,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                 // รหัสลูกค้าตั้งแต่
                                 const SizedBox(height: 12),
                                 _buildCustomerCodeField(
-                                  label: 'รหัสลูกค้า ตั้งแต่',
+                                  label: l.isEnglish ? 'Customer Code From' : 'รหัสลูกค้า ตั้งแต่',
                                   displayText: _fromLabel,
                                   onPick: () => _pickCustomer(isFrom: true),
                                   onClear: () => setState(() {
@@ -838,7 +865,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                 // รหัสลูกค้าถึง
                                 const SizedBox(height: 8),
                                 _buildCustomerCodeField(
-                                  label: 'รหัสลูกค้า ถึง',
+                                  label: l.isEnglish ? 'Customer Code To' : 'รหัสลูกค้า ถึง',
                                   displayText: _toLabel,
                                   onPick: () => _pickCustomer(isFrom: false),
                                   onClear: () => setState(() {
@@ -855,14 +882,14 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                 DropdownButtonFormField<int>(
                                   isExpanded: true,
                                   value: _overdueColumnCount,
-                                  decoration: const InputDecoration(
-                                      labelText: 'จำนวนคอลัมน์ที่ครบกำหนดแล้ว',
-                                      border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                      labelText: l.isEnglish ? 'Number of Overdue Columns' : 'จำนวนคอลัมน์ที่ครบกำหนดแล้ว',
+                                      border: const OutlineInputBorder(),
                                       isDense: true),
                                   items: [2, 3, 4, 5]
                                       .map((n) => DropdownMenuItem<int>(
                                           value: n,
-                                          child: Text('$n คอลัมน์')))
+                                          child: Text(l.isEnglish ? '$n columns' : '$n คอลัมน์')))
                                       .toList(),
                                   onChanged: (v) {
                                     if (v != null) {
@@ -878,11 +905,11 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                   controller: _daysIntervalCtrl,
                                   keyboardType: TextInputType.number,
                                   textAlign: TextAlign.right,
-                                  decoration: const InputDecoration(
-                                    labelText: 'จำนวนวันต่อคอลัมน์',
-                                    border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                    labelText: l.isEnglish ? 'Days per Column' : 'จำนวนวันต่อคอลัมน์',
+                                    border: const OutlineInputBorder(),
                                     isDense: true,
-                                    suffixText: 'วัน',
+                                    suffixText: l.isEnglish ? 'days' : 'วัน',
                                   ),
                                   onEditingComplete: _onColumnSettingChanged,
                                 ),
@@ -893,20 +920,20 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                 DropdownButtonFormField<String>(
                                   isExpanded: true,
                                   value: _sortOrder,
-                                  decoration: const InputDecoration(
-                                      labelText: 'เรียงตามยอดหนี้รวม',
-                                      border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                      labelText: l.isEnglish ? 'Sort by Total Debt' : 'เรียงตามยอดหนี้รวม',
+                                      border: const OutlineInputBorder(),
                                       isDense: true),
-                                  items: const [
+                                  items: [
                                     DropdownMenuItem(
                                         value: 'none',
-                                        child: Text('— ไม่ระบุ —')),
+                                        child: Text(l.isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
                                     DropdownMenuItem(
                                         value: 'desc',
-                                        child: Text('มากไปน้อย ↓')),
+                                        child: Text(l.isEnglish ? 'High to Low ↓' : 'มากไปน้อย ↓')),
                                     DropdownMenuItem(
                                         value: 'asc',
-                                        child: Text('น้อยไปมาก ↑')),
+                                        child: Text(l.isEnglish ? 'Low to High ↑' : 'น้อยไปมาก ↑')),
                                   ],
                                   onChanged: (v) {
                                     if (v != null) {
@@ -922,9 +949,9 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                 // แสดงรายละเอียด
                                 Row(
                                   children: [
-                                    const Expanded(
-                                      child: Text('แสดงรายละเอียดใบแจ้งหนี้',
-                                          style: TextStyle(fontSize: 13)),
+                                    Expanded(
+                                      child: Text(l.isEnglish ? 'Show invoice details' : 'แสดงรายละเอียดใบแจ้งหนี้',
+                                          style: const TextStyle(fontSize: 13)),
                                     ),
                                     Switch(
                                       value: _showDetail,
@@ -949,7 +976,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                                   height: 50,
                                   child: ElevatedButton.icon(
                                     icon: const Icon(Icons.picture_as_pdf),
-                                    label: const Text('ประมวลผลรายงาน'),
+                                    label: Text(l.isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                     style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.teal[800],
                                         foregroundColor: Colors.white),
@@ -1186,8 +1213,8 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.teal[800],
-              child: const Text('ค้นหาลูกค้า',
-                  style: TextStyle(
+              child: Text(l.isEnglish ? 'Search Customer' : 'ค้นหาลูกค้า',
+                  style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 15)),
@@ -1198,10 +1225,10 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
               child: TextField(
                 controller: _searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหาจากรหัสหรือชื่อลูกค้า',
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: l.isEnglish ? 'Search by customer code or name' : 'ค้นหาจากรหัสหรือชื่อลูกค้า',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
                 onChanged: _search,
@@ -1211,16 +1238,16 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
             Container(
               color: Colors.grey[200],
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: const Row(
+              child: Row(
                 children: [
                   SizedBox(
                       width: 100,
-                      child: Text('รหัส',
-                          style: TextStyle(
+                      child: Text(l.isEnglish ? 'Code' : 'รหัส',
+                          style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 12))),
                   Expanded(
-                      child: Text('ชื่อลูกค้า',
-                          style: TextStyle(
+                      child: Text(l.isEnglish ? 'Customer Name' : 'ชื่อลูกค้า',
+                          style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 12))),
                 ],
               ),
@@ -1231,9 +1258,9 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _customers.isEmpty
-                      ? const Center(
-                          child: Text('ไม่พบข้อมูล',
-                              style: TextStyle(color: Colors.grey)))
+                      ? Center(
+                          child: Text(l.isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+                              style: const TextStyle(color: Colors.grey)))
                       : ListView.separated(
                           controller: _scrollCtrl,
                           itemCount: _customers.length,
@@ -1256,7 +1283,10 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
                                               fontWeight: FontWeight.w500)),
                                     ),
                                     Expanded(
-                                      child: Text(c.customerNameTh,
+                                      child: Text(
+                                          l.isEnglish && (c.customerNameEn?.isNotEmpty ?? false)
+                                              ? c.customerNameEn!
+                                              : c.customerNameTh,
                                           style: const TextStyle(fontSize: 13),
                                           overflow: TextOverflow.ellipsis),
                                     ),

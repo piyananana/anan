@@ -53,6 +53,7 @@ class _ChartOfAccountsReportScreenState
   bool _isLoading = false;
   bool _isExporting = false;
   bool _isFilterExpanded = true;
+  bool _isEnglish = false;
   double _filterPanelWidth = 350.0;
   bool _isDraggingDivider = false;
 
@@ -65,9 +66,9 @@ class _ChartOfAccountsReportScreenState
     5: const pw.FlexColumnWidth(3.6),
   };
 
-  List<Map<String, dynamic>> get _accountTypeOptionsList =>
+  List<Map<String, dynamic>> _accountTypeOptionsList(bool isEnglish) =>
       accountTypeOptions.entries
-          .map((e) => {'doc_code': e.key, 'doc_name_thai': '${e.value} (${e.key})'})
+          .map((e) => {'doc_code': e.key, 'doc_name_thai': '${isEnglish ? (accountTypeOptionsEng[e.key] ?? e.value) : e.value} (${e.key})'})
           .toList();
 
   @override
@@ -88,7 +89,7 @@ class _ChartOfAccountsReportScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error loading master: $e')));
+            .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error loading master data: $e' : 'เกิดข้อผิดพลาดในการโหลดข้อมูลหลัก: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -127,9 +128,10 @@ class _ChartOfAccountsReportScreenState
   }
 
   void _generateReport() {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     if (_accounts.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('ไม่พบข้อมูลผังบัญชี')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'No chart of accounts found' : 'ไม่พบข้อมูลผังบัญชี')));
       return;
     }
 
@@ -158,8 +160,10 @@ class _ChartOfAccountsReportScreenState
     if (_status == 'inactive') ordered = ordered.where((a) => !a.isActive).toList();
 
     if (ordered.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ไม่พบบัญชีตามเงื่อนไขที่เลือก')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish
+              ? 'No accounts match the selected conditions'
+              : 'ไม่พบบัญชีตามเงื่อนไขที่เลือก')));
     }
 
     setState(() => _reportData = ordered);
@@ -179,34 +183,42 @@ class _ChartOfAccountsReportScreenState
   }
 
   // รวมค่าจาก switch ต่างๆ ในหน้า account_detail_widget ที่ "เปิดใช้งาน" คั่นด้วย " | "
-  String _settingsText(Account a) {
+  String _settingsText(Account a, bool isEnglish) {
     final List<String> parts = [];
-    if (!a.isNormalAccount) parts.add('หัวบัญชี/บัญชีรวม');
+    if (!a.isNormalAccount) parts.add(isEnglish ? 'Header/Group Account' : 'หัวบัญชี/บัญชีรวม');
     if (a.isControlAccount) parts.add('Control Account');
-    if (a.branchRequired) parts.add('ระบุสาขา');
+    if (a.branchRequired) parts.add(isEnglish ? 'Branch Required' : 'ระบุสาขา');
     for (final r in a.dimRules.where((r) => r.isRequired)) {
       final label = _dimTypeMap[r.typeCode]?.nameThai ?? r.typeCode;
-      parts.add('ระบุ$label');
+      parts.add(isEnglish ? 'Require $label' : 'ระบุ$label');
     }
     return parts.join(' | ');
   }
 
-  String _buildFilterLine() {
+  String _buildFilterLine(bool isEnglish) {
     final List<String> parts = [];
     if (_selectedAccountTypes.isEmpty ||
         _selectedAccountTypes.length == accountTypeOptions.length) {
-      parts.add('หมวดบัญชี: ทั้งหมด');
+      parts.add(isEnglish ? 'Account Type: All' : 'หมวดบัญชี: ทั้งหมด');
     } else {
       final typesText = _selectedAccountTypes
-          .map((t) => accountTypeOptions[t] ?? t)
+          .map((t) => accountTypeLabel(t, isEnglish))
           .join(', ');
-      parts.add('หมวดบัญชี: $typesText');
+      parts.add(isEnglish ? 'Account Type: $typesText' : 'หมวดบัญชี: $typesText');
     }
-    parts.add(
-        'รหัสบัญชี: ${_accountFrom?.accountCode ?? 'ทั้งหมด'} - ${_accountTo?.accountCode ?? 'ทั้งหมด'}');
-    parts.add('สถานะ: ${_status == 'active' ? 'ใช้งาน' : _status == 'inactive' ? 'หยุดใช้งาน' : 'ทั้งหมด'}');
+    final allText = isEnglish ? 'All' : 'ทั้งหมด';
+    parts.add(isEnglish
+        ? 'Account Code: ${_accountFrom?.accountCode ?? allText} - ${_accountTo?.accountCode ?? allText}'
+        : 'รหัสบัญชี: ${_accountFrom?.accountCode ?? allText} - ${_accountTo?.accountCode ?? allText}');
+    if (_status == 'active') {
+      parts.add(isEnglish ? 'Status: Active' : 'สถานะ: ใช้งาน');
+    } else if (_status == 'inactive') {
+      parts.add(isEnglish ? 'Status: Inactive' : 'สถานะ: หยุดใช้งาน');
+    } else {
+      parts.add(isEnglish ? 'Status: All' : 'สถานะ: ทั้งหมด');
+    }
     if (!_showHeaderAccounts) {
-      parts.add('ไม่รวมหัวบัญชี/บัญชีรวม');
+      parts.add(isEnglish ? 'Exclude header accounts' : 'ไม่รวมหัวบัญชี/บัญชีรวม');
     }
     return '* ${parts.join("  |  ")}';
   }
@@ -220,6 +232,7 @@ class _ChartOfAccountsReportScreenState
     required Function(Set<String>) onChanged,
   }) async {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     Set<String> temp = Set.from(selected);
     await showDialog(
       context: context,
@@ -232,7 +245,7 @@ class _ChartOfAccountsReportScreenState
             child: Column(
               children: [
                 CheckboxListTile(
-                  title: const Text('เลือกทั้งหมด'),
+                  title: Text(isEnglish ? 'Select All' : 'เลือกทั้งหมด'),
                   value: temp.length == options.length
                       ? true
                       : (temp.isEmpty ? false : null),
@@ -278,7 +291,7 @@ class _ChartOfAccountsReportScreenState
                   onChanged(temp);
                   Navigator.pop(ctx);
                 },
-                child: const Text('ตกลง')),
+                child: Text(isEnglish ? 'OK' : 'ตกลง')),
           ],
         ),
       ),
@@ -289,7 +302,7 @@ class _ChartOfAccountsReportScreenState
       String label, List<Map<String, dynamic>> options, Set<String> selected,
       Function(Set<String>) onChanged) {
     final displayText = selected.isEmpty || selected.length == options.length
-        ? 'ทั้งหมด'
+        ? (_isEnglish ? 'All' : 'ทั้งหมด')
         : selected.map((c) {
             final opt = options.firstWhere((o) => o['doc_code'] == c,
                 orElse: () => {'doc_code': c, 'doc_name_thai': c});
@@ -319,6 +332,7 @@ class _ChartOfAccountsReportScreenState
 
   Future<void> _showAccountSearchDialog(bool isFrom) async {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     final searchCtrl = TextEditingController();
     List<Account> filtered = List.from(_accounts)
       ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
@@ -338,7 +352,8 @@ class _ChartOfAccountsReportScreenState
                 filtered = _accounts
                     .where((a) =>
                         a.accountCode.toLowerCase().contains(lq) ||
-                        a.accountNameThai.toLowerCase().contains(lq))
+                        a.accountNameThai.toLowerCase().contains(lq) ||
+                        a.accountNameEng.toLowerCase().contains(lq))
                     .toList()
                   ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
               }
@@ -346,7 +361,9 @@ class _ChartOfAccountsReportScreenState
           }
 
           return AlertDialog(
-            title: Text(isFrom ? 'เลือกบัญชีเริ่มต้น' : 'เลือกบัญชีสิ้นสุด'),
+            title: Text(isFrom
+                ? (isEnglish ? 'Select Start Account' : 'เลือกบัญชีเริ่มต้น')
+                : (isEnglish ? 'Select End Account' : 'เลือกบัญชีสิ้นสุด')),
             content: SizedBox(
               width: 520,
               height: 420,
@@ -355,18 +372,18 @@ class _ChartOfAccountsReportScreenState
                   TextField(
                     controller: searchCtrl,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                    decoration: InputDecoration(
+                      hintText: isEnglish ? 'Search code / name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                     ),
                     onChanged: doFilter,
                   ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: filtered.isEmpty
-                        ? const Center(child: Text('ไม่พบบัญชี'))
+                        ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี'))
                         : ListView.builder(
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
@@ -391,7 +408,10 @@ class _ChartOfAccountsReportScreenState
                                             color: Colors.indigo[900]),
                                       ),
                                     ),
-                                    Expanded(child: Text(a.accountNameThai)),
+                                    Expanded(
+                                        child: Text(isEnglish && a.accountNameEng.isNotEmpty
+                                            ? a.accountNameEng
+                                            : a.accountNameThai)),
                                     const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
@@ -401,8 +421,7 @@ class _ChartOfAccountsReportScreenState
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
-                                        accountTypeOptions[a.accountType] ??
-                                            a.accountType,
+                                        accountTypeLabel(a.accountType, isEnglish),
                                         style: const TextStyle(
                                             fontSize: 11, color: Colors.grey),
                                       ),
@@ -442,6 +461,7 @@ class _ChartOfAccountsReportScreenState
   // ── Excel Export ─────────────────────────────────────────────────────────
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     setState(() => _isExporting = true);
     try {
       final ex = Excel.createExcel();
@@ -450,19 +470,14 @@ class _ChartOfAccountsReportScreenState
       final hdrBg = ExcelColor.fromHexString('#92D050');
 
       final ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานผังบัญชี (Chart of Accounts)', bold: true);
-      _xlCell(s, 2, 0, '${_buildFilterLine()}  |  พิมพ์: $ts');
+      _xlCell(s, 0, 0, _company?.displayName(_isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, _isEnglish ? 'Chart of Accounts' : 'รายงานผังบัญชี (Chart of Accounts)', bold: true);
+      _xlCell(s, 2, 0, '${_buildFilterLine(isEnglish)}  |  ${isEnglish ? 'Printed: $ts' : 'พิมพ์: $ts'}');
 
       int r = 3;
-      const colHeaders = [
-        'รหัสบัญชี',
-        'ชื่อบัญชี (ไทย/อังกฤษ)',
-        'ยอดดุล',
-        'สกุลเงิน',
-        'สถานะ',
-        'การตั้งค่าต่างๆ',
-      ];
+      final colHeaders = isEnglish
+          ? ['Account Code', 'Account Name (TH/EN)', 'Balance', 'Currency', 'Status', 'Settings']
+          : ['รหัสบัญชี', 'ชื่อบัญชี (ไทย/อังกฤษ)', 'ยอดดุล', 'สกุลเงิน', 'สถานะ', 'การตั้งค่าต่างๆ'];
       for (int c = 0; c < colHeaders.length; c++) {
         _xlCell(s, r, c, colHeaders[c], bg: hdrBg, bold: true);
       }
@@ -471,7 +486,9 @@ class _ChartOfAccountsReportScreenState
       for (final group in _groupByType(_reportData)) {
         _xlCell(
             s, r, 0,
-            'หมวดบัญชี: ${accountTypeOptions[group.first.accountType] ?? group.first.accountType} (${group.first.accountType})',
+            isEnglish
+                ? 'Account Type: ${accountTypeLabel(group.first.accountType, true)} (${group.first.accountType})'
+                : 'หมวดบัญชี: ${accountTypeOptions[group.first.accountType] ?? group.first.accountType} (${group.first.accountType})',
             bold: true);
         r++;
         for (final a in group) {
@@ -481,10 +498,10 @@ class _ChartOfAccountsReportScreenState
               : a.accountNameThai;
           _xlCell(s, r, 0, a.accountCode);
           _xlCell(s, r, 1, '${'    ' * level}$nameText');
-          _xlCell(s, r, 2, a.normalBalance == 'DR' ? 'เดบิต' : 'เครดิต');
+          _xlCell(s, r, 2, a.normalBalance == 'DR' ? (isEnglish ? 'DR' : 'เดบิต') : (isEnglish ? 'CR' : 'เครดิต'));
           _xlCell(s, r, 3, a.currencyCode);
-          _xlCell(s, r, 4, a.isActive ? 'ใช้งาน' : 'หยุดใช้งาน');
-          _xlCell(s, r, 5, _settingsText(a));
+          _xlCell(s, r, 4, a.isActive ? (isEnglish ? 'Active' : 'ใช้งาน') : (isEnglish ? 'Inactive' : 'หยุดใช้งาน'));
+          _xlCell(s, r, 5, _settingsText(a, isEnglish));
           r++;
         }
       }
@@ -509,7 +526,7 @@ class _ChartOfAccountsReportScreenState
 
   // ── PDF Generation ───────────────────────────────────────────────────────
 
-  pw.Widget _tableHeaderRow() {
+  pw.Widget _tableHeaderRow(bool isEnglish) {
     pw.Widget cell(String text) => pw.Container(
           decoration: const pw.BoxDecoration(
             color: PdfColors.grey300,
@@ -520,19 +537,16 @@ class _ChartOfAccountsReportScreenState
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
         );
 
+    final headers = isEnglish
+        ? ['Account Code', 'Account Name (TH/EN)', 'Balance', 'Currency', 'Status', 'Settings']
+        : ['รหัสบัญชี', 'ชื่อบัญชี (ไทย/อังกฤษ)', 'ยอดดุล', 'สกุลเงิน', 'สถานะ', 'การตั้งค่าต่างๆ'];
+
     return pw.Table(columnWidths: _colWidths, children: [
-      pw.TableRow(children: [
-        cell('รหัสบัญชี'),
-        cell('ชื่อบัญชี (ไทย/อังกฤษ)'),
-        cell('ยอดดุล'),
-        cell('สกุลเงิน'),
-        cell('สถานะ'),
-        cell('การตั้งค่าต่างๆ'),
-      ]),
+      pw.TableRow(children: headers.map(cell).toList()),
     ]);
   }
 
-  pw.Widget _buildAccountRow(Account a) {
+  pw.Widget _buildAccountRow(Account a, bool isEnglish) {
     final level = _accountLevels[a.id] ?? 0;
     final double indent = level * 10.0;
     const cellStyle = pw.TextStyle(fontSize: 10);
@@ -557,15 +571,16 @@ class _ChartOfAccountsReportScreenState
           pw.Text(nameText, style: cellStyle),
           padding: pw.EdgeInsets.only(left: 4 + indent, right: 4, top: 3, bottom: 3),
         ),
-        cell(pw.Text(a.normalBalance == 'DR' ? 'เดบิต' : 'เครดิต', style: cellStyle)),
+        cell(pw.Text(a.normalBalance == 'DR' ? (isEnglish ? 'DR' : 'เดบิต') : (isEnglish ? 'CR' : 'เครดิต'), style: cellStyle)),
         cell(pw.Text(a.currencyCode, style: cellStyle)),
-        cell(pw.Text(a.isActive ? 'ใช้งาน' : 'หยุดใช้งาน', style: cellStyle)),
-        cell(pw.Text(_settingsText(a), style: const pw.TextStyle(fontSize: 9))),
+        cell(pw.Text(a.isActive ? (isEnglish ? 'Active' : 'ใช้งาน') : (isEnglish ? 'Inactive' : 'หยุดใช้งาน'), style: cellStyle)),
+        cell(pw.Text(_settingsText(a, isEnglish), style: const pw.TextStyle(fontSize: 9))),
       ]),
     ]);
   }
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish = _isEnglish;
     final doc = pw.Document();
 
     final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
@@ -573,10 +588,12 @@ class _ChartOfAccountsReportScreenState
     final font = pw.Font.ttf(fontData);
     final fontBold = pw.Font.ttf(fontBoldData);
 
-    final String companyName = _company != null ? _company!.thaiName : '(ไม่ระบุชื่อบริษัท)';
-    final String userName = headers['UserName'] ?? '(ไม่ระบุชื่อ)';
+    final String companyName = _company != null
+        ? _company!.displayName(isEnglish)
+        : (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
+    final String userName = headers['UserName'] ?? (isEnglish ? '(Unknown user)' : '(ไม่ระบุชื่อ)');
     final String printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-    final String filterLine = _buildFilterLine();
+    final String filterLine = _buildFilterLine(isEnglish);
     final int totalAccounts = _reportData.length;
 
     doc.addPage(pw.MultiPage(
@@ -594,12 +611,15 @@ class _ChartOfAccountsReportScreenState
                     child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 6,
-                    child: pw.Text('รายงานผังบัญชี (Chart of Accounts)',
+                    child: pw.Text(isEnglish ? 'Chart of Accounts' : 'รายงานผังบัญชี (Chart of Accounts)',
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text('หน้า ${context.pageNumber}/${context.pagesCount}',
+                    child: pw.Text(
+                        isEnglish
+                            ? 'Page ${context.pageNumber}/${context.pagesCount}'
+                            : 'หน้า ${context.pageNumber}/${context.pagesCount}',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12))),
               ],
@@ -613,7 +633,8 @@ class _ChartOfAccountsReportScreenState
                     child: pw.Text(filterLine, style: const pw.TextStyle(fontSize: 10))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text('พิมพ์โดย $userName',
+                    child: pw.Text(
+                        isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12))),
               ],
@@ -624,17 +645,21 @@ class _ChartOfAccountsReportScreenState
               children: [
                 pw.Expanded(
                     flex: 9,
-                    child: pw.Text('* ทั้งหมด $totalAccounts บัญชี',
+                    child: pw.Text(
+                        isEnglish
+                            ? '* Total $totalAccounts accounts'
+                            : '* ทั้งหมด $totalAccounts บัญชี',
                         style: const pw.TextStyle(fontSize: 10))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text('พิมพ์เมื่อ $printDateStr',
+                    child: pw.Text(
+                        isEnglish ? 'Printed $printDateStr' : 'พิมพ์เมื่อ $printDateStr',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12))),
               ],
             ),
             pw.SizedBox(height: 6),
-            _tableHeaderRow(),
+            _tableHeaderRow(isEnglish),
           ],
         );
       },
@@ -647,10 +672,12 @@ class _ChartOfAccountsReportScreenState
           widgets.add(pw.Padding(
             padding: pw.EdgeInsets.only(top: i == 0 ? 0 : 6, bottom: 4),
             child: pw.Text(
-                'หมวดบัญชี: ${accountTypeOptions[group.first.accountType] ?? group.first.accountType} (${group.first.accountType})',
+                isEnglish
+                    ? 'Account Type: ${accountTypeLabel(group.first.accountType, true)} (${group.first.accountType})'
+                    : 'หมวดบัญชี: ${accountTypeOptions[group.first.accountType] ?? group.first.accountType} (${group.first.accountType})',
                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
           ));
-          widgets.addAll(group.map(_buildAccountRow));
+          widgets.addAll(group.map((a) => _buildAccountRow(a, isEnglish)));
         }
         return widgets;
       },
@@ -661,7 +688,8 @@ class _ChartOfAccountsReportScreenState
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -685,7 +713,7 @@ class _ChartOfAccountsReportScreenState
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชผังบัญชี',
+            tooltip: isEnglish ? 'Refresh accounts' : 'รีเฟรชผังบัญชี',
             onPressed: _loadMasterData,
           ),
         ],
@@ -708,7 +736,9 @@ class _ChartOfAccountsReportScreenState
                   ),
                   padding: EdgeInsets.zero,
                   onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
-                  tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                  tooltip: _isFilterExpanded
+                      ? (isEnglish ? 'Collapse filters' : 'ย่อเงื่อนไข')
+                      : (isEnglish ? 'Expand filters' : 'ขยายเงื่อนไข'),
                 ),
               ),
               AnimatedContainer(
@@ -726,17 +756,19 @@ class _ChartOfAccountsReportScreenState
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('เงื่อนไขรายงาน',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text(isEnglish ? 'Report Filters' : 'เงื่อนไขรายงาน',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                             const SizedBox(height: 16),
-                            _buildMultiSelectField('หมวดบัญชี', _accountTypeOptionsList,
+                            _buildMultiSelectField(
+                                isEnglish ? 'Account Type' : 'หมวดบัญชี',
+                                _accountTypeOptionsList(isEnglish),
                                 _selectedAccountTypes, (v) => _selectedAccountTypes = v),
                             const SizedBox(height: 16),
                             InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'รหัสบัญชี (จาก)',
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: InputDecoration(
+                                labelText: isEnglish ? 'Account Code (From)' : 'รหัสบัญชี (จาก)',
+                                border: const OutlineInputBorder(),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               ),
                               child: Row(
                                 children: [
@@ -747,12 +779,12 @@ class _ChartOfAccountsReportScreenState
                                             style: const TextStyle(fontWeight: FontWeight.bold),
                                             overflow: TextOverflow.ellipsis,
                                           )
-                                        : const Text('— ทั้งหมด —',
-                                            style: TextStyle(color: Colors.grey)),
+                                        : Text(isEnglish ? '— All —' : '— ทั้งหมด —',
+                                            style: const TextStyle(color: Colors.grey)),
                                   ),
                                   IconButton(
                                     icon: Icon(Icons.search, color: Colors.indigo[900]),
-                                    tooltip: 'ค้นหาบัญชีเริ่มต้น',
+                                    tooltip: isEnglish ? 'Search start account' : 'ค้นหาบัญชีเริ่มต้น',
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                     onPressed: () => _showAccountSearchDialog(true),
@@ -760,7 +792,7 @@ class _ChartOfAccountsReportScreenState
                                   if (_accountFrom != null)
                                     IconButton(
                                       icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                                      tooltip: 'ล้าง',
+                                      tooltip: isEnglish ? 'Clear' : 'ล้าง',
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
                                       onPressed: () => setState(() => _accountFrom = null),
@@ -770,10 +802,10 @@ class _ChartOfAccountsReportScreenState
                             ),
                             const SizedBox(height: 16),
                             InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'รหัสบัญชี (ถึง)',
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: InputDecoration(
+                                labelText: isEnglish ? 'Account Code (To)' : 'รหัสบัญชี (ถึง)',
+                                border: const OutlineInputBorder(),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               ),
                               child: Row(
                                 children: [
@@ -784,12 +816,12 @@ class _ChartOfAccountsReportScreenState
                                             style: const TextStyle(fontWeight: FontWeight.bold),
                                             overflow: TextOverflow.ellipsis,
                                           )
-                                        : const Text('— ทั้งหมด —',
-                                            style: TextStyle(color: Colors.grey)),
+                                        : Text(isEnglish ? '— All —' : '— ทั้งหมด —',
+                                            style: const TextStyle(color: Colors.grey)),
                                   ),
                                   IconButton(
                                     icon: Icon(Icons.search, color: Colors.indigo[900]),
-                                    tooltip: 'ค้นหาบัญชีสิ้นสุด',
+                                    tooltip: isEnglish ? 'Search end account' : 'ค้นหาบัญชีสิ้นสุด',
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                     onPressed: () => _showAccountSearchDialog(false),
@@ -797,7 +829,7 @@ class _ChartOfAccountsReportScreenState
                                   if (_accountTo != null)
                                     IconButton(
                                       icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                                      tooltip: 'ล้าง',
+                                      tooltip: isEnglish ? 'Clear' : 'ล้าง',
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
                                       onPressed: () => setState(() => _accountTo = null),
@@ -808,28 +840,32 @@ class _ChartOfAccountsReportScreenState
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
                               value: _status,
-                              decoration: const InputDecoration(
-                                labelText: 'สถานะ',
-                                border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                labelText: isEnglish ? 'Status' : 'สถานะ',
+                                border: const OutlineInputBorder(),
                               ),
-                              items: const [
-                                DropdownMenuItem(value: '', child: Text('ทั้งหมด')),
-                                DropdownMenuItem(value: 'active', child: Text('ใช้งาน')),
-                                DropdownMenuItem(value: 'inactive', child: Text('หยุดใช้งาน')),
+                              items: [
+                                DropdownMenuItem(value: '', child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
+                                DropdownMenuItem(value: 'active', child: Text(isEnglish ? 'Active' : 'ใช้งาน')),
+                                DropdownMenuItem(value: 'inactive', child: Text(isEnglish ? 'Inactive' : 'หยุดใช้งาน')),
                               ],
                               onChanged: (v) => setState(() => _status = v ?? ''),
                             ),
                             const Divider(),
                             SwitchListTile(
-                              title: const Text('แสดงหัวบัญชี'),
-                              subtitle: const Text('รวมบัญชีที่เป็นหัวบัญชี/บัญชีรวม (ไม่ใช่บัญชีปกติ)'),
+                              title: Text(isEnglish ? 'Show Header Accounts' : 'แสดงหัวบัญชี'),
+                              subtitle: Text(isEnglish
+                                  ? 'Include header/group accounts (non-normal accounts)'
+                                  : 'รวมบัญชีที่เป็นหัวบัญชี/บัญชีรวม (ไม่ใช่บัญชีปกติ)'),
                               value: _showHeaderAccounts,
                               onChanged: (v) => setState(() => _showHeaderAccounts = v),
                               contentPadding: EdgeInsets.zero,
                             ),
                             SwitchListTile(
-                              title: const Text('ขึ้นหน้าใหม่ทุกหมวดบัญชี'),
-                              subtitle: const Text('แยกพิมพ์ตามหมวดบัญชีคนละหน้า'),
+                              title: Text(isEnglish ? 'Page Break per Account Type' : 'ขึ้นหน้าใหม่ทุกหมวดบัญชี'),
+                              subtitle: Text(isEnglish
+                                  ? 'Print each account type on a separate page'
+                                  : 'แยกพิมพ์ตามหมวดบัญชีคนละหน้า'),
                               value: _pageBreakPerType,
                               onChanged: (v) => setState(() => _pageBreakPerType = v),
                               contentPadding: EdgeInsets.zero,
@@ -843,7 +879,7 @@ class _ChartOfAccountsReportScreenState
                                 height: 50,
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.picture_as_pdf),
-                                  label: const Text('ประมวลผลรายงาน'),
+                                  label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                   style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.indigo[900],
                                       foregroundColor: Colors.white),
@@ -876,7 +912,7 @@ class _ChartOfAccountsReportScreenState
                 child: Container(
                   color: Colors.grey[200],
                   child: _reportData.isEmpty
-                      ? const Center(child: Text('กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                      ? Center(child: Text(isEnglish ? 'Please select filters and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                       : PdfPreview(
                           build: (format) => _generatePdf(format),
                           initialPageFormat: PdfPageFormat.a4.landscape,

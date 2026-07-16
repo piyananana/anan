@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/ar_customer.dart';
 import '../services/ar_customer_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 
 class ArCustomerListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -59,6 +60,8 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
   }
 
   Future<void> _fetchLists() async {
+    final isEnglish =
+        Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() {
       _isLoading = true;
       _error = '';
@@ -73,7 +76,9 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
       });
     } catch (e) {
       setState(() {
-        _error = 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
+        _error = isEnglish
+            ? 'Failed to load data: ${e.toString()}'
+            : 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
         _isLoading = false;
       });
       if (mounted) {
@@ -87,7 +92,7 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
 
   void _onSortSelected(String v) => setState(() => _sortBy = v);
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
@@ -95,28 +100,30 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
           if (widget.enableAddButton)
             IconButton(
               icon: const Icon(Icons.add),
-              tooltip: 'เพิ่มลูกหนี้ใหม่',
+              tooltip: isEnglish ? 'Add New Customer' : 'เพิ่มลูกหนี้ใหม่',
               onPressed: widget.onAdd,
             ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.sort),
-            tooltip: 'จัดเรียง',
+            tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
             onSelected: _onSortSelected,
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
-              PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
-              PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
-              PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'code_asc', child: Text(isEnglish ? 'Code (A→Z)' : 'รหัส (น้อยไปมาก)')),
+              PopupMenuItem(value: 'code_desc', child: Text(isEnglish ? 'Code (Z→A)' : 'รหัส (มากไปน้อย)')),
+              PopupMenuItem(value: 'name_asc', child: Text(isEnglish ? 'Name (A→Z)' : 'ชื่อ (น้อยไปมาก)')),
+              PopupMenuItem(value: 'name_desc', child: Text(isEnglish ? 'Name (Z→A)' : 'ชื่อ (มากไปน้อย)')),
             ],
           ),
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา (รหัส / รหัสเก่า / ชื่อ)',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: isEnglish
+                    ? 'Search (Code / Old Code / Name)'
+                    : 'ค้นหา (รหัส / รหัสเก่า / ชื่อ)',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (v) {
                 setState(() => _searchQuery = v);
@@ -129,10 +136,12 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
     );
   }
 
-  Widget _buildRowCount() {
+  Widget _buildRowCount(bool isEnglish) {
     final text = _searchQuery.isEmpty
-        ? 'ทั้งหมด $_totalCount แถว'
-        : 'พบ ${_lists.length} จาก $_totalCount แถว';
+        ? (isEnglish ? 'Total $_totalCount rows' : 'ทั้งหมด $_totalCount แถว')
+        : (isEnglish
+            ? 'Found ${_lists.length} of $_totalCount rows'
+            : 'พบ ${_lists.length} จาก $_totalCount แถว');
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       child: Align(
@@ -146,6 +155,7 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     var display = List<ArCustomer>.from(_lists);
     if (widget.enableCardSelect) display = display.where((e) => e.isActive).toList();
     switch (_sortBy) {
@@ -156,17 +166,30 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
     }
     return Column(
       children: [
-        _buildHeader(),
-        _buildRowCount(),
+        _buildHeader(isEnglish),
+        _buildRowCount(isEnglish),
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : display.isEmpty
-                  ? const Center(child: Text('ไม่พบข้อมูลลูกหนี้'))
+                  ? Center(
+                      child: Text(isEnglish
+                          ? 'No customers found'
+                          : 'ไม่พบข้อมูลลูกหนี้'))
                   : ListView.builder(
                       itemCount: display.length,
                       itemBuilder: (context, index) {
                         final item = display[index];
+                        final hasNameEn =
+                            item.customerNameEn?.isNotEmpty ?? false;
+                        final displayName = isEnglish && hasNameEn
+                            ? item.customerNameEn!
+                            : item.customerNameTh;
+                        final altName = hasNameEn
+                            ? (isEnglish
+                                ? item.customerNameTh
+                                : item.customerNameEn)
+                            : null;
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8.0, vertical: 4.0),
@@ -184,7 +207,7 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
                               ),
                             ),
                             title: Text(
-                              '${item.customerCode}  ${item.customerNameTh}',
+                              '${item.customerCode}  $displayName',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: item.isActive ? null : Colors.grey,
@@ -192,11 +215,11 @@ class ArCustomerListWidgetState extends State<ArCustomerListWidget>
                             ),
                             subtitle: Text(
                               '${item.businessTypeNameThai ?? ''}${item.businessTypeNameThai != null ? '  •  ' : ''}'
-                              'เครดิต ${item.creditTermMonths > 0 ? '${item.creditTermMonths} เดือน ' : ''}${item.creditTermDays} วัน'
-                              '${item.customerGroupCode != null ? '  •  กลุ่ม: ${item.customerGroupCode}' : ''}'
-                              '${item.customerNameEn != null ? '\n${item.customerNameEn}' : ''}',
+                              '${isEnglish ? 'Credit ' : 'เครดิต '}${item.creditTermMonths > 0 ? '${item.creditTermMonths}${isEnglish ? ' mo ' : ' เดือน '}' : ''}${item.creditTermDays}${isEnglish ? ' days' : ' วัน'}'
+                              '${item.customerGroupCode != null ? (isEnglish ? '  •  Group: ${item.customerGroupCode}' : '  •  กลุ่ม: ${item.customerGroupCode}') : ''}'
+                              '${altName != null && altName.isNotEmpty ? '\n$altName' : ''}',
                             ),
-                            isThreeLine: item.customerNameEn != null,
+                            isThreeLine: altName != null && altName.isNotEmpty,
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [

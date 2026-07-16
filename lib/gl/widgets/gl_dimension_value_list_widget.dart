@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 
 class GlDimensionValueListWidget extends StatefulWidget {
   final Function(GlDimensionType type, GlDimensionValue row) onEdit;
@@ -118,6 +120,7 @@ class GlDimensionValueListWidgetState
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Column(children: [
       // ── Toolbar: ประเภท + ปุ่มเพิ่ม ─────────────────────────────────
       Padding(
@@ -126,18 +129,20 @@ class GlDimensionValueListWidgetState
           if (_selectedType != null)
             IconButton(
               icon: const Icon(Icons.add_circle_outline, color: Colors.teal),
-              tooltip: 'เพิ่ม ${_selectedType!.nameThai}',
+              tooltip: isEnglish
+                  ? 'Add ${_selectedType!.nameEng ?? _selectedType!.nameThai}'
+                  : 'เพิ่ม ${_selectedType!.nameThai}',
               onPressed: () => widget.onAddRoot(_selectedType!),
             ),
           Expanded(
             child: DropdownButtonFormField<GlDimensionType>(
               isExpanded: true,
               value: _selectedType,
-              decoration: const InputDecoration(
-                labelText: 'ประเภท Dimension',
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Dimension Type' : 'ประเภท Dimension',
                 isDense: true,
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               ),
               items: _types
                   .map((t) => DropdownMenuItem(
@@ -163,12 +168,12 @@ class GlDimensionValueListWidgetState
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: TextField(
           controller: _searchCtrl,
-          decoration: const InputDecoration(
-            hintText: 'ค้นหา (รหัส, ชื่อ)',
-            prefixIcon: Icon(Icons.search, size: 18),
+          decoration: InputDecoration(
+            hintText: isEnglish ? 'Search (Code, Name)' : 'ค้นหา (รหัส, ชื่อ)',
+            prefixIcon: const Icon(Icons.search, size: 18),
             isDense: true,
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            border: const OutlineInputBorder(),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           ),
           onChanged: (_) => setState(() {}),
         ),
@@ -182,8 +187,8 @@ class GlDimensionValueListWidgetState
           alignment: Alignment.centerLeft,
           child: Text(
             _searchCtrl.text.isEmpty
-                ? 'ทั้งหมด ${_values.length} รายการ'
-                : 'พบ ${_filtered.length} จาก ${_values.length} รายการ',
+                ? (isEnglish ? 'Total ${_values.length} rows' : 'ทั้งหมด ${_values.length} รายการ')
+                : (isEnglish ? 'Found ${_filtered.length} of ${_values.length} rows' : 'พบ ${_filtered.length} จาก ${_values.length} รายการ'),
             style: const TextStyle(fontSize: 12, color: Colors.black87),
           ),
         ),
@@ -194,9 +199,9 @@ class GlDimensionValueListWidgetState
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _filtered.isEmpty
-                ? const Center(
-                    child: Text('ไม่มีข้อมูล',
-                        style: TextStyle(color: Colors.grey)))
+                ? Center(
+                    child: Text(isEnglish ? 'No data' : 'ไม่มีข้อมูล',
+                        style: const TextStyle(color: Colors.grey)))
                 : Builder(builder: (context) {
                     final isSearching = _searchCtrl.text.isNotEmpty;
                     final rows = isSearching
@@ -262,7 +267,7 @@ class GlDimensionValueListWidgetState
                                             : Colors.grey),
                                   ),
                                   child: Text(
-                                    v.isActive ? 'ใช้งาน' : 'ปิด',
+                                    v.isActive ? (isEnglish ? 'Active' : 'ใช้งาน') : (isEnglish ? 'Closed' : 'ปิด'),
                                     style: TextStyle(
                                         fontSize: 10,
                                         color: v.isActive
@@ -274,7 +279,7 @@ class GlDimensionValueListWidgetState
                                 IconButton(
                                   icon: const Icon(Icons.visibility,
                                       size: 16, color: Colors.green),
-                                  tooltip: 'ดู',
+                                  tooltip: isEnglish ? 'View' : 'ดู',
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(
                                       minWidth: 28, minHeight: 28),
@@ -284,7 +289,7 @@ class GlDimensionValueListWidgetState
                                 IconButton(
                                   icon: const Icon(Icons.edit,
                                       size: 16, color: Colors.blue),
-                                  tooltip: 'แก้ไข',
+                                  tooltip: isEnglish ? 'Edit' : 'แก้ไข',
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(
                                       minWidth: 28, minHeight: 28),
@@ -294,7 +299,7 @@ class GlDimensionValueListWidgetState
                                 IconButton(
                                   icon: Icon(Icons.add_circle_outline,
                                       size: 16, color: Colors.teal[400]),
-                                  tooltip: 'เพิ่มรายการย่อย',
+                                  tooltip: isEnglish ? 'Add child' : 'เพิ่มรายการย่อย',
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(
                                       minWidth: 28, minHeight: 28),
@@ -304,7 +309,7 @@ class GlDimensionValueListWidgetState
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline,
                                       size: 16, color: Colors.red),
-                                  tooltip: 'ลบ',
+                                  tooltip: isEnglish ? 'Delete' : 'ลบ',
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(
                                       minWidth: 28, minHeight: 28),

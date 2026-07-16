@@ -4,9 +4,8 @@ import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../models/ar_collector.dart';
 import '../../cd/models/cd_branch.dart';
-import '../../cd/models/cd_business_unit.dart';
 import '../../cd/services/cd_branch_service.dart';
-import '../../cd/services/cd_business_unit_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 
 class ArCollectorDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -42,8 +41,6 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
   String _collectorType = 'EMPLOYEE';
   int? _branchId;
   String? _branchNameThai;
-  int? _businessUnitId;
-  String? _businessUnitName;
   DateTime? _effectiveDateFrom;
   DateTime? _effectiveDateTo;
   bool _isActive = true;
@@ -66,8 +63,6 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
     _collectorType = d?.collectorType ?? 'EMPLOYEE';
     _branchId = d?.branchId;
     _branchNameThai = d?.branchNameThai;
-    _businessUnitId = d?.businessUnitId;
-    _businessUnitName = d?.businessUnitName;
     _effectiveDateFrom = d?.effectiveDateFrom;
     _effectiveDateTo = d?.effectiveDateTo;
     _isActive = d?.isActive ?? true;
@@ -88,8 +83,6 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
       _collectorType = widget.selected?.collectorType ?? 'EMPLOYEE';
       _branchId = widget.selected?.branchId;
       _branchNameThai = widget.selected?.branchNameThai;
-      _businessUnitId = widget.selected?.businessUnitId;
-      _businessUnitName = widget.selected?.businessUnitName;
       _effectiveDateFrom = widget.selected?.effectiveDateFrom;
       _effectiveDateTo = widget.selected?.effectiveDateTo;
       _isActive = widget.selected?.isActive ?? true;
@@ -130,14 +123,16 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
     }
   }
 
-  Future<void> _pickBranch() async {
+  Future<void> _pickBranch(bool isEnglish) async {
     final List<Branch> all;
     try {
       all = await Provider.of<BranchService>(context, listen: false).fetchRows();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('โหลดข้อมูลสาขาล้มเหลว: $e')));
+            SnackBar(content: Text(isEnglish
+                ? 'Failed to load branches: $e'
+                : 'โหลดข้อมูลสาขาล้มเหลว: $e')));
       }
       return;
     }
@@ -151,19 +146,22 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
       context: context,
       builder: (ctx) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('เลือกสาขา',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Select Branch' : 'เลือกสาขา',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: 500,
           height: 500,
           child: choices.isEmpty
-              ? const Center(child: Text('ไม่พบข้อมูลสาขา'))
+              ? Center(child: Text(isEnglish ? 'No branches found' : 'ไม่พบข้อมูลสาขา'))
               : ListView.builder(
                   itemCount: choices.length,
                   itemBuilder: (_, i) {
                     final b = choices[i];
+                    final displayName = isEnglish && b.branchNameEng.isNotEmpty
+                        ? b.branchNameEng
+                        : b.branchNameThai;
                     return ListTile(
-                      title: Text('${b.branchCode} — ${b.branchNameThai}'),
+                      title: Text('${b.branchCode} — $displayName'),
                       onTap: () {
                         setState(() {
                           _branchId = b.id;
@@ -178,64 +176,8 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ยกเลิก', style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _pickBusinessUnit() async {
-    final List<BusinessUnit> all;
-    try {
-      all = await Provider.of<BusinessUnitService>(context, listen: false)
-          .fetchRows();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('โหลดข้อมูลหน่วยงานล้มเหลว: $e')));
-      }
-      return;
-    }
-    final parentIds = all.map((bu) => bu.parentId).whereType<int>().toSet();
-    final choices = all
-        .where((bu) =>
-            bu.isActive && bu.parentId != null && !parentIds.contains(bu.id))
-        .toList()
-      ..sort((a, b) => a.buCode.compareTo(b.buCode));
-
-    if (!mounted) return;
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        contentPadding: EdgeInsets.zero,
-        title: const Text('เลือกหน่วยงาน',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        content: SizedBox(
-          width: 500,
-          height: 500,
-          child: choices.isEmpty
-              ? const Center(child: Text('ไม่พบข้อมูลหน่วยงาน'))
-              : ListView.builder(
-                  itemCount: choices.length,
-                  itemBuilder: (_, i) {
-                    final bu = choices[i];
-                    return ListTile(
-                      title: Text('${bu.buCode} — ${bu.buNameThai}'),
-                      onTap: () {
-                        setState(() {
-                          _businessUnitId = bu.id;
-                          _businessUnitName = bu.buNameThai;
-                        });
-                        Navigator.of(ctx).pop();
-                      },
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ยกเลิก', style: TextStyle(color: Colors.red))),
+              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก',
+                  style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -255,7 +197,6 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
         collectorType: _collectorType,
         taxId: _taxIdCtrl.text.trim().isEmpty ? null : _taxIdCtrl.text.trim(),
         branchId: _branchId,
-        businessUnitId: _businessUnitId,
         phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
         email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
         address: _addressCtrl.text.trim().isEmpty
@@ -268,9 +209,10 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
       await widget.onSubmit(row);
     } catch (e) {
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาด: $e'),
+              content: Text(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e'),
               backgroundColor: Colors.red),
         );
       }
@@ -285,10 +227,13 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+
     if (widget.isPlaceholder) {
-      return const Center(
-          child: Text(
-              'เลือกผู้วางบิล/รับชำระเพื่อแก้ไข หรือ กดปุ่ม + เพื่อเพิ่มใหม่'));
+      return Center(
+          child: Text(isEnglish
+              ? 'Select a collector to edit or press + to add new'
+              : 'เลือกผู้วางบิล/รับชำระเพื่อแก้ไข หรือ กดปุ่ม + เพื่อเพิ่มใหม่'));
     }
 
     final bool ro = widget.mode == Mode.view;
@@ -302,41 +247,40 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
           children: [
             Text(
               widget.mode == Mode.view
-                  ? 'ดูข้อมูลผู้วางบิล/รับชำระ'
+                  ? (isEnglish ? 'View Collector' : 'ดูข้อมูลผู้วางบิล/รับชำระ')
                   : widget.mode == Mode.edit
-                      ? 'แก้ไขผู้วางบิล/รับชำระ'
-                      : 'เพิ่มผู้วางบิล/รับชำระ',
+                      ? (isEnglish ? 'Edit Collector' : 'แก้ไขผู้วางบิล/รับชำระ')
+                      : (isEnglish ? 'Add Collector' : 'เพิ่มผู้วางบิล/รับชำระ'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
 
-            // รหัส
             TextFormField(
               controller: _codeCtrl,
               readOnly: widget.mode != Mode.add,
               style: const TextStyle(fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                labelText: 'รหัส *',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Code *' : 'รหัส *',
+                border: const OutlineInputBorder(),
               ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'โปรดระบุรหัส' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? (isEnglish ? 'Please enter code' : 'โปรดระบุรหัส')
+                  : null,
             ),
             const SizedBox(height: 12),
 
-            // ชื่อไทย / อังกฤษ
             Row(
               children: [
                 Expanded(
                   child: TextFormField(
                     controller: _nameThaCtrl,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'ชื่อ (ไทย) *',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Name (TH) *' : 'ชื่อ (ไทย) *',
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'โปรดระบุชื่อภาษาไทย'
+                        ? (isEnglish ? 'Please enter Thai name' : 'โปรดระบุชื่อภาษาไทย')
                         : null,
                   ),
                 ),
@@ -346,7 +290,7 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
                     controller: _nameEngCtrl,
                     readOnly: ro,
                     decoration: const InputDecoration(
-                      labelText: 'ชื่อ (อังกฤษ)',
+                      labelText: 'Name (EN)',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -355,7 +299,6 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // ประเภท + เลขภาษี
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -363,13 +306,13 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: _collectorType,
-                    decoration: const InputDecoration(
-                      labelText: 'ประเภท *',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Type *' : 'ประเภท *',
+                      border: const OutlineInputBorder(),
                     ),
-                    items: arCollectorTypeOptions.entries
-                        .map((e) => DropdownMenuItem(
-                            value: e.key, child: Text(e.value)))
+                    items: arCollectorTypeOptions.keys
+                        .map((k) => DropdownMenuItem(
+                            value: k, child: Text(arCollectorTypeLabel(k, isEnglish))))
                         .toList(),
                     onChanged: ro
                         ? null
@@ -381,9 +324,9 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
                   child: TextFormField(
                     controller: _taxIdCtrl,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'เลขภาษี/เลขบัตรประชาชน',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Tax ID / National ID' : 'เลขภาษี/เลขบัตรประชาชน',
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -391,16 +334,15 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // สาขา + หน่วยงาน
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: InkWell(
-                    onTap: ro ? null : _pickBranch,
+                    onTap: ro ? null : () => _pickBranch(isEnglish),
                     child: InputDecorator(
                       decoration: InputDecoration(
-                        labelText: 'สาขา',
+                        labelText: isEnglish ? 'Branch' : 'สาขา',
                         border: const OutlineInputBorder(),
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -418,54 +360,19 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
                         ),
                       ),
                       child: Text(_branchId == null
-                          ? '— ไม่ระบุ —'
+                          ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
                           : _branchNameThai ?? ''),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: InkWell(
-                    onTap: ro ? null : _pickBusinessUnit,
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: 'หน่วยงานที่สังกัด',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_businessUnitId != null && !ro)
-                              IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () => setState(() {
-                                  _businessUnitId = null;
-                                  _businessUnitName = null;
-                                }),
-                              ),
-                            const Icon(Icons.search),
-                          ],
-                        ),
-                      ),
-                      child: Text(_businessUnitId == null
-                          ? '— ไม่ระบุ —'
-                          : _businessUnitName ?? ''),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // โทรศัพท์ / อีเมล
-            Row(
-              children: [
-                Expanded(
                   child: TextFormField(
                     controller: _phoneCtrl,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'โทรศัพท์',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Phone' : 'โทรศัพท์',
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -474,9 +381,9 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
                   child: TextFormField(
                     controller: _emailCtrl,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'อีเมล',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Email' : 'อีเมล',
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -484,20 +391,18 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // ที่อยู่
             TextFormField(
               controller: _addressCtrl,
               readOnly: ro,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'ที่อยู่',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Address' : 'ที่อยู่',
+                border: const OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
             ),
             const SizedBox(height: 12),
 
-            // วันที่เริ่ม / สิ้นสุด
             Row(
               children: [
                 Expanded(
@@ -505,7 +410,7 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
                     onTap: ro ? null : () => _pickDate(true),
                     child: InputDecorator(
                       decoration: InputDecoration(
-                        labelText: 'วันที่เริ่มงาน',
+                        labelText: isEnglish ? 'Start Date' : 'วันที่เริ่มงาน',
                         border: const OutlineInputBorder(),
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -530,7 +435,7 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
                     onTap: ro ? null : () => _pickDate(false),
                     child: InputDecorator(
                       decoration: InputDecoration(
-                        labelText: 'วันที่สิ้นสุด',
+                        labelText: isEnglish ? 'End Date' : 'วันที่สิ้นสุด',
                         border: const OutlineInputBorder(),
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -553,12 +458,12 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // สถานะ
             Row(
               children: [
                 Expanded(
-                    child: Text(
-                        'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
+                    child: Text(isEnglish
+                        ? 'Status: ${_isActive ? 'Active' : 'Inactive'}'
+                        : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
                 Switch(
                   value: _isActive,
                   onChanged:
@@ -568,7 +473,6 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
             ),
             const SizedBox(height: 24),
 
-            // ปุ่ม
             Row(
               children: [
                 if (widget.mode != Mode.view)
@@ -583,10 +487,10 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
                                   strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.save),
                       label: Text(_isSaving
-                          ? 'กำลังบันทึก...'
+                          ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
                           : widget.mode == Mode.edit
-                              ? 'บันทึก'
-                              : 'เพิ่ม'),
+                              ? (isEnglish ? 'Save' : 'บันทึก')
+                              : (isEnglish ? 'Add' : 'เพิ่ม')),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue.shade700,
                         foregroundColor: Colors.white,
@@ -599,7 +503,7 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
                   child: ElevatedButton.icon(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
+                    label: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade600,
                       foregroundColor: Colors.white,

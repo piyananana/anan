@@ -21,6 +21,7 @@ import '../../gl/services/gl_account_service.dart';
 import '../../cd/models/cd_sales_territory.dart';
 import '../../cd/services/cd_sales_territory_service.dart';
 import '../widgets/ar_collector_list_widget.dart';
+import '../../sa/services/sa_language_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Collapsible section widget
@@ -102,6 +103,8 @@ class _SectionState extends State<_Section> {
 Future<ArCustomerAddress?> showAddressDialog(
     BuildContext context, ArCustomerAddress? existing, bool readOnly,
     {ArCustomerAddress? primaryAddress}) async {
+  final isEnglish =
+      Provider.of<LanguageProvider>(context, listen: false).isEnglish;
   final addrTypeCtrl =
       ValueNotifier<String>(existing?.addressType ?? 'billing');
   final noCtrl = TextEditingController(text: existing?.addressNo ?? '');
@@ -157,10 +160,10 @@ Future<ArCustomerAddress?> showAddressDialog(
 
         return AlertDialog(
         title: Text(readOnly
-            ? 'ดูที่อยู่'
+            ? (isEnglish ? 'View Address' : 'ดูที่อยู่')
             : existing == null
-                ? 'เพิ่มที่อยู่'
-                : 'แก้ไขที่อยู่'),
+                ? (isEnglish ? 'Add Address' : 'เพิ่มที่อยู่')
+                : (isEnglish ? 'Edit Address' : 'แก้ไขที่อยู่')),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 460,
@@ -175,7 +178,9 @@ Future<ArCustomerAddress?> showAddressDialog(
                     child: CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,
-                      title: const Text('ใช้ที่อยู่เดียวกับที่อยู่หลัก'),
+                      title: Text(isEnglish
+                          ? 'Use same address as primary'
+                          : 'ใช้ที่อยู่เดียวกับที่อยู่หลัก'),
                       value: useSameAddress,
                       activeColor: Colors.teal,
                       onChanged: (v) {
@@ -195,19 +200,32 @@ Future<ArCustomerAddress?> showAddressDialog(
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
                       value: v,
-                      decoration: const InputDecoration(
-                          labelText: 'ประเภทที่อยู่',
-                          border: OutlineInputBorder()),
-                      items: const [
+                      decoration: InputDecoration(
+                          labelText: isEnglish ? 'Address Type' : 'ประเภทที่อยู่',
+                          border: const OutlineInputBorder()),
+                      items: [
                         DropdownMenuItem(
-                            value: 'billing', child: Text('ที่อยู่ใบแจ้งหนี้')),
+                            value: 'billing',
+                            child: Text(isEnglish
+                                ? 'Billing Address'
+                                : 'ที่อยู่ใบแจ้งหนี้')),
                         DropdownMenuItem(
-                            value: 'shipping', child: Text('ที่อยู่จัดส่ง')),
+                            value: 'shipping',
+                            child: Text(
+                                isEnglish ? 'Shipping Address' : 'ที่อยู่จัดส่ง')),
                         DropdownMenuItem(
-                            value: 'billing note', child: Text('ที่อยู่วางบิล')),
+                            value: 'billing note',
+                            child: Text(isEnglish
+                                ? 'Billing Note Address'
+                                : 'ที่อยู่วางบิล')),
                         DropdownMenuItem(
-                            value: 'payment', child: Text('ที่อยู่ชำระเงิน')),
-                        DropdownMenuItem(value: 'other', child: Text('อื่นๆ')),
+                            value: 'payment',
+                            child: Text(isEnglish
+                                ? 'Payment Address'
+                                : 'ที่อยู่ชำระเงิน')),
+                        DropdownMenuItem(
+                            value: 'other',
+                            child: Text(isEnglish ? 'Other' : 'อื่นๆ')),
                       ],
                       onChanged: readOnly
                           ? null
@@ -218,14 +236,25 @@ Future<ArCustomerAddress?> showAddressDialog(
                   ),
                 ),
                 Row(children: [
-                  Expanded(child: buildField('บ้านเลขที่ / ห้อง', noCtrl)),
+                  Expanded(
+                      child: buildField(
+                          isEnglish ? 'House No. / Room' : 'บ้านเลขที่ / ห้อง',
+                          noCtrl)),
                   const SizedBox(width: 8),
-                  Expanded(child: buildField('อาคาร / หมู่บ้าน', buildingCtrl)),
+                  Expanded(
+                      child: buildField(
+                          isEnglish
+                              ? 'Building / Village'
+                              : 'อาคาร / หมู่บ้าน',
+                          buildingCtrl)),
                 ]),
                 Row(children: [
-                  Expanded(child: buildField('ซอย', alleyCtrl)),
+                  Expanded(
+                      child:
+                          buildField(isEnglish ? 'Alley' : 'ซอย', alleyCtrl)),
                   const SizedBox(width: 8),
-                  Expanded(child: buildField('ถนน', roadCtrl)),
+                  Expanded(
+                      child: buildField(isEnglish ? 'Road' : 'ถนน', roadCtrl)),
                 ]),
                 // แขวง/ตำบล + อำเภอ/เขต พร้อมปุ่มค้นหา zipcode
                 Row(
@@ -234,8 +263,9 @@ Future<ArCustomerAddress?> showAddressDialog(
                     if (!readOnly)
                       IconButton(
                           icon: const Icon(Icons.search, color: Colors.blue),
-                          tooltip:
-                              'ค้นหา ตำบล/แขวง, อำเภอ/เขต, จังหวัด, รหัสไปรษณีย์',
+                          tooltip: isEnglish
+                              ? 'Search sub-district, district, province, zip code'
+                              : 'ค้นหา ตำบล/แขวง, อำเภอ/เขต, จังหวัด, รหัสไปรษณีย์',
                           onPressed: () {
                             ZipcodeListWidget.search(
                               ctx,
@@ -252,25 +282,38 @@ Future<ArCustomerAddress?> showAddressDialog(
                       child: Column(
                         children: [
                           Row(children: [
-                            Expanded(child: buildField('ตำบล / แขวง', subDistCtrl)),
+                            Expanded(
+                                child: buildField(
+                                    isEnglish ? 'Sub-district' : 'ตำบล / แขวง',
+                                    subDistCtrl)),
                             const SizedBox(width: 8),
-                            Expanded(child: buildField('อำเภอ / เขต', distCtrl)),
+                            Expanded(
+                                child: buildField(
+                                    isEnglish ? 'District' : 'อำเภอ / เขต',
+                                    distCtrl)),
                           ]),
                           Row(children: [
-                            Expanded(child: buildField('จังหวัด', provCtrl)),
+                            Expanded(
+                                child: buildField(
+                                    isEnglish ? 'Province' : 'จังหวัด',
+                                    provCtrl)),
                             const SizedBox(width: 8),
-                            Expanded(child: buildField('รหัสไปรษณีย์', zipCtrl)),
+                            Expanded(
+                                child: buildField(
+                                    isEnglish ? 'Zip Code' : 'รหัสไปรษณีย์',
+                                    zipCtrl)),
                           ]),
                         ],
                       ),
                     ),
                   ],
                 ),
-                buildField('ประเทศ', countryCtrl),
+                buildField(isEnglish ? 'Country' : 'ประเทศ', countryCtrl),
                 ValueListenableBuilder<bool>(
                   valueListenable: isDefaultNotifier,
                   builder: (_, v, __) => SwitchListTile(
-                    title: const Text('ที่อยู่หลัก'),
+                    title:
+                        Text(isEnglish ? 'Primary Address' : 'ที่อยู่หลัก'),
                     value: v,
                     onChanged: readOnly
                         ? null
@@ -308,11 +351,11 @@ Future<ArCustomerAddress?> showAddressDialog(
                   isDefault: isDefaultNotifier.value,
                 ));
               },
-              child: const Text('บันทึก'),
+              child: Text(isEnglish ? 'Save' : 'บันทึก'),
             ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ปิด'),
+            child: Text(isEnglish ? 'Close' : 'ปิด'),
           ),
         ],
         );
@@ -326,6 +369,8 @@ Future<ArCustomerAddress?> showAddressDialog(
 // ---------------------------------------------------------------------------
 Future<ArCustomerContact?> showContactDialog(
     BuildContext context, ArCustomerContact? existing, bool readOnly) async {
+  final isEnglish =
+      Provider.of<LanguageProvider>(context, listen: false).isEnglish;
   final nameCtrl = TextEditingController(text: existing?.contactName ?? '');
   final posCtrl = TextEditingController(text: existing?.position ?? '');
   final phoneCtrl = TextEditingController(text: existing?.phone ?? '');
@@ -337,10 +382,10 @@ Future<ArCustomerContact?> showContactDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(readOnly
-          ? 'ดูผู้ติดต่อ'
+          ? (isEnglish ? 'View Contact' : 'ดูผู้ติดต่อ')
           : existing == null
-              ? 'เพิ่มผู้ติดต่อ'
-              : 'แก้ไขผู้ติดต่อ'),
+              ? (isEnglish ? 'Add Contact' : 'เพิ่มผู้ติดต่อ')
+              : (isEnglish ? 'Edit Contact' : 'แก้ไขผู้ติดต่อ')),
       content: SingleChildScrollView(
         child: SizedBox(
           width: 420,
@@ -350,16 +395,18 @@ Future<ArCustomerContact?> showContactDialog(
               TextField(
                 readOnly: readOnly,
                 controller: nameCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'ชื่อผู้ติดต่อ *',
-                    border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText:
+                        isEnglish ? 'Contact Name *' : 'ชื่อผู้ติดต่อ *',
+                    border: const OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               TextField(
                 readOnly: readOnly,
                 controller: posCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'ตำแหน่ง', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Position' : 'ตำแหน่ง',
+                    border: const OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               Row(
@@ -368,9 +415,9 @@ Future<ArCustomerContact?> showContactDialog(
                     child: TextField(
                       readOnly: readOnly,
                       controller: phoneCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'โทรศัพท์',
-                          border: OutlineInputBorder()),
+                      decoration: InputDecoration(
+                          labelText: isEnglish ? 'Phone' : 'โทรศัพท์',
+                          border: const OutlineInputBorder()),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -378,8 +425,9 @@ Future<ArCustomerContact?> showContactDialog(
                     child: TextField(
                       readOnly: readOnly,
                       controller: mobileCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'มือถือ', border: OutlineInputBorder()),
+                      decoration: InputDecoration(
+                          labelText: isEnglish ? 'Mobile' : 'มือถือ',
+                          border: const OutlineInputBorder()),
                     ),
                   ),
                 ],
@@ -388,14 +436,16 @@ Future<ArCustomerContact?> showContactDialog(
               TextField(
                 readOnly: readOnly,
                 controller: emailCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'อีเมล', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Email' : 'อีเมล',
+                    border: const OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               ValueListenableBuilder<bool>(
                 valueListenable: isDefaultNotifier,
                 builder: (_, v, __) => SwitchListTile(
-                  title: const Text('ผู้ติดต่อหลัก'),
+                  title: Text(
+                      isEnglish ? 'Primary Contact' : 'ผู้ติดต่อหลัก'),
                   value: v,
                   onChanged: readOnly
                       ? null
@@ -422,11 +472,11 @@ Future<ArCustomerContact?> showContactDialog(
                 isDefault: isDefaultNotifier.value,
               ));
             },
-            child: const Text('บันทึก'),
+            child: Text(isEnglish ? 'Save' : 'บันทึก'),
           ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('ปิด'),
+          child: Text(isEnglish ? 'Close' : 'ปิด'),
         ),
       ],
     ),
@@ -438,8 +488,14 @@ Future<ArCustomerContact?> showContactDialog(
 // ---------------------------------------------------------------------------
 Future<ArCustomerBillingCondition?> showBillingConditionDialog(
     BuildContext context, ArCustomerBillingCondition? existing, bool readOnly) {
-  const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
-  const weekOptions = <int, String>{1: 'แรก', 2: 'ที่ 2', 3: 'ที่ 3', 4: 'ที่ 4', -1: 'สุดท้าย'};
+  final isEnglish =
+      Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+  final dayNames = isEnglish
+      ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      : ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  final weekOptions = isEnglish
+      ? <int, String>{1: '1st', 2: '2nd', 3: '3rd', 4: '4th', -1: 'Last'}
+      : <int, String>{1: 'แรก', 2: 'ที่ 2', 3: 'ที่ 3', 4: 'ที่ 4', -1: 'สุดท้าย'};
 
   var billWithDelivery = existing?.billWithDelivery ?? false;
   var dueFromBillingDate = existing?.dueFromBillingDate ?? false;
@@ -494,10 +550,12 @@ Future<ArCustomerBillingCondition?> showBillingConditionDialog(
 
       return AlertDialog(
         title: Text(readOnly
-            ? 'ดูเงื่อนไขวางบิล'
+            ? (isEnglish ? 'View Billing Condition' : 'ดูเงื่อนไขวางบิล')
             : existing == null
-                ? 'เพิ่มเงื่อนไขวางบิล'
-                : 'แก้ไขเงื่อนไขวางบิล'),
+                ? (isEnglish ? 'Add Billing Condition' : 'เพิ่มเงื่อนไขวางบิล')
+                : (isEnglish
+                    ? 'Edit Billing Condition'
+                    : 'แก้ไขเงื่อนไขวางบิล')),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 500,
@@ -508,28 +566,32 @@ Future<ArCustomerBillingCondition?> showBillingConditionDialog(
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   dense: true,
-                  title: const Text('วางบิลพร้อมวันส่งของ (ไม่ต้องรอวันวางบิล)'),
+                  title: Text(isEnglish
+                      ? 'Bill with delivery date (no need to wait for billing date)'
+                      : 'วางบิลพร้อมวันส่งของ (ไม่ต้องรอวันวางบิล)'),
                   value: billWithDelivery,
                   onChanged: readOnly ? null : (v) => setDlg(() => billWithDelivery = v ?? false),
                 ),
                 const Divider(),
                 // วันที่ในเดือน
                 chipGroup(
-                  'วันที่ในเดือน (31 = สิ้นเดือน)',
+                  isEnglish
+                      ? 'Day of month (31 = end of month)'
+                      : 'วันที่ในเดือน (31 = สิ้นเดือน)',
                   [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],
                   dayOfMonth,
-                  (d) => d == 31 ? 'สิ้นเดือน' : '$d',
+                  (d) => d == 31 ? (isEnglish ? 'End of month' : 'สิ้นเดือน') : '$d',
                 ),
                 // วันในสัปดาห์
                 chipGroup(
-                  'วันในสัปดาห์',
+                  isEnglish ? 'Day of week' : 'วันในสัปดาห์',
                   List.generate(7, (i) => i),
                   dayOfWeek,
                   (d) => dayNames[d],
                 ),
                 // สัปดาห์ที่
                 chipGroup(
-                  'สัปดาห์ที่',
+                  isEnglish ? 'Week of month' : 'สัปดาห์ที่',
                   [1, 2, 3, 4, -1],
                   weekOfMonth,
                   (w) => weekOptions[w] ?? '$w',
@@ -542,9 +604,9 @@ Future<ArCustomerBillingCondition?> showBillingConditionDialog(
                       child: TextField(
                         controller: timeFromCtrl,
                         readOnly: readOnly,
-                        decoration: const InputDecoration(
-                          labelText: 'เวลาตั้งแต่',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Time From' : 'เวลาตั้งแต่',
+                          border: const OutlineInputBorder(),
                           hintText: '09:00',
                         ),
                       ),
@@ -556,9 +618,9 @@ Future<ArCustomerBillingCondition?> showBillingConditionDialog(
                       child: TextField(
                         controller: timeToCtrl,
                         readOnly: readOnly,
-                        decoration: const InputDecoration(
-                          labelText: 'ถึงเวลา',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Time To' : 'ถึงเวลา',
+                          border: const OutlineInputBorder(),
                           hintText: '17:00',
                         ),
                       ),
@@ -568,7 +630,9 @@ Future<ArCustomerBillingCondition?> showBillingConditionDialog(
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   dense: true,
-                  title: const Text('คำนวณวันครบกำหนดชำระจากวันวางบิล (แทนวันส่งของ)'),
+                  title: Text(isEnglish
+                      ? 'Calculate due date from billing date (instead of delivery date)'
+                      : 'คำนวณวันครบกำหนดชำระจากวันวางบิล (แทนวันส่งของ)'),
                   value: dueFromBillingDate,
                   onChanged: readOnly ? null : (v) => setDlg(() => dueFromBillingDate = v ?? false),
                 ),
@@ -577,9 +641,9 @@ Future<ArCustomerBillingCondition?> showBillingConditionDialog(
                   child: TextField(
                     controller: remarkCtrl,
                     readOnly: readOnly,
-                    decoration: const InputDecoration(
-                      labelText: 'หมายเหตุ',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Remark' : 'หมายเหตุ',
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -590,7 +654,7 @@ Future<ArCustomerBillingCondition?> showBillingConditionDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ยกเลิก'),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
           ),
           if (!readOnly)
             ElevatedButton(
@@ -607,7 +671,7 @@ Future<ArCustomerBillingCondition?> showBillingConditionDialog(
                 dueFromBillingDate: dueFromBillingDate,
                 remark: remarkCtrl.text.trim().isEmpty ? null : remarkCtrl.text.trim(),
               )),
-              child: const Text('บันทึก'),
+              child: Text(isEnglish ? 'Save' : 'บันทึก'),
             ),
         ],
       );
@@ -620,8 +684,14 @@ Future<ArCustomerBillingCondition?> showBillingConditionDialog(
 // ---------------------------------------------------------------------------
 Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
     BuildContext context, ArCustomerPaymentCondition? existing, bool readOnly) {
-  const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
-  const weekOptions = <int, String>{1: 'แรก', 2: 'ที่ 2', 3: 'ที่ 3', 4: 'ที่ 4', -1: 'สุดท้าย'};
+  final isEnglish =
+      Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+  final dayNames = isEnglish
+      ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      : ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  final weekOptions = isEnglish
+      ? <int, String>{1: '1st', 2: '2nd', 3: '3rd', 4: '4th', -1: 'Last'}
+      : <int, String>{1: 'แรก', 2: 'ที่ 2', 3: 'ที่ 3', 4: 'ที่ 4', -1: 'สุดท้าย'};
 
   var dayOfMonth = List<int>.from(existing?.paymentDayOfMonth ?? []);
   var dayOfWeek = List<int>.from(existing?.paymentDayOfWeek ?? []);
@@ -678,10 +748,12 @@ Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
 
       return AlertDialog(
         title: Text(readOnly
-            ? 'ดูเงื่อนไขรับชำระ'
+            ? (isEnglish ? 'View Payment Condition' : 'ดูเงื่อนไขรับชำระ')
             : existing == null
-                ? 'เพิ่มเงื่อนไขรับชำระ'
-                : 'แก้ไขเงื่อนไขรับชำระ'),
+                ? (isEnglish ? 'Add Payment Condition' : 'เพิ่มเงื่อนไขรับชำระ')
+                : (isEnglish
+                    ? 'Edit Payment Condition'
+                    : 'แก้ไขเงื่อนไขรับชำระ')),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 500,
@@ -691,21 +763,23 @@ Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
               children: [
                 // วันที่ในเดือน
                 chipGroup(
-                  'วันที่ในเดือน (31 = สิ้นเดือน)',
+                  isEnglish
+                      ? 'Day of month (31 = end of month)'
+                      : 'วันที่ในเดือน (31 = สิ้นเดือน)',
                   [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],
                   dayOfMonth,
-                  (d) => d == 31 ? 'สิ้นเดือน' : '$d',
+                  (d) => d == 31 ? (isEnglish ? 'End of month' : 'สิ้นเดือน') : '$d',
                 ),
                 // วันในสัปดาห์
                 chipGroup(
-                  'วันในสัปดาห์',
+                  isEnglish ? 'Day of week' : 'วันในสัปดาห์',
                   List.generate(7, (i) => i),
                   dayOfWeek,
                   (d) => dayNames[d],
                 ),
                 // สัปดาห์ที่
                 chipGroup(
-                  'สัปดาห์ที่',
+                  isEnglish ? 'Week of month' : 'สัปดาห์ที่',
                   [1, 2, 3, 4, -1],
                   weekOfMonth,
                   (w) => weekOptions[w] ?? '$w',
@@ -718,9 +792,9 @@ Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
                       child: TextField(
                         controller: timeFromCtrl,
                         readOnly: readOnly,
-                        decoration: const InputDecoration(
-                          labelText: 'เวลาตั้งแต่',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Time From' : 'เวลาตั้งแต่',
+                          border: const OutlineInputBorder(),
                           hintText: '09:00',
                         ),
                       ),
@@ -732,9 +806,9 @@ Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
                       child: TextField(
                         controller: timeToCtrl,
                         readOnly: readOnly,
-                        decoration: const InputDecoration(
-                          labelText: 'ถึงเวลา',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Time To' : 'ถึงเวลา',
+                          border: const OutlineInputBorder(),
                           hintText: '17:00',
                         ),
                       ),
@@ -751,10 +825,12 @@ Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
                         controller: withinMonthsCtrl,
                         readOnly: readOnly,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'ชำระภายในกี่เดือนจากวางบิล',
-                          border: OutlineInputBorder(),
-                          hintText: '0 = ไม่จำกัด',
+                        decoration: InputDecoration(
+                          labelText: isEnglish
+                              ? 'Pay within (months) from billing'
+                              : 'ชำระภายในกี่เดือนจากวางบิล',
+                          border: const OutlineInputBorder(),
+                          hintText: isEnglish ? '0 = unlimited' : '0 = ไม่จำกัด',
                         ),
                       ),
                     ),
@@ -766,9 +842,10 @@ Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
                         controller: additionalDaysCtrl,
                         readOnly: readOnly,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'บวกเพิ่ม (วัน)',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText:
+                              isEnglish ? 'Additional (days)' : 'บวกเพิ่ม (วัน)',
+                          border: const OutlineInputBorder(),
                           hintText: '0',
                         ),
                       ),
@@ -778,9 +855,9 @@ Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
                 TextField(
                   controller: remarkCtrl,
                   readOnly: readOnly,
-                  decoration: const InputDecoration(
-                    labelText: 'หมายเหตุ',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: isEnglish ? 'Remark' : 'หมายเหตุ',
+                    border: const OutlineInputBorder(),
                   ),
                 ),
               ],
@@ -790,7 +867,7 @@ Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ยกเลิก'),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
           ),
           if (!readOnly)
             ElevatedButton(
@@ -807,7 +884,7 @@ Future<ArCustomerPaymentCondition?> showPaymentConditionDialog(
                 additionalDays: int.tryParse(additionalDaysCtrl.text) ?? 0,
                 remark: remarkCtrl.text.trim().isEmpty ? null : remarkCtrl.text.trim(),
               )),
-              child: const Text('บันทึก'),
+              child: Text(isEnglish ? 'Save' : 'บันทึก'),
             ),
         ],
       );
@@ -959,12 +1036,13 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
   @override
   Widget build(BuildContext context) {
     final readOnly = widget.readOnly;
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return AlertDialog(
       title: Text(readOnly
-          ? 'ดูบัญชีธนาคาร'
+          ? (isEnglish ? 'View Bank Account' : 'ดูบัญชีธนาคาร')
           : widget.existing == null
-              ? 'เพิ่มบัญชีธนาคาร'
-              : 'แก้ไขบัญชีธนาคาร'),
+              ? (isEnglish ? 'Add Bank Account' : 'เพิ่มบัญชีธนาคาร')
+              : (isEnglish ? 'Edit Bank Account' : 'แก้ไขบัญชีธนาคาร')),
       content: SingleChildScrollView(
         child: SizedBox(
           width: 420,
@@ -974,7 +1052,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
               // ── Bank picker ──────────────────────────────────────────────
               InputDecorator(
                 decoration: InputDecoration(
-                  labelText: 'ธนาคาร',
+                  labelText: isEnglish ? 'Bank' : 'ธนาคาร',
                   border: const OutlineInputBorder(),
                   suffixIcon: readOnly
                       ? null
@@ -984,7 +1062,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
                             if (_bankDisplay.isNotEmpty)
                               IconButton(
                                 icon: const Icon(Icons.clear, size: 18),
-                                tooltip: 'ล้าง',
+                                tooltip: isEnglish ? 'Clear' : 'ล้าง',
                                 onPressed: () => setState(() {
                                   _selectedBank = null;
                                   _bankDisplay = '';
@@ -994,7 +1072,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
                               ),
                             IconButton(
                               icon: const Icon(Icons.search, size: 18),
-                              tooltip: 'เลือกธนาคาร',
+                              tooltip: isEnglish ? 'Select Bank' : 'เลือกธนาคาร',
                               onPressed: () async {
                                 await BankListWidget.search(context,
                                     onSelected: (bank) {
@@ -1029,7 +1107,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
                 controller: _branchCtrl,
                 readOnly: readOnly,
                 decoration: InputDecoration(
-                  labelText: 'สาขา',
+                  labelText: isEnglish ? 'Branch' : 'สาขา',
                   border: const OutlineInputBorder(),
                   suffixIcon: (!readOnly && _branchCtrl.text.isNotEmpty)
                       ? IconButton(
@@ -1093,30 +1171,32 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
               TextField(
                 readOnly: readOnly,
                 controller: _accNumCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'เลขที่บัญชี',
-                    border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Account Number' : 'เลขที่บัญชี',
+                    border: const OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               TextField(
                 readOnly: readOnly,
                 controller: _accNameCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'ชื่อบัญชี',
-                    border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Account Name' : 'ชื่อบัญชี',
+                    border: const OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 isExpanded: true,
                 value: _accType,
-                decoration: const InputDecoration(
-                    labelText: 'ประเภทบัญชี',
-                    border: OutlineInputBorder()),
-                items: const [
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Account Type' : 'ประเภทบัญชี',
+                    border: const OutlineInputBorder()),
+                items: [
                   DropdownMenuItem(
-                      value: 'current', child: Text('กระแสรายวัน')),
+                      value: 'current',
+                      child: Text(isEnglish ? 'Current' : 'กระแสรายวัน')),
                   DropdownMenuItem(
-                      value: 'savings', child: Text('ออมทรัพย์')),
+                      value: 'savings',
+                      child: Text(isEnglish ? 'Savings' : 'ออมทรัพย์')),
                 ],
                 onChanged: readOnly
                     ? null
@@ -1126,7 +1206,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
               ),
               const SizedBox(height: 10),
               SwitchListTile(
-                title: const Text('บัญชีหลัก'),
+                title: Text(isEnglish ? 'Primary Account' : 'บัญชีหลัก'),
                 value: _isDefault,
                 onChanged: readOnly
                     ? null
@@ -1146,11 +1226,11 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
                     height: 18,
                     child:
                         CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('บันทึก'),
+                : Text(isEnglish ? 'Save' : 'บันทึก'),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('ปิด'),
+          child: Text(isEnglish ? 'Close' : 'ปิด'),
         ),
       ],
     );
@@ -1269,6 +1349,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   String? _collectionCollectorNameThai;
 
   bool _isSaving = false;
+  bool _isEnglish = false;
 
   @override
   void initState() {
@@ -1497,6 +1578,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     if (_businessTypes.isEmpty) await _loadBusinessTypes();
     if (!mounted) return;
 
+    final isEnglish = _isEnglish;
     final TextEditingController searchCtrl = TextEditingController();
     List<BusinessType> filtered = List.from(_businessTypes);
 
@@ -1512,14 +1594,15 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               filtered = _businessTypes
                   .where((bt) =>
                       bt.businessTypeCode.toLowerCase().contains(lq) ||
-                      bt.businessTypeNameThai.toLowerCase().contains(lq))
+                      bt.businessTypeNameThai.toLowerCase().contains(lq) ||
+                      bt.businessTypeNameEng.toLowerCase().contains(lq))
                   .toList();
             }
           });
         }
 
         return AlertDialog(
-          title: const Text('เลือกประเภทธุรกิจ'),
+          title: Text(isEnglish ? 'Select Business Type' : 'เลือกประเภทธุรกิจ'),
           content: SizedBox(
             width: 480,
             height: 380,
@@ -1528,11 +1611,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 TextField(
                   controller: searchCtrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา รหัส / ชื่อประเภทธุรกิจ',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search code / business type name' : 'ค้นหา รหัส / ชื่อประเภทธุรกิจ',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                   onChanged: doFilter,
                 ),
@@ -1541,7 +1624,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                   child: _businessTypes.isEmpty
                       ? const Center(child: CircularProgressIndicator())
                       : filtered.isEmpty
-                          ? const Center(child: Text('ไม่พบข้อมูล'))
+                          ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
                           : ListView.builder(
                               itemCount: filtered.length,
                               itemBuilder: (_, i) {
@@ -1567,7 +1650,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                                         ),
                                       ),
                                       Expanded(
-                                          child: Text(bt.businessTypeNameThai)),
+                                          child: Text(isEnglish && bt.businessTypeNameEng.isNotEmpty
+                                              ? bt.businessTypeNameEng
+                                              : bt.businessTypeNameThai)),
                                     ],
                                   ),
                                   onTap: () {
@@ -1588,7 +1673,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ปิด'),
+              child: Text(isEnglish ? 'Close' : 'ปิด'),
             ),
           ],
         );
@@ -1605,9 +1690,30 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     });
   }
 
+  String _customerGroupDisplayName(bool isEnglish) {
+    if (_customerGroupId != null && isEnglish) {
+      final match = _customerGroups.where((g) => g.id == _customerGroupId);
+      if (match.isNotEmpty && match.first.groupNameEng.isNotEmpty) {
+        return match.first.groupNameEng;
+      }
+    }
+    return _customerGroupName ?? '';
+  }
+
+  String _arAccountDisplayName(bool isEnglish) {
+    if (_arAccountId != null && isEnglish) {
+      final match = _controlAccounts.where((a) => a.id == _arAccountId);
+      if (match.isNotEmpty && match.first.accountNameEng.isNotEmpty) {
+        return match.first.accountNameEng;
+      }
+    }
+    return _arAccountNameThai ?? '';
+  }
+
   Future<void> _pickCustomerGroup() async {
     if (_customerGroups.isEmpty) await _loadCustomerGroups();
     if (!mounted) return;
+    final isEnglish = _isEnglish;
     final searchCtrl = TextEditingController();
     List<ArCustomerGroup> filtered = List.from(_customerGroups);
 
@@ -1623,14 +1729,15 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               filtered = _customerGroups
                   .where((g) =>
                       g.groupCode.toLowerCase().contains(lq) ||
-                      g.groupNameThai.toLowerCase().contains(lq))
+                      g.groupNameThai.toLowerCase().contains(lq) ||
+                      g.groupNameEng.toLowerCase().contains(lq))
                   .toList();
             }
           });
         }
 
         return AlertDialog(
-          title: const Text('เลือกกลุ่มลูกค้า'),
+          title: Text(isEnglish ? 'Select Customer Group' : 'เลือกกลุ่มลูกค้า'),
           content: SizedBox(
             width: 480,
             height: 380,
@@ -1639,11 +1746,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 TextField(
                   controller: searchCtrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา รหัส / ชื่อกลุ่มลูกค้า',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search code / customer group name' : 'ค้นหา รหัส / ชื่อกลุ่มลูกค้า',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                   onChanged: doFilter,
                 ),
@@ -1652,7 +1759,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                   child: _customerGroups.isEmpty
                       ? const Center(child: CircularProgressIndicator())
                       : filtered.isEmpty
-                          ? const Center(child: Text('ไม่พบข้อมูล'))
+                          ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
                           : ListView.builder(
                               itemCount: filtered.length,
                               itemBuilder: (_, i) {
@@ -1677,7 +1784,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                                               color: Colors.indigo),
                                         ),
                                       ),
-                                      Expanded(child: Text(g.groupNameThai)),
+                                      Expanded(child: Text(isEnglish && g.groupNameEng.isNotEmpty
+                                          ? g.groupNameEng
+                                          : g.groupNameThai)),
                                     ],
                                   ),
                                   onTap: () {
@@ -1694,7 +1803,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ปิด'),
+              child: Text(isEnglish ? 'Close' : 'ปิด'),
             ),
           ],
         );
@@ -1706,6 +1815,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   Future<void> _pickCurrency() async {
     if (_currencies.isEmpty) await _loadCurrencies();
     if (!mounted) return;
+    final isEnglish = _isEnglish;
     final searchCtrl = TextEditingController();
     List<Currency> filtered = List.from(_currencies);
 
@@ -1721,14 +1831,15 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               filtered = _currencies
                   .where((c) =>
                       c.currencyCode.toLowerCase().contains(lq) ||
-                      c.currencyNameThai.toLowerCase().contains(lq))
+                      c.currencyNameThai.toLowerCase().contains(lq) ||
+                      c.currencyNameEng.toLowerCase().contains(lq))
                   .toList();
             }
           });
         }
 
         return AlertDialog(
-          title: const Text('เลือกสกุลเงิน'),
+          title: Text(isEnglish ? 'Select Currency' : 'เลือกสกุลเงิน'),
           content: SizedBox(
             width: 480,
             height: 380,
@@ -1737,11 +1848,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 TextField(
                   controller: searchCtrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา รหัส / ชื่อสกุลเงิน',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search code / currency name' : 'ค้นหา รหัส / ชื่อสกุลเงิน',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                   onChanged: doFilter,
                 ),
@@ -1750,7 +1861,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                   child: _currencies.isEmpty
                       ? const Center(child: CircularProgressIndicator())
                       : filtered.isEmpty
-                          ? const Center(child: Text('ไม่พบข้อมูล'))
+                          ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
                           : ListView.builder(
                               itemCount: filtered.length,
                               itemBuilder: (_, i) {
@@ -1776,7 +1887,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                                               color: Colors.indigo),
                                         ),
                                       ),
-                                      Expanded(child: Text(c.currencyNameThai)),
+                                      Expanded(child: Text(isEnglish && c.currencyNameEng.isNotEmpty
+                                          ? c.currencyNameEng
+                                          : c.currencyNameThai)),
                                     ],
                                   ),
                                   onTap: () {
@@ -1797,7 +1910,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ปิด'),
+              child: Text(isEnglish ? 'Close' : 'ปิด'),
             ),
           ],
         );
@@ -1816,6 +1929,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   Future<void> _pickArAccount() async {
     if (_controlAccounts.isEmpty) await _loadControlAccounts();
     if (!mounted) return;
+    final isEnglish = _isEnglish;
     final searchCtrl = TextEditingController();
     List<Account> filtered = List.from(_controlAccounts);
 
@@ -1831,14 +1945,15 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               filtered = _controlAccounts
                   .where((a) =>
                       a.accountCode.toUpperCase().contains(lq) ||
-                      a.accountNameThai.toUpperCase().contains(lq))
+                      a.accountNameThai.toUpperCase().contains(lq) ||
+                      a.accountNameEng.toUpperCase().contains(lq))
                   .toList();
             }
           });
         }
 
         return AlertDialog(
-          title: const Text('เลือกบัญชีลูกหนี้'),
+          title: Text(isEnglish ? 'Select Receivable Account' : 'เลือกบัญชีลูกหนี้'),
           content: SizedBox(
             width: 520,
             height: 400,
@@ -1847,11 +1962,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 TextField(
                   controller: searchCtrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search code / account name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                   onChanged: doFilter,
                 ),
@@ -1860,7 +1975,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                   child: _controlAccounts.isEmpty
                       ? const Center(child: CircularProgressIndicator())
                       : filtered.isEmpty
-                          ? const Center(child: Text('ไม่พบข้อมูล'))
+                          ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
                           : ListView.builder(
                               itemCount: filtered.length,
                               itemBuilder: (_, i) {
@@ -1885,7 +2000,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                                               color: Colors.indigo),
                                         ),
                                       ),
-                                      Expanded(child: Text(a.accountNameThai)),
+                                      Expanded(child: Text(isEnglish && a.accountNameEng.isNotEmpty
+                                          ? a.accountNameEng
+                                          : a.accountNameThai)),
                                     ],
                                   ),
                                   onTap: () {
@@ -1906,7 +2023,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ปิด'),
+              child: Text(isEnglish ? 'Close' : 'ปิด'),
             ),
           ],
         );
@@ -1943,6 +2060,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             context, listen: false)
         .fetchRows();
     if (!mounted) return;
+    final isEnglish = _isEnglish;
     final searchCtrl = TextEditingController();
     List<SalesTerritory> filtered = List.from(territories);
 
@@ -1958,15 +2076,16 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               filtered = territories
                   .where((t) =>
                       t.territoryCode.toUpperCase().contains(up) ||
-                      t.territoryNameThai.toUpperCase().contains(up))
+                      t.territoryNameThai.toUpperCase().contains(up) ||
+                      (t.territoryNameEng?.toUpperCase().contains(up) ?? false))
                   .toList();
             }
           });
         }
 
         return AlertDialog(
-          title: const Text('เลือกเขตการขาย',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          title: Text(isEnglish ? 'Select Sales Territory' : 'เลือกเขตการขาย',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           content: SizedBox(
             width: 500,
             height: 520,
@@ -1974,10 +2093,10 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               children: [
                 TextField(
                   controller: searchCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา (รหัส / ชื่อเขต)',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search (code / territory name)' : 'ค้นหา (รหัส / ชื่อเขต)',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                   onChanged: doFilter,
@@ -1985,21 +2104,23 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 const SizedBox(height: 8),
                 Expanded(
                   child: filtered.isEmpty
-                      ? const Center(child: Text('ไม่พบข้อมูล'))
+                      ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
                       : ListView.builder(
                           itemCount: filtered.length,
                           itemBuilder: (_, i) {
                             final t = filtered[i];
+                            final tName = isEnglish && (t.territoryNameEng?.isNotEmpty ?? false)
+                                ? t.territoryNameEng!
+                                : t.territoryNameThai;
                             return ListTile(
                               leading: Icon(Icons.map_outlined,
                                   color: t.isActive
                                       ? Colors.teal[600]
                                       : Colors.grey,
                                   size: 20),
-                              title: Text(
-                                  '${t.territoryCode} — ${t.territoryNameThai}'),
+                              title: Text('${t.territoryCode} — $tName'),
                               subtitle: t.parentNameThai != null
-                                  ? Text('ขึ้นกับ: ${t.parentNameThai}',
+                                  ? Text(isEnglish ? 'Parent: ${t.parentNameThai}' : 'ขึ้นกับ: ${t.parentNameThai}',
                                       style: const TextStyle(fontSize: 12))
                                   : null,
                               enabled: t.isActive,
@@ -2028,7 +2149,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('ปิด')),
+                child: Text(isEnglish ? 'Close' : 'ปิด')),
           ],
         );
       }),
@@ -2056,34 +2177,39 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     }
     if (!mounted) return;
 
+    final isEnglish = _isEnglish;
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('เลือกพนักงานขาย',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Select Salesperson' : 'เลือกพนักงานขาย',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: 500,
           height: 400,
           child: _loadingMembers
               ? const Center(child: CircularProgressIndicator())
               : _territoryMembers.isEmpty
-                  ? const Center(
-                      child: Text('ไม่มีพนักงานขายในเขตนี้',
-                          style: TextStyle(color: Colors.grey)))
+                  ? Center(
+                      child: Text(isEnglish ? 'No salespersons in this territory' : 'ไม่มีพนักงานขายในเขตนี้',
+                          style: const TextStyle(color: Colors.grey)))
                   : ListView.builder(
                       itemCount: _territoryMembers.length,
                       itemBuilder: (_, i) {
                         final m = _territoryMembers[i];
+                        final mName = isEnglish && (m.salespersonNameEng?.isNotEmpty ?? false)
+                            ? m.salespersonNameEng!
+                            : m.salespersonNameThai;
                         return ListTile(
                           leading: Icon(
                             m.isPrimary ? Icons.star : Icons.star_border,
                             color: m.isPrimary ? Colors.amber : Colors.grey,
                             size: 20,
                           ),
-                          title: Text(
-                              '${m.salespersonCode} — ${m.salespersonNameThai}'),
+                          title: Text('${m.salespersonCode} — $mName'),
                           subtitle: Text(
-                            m.isPrimary ? 'พนักงานขายหลัก' : 'พนักงานขายรอง',
+                            m.isPrimary
+                                ? (isEnglish ? 'Primary salesperson' : 'พนักงานขายหลัก')
+                                : (isEnglish ? 'Secondary salesperson' : 'พนักงานขายรอง'),
                             style: TextStyle(
                               fontSize: 12,
                               color: m.isPrimary
@@ -2107,7 +2233,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ปิด')),
+              child: Text(isEnglish ? 'Close' : 'ปิด')),
         ],
       ),
     );
@@ -2165,6 +2291,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
+    final isEnglish = _isEnglish;
     setState(() => _isSaving = true);
     try {
       final customer = ArCustomer(
@@ -2203,7 +2330,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('เกิดข้อผิดพลาด: $e'),
+            content: Text(isEnglish
+                ? 'An error occurred: $e'
+                : 'เกิดข้อผิดพลาด: $e'),
             backgroundColor: Colors.red));
       }
     } finally {
@@ -2218,6 +2347,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     bool required = false,
     TextInputType? keyboard,
   }) {
+    final isEnglish = _isEnglish;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextFormField(
@@ -2229,8 +2359,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           border: const OutlineInputBorder(),
         ),
         validator: required
-            ? (v) =>
-                (v == null || v.trim().isEmpty) ? 'กรุณาป้อน $label' : null
+            ? (v) => (v == null || v.trim().isEmpty)
+                ? (isEnglish ? 'Please enter $label' : 'กรุณาป้อน $label')
+                : null
             : null,
       ),
     );
@@ -2238,6 +2369,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   // ---- Code Field: รหัสลูกหนี้ (รองรับทั้งแบบ auto และ manual) ----
   Widget _buildCodeField(bool readOnly) {
+    final isEnglish = _isEnglish;
     final isAdd = widget.mode == Mode.add;
     final isLocked = readOnly || widget.mode == Mode.edit;
 
@@ -2246,24 +2378,27 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: InputDecorator(
-          decoration: const InputDecoration(
-            labelText: 'รหัสลูกหนี้',
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: InputDecoration(
+            labelText: isEnglish ? 'Customer Code' : 'รหัสลูกหนี้',
+            border: const OutlineInputBorder(),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
           child: Row(
             children: [
               const Icon(Icons.auto_awesome, color: Colors.teal, size: 16),
               const SizedBox(width: 6),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'ออกรหัสอัตโนมัติเมื่อบันทึก',
-                  style: TextStyle(color: Colors.teal, fontStyle: FontStyle.italic),
+                  isEnglish
+                      ? 'Auto-generated on save'
+                      : 'ออกรหัสอัตโนมัติเมื่อบันทึก',
+                  style: const TextStyle(color: Colors.teal, fontStyle: FontStyle.italic),
                 ),
               ),
               TextButton.icon(
                 icon: const Icon(Icons.edit, size: 14),
-                label: const Text('แก้ไขเอง', style: TextStyle(fontSize: 12)),
+                label: Text(isEnglish ? 'Edit manually' : 'แก้ไขเอง',
+                    style: const TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.grey.shade700,
                   padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -2288,18 +2423,23 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             Expanded(
               child: TextFormField(
                 controller: _codeCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'รหัสลูกหนี้ *',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Customer Code *' : 'รหัสลูกหนี้ *',
+                  border: const OutlineInputBorder(),
                 ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'กรุณาป้อน รหัสลูกหนี้' : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? (isEnglish
+                        ? 'Please enter customer code'
+                        : 'กรุณาป้อน รหัสลูกหนี้')
+                    : null,
                 textCapitalization: TextCapitalization.characters,
               ),
             ),
             const SizedBox(width: 4),
             Tooltip(
-              message: 'กลับไปใช้รหัสอัตโนมัติ',
+              message: isEnglish
+                  ? 'Revert to auto-generated code'
+                  : 'กลับไปใช้รหัสอัตโนมัติ',
               child: IconButton(
                 icon: const Icon(Icons.auto_awesome, color: Colors.teal),
                 onPressed: () => setState(() {
@@ -2314,14 +2454,15 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     }
 
     // โหมด edit / view / effective auto-numbering ปิด → ปกติ
-    return _buildField('รหัสลูกหนี้ *', _codeCtrl,
+    return _buildField(isEnglish ? 'Customer Code *' : 'รหัสลูกหนี้ *', _codeCtrl,
         readOnly: isLocked, required: !isLocked);
   }
 
   // ---- Section: ข้อมูลทั่วไป ----
   Widget _buildGeneralSection(bool readOnly) {
+    final isEnglish = _isEnglish;
     return _Section(
-      title: 'ข้อมูลทั่วไป',
+      title: isEnglish ? 'General Information' : 'ข้อมูลทั่วไป',
       children: [
         Row(
           children: [
@@ -2330,12 +2471,15 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _buildField('เลขประจำตัวผู้เสียภาษี', _taxIdCtrl,
+              child: _buildField(
+                  isEnglish ? 'Tax ID' : 'เลขประจำตัวผู้เสียภาษี', _taxIdCtrl,
                   readOnly: readOnly),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _buildField('รหัสลูกหนี้เก่า', _oldCustomerCodeCtrl,
+              child: _buildField(
+                  isEnglish ? 'Old Customer Code' : 'รหัสลูกหนี้เก่า',
+                  _oldCustomerCodeCtrl,
                   readOnly: readOnly),
             ),
           ],
@@ -2343,12 +2487,16 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         Row(
           children: [
             Expanded(
-              child: _buildField('ชื่อลูกหนี้ (ไทย) *', _nameThCtrl,
+              child: _buildField(
+                  isEnglish ? 'Customer Name (TH) *' : 'ชื่อลูกหนี้ (ไทย) *',
+                  _nameThCtrl,
                   readOnly: readOnly, required: true),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _buildField('ชื่อลูกหนี้ (อังกฤษ)', _nameEnCtrl,
+              child: _buildField(
+                  isEnglish ? 'Customer Name (EN)' : 'ชื่อลูกหนี้ (อังกฤษ)',
+                  _nameEnCtrl,
                   readOnly: readOnly),
             ),
           ],
@@ -2357,18 +2505,18 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: InputDecorator(
-            decoration: const InputDecoration(
-              labelText: 'ประเภทธุรกิจ',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Business Type' : 'ประเภทธุรกิจ',
+              border: const OutlineInputBorder(),
               contentPadding:
-                  EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: _businessTypeId == null
-                      ? const Text('— ไม่ระบุ —',
-                          style: TextStyle(color: Colors.grey))
+                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                          style: const TextStyle(color: Colors.grey))
                       : Row(
                           children: [
                             const Icon(Icons.check_circle,
@@ -2387,7 +2535,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 if (!readOnly) ...[
                   IconButton(
                     icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: 'ค้นหาประเภทธุรกิจ',
+                    tooltip: isEnglish
+                        ? 'Search business type'
+                        : 'ค้นหาประเภทธุรกิจ',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: _pickBusinessType,
@@ -2396,7 +2546,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                     IconButton(
                       icon: const Icon(Icons.clear,
                           color: Colors.red, size: 18),
-                      tooltip: 'ล้างประเภทธุรกิจ',
+                      tooltip: isEnglish
+                          ? 'Clear business type'
+                          : 'ล้างประเภทธุรกิจ',
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: _clearBusinessType,
@@ -2411,18 +2563,18 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: InputDecorator(
-            decoration: const InputDecoration(
-              labelText: 'กลุ่มลูกค้า',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Customer Group' : 'กลุ่มลูกค้า',
+              border: const OutlineInputBorder(),
               contentPadding:
-                  EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: _customerGroupId == null
-                      ? const Text('— ไม่ระบุ —',
-                          style: TextStyle(color: Colors.grey))
+                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                          style: const TextStyle(color: Colors.grey))
                       : Row(
                           children: [
                             const Icon(Icons.check_circle,
@@ -2430,7 +2582,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                '$_customerGroupCode — $_customerGroupName',
+                                '$_customerGroupCode — ${_customerGroupDisplayName(isEnglish)}',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold),
                               ),
@@ -2441,7 +2593,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 if (!readOnly) ...[
                   IconButton(
                     icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: 'ค้นหากลุ่มลูกค้า',
+                    tooltip:
+                        isEnglish ? 'Search customer group' : 'ค้นหากลุ่มลูกค้า',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: _pickCustomerGroup,
@@ -2449,7 +2602,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                   if (_customerGroupId != null)
                     IconButton(
                       icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                      tooltip: 'ล้างกลุ่มลูกค้า',
+                      tooltip:
+                          isEnglish ? 'Clear customer group' : 'ล้างกลุ่มลูกค้า',
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: _clearGroup,
@@ -2464,23 +2618,31 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         Row(
           children: [
             Expanded(
-              child: _buildField('ระยะเครดิต (เดือน)', _creditTermMonthsCtrl,
+              child: _buildField(
+                  isEnglish ? 'Credit Term (months)' : 'ระยะเครดิต (เดือน)',
+                  _creditTermMonthsCtrl,
                   readOnly: readOnly, keyboard: TextInputType.number),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _buildField('ระยะเครดิต (วัน)', _creditTermDaysCtrl,
+              child: _buildField(
+                  isEnglish ? 'Credit Term (days)' : 'ระยะเครดิต (วัน)',
+                  _creditTermDaysCtrl,
                   readOnly: readOnly, keyboard: TextInputType.number),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _buildField('วงเงินเครดิต', _creditLimitCtrl,
+              child: _buildField(
+                  isEnglish ? 'Credit Limit' : 'วงเงินเครดิต',
+                  _creditLimitCtrl,
                   readOnly: readOnly,
                   keyboard: const TextInputType.numberWithOptions(decimal: true)),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: _buildField('ส่วนลด (%)', _discountPercentCtrl,
+              child: _buildField(
+                  isEnglish ? 'Discount (%)' : 'ส่วนลด (%)',
+                  _discountPercentCtrl,
                   readOnly: readOnly,
                   keyboard: const TextInputType.numberWithOptions(decimal: true)),
             ),
@@ -2489,16 +2651,16 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'สกุลเงิน',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Currency' : 'สกุลเงิน',
+                  border: const OutlineInputBorder(),
                 ),
                 child: Row(
                   children: [
                     Expanded(
                       child: _selectedCurrencyCode == null
-                          ? const Text('— ไม่ระบุ —',
-                              style: TextStyle(color: Colors.grey))
+                          ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                              style: const TextStyle(color: Colors.grey))
                           : Row(
                               children: [
                                 const Icon(Icons.check_circle,
@@ -2520,7 +2682,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                     if (!readOnly) ...[
                       IconButton(
                         icon: const Icon(Icons.search, color: Colors.blue),
-                        tooltip: 'ค้นหาสกุลเงิน',
+                        tooltip: isEnglish ? 'Search currency' : 'ค้นหาสกุลเงิน',
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         onPressed: _pickCurrency,
@@ -2529,7 +2691,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                         IconButton(
                           icon: const Icon(Icons.clear,
                               color: Colors.red, size: 18),
-                          tooltip: 'ล้างสกุลเงิน',
+                          tooltip: isEnglish ? 'Clear currency' : 'ล้างสกุลเงิน',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                           onPressed: _clearCurrency,
@@ -2542,9 +2704,12 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           ),
           ],
         ),
-        _buildField('หมายเหตุ', _remarkCtrl, readOnly: readOnly),
+        _buildField(isEnglish ? 'Remark' : 'หมายเหตุ', _remarkCtrl,
+            readOnly: readOnly),
         SwitchListTile(
-          title: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
+          title: Text(isEnglish
+              ? 'Status: ${_isActive ? 'Active' : 'Inactive'}'
+              : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
           value: _isActive,
           onChanged: readOnly ? null : (v) => setState(() => _isActive = v),
         ),
@@ -2554,14 +2719,17 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   // ---- Section: ที่อยู่ ----
   Widget _buildAddressSection(bool readOnly) {
+    final isEnglish = _isEnglish;
     return _Section(
-      title: 'ที่อยู่ (${_addresses.length})',
+      title: isEnglish
+          ? 'Addresses (${_addresses.length})'
+          : 'ที่อยู่ (${_addresses.length})',
       initiallyExpanded: false,
       trailing: readOnly
           ? null
           : IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: 'เพิ่มที่อยู่',
+              tooltip: isEnglish ? 'Add Address' : 'เพิ่มที่อยู่',
               onPressed: () async {
                 final primary = _addresses.cast<ArCustomerAddress?>()
                     .firstWhere((a) => a!.isDefault, orElse: () => null);
@@ -2572,8 +2740,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             ),
       children: [
         if (_addresses.isEmpty)
-          const Text('ยังไม่มีที่อยู่',
-              style: TextStyle(color: Colors.grey)),
+          Text(isEnglish ? 'No addresses yet' : 'ยังไม่มีที่อยู่',
+              style: const TextStyle(color: Colors.grey)),
         ..._addresses.asMap().entries.map((entry) {
           final i = entry.key;
           final addr = entry.value;
@@ -2589,15 +2757,21 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                     .where((s) => s != null && s.isNotEmpty)
                     .join(', ')
                     .trim().isEmpty
-                  ? 'ที่อยู่ ${i + 1}'
+                  ? (isEnglish ? 'Address ${i + 1}' : 'ที่อยู่ ${i + 1}')
                   : [addr.addressSubDistrict, addr.addressProvince]
                       .where((s) => s != null && s.isNotEmpty)
                       .join(', ');
-          const addrTypeLabel = {
-            'billing':      'ที่อยู่ใบแจ้งหนี้',
-            'shipping':     'ที่อยู่จัดส่ง',
-            'billing note': 'ที่อยู่วางบิล',
-          };
+          final addrTypeLabel = isEnglish
+              ? const {
+                  'billing': 'Billing Address',
+                  'shipping': 'Shipping Address',
+                  'billing note': 'Billing Note Address',
+                }
+              : const {
+                  'billing':      'ที่อยู่ใบแจ้งหนี้',
+                  'shipping':     'ที่อยู่จัดส่ง',
+                  'billing note': 'ที่อยู่วางบิล',
+                };
           final typeLabel = addrTypeLabel[addr.addressType] ?? addr.addressType;
           final subText = [
             if (addr.addressSubDistrict != null) addr.addressSubDistrict!,
@@ -2655,14 +2829,17 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   // ---- Section: ผู้ติดต่อ ----
   Widget _buildContactSection(bool readOnly) {
+    final isEnglish = _isEnglish;
     return _Section(
-      title: 'ผู้ติดต่อ (${_contacts.length})',
+      title: isEnglish
+          ? 'Contacts (${_contacts.length})'
+          : 'ผู้ติดต่อ (${_contacts.length})',
       initiallyExpanded: false,
       trailing: readOnly
           ? null
           : IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: 'เพิ่มผู้ติดต่อ',
+              tooltip: isEnglish ? 'Add Contact' : 'เพิ่มผู้ติดต่อ',
               onPressed: () async {
                 final result = await showContactDialog(context, null, false);
                 if (result != null) setState(() => _contacts.add(result));
@@ -2670,8 +2847,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             ),
       children: [
         if (_contacts.isEmpty)
-          const Text('ยังไม่มีผู้ติดต่อ',
-              style: TextStyle(color: Colors.grey)),
+          Text(isEnglish ? 'No contacts yet' : 'ยังไม่มีผู้ติดต่อ',
+              style: const TextStyle(color: Colors.grey)),
         ..._contacts.asMap().entries.map((entry) {
           final i = entry.key;
           final c = entry.value;
@@ -2881,9 +3058,15 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
   ];
 
+  static const _enMonths = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+
   // แปลง list วันที่ → ช่วง เช่น [1,2,3,7,8] → "1-3, 7-8"
   String _formatDayRanges(List<int> days) {
     if (days.isEmpty) return '';
+    final isEnglish = _isEnglish;
     final sorted = [...days]..sort();
     final ranges = <String>[];
     int start = sorted[0], end = sorted[0];
@@ -2896,7 +3079,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       }
     }
     ranges.add(start == end ? '$start' : '$start-$end');
-    return 'วันที่ ${ranges.join(', ')}';
+    return isEnglish
+        ? 'Day ${ranges.join(', ')}'
+        : 'วันที่ ${ranges.join(', ')}';
   }
 
   // คำนวณกลุ่มวันที่ invoice ทุกวันในเดือนเดียวกัน
@@ -2958,6 +3143,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   // ─── Section Widget ────────────────────────────────────────────────────────
 
   Widget _buildDatePreviewSection() {
+    final isEnglish = _isEnglish;
     final invoice    = _previewInvoiceDate;
     final billing    = _previewCalcBillingDate(invoice);
     final due        = _previewCalcDueDate(invoice, billing);
@@ -2972,7 +3158,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     // ── คำอธิบายสั้น ──
     String billingDetail;
     if (_billingConditions.isEmpty) {
-      billingDetail = 'ไม่มีเงื่อนไขวางบิล — ใช้วันที่ invoice';
+      billingDetail = isEnglish
+          ? 'No billing condition — uses invoice date'
+          : 'ไม่มีเงื่อนไขวางบิล — ใช้วันที่ invoice';
     } else {
       final c = _billingConditions.reduce(
           (a, b) => a.sortOrder <= b.sortOrder ? a : b);
@@ -2981,18 +3169,26 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
     String dueDetail;
     if (months == 0 && days == 0) {
-      dueDetail = 'ชำระทันที (ระยะเครดิต 0)';
+      dueDetail = isEnglish
+          ? 'Due immediately (credit term 0)'
+          : 'ชำระทันที (ระยะเครดิต 0)';
     } else {
       final parts = <String>[];
-      if (months > 0) parts.add('$months เดือน');
-      if (days > 0)   parts.add('$days วัน');
-      final base = useFromBilling ? 'วันวางบิล' : 'วันที่ invoice';
-      dueDetail = 'นับจาก$base + ${parts.join(' ')}';
+      if (months > 0) parts.add(isEnglish ? '$months month(s)' : '$months เดือน');
+      if (days > 0)   parts.add(isEnglish ? '$days day(s)' : '$days วัน');
+      final base = isEnglish
+          ? (useFromBilling ? 'billing date' : 'invoice date')
+          : (useFromBilling ? 'วันวางบิล' : 'วันที่ invoice');
+      dueDetail = isEnglish
+          ? 'From $base + ${parts.join(' ')}'
+          : 'นับจาก$base + ${parts.join(' ')}';
     }
 
     String paymentDetail;
     if (_paymentConditions.isEmpty) {
-      paymentDetail = 'ไม่มีเงื่อนไขรับชำระ — ตามวันครบกำหนด';
+      paymentDetail = isEnglish
+          ? 'No payment condition — follows due date'
+          : 'ไม่มีเงื่อนไขรับชำระ — ตามวันครบกำหนด';
     } else {
       final c = _paymentConditions.reduce(
           (a, b) => a.sortOrder <= b.sortOrder ? a : b);
@@ -3044,12 +3240,13 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     }
 
     return _Section(
-      title: 'ตัวอย่างการคำนวณวันที่',
+      title: isEnglish ? 'Date Calculation Preview' : 'ตัวอย่างการคำนวณวันที่',
       initiallyExpanded: false,
       children: [
         // Input: วันที่ Invoice
         Row(children: [
-          const Text('วันที่ Invoice', style: TextStyle(fontSize: 13)),
+          Text(isEnglish ? 'Invoice Date' : 'วันที่ Invoice',
+              style: const TextStyle(fontSize: 13)),
           const SizedBox(width: 12),
           InkWell(
             onTap: () async {
@@ -3091,21 +3288,21 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         resultRow(
           Icons.receipt_long,
           Colors.blue[700]!,
-          'วันวางบิล',
+          isEnglish ? 'Billing Date' : 'วันวางบิล',
           billing ?? invoice,
           billingDetail,
         ),
         resultRow(
           Icons.event_available,
           Colors.green[700]!,
-          'วันครบกำหนด',
+          isEnglish ? 'Due Date' : 'วันครบกำหนด',
           due,
           dueDetail,
         ),
         resultRow(
           Icons.payments_outlined,
           Colors.orange[700]!,
-          'วันรับชำระ',
+          isEnglish ? 'Payment Date' : 'วันรับชำระ',
           payment,
           paymentDetail,
         ),
@@ -3121,14 +3318,17 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               .map((g) => g['minDelay'] as int)
               .reduce((a, b) => a < b ? a : b);
 
-          final monthLabel =
-              '${_thMonths[invoice.month - 1]} ${invoice.year + 543}';
+          final monthLabel = isEnglish
+              ? '${_enMonths[invoice.month - 1]} ${invoice.year}'
+              : '${_thMonths[invoice.month - 1]} ${invoice.year + 543}';
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'ช่วงวันที่ invoice ในเดือน $monthLabel',
+                isEnglish
+                    ? 'Suitable invoice date range in $monthLabel'
+                    : 'ช่วงวันที่ invoice ในเดือน $monthLabel',
                 style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -3143,9 +3343,13 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 final maxD     = g['maxDelay'] as int;
                 final isBest   = minD == minDelay;
 
-                final delayText = minD == maxD
-                    ? 'ห่างครบกำหนด $minD วัน'
-                    : 'ห่างครบกำหนด $minD–$maxD วัน';
+                final delayText = isEnglish
+                    ? (minD == maxD
+                        ? '$minD day(s) before due'
+                        : '$minD–$maxD day(s) before due')
+                    : (minD == maxD
+                        ? 'ห่างครบกำหนด $minD วัน'
+                        : 'ห่างครบกำหนด $minD–$maxD วัน');
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 4),
@@ -3176,8 +3380,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                               : FontWeight.normal),
                     ),
                     Text(
-                      '  →  วางบิล ${_previewDateFmt.format(billing)}'
-                      '  →  รับชำระ ${_previewDateFmt.format(pmt)}',
+                      isEnglish
+                          ? '  →  bill ${_previewDateFmt.format(billing)}'
+                              '  →  pay ${_previewDateFmt.format(pmt)}'
+                          : '  →  วางบิล ${_previewDateFmt.format(billing)}'
+                              '  →  รับชำระ ${_previewDateFmt.format(pmt)}',
                       style: TextStyle(
                           fontSize: 12,
                           color: isBest
@@ -3208,8 +3415,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   // ---- Section: เงื่อนไขการวางบิล ----
   Widget _buildBillingConditionsSection(bool readOnly) {
+    final isEnglish = _isEnglish;
     return _Section(
-      title: 'เงื่อนไขการวางบิล (${_billingConditions.length})',
+      title: isEnglish
+          ? 'Billing Conditions (${_billingConditions.length})'
+          : 'เงื่อนไขการวางบิล (${_billingConditions.length})',
       initiallyExpanded: false,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -3218,7 +3428,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('ต้องวางบิล',
+              Text(isEnglish ? 'Requires Billing' : 'ต้องวางบิล',
                   style: TextStyle(
                       fontSize: 12,
                       color: _requiresBilling
@@ -3236,7 +3446,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           if (!readOnly)
             IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: 'เพิ่มเงื่อนไขวางบิล',
+              tooltip: isEnglish
+                  ? 'Add Billing Condition'
+                  : 'เพิ่มเงื่อนไขวางบิล',
               onPressed: () async {
                 final result =
                     await showBillingConditionDialog(context, null, false);
@@ -3253,13 +3465,18 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
-              'ไม่ต้องวางบิล: วันครบกำหนดชำระนับจากวันส่งของ',
+              isEnglish
+                  ? 'Billing not required: due date is counted from delivery date'
+                  : 'ไม่ต้องวางบิล: วันครบกำหนดชำระนับจากวันส่งของ',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
           ),
         if (_billingConditions.isEmpty)
-          const Text('ยังไม่มีเงื่อนไขการวางบิล',
-              style: TextStyle(color: Colors.grey)),
+          Text(
+              isEnglish
+                  ? 'No billing conditions yet'
+                  : 'ยังไม่มีเงื่อนไขการวางบิล',
+              style: const TextStyle(color: Colors.grey)),
         ..._billingConditions.asMap().entries.map((entry) {
           final i = entry.key;
           final b = entry.value;
@@ -3318,40 +3535,59 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   }
 
   String _billingConditionSummary(ArCustomerBillingCondition b) {
-    const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
-    const weekNames = {1: 'แรก', 2: 'ที่2', 3: 'ที่3', 4: 'ที่4', -1: 'สุดท้าย'};
+    final isEnglish = _isEnglish;
+    final dayNames = isEnglish
+        ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        : ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+    final weekNames = isEnglish
+        ? {1: '1st', 2: '2nd', 3: '3rd', 4: '4th', -1: 'Last'}
+        : {1: 'แรก', 2: 'ที่2', 3: 'ที่3', 4: 'ที่4', -1: 'สุดท้าย'};
     final parts = <String>[];
-    if (b.billWithDelivery) parts.add('วางบิลพร้อมส่งของ');
+    if (b.billWithDelivery) {
+      parts.add(isEnglish ? 'Bill with delivery' : 'วางบิลพร้อมส่งของ');
+    }
     if (b.billingDayOfMonth.isNotEmpty) {
       final days = b.billingDayOfMonth
-          .map((d) => d == 31 ? 'สิ้นเดือน' : 'วันที่ $d')
+          .map((d) => d == 31
+              ? (isEnglish ? 'End of month' : 'สิ้นเดือน')
+              : (isEnglish ? 'Day $d' : 'วันที่ $d'))
           .join(', ');
       parts.add(days);
     }
     if (b.billingDayOfWeek.isNotEmpty) {
-      parts.add('วัน${b.billingDayOfWeek.map((d) => dayNames[d]).join('-')}');
+      parts.add((isEnglish ? '' : 'วัน') +
+          b.billingDayOfWeek.map((d) => dayNames[d]).join('-'));
     }
     if (b.billingWeekOfMonth.isNotEmpty) {
-      parts.add(
-          'สัปดาห์${b.billingWeekOfMonth.map((w) => weekNames[w] ?? '$w').join('/')}');
+      parts.add((isEnglish ? 'Week ' : 'สัปดาห์') +
+          b.billingWeekOfMonth.map((w) => weekNames[w] ?? '$w').join('/'));
     }
     if (b.billingTimeFrom != null || b.billingTimeTo != null) {
       parts.add('${b.billingTimeFrom ?? ''}–${b.billingTimeTo ?? ''}');
     }
-    if (b.dueFromBillingDate) parts.add('due นับจากวางบิล');
-    return parts.isEmpty ? '(ไม่ระบุเงื่อนไข)' : parts.join('  ·  ');
+    if (b.dueFromBillingDate) {
+      parts.add(isEnglish ? 'Due from billing date' : 'due นับจากวางบิล');
+    }
+    return parts.isEmpty
+        ? (isEnglish ? '(No condition specified)' : '(ไม่ระบุเงื่อนไข)')
+        : parts.join('  ·  ');
   }
 
   // ---- Section: เงื่อนไขการรับชำระเงิน ----
   Widget _buildPaymentConditionsSection(bool readOnly) {
+    final isEnglish = _isEnglish;
     return _Section(
-      title: 'เงื่อนไขการรับชำระเงิน (${_paymentConditions.length})',
+      title: isEnglish
+          ? 'Payment Conditions (${_paymentConditions.length})'
+          : 'เงื่อนไขการรับชำระเงิน (${_paymentConditions.length})',
       initiallyExpanded: false,
       trailing: readOnly
           ? null
           : IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: 'เพิ่มเงื่อนไขรับชำระ',
+              tooltip: isEnglish
+                  ? 'Add Payment Condition'
+                  : 'เพิ่มเงื่อนไขรับชำระ',
               onPressed: () async {
                 final result =
                     await showPaymentConditionDialog(context, null, false);
@@ -3363,9 +3599,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             ),
       children: [
         if (_paymentConditions.isEmpty)
-          const Text(
-              'ยังไม่มีเงื่อนไขรับชำระ — วันชำระเงินจะเท่ากับวันครบกำหนด',
-              style: TextStyle(color: Colors.grey)),
+          Text(
+              isEnglish
+                  ? 'No payment conditions yet — payment date will equal due date'
+                  : 'ยังไม่มีเงื่อนไขรับชำระ — วันชำระเงินจะเท่ากับวันครบกำหนด',
+              style: const TextStyle(color: Colors.grey)),
         ..._paymentConditions.asMap().entries.map((entry) {
           final i = entry.key;
           final p = entry.value;
@@ -3452,14 +3690,15 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   // ---- Section: บัญชีธนาคาร ----
   Widget _buildBankSection(bool readOnly) {
+    final isEnglish = _isEnglish;
     return _Section(
-      title: 'บัญชีธนาคาร (${_bankAccounts.length})',
+      title: isEnglish ? 'Bank Accounts (${_bankAccounts.length})' : 'บัญชีธนาคาร (${_bankAccounts.length})',
       initiallyExpanded: false,
       trailing: readOnly
           ? null
           : IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: 'เพิ่มบัญชีธนาคาร',
+              tooltip: isEnglish ? 'Add Bank Account' : 'เพิ่มบัญชีธนาคาร',
               onPressed: () async {
                 final result = await showBankDialog(context, null, false);
                 if (result != null) {
@@ -3469,8 +3708,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             ),
       children: [
         if (_bankAccounts.isEmpty)
-          const Text('ยังไม่มีบัญชีธนาคาร',
-              style: TextStyle(color: Colors.grey)),
+          Text(isEnglish ? 'No bank accounts yet' : 'ยังไม่มีบัญชีธนาคาร',
+              style: const TextStyle(color: Colors.grey)),
         ..._bankAccounts.asMap().entries.map((entry) {
           final i = entry.key;
           final b = entry.value;
@@ -3515,26 +3754,27 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   // ---- Section: เขตการขาย & พนักงานขาย ----
   Widget _buildSalesTerritorySection(bool readOnly) {
+    final isEnglish = _isEnglish;
     return _Section(
-      title: 'เขตการขายและพนักงานขาย',
+      title: isEnglish ? 'Sales Territory and Salesperson' : 'เขตการขายและพนักงานขาย',
       initiallyExpanded: false,
       children: [
         // ── เขตการขาย ──────────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: InputDecorator(
-            decoration: const InputDecoration(
-              labelText: 'เขตการขาย',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Sales Territory' : 'เขตการขาย',
+              border: const OutlineInputBorder(),
               contentPadding:
-                  EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: _salesTerritoryId == null
-                      ? const Text('— ไม่ระบุ —',
-                          style: TextStyle(color: Colors.grey))
+                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                          style: const TextStyle(color: Colors.grey))
                       : Row(children: [
                           const Icon(Icons.map_outlined,
                               color: Colors.teal, size: 16),
@@ -3551,7 +3791,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 if (!readOnly) ...[
                   IconButton(
                     icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: 'ค้นหาเขตการขาย',
+                    tooltip: isEnglish ? 'Search sales territory' : 'ค้นหาเขตการขาย',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: _pickSalesTerritory,
@@ -3560,7 +3800,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                     IconButton(
                       icon: const Icon(Icons.clear,
                           color: Colors.red, size: 18),
-                      tooltip: 'ล้างเขตการขาย',
+                      tooltip: isEnglish ? 'Clear sales territory' : 'ล้างเขตการขาย',
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: _clearSalesTerritory,
@@ -3576,12 +3816,12 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           padding: const EdgeInsets.only(bottom: 6),
           child: InputDecorator(
             decoration: InputDecoration(
-              labelText: 'พนักงานขาย',
+              labelText: isEnglish ? 'Salesperson' : 'พนักงานขาย',
               border: const OutlineInputBorder(),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               helperText: _salesTerritoryId == null && !readOnly
-                  ? 'กรุณาเลือกเขตการขายก่อน'
+                  ? (isEnglish ? 'Please select a sales territory first' : 'กรุณาเลือกเขตการขายก่อน')
                   : null,
               helperStyle:
                   const TextStyle(fontSize: 11, color: Colors.orange),
@@ -3590,18 +3830,18 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               children: [
                 Expanded(
                   child: _loadingMembers
-                      ? const Row(children: [
-                          SizedBox(
+                      ? Row(children: [
+                          const SizedBox(
                               width: 14,
                               height: 14,
                               child: CircularProgressIndicator(strokeWidth: 2)),
-                          SizedBox(width: 8),
-                          Text('กำลังโหลด...',
-                              style: TextStyle(color: Colors.grey)),
+                          const SizedBox(width: 8),
+                          Text(isEnglish ? 'Loading...' : 'กำลังโหลด...',
+                              style: const TextStyle(color: Colors.grey)),
                         ])
                       : _salespersonId == null
-                          ? const Text('— ไม่ระบุ —',
-                              style: TextStyle(color: Colors.grey))
+                          ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                              style: const TextStyle(color: Colors.grey))
                           : Row(children: [
                               const Icon(Icons.person_outline,
                                   color: Colors.blue, size: 16),
@@ -3622,8 +3862,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                             ? Colors.blue
                             : Colors.grey),
                     tooltip: _salesTerritoryId != null
-                        ? 'ค้นหาพนักงานขาย'
-                        : 'เลือกเขตการขายก่อน',
+                        ? (isEnglish ? 'Search salesperson' : 'ค้นหาพนักงานขาย')
+                        : (isEnglish ? 'Select a sales territory first' : 'เลือกเขตการขายก่อน'),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed:
@@ -3633,7 +3873,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                     IconButton(
                       icon: const Icon(Icons.clear,
                           color: Colors.red, size: 18),
-                      tooltip: 'ล้างพนักงานขาย',
+                      tooltip: isEnglish ? 'Clear salesperson' : 'ล้างพนักงานขาย',
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: _clearSalesperson,
@@ -3649,7 +3889,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           padding: const EdgeInsets.only(bottom: 6),
           child: InputDecorator(
             decoration: InputDecoration(
-              labelText: 'ผู้วางบิล',
+              labelText: isEnglish ? 'Biller' : 'ผู้วางบิล',
               border: const OutlineInputBorder(),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -3658,8 +3898,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               children: [
                 Expanded(
                   child: _billingCollectorId == null
-                      ? const Text('— ไม่ระบุ —',
-                          style: TextStyle(color: Colors.grey))
+                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                          style: const TextStyle(color: Colors.grey))
                       : Row(children: [
                           const Icon(Icons.receipt_long_outlined,
                               color: Colors.indigo, size: 16),
@@ -3675,7 +3915,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 if (!readOnly) ...[
                   IconButton(
                     icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: 'ค้นหาผู้วางบิล',
+                    tooltip: isEnglish ? 'Search biller' : 'ค้นหาผู้วางบิล',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: _pickBillingCollector,
@@ -3684,7 +3924,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                     IconButton(
                       icon: const Icon(Icons.clear,
                           color: Colors.red, size: 18),
-                      tooltip: 'ล้างผู้วางบิล',
+                      tooltip: isEnglish ? 'Clear biller' : 'ล้างผู้วางบิล',
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: _clearBillingCollector,
@@ -3700,7 +3940,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           padding: const EdgeInsets.only(bottom: 6),
           child: InputDecorator(
             decoration: InputDecoration(
-              labelText: 'ผู้รับชำระ',
+              labelText: isEnglish ? 'Collector' : 'ผู้รับชำระ',
               border: const OutlineInputBorder(),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -3709,8 +3949,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               children: [
                 Expanded(
                   child: _collectionCollectorId == null
-                      ? const Text('— ไม่ระบุ —',
-                          style: TextStyle(color: Colors.grey))
+                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                          style: const TextStyle(color: Colors.grey))
                       : Row(children: [
                           const Icon(Icons.payments_outlined,
                               color: Colors.green, size: 16),
@@ -3726,7 +3966,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 if (!readOnly) ...[
                   IconButton(
                     icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: 'ค้นหาผู้รับชำระ',
+                    tooltip: isEnglish ? 'Search collector' : 'ค้นหาผู้รับชำระ',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: _pickCollectionCollector,
@@ -3735,7 +3975,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                     IconButton(
                       icon: const Icon(Icons.clear,
                           color: Colors.red, size: 18),
-                      tooltip: 'ล้างผู้รับชำระ',
+                      tooltip: isEnglish ? 'Clear collector' : 'ล้างผู้รับชำระ',
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: _clearCollectionCollector,
@@ -3751,24 +3991,25 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   // ---- Section: บัญชีลูกหนี้ GL ----
   Widget _buildArAccountSection(bool readOnly) {
+    final isEnglish = _isEnglish;
     return _Section(
-      title: 'รหัสบัญชีลูกหนี้',
+      title: isEnglish ? 'Receivable Account Code' : 'รหัสบัญชีลูกหนี้',
       initiallyExpanded: false,
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: InputDecorator(
-            decoration: const InputDecoration(
-              labelText: 'รหัสบัญชีลูกหนี้ (GL)',
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Receivable Account Code (GL)' : 'รหัสบัญชีลูกหนี้ (GL)',
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: _arAccountId == null
-                      ? const Text('— ไม่ระบุ —',
-                          style: TextStyle(color: Colors.grey))
+                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                          style: const TextStyle(color: Colors.grey))
                       : Row(
                           children: [
                             const Icon(Icons.account_balance,
@@ -3776,7 +4017,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                '${_arAccountCode ?? ''} — ${_arAccountNameThai ?? ''}',
+                                '${_arAccountCode ?? ''} — ${_arAccountDisplayName(isEnglish)}',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold),
                               ),
@@ -3787,7 +4028,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 if (!readOnly) ...[
                   IconButton(
                     icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: 'ค้นหาบัญชีลูกหนี้',
+                    tooltip: isEnglish ? 'Search receivable account' : 'ค้นหาบัญชีลูกหนี้',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: _pickArAccount,
@@ -3796,7 +4037,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                     IconButton(
                       icon: const Icon(Icons.clear,
                           color: Colors.red, size: 18),
-                      tooltip: 'ล้างบัญชีลูกหนี้',
+                      tooltip: isEnglish ? 'Clear receivable account' : 'ล้างบัญชีลูกหนี้',
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: _clearArAccount,
@@ -3820,19 +4061,23 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
+
     if (widget.isPlaceholder) {
-      return const Center(
-        child: Text(
-            'เลือกลูกหนี้เพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มลูกหนี้ใหม่'),
+      return Center(
+        child: Text(isEnglish
+            ? 'Select a customer to edit or delete, or press + to add a new customer'
+            : 'เลือกลูกหนี้เพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มลูกหนี้ใหม่'),
       );
     }
 
     final bool readOnly = widget.mode == Mode.view;
     final String title = readOnly
-        ? 'ดูข้อมูลลูกหนี้'
+        ? (isEnglish ? 'View Customer' : 'ดูข้อมูลลูกหนี้')
         : widget.mode == Mode.edit
-            ? 'แก้ไขลูกหนี้'
-            : 'เพิ่มลูกหนี้ใหม่';
+            ? (isEnglish ? 'Edit Customer' : 'แก้ไขลูกหนี้')
+            : (isEnglish ? 'Add New Customer' : 'เพิ่มลูกหนี้ใหม่');
 
     return Form(
       key: _formKey,
@@ -3897,10 +4142,10 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                                 strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.save),
                     label: Text(_isSaving
-                        ? 'กำลังบันทึก...'
+                        ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
                         : widget.mode == Mode.edit
-                            ? 'บันทึก'
-                            : 'เพิ่ม'),
+                            ? (isEnglish ? 'Save' : 'บันทึก')
+                            : (isEnglish ? 'Add' : 'เพิ่ม')),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange.shade700,
                       foregroundColor: Colors.white,
@@ -3912,7 +4157,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                 ElevatedButton.icon(
                   onPressed: widget.onCancel,
                   icon: const Icon(Icons.cancel),
-                  label: const Text('ยกเลิก'),
+                  label: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.grey.shade600,
                     foregroundColor: Colors.white,

@@ -17,6 +17,7 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
   final _service = GlDimensionService();
   List<GlDimensionType> _types = [];
   bool _isLoading = false;
+  bool _isEnglish = false;
 
   // edit state
   final Map<int, TextEditingController> _codeCtrl = {};
@@ -58,13 +59,15 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
         }
       });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      final isEnglish = _isEnglish;
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'ข้อผิดพลาด: $e'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _save(int slotNo) async {
+    final isEnglish = _isEnglish;
     final type = GlDimensionType(
       slotNo:    slotNo,
       typeCode:  _codeCtrl[slotNo]!.text.trim().toUpperCase(),
@@ -75,15 +78,17 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
     );
     try {
       await _service.upsertType(type);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกเรียบร้อย')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกเรียบร้อย')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'ข้อผิดพลาด: $e'), backgroundColor: Colors.red));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
+    final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -101,9 +106,12 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('กำหนด Dimension Slot 1–5', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                          Text(isEnglish ? 'Configure Dimension Slot 1–5' : 'กำหนด Dimension Slot 1–5', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
-                          Text('แต่ละ Slot คือมิติการวิเคราะห์ที่แนบกับบรรทัด GL เช่น แผนก, ศูนย์ต้นทุน, โครงการ',
+                          Text(
+                              isEnglish
+                                  ? 'Each slot is an analysis dimension attached to a GL line, e.g. department, cost center, project'
+                                  : 'แต่ละ Slot คือมิติการวิเคราะห์ที่แนบกับบรรทัด GL เช่น แผนก, ศูนย์ต้นทุน, โครงการ',
                               style: const TextStyle(color: Colors.grey, fontSize: 12)),
                           const SizedBox(height: 16),
                           ...List.generate(5, (i) => _buildSlotCard(i + 1)),
@@ -118,7 +126,8 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
   }
 
   Widget _buildSlotCard(int slotNo) {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final isActive = _active[slotNo] ?? false;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -142,27 +151,27 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
               value: isActive,
               onChanged: (v) async {
                 setState(() => _active[slotNo] = v);
-                await _save(slotNo); // auto-save เมื่อ toggle เปิด/ปิด
+                await _save(slotNo);
               },
             ),
-            const Text('เปิดใช้งาน'),
+            Text(isEnglish ? 'Enabled' : 'เปิดใช้งาน'),
           ]),
           if (isActive) ...[
             const SizedBox(height: 12),
             Row(children: [
               SizedBox(width: 160, child: TextFormField(
                 controller: _codeCtrl[slotNo],
-                decoration: const InputDecoration(labelText: 'รหัส (type_code)', isDense: true, border: OutlineInputBorder()),
+                decoration: InputDecoration(labelText: isEnglish ? 'Code (type_code)' : 'รหัส (type_code)', isDense: true, border: const OutlineInputBorder()),
               )),
               const SizedBox(width: 12),
               Expanded(child: TextFormField(
                 controller: _nameCtrl[slotNo],
-                decoration: const InputDecoration(labelText: 'ชื่อภาษาไทย *', isDense: true, border: OutlineInputBorder()),
+                decoration: InputDecoration(labelText: isEnglish ? 'Thai Name *' : 'ชื่อภาษาไทย *', isDense: true, border: const OutlineInputBorder()),
               )),
               const SizedBox(width: 12),
               Expanded(child: TextFormField(
                 controller: _nameEngCtrl[slotNo],
-                decoration: const InputDecoration(labelText: 'ชื่อภาษาอังกฤษ', isDense: true, border: OutlineInputBorder()),
+                decoration: InputDecoration(labelText: isEnglish ? 'English Name' : 'ชื่อภาษาอังกฤษ', isDense: true, border: const OutlineInputBorder()),
               )),
               const SizedBox(width: 12),
               ElevatedButton.icon(

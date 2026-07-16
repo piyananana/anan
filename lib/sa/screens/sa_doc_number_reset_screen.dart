@@ -29,6 +29,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
   DocNumberBranchConfig? _selectedDocType;
   bool _loading = false;
   bool _saving = false;
+  bool _isEnglish = false;
 
   @override
   void initState() {
@@ -57,7 +58,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('โหลดข้อมูลล้มเหลว: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text(_isEnglish ? 'Failed to load data: $e' : 'โหลดข้อมูลล้มเหลว: $e'), backgroundColor: Colors.red));
       }
       if (mounted) setState(() => _loading = false);
     }
@@ -78,12 +79,13 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
   }
 
   Future<void> _reset() async {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = _isEnglish;
+    final l = AppL10n(isEnglish);
     if (_selectedDocType == null) return;
     final newVal = int.tryParse(_newValueCtrl.text);
     if (newVal == null || newVal < 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรุณาใส่ค่าที่ถูกต้อง (≥ 1)')));
+          SnackBar(content: Text(isEnglish ? 'Please enter a valid value (≥ 1)' : 'กรุณาใส่ค่าที่ถูกต้อง (≥ 1)')));
       return;
     }
 
@@ -93,11 +95,15 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการ Reset'),
+        title: Text(isEnglish ? 'Confirm Reset' : 'ยืนยันการ Reset'),
         content: Text(
-          'Reset เลขที่เอกสาร [$branchLabel] $docLabel\n'
-          'ค่าใหม่: $newVal\n\n'
-          'เลขที่เอกสารที่สร้างก่อนหน้านี้จะไม่เปลี่ยนแปลง แต่เลขถัดไปจะเริ่มจากค่าใหม่',
+          isEnglish
+              ? 'Reset document number [$branchLabel] $docLabel\n'
+                'New value: $newVal\n\n'
+                'Document numbers already generated will not change, but the next number will start from the new value'
+              : 'Reset เลขที่เอกสาร [$branchLabel] $docLabel\n'
+                'ค่าใหม่: $newVal\n\n'
+                'เลขที่เอกสารที่สร้างก่อนหน้านี้จะไม่เปลี่ยนแปลง แต่เลขถัดไปจะเริ่มจากค่าใหม่',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
@@ -120,7 +126,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Reset สำเร็จ'), backgroundColor: Colors.green));
+            SnackBar(content: Text(isEnglish ? 'Reset successful' : 'Reset สำเร็จ'), backgroundColor: Colors.green));
         // Reload to show updated counter
         if (_useGlobal) {
           await _loadInitial();
@@ -132,7 +138,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Reset ล้มเหลว: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text(isEnglish ? 'Reset failed: $e' : 'Reset ล้มเหลว: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -141,7 +147,8 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -158,7 +165,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('ขอบเขต', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text(isEnglish ? 'Scope' : 'ขอบเขต', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                       const SizedBox(height: 8),
                       Row(children: [
                         Radio<bool>(
@@ -170,7 +177,7 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
                             _selectedBranch  = null;
                           }),
                         ),
-                        const Text('Global (ทั้งระบบ)'),
+                        Text(isEnglish ? 'Global (system-wide)' : 'Global (ทั้งระบบ)'),
                         const SizedBox(width: 32),
                         Radio<bool>(
                           value: false,
@@ -180,21 +187,21 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
                             _selectedDocType = null;
                           }),
                         ),
-                        const Text('แยกตามสาขา'),
+                        Text(isEnglish ? 'Per Branch' : 'แยกตามสาขา'),
                       ]),
                       if (!_useGlobal) ...[
                         const SizedBox(height: 12),
                         DropdownButtonFormField<Branch>(
                           isExpanded: true,
                           value: _selectedBranch,
-                          decoration: const InputDecoration(
-                            labelText: 'สาขา',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Branch' : 'สาขา',
+                            border: const OutlineInputBorder(),
                             isDense: true,
                           ),
                           items: _branches.map((b) => DropdownMenuItem(
                             value: b,
-                            child: Text('${b.branchCode}  ${b.branchNameThai}'),
+                            child: Text('${b.branchCode}  ${isEnglish && b.branchNameEng.isNotEmpty ? b.branchNameEng : b.branchNameThai}'),
                           )).toList(),
                           onChanged: (b) {
                             setState(() {
@@ -215,22 +222,22 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('ประเภทเอกสาร', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text(isEnglish ? 'Document Type' : 'ประเภทเอกสาร', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                       const SizedBox(height: 8),
                       Builder(builder: (_) {
                         final list = _useGlobal ? _docTypes : _branchConfigs;
                         if (!_useGlobal && _selectedBranch == null) {
-                          return const Text('เลือกสาขาก่อน', style: TextStyle(color: Colors.grey));
+                          return Text(isEnglish ? 'Please select a branch first' : 'เลือกสาขาก่อน', style: const TextStyle(color: Colors.grey));
                         }
                         if (!_useGlobal && list.isEmpty) {
-                          return const Text('ไม่มีการตั้งค่าเลขที่สาขานี้', style: TextStyle(color: Colors.orange));
+                          return Text(isEnglish ? 'No document number configuration for this branch' : 'ไม่มีการตั้งค่าเลขที่สาขานี้', style: const TextStyle(color: Colors.orange));
                         }
                         return DropdownButtonFormField<DocNumberBranchConfig>(
                           isExpanded: true,
                           value: _selectedDocType,
-                          decoration: const InputDecoration(
-                            labelText: 'ประเภทเอกสาร',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Document Type' : 'ประเภทเอกสาร',
+                            border: const OutlineInputBorder(),
                             isDense: true,
                           ),
                           items: list.map((d) => DropdownMenuItem(
@@ -255,8 +262,8 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const Text('Counter ปัจจุบัน',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        Text(isEnglish ? 'Current Counter' : 'Counter ปัจจุบัน',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                         const SizedBox(height: 8),
                         Row(children: [
                           const Icon(Icons.numbers, size: 20, color: Colors.deepOrange),
@@ -274,9 +281,9 @@ class _DocNumberResetScreenState extends State<DocNumberResetScreen> {
                           width: 200,
                           child: TextFormField(
                             controller: _newValueCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'ค่าเริ่มต้นใหม่',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: isEnglish ? 'New Starting Value' : 'ค่าเริ่มต้นใหม่',
+                              border: const OutlineInputBorder(),
                               isDense: true,
                             ),
                             keyboardType: TextInputType.number,

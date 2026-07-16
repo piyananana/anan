@@ -1,6 +1,9 @@
-﻿// widgets/cd_business_type_detail_widget.dart
+// widgets/cd_business_type_detail_widget.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_business_type.dart';
 
 class BusinessTypeDetailWidget extends StatefulWidget {
@@ -94,9 +97,10 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
         await widget.onSubmit(row);
       } catch (e) {
         if (mounted) {
+          final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('เกิดข้อผิดพลาด: $e'),
+              content: Text('${l.errorOccurred}: $e'),
               backgroundColor: Colors.red,
             ),
           );
@@ -109,10 +113,14 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+
     if (widget.isPlaceholder) {
-      return const Center(
-        child: Text(
-            'เลือกประเภทธุรกิจเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มใหม่'),
+      return Center(
+        child: Text(isEnglish
+            ? 'Select a business type to edit or press + to add new'
+            : 'เลือกประเภทธุรกิจเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มใหม่'),
       );
     }
 
@@ -127,33 +135,31 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
           children: [
             Text(
               widget.mode == Mode.view
-                  ? 'ดูข้อมูล'
+                  ? (isEnglish ? 'View' : 'ดูข้อมูล')
                   : widget.mode == Mode.edit
-                      ? 'แก้ไขข้อมูล'
-                      : 'เพิ่มข้อมูลใหม่',
+                      ? (isEnglish ? 'Edit' : 'แก้ไขข้อมูล')
+                      : (isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
 
-            // รหัสประเภทธุรกิจ
             TextFormField(
               readOnly: widget.mode != Mode.add,
               controller: _codeController,
               style: const TextStyle(fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                labelText: 'รหัสประเภทธุรกิจ *',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Business Type Code *' : 'รหัสประเภทธุรกิจ *',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'โปรดระบุรหัสประเภทธุรกิจ';
+                  return isEnglish ? 'Please enter code' : 'โปรดระบุรหัสประเภทธุรกิจ';
                 }
                 return null;
               },
             ),
             const SizedBox(height: 16),
 
-            // ชื่อ (ไทย / อังกฤษ) แบบ Row
             Row(
               children: [
                 Expanded(
@@ -166,7 +172,7 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'โปรดระบุชื่อภาษาไทย';
+                        return isEnglish ? 'Please enter Thai name' : 'โปรดระบุชื่อภาษาไทย';
                       }
                       return null;
                     },
@@ -178,7 +184,7 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
                     readOnly: readOnly,
                     controller: _nameEngController,
                     decoration: const InputDecoration(
-                      labelText: 'ชื่อประเภทธุรกิจ (อังกฤษ)',
+                      labelText: 'Business Type Name (EN)',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -187,24 +193,22 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
             ),
             const SizedBox(height: 16),
 
-            // คำอธิบาย
             TextFormField(
               readOnly: readOnly,
               controller: _descriptionController,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'คำอธิบาย',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.description,
+                border: const OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
             ),
             const SizedBox(height: 16),
 
-            // สถานะ
             Row(
               children: [
                 Expanded(
-                  child: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
+                  child: Text('${l.status}: ${_isActive ? l.active : l.inactive}'),
                 ),
                 Switch(
                   value: _isActive,
@@ -216,7 +220,6 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
             ),
             const SizedBox(height: 32),
 
-            // ปุ่ม
             Row(
               children: [
                 if (widget.mode != Mode.view)
@@ -232,10 +235,10 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
                             )
                           : const Icon(Icons.save),
                       label: Text(_isSaving
-                          ? 'กำลังบันทึก...'
+                          ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
                           : widget.mode == Mode.edit
-                              ? 'บันทึก'
-                              : 'เพิ่ม'),
+                              ? l.save
+                              : l.add),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue.shade700,
                         foregroundColor: Colors.white,
@@ -248,7 +251,7 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
                   child: ElevatedButton.icon(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
+                    label: Text(l.cancel),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade600,
                       foregroundColor: Colors.white,

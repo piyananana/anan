@@ -142,8 +142,9 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
       });
     } catch (e) {
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ไม่สามารถโหลดสิทธิ์ของกลุ่ม: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish ? 'Failed to load group permissions: ${e.toString()}' : 'ไม่สามารถโหลดสิทธิ์ของกลุ่ม: ${e.toString()}')),
         );
       }
       setState(() {
@@ -183,8 +184,9 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
       });
     } catch (e) {
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ไม่สามารถโหลดสิทธิ์ของกลุ่ม: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish ? 'Failed to load group permissions: ${e.toString()}' : 'ไม่สามารถโหลดสิทธิ์ของกลุ่ม: ${e.toString()}')),
         );
       }
       setState(() {
@@ -261,10 +263,9 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
 
     } catch (e) {
       print('Error saving group menu: $e'); // Log เพื่อดูรายละเอียดใน Debug Console
-      // _showSnackBar('เกิดข้อผิดพลาดในการบันทึกสิทธิ์: ${e.toString()}', Colors.red);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('เกิดข้อผิดพลาดในการบันทึกสิทธิ์: ${e.toString()}')),
+            content: Text(l.isEnglish ? 'Error saving permissions: ${e.toString()}' : 'เกิดข้อผิดพลาดในการบันทึกสิทธิ์: ${e.toString()}')),
       );
       // ^^^^ แสดงข้อความ error ที่ชัดเจนขึ้น ^^^^
     } finally {

@@ -34,6 +34,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 400.0;
   bool _isDraggingDivider = false;
+  bool _isEnglish = false;
 
   @override
   void initState() {
@@ -42,6 +43,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   }
 
   Future<void> _loadReports() async {
+    final isEnglish = _isEnglish;
     setState(() => _isLoadingReports = true);
     try {
       final results = await Future.wait([
@@ -65,19 +67,20 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
         }
       });
     } catch (e) {
-      _showError('โหลดรายการล้มเหลว: $e');
+      _showError(isEnglish ? 'Failed to load reports: $e' : 'โหลดรายการล้มเหลว: $e');
     } finally {
       setState(() => _isLoadingReports = false);
     }
   }
 
   Future<void> _loadRows(int reportId) async {
+    final isEnglish = _isEnglish;
     setState(() => _isLoadingRows = true);
     try {
       final rows = await _service.fetchRows(reportId);
       setState(() => _rows = rows);
     } catch (e) {
-      _showError('โหลดบรรทัดล้มเหลว: $e');
+      _showError(isEnglish ? 'Failed to load rows: $e' : 'โหลดบรรทัดล้มเหลว: $e');
     } finally {
       setState(() => _isLoadingRows = false);
     }
@@ -99,7 +102,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== REPORT DIALOG =====
   void _showReportDialog([Map<String, dynamic>? report]) {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final isEdit = report != null;
     final codeCtrl = TextEditingController(text: report?['report_code'] ?? '');
     final nameCtrl = TextEditingController(text: report?['report_name_thai'] ?? '');
@@ -115,7 +119,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(isEdit ? 'แก้ไขงบการเงิน' : 'เพิ่มงบการเงินใหม่'),
+          title: Text(isEdit
+              ? (isEnglish ? 'Edit Financial Report' : 'แก้ไขงบการเงิน')
+              : (isEnglish ? 'Add New Financial Report' : 'เพิ่มงบการเงินใหม่')),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -124,21 +130,21 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                 children: [
                   TextField(
                     controller: codeCtrl,
-                    decoration: const InputDecoration(labelText: 'รหัส (report_code)', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Code (report_code)' : 'รหัส (report_code)', border: const OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'ชื่องบการเงิน (ภาษาไทย)', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Report Name (Thai)' : 'ชื่องบการเงิน (ภาษาไทย)', border: const OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: orientation,
-                    decoration: const InputDecoration(labelText: 'การวางแนวหน้ากระดาษ', border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'PORTRAIT', child: Text('PORTRAIT (แนวตั้ง)')),
-                      DropdownMenuItem(value: 'LANDSCAPE', child: Text('LANDSCAPE (แนวนอน)')),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Page Orientation' : 'การวางแนวหน้ากระดาษ', border: const OutlineInputBorder()),
+                    items: [
+                      DropdownMenuItem(value: 'PORTRAIT', child: Text(isEnglish ? 'PORTRAIT' : 'PORTRAIT (แนวตั้ง)')),
+                      DropdownMenuItem(value: 'LANDSCAPE', child: Text(isEnglish ? 'LANDSCAPE' : 'LANDSCAPE (แนวนอน)')),
                     ],
                     onChanged: (v) => setDialogState(() => orientation = v!),
                   ),
@@ -156,13 +162,13 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   ]),
                   const SizedBox(height: 4),
                   SwitchListTile(
-                    title: const Text('ใช้งาน (is_active)'),
+                    title: Text(isEnglish ? 'Active (is_active)' : 'ใช้งาน (is_active)'),
                     value: isActive,
                     onChanged: (v) => setDialogState(() => isActive = v),
                     dense: true,
                   ),
                   SwitchListTile(
-                    title: const Text('แสดงค่าติดลบในวงเล็บ'),
+                    title: Text(isEnglish ? 'Show negative values in parentheses' : 'แสดงค่าติดลบในวงเล็บ'),
                     value: parenthesis,
                     onChanged: (v) => setDialogState(() => parenthesis = v),
                     dense: true,
@@ -198,12 +204,14 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   }
                   if (ctx.mounted) Navigator.pop(ctx);
                   await _loadReports();
-                  _showSuccess(isEdit ? 'แก้ไขเรียบร้อย' : 'เพิ่มเรียบร้อย');
+                  _showSuccess(isEdit
+                      ? (isEnglish ? 'Updated successfully' : 'แก้ไขเรียบร้อย')
+                      : (isEnglish ? 'Added successfully' : 'เพิ่มเรียบร้อย'));
                 } catch (e) {
-                  _showError('เกิดข้อผิดพลาด: $e');
+                  _showError(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e');
                 }
               },
-              child: Text(isEdit ? 'บันทึก' : 'เพิ่ม'),
+              child: Text(isEdit ? l.save : l.add),
             ),
           ],
         ),
@@ -213,7 +221,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== ROW DIALOG =====
   Future<Account?> _pickAccountInDialog(BuildContext ctx, Account? current) async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final searchCtrl = TextEditingController();
     List<Account> filtered = List.from(_accounts);
     Account? picked;
@@ -230,14 +239,15 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
               filtered = _accounts
                   .where((a) =>
                       a.accountCode.toLowerCase().contains(lq) ||
-                      a.accountNameThai.toLowerCase().contains(lq))
+                      a.accountNameThai.toLowerCase().contains(lq) ||
+                      a.accountNameEng.toLowerCase().contains(lq))
                   .toList();
             }
           });
         }
 
         return AlertDialog(
-          title: const Text('เลือกรหัสบัญชี'),
+          title: Text(isEnglish ? 'Select Account Code' : 'เลือกรหัสบัญชี'),
           content: SizedBox(
             width: 520,
             height: 420,
@@ -246,18 +256,18 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                 TextField(
                   controller: searchCtrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search code / name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                   onChanged: doFilter,
                 ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: filtered.isEmpty
-                      ? const Center(child: Text('ไม่พบบัญชี'))
+                      ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี'))
                       : ListView.builder(
                           itemCount: filtered.length,
                           itemBuilder: (_, i) {
@@ -282,7 +292,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                                           color: Colors.deepOrange[900]),
                                     ),
                                   ),
-                                  Expanded(child: Text(a.accountNameThai)),
+                                  Expanded(child: Text(isEnglish && a.accountNameEng.isNotEmpty
+                                      ? a.accountNameEng
+                                      : a.accountNameThai)),
                                   const SizedBox(width: 8),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
@@ -292,8 +304,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
-                                      accountTypeOptions[a.accountType] ??
-                                          a.accountType,
+                                      accountTypeLabel(a.accountType, isEnglish),
                                       style: const TextStyle(
                                           fontSize: 11, color: Colors.grey),
                                     ),
@@ -325,7 +336,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   }
 
   void _showRowDialog([Map<String, dynamic>? row]) {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final isEdit = row != null;
     final seqCtrl = TextEditingController(text: isEdit ? (row['row_seq_no'] ?? '').toString() : '');
     String rowType = row?['row_type'] ?? 'BODY';
@@ -359,7 +371,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(isEdit ? 'แก้ไขบรรทัด' : 'เพิ่มบรรทัดใหม่'),
+          title: Text(isEdit
+              ? (isEnglish ? 'Edit Row' : 'แก้ไขบรรทัด')
+              : (isEnglish ? 'Add New Row' : 'เพิ่มบรรทัดใหม่')),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -369,17 +383,17 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   TextField(
                     controller: seqCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'ลำดับบรรทัด (row_seq_no)', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Row Sequence (row_seq_no)' : 'ลำดับบรรทัด (row_seq_no)', border: const OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: rowType,
-                    decoration: const InputDecoration(labelText: 'ประเภทบรรทัด (row_type)', border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'HEADER', child: Text('HEADER (ส่วนหัว)')),
-                      DropdownMenuItem(value: 'BODY', child: Text('BODY (เนื้อหา)')),
-                      DropdownMenuItem(value: 'FOOTER', child: Text('FOOTER (ส่วนท้าย)')),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Row Type (row_type)' : 'ประเภทบรรทัด (row_type)', border: const OutlineInputBorder()),
+                    items: [
+                      DropdownMenuItem(value: 'HEADER', child: Text(isEnglish ? 'HEADER' : 'HEADER (ส่วนหัว)')),
+                      DropdownMenuItem(value: 'BODY', child: Text(isEnglish ? 'BODY' : 'BODY (เนื้อหา)')),
+                      DropdownMenuItem(value: 'FOOTER', child: Text(isEnglish ? 'FOOTER' : 'FOOTER (ส่วนท้าย)')),
                     ],
                     onChanged: (v) => setDialogState(() => rowType = v!),
                   ),
@@ -387,10 +401,10 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: printControl,
-                    decoration: const InputDecoration(labelText: 'การแสดงผล (print_control)', border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'SHOW', child: Text('SHOW (แสดง)')),
-                      DropdownMenuItem(value: 'HIDE', child: Text('HIDE (ซ่อน)')),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Print Control (print_control)' : 'การแสดงผล (print_control)', border: const OutlineInputBorder()),
+                    items: [
+                      DropdownMenuItem(value: 'SHOW', child: Text(isEnglish ? 'SHOW' : 'SHOW (แสดง)')),
+                      DropdownMenuItem(value: 'HIDE', child: Text(isEnglish ? 'HIDE' : 'HIDE (ซ่อน)')),
                     ],
                     onChanged: (v) => setDialogState(() => printControl = v!),
                   ),
@@ -398,18 +412,18 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   Row(children: [
                     Expanded(
                       child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'รหัสบัญชีต้น (account_from)',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Start Account (account_from)' : 'รหัสบัญชีต้น (account_from)',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
                         child: Row(children: [
                           Expanded(
                             child: dlgAccFrom != null
-                                ? Text('${dlgAccFrom!.accountCode} — ${dlgAccFrom!.accountNameThai}',
+                                ? Text('${dlgAccFrom!.accountCode} — ${isEnglish && dlgAccFrom!.accountNameEng.isNotEmpty ? dlgAccFrom!.accountNameEng : dlgAccFrom!.accountNameThai}',
                                     style: const TextStyle(fontWeight: FontWeight.bold))
-                                : const Text('— ไม่ระบุ —',
-                                    style: TextStyle(color: Colors.grey)),
+                                : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                                    style: const TextStyle(color: Colors.grey)),
                           ),
                           IconButton(
                             icon: Icon(Icons.search, color: Colors.deepOrange[900]),
@@ -433,18 +447,18 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     const SizedBox(width: 8),
                     Expanded(
                       child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'รหัสบัญชีปลาย (account_to)',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'End Account (account_to)' : 'รหัสบัญชีปลาย (account_to)',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
                         child: Row(children: [
                           Expanded(
                             child: dlgAccTo != null
-                                ? Text('${dlgAccTo!.accountCode} — ${dlgAccTo!.accountNameThai}',
+                                ? Text('${dlgAccTo!.accountCode} — ${isEnglish && dlgAccTo!.accountNameEng.isNotEmpty ? dlgAccTo!.accountNameEng : dlgAccTo!.accountNameThai}',
                                     style: const TextStyle(fontWeight: FontWeight.bold))
-                                : const Text('— ไม่ระบุ —',
-                                    style: TextStyle(color: Colors.grey)),
+                                : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                                    style: const TextStyle(color: Colors.grey)),
                           ),
                           IconButton(
                             icon: Icon(Icons.search, color: Colors.deepOrange[900]),
@@ -470,19 +484,19 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: normalSign,
-                    decoration: const InputDecoration(labelText: 'เครื่องหมายปกติ (normal_sign)', border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'DEBIT', child: Text('DEBIT (เดบิต)')),
-                      DropdownMenuItem(value: 'CREDIT', child: Text('CREDIT (เครดิต)')),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Normal Sign (normal_sign)' : 'เครื่องหมายปกติ (normal_sign)', border: const OutlineInputBorder()),
+                    items: [
+                      DropdownMenuItem(value: 'DEBIT', child: Text(isEnglish ? 'DEBIT' : 'DEBIT (เดบิต)')),
+                      DropdownMenuItem(value: 'CREDIT', child: Text(isEnglish ? 'CREDIT' : 'CREDIT (เครดิต)')),
                     ],
                     onChanged: (v) => setDialogState(() => normalSign = v!),
                   ),
                   if (_dimTypes.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    const Align(
+                    Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('กรอง Dimension (เลือกเฉพาะที่ต้องการ)',
-                          style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      child: Text(isEnglish ? 'Filter Dimension (select as needed)' : 'กรอง Dimension (เลือกเฉพาะที่ต้องการ)',
+                          style: const TextStyle(fontSize: 12, color: Colors.grey)),
                     ),
                     const SizedBox(height: 6),
                     ..._dimTypes.map((t) {
@@ -532,12 +546,14 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   }
                   if (ctx.mounted) Navigator.pop(ctx);
                   await _loadRows(_selectedReport!['id']);
-                  _showSuccess(isEdit ? 'แก้ไขบรรทัดเรียบร้อย' : 'เพิ่มบรรทัดเรียบร้อย');
+                  _showSuccess(isEdit
+                      ? (isEnglish ? 'Row updated successfully' : 'แก้ไขบรรทัดเรียบร้อย')
+                      : (isEnglish ? 'Row added successfully' : 'เพิ่มบรรทัดเรียบร้อย'));
                 } catch (e) {
-                  _showError('เกิดข้อผิดพลาด: $e');
+                  _showError(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e');
                 }
               },
-              child: Text(isEdit ? 'บันทึก' : 'เพิ่ม'),
+              child: Text(isEdit ? l.save : l.add),
             ),
           ],
         ),
@@ -547,7 +563,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== COLUMN DIALOG =====
   void _showColumnDialog(int rowId, [Map<String, dynamic>? col]) {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final isEdit = col != null;
     final seqCtrl = TextEditingController(text: isEdit ? (col['column_seq_no'] ?? '').toString() : '');
     String colType = col?['column_type'] ?? 'TEXT';
@@ -565,7 +582,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(isEdit ? 'แก้ไขคอลัมน์' : 'เพิ่มคอลัมน์ใหม่'),
+          title: Text(isEdit
+              ? (isEnglish ? 'Edit Column' : 'แก้ไขคอลัมน์')
+              : (isEnglish ? 'Add New Column' : 'เพิ่มคอลัมน์ใหม่')),
           content: SizedBox(
             width: 440,
             child: SingleChildScrollView(
@@ -573,33 +592,33 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Row(children: [
-                    Expanded(child: TextField(controller: seqCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'ลำดับ (column_seq_no)', border: OutlineInputBorder()))),
+                    Expanded(child: TextField(controller: seqCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: isEnglish ? 'Sequence (column_seq_no)' : 'ลำดับ (column_seq_no)', border: const OutlineInputBorder()))),
                     const SizedBox(width: 8),
-                    Expanded(child: TextField(controller: flexCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'สัดส่วน (flex)', border: OutlineInputBorder()))),
+                    Expanded(child: TextField(controller: flexCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: isEnglish ? 'Flex (flex)' : 'สัดส่วน (flex)', border: const OutlineInputBorder()))),
                   ]),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: colType,
-                    decoration: const InputDecoration(labelText: 'ประเภทคอลัมน์ (column_type)', border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'TEXT', child: Text('TEXT (ข้อความ)')),
-                      DropdownMenuItem(value: 'MTD', child: Text('MTD (ยอดรายเดือน)')),
-                      DropdownMenuItem(value: 'YTD', child: Text('YTD (ยอดสะสม)')),
-                      DropdownMenuItem(value: 'FORMULA', child: Text('FORMULA (สูตรคำนวณ)')),
-                      DropdownMenuItem(value: 'DIVIDER', child: Text('DIVIDER (เส้นคั่น)')),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Column Type (column_type)' : 'ประเภทคอลัมน์ (column_type)', border: const OutlineInputBorder()),
+                    items: [
+                      DropdownMenuItem(value: 'TEXT', child: Text(isEnglish ? 'TEXT' : 'TEXT (ข้อความ)')),
+                      DropdownMenuItem(value: 'MTD', child: Text(isEnglish ? 'MTD (Monthly)' : 'MTD (ยอดรายเดือน)')),
+                      DropdownMenuItem(value: 'YTD', child: Text(isEnglish ? 'YTD (Cumulative)' : 'YTD (ยอดสะสม)')),
+                      DropdownMenuItem(value: 'FORMULA', child: Text(isEnglish ? 'FORMULA' : 'FORMULA (สูตรคำนวณ)')),
+                      DropdownMenuItem(value: 'DIVIDER', child: Text(isEnglish ? 'DIVIDER (Line)' : 'DIVIDER (เส้นคั่น)')),
                     ],
                     onChanged: (v) => setDialogState(() => colType = v!),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: descCtrl,
-                    decoration: const InputDecoration(labelText: 'ข้อความ / คำอธิบาย (description_thai)', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Text / Description (description_thai)' : 'ข้อความ / คำอธิบาย (description_thai)', border: const OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: dataTypeCtrl,
-                    decoration: const InputDecoration(labelText: 'data_type (เช่น = สำหรับเส้นคู่)', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: isEnglish ? 'data_type (e.g. = for double line)' : 'data_type (เช่น = สำหรับเส้นคู่)', border: const OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   Row(children: [
@@ -641,12 +660,12 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   TextField(
                     controller: offsetCtrl,
                     keyboardType: const TextInputType.numberWithOptions(signed: true),
-                    decoration: const InputDecoration(labelText: 'period_offset (MTD/YTD เท่านั้น)', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: isEnglish ? 'period_offset (MTD/YTD only)' : 'period_offset (MTD/YTD เท่านั้น)', border: const OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: formulaCtrl,
-                    decoration: const InputDecoration(labelText: 'formula_text (FORMULA เท่านั้น)', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: isEnglish ? 'formula_text (FORMULA only)' : 'formula_text (FORMULA เท่านั้น)', border: const OutlineInputBorder()),
                   ),
                 ],
               ),
@@ -679,12 +698,14 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   }
                   if (ctx.mounted) Navigator.pop(ctx);
                   await _loadRows(_selectedReport!['id']);
-                  _showSuccess(isEdit ? 'แก้ไขคอลัมน์เรียบร้อย' : 'เพิ่มคอลัมน์เรียบร้อย');
+                  _showSuccess(isEdit
+                      ? (isEnglish ? 'Column updated successfully' : 'แก้ไขคอลัมน์เรียบร้อย')
+                      : (isEnglish ? 'Column added successfully' : 'เพิ่มคอลัมน์เรียบร้อย'));
                 } catch (e) {
-                  _showError('เกิดข้อผิดพลาด: $e');
+                  _showError(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e');
                 }
               },
-              child: Text(isEdit ? 'บันทึก' : 'เพิ่ม'),
+              child: Text(isEdit ? l.save : l.add),
             ),
           ],
         ),
@@ -695,7 +716,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   // ===== BUILD =====
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
+    final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -704,7 +727,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: _loadReports,
           ),
         ],
@@ -728,7 +751,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                      : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(
@@ -772,7 +797,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== LEFT PANEL =====
   Widget _buildLeftPanel() {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -781,7 +807,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [
-              const Text('รายการงบการเงิน', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(isEnglish ? 'Financial Reports' : 'รายการงบการเงิน', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
               const Spacer(),
               ElevatedButton.icon(
                 icon: const Icon(Icons.add, size: 18),
@@ -796,7 +822,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           child: _isLoadingReports
               ? const Center(child: CircularProgressIndicator())
               : _reports.isEmpty
-                  ? const Center(child: Text('ยังไม่มีรายการ'))
+                  ? Center(child: Text(isEnglish ? 'No reports yet' : 'ยังไม่มีรายการ'))
                   : ListView.separated(
                       itemCount: _reports.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
@@ -811,7 +837,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                             style: const TextStyle(fontSize: 15),
                           ),
                           subtitle: Text(
-                            r['is_active'] == true ? 'ใช้งาน' : 'ไม่ใช้งาน',
+                            r['is_active'] == true ? l.active : l.inactive,
                             style: TextStyle(fontSize: 13, color: r['is_active'] == true ? Colors.green : Colors.red),
                           ),
                           trailing: Row(
@@ -819,12 +845,12 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.edit, size: 18),
-                                tooltip: 'แก้ไข',
+                                tooltip: l.edit,
                                 onPressed: () => _showReportDialog(r),
                               ),
                               IconButton(
                                 icon: Icon(Icons.design_services, size: 18, color: Colors.deepOrange[900]),
-                                tooltip: 'ออกแบบ',
+                                tooltip: isEnglish ? 'Design' : 'ออกแบบ',
                                 onPressed: () {
                                   setState(() {
                                     _selectedReport = r;
@@ -845,11 +871,12 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== RIGHT PANEL =====
   Widget _buildRightPanel() {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     if (_selectedReport == null) {
-      return const Center(
+      return Center(
         child: Text(
-          'กรุณากดปุ่ม "ออกแบบ" เพื่อเลือกงบการเงิน',
-          style: TextStyle(color: Colors.grey, fontSize: 16),
+          isEnglish ? 'Please click "Design" to select a financial report' : 'กรุณากดปุ่ม "ออกแบบ" เพื่อเลือกงบการเงิน',
+          style: const TextStyle(color: Colors.grey, fontSize: 16),
         ),
       );
     }
@@ -863,14 +890,14 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             children: [
               Expanded(
                 child: Text(
-                  'ออกแบบ: ${_selectedReport!['report_code']} - ${_selectedReport!['report_name_thai']}',
+                  '${isEnglish ? 'Design' : 'ออกแบบ'}: ${_selectedReport!['report_code']} - ${_selectedReport!['report_name_thai']}',
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               ElevatedButton.icon(
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('เพิ่มบรรทัด'),
+                label: Text(isEnglish ? 'Add Row' : 'เพิ่มบรรทัด'),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.deepOrange[900]),
                 onPressed: () => _showRowDialog(),
               ),
@@ -881,7 +908,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           child: _isLoadingRows
               ? const Center(child: CircularProgressIndicator())
               : _rows.isEmpty
-                  ? const Center(child: Text('ยังไม่มีบรรทัด กดปุ่ม "เพิ่มบรรทัด" เพื่อเริ่ม', style: TextStyle(color: Colors.grey)))
+                  ? Center(child: Text(isEnglish ? 'No rows yet — click "Add Row" to start' : 'ยังไม่มีบรรทัด กดปุ่ม "เพิ่มบรรทัด" เพื่อเริ่ม', style: const TextStyle(color: Colors.grey)))
                   : ListView.separated(
                       padding: const EdgeInsets.all(8),
                       itemCount: _rows.length,
@@ -895,7 +922,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
   // ===== ROW ITEM =====
   Widget _buildRowItem(Map<String, dynamic> row) {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final List<dynamic> columns = row['columns'] ?? [];
     final String rowType = row['row_type'] ?? 'BODY';
     final int seqNo = row['row_seq_no'] ?? 0;
@@ -921,15 +949,17 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             // ปุ่มลบบรรทัด
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-              tooltip: 'ลบบรรทัด',
+              tooltip: isEnglish ? 'Delete row' : 'ลบบรรทัด',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               onPressed: () async {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    title: const Text('ยืนยันลบ'),
-                    content: Text('ต้องการลบบรรทัดที่ $seqNo และคอลัมน์ทั้งหมดในบรรทัดนี้?'),
+                    title: Text(l.confirmDelete),
+                    content: Text(isEnglish
+                        ? 'Do you want to delete row $seqNo and all columns in this row?'
+                        : 'ต้องการลบบรรทัดที่ $seqNo และคอลัมน์ทั้งหมดในบรรทัดนี้?'),
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
                       ElevatedButton(
@@ -944,9 +974,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   try {
                     await _service.deleteRow(row['id']);
                     await _loadRows(_selectedReport!['id']);
-                    _showSuccess('ลบบรรทัดเรียบร้อย');
+                    _showSuccess(isEnglish ? 'Row deleted successfully' : 'ลบบรรทัดเรียบร้อย');
                   } catch (e) {
-                    _showError('ลบไม่สำเร็จ: $e');
+                    _showError(isEnglish ? 'Delete failed: $e' : 'ลบไม่สำเร็จ: $e');
                   }
                 }
               },
@@ -985,7 +1015,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                         borderRadius: BorderRadius.circular(4),
                       ),
                       alignment: Alignment.center,
-                      child: const Text('(ยังไม่มีคอลัมน์)', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                      child: Text(isEnglish ? '(No columns yet)' : '(ยังไม่มีคอลัมน์)', style: const TextStyle(color: Colors.grey, fontSize: 13)),
                     )
                   : _buildColumnsPreview(row['id'], row['row_seq_no'] ?? 0, columns),
             ),
@@ -993,7 +1023,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             // ปุ่มเพิ่มคอลัมน์
             IconButton(
               icon: Icon(Icons.add_box_outlined, size: 22, color: Colors.deepOrange[900]),
-              tooltip: 'เพิ่มคอลัมน์',
+              tooltip: isEnglish ? 'Add column' : 'เพิ่มคอลัมน์',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               onPressed: () => _showColumnDialog(row['id']),

@@ -1,13 +1,13 @@
-﻿// lib/cd/widgets/cd_salesperson_detail_widget.dart
+// lib/cd/widgets/cd_salesperson_detail_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_salesperson.dart';
 import '../models/cd_sales_territory.dart';
-import '../models/cd_business_unit.dart';
 import '../models/cd_branch.dart';
 import '../services/cd_sales_territory_service.dart';
-import '../services/cd_business_unit_service.dart';
 import '../services/cd_branch_service.dart';
 
 class SalespersonDetailWidget extends StatefulWidget {
@@ -45,14 +45,11 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
   String _salespersonType = 'EMPLOYEE';
   int? _branchId;
   String? _branchNameThai;
-  int? _businessUnitId;
-  String? _businessUnitName;
   DateTime? _effectiveDateFrom;
   DateTime? _effectiveDateTo;
   bool _isActive = true;
   bool _isSaving = false;
 
-  // territories list
   List<SalespersonTerritory> _territories = [];
 
   @override
@@ -74,8 +71,6 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
     _commissionCtrl =
         TextEditingController(text: (d?.commissionRate ?? 0).toString());
     _salespersonType = d?.salespersonType ?? 'EMPLOYEE';
-    _businessUnitId = d?.businessUnitId;
-    _businessUnitName = d?.businessUnitName;
     _effectiveDateFrom = d?.effectiveDateFrom;
     _effectiveDateTo = d?.effectiveDateTo;
     _isActive = d?.isActive ?? true;
@@ -99,8 +94,6 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
       _commissionCtrl.text =
           (widget.selected?.commissionRate ?? 0).toString();
       _salespersonType = widget.selected?.salespersonType ?? 'EMPLOYEE';
-      _businessUnitId = widget.selected?.businessUnitId;
-      _businessUnitName = widget.selected?.businessUnitName;
       _effectiveDateFrom = widget.selected?.effectiveDateFrom;
       _effectiveDateTo = widget.selected?.effectiveDateTo;
       _isActive = widget.selected?.isActive ?? true;
@@ -143,14 +136,16 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
     }
   }
 
-  Future<void> _pickBranch() async {
+  Future<void> _pickBranch(bool isEnglish) async {
     final List<Branch> all;
     try {
       all = await Provider.of<BranchService>(context, listen: false).fetchRows();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('โหลดข้อมูลสาขาล้มเหลว: $e')));
+            SnackBar(content: Text(isEnglish
+                ? 'Failed to load branches: $e'
+                : 'โหลดข้อมูลสาขาล้มเหลว: $e')));
       }
       return;
     }
@@ -164,19 +159,22 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
       context: context,
       builder: (ctx) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('เลือกสาขา',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Select Branch' : 'เลือกสาขา',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: 500,
           height: 500,
           child: choices.isEmpty
-              ? const Center(child: Text('ไม่พบข้อมูลสาขา'))
+              ? Center(child: Text(isEnglish ? 'No branches found' : 'ไม่พบข้อมูลสาขา'))
               : ListView.builder(
                   itemCount: choices.length,
                   itemBuilder: (_, i) {
                     final b = choices[i];
+                    final displayName = isEnglish && b.branchNameEng.isNotEmpty
+                        ? b.branchNameEng
+                        : b.branchNameThai;
                     return ListTile(
-                      title: Text('${b.branchCode} — ${b.branchNameThai}'),
+                      title: Text('${b.branchCode} — $displayName'),
                       onTap: () {
                         setState(() {
                           _branchId = b.id;
@@ -191,82 +189,27 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ยกเลิก', style: TextStyle(color: Colors.red))),
+              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก',
+                  style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
   }
 
-  Future<void> _pickBusinessUnit() async {
-    final List<BusinessUnit> all;
-    try {
-      all = await Provider.of<BusinessUnitService>(context, listen: false)
-          .fetchRows();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('โหลดข้อมูลหน่วยงานล้มเหลว: $e')));
-      }
-      return;
-    }
-    final parentIds = all.map((bu) => bu.parentId).whereType<int>().toSet();
-    final choices = all
-        .where((bu) => bu.isActive && bu.parentId != null && !parentIds.contains(bu.id))
-        .toList()
-      ..sort((a, b) => a.buCode.compareTo(b.buCode));
-
-    if (!mounted) return;
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        contentPadding: EdgeInsets.zero,
-        title: const Text('เลือกหน่วยงาน',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        content: SizedBox(
-          width: 500,
-          height: 500,
-          child: choices.isEmpty
-              ? const Center(child: Text('ไม่พบข้อมูลหน่วยงาน'))
-              : ListView.builder(
-                  itemCount: choices.length,
-                  itemBuilder: (_, i) {
-                    final bu = choices[i];
-                    return ListTile(
-                      title: Text('${bu.buCode} — ${bu.buNameThai}'),
-                      onTap: () {
-                        setState(() {
-                          _businessUnitId = bu.id;
-                          _businessUnitName = bu.buNameThai;
-                        });
-                        Navigator.of(ctx).pop();
-                      },
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ยกเลิก', style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _addTerritory() async {
+  Future<void> _addTerritory(bool isEnglish) async {
     final List<SalesTerritory> all;
     try {
-      all =
-          await Provider.of<SalesTerritoryService>(context, listen: false)
-              .fetchActiveRows();
+      all = await Provider.of<SalesTerritoryService>(context, listen: false)
+          .fetchActiveRows();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('โหลดเขตการขายล้มเหลว: $e')));
+            SnackBar(content: Text(isEnglish
+                ? 'Failed to load territories: $e'
+                : 'โหลดเขตการขายล้มเหลว: $e')));
       }
       return;
     }
-    // กรอง id ที่เลือกแล้ว
     final chosen = _territories.map((t) => t.territoryId).toSet();
     final available = all.where((t) => !chosen.contains(t.id)).toList()
       ..sort((a, b) => a.territoryCode.compareTo(b.territoryCode));
@@ -276,20 +219,26 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
       context: context,
       builder: (ctx) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('เพิ่มเขตการขาย',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Add Territory' : 'เพิ่มเขตการขาย',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: 500,
           height: 500,
           child: available.isEmpty
-              ? const Center(child: Text('ไม่มีเขตการขายให้เลือกเพิ่ม'))
+              ? Center(child: Text(isEnglish
+                  ? 'No territories available'
+                  : 'ไม่มีเขตการขายให้เลือกเพิ่ม'))
               : ListView.builder(
                   itemCount: available.length,
                   itemBuilder: (_, i) {
                     final t = available[i];
+                    final displayName = isEnglish &&
+                            t.territoryNameEng != null &&
+                            t.territoryNameEng!.isNotEmpty
+                        ? t.territoryNameEng!
+                        : t.territoryNameThai;
                     return ListTile(
-                      title: Text(
-                          '${t.territoryCode} — ${t.territoryNameThai}'),
+                      title: Text('${t.territoryCode} — $displayName'),
                       onTap: () {
                         setState(() {
                           _territories.add(SalespersonTerritory(
@@ -308,7 +257,8 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ปิด', style: TextStyle(color: Colors.red))),
+              child: Text(isEnglish ? 'Close' : 'ปิด',
+                  style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -317,7 +267,6 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
   void _removeTerritory(int index) {
     setState(() {
       final removed = _territories.removeAt(index);
-      // ถ้าลบ primary และยังมีเขตอื่น → ตั้ง primary แรกใหม่
       if (removed.isPrimary && _territories.isNotEmpty) {
         _territories[0] = _territories[0].copyWith(isPrimary: true);
       }
@@ -332,7 +281,7 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
     });
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit(bool isEnglish) async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     try {
@@ -346,16 +295,12 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
         salespersonType: _salespersonType,
         taxId: _taxIdCtrl.text.trim().isEmpty ? null : _taxIdCtrl.text.trim(),
         branchId: _branchId,
-        businessUnitId: _businessUnitId,
-        phone:
-            _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
-        email:
-            _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+        email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
         address: _addressCtrl.text.trim().isEmpty
             ? null
             : _addressCtrl.text.trim(),
-        commissionRate:
-            double.tryParse(_commissionCtrl.text) ?? 0,
+        commissionRate: double.tryParse(_commissionCtrl.text) ?? 0,
         effectiveDateFrom: _effectiveDateFrom,
         effectiveDateTo: _effectiveDateTo,
         isActive: _isActive,
@@ -364,9 +309,10 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
       await widget.onSubmit(row);
     } catch (e) {
       if (mounted) {
+        final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาด: $e'),
+              content: Text('${l.errorOccurred}: $e'),
               backgroundColor: Colors.red),
         );
       }
@@ -379,12 +325,27 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
       ? '—'
       : '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 
+  Map<String, String> _typeOptions(bool isEnglish) {
+    if (isEnglish) {
+      return const {
+        'EMPLOYEE': 'Internal Employee',
+        'INDIVIDUAL': 'External Individual',
+        'COMPANY': 'Company / Legal Entity',
+      };
+    }
+    return salespersonTypeOptions;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+
     if (widget.isPlaceholder) {
-      return const Center(
-          child: Text(
-              'เลือกพนักงานขายเพื่อแก้ไข หรือ กดปุ่ม + เพื่อเพิ่มใหม่'));
+      return Center(
+          child: Text(isEnglish
+              ? 'Select a salesperson to edit or press + to add new'
+              : 'เลือกพนักงานขายเพื่อแก้ไข หรือ กดปุ่ม + เพื่อเพิ่มใหม่'));
     }
 
     final bool ro = widget.mode == Mode.view;
@@ -398,29 +359,28 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
           children: [
             Text(
               widget.mode == Mode.view
-                  ? 'ดูข้อมูลพนักงานขาย'
+                  ? (isEnglish ? 'View Salesperson' : 'ดูข้อมูลพนักงานขาย')
                   : widget.mode == Mode.edit
-                      ? 'แก้ไขพนักงานขาย'
-                      : 'เพิ่มพนักงานขาย',
+                      ? (isEnglish ? 'Edit Salesperson' : 'แก้ไขพนักงานขาย')
+                      : (isEnglish ? 'Add Salesperson' : 'เพิ่มพนักงานขาย'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
 
-            // รหัส
             TextFormField(
               controller: _codeCtrl,
               readOnly: widget.mode != Mode.add,
               style: const TextStyle(fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                labelText: 'รหัสพนักงานขาย *',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Salesperson Code *' : 'รหัสพนักงานขาย *',
+                border: const OutlineInputBorder(),
               ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'โปรดระบุรหัส' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? (isEnglish ? 'Please enter code' : 'โปรดระบุรหัส')
+                  : null,
             ),
             const SizedBox(height: 12),
 
-            // ชื่อไทย / อังกฤษ
             Row(
               children: [
                 Expanded(
@@ -432,7 +392,7 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                       border: OutlineInputBorder(),
                     ),
                     validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'โปรดระบุชื่อภาษาไทย'
+                        ? (isEnglish ? 'Please enter Thai name' : 'โปรดระบุชื่อภาษาไทย')
                         : null,
                   ),
                 ),
@@ -442,7 +402,7 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                     controller: _nameEngCtrl,
                     readOnly: ro,
                     decoration: const InputDecoration(
-                      labelText: 'ชื่อ (อังกฤษ)',
+                      labelText: 'Name (EN)',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -451,8 +411,6 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // ประเภทพนักงานขาย
-            // ประเภท + เลขภาษี
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -460,11 +418,12 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: _salespersonType,
-                    decoration: const InputDecoration(
-                      labelText: 'ประเภท *',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Type *' : 'ประเภท *',
+                      border: const OutlineInputBorder(),
                     ),
-                    items: salespersonTypeOptions.entries
+                    items: _typeOptions(isEnglish)
+                        .entries
                         .map((e) => DropdownMenuItem(
                             value: e.key, child: Text(e.value)))
                         .toList(),
@@ -478,9 +437,9 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                   child: TextFormField(
                     controller: _taxIdCtrl,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'เลขภาษี/เลขบัตรประชาชน',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Tax ID / National ID' : 'เลขภาษี/เลขบัตรประชาชน',
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -488,16 +447,15 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // สาขา + หน่วยงานที่สังกัด
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: InkWell(
-                    onTap: ro ? null : _pickBranch,
+                    onTap: ro ? null : () => _pickBranch(isEnglish),
                     child: InputDecorator(
                       decoration: InputDecoration(
-                        labelText: 'สาขา',
+                        labelText: isEnglish ? 'Branch' : 'สาขา',
                         border: const OutlineInputBorder(),
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -515,54 +473,19 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                         ),
                       ),
                       child: Text(_branchId == null
-                          ? '— ไม่ระบุ —'
+                          ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
                           : _branchNameThai ?? ''),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: InkWell(
-                    onTap: ro ? null : _pickBusinessUnit,
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: 'หน่วยงานที่สังกัด',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_businessUnitId != null && !ro)
-                              IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () => setState(() {
-                                  _businessUnitId = null;
-                                  _businessUnitName = null;
-                                }),
-                              ),
-                            const Icon(Icons.search),
-                          ],
-                        ),
-                      ),
-                      child: Text(_businessUnitId == null
-                          ? '— ไม่ระบุ —'
-                          : _businessUnitName ?? ''),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // โทรศัพท์ / อีเมล
-            Row(
-              children: [
-                Expanded(
                   child: TextFormField(
                     controller: _phoneCtrl,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'โทรศัพท์',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.phone,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -571,9 +494,9 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                   child: TextFormField(
                     controller: _emailCtrl,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'อีเมล',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.email,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -581,41 +504,40 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // ที่อยู่
             TextFormField(
               controller: _addressCtrl,
               readOnly: ro,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'ที่อยู่',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.address,
+                border: const OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
             ),
             const SizedBox(height: 12),
 
-            // อัตราค่าคอมมิชชั่น
             TextFormField(
               controller: _commissionCtrl,
               readOnly: ro,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'อัตราค่าคอมมิชชั่น (%)',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Commission Rate (%)' : 'อัตราค่าคอมมิชชั่น (%)',
+                border: const OutlineInputBorder(),
               ),
               validator: (v) {
                 if (v != null && v.isNotEmpty) {
                   final d = double.tryParse(v);
-                  if (d == null) return 'กรุณาใส่ตัวเลข';
-                  if (d < 0 || d > 100) return 'ต้องอยู่ระหว่าง 0-100';
+                  if (d == null)
+                    return isEnglish ? 'Please enter a number' : 'กรุณาใส่ตัวเลข';
+                  if (d < 0 || d > 100)
+                    return isEnglish ? 'Must be between 0-100' : 'ต้องอยู่ระหว่าง 0-100';
                 }
                 return null;
               },
             ),
             const SizedBox(height: 12),
 
-            // วันที่เริ่ม / สิ้นสุด
             Row(
               children: [
                 Expanded(
@@ -623,7 +545,7 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                     onTap: ro ? null : () => _pickDate(true),
                     child: InputDecorator(
                       decoration: InputDecoration(
-                        labelText: 'วันที่เริ่มใช้',
+                        labelText: isEnglish ? 'Start Date' : 'วันที่เริ่มใช้',
                         border: const OutlineInputBorder(),
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -648,7 +570,7 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                     onTap: ro ? null : () => _pickDate(false),
                     child: InputDecorator(
                       decoration: InputDecoration(
-                        labelText: 'วันที่สิ้นสุด',
+                        labelText: isEnglish ? 'End Date' : 'วันที่สิ้นสุด',
                         border: const OutlineInputBorder(),
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -671,12 +593,10 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // สถานะ
             Row(
               children: [
                 Expanded(
-                    child: Text(
-                        'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
+                    child: Text('${l.status}: ${_isActive ? l.active : l.inactive}')),
                 Switch(
                   value: _isActive,
                   onChanged: ro
@@ -687,26 +607,28 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
             ),
             const SizedBox(height: 20),
 
-            // ─── เขตการขาย ───────────────────────────────────────
             Row(
               children: [
-                Text('เขตการขายที่รับผิดชอบ',
+                Text(isEnglish ? 'Sales Territories' : 'เขตการขายที่รับผิดชอบ',
                     style: Theme.of(context).textTheme.titleMedium),
                 const Spacer(),
                 if (!ro)
                   TextButton.icon(
-                    onPressed: _addTerritory,
+                    onPressed: () => _addTerritory(isEnglish),
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('เพิ่มเขต'),
+                    label: Text(isEnglish ? 'Add Territory' : 'เพิ่มเขต'),
                   ),
               ],
             ),
             const Divider(),
             if (_territories.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('— ยังไม่มีเขตการขาย —',
-                    style: TextStyle(color: Colors.grey)),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                    isEnglish
+                        ? '— No territories assigned —'
+                        : '— ยังไม่มีเขตการขาย —',
+                    style: const TextStyle(color: Colors.grey)),
               )
             else
               ListView.builder(
@@ -721,31 +643,26 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                       leading: ro
                           ? Icon(
                               t.isPrimary ? Icons.star : Icons.star_border,
-                              color: t.isPrimary
-                                  ? Colors.amber
-                                  : Colors.grey,
+                              color: t.isPrimary ? Colors.amber : Colors.grey,
                             )
                           : IconButton(
                               icon: Icon(
                                 t.isPrimary ? Icons.star : Icons.star_border,
-                                color: t.isPrimary
-                                    ? Colors.amber
-                                    : Colors.grey,
+                                color: t.isPrimary ? Colors.amber : Colors.grey,
                               ),
-                              tooltip: 'ตั้งเป็นหลัก',
+                              tooltip: isEnglish ? 'Set as Primary' : 'ตั้งเป็นหลัก',
                               onPressed: () => _togglePrimary(i),
                             ),
                       title: Text(
                           '${t.territoryCode ?? ''} — ${t.territoryNameThai ?? ''}'),
                       subtitle: t.isPrimary
-                          ? const Text('เขตหลัก',
-                              style: TextStyle(color: Colors.amber))
+                          ? Text(isEnglish ? 'Primary Territory' : 'เขตหลัก',
+                              style: const TextStyle(color: Colors.amber))
                           : null,
                       trailing: ro
                           ? null
                           : IconButton(
-                              icon: const Icon(Icons.delete,
-                                  color: Colors.red),
+                              icon: const Icon(Icons.delete, color: Colors.red),
                               onPressed: () => _removeTerritory(i),
                             ),
                     ),
@@ -754,13 +671,12 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
               ),
             const SizedBox(height: 24),
 
-            // ปุ่ม
             Row(
               children: [
                 if (widget.mode != Mode.view)
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _submit,
+                      onPressed: _isSaving ? null : () => _submit(isEnglish),
                       icon: _isSaving
                           ? const SizedBox(
                               width: 20,
@@ -769,10 +685,8 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                                   strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.save),
                       label: Text(_isSaving
-                          ? 'กำลังบันทึก...'
-                          : widget.mode == Mode.edit
-                              ? 'บันทึก'
-                              : 'เพิ่ม'),
+                          ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
+                          : widget.mode == Mode.edit ? l.save : l.add),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue.shade700,
                         foregroundColor: Colors.white,
@@ -785,7 +699,7 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                   child: ElevatedButton.icon(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
+                    label: Text(l.cancel),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade600,
                       foregroundColor: Colors.white,

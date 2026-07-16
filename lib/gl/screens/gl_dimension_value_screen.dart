@@ -28,6 +28,7 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 380.0;
   bool _isDraggingDivider = false;
+  bool _isEnglish = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -65,18 +66,22 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
   }
 
   Future<void> _onDelete(GlDimensionType type, GlDimensionValue v) async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(children: [
-          Icon(Icons.delete_forever, color: Colors.red),
-          SizedBox(width: 8),
-          Text('ยืนยันการลบ'),
+        title: Row(children: [
+          const Icon(Icons.delete_forever, color: Colors.red),
+          const SizedBox(width: 8),
+          Text(l.confirmDelete),
         ]),
         content: Text(
-          'ลบ "${v.valueCode} — ${v.valueNameThai}" ?\n\n'
-          'ไม่สามารถลบได้หากมีการใช้งานในธุรกรรม GL',
+          isEnglish
+              ? 'Delete "${v.valueCode} — ${v.valueNameThai}" ?\n\n'
+                  'Cannot be deleted if used in GL transactions'
+              : 'ลบ "${v.valueCode} — ${v.valueNameThai}" ?\n\n'
+                  'ไม่สามารถลบได้หากมีการใช้งานในธุรกรรม GL',
         ),
         actions: [
           TextButton(
@@ -99,7 +104,7 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
       if (_selectedData?.id == v.id) _onCancel();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('ลบ "${v.valueCode}" เรียบร้อย')));
+            SnackBar(content: Text(isEnglish ? 'Deleted "${v.valueCode}" successfully' : 'ลบ "${v.valueCode}" เรียบร้อย')));
       }
     } catch (e) {
       if (mounted) {
@@ -113,18 +118,19 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
   }
 
   Future<void> _onSubmit(GlDimensionValue row) async {
+    final isEnglish = _isEnglish;
     try {
       if (_mode == GlDimValueMode.add || _mode == GlDimValueMode.addChild) {
         await _service.addValue(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('เพิ่ม "${row.valueCode}" เรียบร้อย')));
+              SnackBar(content: Text(isEnglish ? 'Added "${row.valueCode}" successfully' : 'เพิ่ม "${row.valueCode}" เรียบร้อย')));
         }
       } else if (_mode == GlDimValueMode.edit) {
         await _service.updateValue(row.id, row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('บันทึก "${row.valueCode}" เรียบร้อย')));
+              SnackBar(content: Text(isEnglish ? 'Saved "${row.valueCode}" successfully' : 'บันทึก "${row.valueCode}" เรียบร้อย')));
         }
       }
       _listKey.currentState?.refresh();
@@ -132,7 +138,7 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text(isEnglish ? 'Error: $e' : 'ข้อผิดพลาด: $e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -147,7 +153,9 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
+    final l = AppL10n(isEnglish);
 
     return Scaffold(
       appBar: AppBar(
@@ -157,7 +165,7 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: () {
               _listKey.currentState?.refresh();
               _onCancel();
@@ -188,7 +196,9 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () => setState(
                       () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                      : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
 

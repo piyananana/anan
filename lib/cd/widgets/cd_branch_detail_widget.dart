@@ -1,7 +1,9 @@
-﻿// widgets/zipcode_detail_form.dart
+// widgets/cd_branch_detail_widget.dart
 import 'package:flutter/material.dart';
-// import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_branch.dart';
 import '../models/cd_zipcode.dart';
 import 'cd_zipcode_list_widget.dart';
@@ -32,7 +34,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
   late TextEditingController _branchCodeController;
   late TextEditingController _branchNameThaiController;
   late TextEditingController _branchNameEngController;
-  late bool _isActive; 
+  late bool _isActive;
   late TextEditingController _addressNoController;
   late TextEditingController _addressBuildingVillageController;
   late TextEditingController _addressSoiController;
@@ -56,8 +58,8 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
     _branchCodeController = TextEditingController(text: _selected?.branchCode ?? '');
     _branchNameThaiController = TextEditingController(text: _selected?.branchNameThai ?? '');
     _branchNameEngController = TextEditingController(text: _selected?.branchNameEng ?? '');
-    _isActive = _selected?.isActive ?? true;  
-        DateTime.now().add(const Duration(days: 365)).toLocal();
+    _isActive = _selected?.isActive ?? true;
+    DateTime.now().add(const Duration(days: 365)).toLocal();
     _addressNoController = TextEditingController(text: _selected?.addressNo ?? '');
     _addressBuildingVillageController = TextEditingController(text: _selected?.addressBuildingVillage ?? '');
     _addressSoiController = TextEditingController(text: _selected?.addressSoi ?? '');
@@ -81,7 +83,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
       _branchCodeController.text = _selected?.branchCode ?? '';
       _branchNameThaiController.text = _selected?.branchNameThai ?? '';
       _branchNameEngController.text = _selected?.branchNameEng ?? '';
-      _isActive = _selected?.isActive ?? true;  
+      _isActive = _selected?.isActive ?? true;
       _addressNoController = TextEditingController(text: _selected?.addressNo ?? '');
       _addressBuildingVillageController = TextEditingController(text: _selected?.addressBuildingVillage ?? '');
       _addressSoiController = TextEditingController(text: _selected?.addressSoi ?? '');
@@ -94,15 +96,12 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
       _phoneNumberController = TextEditingController(text: _selected?.phoneNumber ?? '');
       _faxNumberController = TextEditingController(text: _selected?.faxNumber ?? '');
       _primaryContactPersonController = TextEditingController(text: _selected?.primaryContactPerson ?? '');
-
-      // *ไม่ต้องเรียก setState() เพราะการเปลี่ยนแปลงสถานะใน didUpdateWidget จะถูกนำไปใช้ในการ build ถัดไป*
     } else if (widget.mode == Mode.add && oldWidget.mode != Mode.add) {
-      // กรณีเปลี่ยนเป็นโหมดเพิ่มข้อมูลใหม่
       _selected = null;
       _branchCodeController.clear();
       _branchNameThaiController.clear();
       _branchNameEngController.clear();
-      _isActive = true;  
+      _isActive = true;
       _addressNoController.clear();
       _addressBuildingVillageController.clear();
       _addressSoiController.clear();
@@ -138,11 +137,9 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
     super.dispose();
   }
 
-  Future<void> _submitForm() async {
+  Future<void> _submitForm(bool isEnglish) async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isSaving = true;
-      });
+      setState(() => _isSaving = true);
       try {
         final newDetail = Branch(
           id: widget.selected?.id ?? 0,
@@ -166,29 +163,30 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
         await widget.onSubmit(newDetail);
       } catch (e) {
         if (mounted) {
+          final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('เกิดข้อผิดพลาด: $e'),
+              content: Text('${l.errorOccurred}: $e'),
               backgroundColor: Colors.red,
             ),
           );
         }
       } finally {
-        if (mounted) {
-          setState(() {
-            _isSaving = false;
-          });
-        }
+        if (mounted) setState(() => _isSaving = false);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+
     if (widget.isPlaceholder) {
-      return const Center(
-        child: Text(
-            'เลือกสาขาเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มสาขาใหม่'),
+      return Center(
+        child: Text(isEnglish
+            ? 'Select a branch to edit or press + to add new'
+            : 'เลือกสาขาเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มสาขาใหม่'),
       );
     }
 
@@ -202,124 +200,107 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.mode == Mode.view // _isViewing
-                  ? 'ดูข้อมูล'
-                  : widget.mode == Mode.edit // _isEditing
-                      ? 'แก้ไขข้อมูล'
-                      : 'เพิ่มข้อมูลใหม่',
+              widget.mode == Mode.view
+                  ? (isEnglish ? 'View' : 'ดูข้อมูล')
+                  : widget.mode == Mode.edit
+                      ? (isEnglish ? 'Edit' : 'แก้ไขข้อมูล')
+                      : (isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(child:
-                  TextFormField(
-                    readOnly: widget.mode != Mode.add,
-                    controller: _branchCodeController,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                    decoration: const InputDecoration(
-                      labelText: 'รหัสสาขา',
-                      border: OutlineInputBorder(),
-                    ),
-                    // maxLength: 50,
-                    validator: (value) {
-                      if (value == null || value.isEmpty || value.length > 50) {
-                        return 'โปรดระบุรหัสไม่เกิน 50 ตัวอักษร';
-                      }
-                      return null;
-                    },
-                  ),
-                ),
-              ],
+            TextFormField(
+              readOnly: widget.mode != Mode.add,
+              controller: _branchCodeController,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Branch Code' : 'รหัสสาขา',
+                border: const OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty || value.length > 50) {
+                  return isEnglish
+                      ? 'Please enter code (max 50 chars)'
+                      : 'โปรดระบุรหัสไม่เกิน 50 ตัวอักษร';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child:
-                  TextFormField(
+                Expanded(
+                  child: TextFormField(
                     readOnly: readOnly,
                     controller: _branchNameThaiController,
                     decoration: const InputDecoration(
                       labelText: 'ชื่อสาขา (ไทย)',
                       border: OutlineInputBorder(),
                     ),
-                    // maxLength: 255,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'โปรดระบุชื่อสาขาภาษาไทย';
+                        return isEnglish
+                            ? 'Please enter Thai name'
+                            : 'โปรดระบุชื่อสาขาภาษาไทย';
                       }
                       return null;
                     },
                   ),
                 ),
                 const SizedBox(width: 4),
-                Expanded(child:
-                  TextFormField(
+                Expanded(
+                  child: TextFormField(
                     readOnly: readOnly,
                     controller: _branchNameEngController,
                     decoration: const InputDecoration(
-                      labelText: 'ชื่อสาขา (อังกฤษ)',
+                      labelText: 'Branch Name (EN)',
                       border: OutlineInputBorder(),
                     ),
-                    // maxLength: 255,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'โปรดระบุชื่อสาขาภาษาอังกฤษ';
+                        return isEnglish
+                            ? 'Please enter English name'
+                            : 'โปรดระบุชื่อสาขาภาษาอังกฤษ';
                       }
                       return null;
                     },
                   ),
-                )
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4.0),
-                      side: BorderSide(
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    title: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
-                    trailing: Switch(
-                      value: _isActive,
-                      onChanged: readOnly ? null : (bool value) {
-                        setState(() {
-                          _isActive = value;
-                        });
-                      },
-                    ),
-                  ),
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4.0),
+                side: BorderSide(color: Colors.grey.shade700),
+              ),
+              title: Text('${l.status}: ${_isActive ? l.active : l.inactive}'),
+              trailing: Switch(
+                value: _isActive,
+                onChanged: readOnly
+                    ? null
+                    : (bool value) => setState(() => _isActive = value),
+              ),
+            ),
             const SizedBox(height: 20),
-            const Text('ที่อยู่',
-                style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(isEnglish ? 'Address' : 'ที่อยู่',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Divider(),
-            _buildAddressFields(),
+            _buildAddressFields(isEnglish, readOnly),
             const SizedBox(height: 20),
-            const Text('ข้อมูลติดต่อ',
-                style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(isEnglish ? 'Contact Information' : 'ข้อมูลติดต่อ',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const Divider(),
-            _buildContactFields(),
-            // --- สิ้นสุดการเพิ่ม Branch ---
+            _buildContactFields(isEnglish, readOnly),
             const SizedBox(height: 32),
-            // --- Buttons ---
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 widget.mode == Mode.view
-                    ? Container() // ไม่แสดงปุ่มเพิ่ม/บันทึก หากเป็นโหมดดูอย่างเดียว
+                    ? Container()
                     : Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: _isSaving ? null : _submitForm,
+                          onPressed: _isSaving ? null : () => _submitForm(isEnglish),
                           icon: _isSaving
                               ? const SizedBox(
                                   height: 20,
@@ -328,10 +309,10 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                                       strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.save),
                           label: Text(_isSaving
-                              ? 'กำลังบันทึก...'
+                              ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
                               : widget.mode == Mode.edit
-                                  ? 'บันทึก'
-                                  : 'เพิ่ม'),
+                                  ? l.save
+                                  : l.add),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue.shade700,
                             foregroundColor: Colors.white,
@@ -344,7 +325,7 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
                   child: ElevatedButton.icon(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
+                    label: Text(l.cancel),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade600,
                       foregroundColor: Colors.white,
@@ -360,191 +341,121 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
     );
   }
 
-  Widget _buildAddressFields() {
-    final bool readOnly = widget.mode == Mode.view;
+  Widget _buildAddressFields(bool isEnglish, bool readOnly) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ... (Address No, Building/Village, Soi, Road - ไม่มีการเปลี่ยนแปลง)
-        Row(crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child:
-              _buildTextFormField(
-                controller: _addressNoController,
-                labelText: 'บ้านเลขที่ / ห้อง',
-                // maxLength: 50,
-                readOnly: readOnly,
-              ),
-            ),
-            const SizedBox(width: 4,),
-            Expanded(child:
-              _buildTextFormField(
-                controller: _addressBuildingVillageController,
-                labelText: 'อาคาร / หมู่บ้าน',
-                // maxLength: 100,
-                readOnly: readOnly,
-              ),
-            ),
-            const SizedBox(width: 4,),
-            Expanded(child:
-              _buildTextFormField(
-                controller: _addressSoiController,
-                labelText: 'ซอย',
-                // maxLength: 100,
-                readOnly: readOnly,
-              ),
-            ),
-            const SizedBox(width: 4,),
-            Expanded(child:
-              _buildTextFormField(
-                controller: _addressRoadController,
-                labelText: 'ถนน',
-                // maxLength: 100,
-                readOnly: readOnly,
-              ),
-            ),
-          ],
-        ),
-        // NEW: แถวที่มี IconButton สำหรับค้นหารหัสไปรษณีย์
-        Row(
-          children: [
-            // ปุ่มค้นหา
-            IconButton(
-              icon: const Icon(Icons.search, color: Colors.blue),
-              tooltip: 'ค้นหา ตำบล/แขวง, อำเภอ/เขต, จังหวัด, รหัสไปรษณีย์',
-              onPressed: readOnly ? null : _showZipCodeSearchCard,
-            ),
-            Expanded(child:
-              Column(children: [
-                Row(crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child:
-                      // แขวง / ตำบล
-                      _buildTextFormField(
-                        controller: _addressSubDistrictController,
-                        labelText: 'ตำบล / แขวง',
-                        // maxLength: 100,
-                        readOnly: readOnly,
-                      ),
-                    ),
-                    const SizedBox(width: 4,),
-                    Expanded(child:
-                      // อำเภอ / เขต
-                      _buildTextFormField(
-                        controller: _addressDistrictController,
-                        labelText: 'อำเภอ / เขต',
-                        // maxLength: 100,
-                        readOnly: readOnly,
-                      ),
-                    ),
-                    const SizedBox(width: 4,),
-                    Expanded(child:
-                      // จังหวัด
-                      _buildTextFormField(
-                        controller: _addressProvinceController,
-                        labelText: 'จังหวัด',
-                        // maxLength: 100,
-                        readOnly: readOnly,
-                      ),
-                    ),
-                    const SizedBox(width: 4,),
-                    Expanded(child:
-                      // รหัสไปรษณีย์
-                      _buildTextFormField(
-                        controller: _addressZipCodeController,
-                        labelText: 'รหัสไปรษณีย์',
-                        // maxLength: 10,
-                        keyboardType: TextInputType.number,
-                        readOnly: readOnly,
-                      ),
-                    ),
-                  ],
-                ),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: _buildTextField(
+            controller: _addressNoController,
+            labelText: isEnglish ? 'No. / Room' : 'บ้านเลขที่ / ห้อง',
+            readOnly: readOnly,
+          )),
+          const SizedBox(width: 4),
+          Expanded(child: _buildTextField(
+            controller: _addressBuildingVillageController,
+            labelText: isEnglish ? 'Building / Village' : 'อาคาร / หมู่บ้าน',
+            readOnly: readOnly,
+          )),
+          const SizedBox(width: 4),
+          Expanded(child: _buildTextField(
+            controller: _addressSoiController,
+            labelText: isEnglish ? 'Lane (Soi)' : 'ซอย',
+            readOnly: readOnly,
+          )),
+          const SizedBox(width: 4),
+          Expanded(child: _buildTextField(
+            controller: _addressRoadController,
+            labelText: isEnglish ? 'Road' : 'ถนน',
+            readOnly: readOnly,
+          )),
+        ]),
+        Row(children: [
+          IconButton(
+            icon: const Icon(Icons.search, color: Colors.blue),
+            tooltip: isEnglish
+                ? 'Search Sub-district, District, Province, Zipcode'
+                : 'ค้นหา ตำบล/แขวง, อำเภอ/เขต, จังหวัด, รหัสไปรษณีย์',
+            onPressed: readOnly ? null : () => _showZipCodeSearchCard(isEnglish),
+          ),
+          Expanded(
+            child: Column(children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: _buildTextField(
+                  controller: _addressSubDistrictController,
+                  labelText: isEnglish ? 'Sub-district' : 'ตำบล / แขวง',
+                  readOnly: readOnly,
+                )),
+                const SizedBox(width: 4),
+                Expanded(child: _buildTextField(
+                  controller: _addressDistrictController,
+                  labelText: isEnglish ? 'District' : 'อำเภอ / เขต',
+                  readOnly: readOnly,
+                )),
+                const SizedBox(width: 4),
+                Expanded(child: _buildTextField(
+                  controller: _addressProvinceController,
+                  labelText: isEnglish ? 'Province' : 'จังหวัด',
+                  readOnly: readOnly,
+                )),
+                const SizedBox(width: 4),
+                Expanded(child: _buildTextField(
+                  controller: _addressZipCodeController,
+                  labelText: isEnglish ? 'Zipcode' : 'รหัสไปรษณีย์',
+                  keyboardType: TextInputType.number,
+                  readOnly: readOnly,
+                )),
               ]),
-            ),
-          ],
-        ),
-        // ประเทศ
-        _buildTextFormField(
+            ]),
+          ),
+        ]),
+        _buildTextField(
           controller: _addressCountryController,
-          labelText: 'ประเทศ',
-          // maxLength: 100,
-          keyboardType: TextInputType.text,
+          labelText: isEnglish ? 'Country' : 'ประเทศ',
           readOnly: readOnly,
         ),
-
-        // TextFormField(
-        //   controller: _addressCountryController,
-        //   decoration: const InputDecoration(
-        //     labelText: 'ประเทศ',
-        //     border: OutlineInputBorder(),
-        //     prefixIcon: Icon(Icons.public),
-        //   ),
-        //   // อาจมีค่าเริ่มต้นเป็น 'Thailand'
-        //   onTap: () {
-        //     if (_addressCountryController.text.isEmpty) {
-        //       _addressCountryController.text = 'Thailand';
-        //     }
-        //   },
-        // ),
       ],
     );
   }
 
-  Widget _buildContactFields() {
-    final bool readOnly = widget.mode == Mode.view;
+  Widget _buildContactFields(bool isEnglish, bool readOnly) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child:
-              _buildTextFormField(
-                controller: _phoneNumberController,
-                labelText: 'เบอร์โทรศัพท์',
-                keyboardType: TextInputType.phone,
-                // maxLength: 50,
-                readOnly: readOnly,
-              ),
-            ),
-            const SizedBox(width: 4,),
-            Expanded(child:
-              _buildTextFormField(
-                controller: _faxNumberController,
-                labelText: 'เบอร์แฟกซ์',
-                keyboardType: TextInputType.phone,
-                // maxLength: 50,
-                readOnly: readOnly,
-              ),
-            ),
-            const SizedBox(width: 4,),
-            Expanded(child:
-              _buildTextFormField(
-                controller: _primaryContactPersonController,
-                labelText: 'ผู้ติดต่อหลัก',
-                keyboardType: TextInputType.text,
-                // maxLength: 100,
-                readOnly: readOnly,
-              ),
-            ),
-          ],
-        ),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: _buildTextField(
+            controller: _phoneNumberController,
+            labelText: isEnglish ? 'Phone' : 'เบอร์โทรศัพท์',
+            keyboardType: TextInputType.phone,
+            readOnly: readOnly,
+          )),
+          const SizedBox(width: 4),
+          Expanded(child: _buildTextField(
+            controller: _faxNumberController,
+            labelText: isEnglish ? 'Fax' : 'เบอร์แฟกซ์',
+            keyboardType: TextInputType.phone,
+            readOnly: readOnly,
+          )),
+          const SizedBox(width: 4),
+          Expanded(child: _buildTextField(
+            controller: _primaryContactPersonController,
+            labelText: isEnglish ? 'Primary Contact' : 'ผู้ติดต่อหลัก',
+            readOnly: readOnly,
+          )),
+        ]),
       ],
     );
   }
 
-  Widget _buildTextFormField({
+  Widget _buildTextField({
     required TextEditingController controller,
     required String labelText,
-    int? maxLength,
-    String? hintText,
     bool readOnly = false,
     bool required = false,
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
-    VoidCallback?
-        onTap, // สำหรับกรณีต้องการให้แตะแล้วทำบางอย่าง เช่น DatePicker
+    VoidCallback? onTap,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -556,7 +467,6 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
         onTap: onTap,
         decoration: InputDecoration(
           labelText: required ? '$labelText *' : labelText,
-          hintText: hintText,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
           border: const OutlineInputBorder(
@@ -571,44 +481,34 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
             borderRadius: BorderRadius.all(Radius.circular(8.0)),
             borderSide: BorderSide(color: Colors.grey, width: 1.0),
           ),
-          // เพิ่มไอคอน * สำหรับฟิลด์ที่ต้องการ
-          suffixIcon: required
-              ? const Padding(
-                  padding: EdgeInsets.only(right: 12.0),
-                  child: Text('*',
-                      style: TextStyle(color: Colors.red, fontSize: 20)),
-                )
-              : null,
-          suffixIconConstraints:
-              required ? const BoxConstraints(minWidth: 0, minHeight: 0) : null,
         ),
         validator: (value) {
           if (required && (value == null || value.isEmpty)) {
             return 'กรุณากรอก $labelText';
           }
-          if (validator != null) {
-            return validator(value);
-          }
+          if (validator != null) return validator(value);
           return null;
         },
       ),
     );
   }
 
-  void _showZipCodeSearchCard() {
+  void _showZipCodeSearchCard(bool isEnglish) {
     ZipcodeListWidget.search(
       context,
       onSelected: (Zipcode selected) {
         setState(() {
-          // กำหนดค่ากลับไปยัง TextFormField ที่เกี่ยวข้อง
           _addressSubDistrictController.text = selected.subDistrict;
           _addressDistrictController.text = selected.district;
           _addressProvinceController.text = selected.province;
           _addressZipCodeController.text = selected.zipcode;
 
           _showSnackBar(
-              'เลือก: ${selected.subDistrict}, ${selected.district}, ${selected.province}, ${selected.zipcode}',
-              Colors.green);
+            isEnglish
+                ? 'Selected: ${selected.subDistrict}, ${selected.district}, ${selected.province}, ${selected.zipcode}'
+                : 'เลือก: ${selected.subDistrict}, ${selected.district}, ${selected.province}, ${selected.zipcode}',
+            Colors.green,
+          );
         });
       },
     );
@@ -617,13 +517,8 @@ class BranchDetailWidgetState extends State<BranchDetailWidget> {
   void _showSnackBar(String message, Color color) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: color,
-        ),
+        SnackBar(content: Text(message), backgroundColor: color),
       );
     }
   }
-
-
 }

@@ -47,6 +47,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
   Map<String, bool> _dimRules = {};
 
   bool _isSaving = false;
+  bool _isEnglish = false;
 
   // final List<String> _accountTypes = [
   //   'ASSET',
@@ -106,8 +107,11 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
         if (_selected == null) _currencyCode = _baseCurrencyCode();
       });
     } catch (e) {
+      final isEnglish = _isEnglish;
       setState(() {
-        _error = 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
+        _error = isEnglish
+            ? 'Unable to load data: ${e.toString()}'
+            : 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
         _isLoading = false;
       });
       if (mounted) {
@@ -222,6 +226,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
   }
 
   Future<void> _submitForm() async {
+    final isEnglish = _isEnglish;
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isSaving = true;
@@ -264,7 +269,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('เกิดข้อผิดพลาด: $e'),
+              content: Text(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e'),
               backgroundColor: Colors.red,
             ),
           );
@@ -281,11 +286,14 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
+    final l = AppL10n(isEnglish);
     if (widget.isPlaceholder) {
-      return const Center(
-        child: Text(
-            'เลือกรายการผังบัญชีเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มรหัสบัญชีใหม่'),
+      return Center(
+        child: Text(isEnglish
+            ? 'Select a chart of accounts item to edit or delete, or press the + button to add a new account code'
+            : 'เลือกรายการผังบัญชีเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มรหัสบัญชีใหม่'),
       );
     }
 
@@ -300,12 +308,12 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
           children: [
             Text(
               widget.mode == AccountMode.view
-                  ? 'ดูข้อมูล'
+                  ? (isEnglish ? 'View Data' : 'ดูข้อมูล')
                   : widget.mode == AccountMode.edit
-                      ? 'แก้ไขข้อมูล'
+                      ? (isEnglish ? 'Edit Data' : 'แก้ไขข้อมูล')
                       : widget.mode == AccountMode.addChild
-                          ? 'เพิ่มข้อมูลย่อย: ${_selected?.accountCode} ${_selected?.accountNameThai}'
-                          : 'เพิ่มข้อมูลหมวดหลัก',
+                          ? '${isEnglish ? 'Add sub-account' : 'เพิ่มข้อมูลย่อย'}: ${_selected?.accountCode} ${isEnglish && (_selected?.accountNameEng.isNotEmpty ?? false) ? _selected?.accountNameEng : _selected?.accountNameThai}'
+                          : (isEnglish ? 'Add Main Category' : 'เพิ่มข้อมูลหมวดหลัก'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
@@ -314,13 +322,13 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
               controller: _accountCodeController,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
               textAlign: TextAlign.center,
-              decoration: const InputDecoration(
-                labelText: 'รหัสบัญชี',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Account Code' : 'รหัสบัญชี',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'กรุณาป้อนรหัสบัญชี';
+                  return isEnglish ? 'Please enter the account code' : 'กรุณาป้อนรหัสบัญชี';
                 }
                 return null;
               },
@@ -332,13 +340,15 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                   child: TextFormField(
                     readOnly: readOnly,
                     controller: _accountNameThaiController,
-                    decoration: const InputDecoration(
-                      labelText: 'ชื่อบัญชี (ภาษาไทย)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Account Name (Thai)' : 'ชื่อบัญชี (ภาษาไทย)',
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'กรุณาป้อนชื่อบัญชี (ภาษาไทย)';
+                        return isEnglish
+                            ? 'Please enter the account name (Thai)'
+                            : 'กรุณาป้อนชื่อบัญชี (ภาษาไทย)';
                       }
                       return null;
                     },
@@ -349,13 +359,15 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                   child: TextFormField(
                     readOnly: readOnly,
                     controller: _accountNameEngController,
-                    decoration: const InputDecoration(
-                      labelText: 'ชื่อบัญชี (ภาษาอังกฤษ)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Account Name (English)' : 'ชื่อบัญชี (ภาษาอังกฤษ)',
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'กรุณาป้อนชื่อบัญชี (ภาษาอังกฤษ)';
+                        return isEnglish
+                            ? 'Please enter the account name (English)'
+                            : 'กรุณาป้อนชื่อบัญชี (ภาษาอังกฤษ)';
                       }
                       return null;
                     },
@@ -370,15 +382,16 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                   child: DropdownButtonFormField<String>(
                       isExpanded: true,
                       value: _accountType,
-                      decoration: const InputDecoration(
-                        labelText:
-                            'หมวดบัญชี (สินทรัพย์, หนี้สิน, ส่วนของเจ้าของ, รายได้, ค่าใช้จ่าย)',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: isEnglish
+                            ? 'Account Type (Asset, Liability, Equity, Revenue, Expense)'
+                            : 'หมวดบัญชี (สินทรัพย์, หนี้สิน, ส่วนของเจ้าของ, รายได้, ค่าใช้จ่าย)',
+                        border: const OutlineInputBorder(),
                       ),
                       items: accountTypeOptions.entries.map((e) {
                         return DropdownMenuItem<String>(
                           value: e.key,
-                          child: Text('${e.key} - ${e.value}'),
+                          child: Text('${e.key} - ${accountTypeLabel(e.key, isEnglish)}'),
                         );
                       }).toList(),
                       onChanged: readOnly ? null : (value) {
@@ -400,9 +413,9 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: _normalBalance,
-                    decoration: const InputDecoration(
-                      labelText: 'ดุลบัญชีปกติ (เดบิต/เครดิต)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Normal Balance (Debit/Credit)' : 'ดุลบัญชีปกติ (เดบิต/เครดิต)',
+                      border: const OutlineInputBorder(),
                     ),
                     items: _normalBalances.map((val) {
                       return DropdownMenuItem(
@@ -424,14 +437,17 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: _currencyCode,
-                    decoration: const InputDecoration(
-                      labelText: 'สกุลเงินหลัก',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Base Currency' : 'สกุลเงินหลัก',
+                      border: const OutlineInputBorder(),
                     ),
                     items: _currencyLists.map((val) {
+                      final currencyName = isEnglish && val.currencyNameEng.isNotEmpty
+                          ? val.currencyNameEng
+                          : val.currencyNameThai;
                       return DropdownMenuItem(
                         value: val.currencyCode,
-                        child: Text('${val.currencyCode} - ${val.currencyNameThai}'),
+                        child: Text('${val.currencyCode} - $currencyName'),
                       );
                     }).toList(),
                     onChanged: readOnly ? null : (value) {
@@ -449,7 +465,9 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
             Row(
               children: [
                 Expanded(
-                  child: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
+                  child: Text(isEnglish
+                      ? 'Status: ${_isActive ? 'Active' : 'Inactive'}'
+                      : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
                 ),
                 Switch(
                   value: _isActive,
@@ -465,8 +483,9 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                      'การลงรายการบัญชี: ${_isNormalAccount ? 'บัญชีปกติ (ลงรายการได้)' : 'เป็นหัวบัญชี/สะสมยอด'}'),
+                  child: Text(isEnglish
+                      ? 'Posting: ${_isNormalAccount ? 'Normal account (can post)' : 'Header/summary account'}'
+                      : 'การลงรายการบัญชี: ${_isNormalAccount ? 'บัญชีปกติ (ลงรายการได้)' : 'เป็นหัวบัญชี/สะสมยอด'}'),
                 ),
                 Switch(
                   value: _isNormalAccount,
@@ -484,8 +503,9 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
-                              'Control Account: ${_isControlAccount ? 'บันทึกได้เฉพาะจากโมดูลอื่น' : 'บันทึกในโมดูล GL ได้'}'),
+                          child: Text(isEnglish
+                              ? 'Control Account: ${_isControlAccount ? 'Postable only from other modules' : 'Can be posted in GL module'}'
+                              : 'Control Account: ${_isControlAccount ? 'บันทึกได้เฉพาะจากโมดูลอื่น' : 'บันทึกในโมดูล GL ได้'}'),
                         ),
                         Switch(
                           value: _isControlAccount,
@@ -499,12 +519,16 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                     ),
                     ..._dimTypes.expand((t) {
                       final enabled = _dimRules[t.typeCode] ?? false;
+                      final dimName = isEnglish && (t.nameEng?.isNotEmpty ?? false)
+                          ? t.nameEng!
+                          : t.nameThai;
                       return [
                         const SizedBox(height: 16),
                         Row(children: [
                           Expanded(
-                            child: Text(
-                                '${t.nameThai}: ${enabled ? 'ต้องระบุเมื่อทำรายการ' : 'ไม่ต้องระบุเมื่อทำรายการ'}'),
+                            child: Text(isEnglish
+                                ? '$dimName: ${enabled ? 'Required when posting' : 'Not required when posting'}'
+                                : '$dimName: ${enabled ? 'ต้องระบุเมื่อทำรายการ' : 'ไม่ต้องระบุเมื่อทำรายการ'}'),
                           ),
                           Switch(
                             value: enabled,
@@ -535,10 +559,10 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                                       strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.save),
                           label: Text(_isSaving
-                              ? 'กำลังบันทึก...'
+                              ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
                               : widget.mode == AccountMode.edit
-                                  ? 'บันทึก'
-                                  : 'เพิ่ม'),
+                                  ? l.save
+                                  : l.add),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue.shade700,
                             foregroundColor: Colors.white,

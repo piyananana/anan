@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/gl_period.dart';
 import '../services/gl_period_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 
 class PeriodListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -88,7 +89,6 @@ class PeriodListWidgetState extends State<PeriodListWidget>
 
   List<FiscalYear> _lists = [];
   bool _isLoading = false;
-  String _error = '';
 
   List<FiscalYear> _filterAndSort() {
     List<FiscalYear> displayLists = List.from(_lists);
@@ -115,10 +115,7 @@ class PeriodListWidgetState extends State<PeriodListWidget>
   }
 
   Future<void> _fetchLists() async {
-    setState(() {
-      _isLoading = true;
-      _error = '';
-    });
+    setState(() => _isLoading = true);
     try {
       final dataService = Provider.of<PeriodService>(context, listen: false);
       final fetched = await dataService.fetchHeaderRows();
@@ -127,13 +124,13 @@ class PeriodListWidgetState extends State<PeriodListWidget>
         _isLoading = false;
       });
     } catch (e) {
-      setState(() {
-        _error = 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_error)),
+          SnackBar(content: Text(isEnglish
+              ? 'Failed to load data: ${e.toString()}'
+              : 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}')),
         );
       }
     }
@@ -161,7 +158,7 @@ class PeriodListWidgetState extends State<PeriodListWidget>
     });
   }
 
-  Widget _buildListHeader() {
+  Widget _buildListHeader(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
@@ -169,26 +166,26 @@ class PeriodListWidgetState extends State<PeriodListWidget>
           widget.enableAddButton
               ? IconButton(
                   icon: const Icon(Icons.add),
-                  tooltip: 'เพิ่มข้อมูลใหม่',
+                  tooltip: isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่',
                   onPressed: () => widget.onAdd(),
                 )
               : const SizedBox.shrink(),
           widget.enableSortButton
               ? PopupMenuButton<String>(
                   icon: const Icon(Icons.sort),
-                  tooltip: 'จัดเรียง',
+                  tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
                   onSelected: (result) {
                     _onSortSelected(result);
                   },
                   itemBuilder: (BuildContext context) =>
                       <PopupMenuEntry<String>>[
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'code_asc',
-                      child: Text('รหัสปีบัญชี (น้อยไปมาก)'),
+                      child: Text(isEnglish ? 'Fiscal Year Code (A→Z)' : 'รหัสปีบัญชี (น้อยไปมาก)'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'code_desc',
-                      child: Text('รหัสปีบัญชี (มากไปน้อย)'),
+                      child: Text(isEnglish ? 'Fiscal Year Code (Z→A)' : 'รหัสปีบัญชี (มากไปน้อย)'),
                     ),
                   ],
                 )
@@ -196,12 +193,11 @@ class PeriodListWidgetState extends State<PeriodListWidget>
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา ปีบัญชี',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                // border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: isEnglish ? 'Search Fiscal Year' : 'ค้นหา ปีบัญชี',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (value) {
                 setState(() {
@@ -222,15 +218,18 @@ class PeriodListWidgetState extends State<PeriodListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
 
     _searchResult = _filterAndSort();
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${_lists.length} แถว'
-        : 'พบ ${_searchResult.length} จาก ${_lists.length} แถว';
+        ? (isEnglish ? 'Total ${_lists.length} rows' : 'ทั้งหมด ${_lists.length} แถว')
+        : (isEnglish
+            ? 'Found ${_searchResult.length} of ${_lists.length} rows'
+            : 'พบ ${_searchResult.length} จาก ${_lists.length} แถว');
 
     return Column(
       children: [
-        _buildListHeader(),
+        _buildListHeader(isEnglish),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           child: Align(
@@ -243,7 +242,7 @@ class PeriodListWidgetState extends State<PeriodListWidget>
           child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _searchResult.isEmpty
-              ? const Center(child: Text('ไม่พบปีบัญชี'))
+              ? Center(child: Text(isEnglish ? 'No fiscal years found' : 'ไม่พบปีบัญชี'))
               : ListView.builder(
                   itemCount: _searchResult.length,
                   itemBuilder: (context, index) {

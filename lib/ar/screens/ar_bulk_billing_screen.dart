@@ -89,6 +89,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
   bool _isLoading   = false;
   bool _isCreating  = false;
   bool _isFilterExpanded = true;
+  bool _isEnglish = false;
   double _filterPanelWidth = 310.0;
   bool _isDraggingDivider = false;
 
@@ -156,6 +157,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
   // ─── load invoice data ───────────────────────────────────────────────────────
 
   Future<void> _loadData() async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     setState(() { _isLoading = true; });
     for (final r in _rows) { r.dispose(); }
 
@@ -194,8 +196,10 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
       }
 
       if (rows.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('ไม่พบใบแจ้งหนี้ที่มีกำหนดวางบิลในช่วงที่เลือก')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l.isEnglish
+                ? 'No invoices due for billing in the selected period'
+                : 'ไม่พบใบแจ้งหนี้ที่มีกำหนดวางบิลในช่วงที่เลือก')));
       }
       setState(() => _rows = rows);
     } catch (e) {
@@ -248,26 +252,37 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     if (_selectedBcDocId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรุณาเลือกประเภทเอกสารวางบิล')));
+          SnackBar(content: Text(l.isEnglish
+              ? 'Please select a billing document type'
+              : 'กรุณาเลือกประเภทเอกสารวางบิล')));
       return;
     }
     final byCustomer = _selectedByCustomer;
     if (byCustomer.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรุณาเลือกรายการที่ต้องการวางบิลก่อน')));
+          SnackBar(content: Text(l.isEnglish
+              ? 'Please select items to bill first'
+              : 'กรุณาเลือกรายการที่ต้องการวางบิลก่อน')));
       return;
     }
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('ยืนยันการสร้างใบวางบิล'),
-        content: Text(
-          'จะสร้างใบวางบิล ${byCustomer.length} ใบ\n'
-          'รวม ${_selectedRows.length} ใบแจ้งหนี้\n'
-          'ยอดรวม ${_fmt.format(_selectedTotal)} บาท\n'
-          'วันที่เอกสาร: ${DateFormat('dd/MM/yyyy').format(_bcDocDate)}\n\n'
-          'ต้องการดำเนินการหรือไม่?'),
+        title: Text(l.isEnglish
+            ? 'Confirm Billing Document Creation'
+            : 'ยืนยันการสร้างใบวางบิล'),
+        content: Text(l.isEnglish
+            ? 'Will create ${byCustomer.length} billing document(s)\n'
+                'Total ${_selectedRows.length} invoice(s)\n'
+                'Total amount ${_fmt.format(_selectedTotal)} THB\n'
+                'Document date: ${DateFormat('dd/MM/yyyy').format(_bcDocDate)}\n\n'
+                'Do you want to proceed?'
+            : 'จะสร้างใบวางบิล ${byCustomer.length} ใบ\n'
+                'รวม ${_selectedRows.length} ใบแจ้งหนี้\n'
+                'ยอดรวม ${_fmt.format(_selectedTotal)} บาท\n'
+                'วันที่เอกสาร: ${DateFormat('dd/MM/yyyy').format(_bcDocDate)}\n\n'
+                'ต้องการดำเนินการหรือไม่?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -314,7 +329,9 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
             title: Row(children: [
               Icon(Icons.check_circle, color: Colors.teal[700]),
               const SizedBox(width: 8),
-              const Text('สร้างใบวางบิลสำเร็จ'),
+              Text(l.isEnglish
+                  ? 'Billing Documents Created Successfully'
+                  : 'สร้างใบวางบิลสำเร็จ'),
             ]),
             content: SizedBox(
               width: 500,
@@ -322,7 +339,10 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('สร้างเอกสารทั้งหมด ${createdList.length} ใบ:',
+                  Text(
+                      l.isEnglish
+                          ? 'Created ${createdList.length} document(s) in total:'
+                          : 'สร้างเอกสารทั้งหมด ${createdList.length} ใบ:',
                       style: const TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   ConstrainedBox(
@@ -340,20 +360,24 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                           TableRow(
                             decoration:
                                 BoxDecoration(color: Colors.teal[50]),
-                            children: const [
-                              Padding(padding: EdgeInsets.all(6),
-                                  child: Text('เลขที่เอกสาร',
-                                      style: TextStyle(
+                            children: [
+                              Padding(padding: const EdgeInsets.all(6),
+                                  child: Text(l.docNo,
+                                      style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 12))),
-                              Padding(padding: EdgeInsets.all(6),
-                                  child: Text('ชื่อลูกหนี้',
-                                      style: TextStyle(
+                              Padding(padding: const EdgeInsets.all(6),
+                                  child: Text(l.isEnglish
+                                          ? 'Customer Name'
+                                          : 'ชื่อลูกหนี้',
+                                      style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 12))),
-                              Padding(padding: EdgeInsets.all(6),
-                                  child: Text('ยอดรวม',
-                                      style: TextStyle(
+                              Padding(padding: const EdgeInsets.all(6),
+                                  child: Text(l.isEnglish
+                                          ? 'Total Amount'
+                                          : 'ยอดรวม',
+                                      style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 12))),
                             ],
@@ -410,6 +434,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    _isEnglish = l.isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -433,8 +458,9 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                         : Icons.filter_list,
                     color: Colors.white, size: 20),
                 padding: EdgeInsets.zero,
-                tooltip:
-                    _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                tooltip: _isFilterExpanded
+                    ? (l.isEnglish ? 'Collapse filters' : 'ย่อเงื่อนไข')
+                    : (l.isEnglish ? 'Expand filters' : 'ขยายเงื่อนไข'),
                 onPressed: () =>
                     setState(() => _isFilterExpanded = !_isFilterExpanded),
               ),
@@ -460,21 +486,28 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('เงื่อนไขการโหลดข้อมูล',
-                                  style: TextStyle(
+                              Text(
+                                  l.isEnglish
+                                      ? 'Data Loading Conditions'
+                                      : 'เงื่อนไขการโหลดข้อมูล',
+                                  style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16)),
                               const SizedBox(height: 16),
 
                               // วันที่วางบิล ตั้งแต่ - ถึง
                               _buildDateField(
-                                  label: 'วันที่วางบิล ตั้งแต่',
+                                  label: l.isEnglish
+                                      ? 'Billing Date From'
+                                      : 'วันที่วางบิล ตั้งแต่',
                                   date: _dateFrom,
                                   onPick: (d) =>
                                       setState(() => _dateFrom = d)),
                               const SizedBox(height: 12),
                               _buildDateField(
-                                  label: 'วันที่วางบิล ถึง',
+                                  label: l.isEnglish
+                                      ? 'Billing Date To'
+                                      : 'วันที่วางบิล ถึง',
                                   date: _dateTo,
                                   onPick: (d) =>
                                       setState(() => _dateTo = d)),
@@ -496,19 +529,22 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                               DropdownButtonFormField<int?>(
                                 isExpanded: true,
                                 value: _selectedCollectorId,
-                                decoration: const InputDecoration(
-                                    labelText: 'ผู้วางบิล',
-                                    border: OutlineInputBorder(),
+                                decoration: InputDecoration(
+                                    labelText:
+                                        l.isEnglish ? 'Biller' : 'ผู้วางบิล',
+                                    border: const OutlineInputBorder(),
                                     isDense: true),
                                 items: [
-                                  const DropdownMenuItem<int?>(
+                                  DropdownMenuItem<int?>(
                                       value: null,
-                                      child: Text('— ทั้งหมด —')),
+                                      child: Text(l.isEnglish
+                                          ? '— All —'
+                                          : '— ทั้งหมด —')),
                                   ..._collectors.map((c) =>
                                       DropdownMenuItem<int?>(
                                         value: c.id,
                                         child: Text(
-                                            '${c.collectorCode}  ${c.collectorNameThai}',
+                                            '${c.collectorCode}  ${l.isEnglish && (c.collectorNameEng?.isNotEmpty ?? false) ? c.collectorNameEng! : c.collectorNameThai}',
                                             overflow:
                                                 TextOverflow.ellipsis),
                                       )),
@@ -520,7 +556,9 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
 
                               // รหัสลูกค้า ตั้งแต่ / ถึง
                               _buildCustomerCodeField(
-                                  label: 'รหัสลูกค้า ตั้งแต่',
+                                  label: l.isEnglish
+                                      ? 'Customer Code From'
+                                      : 'รหัสลูกค้า ตั้งแต่',
                                   displayText: _fromLabel,
                                   onPick: () => _pickCustomer(isFrom: true),
                                   onClear: () => setState(() {
@@ -529,7 +567,9 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                                   })),
                               const SizedBox(height: 8),
                               _buildCustomerCodeField(
-                                  label: 'รหัสลูกค้า ถึง',
+                                  label: l.isEnglish
+                                      ? 'Customer Code To'
+                                      : 'รหัสลูกค้า ถึง',
                                   displayText: _toLabel,
                                   onPick: () => _pickCustomer(isFrom: false),
                                   onClear: () => setState(() {
@@ -541,8 +581,11 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                               const Divider(height: 1),
                               const SizedBox(height: 12),
 
-                              const Text('เอกสารวางบิล',
-                                  style: TextStyle(
+                              Text(
+                                  l.isEnglish
+                                      ? 'Billing Document'
+                                      : 'เอกสารวางบิล',
+                                  style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14)),
                               const SizedBox(height: 10),
@@ -551,9 +594,11 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                               DropdownButtonFormField<int?>(
                                 isExpanded: true,
                                 value: _selectedBcDocId,
-                                decoration: const InputDecoration(
-                                    labelText: 'ประเภทเอกสารวางบิล',
-                                    border: OutlineInputBorder(),
+                                decoration: InputDecoration(
+                                    labelText: l.isEnglish
+                                        ? 'Billing Document Type'
+                                        : 'ประเภทเอกสารวางบิล',
+                                    border: const OutlineInputBorder(),
                                     isDense: true),
                                 items: _bcDocTypes.map((d) =>
                                     DropdownMenuItem<int?>(
@@ -570,7 +615,9 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
 
                               // วันที่เอกสาร BC
                               _buildDateField(
-                                  label: 'วันที่เอกสารวางบิล',
+                                  label: l.isEnglish
+                                      ? 'Billing Document Date'
+                                      : 'วันที่เอกสารวางบิล',
                                   date: _bcDocDate,
                                   onPick: (d) =>
                                       setState(() => _bcDocDate = d)),
@@ -585,7 +632,8 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                           height: 50,
                           child: ElevatedButton.icon(
                             icon: const Icon(Icons.refresh),
-                            label: const Text('โหลดข้อมูล'),
+                            label: Text(
+                                l.isEnglish ? 'Load Data' : 'โหลดข้อมูล'),
                             style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.teal[800],
                                 foregroundColor: Colors.white),
@@ -648,13 +696,16 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
               tristate: true,
               onChanged: _rows.isEmpty ? null : _toggleAll,
             ),
-            const Text('เลือกทั้งหมด',
-                style: TextStyle(fontSize: 13)),
+            Text(_isEnglish ? 'Select All' : 'เลือกทั้งหมด',
+                style: const TextStyle(fontSize: 13)),
             const Spacer(),
             if (_rows.isNotEmpty)
               Text(
-                'เลือก $selCount รายการ | ${byCustomer.length} ลูกค้า | '
-                'รวม ${_fmt.format(selTotal)} บาท',
+                _isEnglish
+                    ? 'Selected $selCount item(s) | ${byCustomer.length} customer(s) | '
+                        'Total ${_fmt.format(selTotal)}'
+                    : 'เลือก $selCount รายการ | ${byCustomer.length} ลูกค้า | '
+                        'รวม ${_fmt.format(selTotal)} บาท',
                 style: TextStyle(
                     fontSize: 13,
                     color: Colors.teal[800],
@@ -672,7 +723,9 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
               : _rows.isEmpty
                   ? Center(
                       child: Text(
-                        'กรุณากำหนดเงื่อนไขและกด "โหลดข้อมูล"',
+                        _isEnglish
+                            ? 'Please set the conditions and press "Load Data"'
+                            : 'กรุณากำหนดเงื่อนไขและกด "โหลดข้อมูล"',
                         style: TextStyle(
                             color: Colors.grey[500], fontSize: 14),
                       ),
@@ -728,18 +781,18 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
     return Container(
       color: const Color(0xFFDCEFE9),
       child: Row(children: [
-        SizedBox(width: _wCB),
-        _hCell('วันที่วางบิล',        _wDate),
-        _hCell('ประเภทเอกสาร',        _wType),
-        _hCell('เลขที่เอกสาร',        _wDocNo),
-        _hCell('วันแจ้งหนี้',          _wDate),
-        _hCell('วันครบกำหนด',         _wDate),
-        _hCell('วันชำระ(คาดว่า)',      _wDate),
-        _hCell('รหัส – ชื่อลูกหนี้',   _wCust),
-        _hCell('ยอดรวม',              _wAmt,  right: true),
-        _hCell('ยอดคงค้าง',           _wAmt,  right: true),
-        _hCell('ยอดที่จะวางบิล',      _wEdit, right: true),
-        _hCell('อ้างอิง',             _wRef),
+        const SizedBox(width: _wCB),
+        _hCell(_isEnglish ? 'Billing Date' : 'วันที่วางบิล',        _wDate),
+        _hCell(_isEnglish ? 'Doc Type' : 'ประเภทเอกสาร',        _wType),
+        _hCell(_isEnglish ? 'Doc No.' : 'เลขที่เอกสาร',        _wDocNo),
+        _hCell(_isEnglish ? 'Invoice Date' : 'วันแจ้งหนี้',          _wDate),
+        _hCell(_isEnglish ? 'Due Date' : 'วันครบกำหนด',         _wDate),
+        _hCell(_isEnglish ? 'Expected Payment' : 'วันชำระ(คาดว่า)',      _wDate),
+        _hCell(_isEnglish ? 'Code – Customer Name' : 'รหัส – ชื่อลูกหนี้',   _wCust),
+        _hCell(_isEnglish ? 'Total' : 'ยอดรวม',              _wAmt,  right: true),
+        _hCell(_isEnglish ? 'Balance' : 'ยอดคงค้าง',           _wAmt,  right: true),
+        _hCell(_isEnglish ? 'Billing Amount' : 'ยอดที่จะวางบิล',      _wEdit, right: true),
+        _hCell(_isEnglish ? 'Reference' : 'อ้างอิง',             _wRef),
       ]),
     );
   }
@@ -797,7 +850,9 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                 isDense: true,
                 filled: true,
                 fillColor: Colors.white,
-                errorText: isOverAmount ? 'เกินยอดคงค้าง' : null,
+                errorText: isOverAmount
+                    ? (_isEnglish ? 'Exceeds balance' : 'เกินยอดคงค้าง')
+                    : null,
                 errorStyle: const TextStyle(fontSize: 9, height: 1),
               ),
               onChanged: (_) => setState(() {}),
@@ -845,11 +900,21 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
       child: Row(children: [
         Expanded(
           child: Wrap(spacing: 20, runSpacing: 4, children: [
-            _chip(Icons.people,       '$custCount ลูกค้า',           Colors.blue[700]!),
-            _chip(Icons.description,  '${_selectedRows.length} ใบ',  Colors.orange[700]!),
+            _chip(Icons.people,
+                _isEnglish ? '$custCount customer(s)' : '$custCount ลูกค้า',
+                Colors.blue[700]!),
+            _chip(Icons.description,
+                _isEnglish
+                    ? '${_selectedRows.length} doc(s)'
+                    : '${_selectedRows.length} ใบ',
+                Colors.orange[700]!),
             _chip(Icons.payments,     _fmt.format(selTotal),          Colors.teal[700]!),
             if (noDocType)
-              _chip(Icons.warning_amber, 'ยังไม่ได้เลือกประเภทเอกสาร',
+              _chip(
+                  Icons.warning_amber,
+                  _isEnglish
+                      ? 'Document type not selected'
+                      : 'ยังไม่ได้เลือกประเภทเอกสาร',
                   Colors.red[600]!),
           ]),
         ),
@@ -862,7 +927,8 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.add_circle),
-            label: const Text('สร้างใบวางบิล'),
+            label: Text(
+                _isEnglish ? 'Create Billing Document' : 'สร้างใบวางบิล'),
             style: ElevatedButton.styleFrom(
                 backgroundColor:
                     (hasError || noDocType || custCount == 0)
@@ -924,7 +990,11 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
     );
     if (result != null && mounted) {
       setState(() {
-        final label = '${result.customerCode}  ${result.customerNameTh}';
+        final custName = _isEnglish &&
+                (result.customerNameEn?.isNotEmpty ?? false)
+            ? result.customerNameEn!
+            : result.customerNameTh;
+        final label = '${result.customerCode}  $custName';
         if (isFrom) {
           _customerCodeFrom = result.customerCode;
           _fromLabel        = label;
@@ -966,7 +1036,9 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
       child: InkWell(
         onTap: onPick,
         child: Text(
-          hasValue ? displayText : '— ทั้งหมด —',
+          hasValue
+              ? displayText
+              : (_isEnglish ? '— All —' : '— ทั้งหมด —'),
           style: TextStyle(
               fontSize: 13,
               color: hasValue ? Colors.black87 : Colors.black38),
@@ -1033,8 +1105,8 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 12),
               color: Colors.teal[800],
-              child: const Text('ค้นหาลูกค้า',
-                  style: TextStyle(
+              child: Text(l.isEnglish ? 'Search Customer' : 'ค้นหาลูกค้า',
+                  style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 15)),
@@ -1044,10 +1116,12 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
               child: TextField(
                 controller: _ctrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                    hintText: 'ค้นหาจากรหัสหรือชื่อลูกค้า',
-                    prefixIcon: Icon(Icons.search, size: 18),
-                    border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                    hintText: l.isEnglish
+                        ? 'Search by customer code or name'
+                        : 'ค้นหาจากรหัสหรือชื่อลูกค้า',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    border: const OutlineInputBorder(),
                     isDense: true),
                 onChanged: _search,
               ),
@@ -1056,15 +1130,16 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
               color: Colors.grey[200],
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 6),
-              child: const Row(children: [
+              child: Row(children: [
                 SizedBox(
                     width: 100,
-                    child: Text('รหัส',
-                        style: TextStyle(
+                    child: Text(l.code,
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 12))),
                 Expanded(
-                    child: Text('ชื่อลูกค้า',
-                        style: TextStyle(
+                    child: Text(
+                        l.isEnglish ? 'Customer Name' : 'ชื่อลูกค้า',
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 12))),
               ]),
             ),
@@ -1073,9 +1148,10 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _list.isEmpty
-                      ? const Center(
-                          child: Text('ไม่พบข้อมูล',
-                              style: TextStyle(color: Colors.grey)))
+                      ? Center(
+                          child: Text(
+                              l.isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+                              style: const TextStyle(color: Colors.grey)))
                       : ListView.separated(
                           controller: _scroll,
                           itemCount: _list.length,
@@ -1097,7 +1173,13 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
                                               fontWeight:
                                                   FontWeight.w500))),
                                   Expanded(
-                                      child: Text(c.customerNameTh,
+                                      child: Text(
+                                          l.isEnglish &&
+                                                  (c.customerNameEn
+                                                          ?.isNotEmpty ??
+                                                      false)
+                                              ? c.customerNameEn!
+                                              : c.customerNameTh,
                                           style: const TextStyle(
                                               fontSize: 13),
                                           overflow:

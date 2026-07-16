@@ -49,6 +49,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
   final DateFormat _dateFormat = DateFormat('dd-MM-yyyy');
 
   bool _isSaving = false;
+  bool _isEnglish = false;
 
   @override
   void initState() {
@@ -121,6 +122,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
   }
 
   Future<void> _submitForm() async {
+    final isEnglish = _isEnglish;
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isSaving = true;
@@ -140,7 +142,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('เกิดข้อผิดพลาด: $e'),
+              content: Text(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e'),
               backgroundColor: Colors.red,
             ),
           );
@@ -157,11 +159,15 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
+    final l = AppL10n(isEnglish);
     if (widget.isPlaceholder) {
-      return const Center(
+      return Center(
         child: Text(
-            'เลือกปีบัญชีเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มปีบัญชีใหม่'),
+            isEnglish
+                ? 'Select a fiscal year to edit or delete, or press + to add a new fiscal year'
+                : 'เลือกปีบัญชีเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มปีบัญชีใหม่'),
       );
     }
 
@@ -177,10 +183,10 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
               children: [
                 Text(
                   widget.mode == Mode.view
-                      ? 'ดูข้อมูล'
+                      ? (isEnglish ? 'View' : 'ดูข้อมูล')
                       : widget.mode == Mode.edit
-                          ? 'แก้ไข'
-                          : 'เพิ่มข้อมูลใหม่',
+                          ? (isEnglish ? 'Edit' : 'แก้ไข')
+                          : (isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่'),
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 20),
@@ -191,9 +197,9 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                       child: TextFormField(
                         controller: _fiscalYearCodeController,
                         readOnly: widget.mode != Mode.add,
-                        decoration: const InputDecoration(
-                          labelText: 'ปีพ.ศ. หรือ ค.ศ.',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Fiscal Year (B.E. or A.D.)' : 'ปีพ.ศ. หรือ ค.ศ.',
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         // maxLength: 10,
@@ -204,7 +210,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'กรุณาป้อนรหัสปีบัญชี';
+                            return isEnglish ? 'Please enter the fiscal year code' : 'กรุณาป้อนรหัสปีบัญชี';
                           }
                           return null;
                         },
@@ -215,15 +221,15 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                       child: TextFormField(
                         readOnly: widget.mode == Mode.view,
                         controller: _descriptionController,
-                        decoration: const InputDecoration(
-                          labelText: 'อธิบาย',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: l.description,
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         // maxLength: 255,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'กรุณาป้อนคำอธิบาย';
+                            return isEnglish ? 'Please enter a description' : 'กรุณาป้อนคำอธิบาย';
                           }
                           return null;
                         },
@@ -237,7 +243,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                           borderRadius: BorderRadius.circular(4.0),
                           side: BorderSide(color: Colors.grey.shade700),
                         ),
-                        title: Text('สถานะ: ${_isActive ? 'เปิด' : 'ปิด'}'),
+                        title: Text('${l.status}: ${_isActive ? l.open : l.closed}'),
                         trailing: Switch(
                           value: _isActive,
                           onChanged: widget.mode == Mode.view ? null : (bool value) {
@@ -266,7 +272,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                               : Colors.grey.shade700,
                         ),
                       ),
-                      title: Text('วันที่เริ่มต้น: ${_dateFormat.format(_yearStartDate)}'),
+                      title: Text('${isEnglish ? 'Start Date' : 'วันที่เริ่มต้น'}: ${_dateFormat.format(_yearStartDate)}'),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: widget.selectedHead == null
                           ? () async {
@@ -303,7 +309,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                               : Colors.grey.shade700,
                         ),
                       ),
-                      title: Text('วันที่สิ้นสุด: ${_dateFormat.format(_yearEndDate)}'),
+                      title: Text('${isEnglish ? 'End Date' : 'วันที่สิ้นสุด'}: ${_dateFormat.format(_yearEndDate)}'),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: widget.selectedHead == null
                           ? () async {
@@ -325,9 +331,9 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                       controller: _numOfPeriodsController,
                       enabled: widget.selectedHead == null,
                       textAlign: TextAlign.right,
-                      decoration: const InputDecoration(
-                        labelText: 'จำนวนงวดเดือนบัญชี (12, 13, ...)',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'Number of Periods (12, 13, ...)' : 'จำนวนงวดเดือนบัญชี (12, 13, ...)',
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                       keyboardType: const TextInputType.numberWithOptions(),
@@ -335,7 +341,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         if (value == null ||
                             int.tryParse(value) == null ||
                             int.tryParse(value)! <= 0) {
-                          return 'โปรดระบุจำนวนงวดเดือนที่ถูกต้อง';
+                          return isEnglish ? 'Please specify a valid number of periods' : 'โปรดระบุจำนวนงวดเดือนที่ถูกต้อง';
                         }
                         return null;
                       },
@@ -345,11 +351,13 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                 if (widget.mode == Mode.add || widget.selectedHead == null)
                 const SizedBox(height: 8),
                 if (widget.mode == Mode.add || widget.selectedHead == null)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8.0),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
                   child: Text(
-                      'หมายเหตุ: วันที่เริ่มต้น/สิ้นสุด และจำนวนงวดเดือนใช้สร้างงวดครั้งแรกเท่านั้น โปรดตรวจสอบให้แน่ใจก่อนบันทึก',
-                      style: TextStyle(fontSize: 12, color: Colors.red)),
+                      isEnglish
+                          ? 'Note: Start/end date and number of periods are used only for the first period generation. Please verify before saving'
+                          : 'หมายเหตุ: วันที่เริ่มต้น/สิ้นสุด และจำนวนงวดเดือนใช้สร้างงวดครั้งแรกเท่านั้น โปรดตรวจสอบให้แน่ใจก่อนบันทึก',
+                      style: const TextStyle(fontSize: 12, color: Colors.red)),
                 ),
                 const SizedBox(height: 16),
                 // --- Buttons ---
@@ -369,10 +377,10 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                                           strokeWidth: 2, color: Colors.white))
                                   : const Icon(Icons.save),
                               label: Text(_isSaving
-                                  ? 'กำลังบันทึก...'
+                                  ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
                                   : widget.mode == Mode.edit
-                                      ? 'บันทึก'
-                                      : 'เพิ่ม'),
+                                      ? l.save
+                                      : l.add),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blue.shade700,
                                 foregroundColor: Colors.white,
@@ -403,15 +411,15 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
         const Divider(height: 1),
         TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'รายละเอียดงวดเดือนบัญชี'),
+          tabs: [
+            Tab(text: isEnglish ? 'Period Details' : 'รายละเอียดงวดเดือนบัญชี'),
           ],
         ),
         Expanded(
           child: TabBarView(
             controller: _tabController,
             children: [
-              _buildDetailList(),
+              _buildDetailList(isEnglish),
             ],
           ),
         ),
@@ -419,7 +427,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     );
   }
 
-  Widget _buildDetailList() {
+  Widget _buildDetailList(bool isEnglish) {
     _selectedDetail = widget.selectedDetail != null ? widget.selectedDetail! : [];
 
     const Map<int, TableColumnWidth> colWidths = {
@@ -443,7 +451,9 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
             children: [
               Expanded(
                 child: Text(
-                  'จำนวนงวดเดือนบัญชี = ${_selectedDetail.length} งวด',
+                  isEnglish
+                      ? 'Number of Periods = ${_selectedDetail.length}'
+                      : 'จำนวนงวดเดือนบัญชี = ${_selectedDetail.length} งวด',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -451,7 +461,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                 ElevatedButton.icon(
                   onPressed: () => _showDetailDialog(),
                   icon: const Icon(Icons.add),
-                  label: const Text('เพิ่มงวดเดือนพิเศษ'),
+                  label: Text(isEnglish ? 'Add Special Period' : 'เพิ่มงวดเดือนพิเศษ'),
                 ),
             ],
           ),
@@ -466,12 +476,12 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
               decoration: BoxDecoration(color: Colors.grey.shade200),
               children: [
                 _tableHeaderCell('#'),
-                _tableHeaderCell('ชื่อ/วันที่'),
-                _tableHeaderCell('สถานะ GL'),
-                _tableHeaderCell('สถานะ AR'),
-                _tableHeaderCell('สถานะ AP'),
-                _tableHeaderCell('สถานะ CM'),
-                _tableHeaderCell('สถานะ IM'),
+                _tableHeaderCell(isEnglish ? 'Name/Date' : 'ชื่อ/วันที่'),
+                _tableHeaderCell(isEnglish ? 'GL Status' : 'สถานะ GL'),
+                _tableHeaderCell(isEnglish ? 'AR Status' : 'สถานะ AR'),
+                _tableHeaderCell(isEnglish ? 'AP Status' : 'สถานะ AP'),
+                _tableHeaderCell(isEnglish ? 'CM Status' : 'สถานะ CM'),
+                _tableHeaderCell(isEnglish ? 'IM Status' : 'สถานะ IM'),
                 _tableHeaderCell('Actions'),
               ],
             ),
@@ -522,23 +532,23 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                   ),
                   TableCell(child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Center(child: _buildStatusChip(period.glStatus, 'GL', period)),
+                    child: Center(child: _buildStatusChip(period.glStatus, 'GL', period, isEnglish)),
                   )),
                   TableCell(child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Center(child: _buildStatusChip(period.arStatus, 'AR', period)),
+                    child: Center(child: _buildStatusChip(period.arStatus, 'AR', period, isEnglish)),
                   )),
                   TableCell(child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Center(child: _buildStatusChip(period.apStatus, 'AP', period)),
+                    child: Center(child: _buildStatusChip(period.apStatus, 'AP', period, isEnglish)),
                   )),
                   TableCell(child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Center(child: _buildStatusChip(period.cmStatus, 'CM', period)),
+                    child: Center(child: _buildStatusChip(period.cmStatus, 'CM', period, isEnglish)),
                   )),
                   TableCell(child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Center(child: _buildStatusChip(period.imStatus, 'IM', period)),
+                    child: Center(child: _buildStatusChip(period.imStatus, 'IM', period, isEnglish)),
                   )),
                   TableCell(
                     verticalAlignment: TableCellVerticalAlignment.middle,
@@ -555,7 +565,9 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                           onPressed: isClosed || widget.mode == Mode.view
                               ? null
                               : () => _showDetailDialog(period: period),
-                          tooltip: 'แก้ไขวันที่/ชื่องวดเดือนบัญชี',
+                          tooltip: isEnglish
+                              ? 'Edit period date/name'
+                              : 'แก้ไขวันที่/ชื่องวดเดือนบัญชี',
                         ),
                         IconButton(
                           key: Key('delete_${period.id}'),
@@ -567,7 +579,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                           onPressed: isClosed || widget.mode == Mode.view
                               ? null
                               : () => _deletePeriod(period.id),
-                          tooltip: 'ลบงวดเดือนบัญชี',
+                          tooltip: isEnglish ? 'Delete period' : 'ลบงวดเดือนบัญชี',
                         ),
                       ],
                     ),
@@ -614,8 +626,10 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
             builder: (BuildContext context, StateSetter setDialogState) {
               return AlertDialog(
                 title: Text(period == null
-                    ? 'เพิ่มงวดเดือนบัญชีใหม่'
-                    : 'แก้ไขงวดเดือนบัญชี ${period.periodName}'),
+                    ? (l.isEnglish ? 'Add New Period' : 'เพิ่มงวดเดือนบัญชีใหม่')
+                    : (l.isEnglish
+                        ? 'Edit Period ${period.periodName}'
+                        : 'แก้ไขงวดเดือนบัญชี ${period.periodName}')),
                 content: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -624,9 +638,9 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         Expanded(
                           child: TextFormField(
                             initialValue: periodNumber.toString(),
-                            decoration: const InputDecoration(
-                              labelText: 'ลำดับงวดเดือนบัญชี',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: l.isEnglish ? 'Period Number' : 'ลำดับงวดเดือนบัญชี',
+                              border: const OutlineInputBorder(),
                               isDense: true,
                             ),
                             keyboardType: TextInputType.number,
@@ -639,9 +653,9 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         Expanded(
                           child: TextFormField(
                             initialValue: periodName,
-                            decoration: const InputDecoration(
-                              labelText: 'ชื่องวดเดือนบัญชี',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: l.isEnglish ? 'Period Name' : 'ชื่องวดเดือนบัญชี',
+                              border: const OutlineInputBorder(),
                               isDense: true,
                             ),
                             onChanged: (v) => periodName = v,
@@ -663,8 +677,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                                 ),
                               ),
                               title: Text(
-                                  // 'วันที่เริ่มต้น: ${_dateFormat.format(startDate.toLocal())}'),
-                                  'วันที่เริ่มต้น: ${_dateFormat.format(startDate)}'),
+                                  '${l.isEnglish ? 'Start Date' : 'วันที่เริ่มต้น'}: ${_dateFormat.format(startDate)}'),
                               trailing: const Icon(Icons.calendar_today),
                               onTap: isClosed
                                   ? null
@@ -694,8 +707,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                                 ),
                               ),
                               title: Text(
-                                  // 'วันที่สิ้นสุด: ${_dateFormat.format(endDate.toLocal())}'),
-                                  'วันที่สิ้นสุด: ${_dateFormat.format(endDate)}'),
+                                  '${l.isEnglish ? 'End Date' : 'วันที่สิ้นสุด'}: ${_dateFormat.format(endDate)}'),
                               trailing: const Icon(Icons.calendar_today),
                               onTap: isClosed
                                   ? null
@@ -717,9 +729,11 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                       ),
                       const SizedBox(height: 6),
                       if (isClosed)
-                        const Text(
-                            'ไม่สามารถแก้ไขวันที่ได้ เนื่องจากงวดเดือนบัญชีถูกปิดแล้ว',
-                            style: TextStyle(color: Colors.red)),
+                        Text(
+                            l.isEnglish
+                                ? 'Dates cannot be edited because the period is already closed'
+                                : 'ไม่สามารถแก้ไขวันที่ได้ เนื่องจากงวดเดือนบัญชีถูกปิดแล้ว',
+                            style: const TextStyle(color: Colors.red)),
                     ],
                   ),
                 ),
@@ -732,9 +746,10 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                       if (periodName.isEmpty || startDate.isAfter(endDate)) {
                         // widget.onMessage('ข้อมูลไม่ถูกต้อง: ชื่อห้ามว่าง และวันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                                'ข้อมูลไม่ถูกต้อง: ชื่อห้ามว่าง และวันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด'),
+                          SnackBar(
+                            content: Text(l.isEnglish
+                                ? 'Invalid data: name must not be empty, and start date must not be after end date'
+                                : 'ข้อมูลไม่ถูกต้อง: ชื่อห้ามว่าง และวันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด'),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -762,8 +777,10 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                           await _detailService.updateDetailRow(newPeriod);
                         }
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('บันทึกงวดเดือนบัญชีสำเร็จ'),
+                          SnackBar(
+                            content: Text(l.isEnglish
+                                ? 'Period saved successfully'
+                                : 'บันทึกงวดเดือนบัญชีสำเร็จ'),
                             backgroundColor: Colors.green,
                           ),
                         );
@@ -773,8 +790,9 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         // widget.onMessage('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}',);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content:
-                                Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}'),
+                            content: Text(l.isEnglish
+                                ? 'Error saving: ${e.toString()}'
+                                : 'เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}'),
                             backgroundColor: Colors.green,
                           ),
                         );
@@ -790,7 +808,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     );
   }
 
-  Widget _buildStatusChip(String status, String module, PostingPeriod period) {
+  Widget _buildStatusChip(String status, String module, PostingPeriod period, bool isEnglish) {
     Color chipColor;
     switch (status) {
       case 'OPEN':
@@ -813,7 +831,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
       if (status == 'OPEN') {
         // icon ล็อคสีส้ม → LOCKED
         actionIcons.add(Tooltip(
-          message: 'ล็อค (LOCKED)',
+          message: isEnglish ? 'Lock (LOCKED)' : 'ล็อค (LOCKED)',
           child: InkWell(
             onTap: () => _confirmSoftClose(period, module),
             child: const Icon(Icons.lock_outline, color: Colors.orange, size: 20),
@@ -821,7 +839,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
         ));
         // icon ปิดสีแดง → CLOSED (2-step approval)
         actionIcons.add(Tooltip(
-          message: 'ปิดงวด (CLOSED)',
+          message: isEnglish ? 'Close Period (CLOSED)' : 'ปิดงวด (CLOSED)',
           child: InkWell(
             onTap: () => _confirmClose(period, module, 'OPEN'),
             child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
@@ -830,7 +848,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
       } else if (status == 'LOCKED') {
         // icon ปลดล็อคสีเขียว → OPEN
         actionIcons.add(Tooltip(
-          message: 'ปลดล็อค (OPEN)',
+          message: isEnglish ? 'Unlock (OPEN)' : 'ปลดล็อค (OPEN)',
           child: InkWell(
             onTap: () => _updateStatus(period, module, 'OPEN'),
             child: const Icon(Icons.lock_open_outlined, color: Colors.green, size: 20),
@@ -838,7 +856,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
         ));
         // icon ปิดสีแดง → CLOSED (2-step approval)
         actionIcons.add(Tooltip(
-          message: 'ปิดงวด (CLOSED)',
+          message: isEnglish ? 'Close Period (CLOSED)' : 'ปิดงวด (CLOSED)',
           child: InkWell(
             onTap: () => _confirmClose(period, module, 'LOCKED'),
             child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
@@ -878,9 +896,11 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     final bool confirm = await showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('ยืนยันการลบ'),
-            content: const Text(
-                'คุณแน่ใจว่าต้องการลบงวดเดือนบัญชีนี้หรือไม่? (ลบได้เฉพาะรอบที่ยังไม่ลงบัญชี)'),
+            title: Text(l.confirmDelete),
+            content: Text(
+                l.isEnglish
+                    ? 'Are you sure you want to delete this period? (Only periods not yet posted can be deleted)'
+                    : 'คุณแน่ใจว่าต้องการลบงวดเดือนบัญชีนี้หรือไม่? (ลบได้เฉพาะรอบที่ยังไม่ลงบัญชี)'),
             actions: [
               TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
@@ -899,8 +919,8 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
         await _detailService.deleteDetailRow(periodId);
         // widget.onMessage('ลบงวดเดือนบัญชีสำเร็จ');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('ลบงวดเดือนบัญชีสำเร็จ'),
+          SnackBar(
+            content: Text(l.isEnglish ? 'Period deleted successfully' : 'ลบงวดเดือนบัญชีสำเร็จ'),
             backgroundColor: Colors.green,
           ),
         );
@@ -909,7 +929,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
         // widget.onMessage('ไม่สามารถลบได้: ${e.toString()}',);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('ไม่สามารถลบได้: ${e.toString()}'),
+            content: Text(l.isEnglish ? 'Unable to delete: ${e.toString()}' : 'ไม่สามารถลบได้: ${e.toString()}'),
             backgroundColor: Colors.green,
           ),
         );
@@ -938,7 +958,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
               title: Row(children: [
                 const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 26),
                 const SizedBox(width: 8),
-                const Text('คำเตือน: ปิดงวดบัญชี'),
+                Text(l.isEnglish ? 'Warning: Close Period' : 'คำเตือน: ปิดงวดบัญชี'),
               ]),
               content: SizedBox(
                 width: 460,
@@ -957,12 +977,12 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('งวดเดือนบัญชี: ${period.periodName}',
+                          Text('${l.isEnglish ? 'Period' : 'งวดเดือนบัญชี'}: ${period.periodName}',
                               style: const TextStyle(fontWeight: FontWeight.bold)),
                           const SizedBox(height: 2),
-                          Text('โมดูล: $module'),
+                          Text('${l.isEnglish ? 'Module' : 'โมดูล'}: $module'),
                           const SizedBox(height: 2),
-                          Text('การเปลี่ยนสถานะ: $fromStatus → CLOSED',
+                          Text('${l.isEnglish ? 'Status change' : 'การเปลี่ยนสถานะ'}: $fromStatus → CLOSED',
                               style: TextStyle(
                                   color: Colors.red.shade700,
                                   fontWeight: FontWeight.w600)),
@@ -970,9 +990,15 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                       ),
                     ),
                     const SizedBox(height: 14),
-                    _warningRow(Icons.lock, 'ไม่สามารถบันทึก/แก้ไขรายการในงวดนี้ได้อีก'),
-                    _warningRow(Icons.block, 'ไม่สามารถย้อนสถานะกลับเป็น OPEN หรือ LOCKED ได้'),
-                    _warningRow(Icons.people_outline, 'ผู้ใช้ทุกคนจะไม่สามารถลงรายการในงวดนี้ได้'),
+                    _warningRow(Icons.lock, l.isEnglish
+                        ? 'Entries in this period can no longer be recorded/edited'
+                        : 'ไม่สามารถบันทึก/แก้ไขรายการในงวดนี้ได้อีก'),
+                    _warningRow(Icons.block, l.isEnglish
+                        ? 'The status cannot be reverted back to OPEN or LOCKED'
+                        : 'ไม่สามารถย้อนสถานะกลับเป็น OPEN หรือ LOCKED ได้'),
+                    _warningRow(Icons.people_outline, l.isEnglish
+                        ? 'No user will be able to post entries in this period'
+                        : 'ผู้ใช้ทุกคนจะไม่สามารถลงรายการในงวดนี้ได้'),
                     const SizedBox(height: 14),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -981,13 +1007,15 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: Colors.orange.shade300),
                       ),
-                      child: const Row(children: [
-                        Icon(Icons.info_outline, size: 16, color: Colors.orange),
-                        SizedBox(width: 6),
+                      child: Row(children: [
+                        const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            'ควรตรวจสอบให้แน่ใจว่าลงรายการและกระทบยอดครบถ้วนแล้ว\nก่อนดำเนินการปิดงวดบัญชี',
-                            style: TextStyle(fontSize: 12),
+                            l.isEnglish
+                                ? 'Please make sure all entries are recorded and reconciled\nbefore closing this period'
+                                : 'ควรตรวจสอบให้แน่ใจว่าลงรายการและกระทบยอดครบถ้วนแล้ว\nก่อนดำเนินการปิดงวดบัญชี',
+                            style: const TextStyle(fontSize: 12),
                           ),
                         ),
                       ]),
@@ -1003,7 +1031,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                 ElevatedButton.icon(
                   onPressed: () => setDs(() => step = 2),
                   icon: const Icon(Icons.arrow_forward, size: 16),
-                  label: const Text('ดำเนินการต่อ'),
+                  label: Text(l.isEnglish ? 'Continue' : 'ดำเนินการต่อ'),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
                 ),
               ],
@@ -1015,7 +1043,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
             title: Row(children: [
               const Icon(Icons.verified_user, color: Colors.red, size: 22),
               const SizedBox(width: 8),
-              const Text('ผู้อนุมัติการปิดงวดบัญชี'),
+              Text(l.isEnglish ? 'Period Closing Approver' : 'ผู้อนุมัติการปิดงวดบัญชี'),
             ]),
             content: SizedBox(
               width: 460,
@@ -1023,18 +1051,20 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'โปรดให้ผู้มีสิทธิ์อนุมัติกรอกข้อมูลเพื่อยืนยัน\n(ผู้ใช้ที่อยู่ในกลุ่มที่มีสิทธิ์อนุมัติการปิดงวดบัญชี)',
-                    style: TextStyle(fontSize: 13),
+                  Text(
+                    l.isEnglish
+                        ? 'Please have an authorized approver fill in the details to confirm\n(a user belonging to a group with permission to approve period closing)'
+                        : 'โปรดให้ผู้มีสิทธิ์อนุมัติกรอกข้อมูลเพื่อยืนยัน\n(ผู้ใช้ที่อยู่ในกลุ่มที่มีสิทธิ์อนุมัติการปิดงวดบัญชี)',
+                    style: const TextStyle(fontSize: 13),
                   ),
                   const SizedBox(height: 14),
                   TextField(
                     controller: confirmCtrl,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'ชื่อผู้ใช้',
-                      prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.isEnglish ? 'Username' : 'ชื่อผู้ใช้',
+                      prefixIcon: const Icon(Icons.person_outline),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                     onChanged: (_) => setDs(() {}),
@@ -1044,7 +1074,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                     controller: pwCtrl,
                     obscureText: !pwVisible,
                     decoration: InputDecoration(
-                      labelText: 'รหัสผ่าน',
+                      labelText: l.isEnglish ? 'Password' : 'รหัสผ่าน',
                       prefixIcon: const Icon(Icons.lock_outline),
                       border: const OutlineInputBorder(),
                       isDense: true,
@@ -1104,7 +1134,7 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
                     : const Icon(Icons.lock, size: 16),
-                label: const Text('ยืนยันปิดงวด'),
+                label: Text(l.isEnglish ? 'Confirm Close Period' : 'ยืนยันปิดงวด'),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               ),
             ],
@@ -1136,11 +1166,15 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการเปลี่ยนสถานะ'),
-        content: const Text(
-          'การเปลี่ยนสถานะ OPEN เป็น LOCKED เพื่อการตรวจสอบข้อมูล '
-          'จะทำให้เพิ่มเติมรายการของงวดและโมดูลนี้ไม่ได้ '
-          'แต่ยังสามารถย้อนสถานะกลับมา OPEN ได้',
+        title: Text(l.isEnglish ? 'Confirm Status Change' : 'ยืนยันการเปลี่ยนสถานะ'),
+        content: Text(
+          l.isEnglish
+              ? 'Changing status from OPEN to LOCKED is for data review purposes. '
+                  'It will prevent further entries from being added to this period and module, '
+                  'but the status can still be reverted back to OPEN.'
+              : 'การเปลี่ยนสถานะ OPEN เป็น LOCKED เพื่อการตรวจสอบข้อมูล '
+                  'จะทำให้เพิ่มเติมรายการของงวดและโมดูลนี้ไม่ได้ '
+                  'แต่ยังสามารถย้อนสถานะกลับมา OPEN ได้',
         ),
         actions: [
           TextButton(
@@ -1161,13 +1195,16 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
 
   void _updateStatus(
       PostingPeriod period, String module, String newStatus) async {
+    final isEnglish = _isEnglish;
     try {
       // await _service.updatePeriodStatus(period.id, module, newStatus, _currentUserId);
       await _detailService.updateStatusDetailRow(period.id, module, newStatus);
       // widget.onMessage('อัปเดตสถานะ ${module} เป็น ${newStatus} สำเร็จ');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('อัปเดตสถานะ $module เป็น $newStatus สำเร็จ'),
+          content: Text(isEnglish
+              ? 'Updated $module status to $newStatus successfully'
+              : 'อัปเดตสถานะ $module เป็น $newStatus สำเร็จ'),
           backgroundColor: Colors.green,
         ),
       );

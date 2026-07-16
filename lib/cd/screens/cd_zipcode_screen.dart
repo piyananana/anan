@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_zipcode.dart';
 import '../services/cd_zipcode_service.dart';
 import '../widgets/cd_zipcode_list_widget.dart';
@@ -107,6 +106,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
   }
 
   Future<void> _exportData() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() {
       _isImportOrExport = true;
     });
@@ -115,15 +115,19 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
           .exportDataExcel();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads')),
+          SnackBar(
+              content: Text(isEnglish
+                  ? 'Export successful! File saved in Downloads'
+                  : 'Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Export: ${e.toString()}')),
+              content: Text(isEnglish
+                  ? 'Export failed: ${e.toString()}'
+                  : 'เกิดข้อผิดพลาดในการ Export: ${e.toString()}')),
         );
       }
     } finally {
@@ -134,19 +138,20 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
   }
 
   Future<void> _deleteRows() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: const Text('คุณแน่ใจหรือไม่ที่จะลบทั้งหมด ?'),
+        title: Text(isEnglish ? 'Confirm Delete All' : 'ยืนยันการลบ'),
+        content: Text(isEnglish ? 'Are you sure you want to delete all?' : 'คุณแน่ใจหรือไม่ที่จะลบทั้งหมด ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ'),
+            child: Text(isEnglish ? 'Delete' : 'ลบ'),
           ),
         ],
       ),
@@ -160,14 +165,16 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ลบทั้งหมด สำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'Deleted all successfully' : 'ลบทั้งหมด สำเร็จ')),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')),
+                content: Text(isEnglish
+                    ? 'Delete all failed: ${e.toString()}'
+                    : 'เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')),
           );
         }
       }
@@ -196,20 +203,22 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
   }
 
   Future<void> _onDelete(Zipcode row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบ "${row.zipcode} (${row.subDistrict})" ?'),
+        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(isEnglish
+            ? 'Are you sure you want to delete "${row.zipcode} (${row.subDistrict})"?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบ "${row.zipcode} (${row.subDistrict})" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ'),
+            child: Text(isEnglish ? 'Delete' : 'ลบ'),
           ),
         ],
       ),
@@ -223,13 +232,15 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ลบสำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
+            SnackBar(content: Text(isEnglish
+                ? 'Delete failed: ${e.toString()}'
+                : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
           );
         }
       }
@@ -237,20 +248,21 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
   }
 
   Future<void> _onSubmit(Zipcode row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final dataService = Provider.of<ZipcodeService>(context, listen: false);
       if (_selectedData == null) {
         await dataService.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('เพิ่มสำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')),
           );
         }
       } else {
         await dataService.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('บันทึกสำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')),
           );
         }
       }
@@ -259,7 +271,9 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish
+              ? 'Save failed: ${e.toString()}'
+              : 'เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
         );
       }
     }
@@ -282,6 +296,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
 
     return Scaffold(
       appBar: AppBar(
@@ -291,7 +306,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
             onPressed: () {
               _listWidgetKey.currentState?.refresh();
               _onCancel();
@@ -307,18 +322,18 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
           else ...[
             IconButton(
               icon: const Icon(Icons.upload_file),
-              tooltip: 'นำข้อมูลเข้าจาก Spredsheet',
+              tooltip: isEnglish ? 'Import from Spreadsheet' : 'นำข้อมูลเข้าจาก Spredsheet',
               onPressed: _importData,
             ),
             IconButton(
               icon: const Icon(Icons.download),
-              tooltip: 'นำข้อมูลออกไป Spredsheet',
+              tooltip: isEnglish ? 'Export to Spreadsheet' : 'นำข้อมูลออกไป Spredsheet',
               onPressed: _exportData,
             ),
           ],
           IconButton(
             icon: const Icon(Icons.delete_sweep),
-            tooltip: 'ลบรหัสไปรษณีย์ทั้งหมด',
+            tooltip: isEnglish ? 'Delete All Zipcodes' : 'ลบรหัสไปรษณีย์ทั้งหมด',
             onPressed: _deleteRows,
           ),
           const SizedBox(width: 8),
@@ -343,7 +358,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse' : 'ย่อรายการ') : (isEnglish ? 'Expand' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(

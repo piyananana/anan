@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/sa_language_provider.dart';
@@ -26,15 +26,15 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
   Branch? _selectedBranch;
 
   // ---- Tree data ----
-  List<ModuleDocument> _treeRoots = [];       // root nodes (parentId=null)
-  Map<int, List<ModuleDocument>> _children = {}; // parentId → children
-  Map<int, DocNumberBranchConfig> _configMap = {}; // docId → config
+  List<ModuleDocument> _treeRoots = [];
+  Map<int, List<ModuleDocument>> _children = {};
+  Map<int, DocNumberBranchConfig> _configMap = {};
   bool _loadingTree = false;
 
   // ---- Right panel ----
-  ModuleDocument? _activeDoc;        // currently selected doc type (for config)
-  DocNumberBranchConfig? _activeCfg; // existing config (null = creating new)
-  bool _isEnabled    = false;        // switch: เลขที่เอกสารอัตโนมัติ?
+  ModuleDocument? _activeDoc;
+  DocNumberBranchConfig? _activeCfg;
+  bool _isEnabled    = false;
   bool _savingConfig = false;
 
   // Form controllers (right panel)
@@ -78,7 +78,10 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
           ..sort((a, b) => a.branchCode.compareTo(b.branchCode));
       });
     } catch (e) {
-      _snack('โหลดสาขาล้มเหลว: $e', error: true);
+      final isEnglish = mounted
+          ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+          : false;
+      _snack(isEnglish ? 'Cannot load branches: $e' : 'โหลดสาขาล้มเหลว: $e', error: true);
     }
   }
 
@@ -88,12 +91,10 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
       final docs    = await _service.fetchAllDocTypes();
       final configs = await _service.fetchByBranch(branch.id!);
 
-      // Build config map — เฉพาะที่มีการตั้งค่าสาขาแล้ว (hasConfig=true)
       final cfgMap = <int, DocNumberBranchConfig>{
         for (final c in configs.where((c) => c.hasConfig)) c.docId: c,
       };
 
-      // Build tree
       final childrenMap = <int, List<ModuleDocument>>{};
       final roots = <ModuleDocument>[];
       for (final d in docs) {
@@ -103,7 +104,6 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
           childrenMap.putIfAbsent(d.parentId!, () => []).add(d);
         }
       }
-      // Sort by sortOrder
       roots.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
       for (final list in childrenMap.values) {
         list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
@@ -116,7 +116,10 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
         _loadingTree = false;
       });
     } catch (e) {
-      if (mounted) _snack('โหลดข้อมูลล้มเหลว: $e', error: true);
+      final isEnglish = mounted
+          ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+          : false;
+      if (mounted) _snack(isEnglish ? 'Cannot load data: $e' : 'โหลดข้อมูลล้มเหลว: $e', error: true);
       if (mounted) setState(() => _loadingTree = false);
     }
   }
@@ -134,6 +137,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
   // ─────────────────────────── Branch picker dialog ───────────────────────────
 
   Future<void> _showBranchDialog() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final searchCtrl = TextEditingController();
     List<Branch> filtered = List.from(_branches);
 
@@ -148,15 +152,16 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
               final lq = q.toLowerCase();
               filtered = _branches.where((b) =>
                 b.branchCode.toLowerCase().contains(lq) ||
-                b.branchNameThai.toLowerCase().contains(lq)).toList();
+                b.branchNameThai.toLowerCase().contains(lq) ||
+                b.branchNameEng.toLowerCase().contains(lq)).toList();
             }
           });
         }
         return AlertDialog(
-          title: const Row(children: [
-            Icon(Icons.business, size: 20, color: Colors.deepOrange),
-            SizedBox(width: 8),
-            Text('เลือกสาขา'),
+          title: Row(children: [
+            const Icon(Icons.business, size: 20, color: Colors.deepOrange),
+            const SizedBox(width: 8),
+            Text(isEnglish ? 'Select Branch' : 'เลือกสาขา'),
           ]),
           content: SizedBox(
             width: 440, height: 380,
@@ -164,24 +169,28 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
               TextField(
                 controller: searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา รหัส / ชื่อ',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search code / name' : 'ค้นหา รหัส / ชื่อ',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                 ),
                 onChanged: doFilter,
               ),
               const SizedBox(height: 8),
               Expanded(
                 child: filtered.isEmpty
-                    ? const Center(child: Text('ไม่พบข้อมูล', style: TextStyle(color: Colors.grey)))
+                    ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+                        style: const TextStyle(color: Colors.grey)))
                     : ListView.builder(
                         itemCount: filtered.length,
                         itemBuilder: (_, i) {
                           final b = filtered[i];
                           final sel = _selectedBranch?.id == b.id;
+                          final displayName = isEnglish && b.branchNameEng.isNotEmpty
+                              ? b.branchNameEng
+                              : b.branchNameThai;
                           return ListTile(
                             dense: true,
                             selected: sel,
@@ -189,7 +198,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
                             leading: sel
                                 ? const Icon(Icons.check_circle, color: Colors.deepOrange, size: 18)
                                 : const SizedBox(width: 18),
-                            title: Text('${b.branchCode}  ${b.branchNameThai}',
+                            title: Text('${b.branchCode}  $displayName',
                                 style: const TextStyle(fontSize: 14)),
                             onTap: () => Navigator.of(ctx).pop(b),
                           );
@@ -199,7 +208,10 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ปิด')),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(isEnglish ? 'Close' : 'ปิด'),
+            ),
           ],
         );
       }),
@@ -211,7 +223,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
     }
   }
 
-  // ─────────────────────────── Right panel ───────────────────────────
+  // ─────────────────────────── Right panel logic ───────────────────────────
 
   void _openConfig(ModuleDocument doc, {bool isNew = false}) {
     final cfg = _configMap[doc.id];
@@ -262,15 +274,16 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
   Future<void> _saveConfig() async {
     if (_activeDoc == null || _selectedBranch == null) return;
     setState(() => _savingConfig = true);
+    final isEnglish = mounted
+        ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+        : false;
     try {
       if (!_isEnabled) {
-        // Delete config (use global counter)
         if (_activeCfg != null) {
           await _service.deleteSingle(
               branchId: _selectedBranch!.id!, docId: _activeDoc!.id);
         }
       } else {
-        // Upsert single config
         await _service.upsertSingle(
           branchId: _selectedBranch!.id!,
           docId: _activeDoc!.id,
@@ -282,25 +295,31 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
         );
       }
       await _reloadConfigs();
-      // Re-open to refresh activeCfg
       if (_activeDoc != null) _openConfig(_activeDoc!);
-      _snack('บันทึกสำเร็จ');
+      _snack(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ');
     } catch (e) {
-      _snack('บันทึกล้มเหลว: $e', error: true);
+      _snack(isEnglish ? 'Save failed: $e' : 'บันทึกล้มเหลว: $e', error: true);
     } finally {
       if (mounted) setState(() => _savingConfig = false);
     }
   }
 
   Future<void> _deleteConfig(ModuleDocument doc) async {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = mounted
+        ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
+        : false;
+    final l = AppL10n(isEnglish);
     if (_selectedBranch == null) return;
+    final docName = isEnglish && doc.docNameEng.isNotEmpty ? doc.docNameEng : doc.docNameThai;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text('ลบการตั้งค่าสาขาสำหรับ "${doc.docCode} ${doc.docNameThai}" ?\n'
-            'ระบบจะกลับไปใช้ counter ทั้งระบบแทน'),
+        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(
+          isEnglish
+              ? 'Delete branch config for "$docName"?\nThe system will revert to using the global counter.'
+              : 'ลบการตั้งค่าสาขาสำหรับ "$docName" ?\nระบบจะกลับไปใช้ counter ทั้งระบบแทน',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
           ElevatedButton(
@@ -316,9 +335,9 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
       await _service.deleteSingle(branchId: _selectedBranch!.id!, docId: doc.id);
       await _reloadConfigs();
       if (_activeDoc?.id == doc.id) setState(() { _activeDoc = null; _activeCfg = null; });
-      _snack('ลบสำเร็จ');
+      _snack(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ');
     } catch (e) {
-      _snack('ลบล้มเหลว: $e', error: true);
+      _snack(isEnglish ? 'Delete failed: $e' : 'ลบล้มเหลว: $e', error: true);
     }
   }
 
@@ -334,7 +353,8 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -343,29 +363,35 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรช',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรช',
             onPressed: _selectedBranch == null ? null : () => _loadTree(_selectedBranch!),
           ),
           const SizedBox(width: 8),
         ],
       ),
       body: Column(children: [
-        // ── Branch selector ──
-        _buildBranchSelector(),
+        _buildBranchSelector(isEnglish),
         const Divider(height: 1),
-        // ── Main 2-panel layout ──
-        Expanded(child: _buildMainPanels()),
+        Expanded(child: _buildMainPanels(isEnglish, l)),
       ]),
     );
   }
 
-  Widget _buildBranchSelector() {
+  Widget _buildBranchSelector(bool isEnglish) {
+    final branchDisplayName = _selectedBranch == null
+        ? null
+        : (isEnglish && _selectedBranch!.branchNameEng.isNotEmpty
+            ? _selectedBranch!.branchNameEng
+            : _selectedBranch!.branchNameThai);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(children: [
         const Icon(Icons.business, size: 18, color: Colors.deepOrange),
         const SizedBox(width: 8),
-        const Text('สาขา:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(
+          isEnglish ? 'Branch:' : 'สาขา:',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
         const SizedBox(width: 12),
         InkWell(
           onTap: _showBranchDialog,
@@ -379,9 +405,9 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             child: SizedBox(
               width: 320,
               child: Text(
-                _selectedBranch != null
-                    ? '${_selectedBranch!.branchCode}  ${_selectedBranch!.branchNameThai}'
-                    : '— คลิกเพื่อเลือกสาขา —',
+                branchDisplayName != null
+                    ? '${_selectedBranch!.branchCode}  $branchDisplayName'
+                    : (isEnglish ? '— Click to select branch —' : '— คลิกเพื่อเลือกสาขา —'),
                 style: TextStyle(
                   fontSize: 14,
                   color: _selectedBranch == null ? Colors.grey[500] : null,
@@ -394,10 +420,14 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
     );
   }
 
-  Widget _buildMainPanels() {
+  Widget _buildMainPanels(bool isEnglish, AppL10n l) {
     if (_selectedBranch == null) {
-      return const Center(child: Text('เลือกสาขาเพื่อดูการตั้งค่า',
-          style: TextStyle(color: Colors.grey)));
+      return Center(
+        child: Text(
+          isEnglish ? 'Select a branch to view settings' : 'เลือกสาขาเพื่อดูการตั้งค่า',
+          style: const TextStyle(color: Colors.grey),
+        ),
+      );
     }
     if (_loadingTree) {
       return const Center(child: CircularProgressIndicator());
@@ -416,7 +446,9 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             ),
             padding: EdgeInsets.zero,
             onPressed: () => setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-            tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+            tooltip: _isLeftPanelExpanded
+                ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
           ),
         ),
         // Left panel
@@ -429,7 +461,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
               alignment: Alignment.topLeft,
               child: Container(
                 color: Colors.blueGrey[50],
-                child: _buildTree(),
+                child: _buildTree(isEnglish),
               ),
             ),
           ),
@@ -448,61 +480,66 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             ),
           ),
         // Right panel
-        Expanded(child: _buildRightPanel()),
+        Expanded(child: _buildRightPanel(isEnglish, l)),
       ]);
     });
   }
 
   // ─────────────────────────── Tree ───────────────────────────
 
-  Widget _buildTree() {
+  Widget _buildTree(bool isEnglish) {
     if (_treeRoots.isEmpty) {
-      return const Center(child: Text('ไม่พบข้อมูล', style: TextStyle(color: Colors.grey)));
+      return Center(
+        child: Text(
+          isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+          style: const TextStyle(color: Colors.grey),
+        ),
+      );
     }
     return ListView.builder(
       itemCount: _treeRoots.length,
-      itemBuilder: (_, i) => _buildRootNode(_treeRoots[i]),
+      itemBuilder: (_, i) => _buildRootNode(_treeRoots[i], isEnglish),
     );
   }
 
-  Widget _buildRootNode(ModuleDocument root) {
+  Widget _buildRootNode(ModuleDocument root, bool isEnglish) {
     final kids = _children[root.id] ?? [];
+    final displayName = isEnglish && root.docNameEng.isNotEmpty ? root.docNameEng : root.docNameThai;
     return ExpansionTile(
       initiallyExpanded: true,
       leading: const Icon(Icons.folder, color: Colors.deepOrange, size: 20),
       title: Text(
-        '${root.docCode}  ${root.docNameThai}',
+        '${root.docCode}  $displayName',
         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
       ),
       childrenPadding: const EdgeInsets.only(left: 16),
-      children: kids.map((child) => _buildChildNode(child)).toList(),
+      children: kids.map((child) => _buildChildNode(child, isEnglish)).toList(),
     );
   }
 
-  Widget _buildChildNode(ModuleDocument doc) {
+  Widget _buildChildNode(ModuleDocument doc, bool isEnglish) {
     final kids = _children[doc.id] ?? [];
+    final displayName = isEnglish && doc.docNameEng.isNotEmpty ? doc.docNameEng : doc.docNameThai;
+
     if (kids.isNotEmpty) {
-      // Has children → another level
       return ExpansionTile(
         initiallyExpanded: true,
         leading: const Icon(Icons.folder_open, color: Colors.blueGrey, size: 18),
         title: Text(
-          '${doc.docCode}  ${doc.docNameThai}',
+          '${doc.docCode}  $displayName',
           style: const TextStyle(fontSize: 16),
         ),
         childrenPadding: const EdgeInsets.only(left: 16),
-        children: kids.map((c) => _buildChildNode(c)).toList(),
+        children: kids.map((c) => _buildChildNode(c, isEnglish)).toList(),
       );
     }
 
-    // Leaf node
-    final isDocType      = doc.isDocType;
+    final isDocType       = doc.isDocType;
     final isAutoNumbering = doc.isAutoNumbering;
-    final hasCfg = _configMap.containsKey(doc.id);
+    final hasCfg    = _configMap.containsKey(doc.id);
     final isSelected = _activeDoc?.id == doc.id;
 
     if (!isDocType || !isAutoNumbering) {
-      // Non-configurable
       return ListTile(
         dense: true,
         selected: false,
@@ -512,12 +549,14 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
           color: Colors.grey[400],
         ),
         title: Text(
-          '${doc.docCode}  ${doc.docNameThai}',
+          '${doc.docCode}  $displayName',
           style: TextStyle(fontSize: 16, color: Colors.grey[400]),
         ),
         subtitle: isDocType && !isAutoNumbering
-            ? Text('ไม่ใช้เลขอัตโนมัติ',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400]))
+            ? Text(
+                isEnglish ? 'Not using auto numbering' : 'ไม่ใช้เลขอัตโนมัติ',
+                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              )
             : null,
       );
     }
@@ -534,7 +573,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
           color: hasCfg ? Colors.deepOrange : Colors.teal,
         ),
         title: Text(
-          '${doc.docCode}  ${doc.docNameThai}',
+          '${doc.docCode}  $displayName',
           style: TextStyle(
             fontSize: 16,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -546,27 +585,29 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
                 '${_configMap[doc.id]!.effectivePrefix}… counter: ${_configMap[doc.id]!.nextRunningNumber}',
                 style: TextStyle(fontSize: 12, color: Colors.deepOrange[400]),
               )
-            : Text('ใช้ counter ทั้งระบบ',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+            : Text(
+                isEnglish ? 'Using global counter' : 'ใช้ counter ทั้งระบบ',
+                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              ),
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
           if (!hasCfg)
             IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 18, color: Colors.teal),
-              tooltip: 'เพิ่มการตั้งค่าสาขา',
+              tooltip: isEnglish ? 'Add branch config' : 'เพิ่มการตั้งค่าสาขา',
               onPressed: () => _openConfig(doc, isNew: true),
               padding: EdgeInsets.zero, constraints: const BoxConstraints(),
             )
           else ...[
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.blue),
-              tooltip: 'แก้ไขการตั้งค่า',
+              tooltip: isEnglish ? 'Edit config' : 'แก้ไขการตั้งค่า',
               onPressed: () => _openConfig(doc),
               padding: EdgeInsets.zero, constraints: const BoxConstraints(),
             ),
             const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-              tooltip: 'ลบการตั้งค่าสาขา',
+              tooltip: isEnglish ? 'Delete branch config' : 'ลบการตั้งค่าสาขา',
               onPressed: () => _deleteConfig(doc),
               padding: EdgeInsets.zero, constraints: const BoxConstraints(),
             ),
@@ -579,15 +620,16 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
 
   // ─────────────────────────── Right panel ───────────────────────────
 
-  Widget _buildRightPanel() {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+  Widget _buildRightPanel(bool isEnglish, AppL10n l) {
     if (_activeDoc == null) {
       return Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.format_list_numbered, size: 48, color: Colors.grey[300]),
           const SizedBox(height: 12),
           Text(
-            'คลิก + หรือ ไอคอนแก้ไข\nบนประเภทเอกสารทางซ้าย',
+            isEnglish
+                ? 'Click + or the edit icon\non a document type on the left'
+                : 'คลิก + หรือ ไอคอนแก้ไข\nบนประเภทเอกสารทางซ้าย',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey[500]),
           ),
@@ -596,19 +638,23 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
     }
 
     final doc = _activeDoc!;
-    final cfg = _configMap[doc.id]; // reload after save
+    final cfg = _configMap[doc.id];
+    final docDisplayName  = isEnglish && doc.docNameEng.isNotEmpty ? doc.docNameEng : doc.docNameThai;
+    final branchDisplayName = isEnglish && _selectedBranch!.branchNameEng.isNotEmpty
+        ? _selectedBranch!.branchNameEng
+        : _selectedBranch!.branchNameThai;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // Title
         Text(
-          '${doc.docCode}  ${doc.docNameThai}',
+          '${doc.docCode}  $docDisplayName',
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
         Text(
-          'สาขา: ${_selectedBranch!.branchCode} ${_selectedBranch!.branchNameThai}',
+          '${isEnglish ? 'Branch' : 'สาขา'}: ${_selectedBranch!.branchCode} $branchDisplayName',
           style: TextStyle(fontSize: 13, color: Colors.grey[600]),
         ),
         const Divider(height: 24),
@@ -621,7 +667,9 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             side: BorderSide(color: Colors.grey.shade400),
           ),
           title: Text(
-            'เลขที่เอกสารอัตโนมัติสาขา: ${_isEnabled ? 'ใช่ (แยก counter ของสาขา)' : 'ไม่ (ใช้ counter ทั้งระบบ)'}',
+            isEnglish
+                ? 'Branch auto document no.: ${_isEnabled ? 'Yes (separate branch counter)' : 'No (use global counter)'}'
+                : 'เลขที่เอกสารอัตโนมัติสาขา: ${_isEnabled ? 'ใช่ (แยก counter ของสาขา)' : 'ไม่ (ใช้ counter ทั้งระบบ)'}',
           ),
           trailing: Switch(
             value: _isEnabled,
@@ -630,7 +678,6 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
               setState(() {
                 _isEnabled = v;
                 if (v && cfg == null) {
-                  // pre-fill with global defaults
                   _prefixCtrl.text    = doc.formatPrefix;
                   _separatorCtrl.text = doc.formatSeparator;
                   _suffixDate  = doc.formatSuffixDate;
@@ -645,12 +692,11 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
 
         if (_isEnabled) ...[
           const SizedBox(height: 20),
-          // Row 1: Prefix | Suffix date | Separator | Length
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(child: TextFormField(
               controller: _prefixCtrl,
               decoration: InputDecoration(
-                labelText: 'คำนำหน้า',
+                labelText: isEnglish ? 'Prefix' : 'คำนำหน้า',
                 hintText: '(global: ${doc.formatPrefix})',
                 border: const OutlineInputBorder(),
               ),
@@ -659,12 +705,14 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             Expanded(child: DropdownButtonFormField<String>(
               isExpanded: true,
               value: _suffixDate,
-              decoration: const InputDecoration(
-                labelText: 'คำต่อ(ปีเดือนวัน)',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Date suffix (YYYYMMDD)' : 'คำต่อ(ปีเดือนวัน)',
+                border: const OutlineInputBorder(),
               ),
               items: ['', 'YY', 'YYYY', 'YYMM', 'YYYYMM', 'YYMMDD']
-                  .map((v) => DropdownMenuItem(value: v, child: Text(v.isEmpty ? '— ไม่ระบุ —' : v)))
+                  .map((v) => DropdownMenuItem(
+                      value: v,
+                      child: Text(v.isEmpty ? (isEnglish ? '— None —' : '— ไม่ระบุ —') : v)))
                   .toList(),
               onChanged: (v) {
                 setState(() => _suffixDate = v ?? '');
@@ -675,7 +723,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             Expanded(child: TextFormField(
               controller: _separatorCtrl,
               decoration: InputDecoration(
-                labelText: 'อักษรคั่น',
+                labelText: isEnglish ? 'Separator' : 'อักษรคั่น',
                 hintText: '(global: ${doc.formatSeparator})',
                 border: const OutlineInputBorder(),
               ),
@@ -684,9 +732,9 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             Expanded(child: DropdownButtonFormField<int>(
               isExpanded: true,
               value: _runningLen,
-              decoration: const InputDecoration(
-                labelText: 'ความยาวเลขที่',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Number length' : 'ความยาวเลขที่',
+                border: const OutlineInputBorder(),
               ),
               items: [3, 4, 5, 6, 7, 8, 9]
                   .map((v) => DropdownMenuItem(value: v, child: Text(v.toString())))
@@ -701,9 +749,9 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             const SizedBox(width: 8),
             Expanded(child: TextFormField(
               controller: _nextCtrl,
-              decoration: const InputDecoration(
-                labelText: 'เลขที่ถัดไป',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Next number' : 'เลขที่ถัดไป',
+                border: const OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -717,9 +765,9 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
             enabled: false,
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            decoration: const InputDecoration(
-              labelText: 'ตัวอย่างเลขที่เอกสารอัตโนมัติ',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Sample auto document no.' : 'ตัวอย่างเลขที่เอกสารอัตโนมัติ',
+              border: const OutlineInputBorder(),
             ),
           ),
         ],
@@ -733,7 +781,7 @@ class _DocNumberBranchSetupScreenState extends State<DocNumberBranchSetupScreen>
                 ? const SizedBox(width: 16, height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.save, size: 18),
-            label: Text(l.save),
+            label: Text(_savingConfig ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...') : l.save),
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepOrange[700], foregroundColor: Colors.white),
           ),

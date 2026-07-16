@@ -220,18 +220,22 @@ class HomeScreenState extends State<HomeScreen> {
 
   Future<void> _showNoMenuDialog() async {
     if (!mounted) return;
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Row(children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
-          SizedBox(width: 8),
-          Text('ยังไม่ได้กำหนดสิทธิ์เมนู'),
+        title: Row(children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+          const SizedBox(width: 8),
+          Text(isEnglish ? 'No Menu Permissions Assigned' : 'ยังไม่ได้กำหนดสิทธิ์เมนู'),
         ]),
-        content: const Text(
-          'บัญชีผู้ใช้นี้ยังไม่ได้รับการกำหนดสิทธิ์เมนูใดเลย\n'
-          'กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์การใช้งาน',
+        content: Text(
+          isEnglish
+              ? 'This user account has not been assigned any menu permissions yet.\n'
+                'Please contact the system administrator to request access.'
+              : 'บัญชีผู้ใช้นี้ยังไม่ได้รับการกำหนดสิทธิ์เมนูใดเลย\n'
+                'กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์การใช้งาน',
         ),
         actions: [
           ElevatedButton(
@@ -239,7 +243,7 @@ class HomeScreenState extends State<HomeScreen> {
               Navigator.of(ctx).pop();
               _performLogout();
             },
-            child: const Text('ตกลง'),
+            child: Text(isEnglish ? 'OK' : 'ตกลง'),
           ),
         ],
       ),

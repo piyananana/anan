@@ -96,7 +96,7 @@ class _CurrencyScreenState extends State<CurrencyScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Import: ${e.toString()}')),
+              content: Text(isEnglish ? 'Import failed: ${e.toString()}' : 'เกิดข้อผิดพลาดในการ Import: ${e.toString()}')),
         );
       }
     } finally {
@@ -126,7 +126,7 @@ class _CurrencyScreenState extends State<CurrencyScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Export: ${e.toString()}')),
+              content: Text(isEnglish ? 'Export failed: ${e.toString()}' : 'เกิดข้อผิดพลาดในการ Export: ${e.toString()}')),
         );
       }
     } finally {
@@ -174,7 +174,7 @@ class _CurrencyScreenState extends State<CurrencyScreen>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')),
+                content: Text(isEnglish ? 'Delete all failed: ${e.toString()}' : 'เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')),
           );
         }
       }
@@ -239,7 +239,7 @@ class _CurrencyScreenState extends State<CurrencyScreen>
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
+            SnackBar(content: Text(isEnglish ? 'Delete failed: ${e.toString()}' : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
           );
         }
       }
@@ -271,7 +271,7 @@ class _CurrencyScreenState extends State<CurrencyScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish ? 'Save failed: ${e.toString()}' : 'เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
         );
       }
     }
@@ -359,7 +359,7 @@ class _CurrencyScreenState extends State<CurrencyScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse' : 'ย่อรายการ') : (isEnglish ? 'Expand' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(

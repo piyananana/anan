@@ -40,6 +40,7 @@ class GlEntryDetailWidget extends StatefulWidget {
 }
 
 class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
+  bool _isEnglish = false;
   final _formKey = GlobalKey<FormState>();
   final GlEntryService _service = GlEntryService();
   final AccountService _accountService = AccountService();
@@ -125,8 +126,11 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       await _loadTransactionData();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error loading master: $e')));
+        final isEnglish = _isEnglish;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'Error loading master data: $e'
+                : 'เกิดข้อผิดพลาดในการโหลดข้อมูลหลัก: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -220,8 +224,11 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error loading data: $e')));
+        final isEnglish = _isEnglish;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'Error loading data: $e'
+                : 'เกิดข้อผิดพลาดในการโหลดข้อมูล: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -304,29 +311,38 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   }
 
   Future<void> _save(String action) async {
+    final isEnglish = _isEnglish;
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
     _calculateTotals();
 
     if (action == 'Post' &&
         (_header.totalDebitFc - _header.totalCreditFc).abs() > 0.01) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ยอด Dr/Cr ($_baseCurrency) ไม่เท่ากัน')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish
+              ? 'Debit/Credit total ($_baseCurrency) does not balance'
+              : 'ยอด Dr/Cr ($_baseCurrency) ไม่เท่ากัน')));
       return;
     }
     if (_details.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('กรุณาเพิ่มรายการบัญชี')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish
+              ? 'Please add at least one entry line'
+              : 'กรุณาเพิ่มรายการบัญชี')));
       return;
     }
     if (_details.any((d) => d.accountId == 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรุณาเลือกบัญชีให้ครบทุกรายการ')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish
+              ? 'Please select an account for every line'
+              : 'กรุณาเลือกบัญชีให้ครบทุกรายการ')));
       return;
     }
     if (_details.any((d) => d.debitFc == 0 && d.creditFc == 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('กรุณาระบุยอดเดบิตหรือเครดิตในทุกรายการ')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish
+              ? 'Please enter a debit or credit amount for every line'
+              : 'กรุณาระบุยอดเดบิตหรือเครดิตในทุกรายการ')));
       return;
     }
 
@@ -334,16 +350,16 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     try {
       await _service.saveEntry(_header, _details, action);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) widget.onSaveSuccess();
         });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('บันทึกไม่สำเร็จ: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Save failed: $e' : 'บันทึกไม่สำเร็จ: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -351,18 +367,22 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   }
 
   Future<void> _reverse() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการถอยรายการ'),
-        content: const Text(
-            'ต้องการสร้างรายการถอย (Reverse) ใช่หรือไม่?\nระบบจะสร้างรายการใหม่ที่มียอดตรงข้ามกัน'),
+        title: Text(isEnglish ? 'Confirm Reverse Entry' : 'ยืนยันการถอยรายการ'),
+        content: Text(isEnglish
+            ? 'Do you want to create a reversing entry?\nThe system will create a new entry with opposite amounts.'
+            : 'ต้องการสร้างรายการถอย (Reverse) ใช่หรือไม่?\nระบบจะสร้างรายการใหม่ที่มียอดตรงข้ามกัน'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ยืนยันถอย', style: TextStyle(color: Colors.white)),
+            child: Text(isEnglish ? 'Confirm Reverse' : 'ยืนยันถอย',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -377,8 +397,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text('ถอยไม่สำเร็จ: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(isEnglish ? 'Reverse failed: $e' : 'ถอยไม่สำเร็จ: $e')));
         }
       }
     }
@@ -386,6 +406,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
 
   Future<void> _selectDate(BuildContext context, bool isDocDate) async {
     if (_isReadOnly) return;
+    final isEnglish = _isEnglish;
     final messenger = ScaffoldMessenger.of(context);
     final picked = await showDatePicker(
       context: context,
@@ -399,8 +420,10 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             !pickedDay.isBefore(p.periodStartDate) &&
             !pickedDay.isAfter(p.periodEndDate));
         if (!inOpenPeriod) {
-          messenger.showSnackBar(const SnackBar(
-            content: Text('วันที่เอกสารต้องอยู่ในงวดบัญชีที่เปิด (GL Status = OPEN)'),
+          messenger.showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'Document date must fall within an open posting period (GL Status = OPEN)'
+                : 'วันที่เอกสารต้องอยู่ในงวดบัญชีที่เปิด (GL Status = OPEN)'),
             backgroundColor: Colors.red,
           ));
           return;
@@ -462,7 +485,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   // ── Picker dialogs ───────────────────────────────────────────────────────
 
   Future<Account?> _showAccountDialog() async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final searchCtrl = TextEditingController();
     final available = _accounts.where((a) => a.isNormalAccount && !a.isControlAccount && a.isActive).toList();
     List<Account> filtered = List.from(available);
@@ -475,7 +499,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
               ? available
               : available.where((a) =>
                   a.accountCode.toLowerCase().contains(lq) ||
-                  a.accountNameThai.toLowerCase().contains(lq)).toList());
+                  a.accountNameThai.toLowerCase().contains(lq) ||
+                  a.accountNameEng.toLowerCase().contains(lq)).toList());
         }
         return Dialog(
           child: SizedBox(
@@ -485,10 +510,10 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 padding: const EdgeInsets.all(12),
                 child: TextField(
                   controller: searchCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'ค้นหาบัญชี (รหัส / ชื่อ)',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: isEnglish ? 'Search account (code / name)' : 'ค้นหาบัญชี (รหัส / ชื่อ)',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
                   ),
                   style: const TextStyle(fontSize: 15),
                   onChanged: doFilter,
@@ -499,9 +524,12 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 itemCount: filtered.length,
                 itemBuilder: (_, i) {
                   final a = filtered[i];
+                  final name = isEnglish && a.accountNameEng.isNotEmpty
+                      ? a.accountNameEng
+                      : a.accountNameThai;
                   return ListTile(
                     dense: true,
-                    title: Text('${a.accountCode}  ${a.accountNameThai}',
+                    title: Text('${a.accountCode}  $name',
                         style: const TextStyle(fontSize: 14)),
                     onTap: () => Navigator.pop(ctx, a),
                   );
@@ -519,7 +547,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   }
 
   Future<Branch?> _showBranchDialog() async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     // แสดงเฉพาะสาขาที่ user มีสิทธิ์ (ถ้ากำหนดไว้) มิฉะนั้นแสดงทั้งหมด
     final allowedIds = AuthService().allowedBranches.map((b) => b.branchId).toSet();
     final source = allowedIds.isEmpty
@@ -536,7 +565,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
               ? source
               : source.where((b) =>
                   b.branchCode.toLowerCase().contains(lq) ||
-                  b.branchNameThai.toLowerCase().contains(lq)).toList());
+                  b.branchNameThai.toLowerCase().contains(lq) ||
+                  b.branchNameEng.toLowerCase().contains(lq)).toList());
         }
         return Dialog(
           child: SizedBox(
@@ -546,10 +576,10 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 padding: const EdgeInsets.all(12),
                 child: TextField(
                   controller: searchCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'ค้นหาสาขา (รหัส / ชื่อ)',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: isEnglish ? 'Search branch (code / name)' : 'ค้นหาสาขา (รหัส / ชื่อ)',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
                   ),
                   style: const TextStyle(fontSize: 15),
                   onChanged: doFilter,
@@ -560,9 +590,12 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 itemCount: filtered.length,
                 itemBuilder: (_, i) {
                   final b = filtered[i];
+                  final name = isEnglish && b.branchNameEng.isNotEmpty
+                      ? b.branchNameEng
+                      : b.branchNameThai;
                   return ListTile(
                     dense: true,
-                    title: Text('${b.branchCode}  ${b.branchNameThai}',
+                    title: Text('${b.branchCode}  $name',
                         style: const TextStyle(fontSize: 14)),
                     onTap: () => Navigator.pop(ctx, b),
                   );
@@ -574,7 +607,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 if (_header.branchId != null)
                   TextButton.icon(
                     icon: const Icon(Icons.clear, size: 16),
-                    label: const Text('ล้างค่า'),
+                    label: Text(isEnglish ? 'Clear' : 'ล้างค่า'),
                     onPressed: () => Navigator.pop(ctx, null),
                     style: TextButton.styleFrom(foregroundColor: Colors.grey),
                   ),
@@ -591,7 +624,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   }
 
   // ── Header card (collapsible) ────────────────────────────────────────────
-  Widget _buildHeaderCard() {
+  Widget _buildHeaderCard(bool isEnglish) {
     return Card(
       margin: const EdgeInsets.all(8),
       child: Padding(
@@ -600,7 +633,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
           Row(children: [
             const Icon(Icons.article_outlined, size: 18, color: Colors.teal),
             const SizedBox(width: 6),
-            Text('ข้อมูลหัวเอกสาร',
+            Text(isEnglish ? 'Header Information' : 'ข้อมูลหัวเอกสาร',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             IconButton(
               icon: Icon(_headerExpanded ? Icons.expand_less : Icons.expand_more, size: 18),
@@ -633,15 +666,15 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   isExpanded: true,
                   value: _selectedDocType,
                   items: _allowedDocTypes.map((e) => DropdownMenuItem(
-                      value: e, child: Text('${e.docCode} ${e.docNameThai}'))).toList(),
-                  decoration: _fieldDeco('ประเภทเอกสาร'),
+                      value: e, child: Text('${e.docCode} ${isEnglish && e.docNameEng.isNotEmpty ? e.docNameEng : e.docNameThai}'))).toList(),
+                  decoration: _fieldDeco(isEnglish ? 'Document Type' : 'ประเภทเอกสาร'),
                   onChanged: _isReadOnly ? null : (val) => setState(() {
                     _selectedDocType = val;
                     _header.docId = val!.id;
                     _header.isAutoNumbering = val.isAutoNumbering;
                     _header.docNo = val.isAutoNumbering ? 'AUTO' : '';
                   }),
-                  validator: (v) => v == null ? 'กรุณาเลือก' : null,
+                  validator: (v) => v == null ? (isEnglish ? 'Please select' : 'กรุณาเลือก') : null,
                 ),
               ),
               const SizedBox(width: 8),
@@ -651,13 +684,17 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   key: ValueKey('docNo_${_header.docNo}'),
                   initialValue: _header.docNo,
                   decoration: _fieldDeco(
-                      (_selectedDocType?.isAutoNumbering ?? false) ? 'เลขที่อัตโนมัติ' : 'เลขที่เอกสาร',
+                      (_selectedDocType?.isAutoNumbering ?? false)
+                          ? (isEnglish ? 'Auto Number' : 'เลขที่อัตโนมัติ')
+                          : (isEnglish ? 'Doc No.' : 'เลขที่เอกสาร'),
                       forcedReadOnly: _selectedDocType?.isAutoNumbering ?? false).copyWith(
-                    hintText: (_selectedDocType?.isAutoNumbering ?? false) ? '(ระบบกำหนดให้อัตโนมัติ)' : null,
+                    hintText: (_selectedDocType?.isAutoNumbering ?? false)
+                        ? (isEnglish ? '(Auto-generated by system)' : '(ระบบกำหนดให้อัตโนมัติ)')
+                        : null,
                   ),
                   readOnly: _isReadOnly || (_selectedDocType?.isAutoNumbering ?? false),
                   onSaved: (v) => _header.docNo = v ?? '',
-                  validator: (v) => (v == null || v.isEmpty) ? 'ระบุเลขที่' : null,
+                  validator: (v) => (v == null || v.isEmpty) ? (isEnglish ? 'Please enter doc no.' : 'ระบุเลขที่') : null,
                 ),
               ),
               const SizedBox(width: 8),
@@ -666,7 +703,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 child: InkWell(
                   onTap: () => _selectDate(context, true),
                   child: InputDecorator(
-                    decoration: _fieldDeco('วันที่เอกสาร'),
+                    decoration: _fieldDeco(isEnglish ? 'Doc Date' : 'วันที่เอกสาร'),
                     child: Text(DateFormat('dd/MM/yyyy').format(_header.docDate)),
                   ),
                 ),
@@ -678,8 +715,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   isExpanded: true,
                   value: _selectedRefDocType,
                   items: _allDocTypes.map((e) => DropdownMenuItem(
-                      value: e, child: Text('${e.docCode} ${e.docNameThai}', overflow: TextOverflow.ellipsis))).toList(),
-                  decoration: _fieldDeco('ประเภทเอกสารอ้างอิง'),
+                      value: e, child: Text('${e.docCode} ${isEnglish && e.docNameEng.isNotEmpty ? e.docNameEng : e.docNameThai}', overflow: TextOverflow.ellipsis))).toList(),
+                  decoration: _fieldDeco(isEnglish ? 'Reference Doc Type' : 'ประเภทเอกสารอ้างอิง'),
                   onChanged: _isReadOnly ? null : (val) => setState(() {
                     _selectedRefDocType = val;
                     _header.refDocId = val?.id;
@@ -692,7 +729,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 child: TextFormField(
                   key: ValueKey('refDocNo_${widget.resetKey}_${_header.id}'),
                   initialValue: _header.refDocNo,
-                  decoration: _fieldDeco('เลขที่เอกสารอ้างอิง'),
+                  decoration: _fieldDeco(isEnglish ? 'Reference Doc No.' : 'เลขที่เอกสารอ้างอิง'),
                   readOnly: _isReadOnly,
                   onSaved: (v) => _header.refDocNo = v,
                   onChanged: (v) => _header.refDocNo = v,
@@ -712,7 +749,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     if (picked != null) setState(() => _header.refDocDate = picked);
                   },
                   child: InputDecorator(
-                    decoration: _fieldDeco('วันที่เอกสารอ้างอิง'),
+                    decoration: _fieldDeco(isEnglish ? 'Reference Doc Date' : 'วันที่เอกสารอ้างอิง'),
                     child: Text(_header.refDocDate == null
                         ? '-'
                         : DateFormat('dd/MM/yyyy').format(_header.refDocDate!)),
@@ -728,7 +765,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 child: TextFormField(
                   key: ValueKey('desc_${_header.id}'),
                   initialValue: _header.description,
-                  decoration: _fieldDeco('คำอธิบายรายการ'),
+                  decoration: _fieldDeco(isEnglish ? 'Description' : 'คำอธิบายรายการ'),
                   readOnly: _isReadOnly,
                   onSaved: (v) => _header.description = v ?? '',
                 ),
@@ -758,7 +795,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   borderRadius: BorderRadius.circular(4),
                   child: InputDecorator(
                     decoration: InputDecoration(
-                      labelText: 'สาขา',
+                      labelText: isEnglish ? 'Branch' : 'สาขา',
                       border: const OutlineInputBorder(),
                       isDense: true,
                       filled: true,
@@ -774,11 +811,19 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                           ? [
                               Text(_header.branchCode!,
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal[700])),
-                              Text(_header.branchName ?? '',
+                              Text(
+                                  () {
+                                    final match = _branches.cast<Branch?>().firstWhere(
+                                        (b) => b?.id == _header.branchId, orElse: () => null);
+                                    if (match != null && isEnglish && match.branchNameEng.isNotEmpty) {
+                                      return match.branchNameEng;
+                                    }
+                                    return _header.branchName ?? '';
+                                  }(),
                                   style: const TextStyle(fontSize: 11, color: Colors.grey)),
                             ]
                           : [
-                              Text('— ไม่ระบุ —',
+                              Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
                                   style: TextStyle(color: Colors.grey[500], fontSize: 13)),
                             ],
                     ),
@@ -793,13 +838,15 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   isExpanded: true,
                   items: _currencies.map((c) => DropdownMenuItem(
                       value: c,
-                      child: Text(c.currencyNameThai.isNotEmpty
-                          ? '${c.currencyCode}  ${c.currencyNameThai}'
+                      child: Text((isEnglish && c.currencyNameEng.isNotEmpty
+                              ? c.currencyNameEng
+                              : c.currencyNameThai).isNotEmpty
+                          ? '${c.currencyCode}  ${isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai}'
                           : c.currencyCode))).toList(),
                   selectedItemBuilder: (_) => _currencies
                       .map((c) => Text(c.currencyCode, overflow: TextOverflow.ellipsis))
                       .toList(),
-                  decoration: _fieldDeco('สกุลเงิน'),
+                  decoration: _fieldDeco(isEnglish ? 'Currency' : 'สกุลเงิน'),
                   onChanged: _isReadOnly ? null : _onCurrencyChanged,
                 ),
               ),
@@ -809,7 +856,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 child: TextFormField(
                   key: ValueKey('rate_${_header.currencyId}_${_header.exchangeRate}'),
                   initialValue: _header.exchangeRate.toString(),
-                  decoration: _fieldDeco('อัตราแลกเปลี่ยน',
+                  decoration: _fieldDeco(isEnglish ? 'Exchange Rate' : 'อัตราแลกเปลี่ยน',
                       forcedReadOnly: _selectedCurrency?.baseCurrencyFlag ?? true),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   readOnly: _isReadOnly || (_selectedCurrency?.baseCurrencyFlag ?? true),
@@ -824,7 +871,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   }
 
   // ── Detail section ───────────────────────────────────────────────────────
-  Widget _buildDetailSection() {
+  Widget _buildDetailSection(bool isEnglish) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -835,10 +882,10 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             child: Row(children: [
               const Icon(Icons.table_rows_outlined, size: 18, color: Colors.teal),
               const SizedBox(width: 6),
-              Text('รายการเดบิต/เครดิต',
+              Text(isEnglish ? 'Debit / Credit Lines' : 'รายการเดบิต/เครดิต',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(width: 6),
-              Text('(${_details.length} รายการ)',
+              Text(isEnglish ? '(${_details.length} lines)' : '(${_details.length} รายการ)',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600])),
               const Spacer(),
               Icon(_detailExpanded ? Icons.expand_less : Icons.expand_more, size: 18, color: Colors.grey),
@@ -847,13 +894,13 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
         ),
         if (_detailExpanded) ...[
           const Divider(height: 1),
-          _buildDetailTable(),
+          _buildDetailTable(isEnglish),
           if (!_isReadOnly)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: TextButton.icon(
                 icon: const Icon(Icons.add_circle_outline, size: 16),
-                label: const Text('เพิ่มบรรทัด'),
+                label: Text(isEnglish ? 'Add Line' : 'เพิ่มบรรทัด'),
                 onPressed: _addDetailRow,
               ),
             ),
@@ -862,7 +909,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     );
   }
 
-  Widget _buildDetailTable() {
+  Widget _buildDetailTable(bool isEnglish) {
     final currency = _selectedCurrency?.currencyCode ?? _baseCurrency;
     final fmt = NumberFormat('#,##0.00', 'en_US');
     final balanced = (_header.totalDebitFc - _header.totalCreditFc).abs() < 0.005;
@@ -881,11 +928,12 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             dataRowMaxHeight: 76,
             columns: [
               const DataColumn(label: Text('#')),
-              const DataColumn(label: Text('รหัสบัญชี')),
-              ..._dimTypes.map((t) => DataColumn(label: Text(t.nameThai))),
-              DataColumn(label: Text('เดบิต ($currency)')),
-              DataColumn(label: Text('เครดิต ($currency)')),
-              const DataColumn(label: Text('รายละเอียด')),
+              DataColumn(label: Text(isEnglish ? 'Account Code' : 'รหัสบัญชี')),
+              ..._dimTypes.map((t) => DataColumn(
+                  label: Text(isEnglish && (t.nameEng?.isNotEmpty ?? false) ? t.nameEng! : t.nameThai))),
+              DataColumn(label: Text('${isEnglish ? 'Debit' : 'เดบิต'} ($currency)')),
+              DataColumn(label: Text('${isEnglish ? 'Credit' : 'เครดิต'} ($currency)')),
+              DataColumn(label: Text(isEnglish ? 'Description' : 'รายละเอียด')),
               if (!_isReadOnly) const DataColumn(label: SizedBox()),
             ],
             rows: [
@@ -929,7 +977,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
                             child: detail.accountCode.isEmpty
-                                ? Text('คลิกเพื่อเลือก',
+                                ? Text(isEnglish ? 'Click to select' : 'คลิกเพื่อเลือก',
                                     style: TextStyle(fontSize: 14, color: Colors.grey[500]))
                                 : Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -937,7 +985,10 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                                     children: [
                                       Text(detail.accountCode,
                                           style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.teal[700])),
-                                      Text(detail.accountName,
+                                      Text(
+                                          isEnglish && accountInfo.id != 0 && accountInfo.accountNameEng.isNotEmpty
+                                              ? accountInfo.accountNameEng
+                                              : detail.accountName,
                                           style: const TextStyle(fontSize: 12, color: Colors.grey),
                                           overflow: TextOverflow.ellipsis),
                                     ],
@@ -1127,7 +1178,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                       balanced ? Colors.teal[50] : Colors.red[50]),
                   cells: [
                     const DataCell(SizedBox()),
-                    DataCell(Text('รวม',
+                    DataCell(Text(isEnglish ? 'Total' : 'รวม',
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
@@ -1185,7 +1236,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   }
 
   // ── Balance indicator bar (fixed, shows only when unbalanced) ──────────────
-  Widget _buildTotalsRow() {
+  Widget _buildTotalsRow(bool isEnglish) {
     final balanced = (_header.totalDebitFc - _header.totalCreditFc).abs() < 0.005;
     if (balanced) return const SizedBox.shrink();
     return Container(
@@ -1194,69 +1245,75 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       child: Row(children: [
         const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
         const SizedBox(width: 6),
-        const Text('ยอดไม่ดุล — กรุณาตรวจสอบยอดรวมเดบิต/เครดิตในตาราง',
-            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
+        Text(
+            isEnglish
+                ? 'Out of balance — please check the debit/credit totals in the table'
+                : 'ยอดไม่ดุล — กรุณาตรวจสอบยอดรวมเดบิต/เครดิตในตาราง',
+            style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
       ]),
     );
   }
 
   // ── Action buttons ───────────────────────────────────────────────────────
-  Widget _buildActionButtons() {
+  Widget _buildActionButtons(bool isEnglish) {
     return Container(
       color: Colors.deepOrange[50],
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(children: [
         if (!_isReadOnly && _header.status == 'Draft') ...[
-          OutlinedButton(onPressed: () => _save('Draft'), child: const Text('ดราฟท์')),
+          OutlinedButton(onPressed: () => _save('Draft'), child: Text(isEnglish ? 'Draft' : 'ดราฟท์')),
           const SizedBox(width: 8),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900]),
             onPressed: () => _save('Post'),
-            child: const Text('โพสต์', style: TextStyle(color: Colors.white)),
+            child: Text(isEnglish ? 'Post' : 'โพสต์', style: const TextStyle(color: Colors.white)),
           ),
         ] else if (_header.status == 'Posted') ...[
           if (_header.externalSourceId != null)
             Tooltip(
-              message: 'รายการนี้สร้างจากโมดูลอื่น\nกรุณายกเลิกจากโมดูลต้นทาง',
+              message: isEnglish
+                  ? 'This entry was created from another module\nPlease void it from the source module'
+                  : 'รายการนี้สร้างจากโมดูลอื่น\nกรุณายกเลิกจากโมดูลต้นทาง',
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[400]),
                 onPressed: null,
                 icon: const Icon(Icons.lock_outline, size: 14),
-                label: const Text('ถอย', style: TextStyle(color: Colors.white)),
+                label: Text(isEnglish ? 'Reverse' : 'ถอย', style: const TextStyle(color: Colors.white)),
               ),
             )
           else
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               onPressed: _reverse,
-              child: const Text('ถอย', style: TextStyle(color: Colors.white)),
+              child: Text(isEnglish ? 'Reverse' : 'ถอย', style: const TextStyle(color: Colors.white)),
             ),
         ],
         const Spacer(),
-        TextButton(onPressed: widget.onCancel, child: const Text('กลับ')),
+        TextButton(onPressed: widget.onCancel, child: Text(isEnglish ? 'Back' : 'กลับ')),
       ]),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     return Form(
       key: _formKey,
       child: Column(children: [
-        _buildActionButtons(),
+        _buildActionButtons(isEnglish),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _buildHeaderCard(),
+              _buildHeaderCard(isEnglish),
               const SizedBox(height: 4),
-              _buildDetailSection(),
+              _buildDetailSection(isEnglish),
             ]),
           ),
         ),
-        _buildTotalsRow(),
+        _buildTotalsRow(isEnglish),
       ]),
     );
   }

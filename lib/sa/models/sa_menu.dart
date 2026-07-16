@@ -17,9 +17,7 @@ import '../screens/sa_user_screen.dart';
 
 import '../../cd/screens/cd_branch_screen.dart';
 import '../../cd/screens/cd_business_type_screen.dart';
-import '../../cd/screens/cd_business_unit_screen.dart';
 import '../../cd/screens/cd_currency_screen.dart';
-import '../../cd/screens/cd_project_screen.dart';
 import '../../cd/screens/cd_zipcode_screen.dart';
 import '../../cd/screens/cd_vat_rate_screen.dart';
 import '../../cd/screens/cd_bank_screen.dart';
@@ -182,13 +180,7 @@ class Menu {
     'BusinessTypeScreen': (context) => BusinessTypeScreen(
           onFieldsChanged: () {},
         ),
-    'BusinessUnitScreen': (context) => BusinessUnitScreen(
-          onFieldsChanged: () {},
-        ),
     'CurrencyScreen': (context) => CurrencyScreen(
-          onFieldsChanged: () {},
-        ),
-    'ProjectScreen': (context) => ProjectScreen(
           onFieldsChanged: () {},
         ),
     'ZipcodeScreen': (context) => ZipcodeScreen(

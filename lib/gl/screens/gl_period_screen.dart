@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 // import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/gl_period.dart';
 import '../services/gl_period_service.dart';
@@ -194,20 +195,22 @@ class _PeriodScreenState extends State<PeriodScreen>
   }
 
   Future<void> _onDelete(FiscalYear row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบ "${row.fyCode} - (${row.description} ?? '')" ?'),
+        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(isEnglish
+            ? 'Are you sure you want to delete "${row.fyCode}"?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบ "${row.fyCode} - (${row.description} ?? '')" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ'),
+            child: Text(isEnglish ? 'Delete' : 'ลบ'),
           ),
         ],
       ),
@@ -221,13 +224,15 @@ class _PeriodScreenState extends State<PeriodScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ลบสำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
+            SnackBar(content: Text(isEnglish
+                ? 'Error deleting: ${e.toString()}'
+                : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
           );
         }
       }
@@ -235,20 +240,21 @@ class _PeriodScreenState extends State<PeriodScreen>
   }
 
   Future<void> _onSubmitHead(FiscalYear row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final dataService = Provider.of<PeriodService>(context, listen: false);
       if (_selectedData == null) {
         await dataService.addHeaderRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('เพิ่มสำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')),
           );
         }
       } else {
         await dataService.updateHeaderRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('บันทึกสำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')),
           );
         }
       }
@@ -257,7 +263,9 @@ class _PeriodScreenState extends State<PeriodScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish
+              ? 'Error saving: ${e.toString()}'
+              : 'เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
         );
       }
     }
@@ -281,6 +289,7 @@ class _PeriodScreenState extends State<PeriodScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
 
     return Scaffold(
       appBar: AppBar(
@@ -290,7 +299,7 @@ class _PeriodScreenState extends State<PeriodScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
             onPressed: () {
               _listWidgetKey.currentState?.refresh();
               _onCancel();
@@ -317,7 +326,7 @@ class _PeriodScreenState extends State<PeriodScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse list' : 'ย่อรายการ') : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(
@@ -469,15 +478,18 @@ class _PeriodScreenState extends State<PeriodScreen>
   }
 
   void _fetchPeriods(FiscalYear fy) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final dataService = Provider.of<PeriodService>(context, listen: false);
       final periods = await dataService.fetchDetailRows(fy.id);
       setState(() {
         _selectedDetail = periods;
-        // _selectedData = fy;
       });
     } catch (e) {
-      _showSnackbar('ไม่สามารถโหลดรอบบัญชีได้: ${e.toString()}', isError: true);
+      _showSnackbar(
+        isEnglish ? 'Failed to load periods: ${e.toString()}' : 'ไม่สามารถโหลดรอบบัญชีได้: ${e.toString()}',
+        isError: true,
+      );
       setState(() { _selectedDetail = []; });
     }
   }

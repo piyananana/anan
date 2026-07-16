@@ -20,9 +20,7 @@ import 'sa/services/sa_user_service.dart';
 
 import 'cd/services/cd_branch_service.dart';
 import 'cd/services/cd_business_type_service.dart';
-import 'cd/services/cd_business_unit_service.dart';
 import 'cd/services/cd_currency_service.dart';
-import 'cd/services/cd_project_service.dart';
 import 'cd/services/cd_zipcode_service.dart';
 import 'cd/services/cd_vat_rate_service.dart';
 import 'cd/services/cd_bank_service.dart';
@@ -75,9 +73,7 @@ class MyApp extends StatelessWidget {
 
         Provider<BranchService>(create: (_) => BranchService()),
         Provider<BusinessTypeService>(create: (_) => BusinessTypeService()),
-        Provider<BusinessUnitService>(create: (_) => BusinessUnitService()),
         Provider<CurrencyService>(create: (_) => CurrencyService()),
-        Provider<ProjectService>(create: (_) => ProjectService()),
         Provider<ZipcodeService>(create: (_) => ZipcodeService()),
         Provider<VatRateService>(create: (_) => VatRateService()),
 

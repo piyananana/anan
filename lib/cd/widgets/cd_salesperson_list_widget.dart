@@ -1,6 +1,7 @@
-﻿// lib/cd/widgets/cd_salesperson_list_widget.dart
+// lib/cd/widgets/cd_salesperson_list_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/cd_salesperson.dart';
 import '../services/cd_salesperson_service.dart';
 
@@ -35,12 +36,13 @@ class SalespersonListWidget extends StatefulWidget {
 
   static Future<void> search(BuildContext context,
       {required void Function(Salesperson) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('ค้นหา พนักงานขาย',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Search Salesperson' : 'ค้นหา พนักงานขาย',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Container(
           width: 520,
           height: 600,
@@ -64,7 +66,8 @@ class SalespersonListWidget extends StatefulWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+            child: Text(isEnglish ? 'Close' : 'ปิด',
+                style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -110,8 +113,9 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('โหลดข้อมูลล้มเหลว: $e')));
+            .showSnackBar(SnackBar(content: Text(isEnglish ? 'Failed to load data: $e' : 'โหลดข้อมูลล้มเหลว: $e')));
       }
     }
   }
@@ -140,13 +144,28 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
     return items;
   }
 
+  String _typeLabel(String type, bool isEnglish) {
+    if (isEnglish) {
+      const map = {
+        'EMPLOYEE': 'Internal Employee',
+        'INDIVIDUAL': 'External Individual',
+        'COMPANY': 'Company / Legal Entity',
+      };
+      return map[type] ?? type;
+    }
+    return salespersonTypeOptions[type] ?? type;
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final display = _filtered;
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด $_totalCount แถว'
-        : 'พบ ${display.length} จาก $_totalCount แถว';
+        ? (isEnglish ? 'Total $_totalCount rows' : 'ทั้งหมด $_totalCount แถว')
+        : (isEnglish
+            ? 'Found ${display.length} of $_totalCount rows'
+            : 'พบ ${display.length} จาก $_totalCount แถว');
     return Column(
       children: [
         Padding(
@@ -156,28 +175,30 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
               if (widget.enableAddButton)
                 IconButton(
                   icon: const Icon(Icons.add),
-                  tooltip: 'เพิ่มข้อมูลใหม่',
+                  tooltip: isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่',
                   onPressed: widget.onAdd,
                 ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.sort),
-                tooltip: 'จัดเรียง',
+                tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
                 onSelected: _onSortSelected,
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
-                  PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
-                  PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
-                  PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'code_asc',  child: Text(isEnglish ? 'Code (A→Z)'  : 'รหัส (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'code_desc', child: Text(isEnglish ? 'Code (Z→A)'  : 'รหัส (มากไปน้อย)')),
+                  PopupMenuItem(value: 'name_asc',  child: Text(isEnglish ? 'Name (A→Z)'  : 'ชื่อ (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'name_desc', child: Text(isEnglish ? 'Name (Z→A)'  : 'ชื่อ (มากไปน้อย)')),
                 ],
               ),
               Expanded(
                 child: TextField(
                   controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา (รหัส / ชื่อพนักงานขาย)',
-                    prefixIcon: Icon(Icons.search),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: isEnglish
+                        ? 'Search (Code / Salesperson Name)'
+                        : 'ค้นหา (รหัส / ชื่อพนักงานขาย)',
+                    prefixIcon: const Icon(Icons.search),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    border: const OutlineInputBorder(),
                   ),
                   onChanged: (v) => setState(() => _searchQuery = v),
                   onSubmitted: (_) => _fetch(),
@@ -198,21 +219,26 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : display.isEmpty
-                  ? const Center(child: Text('ไม่พบข้อมูลพนักงานขาย'))
+                  ? Center(child: Text(isEnglish
+                      ? 'No salespersons found'
+                      : 'ไม่พบข้อมูลพนักงานขาย'))
                   : ListView.builder(
                       itemCount: display.length,
                       itemBuilder: (ctx, i) {
                         final item = display[i];
-                        final typeLabel =
-                            salespersonTypeOptions[item.salespersonType] ??
-                                item.salespersonType;
+                        final displayName = isEnglish &&
+                                item.salespersonNameEng != null &&
+                                item.salespersonNameEng!.isNotEmpty
+                            ? item.salespersonNameEng!
+                            : item.salespersonNameThai;
+                        final typeLabel = _typeLabel(item.salespersonType, isEnglish);
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           child: Stack(children: [
                           ListTile(
                             title: Text(
-                              '${item.salespersonCode} — ${item.salespersonNameThai}',
+                              '${item.salespersonCode} — $displayName',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: item.isActive ? null : Colors.grey,
@@ -224,12 +250,13 @@ class SalespersonListWidgetState extends State<SalespersonListWidget>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (!item.isActive)
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 4),
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 4),
                                     child: Chip(
-                                      label: Text('หยุดใช้',
-                                          style: TextStyle(fontSize: 11)),
-                                      backgroundColor: Color(0xFFEEEEEE),
+                                      label: Text(
+                                          isEnglish ? 'Inactive' : 'หยุดใช้',
+                                          style: const TextStyle(fontSize: 11)),
+                                      backgroundColor: const Color(0xFFEEEEEE),
                                     ),
                                   ),
                                 if (widget.enableViewButton)

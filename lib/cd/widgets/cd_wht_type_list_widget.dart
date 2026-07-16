@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/cd_wht_type.dart';
 import '../services/cd_wht_type_service.dart';
 
@@ -34,15 +35,15 @@ class CdWhtTypeListWidget extends StatefulWidget {
   @override
   State<CdWhtTypeListWidget> createState() => CdWhtTypeListWidgetState();
 
-  /// Dialog picker — ใช้เลือก WHT type ใน form อื่น
   static Future<void> search(BuildContext context,
       {required void Function(CdWhtType) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('เลือก ประเภทภาษีหัก ณ ที่จ่าย',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Select WHT Type' : 'เลือก ประเภทภาษีหัก ณ ที่จ่าย',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Container(
           width: 560,
           height: 600,
@@ -69,7 +70,8 @@ class CdWhtTypeListWidget extends StatefulWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+            child: Text(isEnglish ? 'Close' : 'ปิด',
+                style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -113,8 +115,9 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('โหลดข้อมูลไม่สำเร็จ: $e')));
+            SnackBar(content: Text(isEnglish ? 'Failed to load data: $e' : 'โหลดข้อมูลไม่สำเร็จ: $e')));
       }
     }
   }
@@ -146,42 +149,46 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final rows = _filtered;
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${_rows.length} แถว'
-        : 'พบ ${rows.length} จาก ${_rows.length} แถว';
+        ? (isEnglish ? 'Total ${_rows.length} rows' : 'ทั้งหมด ${_rows.length} แถว')
+        : (isEnglish
+            ? 'Found ${rows.length} of ${_rows.length} rows'
+            : 'พบ ${rows.length} จาก ${_rows.length} แถว');
 
     return Column(
       children: [
-        // Search bar + add button
         Padding(
           padding: const EdgeInsets.all(8),
           child: Row(children: [
             if (widget.enableAddButton)
               IconButton(
                 icon: const Icon(Icons.add),
-                tooltip: 'เพิ่มประเภท WHT ใหม่',
+                tooltip: isEnglish ? 'Add New WHT Type' : 'เพิ่มประเภท WHT ใหม่',
                 onPressed: widget.onAdd,
               ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.sort),
-              tooltip: 'จัดเรียง',
+              tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
               onSelected: _onSortSelected,
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
-                PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
-                PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
-                PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'code_asc',  child: Text(isEnglish ? 'Code (A→Z)'  : 'รหัส (น้อยไปมาก)')),
+                PopupMenuItem(value: 'code_desc', child: Text(isEnglish ? 'Code (Z→A)'  : 'รหัส (มากไปน้อย)')),
+                PopupMenuItem(value: 'name_asc',  child: Text(isEnglish ? 'Name (A→Z)'  : 'ชื่อ (น้อยไปมาก)')),
+                PopupMenuItem(value: 'name_desc', child: Text(isEnglish ? 'Name (Z→A)'  : 'ชื่อ (มากไปน้อย)')),
               ],
             ),
             Expanded(
               child: TextField(
                 controller: _searchCtrl,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา (รหัส / ชื่อ / ประเภทเงินได้)',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish
+                      ? 'Search (Code / Name / Income Type)'
+                      : 'ค้นหา (รหัส / ชื่อ / ประเภทเงินได้)',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   isDense: true,
                 ),
                 onChanged: (v) => setState(() => _searchQuery = v),
@@ -189,7 +196,6 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
             ),
           ]),
         ),
-        // Count label
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           child: Align(
@@ -198,28 +204,34 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
                 style: const TextStyle(fontSize: 12, color: Colors.black87)),
           ),
         ),
-        // Card list
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : rows.isEmpty
-                  ? const Center(child: Text('ไม่พบข้อมูลประเภทภาษีหัก ณ ที่จ่าย'))
+                  ? Center(child: Text(isEnglish
+                      ? 'No WHT types found'
+                      : 'ไม่พบข้อมูลประเภทภาษีหัก ณ ที่จ่าย'))
                   : ListView.builder(
                       itemCount: rows.length,
                       itemBuilder: (ctx, i) {
                         final row = rows[i];
-                        // อัตราสำหรับ CircleAvatar — ตัดเศษ .00 ออก
                         final rateLabel =
                             '${row.whtRate % 1 == 0 ? row.whtRate.toInt() : row.whtRate}%';
-                        // subtitle: ชื่อ + อัตรา + ประเภทเงินได้ + วันที่ + บัญชี GL
+                        final presentLabel = isEnglish ? 'Present' : 'ปัจจุบัน';
                         final dateRange = row.effectiveDate != null
                             ? '${_dateFmt.format(row.effectiveDate!)} – '
-                              '${row.endDate != null ? _dateFmt.format(row.endDate!) : 'ปัจจุบัน'}'
+                              '${row.endDate != null ? _dateFmt.format(row.endDate!) : presentLabel}'
+                            : null;
+                        final rateLabel2 = isEnglish
+                            ? 'Rate ${row.whtRate.toStringAsFixed(row.whtRate % 1 == 0 ? 0 : 2)}%'
+                            : 'อัตรา ${row.whtRate.toStringAsFixed(row.whtRate % 1 == 0 ? 0 : 2)}%';
+                        final incomeLabel = row.incomeType != null
+                            ? (isEnglish ? 'Section ${row.incomeType}' : 'มาตรา ${row.incomeType}')
                             : null;
                         final subtitleParts = [
                           row.whtName,
-                          'อัตรา ${row.whtRate.toStringAsFixed(row.whtRate % 1 == 0 ? 0 : 2)}%',
-                          if (row.incomeType != null) 'มาตรา ${row.incomeType}',
+                          rateLabel2,
+                          if (incomeLabel != null) incomeLabel,
                           if (dateRange != null) dateRange,
                           if (row.glAccountCode != null) row.glAccountCode!,
                         ];
@@ -228,7 +240,6 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
                               horizontal: 8, vertical: 4),
                           child: Stack(children: [
                           ListTile(
-                            // leading: อัตราภาษีใน CircleAvatar
                             leading: CircleAvatar(
                               backgroundColor: row.isActive
                                   ? Colors.orange.shade100
@@ -244,7 +255,6 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
                                 ),
                               ),
                             ),
-                            // title (บรรทัดบน): รหัส WHT
                             title: Text(
                               row.whtCode,
                               style: TextStyle(
@@ -252,7 +262,6 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
                                 color: row.isActive ? null : Colors.grey,
                               ),
                             ),
-                            // subtitle (บรรทัดล่าง): ชื่อ  •  อัตรา%  •  มาตรา
                             subtitle: Text(
                               subtitleParts.join('  •  '),
                               style: TextStyle(

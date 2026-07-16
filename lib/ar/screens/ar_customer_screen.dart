@@ -1,8 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/ar_customer.dart';
 import '../services/ar_customer_service.dart';
 import '../widgets/ar_customer_list_widget.dart';
@@ -32,6 +34,8 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
   bool _isDraggingDivider = false;
+
+  bool _isEnglish = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -67,21 +71,27 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
   }
 
   Future<void> _onDelete(ArCustomer row) async {
+    final isEnglish = _isEnglish;
+    final l = AppL10n(isEnglish);
     final svc = Provider.of<ArCustomerService>(context, listen: false);
+    final displayName = isEnglish && (row.customerNameEn?.isNotEmpty ?? false)
+        ? row.customerNameEn!
+        : row.customerNameTh;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบลูกหนี้ "${row.customerCode} ${row.customerNameTh}" ?'),
+        title: Text(l.confirmDelete),
+        content: Text(isEnglish
+            ? 'Are you sure you want to delete customer "${row.customerCode} $displayName" ?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบลูกหนี้ "${row.customerCode} $displayName" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ', style: TextStyle(color: Colors.red)),
+            child: Text(l.delete, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -93,31 +103,38 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
       _listKey.currentState?.refresh();
       _onCancel();
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
+          SnackBar(
+              content: Text(isEnglish
+                  ? 'Failed to delete: ${e.toString()}'
+                  : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
         );
       }
     }
   }
 
   Future<void> _onSubmit(ArCustomer row) async {
+    final isEnglish = _isEnglish;
     final svc = Provider.of<ArCustomerService>(context, listen: false);
     if (_selectedData == null) {
       await svc.addRow(row);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
       }
     } else {
       await svc.updateRow(row);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
       }
     }
     _listKey.currentState?.refresh();
@@ -178,6 +195,8 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -186,7 +205,7 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: () {
               _listKey.currentState?.refresh();
               _onCancel();
@@ -213,7 +232,9 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                      : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(

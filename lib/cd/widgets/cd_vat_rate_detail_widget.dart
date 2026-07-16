@@ -1,7 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
 import '../models/cd_vat_rate.dart';
@@ -111,7 +113,7 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
     }
   }
 
-  Future<void> _pickAccount() async {
+  Future<void> _pickAccount(bool isEnglish) async {
     final svc = Provider.of<AccountService>(context, listen: false);
     List<Account> accounts = [];
     try {
@@ -139,18 +141,20 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
         }
 
         return AlertDialog(
-          title: const Text('เลือกบัญชีภาษีมูลค่าเพิ่มจาก GL'),
+          title: Text(isEnglish
+              ? 'Select GL Account (VAT)'
+              : 'เลือกบัญชีภาษีมูลค่าเพิ่มจาก GL'),
           content: SizedBox(
             width: 520, height: 420,
             child: Column(children: [
               TextField(
                 controller: searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search Code / Account Name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   isDense: true,
                 ),
                 onChanged: doFilter,
@@ -181,7 +185,10 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
+            ),
           ],
         );
       }),
@@ -189,11 +196,13 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
     searchCtrl.dispose();
   }
 
-  Future<void> _submitForm() async {
+  Future<void> _submitForm(bool isEnglish) async {
     if (_formKey.currentState!.validate()) {
       if (_effectiveDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรุณาระบุวันที่มีผลบังคับใช้')),
+          SnackBar(content: Text(isEnglish
+              ? 'Please specify effective date'
+              : 'กรุณาระบุวันที่มีผลบังคับใช้')),
         );
         return;
       }
@@ -218,9 +227,10 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
         await widget.onSubmit(row);
       } catch (e) {
         if (mounted) {
+          final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('เกิดข้อผิดพลาด: $e'),
+                content: Text('${l.errorOccurred}: $e'),
                 backgroundColor: Colors.red),
           );
         }
@@ -232,10 +242,14 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+
     if (widget.isPlaceholder) {
-      return const Center(
-        child: Text(
-            'เลือกอัตราภาษีเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มอัตราใหม่'),
+      return Center(
+        child: Text(isEnglish
+            ? 'Select a VAT rate to edit or press + to add new'
+            : 'เลือกอัตราภาษีเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มอัตราใหม่'),
       );
     }
 
@@ -250,15 +264,14 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
           children: [
             Text(
               widget.mode == Mode.view
-                  ? 'ดูข้อมูลอัตราภาษี'
+                  ? (isEnglish ? 'View VAT Rate' : 'ดูข้อมูลอัตราภาษี')
                   : widget.mode == Mode.edit
-                      ? 'แก้ไขอัตราภาษี'
-                      : 'เพิ่มอัตราภาษีใหม่',
+                      ? (isEnglish ? 'Edit VAT Rate' : 'แก้ไขอัตราภาษี')
+                      : (isEnglish ? 'Add New VAT Rate' : 'เพิ่มอัตราภาษีใหม่'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 16),
 
-            // รหัส VAT + อัตรา %
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -268,13 +281,14 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
                     controller: _vatCodeController,
                     readOnly: readOnly,
                     textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      labelText: 'รหัสภาษี (VAT Code) *',
-                      border: OutlineInputBorder(),
-                      hintText: 'เช่น VAT7, VAT0, EXEMPT',
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'VAT Code *' : 'รหัสภาษี (VAT Code) *',
+                      border: const OutlineInputBorder(),
+                      hintText: isEnglish ? 'e.g. VAT7, VAT0, EXEMPT' : 'เช่น VAT7, VAT0, EXEMPT',
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'โปรดระบุรหัสภาษี' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? (isEnglish ? 'Please enter VAT code' : 'โปรดระบุรหัสภาษี')
+                        : null,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -283,18 +297,18 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
                     controller: _rateController,
                     readOnly: readOnly,
                     textAlign: TextAlign.right,
-                    // style: const TextStyle(
-                    //     fontSize: 24, fontWeight: FontWeight.bold),
-                    decoration: const InputDecoration(
-                      labelText: 'อัตรา (%) *',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Rate (%) *' : 'อัตรา (%) *',
+                      border: const OutlineInputBorder(),
                       suffixText: '%',
                     ),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'โปรดระบุอัตรา';
-                      if (double.tryParse(v) == null) return 'ตัวเลขไม่ถูกต้อง';
+                      if (v == null || v.trim().isEmpty)
+                        return isEnglish ? 'Please enter rate' : 'โปรดระบุอัตรา';
+                      if (double.tryParse(v) == null)
+                        return isEnglish ? 'Invalid number' : 'ตัวเลขไม่ถูกต้อง';
                       return null;
                     },
                   ),
@@ -303,7 +317,6 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // ชื่อภาษาไทย
             TextFormField(
               controller: _vatNameThController,
               readOnly: readOnly,
@@ -311,38 +324,37 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
                 labelText: 'ชื่อภาษี (ไทย) *',
                 border: OutlineInputBorder(),
               ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'โปรดระบุชื่อภาษาไทย' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? (isEnglish ? 'Please enter Thai name' : 'โปรดระบุชื่อภาษาไทย')
+                  : null,
             ),
             const SizedBox(height: 12),
 
-            // ชื่อภาษาอังกฤษ
             TextFormField(
               controller: _vatNameEnController,
               readOnly: readOnly,
               decoration: const InputDecoration(
-                labelText: 'ชื่อภาษี (อังกฤษ)',
+                labelText: 'VAT Name (EN)',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
 
-            // วันที่มีผลบังคับใช้
             Row(
               children: [
                 Expanded(
                   child: InkWell(
                     onTap: readOnly ? null : () => _pickDate(true),
                     child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'วันที่มีผลบังคับใช้ *',
-                        border: OutlineInputBorder(),
-                        suffixIcon: Icon(Icons.calendar_today, size: 18),
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'Effective Date *' : 'วันที่มีผลบังคับใช้ *',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: const Icon(Icons.calendar_today, size: 18),
                       ),
                       child: Text(
                         _effectiveDate != null
                             ? _dateFmt.format(_effectiveDate!)
-                            : 'เลือกวันที่',
+                            : (isEnglish ? 'Select date' : 'เลือกวันที่'),
                         style: TextStyle(
                           color: _effectiveDate != null
                               ? null
@@ -358,7 +370,9 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
                     onTap: readOnly ? null : () => _pickDate(false),
                     child: InputDecorator(
                       decoration: InputDecoration(
-                        labelText: 'วันสิ้นสุด (ว่าง = ปัจจุบัน)',
+                        labelText: isEnglish
+                            ? 'End Date (blank = Present)'
+                            : 'วันสิ้นสุด (ว่าง = ปัจจุบัน)',
                         border: const OutlineInputBorder(),
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -378,7 +392,7 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
                       child: Text(
                         _endDate != null
                             ? _dateFmt.format(_endDate!)
-                            : 'ปัจจุบัน',
+                            : (isEnglish ? 'Present' : 'ปัจจุบัน'),
                         style: TextStyle(
                           color: _endDate != null ? null : Colors.grey.shade600,
                         ),
@@ -390,12 +404,11 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // บัญชี GL (VAT)
             InkWell(
-              onTap: readOnly ? null : _pickAccount,
+              onTap: readOnly ? null : () => _pickAccount(isEnglish),
               child: InputDecorator(
                 decoration: InputDecoration(
-                  labelText: 'บัญชี GL (ภาษีมูลค่าเพิ่ม)',
+                  labelText: isEnglish ? 'GL Account (VAT)' : 'บัญชี GL (ภาษีมูลค่าเพิ่ม)',
                   border: const OutlineInputBorder(),
                   suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
                     if (_glAccountId != null && !readOnly)
@@ -415,7 +428,7 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
                 child: Text(
                   _glAccountId != null
                       ? '$_glAccountCode  $_glAccountName'
-                      : '— ไม่ระบุ —',
+                      : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
                   style: TextStyle(
                       color: _glAccountId != null ? null : Colors.grey.shade600),
                 ),
@@ -423,24 +436,21 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
             ),
             const SizedBox(height: 12),
 
-            // หมายเหตุ
             TextFormField(
               controller: _remarkController,
               readOnly: readOnly,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'หมายเหตุ',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.remark,
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
 
-            // สถานะ
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                      'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
+                  child: Text('${l.status}: ${_isActive ? l.active : l.inactive}'),
                 ),
                 Switch(
                   value: _isActive,
@@ -452,14 +462,13 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
             ),
             const SizedBox(height: 24),
 
-            // Buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 if (widget.mode != Mode.view)
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _submitForm,
+                      onPressed: _isSaving ? null : () => _submitForm(isEnglish),
                       icon: _isSaving
                           ? const SizedBox(
                               height: 20,
@@ -468,10 +477,10 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
                                   strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.save),
                       label: Text(_isSaving
-                          ? 'กำลังบันทึก...'
+                          ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
                           : widget.mode == Mode.edit
-                              ? 'บันทึก'
-                              : 'เพิ่ม'),
+                              ? l.save
+                              : l.add),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue.shade700,
                         foregroundColor: Colors.white,
@@ -484,7 +493,7 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
                   child: ElevatedButton.icon(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
+                    label: Text(l.cancel),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade600,
                       foregroundColor: Colors.white,

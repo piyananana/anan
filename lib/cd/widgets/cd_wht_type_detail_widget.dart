@@ -1,9 +1,11 @@
-﻿// lib/cd/widgets/cd_wht_type_detail_widget.dart
+// lib/cd/widgets/cd_wht_type_detail_widget.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
 import '../models/cd_wht_type.dart';
@@ -93,7 +95,6 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
     super.dispose();
   }
 
-  // ── Date picker ───────────────────────────────────────────────────────────
   Future<void> _pickDate(bool isEffective) async {
     final initial = isEffective
         ? (_effectiveDate ?? DateTime.now())
@@ -115,8 +116,7 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
     }
   }
 
-  // ── Account picker ────────────────────────────────────────────────────────
-  Future<void> _pickAccount() async {
+  Future<void> _pickAccount(bool isEnglish) async {
     final svc = Provider.of<AccountService>(context, listen: false);
     List<Account> accounts = [];
     try {
@@ -144,18 +144,20 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
         }
 
         return AlertDialog(
-          title: const Text('เลือกบัญชีภาษีหัก ณ ที่จ่ายจาก GL'),
+          title: Text(isEnglish
+              ? 'Select GL Account (WHT)'
+              : 'เลือกบัญชีภาษีหัก ณ ที่จ่ายจาก GL'),
           content: SizedBox(
             width: 520, height: 420,
             child: Column(children: [
               TextField(
                 controller: searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search Code / Account Name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   isDense: true,
                 ),
                 onChanged: doFilter,
@@ -186,7 +188,10 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
+            ),
           ],
         );
       }),
@@ -194,8 +199,7 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
     searchCtrl.dispose();
   }
 
-  // ── Submit ────────────────────────────────────────────────────────────────
-  Future<void> _submitForm() async {
+  Future<void> _submitForm(bool isEnglish) async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     try {
@@ -214,20 +218,25 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
       await widget.onSubmit(row);
     } catch (e) {
       if (mounted) {
+        final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
+          SnackBar(content: Text('${l.errorOccurred}: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+
     if (widget.isPlaceholder) {
-      return const Center(
-          child: Text('เลือกรายการเพื่อแก้ไข หรือกดปุ่ม + เพื่อเพิ่มใหม่'));
+      return Center(
+          child: Text(isEnglish
+              ? 'Select an item to edit or press + to add new'
+              : 'เลือกรายการเพื่อแก้ไข หรือกดปุ่ม + เพื่อเพิ่มใหม่'));
     }
 
     final ro = widget.mode == Mode.view;
@@ -238,12 +247,15 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
         key: _formKey,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(
-            ro ? 'ดูข้อมูล' : widget.mode == Mode.edit ? 'แก้ไขข้อมูล' : 'เพิ่มข้อมูลใหม่',
+            ro
+                ? (isEnglish ? 'View' : 'ดูข้อมูล')
+                : widget.mode == Mode.edit
+                    ? (isEnglish ? 'Edit' : 'แก้ไขข้อมูล')
+                    : (isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่'),
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 16),
 
-          // รหัส WHT + อัตรา
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
               flex: 2,
@@ -252,12 +264,14 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
                 readOnly: ro,
                 textCapitalization: TextCapitalization.characters,
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_]'))],
-                decoration: const InputDecoration(
-                  labelText: 'รหัสภาษีหัก ณ ที่จ่าย *',
-                  border: OutlineInputBorder(),
-                  hintText: 'เช่น WHT3, WHT5',
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'WHT Code *' : 'รหัสภาษีหัก ณ ที่จ่าย *',
+                  border: const OutlineInputBorder(),
+                  hintText: isEnglish ? 'e.g. WHT3, WHT5' : 'เช่น WHT3, WHT5',
                 ),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'โปรดระบุรหัส' : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? (isEnglish ? 'Please enter code' : 'โปรดระบุรหัส')
+                    : null,
               ),
             ),
             const SizedBox(width: 8),
@@ -267,14 +281,16 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
                 readOnly: ro,
                 textAlign: TextAlign.right,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'อัตรา (%) *',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Rate (%) *' : 'อัตรา (%) *',
+                  border: const OutlineInputBorder(),
                   suffixText: '%',
                 ),
                 validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'โปรดระบุอัตรา';
-                  if (double.tryParse(v) == null) return 'ตัวเลขไม่ถูกต้อง';
+                  if (v == null || v.trim().isEmpty)
+                    return isEnglish ? 'Please enter rate' : 'โปรดระบุอัตรา';
+                  if (double.tryParse(v) == null)
+                    return isEnglish ? 'Invalid number' : 'ตัวเลขไม่ถูกต้อง';
                   return null;
                 },
               ),
@@ -282,41 +298,42 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
           ]),
           const SizedBox(height: 12),
 
-          // ชื่อ WHT
           TextFormField(
             controller: _nameCtrl,
             readOnly: ro,
-            decoration: const InputDecoration(
-              labelText: 'ชื่อ *',
-              border: OutlineInputBorder(),
-              hintText: 'เช่น ค่าบริการ 3%, เงินปันผล 10%',
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Name *' : 'ชื่อ *',
+              border: const OutlineInputBorder(),
+              hintText: isEnglish
+                  ? 'e.g. Service fee 3%, Dividend 10%'
+                  : 'เช่น ค่าบริการ 3%, เงินปันผล 10%',
             ),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'โปรดระบุชื่อ' : null,
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? (isEnglish ? 'Please enter name' : 'โปรดระบุชื่อ')
+                : null,
           ),
           const SizedBox(height: 12),
 
-          // ประเภทเงินได้
           DropdownButtonFormField<String>(
             isExpanded: true,
             value: _incomeType,
-            decoration: const InputDecoration(
-              labelText: 'ประเภทเงินได้ (มาตรา)',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Income Type (Section)' : 'ประเภทเงินได้ (มาตรา)',
+              border: const OutlineInputBorder(),
             ),
             items: [
-              const DropdownMenuItem(value: null, child: Text('— ไม่ระบุ —')),
+              DropdownMenuItem(value: null, child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
               ...whtIncomeTypeOptions.map((t) => DropdownMenuItem(value: t, child: Text(t))),
             ],
             onChanged: ro ? null : (v) => setState(() => _incomeType = v),
           ),
           const SizedBox(height: 12),
 
-          // บัญชี GL
           InkWell(
-            onTap: ro ? null : _pickAccount,
+            onTap: ro ? null : () => _pickAccount(isEnglish),
             child: InputDecorator(
               decoration: InputDecoration(
-                labelText: 'บัญชี GL (ภาษีหัก ณ ที่จ่าย)',
+                labelText: isEnglish ? 'GL Account (WHT)' : 'บัญชี GL (ภาษีหัก ณ ที่จ่าย)',
                 border: const OutlineInputBorder(),
                 suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
                   if (_glAccountId != null && !ro)
@@ -332,28 +349,29 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
                 ]),
               ),
               child: Text(
-                _glAccountId != null ? '$_glAccountCode  $_glAccountName' : '— ไม่ระบุ —',
+                _glAccountId != null
+                    ? '$_glAccountCode  $_glAccountName'
+                    : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
                 style: TextStyle(color: _glAccountId != null ? null : Colors.grey.shade600),
               ),
             ),
           ),
           const SizedBox(height: 12),
 
-          // วันที่มีผลบังคับใช้ + วันที่สิ้นสุด
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
               child: InkWell(
                 onTap: ro ? null : () => _pickDate(true),
                 child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'วันที่มีผลบังคับใช้',
-                    border: OutlineInputBorder(),
-                    suffixIcon: Icon(Icons.calendar_today, size: 18),
+                  decoration: InputDecoration(
+                    labelText: isEnglish ? 'Effective Date' : 'วันที่มีผลบังคับใช้',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: const Icon(Icons.calendar_today, size: 18),
                   ),
                   child: Text(
                     _effectiveDate != null
                         ? _dateFmt.format(_effectiveDate!)
-                        : 'ไม่ระบุ',
+                        : (isEnglish ? 'Not specified' : 'ไม่ระบุ'),
                     style: TextStyle(
                         color: _effectiveDate != null ? null : Colors.grey.shade600),
                   ),
@@ -366,7 +384,7 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
                 onTap: ro ? null : () => _pickDate(false),
                 child: InputDecorator(
                   decoration: InputDecoration(
-                    labelText: 'วันที่สิ้นสุด (ว่าง = ปัจจุบัน)',
+                    labelText: isEnglish ? 'End Date (blank = Present)' : 'วันที่สิ้นสุด (ว่าง = ปัจจุบัน)',
                     border: const OutlineInputBorder(),
                     suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
                       if (_endDate != null && !ro)
@@ -380,7 +398,9 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
                     ]),
                   ),
                   child: Text(
-                    _endDate != null ? _dateFmt.format(_endDate!) : 'ปัจจุบัน',
+                    _endDate != null
+                        ? _dateFmt.format(_endDate!)
+                        : (isEnglish ? 'Present' : 'ปัจจุบัน'),
                     style: TextStyle(
                         color: _endDate != null ? null : Colors.grey.shade600),
                   ),
@@ -390,21 +410,19 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
           ]),
           const SizedBox(height: 12),
 
-          // หมายเหตุ
           TextFormField(
             controller: _descCtrl,
             readOnly: ro,
             maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'หมายเหตุ',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: l.remark,
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
 
-          // สถานะ
           Row(children: [
-            Expanded(child: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
+            Expanded(child: Text('${l.status}: ${_isActive ? l.active : l.inactive}')),
             Switch(
               value: _isActive,
               onChanged: ro ? null : (v) => setState(() => _isActive = v),
@@ -412,17 +430,18 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
           ]),
           const SizedBox(height: 24),
 
-          // Buttons
           Row(children: [
             if (widget.mode != Mode.view) ...[
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _isSaving ? null : _submitForm,
+                  onPressed: _isSaving ? null : () => _submitForm(isEnglish),
                   icon: _isSaving
                       ? const SizedBox(height: 20, width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.save),
-                  label: Text(_isSaving ? 'กำลังบันทึก...' : widget.mode == Mode.edit ? 'บันทึก' : 'เพิ่ม'),
+                  label: Text(_isSaving
+                      ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
+                      : widget.mode == Mode.edit ? l.save : l.add),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue.shade700,
                     foregroundColor: Colors.white,
@@ -436,7 +455,7 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
               child: ElevatedButton.icon(
                 onPressed: widget.onCancel,
                 icon: const Icon(Icons.cancel),
-                label: const Text('ยกเลิก'),
+                label: Text(l.cancel),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey.shade600,
                   foregroundColor: Colors.white,

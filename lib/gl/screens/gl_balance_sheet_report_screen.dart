@@ -11,11 +11,13 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 
+import 'package:provider/provider.dart';
 import '../../gl/models/gl_period.dart';
 import '../../gl/services/gl_period_service.dart';
 import '../../gl/services/gl_balance_sheet_report_service.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 
 class BalanceSheetReportScreen extends StatefulWidget {
   const BalanceSheetReportScreen({super.key});
@@ -48,6 +50,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
   bool _isFilterExpanded = true;
   double _filterPanelWidth = 350.0;
   bool _isDraggingDivider = false;
+  bool _isEnglish = false;
 
   @override
   void initState() {
@@ -77,7 +80,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error loading master: $e')));
+            .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error loading master data: $e' : 'เกิดข้อผิดพลาดในการโหลดข้อมูลหลัก: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -107,7 +110,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
       if (data.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ไม่พบข้อมูลในปีบัญชีที่เลือก')),
+            SnackBar(content: Text(_isEnglish ? 'No data found for selected fiscal year' : 'ไม่พบข้อมูลในปีบัญชีที่เลือก')),
           );
         }
         return;
@@ -117,7 +120,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -208,6 +211,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
     _isExporting = true;
     setState(() {});
     try {
+      final bool isEnglish = _isEnglish;
       final ex = Excel.createExcel();
       ex.rename('Sheet1', 'BalanceSheet');
       final s = ex['BalanceSheet'];
@@ -219,16 +223,16 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
           double.tryParse(row['end_balance'].toString()) ?? 0.0;
 
       final _asOfLabel = _selectedPeriod != null
-          ? 'ณ วันที่: ${DateFormat('dd/MM/yyyy').format(_selectedPeriod!.periodEndDate)}'
-          : 'ปี: ${_selectedYear?.fyCode ?? ''}';
+          ? '${isEnglish ? 'As of' : 'ณ วันที่'}: ${DateFormat('dd/MM/yyyy').format(_selectedPeriod!.periodEndDate)}'
+          : '${isEnglish ? 'Year' : 'ปี'}: ${_selectedYear?.fyCode ?? ''}';
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'งบดุล (Balance Sheet)', bold: true);
-      _xlCell(s, 2, 0, '$_asOfLabel  |  พิมพ์: $_ts');
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, isEnglish ? 'Balance Sheet' : 'งบดุล (Balance Sheet)', bold: true);
+      _xlCell(s, 2, 0, '$_asOfLabel  |  ${isEnglish ? 'Printed:' : 'พิมพ์:'} $_ts');
 
       int r = 3;
-      _xlCell(s, r, 0, 'รหัส/ชื่อบัญชี', bg: hdrBg, bold: true);
-      _xlCell(s, r, 1, 'ยอดคงเหลือ', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 0, isEnglish ? 'Code/Account' : 'รหัส/ชื่อบัญชี', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, isEnglish ? 'Balance' : 'ยอดคงเหลือ', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       r++;
 
       final allAsset    = _reportData.where((row) => row['account_type'] == 'ASSET').toList();
@@ -236,9 +240,9 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
       final allEquity   = _reportData.where((row) => row['account_type'] == 'EQUITY').toList();
 
       for (final group in [
-        ('สินทรัพย์ (ASSET)', allAsset),
-        ('หนี้สิน (LIABILITY)', allLiability),
-        ('ส่วนของเจ้าของ (EQUITY)', allEquity),
+        (isEnglish ? 'Assets' : 'สินทรัพย์ (ASSET)', allAsset),
+        (isEnglish ? 'Liabilities' : 'หนี้สิน (LIABILITY)', allLiability),
+        (isEnglish ? 'Equity' : 'ส่วนของเจ้าของ (EQUITY)', allEquity),
       ]) {
         final (label, rows) = group;
         _xlCell(s, r, 0, label, bg: secBg, bold: true);
@@ -249,7 +253,9 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         for (final row in rows) {
           final isHeader = row['is_header'] == true;
           final code = row['account_code']?.toString() ?? '';
-          final name = row['account_name_thai']?.toString() ?? '';
+          final name = isEnglish
+              ? (row['account_name_eng']?.toString().isNotEmpty == true ? row['account_name_eng'].toString() : row['account_name_thai'].toString())
+              : row['account_name_thai']?.toString() ?? '';
           final bal  = endBal(row);
           if (!isHeader) sectionTotal += bal;
           _xlCell(s, r, 0, '$code $name', bold: isHeader);
@@ -257,7 +263,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
           r++;
         }
 
-        _xlCell(s, r, 0, 'รวม $label', bg: totBg, bold: true);
+        _xlCell(s, r, 0, '${isEnglish ? 'Total' : 'รวม'} $label', bg: totBg, bold: true);
         _xlCell(s, r, 1, DoubleCellValue(sectionTotal), bg: totBg, bold: true, align: HorizontalAlign.Right);
         r++;
       }
@@ -291,19 +297,21 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
     final font = pw.Font.ttf(fontData);
     final fontBold = pw.Font.ttf(fontBoldData);
 
-    final companyName = _company?.thaiName ?? "(ไม่ระบุชื่อบริษัท)";
-    final userName = headers['UserName'] ?? "(ไม่ระบุชื่อ)";
+    final bool isEnglish = _isEnglish;
+    final companyName = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
+    final userName = headers['UserName'] ?? (isEnglish ? '(Unknown user)' : '(ไม่ระบุชื่อ)');
     final printDateStr =
         DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
     // "ณ วันที่" label
+    final String asOfPrefix = isEnglish ? 'As of' : 'ณ วันที่';
     String asOfLabel;
     if (_selectedPeriod != null) {
       asOfLabel =
-          "ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_selectedPeriod!.periodEndDate)}";
+          "$asOfPrefix ${DateFormat('dd/MM/yyyy').format(_selectedPeriod!.periodEndDate)}";
     } else if (_periods.length > 1) {
       asOfLabel =
-          "ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_periods.last.periodEndDate)}";
+          "$asOfPrefix ${DateFormat('dd/MM/yyyy').format(_periods.last.periodEndDate)}";
     } else {
       asOfLabel = "ปี ${_selectedYear?.fyCode ?? ''}";
     }
@@ -384,7 +392,9 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                   padding: pw.EdgeInsets.only(
                       left: indent, top: 3, bottom: 3, right: 4),
                   child: pw.Text(
-                    "${row['account_name_thai']}",
+                    isEnglish
+                        ? (row['account_name_eng']?.toString().isNotEmpty == true ? row['account_name_eng'].toString() : row['account_name_thai'].toString())
+                        : row['account_name_thai'].toString(),
                     style: textStyle,
                   ),
                 ),
@@ -478,7 +488,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                 ),
                 child: pw.Align(
                   alignment: pw.Alignment.centerRight,
-                  child: pw.Text("รวมหนี้สินและส่วนของเจ้าของ",
+                  child: pw.Text(isEnglish ? 'Total Liabilities & Equity' : 'รวมหนี้สินและส่วนของเจ้าของ',
                       style: pw.TextStyle(
                           fontWeight: pw.FontWeight.bold, fontSize: 12)),
                 ),
@@ -516,7 +526,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
           pw.Expanded(
               flex: 7,
               child: pw.Text(
-                "งบดุล (Balance Sheet)",
+                isEnglish ? 'Balance Sheet' : 'งบดุล (Balance Sheet)',
                 textAlign: pw.TextAlign.center,
                 style:
                     pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
@@ -524,7 +534,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
           pw.Expanded(
               flex: 3,
               child: pw.Text(
-                "หน้า ${context.pageNumber}/${context.pagesCount}",
+                isEnglish ? "Page ${context.pageNumber}/${context.pagesCount}" : "หน้า ${context.pageNumber}/${context.pagesCount}",
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 12),
               )),
@@ -539,7 +549,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                   style: const pw.TextStyle(fontSize: 12))),
           pw.Expanded(
               flex: 3,
-              child: pw.Text("พิมพ์โดย $userName",
+              child: pw.Text(isEnglish ? "Printed by $userName" : "พิมพ์โดย $userName",
                   textAlign: pw.TextAlign.right,
                   style: const pw.TextStyle(fontSize: 12))),
         ]),
@@ -547,11 +557,11 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         pw.Row(children: [
           pw.Expanded(
               flex: 10,
-              child: pw.Text("ปีบัญชี: ${_selectedYear?.fyCode ?? ''}",
+              child: pw.Text("${isEnglish ? 'Fiscal Year:' : 'ปีบัญชี:'} ${_selectedYear?.fyCode ?? ''}",
                   style: const pw.TextStyle(fontSize: 10))),
           pw.Expanded(
               flex: 3,
-              child: pw.Text("พิมพ์เมื่อ $printDateStr",
+              child: pw.Text(isEnglish ? "Printed: $printDateStr" : "พิมพ์เมื่อ $printDateStr",
                   textAlign: pw.TextAlign.right,
                   style: const pw.TextStyle(fontSize: 12))),
         ]),
@@ -565,9 +575,9 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         final List<pw.Widget> widgets = [];
 
         // --- ASSET section ---
-        widgets.add(buildSectionHeader("สินทรัพย์ (Assets)"));
+        widgets.add(buildSectionHeader(isEnglish ? 'Assets' : 'สินทรัพย์ (Assets)'));
         widgets.addAll(buildAccountRows(assetRows, assetLeafs));
-        widgets.add(buildSectionTotal("รวมสินทรัพย์", totalAsset));
+        widgets.add(buildSectionTotal(isEnglish ? 'Total Assets' : 'รวมสินทรัพย์', totalAsset));
 
         if (_pageBreakPerType) {
           widgets.add(pw.NewPage());
@@ -576,9 +586,9 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         }
 
         // --- LIABILITY section ---
-        widgets.add(buildSectionHeader("หนี้สิน (Liabilities)"));
+        widgets.add(buildSectionHeader(isEnglish ? 'Liabilities' : 'หนี้สิน (Liabilities)'));
         widgets.addAll(buildAccountRows(liabilityRows, liabilityLeafs));
-        widgets.add(buildSectionTotal("รวมหนี้สิน", totalLiability));
+        widgets.add(buildSectionTotal(isEnglish ? 'Total Liabilities' : 'รวมหนี้สิน', totalLiability));
 
         if (_pageBreakPerType) {
           widgets.add(pw.NewPage());
@@ -587,9 +597,9 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         }
 
         // --- EQUITY section ---
-        widgets.add(buildSectionHeader("ส่วนของเจ้าของ (Equity)"));
+        widgets.add(buildSectionHeader(isEnglish ? 'Equity' : 'ส่วนของเจ้าของ (Equity)'));
         widgets.addAll(buildAccountRows(equityRows, equityLeafs));
-        widgets.add(buildSectionTotal("รวมส่วนของเจ้าของ", totalEquity));
+        widgets.add(buildSectionTotal(isEnglish ? 'Total Equity' : 'รวมส่วนของเจ้าของ', totalEquity));
 
         // --- Grand total ---
         widgets.add(buildGrandTotal(totalLiabilityEquity));
@@ -605,6 +615,8 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -625,7 +637,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
             onPressed: _loadMasterData,
           ),
         ],
@@ -648,7 +660,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
               ),
               padding: EdgeInsets.zero,
               onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
-              tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+              tooltip: _isFilterExpanded ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข') : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
             ),
           ),
           AnimatedContainer(
@@ -668,11 +680,10 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('เงื่อนไขรายงาน',
-                        style: TextStyle(
+                    Text(isEnglish ? 'Report Filter' : 'เงื่อนไขรายงาน',
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 16),
-                    // ปีบัญชี
                     DropdownButtonFormField<FiscalYear>(
                       isExpanded: true,
                       value: _selectedYear,
@@ -680,9 +691,9 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                           .map((fy) => DropdownMenuItem(
                               value: fy, child: Text(fy.fyCode)))
                           .toList(),
-                      decoration: const InputDecoration(
-                          labelText: 'ปีบัญชี',
-                          border: OutlineInputBorder()),
+                      decoration: InputDecoration(
+                          labelText: isEnglish ? 'Fiscal Year' : 'ปีบัญชี',
+                          border: const OutlineInputBorder()),
                       onChanged: (val) async {
                         if (val != null) {
                           setState(() => _selectedYear = val);
@@ -691,21 +702,20 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    // งวด
                     DropdownButtonFormField<PostingPeriod>(
                       isExpanded: true,
                       value: _selectedPeriod,
                       items: [
-                        const DropdownMenuItem<PostingPeriod>(
-                            value: null, child: Text("ทุกงวด (สิ้นปี)")),
+                        DropdownMenuItem<PostingPeriod>(
+                            value: null, child: Text(isEnglish ? 'All periods (Year-end)' : 'ทุกงวด (สิ้นปี)')),
                         ..._periods.skip(1).map((p) => DropdownMenuItem(
                             value: p,
                             child: Text(
                                 "${p.periodNumber} - ${p.periodName}"))),
                       ],
-                      decoration: const InputDecoration(
-                          labelText: 'งวดเดือน',
-                          border: OutlineInputBorder()),
+                      decoration: InputDecoration(
+                          labelText: isEnglish ? 'Period' : 'งวดเดือน',
+                          border: const OutlineInputBorder()),
                       onChanged: (val) =>
                           setState(() => _selectedPeriod = val),
                     ),
@@ -714,11 +724,11 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                       DropdownButtonFormField<int?>(
                         isExpanded: true,
                         value: _selectedBranchId,
-                        decoration: const InputDecoration(
-                            labelText: 'สาขา',
-                            border: OutlineInputBorder()),
+                        decoration: InputDecoration(
+                            labelText: isEnglish ? 'Branch' : 'สาขา',
+                            border: const OutlineInputBorder()),
                         items: [
-                          const DropdownMenuItem<int?>(value: null, child: Text('— ทุกสาขา —')),
+                          DropdownMenuItem<int?>(value: null, child: Text(isEnglish ? '— All branches —' : '— ทุกสาขา —')),
                           ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
                               value: b.branchId,
                               child: Text('${b.branchCode}  ${b.branchNameThai}',
@@ -729,11 +739,9 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                     ],
                     const SizedBox(height: 16),
                     const Divider(),
-                    // Switch: ขึ้นหน้าใหม่ทุกหมวด
                     SwitchListTile(
-                      title: const Text('ขึ้นหน้าใหม่ทุกหมวดบัญชี'),
-                      subtitle:
-                          const Text('แยกสินทรัพย์/หนี้สิน/ทุนคนละหน้า'),
+                      title: Text(isEnglish ? 'Page break per account type' : 'ขึ้นหน้าใหม่ทุกหมวดบัญชี'),
+                      subtitle: Text(isEnglish ? 'Asset / Liability / Equity on separate pages' : 'แยกสินทรัพย์/หนี้สิน/ทุนคนละหน้า'),
                       value: _pageBreakPerType,
                       onChanged: (v) =>
                           setState(() => _pageBreakPerType = v),
@@ -745,7 +753,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                       height: 50,
                       child: ElevatedButton.icon(
                         icon: const Icon(Icons.picture_as_pdf),
-                        label: const Text('ประมวลผลรายงาน'),
+                        label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.deepOrange[900],
                           foregroundColor: Colors.white,
@@ -789,8 +797,8 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _reportData.isEmpty
-                      ? const Center(
-                          child: Text("กรุณาเลือกเงื่อนไขและกดประมวลผล"))
+                      ? Center(
+                          child: Text(isEnglish ? 'Select filter conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                       : PdfPreview(
                           build: (format) => _generatePdf(format),
                           initialPageFormat: PdfPageFormat.a4,

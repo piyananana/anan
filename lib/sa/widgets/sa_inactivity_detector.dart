@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../services/sa_auth_service.dart';
 import '../services/sa_inactivity_service.dart';
+import '../services/sa_language_provider.dart';
 import '../screens/sa_login_screen.dart';
 
 class InactivityDetector extends StatefulWidget {
@@ -56,13 +57,16 @@ class _InactivityDetectorState extends State<InactivityDetector> {
   Future<void> _handleSessionReplaced() async {
     if (!mounted) return;
     _svc.stop();
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final auth = Provider.of<AuthService>(context, listen: false);
     await auth.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => const LoginScreen(
-          logoutMessage: 'บัญชีนี้ถูก Login จากเครื่องอื่น คุณถูก Logout อัตโนมัติ',
+        builder: (_) => LoginScreen(
+          logoutMessage: isEnglish
+              ? 'This account was logged in from another device. You have been logged out automatically.'
+              : 'บัญชีนี้ถูก Login จากเครื่องอื่น คุณถูก Logout อัตโนมัติ',
         ),
       ),
       (_) => false,
@@ -89,13 +93,16 @@ class _InactivityDetectorState extends State<InactivityDetector> {
   Future<void> _handleTimeout() async {
     if (!mounted) return;
     _svc.stop();
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final auth = Provider.of<AuthService>(context, listen: false);
     await auth.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => const LoginScreen(
-          logoutMessage: 'ออกจากระบบอัตโนมัติ เนื่องจากไม่มีการใช้งานในเวลาที่กำหนด',
+        builder: (_) => LoginScreen(
+          logoutMessage: isEnglish
+              ? 'Automatically logged out due to inactivity.'
+              : 'ออกจากระบบอัตโนมัติ เนื่องจากไม่มีการใช้งานในเวลาที่กำหนด',
         ),
       ),
       (_) => false,
@@ -162,18 +169,19 @@ class _InactivityWarningDialogState extends State<_InactivityWarningDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return AlertDialog(
-      title: const Row(children: [
-        Icon(Icons.timer_off_outlined, color: Colors.orange),
-        SizedBox(width: 8),
-        Flexible(child: Text('การเชื่อมต่อกำลังจะหมดอายุ')),
+      title: Row(children: [
+        const Icon(Icons.timer_off_outlined, color: Colors.orange),
+        const SizedBox(width: 8),
+        Flexible(child: Text(isEnglish ? 'Session About to Expire' : 'การเชื่อมต่อกำลังจะหมดอายุ')),
       ]),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('ไม่มีการใช้งานเป็นเวลานาน'),
+          Text(isEnglish ? 'No activity detected for a while' : 'ไม่มีการใช้งานเป็นเวลานาน'),
           const SizedBox(height: 4),
-          Text('ออกจากระบบอัตโนมัติใน',
+          Text(isEnglish ? 'You will be logged out automatically in' : 'ออกจากระบบอัตโนมัติใน',
               style: TextStyle(color: Colors.grey[600])),
           const SizedBox(height: 12),
           Text(
@@ -193,7 +201,7 @@ class _InactivityWarningDialogState extends State<_InactivityWarningDialog> {
             widget.onLogout();
             Navigator.of(context).pop();
           },
-          child: const Text('ออกจากระบบ'),
+          child: Text(isEnglish ? 'Log Out' : 'ออกจากระบบ'),
         ),
         ElevatedButton(
           onPressed: () {
@@ -202,7 +210,7 @@ class _InactivityWarningDialogState extends State<_InactivityWarningDialog> {
             widget.onContinue();
             Navigator.of(context).pop();
           },
-          child: const Text('ใช้งานต่อ'),
+          child: Text(isEnglish ? 'Stay Logged In' : 'ใช้งานต่อ'),
         ),
       ],
     );

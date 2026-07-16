@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../models/cd_business_type.dart';
 import '../services/cd_business_type_service.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 
 class BusinessTypeListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -88,7 +87,6 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
 
   List<BusinessType> _lists = [];
   bool _isLoading = false;
-  String _error = '';
 
   List<BusinessType> _filterAndSort() {
     List<BusinessType> display = List.from(_lists);
@@ -121,7 +119,6 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
   Future<void> _fetchLists() async {
     setState(() {
       _isLoading = true;
-      _error = '';
     });
     try {
       final service = Provider.of<BusinessTypeService>(context, listen: false);
@@ -132,12 +129,12 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
       });
     } catch (e) {
       setState(() {
-        _error = 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
         _isLoading = false;
       });
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_error)),
+          SnackBar(content: Text(isEnglish ? 'Cannot load data: ${e.toString()}' : 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}')),
         );
       }
     }
@@ -160,7 +157,7 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
   @override
   bool get wantKeepAlive => true;
 
-  Widget _buildListHeader() {
+  Widget _buildListHeader(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
@@ -168,29 +165,31 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
           if (widget.enableAddButton)
             IconButton(
               icon: const Icon(Icons.add),
-              tooltip: 'เพิ่มข้อมูลใหม่',
+              tooltip: isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่',
               onPressed: widget.onAdd,
             ),
           if (widget.enableSortButton)
             PopupMenuButton<String>(
               icon: const Icon(Icons.sort),
-              tooltip: 'จัดเรียง',
+              tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
               onSelected: (value) => setState(() => _sortBy = value),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
-                PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
-                PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (ก-ฮ)')),
-                PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (ฮ-ก)')),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'code_asc', child: Text(isEnglish ? 'Code (A→Z)' : 'รหัส (น้อยไปมาก)')),
+                PopupMenuItem(value: 'code_desc', child: Text(isEnglish ? 'Code (Z→A)' : 'รหัส (มากไปน้อย)')),
+                PopupMenuItem(value: 'name_asc', child: Text(isEnglish ? 'Name (A→Z)' : 'ชื่อ (ก-ฮ)')),
+                PopupMenuItem(value: 'name_desc', child: Text(isEnglish ? 'Name (Z→A)' : 'ชื่อ (ฮ-ก)')),
               ],
             ),
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา (รหัส / ชื่อประเภทธุรกิจ)',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: isEnglish
+                    ? 'Search (Code / Business Type Name)'
+                    : 'ค้นหา (รหัส / ชื่อประเภทธุรกิจ)',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (value) => setState(() => _searchQuery = value),
             ),
@@ -203,14 +202,17 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final displayList = _filterAndSort();
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${_lists.length} แถว'
-        : 'พบ ${displayList.length} จาก ${_lists.length} แถว';
+        ? (isEnglish ? 'Total ${_lists.length} rows' : 'ทั้งหมด ${_lists.length} แถว')
+        : (isEnglish
+            ? 'Found ${displayList.length} of ${_lists.length} rows'
+            : 'พบ ${displayList.length} จาก ${_lists.length} แถว');
 
     return Column(
       children: [
-        _buildListHeader(),
+        _buildListHeader(isEnglish),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           child: Align(
@@ -223,36 +225,46 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : displayList.isEmpty
-                  ? const Center(child: Text('ไม่พบข้อมูลประเภทธุรกิจ'))
+                  ? Center(child: Text(isEnglish
+                      ? 'No business types found'
+                      : 'ไม่พบข้อมูลประเภทธุรกิจ'))
                   : ListView.builder(
                       itemCount: displayList.length,
                       itemBuilder: (context, index) {
                         final item = displayList[index];
+                        final titleName = isEnglish && item.businessTypeNameEng.isNotEmpty
+                            ? item.businessTypeNameEng
+                            : item.businessTypeNameThai;
+                        final subtitleName = isEnglish
+                            ? item.businessTypeNameThai
+                            : (item.businessTypeNameEng.isNotEmpty
+                                ? item.businessTypeNameEng
+                                : null);
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8.0, vertical: 4.0),
                           child: Stack(children: [
                           ListTile(
                             title: Text(
-                              '${item.businessTypeCode} — ${item.businessTypeNameThai}',
+                              '${item.businessTypeCode} — $titleName',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: item.isActive ? null : Colors.grey,
                               ),
                             ),
-                            subtitle: item.businessTypeNameEng.isNotEmpty
-                                ? Text(item.businessTypeNameEng)
+                            subtitle: subtitleName != null && subtitleName.isNotEmpty
+                                ? Text(subtitleName)
                                 : null,
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (!item.isActive)
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 4),
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 4),
                                     child: Chip(
-                                      label: Text('หยุดใช้',
-                                          style: TextStyle(fontSize: 11)),
-                                      backgroundColor: Color(0xFFEEEEEE),
+                                      label: Text(isEnglish ? 'Inactive' : 'หยุดใช้',
+                                          style: const TextStyle(fontSize: 11)),
+                                      backgroundColor: const Color(0xFFEEEEEE),
                                     ),
                                   ),
                                 if (widget.enableViewButton)

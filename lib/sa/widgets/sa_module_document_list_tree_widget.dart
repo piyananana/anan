@@ -194,7 +194,7 @@ class ModuleDocumentListTreeWidgetState extends State<ModuleDocumentListTreeWidg
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${item.docCode} ${item.docNameThai}',
+                    '${item.docCode} ${isEnglish && item.docNameEng.isNotEmpty ? item.docNameEng : item.docNameThai}',
                     style: const TextStyle(fontSize: 16),
                     overflow: TextOverflow.ellipsis,
                   ),

@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../models/cd_sales_territory.dart';
 import '../services/cd_sales_territory_service.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 
 class SalesTerritoryListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -119,8 +118,9 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('โหลดข้อมูลล้มเหลว: $e')),
+          SnackBar(content: Text(isEnglish ? 'Cannot load data: $e' : 'โหลดข้อมูลล้มเหลว: $e')),
         );
       }
     }
@@ -340,17 +340,17 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
               if (widget.enableAddButton)
                 IconButton(
                   icon: const Icon(Icons.add),
-                  tooltip: 'เพิ่มเขตหลักใหม่',
+                  tooltip: isEnglish ? 'Add New Root Territory' : 'เพิ่มเขตหลักใหม่',
                   onPressed: widget.onAdd,
                 ),
               Expanded(
                 child: TextField(
                   controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา (รหัส / ชื่อเขต)',
-                    prefixIcon: Icon(Icons.search),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search (Code / Territory Name)' : 'ค้นหา (รหัส / ชื่อเขต)',
+                    prefixIcon: const Icon(Icons.search),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                   onChanged: (v) => setState(() => _searchQuery = v),
@@ -365,8 +365,10 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
             alignment: Alignment.centerLeft,
             child: Text(
               _searchQuery.isEmpty
-                  ? 'ทั้งหมด ${_list.length} แถว'
-                  : 'พบ ${displayList.length} จาก ${_list.length} แถว',
+                  ? (isEnglish ? 'Total ${_list.length} rows' : 'ทั้งหมด ${_list.length} แถว')
+                  : (isEnglish
+                      ? 'Found ${displayList.length} of ${_list.length} rows'
+                      : 'พบ ${displayList.length} จาก ${_list.length} แถว'),
               style: const TextStyle(fontSize: 12, color: Colors.black87),
             ),
           ),
@@ -376,7 +378,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : topLevel.isEmpty
-                  ? const Center(child: Text('ไม่พบข้อมูลเขตการขาย'))
+                  ? Center(child: Text(isEnglish ? 'No sales territories found' : 'ไม่พบข้อมูลเขตการขาย'))
                   : ListView.builder(
                       itemCount: topLevel.length,
                       itemBuilder: (ctx, i) =>

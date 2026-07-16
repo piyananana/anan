@@ -45,6 +45,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
 
   bool _isLoading = false;
   bool _isImporting = false;
+  bool _isEnglish = false;
 
   final _previewScrollCtrl = ScrollController();
 
@@ -143,11 +144,13 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
           _validatedData = List<Map<String, dynamic>>.from(data['data'] ?? []);
         });
       } else {
+        final isEnglish = _isEnglish;
         final body = jsonDecode(response.body);
-        _showSnack(body['message'] ?? 'เกิดข้อผิดพลาด', isError: true);
+        _showSnack(body['message'] ?? (isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      final isEnglish = _isEnglish;
+      _showSnack(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e', isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -157,13 +160,16 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
 
   Future<void> _confirmImport() async {
     if (_validatedData.isEmpty) return;
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = _isEnglish;
+    final l = AppL10n(isEnglish);
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการนำเข้า'),
-        content: Text('ต้องการนำเข้าผังบัญชี $_validRows รายการใช่หรือไม่?'),
+        title: Text(isEnglish ? 'Confirm Import' : 'ยืนยันการนำเข้า'),
+        content: Text(isEnglish
+            ? 'Do you want to import $_validRows chart of accounts item(s)?'
+            : 'ต้องการนำเข้าผังบัญชี $_validRows รายการใช่หรือไม่?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -198,9 +204,13 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
         final errs = (data['errors'] as List?)?.length ?? 0;
         if (mounted) {
           _showSnack(
-            'นำเข้าสำเร็จ $imported รายการ'
-            '${skipped > 0 ? '  |  ข้ามรหัสซ้ำ $skipped รายการ' : ''}'
-            '${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}',
+            isEnglish
+                ? 'Imported $imported item(s) successfully'
+                    '${skipped > 0 ? '  |  Skipped $skipped duplicate code(s)' : ''}'
+                    '${errs > 0 ? '  |  $errs error(s)' : ''}'
+                : 'นำเข้าสำเร็จ $imported รายการ'
+                    '${skipped > 0 ? '  |  ข้ามรหัสซ้ำ $skipped รายการ' : ''}'
+                    '${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}',
           );
           setState(() {
             _fileName = null;
@@ -212,7 +222,9 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
           widget.onFieldsChanged();
         }
       } else {
-        String errMsg = 'เกิดข้อผิดพลาด (${response.statusCode})';
+        String errMsg = isEnglish
+            ? 'An error occurred (${response.statusCode})'
+            : 'เกิดข้อผิดพลาด (${response.statusCode})';
         try {
           final body = jsonDecode(response.body);
           errMsg = body['message'] ?? errMsg;
@@ -222,7 +234,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
         _showSnack(errMsg, isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
@@ -240,7 +252,8 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF303F9F),
@@ -249,7 +262,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'เริ่มใหม่',
+            tooltip: isEnglish ? 'Start over' : 'เริ่มใหม่',
             onPressed: () => setState(() {
               _fileName = null;
               _fileBytes = null;
@@ -292,8 +305,10 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check_circle_outline),
                   label: Text(_isImporting
-                      ? 'กำลังนำเข้า...'
-                      : 'ยืนยันนำเข้าผังบัญชี $_validRows รายการ'),
+                      ? (_isEnglish ? 'Importing...' : 'กำลังนำเข้า...')
+                      : (_isEnglish
+                          ? 'Confirm import of $_validRows chart of accounts item(s)'
+                          : 'ยืนยันนำเข้าผังบัญชี $_validRows รายการ')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green.shade700,
                     foregroundColor: Colors.white,
@@ -310,6 +325,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
   // ─── Template section ────────────────────────────────────────────────────────
 
   Future<void> _downloadTemplate() async {
+    final isEnglish = _isEnglish;
     try {
       final authService = context.read<AuthService>();
       final headers = await authService.getAuthHeader();
@@ -320,23 +336,31 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
       if (response.statusCode == 200) {
         await downloadFile(response.bodyBytes, 'gl_account_template.xlsx');
       } else {
-        _showSnack('ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})', isError: true);
+        _showSnack(
+            isEnglish
+                ? 'Failed to download template (${response.statusCode})'
+                : 'ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})',
+            isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e', isError: true);
     }
   }
 
   Widget _buildTemplateSection() {
+    final isEnglish = _isEnglish;
     return Card(
       child: ExpansionTile(
         leading: const Icon(Icons.table_chart_outlined, color: Color(0xFF303F9F)),
-        title: const Text('เทมเพลตนำเข้าข้อมูล', style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: const Text('คลิกเพื่อดูรายละเอียดคอลัมน์และรหัสอ้างอิงที่ใช้ได้'),
+        title: Text(isEnglish ? 'Import Template' : 'เทมเพลตนำเข้าข้อมูล',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(isEnglish
+            ? 'Click to view column details and available reference codes'
+            : 'คลิกเพื่อดูรายละเอียดคอลัมน์และรหัสอ้างอิงที่ใช้ได้'),
         trailing: OutlinedButton.icon(
           onPressed: _downloadTemplate,
           icon: const Icon(Icons.download, size: 18),
-          label: const Text('ดาวน์โหลดเทมเพลต'),
+          label: Text(isEnglish ? 'Download Template' : 'ดาวน์โหลดเทมเพลต'),
           style: OutlinedButton.styleFrom(
             foregroundColor: const Color(0xFF303F9F),
             side: const BorderSide(color: Color(0xFF303F9F)),
@@ -344,11 +368,13 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
         ),
         initiallyExpanded: false,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              'เทมเพลตประกอบด้วย sheet "ผังบัญชี" 1 sheet ★ = จำเป็นต้องระบุ',
-              style: TextStyle(color: Colors.red, fontSize: 12),
+              isEnglish
+                  ? 'The template contains 1 sheet "Chart of Accounts" ★ = required'
+                  : 'เทมเพลตประกอบด้วย sheet "ผังบัญชี" 1 sheet ★ = จำเป็นต้องระบุ',
+              style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),
           SingleChildScrollView(
@@ -357,11 +383,11 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
             child: DataTable(
               columnSpacing: 16,
               headingRowColor: WidgetStateProperty.all(const Color(0xFFE8EAF6)),
-              columns: const [
-                DataColumn(label: Text('ชื่อ Header', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('ความหมาย', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('จำเป็น', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('ตัวอย่าง', style: TextStyle(fontWeight: FontWeight.bold))),
+              columns: [
+                DataColumn(label: Text(isEnglish ? 'Header Name' : 'ชื่อ Header', style: const TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text(isEnglish ? 'Meaning' : 'ความหมาย', style: const TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text(isEnglish ? 'Required' : 'จำเป็น', style: const TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(label: Text(isEnglish ? 'Example' : 'ตัวอย่าง', style: const TextStyle(fontWeight: FontWeight.bold))),
               ],
               rows: _templateColumns
                   .map((col) => DataRow(cells: [
@@ -382,11 +408,16 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('รหัสอ้างอิงที่ใช้ได้', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(isEnglish ? 'Available Reference Codes' : 'รหัสอ้างอิงที่ใช้ได้',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
-              _buildReferenceWrap('ประเภทบัญชี (account_type)', _accountTypes),
+              _buildReferenceWrap(
+                  isEnglish ? 'Account Type (account_type)' : 'ประเภทบัญชี (account_type)',
+                  _accountTypes),
               const SizedBox(height: 8),
-              _buildReferenceWrap('รหัสมิติ (dim_required_types)', _dimensionTypes,
+              _buildReferenceWrap(
+                  isEnglish ? 'Dimension Code (dim_required_types)' : 'รหัสมิติ (dim_required_types)',
+                  _dimensionTypes,
                   codeKey: 'type_code', labelKey: 'name_thai'),
             ]),
           ),
@@ -421,13 +452,14 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
   // ─── File picker section ────────────────────────────────────────────────────
 
   Widget _buildFilePickerSection() {
+    final isEnglish = _isEnglish;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('เลือกไฟล์นำเข้า', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(isEnglish ? 'Select Import File' : 'เลือกไฟล์นำเข้า', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 4),
-          const Text('รองรับไฟล์ .xlsx, .xls, .csv', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Text(isEnglish ? 'Supports .xlsx, .xls, .csv files' : 'รองรับไฟล์ .xlsx, .xls, .csv', style: const TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
@@ -439,7 +471,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
                   color: Colors.grey.shade50,
                 ),
                 child: Text(
-                  _fileName ?? 'ยังไม่ได้เลือกไฟล์',
+                  _fileName ?? (isEnglish ? 'No file selected yet' : 'ยังไม่ได้เลือกไฟล์'),
                   style: TextStyle(color: _fileName != null ? Colors.black87 : Colors.grey),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -449,7 +481,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
             OutlinedButton.icon(
               onPressed: _pickFile,
               icon: const Icon(Icons.folder_open),
-              label: const Text('เลือกไฟล์'),
+              label: Text(isEnglish ? 'Select File' : 'เลือกไฟล์'),
             ),
             const SizedBox(width: 8),
             ElevatedButton.icon(
@@ -460,7 +492,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.fact_check_outlined),
-              label: const Text('ตรวจสอบ'),
+              label: Text(isEnglish ? 'Validate' : 'ตรวจสอบ'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF303F9F),
                 foregroundColor: Colors.white,
@@ -475,6 +507,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
   // ─── Validation result section ──────────────────────────────────────────────
 
   Widget _buildResultSection() {
+    final isEnglish = _isEnglish;
     final allOk = _errorRows == 0;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       // Summary
@@ -492,8 +525,10 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
                 allOk
-                    ? 'ข้อมูลถูกต้องทั้งหมด พร้อมนำเข้า'
-                    : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่',
+                    ? (isEnglish ? 'All data is valid, ready to import' : 'ข้อมูลถูกต้องทั้งหมด พร้อมนำเข้า')
+                    : (isEnglish
+                        ? 'Invalid data found, please fix the file and validate again'
+                        : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่'),
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
@@ -501,9 +536,11 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'ทั้งหมด: $_totalRows รายการ'
-                '   ถูกต้อง: $_validRows รายการ'
-                '   ไม่ถูกต้อง: $_errorRows รายการ',
+                isEnglish
+                    ? 'Total: $_totalRows item(s)   Valid: $_validRows item(s)   Invalid: $_errorRows item(s)'
+                    : 'ทั้งหมด: $_totalRows รายการ'
+                        '   ถูกต้อง: $_validRows รายการ'
+                        '   ไม่ถูกต้อง: $_errorRows รายการ',
                 style: const TextStyle(fontSize: 13),
               ),
             ]),
@@ -514,19 +551,19 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
       // Error table
       if (_errors.isNotEmpty) ...[
         const SizedBox(height: 16),
-        const Text('รายการที่ไม่ถูกต้อง',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
+        Text(isEnglish ? 'Invalid Items' : 'รายการที่ไม่ถูกต้อง',
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
         const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
             columnSpacing: 16,
             headingRowColor: WidgetStateProperty.all(Colors.red.shade50),
-            columns: const [
-              DataColumn(label: Text('แถวที่')),
-              DataColumn(label: Text('รหัสบัญชี')),
-              DataColumn(label: Text('คอลัมน์')),
-              DataColumn(label: Text('ข้อผิดพลาด')),
+            columns: [
+              DataColumn(label: Text(isEnglish ? 'Row' : 'แถวที่')),
+              DataColumn(label: Text(isEnglish ? 'Account Code' : 'รหัสบัญชี')),
+              DataColumn(label: Text(isEnglish ? 'Column' : 'คอลัมน์')),
+              DataColumn(label: Text(isEnglish ? 'Error' : 'ข้อผิดพลาด')),
             ],
             rows: [
               for (final e in _errors)
@@ -550,7 +587,9 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
       if (_validRows > 0) ...[
         const SizedBox(height: 16),
         Text(
-          'ตัวอย่างข้อมูลที่จะนำเข้า${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
+          isEnglish
+              ? 'Preview of data to be imported${_validRows > 50 ? ' (showing 50 of $_validRows item(s))' : ' ($_validRows item(s))'}'
+              : 'ตัวอย่างข้อมูลที่จะนำเข้า${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         const SizedBox(height: 8),
@@ -563,31 +602,31 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
             child: DataTable(
               columnSpacing: 12,
               headingRowColor: WidgetStateProperty.all(const Color(0xFFE8EAF6)),
-              columns: const [
-                DataColumn(label: Text('รหัสบัญชี')),
-                DataColumn(label: Text('รหัสบัญชีแม่')),
-                DataColumn(label: Text('ชื่อบัญชี')),
-                DataColumn(label: Text('ประเภทบัญชี')),
-                DataColumn(label: Text('ยอดดุล')),
-                DataColumn(label: Text('หัวบัญชี')),
-                DataColumn(label: Text('คุมยอด')),
-                DataColumn(label: Text('สกุลเงิน')),
-                DataColumn(label: Text('มิติบังคับ')),
+              columns: [
+                DataColumn(label: Text(isEnglish ? 'Account Code' : 'รหัสบัญชี')),
+                DataColumn(label: Text(isEnglish ? 'Parent Account Code' : 'รหัสบัญชีแม่')),
+                DataColumn(label: Text(isEnglish ? 'Account Name' : 'ชื่อบัญชี')),
+                DataColumn(label: Text(isEnglish ? 'Account Type' : 'ประเภทบัญชี')),
+                DataColumn(label: Text(isEnglish ? 'Normal Balance' : 'ยอดดุล')),
+                DataColumn(label: Text(isEnglish ? 'Header Account' : 'หัวบัญชี')),
+                DataColumn(label: Text(isEnglish ? 'Control Account' : 'คุมยอด')),
+                DataColumn(label: Text(isEnglish ? 'Currency' : 'สกุลเงิน')),
+                DataColumn(label: Text(isEnglish ? 'Required Dimensions' : 'มิติบังคับ')),
               ],
               rows: _validatedData
                   .take(50)
                   .map((r) => DataRow(cells: [
                         DataCell(Text(r['account_code']?.toString() ?? '')),
-                        DataCell(Text(_formatCellValue(r['parent_account_code']))),
+                        DataCell(Text(_formatCellValue(r['parent_account_code'], isEnglish))),
                         DataCell(ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 260),
-                          child: Text(_buildAccountName(r), overflow: TextOverflow.ellipsis),
+                          child: Text(_buildAccountName(r, isEnglish), overflow: TextOverflow.ellipsis),
                         )),
-                        DataCell(Text(accountTypeOptions[r['account_type']] ?? _formatCellValue(r['account_type']))),
-                        DataCell(Text(_formatCellValue(r['normal_balance']))),
-                        DataCell(Text(_formatCellValue(r['is_normal_account']))),
-                        DataCell(Text(_formatCellValue(r['is_control_account']))),
-                        DataCell(Text(_formatCellValue(r['currency_code']))),
+                        DataCell(Text(accountTypeLabel(r['account_type']?.toString() ?? '', isEnglish))),
+                        DataCell(Text(_formatCellValue(r['normal_balance'], isEnglish))),
+                        DataCell(Text(_formatCellValue(r['is_normal_account'], isEnglish))),
+                        DataCell(Text(_formatCellValue(r['is_control_account'], isEnglish))),
+                        DataCell(Text(_formatCellValue(r['currency_code'], isEnglish))),
                         DataCell(Text(_buildDimRequiredText(r))),
                       ]))
                   .toList(),
@@ -598,9 +637,12 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
     ]);
   }
 
-  String _buildAccountName(Map<String, dynamic> r) {
+  String _buildAccountName(Map<String, dynamic> r, bool isEnglish) {
     final nameThai = r['account_name_thai']?.toString() ?? '';
     final nameEng = r['account_name_eng']?.toString() ?? '';
+    if (isEnglish && nameEng.trim().isNotEmpty) {
+      return nameThai.trim().isNotEmpty ? '$nameEng - $nameThai' : nameEng;
+    }
     return nameEng.trim().isNotEmpty ? '$nameThai - $nameEng' : nameThai;
   }
 
@@ -610,9 +652,9 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
     return dimRules.map((d) => (d as Map<String, dynamic>)['type_code']?.toString() ?? '').join(', ');
   }
 
-  String _formatCellValue(dynamic val) {
+  String _formatCellValue(dynamic val, bool isEnglish) {
     if (val == null) return '';
-    if (val is bool) return val ? 'ใช่' : 'ไม่ใช่';
+    if (val is bool) return val ? (isEnglish ? 'Yes' : 'ใช่') : (isEnglish ? 'No' : 'ไม่ใช่');
     if (val is List) return val.join(', ');
     return val.toString();
   }

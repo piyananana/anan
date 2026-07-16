@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/ar_transaction.dart';
 import '../models/ar_customer.dart';
 import '../services/ar_transaction_service.dart';
@@ -61,6 +63,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   final GlDimensionService _dimService = GlDimensionService();
 
   bool _isLoading = false;
+  bool _isEnglish = false;
 
   // GL Dimensions
   List<GlDimensionType> _dimTypes = [];
@@ -1010,7 +1013,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     if (picked == null) return;
     if (!isDueDate && !_validatePeriod(picked)) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('วันที่เอกสารต้องอยู่ในงวดบัญชีที่เปิดใช้งาน'), backgroundColor: Colors.red),
+        SnackBar(content: Text(_isEnglish ? 'Document date must be within an open accounting period' : 'วันที่เอกสารต้องอยู่ในงวดบัญชีที่เปิดใช้งาน'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -1093,16 +1096,16 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   Future<void> _save(String action) async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedDocType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกประเภทเอกสาร')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Please select a document type' : 'กรุณาเลือกประเภทเอกสาร')));
       return;
     }
     if (_selectedCustomer == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกลูกค้า')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Please select a customer' : 'กรุณาเลือกลูกค้า')));
       return;
     }
     // BC ไม่ลงบัญชี จึงไม่ต้องตรวจสอบงวดบัญชี
     if (action == 'Post' && !_isBillCollection && !_validatePeriod(_docDate)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('วันที่เอกสารไม่อยู่ในงวดบัญชีที่เปิด')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Document date is not within an open accounting period' : 'วันที่เอกสารไม่อยู่ในงวดบัญชีที่เปิด')));
       return;
     }
 
@@ -1111,10 +1114,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       ..._applyRows, ..._advanceRows, ..._cnRows, ..._advanceRefundRows,
     ].any((a) => !_isInvoiceDateValid(a.appliedToDocDate));
     if (hasInvalidRef) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('มีเอกสารอ้างอิงที่มีวันที่หลังวันที่เอกสาร กรุณาตรวจสอบรายการที่ไฮไลท์สีแดง'),
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_isEnglish
+            ? 'There are referenced documents dated after the document date. Please check the rows highlighted in red.'
+            : 'มีเอกสารอ้างอิงที่มีวันที่หลังวันที่เอกสาร กรุณาตรวจสอบรายการที่ไฮไลท์สีแดง'),
         backgroundColor: Colors.red,
-        duration: Duration(seconds: 5),
+        duration: const Duration(seconds: 5),
       ));
       return;
     }
@@ -1264,14 +1269,18 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(action == 'Post' ? 'บันทึกและ Post เรียบร้อย' : 'บันทึก Draft เรียบร้อย')),
+          SnackBar(content: Text(action == 'Post'
+              ? (_isEnglish ? 'Saved and posted successfully' : 'บันทึกและ Post เรียบร้อย')
+              : (_isEnglish ? 'Draft saved successfully' : 'บันทึก Draft เรียบร้อย'))),
         );
         widget.onSaveSuccess();
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('บันทึกไม่สำเร็จ: ${e.toString().replaceFirst('Exception: ', '')}'),
+          content: Text(_isEnglish
+              ? 'Save failed: ${e.toString().replaceFirst('Exception: ', '')}'
+              : 'บันทึกไม่สำเร็จ: ${e.toString().replaceFirst('Exception: ', '')}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -1281,6 +1290,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   }
 
   Future<void> _void() async {
+    final isEnglish = _isEnglish;
     final reasonCtrl = TextEditingController();
     final voidReason = await showDialog<String>(
       context: context,
@@ -1291,7 +1301,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             title: Row(children: [
               Icon(Icons.cancel_outlined, color: Colors.red[700], size: 20),
               const SizedBox(width: 8),
-              const Text('ยืนยันการยกเลิกเอกสาร'),
+              Text(isEnglish ? 'Confirm Void Document' : 'ยืนยันการยกเลิกเอกสาร'),
             ]),
             content: SizedBox(
               width: 400,
@@ -1300,8 +1310,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red[200]!)),
                   child: Text(_isBillCollection
-                      ? 'เอกสารที่ยกเลิกแล้วไม่สามารถกู้คืนได้\nยอดวางบิลจะถูกเคลียร์ออก'
-                      : 'เอกสารที่ยกเลิกแล้วไม่สามารถกู้คืนได้\nระบบจะสร้าง Reversing GL Entry เพื่อยกเลิกผลกระทบทางบัญชี',
+                      ? (isEnglish
+                          ? 'A voided document cannot be restored.\nThe billed amount will be cleared.'
+                          : 'เอกสารที่ยกเลิกแล้วไม่สามารถกู้คืนได้\nยอดวางบิลจะถูกเคลียร์ออก')
+                      : (isEnglish
+                          ? 'A voided document cannot be restored.\nThe system will create a Reversing GL Entry to reverse the accounting impact.'
+                          : 'เอกสารที่ยกเลิกแล้วไม่สามารถกู้คืนได้\nระบบจะสร้าง Reversing GL Entry เพื่อยกเลิกผลกระทบทางบัญชี'),
                       style: const TextStyle(fontSize: 13)),
                 ),
                 const SizedBox(height: 16),
@@ -1309,8 +1323,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   controller: reasonCtrl,
                   maxLines: 2,
                   decoration: InputDecoration(
-                    labelText: 'เหตุผลการยกเลิก *',
-                    hintText: 'เช่น ยอดเงินผิด, ลูกหนี้ผิดราย',
+                    labelText: isEnglish ? 'Void Reason *' : 'เหตุผลการยกเลิก *',
+                    hintText: isEnglish ? 'e.g. incorrect amount, wrong customer' : 'เช่น ยอดเงินผิด, ลูกหนี้ผิดราย',
                     border: const OutlineInputBorder(),
                     errorText: errorText,
                   ),
@@ -1319,17 +1333,17 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ]),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ปิด')),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isEnglish ? 'Close' : 'ปิด')),
               ElevatedButton.icon(
                 onPressed: () {
                   if (reasonCtrl.text.trim().isEmpty) {
-                    setStateDialog(() => errorText = 'กรุณาระบุเหตุผล');
+                    setStateDialog(() => errorText = isEnglish ? 'Please specify a reason' : 'กรุณาระบุเหตุผล');
                     return;
                   }
                   Navigator.pop(ctx, reasonCtrl.text.trim());
                 },
                 icon: const Icon(Icons.check, size: 16),
-                label: const Text('ยืนยัน Void'),
+                label: Text(isEnglish ? 'Confirm Void' : 'ยืนยัน Void'),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
               ),
             ],
@@ -1342,7 +1356,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     try {
       await _service.voidTransaction(_transactionId, voidReason: voidReason);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ยกเลิกเอกสารเรียบร้อย')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Document voided successfully' : 'ยกเลิกเอกสารเรียบร้อย')));
         widget.onSaveSuccess();
       }
     } catch (e) {
@@ -1357,6 +1371,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   // ── Bill Collection lookup (ใช้ใน Receipt เท่านั้น) ─────────────────────
   // ดึงข้อมูลจากใบวางบิลมา pre-fill apply rows ของ Receipt
   Future<void> _lookupBillCollectionFromRefNo() async {
+    final isEnglish = _isEnglish;
     final docNo = _refNoCtrl.text.trim();
     if (docNo.isEmpty) return;
     setState(() => _isLoading = true);
@@ -1364,12 +1379,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       final bc = await _service.fetchBillCollectionByDocNo(docNo);
       if (bc == null) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('ไม่พบใบวางบิล: $docNo'), backgroundColor: Colors.orange));
+            SnackBar(content: Text(isEnglish ? 'Bill collection not found: $docNo' : 'ไม่พบใบวางบิล: $docNo'), backgroundColor: Colors.orange));
         return;
       }
       if (_selectedCustomer?.id != null && bc.header.customerId != _selectedCustomer!.id) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ใบวางบิลไม่ตรงกับลูกค้าที่เลือก'), backgroundColor: Colors.red));
+            SnackBar(content: Text(isEnglish ? 'The bill collection does not match the selected customer' : 'ใบวางบิลไม่ตรงกับลูกค้าที่เลือก'), backgroundColor: Colors.red));
         return;
       }
       // ถ้ายังไม่ได้เลือกลูกค้า ให้ set จาก BC
@@ -1449,7 +1464,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       }
       _recalcTotals();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ดึงข้อมูลวางบิล ${bc.header.docNo} เรียบร้อย')));
+          SnackBar(content: Text(isEnglish ? 'Fetched bill collection ${bc.header.docNo} successfully' : 'ดึงข้อมูลวางบิล ${bc.header.docNo} เรียบร้อย')));
     } on BcAlreadyPaidException catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -1457,15 +1472,17 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           context: context,
           builder: (ctx) => AlertDialog(
             icon: const Icon(Icons.error_outline, color: Colors.red, size: 40),
-            title: const Text('ใบวางบิลถูกชำระแล้ว'),
+            title: Text(isEnglish ? 'Bill Collection Already Paid' : 'ใบวางบิลถูกชำระแล้ว'),
             content: Text(
-              'ใบวางบิล "$docNo" ถูกนำไปชำระเรียบร้อยแล้ว\n'
-              'โดยเลขที่ใบรับชำระ: ${e.receiptDocNo}',
+              isEnglish
+                  ? 'Bill collection "$docNo" has already been paid.\nReceipt No.: ${e.receiptDocNo}'
+                  : 'ใบวางบิล "$docNo" ถูกนำไปชำระเรียบร้อยแล้ว\n'
+                    'โดยเลขที่ใบรับชำระ: ${e.receiptDocNo}',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('ปิด'),
+                child: Text(isEnglish ? 'Close' : 'ปิด'),
               ),
             ],
           ),
@@ -1524,20 +1541,21 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
   // ---- Show branch picker dialog ----
   Future<void> _showBranchDialog() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     final branches = _authService.allowedBranches;
     if (branches.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ยังไม่ได้กำหนดสาขาที่มีสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ')),
+        SnackBar(content: Text(isEnglish ? 'No authorized branches configured. Please contact the administrator.' : 'ยังไม่ได้กำหนดสาขาที่มีสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ')),
       );
       return;
     }
     final result = await showDialog<UserBranch>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(children: [
-          Icon(Icons.business, size: 20, color: Colors.teal),
-          SizedBox(width: 8),
-          Text('เลือกสาขา'),
+        title: Row(children: [
+          const Icon(Icons.business, size: 20, color: Colors.teal),
+          const SizedBox(width: 8),
+          Text(isEnglish ? 'Select Branch' : 'เลือกสาขา'),
         ]),
         content: SizedBox(
           width: 360,
@@ -1557,7 +1575,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ปิด')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Close' : 'ปิด')),
         ],
       ),
     );
@@ -1566,6 +1584,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
   // ---- Show customer picker dialog ----
   Future<ArCustomer?> _showCustomerPicker() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     final searchCtrl = TextEditingController();
     List<ArCustomer> filtered = List.from(_customers);
 
@@ -1578,7 +1597,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ? _customers
               : _customers.where((c) =>
                   c.customerCode.toUpperCase().contains(q) ||
-                  c.customerNameTh.toUpperCase().contains(q)).toList());
+                  c.customerNameTh.toUpperCase().contains(q) ||
+                  (c.customerNameEn ?? '').toUpperCase().contains(q)).toList());
         }
         return Dialog(
           child: SizedBox(
@@ -1588,7 +1608,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 padding: const EdgeInsets.all(12),
                 child: TextField(
                   controller: searchCtrl,
-                  decoration: const InputDecoration(labelText: 'ค้นหาลูกค้า', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: isEnglish ? 'Search Customer' : 'ค้นหาลูกค้า', prefixIcon: const Icon(Icons.search), border: const OutlineInputBorder()),
                   onChanged: (_) => doFilter(),
                   autofocus: true,
                 ),
@@ -1597,15 +1617,16 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 itemCount: filtered.length,
                 itemBuilder: (_, i) {
                   final c = filtered[i];
+                  final displayName = isEnglish && (c.customerNameEn ?? '').isNotEmpty ? c.customerNameEn! : c.customerNameTh;
                   return ListTile(
                     dense: true,
-                    title: Text('${c.customerCode} - ${c.customerNameTh}', style: const TextStyle(fontSize: 13)),
-                    subtitle: c.customerNameEn != null ? Text(c.customerNameEn!, style: const TextStyle(fontSize: 11)) : null,
+                    title: Text('${c.customerCode} - $displayName', style: const TextStyle(fontSize: 13)),
+                    subtitle: !isEnglish && c.customerNameEn != null ? Text(c.customerNameEn!, style: const TextStyle(fontSize: 11)) : null,
                     onTap: () => Navigator.pop(ctx, c),
                   );
                 },
               )),
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
             ]),
           ),
         );
@@ -1615,6 +1636,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
   // ---- Show account picker dialog ----
   Future<Account?> _showAccountPicker() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     final searchCtrl = TextEditingController();
     // Only show normal accounts (can receive transactions) that are not control accounts
     final available = _accounts.where((a) => a.isNormalAccount && !a.isControlAccount && a.isActive).toList();
@@ -1629,7 +1651,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ? available
               : available.where((a) =>
                   a.accountCode.toUpperCase().contains(q) ||
-                  a.accountNameThai.toUpperCase().contains(q)).toList());
+                  a.accountNameThai.toUpperCase().contains(q) ||
+                  a.accountNameEng.toUpperCase().contains(q)).toList());
         }
         return Dialog(
           child: SizedBox(
@@ -1639,7 +1662,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 padding: const EdgeInsets.all(12),
                 child: TextField(
                   controller: searchCtrl,
-                  decoration: const InputDecoration(labelText: 'ค้นหาบัญชี', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: isEnglish ? 'Search Account' : 'ค้นหาบัญชี', prefixIcon: const Icon(Icons.search), border: const OutlineInputBorder()),
                   onChanged: (_) => doFilter(),
                   autofocus: true,
                 ),
@@ -1648,14 +1671,15 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 itemCount: filtered.length,
                 itemBuilder: (_, i) {
                   final a = filtered[i];
+                  final displayName = isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
                   return ListTile(
                     dense: true,
-                    title: Text('${a.accountCode} - ${a.accountNameThai}', style: const TextStyle(fontSize: 13)),
+                    title: Text('${a.accountCode} - $displayName', style: const TextStyle(fontSize: 13)),
                     onTap: () => Navigator.pop(ctx, a),
                   );
                 },
               )),
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
             ]),
           ),
         );
@@ -1665,6 +1689,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     return Form(
       key: _formKey,
@@ -1709,6 +1735,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   }
 
   Widget _buildHeaderSection() {
+    final isEnglish = _isEnglish;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1717,7 +1744,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           Row(children: [
             const Icon(Icons.article_outlined, size: 18),
             const SizedBox(width: 6),
-            Text('ข้อมูลหัวเอกสาร', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(isEnglish ? 'Document Header' : 'ข้อมูลหัวเอกสาร', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(width: 4),
             IconButton(
               icon: Icon(_headerExpanded ? Icons.expand_less : Icons.expand_more, size: 18),
@@ -1731,10 +1758,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               child: DropdownButtonFormField<ModuleDocument>(
                 value: _selectedDocType,
                 isExpanded: true,
-                decoration: _fieldDeco('ประเภทเอกสาร *'),
+                decoration: _fieldDeco(isEnglish ? 'Document Type *' : 'ประเภทเอกสาร *'),
                 items: _allowedDocTypes.map((d) => DropdownMenuItem(
                   value: d,
-                  child: Text('${d.docCode} ${d.docNameThai}', overflow: TextOverflow.ellipsis),
+                  child: Text('${d.docCode} ${isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai}', overflow: TextOverflow.ellipsis),
                 )).toList(),
                 onChanged: _isReadOnly ? null : (v) {
                   setState(() {
@@ -1766,7 +1793,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   _recalcTotals();
                   _loadDocSetup();
                 },
-                validator: (v) => v == null ? 'กรุณาเลือก' : null,
+                validator: (v) => v == null ? (isEnglish ? 'Please select' : 'กรุณาเลือก') : null,
               ),
             ),
             const SizedBox(width: 8),
@@ -1776,9 +1803,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 key: ValueKey('ar_docNo_${widget.resetKey}_$_transactionId'),
                 initialValue: _docNo == 'AUTO' ? '' : _docNo,
                 decoration: _fieldDeco(
-                    _selectedDocType?.isAutoNumbering == true ? 'เลขที่อัตโนมัติ' : 'เลขที่เอกสาร',
+                    _selectedDocType?.isAutoNumbering == true
+                        ? (isEnglish ? 'Auto Number' : 'เลขที่อัตโนมัติ')
+                        : (isEnglish ? 'Doc No.' : 'เลขที่เอกสาร'),
                     forcedReadOnly: _selectedDocType?.isAutoNumbering == true).copyWith(
-                  hintText: _selectedDocType?.isAutoNumbering == true ? '(ระบบกำหนดให้อัตโนมัติ)' : 'ระบุเลขที่',
+                  hintText: _selectedDocType?.isAutoNumbering == true
+                      ? (isEnglish ? '(auto-generated)' : '(ระบบกำหนดให้อัตโนมัติ)')
+                      : (isEnglish ? 'Enter doc no.' : 'ระบุเลขที่'),
                 ),
                 readOnly: _isReadOnly || (_selectedDocType?.isAutoNumbering == true),
                 onChanged: (v) => _docNo = v.isEmpty ? 'AUTO' : v,
@@ -1790,7 +1821,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               child: InkWell(
                 onTap: _isReadOnly ? null : () => _selectDate(false),
                 child: InputDecorator(
-                  decoration: _fieldDeco('วันที่เอกสาร *'),
+                  decoration: _fieldDeco(isEnglish ? 'Doc Date *' : 'วันที่เอกสาร *'),
                   child: Row(children: [
                     Expanded(child: Text(_dateFmt.format(_docDate))),
                     if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
@@ -1803,11 +1834,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               flex: 1,
               child: TextFormField(
                 controller: _refNoCtrl,
-                decoration: _fieldDeco('เลขที่อ้างอิง').copyWith(
+                decoration: _fieldDeco(isEnglish ? 'Reference No.' : 'เลขที่อ้างอิง').copyWith(
                   suffixIcon: (_isReceipt && !_isReadOnly)
                       ? IconButton(
                           icon: const Icon(Icons.search, size: 16),
-                          tooltip: 'ดึงข้อมูลจากใบวางบิล',
+                          tooltip: isEnglish ? 'Fetch from bill collection' : 'ดึงข้อมูลจากใบวางบิล',
                           visualDensity: VisualDensity.compact,
                           onPressed: _lookupBillCollectionFromRefNo,
                         )
@@ -1825,7 +1856,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   border: Border.all(color: _status == 'Posted' ? Colors.green : Colors.red),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(_status, style: TextStyle(color: _status == 'Posted' ? Colors.green[800] : Colors.red[800], fontWeight: FontWeight.bold)),
+                child: Text(
+                  isEnglish
+                      ? (_status == 'Posted' ? 'Posted' : _status == 'Void' ? 'Void' : _status)
+                      : (_status == 'Posted' ? 'บันทึกแล้ว' : _status == 'Void' ? 'ยกเลิกแล้ว' : _status),
+                  style: TextStyle(color: _status == 'Posted' ? Colors.green[800] : Colors.red[800], fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ]),
@@ -1838,13 +1874,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               child: InkWell(
                 onTap: _isReadOnly ? null : _showBranchDialog,
                 child: InputDecorator(
-                  decoration: _fieldDeco('สาขา').copyWith(
+                  decoration: _fieldDeco(isEnglish ? 'Branch' : 'สาขา').copyWith(
                     suffixIcon: _isReadOnly ? null : const Icon(Icons.search, size: 16),
                   ),
                   child: Text(
                     _selectedBranch != null
                         ? '${_selectedBranch!.branchCode}  ${_selectedBranch!.branchNameThai}'
-                        : '— ไม่ระบุสาขา —',
+                        : (isEnglish ? '— Not specified —' : '— ไม่ระบุสาขา —'),
                     style: TextStyle(
                         color: _selectedBranch == null ? Colors.grey[500] : null,
                         fontSize: 14),
@@ -1896,13 +1932,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   }
                 },
                 child: InputDecorator(
-                  decoration: _fieldDeco('ลูกค้า *').copyWith(
+                  decoration: _fieldDeco(isEnglish ? 'Customer *' : 'ลูกค้า *').copyWith(
                     suffixIcon: _isReadOnly ? null : const Icon(Icons.search, size: 16),
                   ),
                   child: Text(
                     _selectedCustomer != null
-                        ? '${_selectedCustomer!.customerCode} - ${_selectedCustomer!.customerNameTh}'
-                        : 'คลิกเพื่อเลือกลูกค้า',
+                        ? '${_selectedCustomer!.customerCode} - ${isEnglish && (_selectedCustomer!.customerNameEn ?? '').isNotEmpty ? _selectedCustomer!.customerNameEn! : _selectedCustomer!.customerNameTh}'
+                        : (isEnglish ? 'Click to select customer' : 'คลิกเพื่อเลือกลูกค้า'),
                     style: TextStyle(color: _selectedCustomer == null ? Colors.grey : null),
                   ),
                 ),
@@ -1914,10 +1950,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               child: DropdownButtonFormField<Currency>(
                 value: _selectedCurrency,
                 isExpanded: true,
-                decoration: _fieldDeco('สกุลเงิน'),
+                decoration: _fieldDeco(isEnglish ? 'Currency' : 'สกุลเงิน'),
                 items: _currencies.map((c) => DropdownMenuItem(
                   value: c,
-                  child: Text('${c.currencyCode} - ${c.currencyNameThai}', overflow: TextOverflow.ellipsis),
+                  child: Text('${c.currencyCode} - ${isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai}', overflow: TextOverflow.ellipsis),
                 )).toList(),
                 onChanged: _isReadOnly ? null : (v) => setState(() { _selectedCurrency = v; _exchangeRate = v?.baseRate ?? 1.0; }),
               ),
@@ -1928,7 +1964,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               child: TextFormField(
                 key: ValueKey('ar_rate_${widget.resetKey}_${_transactionId}_${_selectedCurrency?.currencyCode}'),
                 initialValue: _exchangeRate.toStringAsFixed(6),
-                decoration: _fieldDeco('อัตราแลกเปลี่ยน'),
+                decoration: _fieldDeco(isEnglish ? 'Exchange Rate' : 'อัตราแลกเปลี่ยน'),
                 keyboardType: TextInputType.number,
                 readOnly: _isReadOnly,
                 onChanged: (v) => setState(() => _exchangeRate = double.tryParse(v) ?? 1.0),
@@ -1939,7 +1975,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               flex: 3,
               child: TextFormField(
                 controller: _descCtrl,
-                decoration: _fieldDeco('คำอธิบาย'),
+                decoration: _fieldDeco(isEnglish ? 'Description' : 'คำอธิบาย'),
                 readOnly: _isReadOnly,
               ),
             ),
@@ -1953,7 +1989,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 child: InkWell(
                   onTap: _isReadOnly ? null : _selectBillingDate,
                   child: InputDecorator(
-                    decoration: _fieldDeco('วันที่วางบิล'),
+                    decoration: _fieldDeco(isEnglish ? 'Billing Date' : 'วันที่วางบิล'),
                     child: Row(children: [
                       Expanded(child: Text(_billingDate != null ? _dateFmt.format(_billingDate!) : '-')),
                       if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
@@ -1967,7 +2003,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 child: InkWell(
                   onTap: _isReadOnly ? null : () => _selectDate(true),
                   child: InputDecorator(
-                    decoration: _fieldDeco('วันครบกำหนด'),
+                    decoration: _fieldDeco(isEnglish ? 'Due Date' : 'วันครบกำหนด'),
                     child: Row(children: [
                       Expanded(child: Text(_dueDate != null ? _dateFmt.format(_dueDate!) : '-')),
                       if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
@@ -1979,7 +2015,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               Expanded(
                 flex: 1,
                 child: InputDecorator(
-                  decoration: _fieldDeco('วันที่ชำระ (คาด)', forcedReadOnly: true),
+                  decoration: _fieldDeco(isEnglish ? 'Expected Payment Date' : 'วันที่ชำระ (คาด)', forcedReadOnly: true),
                   child: Text(
                     _expectedPaymentDate != null ? _dateFmt.format(_expectedPaymentDate!) : '-',
                     style: TextStyle(color: _expectedPaymentDate != null ? null : Colors.grey[500]),
@@ -1995,6 +2031,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   }
 
   Widget _buildDetailSection() {
+    final isEnglish = _isEnglish;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -2002,7 +2039,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           Row(children: [
             const Icon(Icons.list_alt, size: 18),
             const SizedBox(width: 6),
-            Text('รายละเอียดสินค้า/บริการ', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(isEnglish ? 'Item / Service Details' : 'รายละเอียดสินค้า/บริการ', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(width: 4),
             IconButton(
               icon: Icon(_detailExpanded ? Icons.expand_less : Icons.expand_more, size: 18),
@@ -2015,14 +2052,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ElevatedButton.icon(
                 onPressed: _addDetailRow,
                 icon: const Icon(Icons.add, size: 14),
-                label: const Text('เพิ่มรายการ'),
+                label: Text(isEnglish ? 'Add Line' : 'เพิ่มรายการ'),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700], foregroundColor: Colors.white, visualDensity: VisualDensity.compact),
               ),
           ]),
           if (_detailExpanded) ...[
           const SizedBox(height: 12),
           if (_detailRows.isEmpty)
-            const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('ไม่มีรายการ', style: TextStyle(color: Colors.grey))))
+            Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(isEnglish ? 'No items' : 'ไม่มีรายการ', style: const TextStyle(color: Colors.grey))))
           else
             LayoutBuilder(
               builder: (context, constraints) => SingleChildScrollView(
@@ -2036,17 +2073,17 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 dataRowMaxHeight: 52,
                 columns: [
                   const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
-                  const DataColumn(label: Text('รหัสสินค้า', style: TextStyle(fontWeight: FontWeight.bold))),
-                  const DataColumn(label: Text('ชื่อสินค้า/บริการ', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('จำนวน', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                  DataColumn(label: Text('ราคา/หน่วย', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                  DataColumn(label: Text('ส่วนลด%', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                  DataColumn(label: Text('ยอดสุทธิ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                  DataColumn(label: Text('VAT', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('ยอด VAT', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                  DataColumn(label: Text('รวม', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                  DataColumn(label: Tooltip(message: 'VAT บันทึกตอนรับชำระ ไม่ใช่ตอนตั้งหนี้', child: Text('VAT\nรอตัด', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center))),
-                  if (!_isReadOnly) DataColumn(label: Text('')),
+                  DataColumn(label: Text(isEnglish ? 'Item Code' : 'รหัสสินค้า', style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text(isEnglish ? 'Item / Service Name' : 'ชื่อสินค้า/บริการ', style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text(isEnglish ? 'Qty' : 'จำนวน', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                  DataColumn(label: Text(isEnglish ? 'Unit Price' : 'ราคา/หน่วย', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                  DataColumn(label: Text(isEnglish ? 'Disc %' : 'ส่วนลด%', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                  DataColumn(label: Text(isEnglish ? 'Net Amount' : 'ยอดสุทธิ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                  DataColumn(label: Text('VAT', style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text(isEnglish ? 'VAT Amount' : 'ยอด VAT', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                  DataColumn(label: Text(isEnglish ? 'Total' : 'รวม', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                  DataColumn(label: Tooltip(message: isEnglish ? 'VAT recorded at payment, not at billing' : 'VAT บันทึกตอนรับชำระ ไม่ใช่ตอนตั้งหนี้', child: Text(isEnglish ? 'Deferred\nVAT' : 'VAT\nรอตัด', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center))),
+                  if (!_isReadOnly) const DataColumn(label: Text('')),
                 ],
                 rows: _detailRows.asMap().entries.map((e) {
                   final i = e.key;
@@ -2201,7 +2238,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             Align(
               alignment: Alignment.centerRight,
               child: Text(
-                'ยอดรวมสุทธิ: ${_fmt.format(_totalAmountFc)} ${_selectedCurrency?.currencyCode ?? 'THB'}',
+                '${isEnglish ? 'Net Total' : 'ยอดรวมสุทธิ'}: ${_fmt.format(_totalAmountFc)} ${_selectedCurrency?.currencyCode ?? 'THB'}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -2212,6 +2249,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   }
 
   Widget _buildApplySection() {
+    final isEnglish = _isEnglish;
     final totalApplied   = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
     final totalAdvance   = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
     final totalCnDeduct  = _cnRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
@@ -2241,12 +2279,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               const SizedBox(width: 6),
               Text(
                 _isDebitNoteWithBill
-                    ? 'ใบแจ้งหนี้อ้างอิง (เพิ่มหนี้)'
+                    ? (isEnglish ? 'Referenced Invoices (Debit Note)' : 'ใบแจ้งหนี้อ้างอิง (เพิ่มหนี้)')
                     : _isCreditNoteWithBill
-                        ? 'จับคู่กับใบแจ้งหนี้ (ลดหนี้)'
+                        ? (isEnglish ? 'Match with Invoices (Credit Note)' : 'จับคู่กับใบแจ้งหนี้ (ลดหนี้)')
                         : _isBillCollection
-                            ? 'รายการวางบิล'
-                            : 'จับคู่ชำระหนี้',
+                            ? (isEnglish ? 'Bill Collection Items' : 'รายการวางบิล')
+                            : (isEnglish ? 'Match Payment' : 'จับคู่ชำระหนี้'),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(width: 4),
@@ -2260,9 +2298,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             if (_applyExpanded) ...[
             const SizedBox(height: 12),
             if (_selectedCustomer == null)
-              const Text('กรุณาเลือกลูกค้าก่อน', style: TextStyle(color: Colors.grey))
+              Text(isEnglish ? 'Please select a customer first' : 'กรุณาเลือกลูกค้าก่อน', style: const TextStyle(color: Colors.grey))
             else if (_openInvoices.isEmpty)
-              const Text('ไม่พบใบแจ้งหนี้ค้างชำระ', style: TextStyle(color: Colors.grey))
+              Text(isEnglish ? 'No outstanding invoices found' : 'ไม่พบใบแจ้งหนี้ค้างชำระ', style: const TextStyle(color: Colors.grey))
             else
               LayoutBuilder(
                 builder: (context, constraints) => SingleChildScrollView(
@@ -2275,20 +2313,20 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                       dataRowMinHeight: 36,
                       dataRowMaxHeight: 46,
                       columns: [
-                        const DataColumn(label: Text('เลขที่เอกสาร', style: TextStyle(fontWeight: FontWeight.bold))),
-                        const DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
                         if (showBcCols) ...[
-                          const DataColumn(label: Text('วางบิลวันที่', style: TextStyle(fontWeight: FontWeight.bold))),
-                          const DataColumn(label: Text('ยอดวางบิล', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                          DataColumn(label: Text(isEnglish ? 'Billed Date' : 'วางบิลวันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text(isEnglish ? 'Billed Amount' : 'ยอดวางบิล', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                         ],
                         if (showBcBillingCol)
-                          const DataColumn(label: Text('วันที่วางบิล', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
-                        const DataColumn(label: Text('ครบกำหนด', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text(isEnglish ? 'Billing Date' : 'วันที่วางบิล', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
+                        DataColumn(label: Text(isEnglish ? 'Due Date' : 'ครบกำหนด', style: const TextStyle(fontWeight: FontWeight.bold))),
                         if (_isReceipt)
-                          const DataColumn(label: Text('ชำระ(คาด)', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text(isFcDoc ? 'ยอดรวม ($currency)' : 'ยอดรวม', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text(isFcDoc ? 'คงเหลือ ($currency)' : 'คงเหลือ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text(isFcDoc ? 'ชำระ ($currency)' : 'ชำระ/หักกลบ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                          DataColumn(label: Text(isEnglish ? 'Expected' : 'ชำระ(คาด)', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Total' : 'ยอดรวม'} ($currency)' : (isEnglish ? 'Total' : 'ยอดรวม'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Balance' : 'คงเหลือ'} ($currency)' : (isEnglish ? 'Balance' : 'คงเหลือ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Pay' : 'ชำระ'} ($currency)' : (isEnglish ? 'Pay/Offset' : 'ชำระ/หักกลบ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       ],
                       rows: _openInvoices.where((inv) => _isInvoiceDateValid(inv.docDate)).map((inv) {
                         final existing = _applyRows.where((a) => a.appliedToId == inv.id).firstOrNull;
@@ -2398,12 +2436,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             const SizedBox(height: 8),
             Text(
               _isDebitNoteWithBill
-                  ? 'ยอดเพิ่มหนี้อ้างอิง: ${_fmt.format(totalApplied)} $currency'
+                  ? '${isEnglish ? 'Referenced Debit Amount' : 'ยอดเพิ่มหนี้อ้างอิง'}: ${_fmt.format(totalApplied)} $currency'
                   : _isCreditNoteWithBill
-                      ? 'ยอดลดหนี้ที่จับคู่: ${_fmt.format(totalApplied)} $currency'
+                      ? '${isEnglish ? 'Matched Credit Amount' : 'ยอดลดหนี้ที่จับคู่'}: ${_fmt.format(totalApplied)} $currency'
                       : _isBillCollection
-                          ? 'ยอดวางบิล: ${_fmt.format(totalApplied)} $currency'
-                          : 'ยอดชำระ Invoice: ${_fmt.format(totalApplied)} $currency',
+                          ? '${isEnglish ? 'Billed Amount' : 'ยอดวางบิล'}: ${_fmt.format(totalApplied)} $currency'
+                          : '${isEnglish ? 'Invoice Payment Amount' : 'ยอดชำระ Invoice'}: ${_fmt.format(totalApplied)} $currency',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ]),
@@ -2420,7 +2458,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               Row(children: [
                 Icon(Icons.currency_exchange, size: 18, color: Colors.orange[700]),
                 const SizedBox(width: 6),
-                Text('หักมัดจำ', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                Text(isEnglish ? 'Advance Deduction' : 'หักมัดจำ', style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold, color: Colors.orange[800])),
                 const SizedBox(width: 4),
                 IconButton(
@@ -2443,11 +2481,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                       dataRowMinHeight: 36,
                       dataRowMaxHeight: 46,
                       columns: [
-                        const DataColumn(label: Text('เลขที่มัดจำ', style: TextStyle(fontWeight: FontWeight.bold))),
-                        const DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text(isFcDoc ? 'ยอดมัดจำ ($currency)' : 'ยอดมัดจำ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text(isFcDoc ? 'คงเหลือ ($currency)' : 'คงเหลือ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text(isFcDoc ? 'หักมัดจำ ($currency)' : 'หักมัดจำ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isEnglish ? 'Advance No.' : 'เลขที่มัดจำ', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Advance Amount' : 'ยอดมัดจำ'} ($currency)' : (isEnglish ? 'Advance Amount' : 'ยอดมัดจำ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Balance' : 'คงเหลือ'} ($currency)' : (isEnglish ? 'Balance' : 'คงเหลือ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Deduct' : 'หักมัดจำ'} ($currency)' : (isEnglish ? 'Deduct' : 'หักมัดจำ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       ],
                       rows: _openAdvances.where((adv) => _isInvoiceDateValid(adv.docDate)).map((adv) {
                         final existing = _advanceRows.where((a) => a.appliedToId == adv.id).firstOrNull;
@@ -2502,7 +2540,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ),
               ], // end _advanceExpanded
               const SizedBox(height: 8),
-              Text('หักมัดจำรวม: ${_fmt.format(totalAdvance)} $currency',
+              Text('${isEnglish ? 'Total Advance Deducted' : 'หักมัดจำรวม'}: ${_fmt.format(totalAdvance)} $currency',
                   style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange[800])),
             ]),
           ),
@@ -2519,7 +2557,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               Row(children: [
                 Icon(Icons.remove_circle_outline, size: 18, color: Colors.red[700]),
                 const SizedBox(width: 6),
-                Text('หักใบลดหนี้', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                Text(isEnglish ? 'Credit Note Deduction' : 'หักใบลดหนี้', style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold, color: Colors.red[800])),
                 const SizedBox(width: 4),
                 IconButton(
@@ -2542,11 +2580,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                       dataRowMinHeight: 36,
                       dataRowMaxHeight: 46,
                       columns: [
-                        const DataColumn(label: Text('เลขที่ลดหนี้', style: TextStyle(fontWeight: FontWeight.bold))),
-                        const DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text(isFcDoc ? 'ยอดลดหนี้ ($currency)' : 'ยอดลดหนี้', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text(isFcDoc ? 'คงเหลือ ($currency)' : 'คงเหลือ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text(isFcDoc ? 'หักลดหนี้ ($currency)' : 'หักลดหนี้', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isEnglish ? 'CN No.' : 'เลขที่ลดหนี้', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'CN Amount' : 'ยอดลดหนี้'} ($currency)' : (isEnglish ? 'CN Amount' : 'ยอดลดหนี้'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Balance' : 'คงเหลือ'} ($currency)' : (isEnglish ? 'Balance' : 'คงเหลือ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Deduct' : 'หักลดหนี้'} ($currency)' : (isEnglish ? 'Deduct' : 'หักลดหนี้'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       ],
                       rows: _openCreditNotes.where((cn) => _isInvoiceDateValid(cn.docDate)).map((cn) {
                         final existing = _cnRows.where((r) => r.appliedToId == cn.id).firstOrNull;
@@ -2601,7 +2639,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ),
               ], // end _cnExpanded
               const SizedBox(height: 8),
-              Text('หักใบลดหนี้รวม: ${_fmt.format(totalCnDeduct)} $currency',
+              Text('${isEnglish ? 'Total Credit Note Deducted' : 'หักใบลดหนี้รวม'}: ${_fmt.format(totalCnDeduct)} $currency',
                   style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red[800])),
             ]),
           ),
@@ -2614,7 +2652,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         Align(
           alignment: Alignment.centerRight,
           child: Text(
-            'รับเงินสุทธิ: ${_fmt.format(totalCash)} $currency',
+            '${isEnglish ? 'Net Cash Received' : 'รับเงินสุทธิ'}: ${_fmt.format(totalCash)} $currency',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
         ),
@@ -2623,6 +2661,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   }
 
   Widget _buildAdvanceRefundSection() {
+    final isEnglish = _isEnglish;
     final currency = _selectedCurrency?.currencyCode ?? '';
     final totalRefund = _advanceRefundRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
 
@@ -2633,14 +2672,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           Row(children: [
             Icon(Icons.undo, size: 18, color: Colors.purple[700]),
             const SizedBox(width: 6),
-            Text('คืนเงินมัดจำ', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            Text(isEnglish ? 'Advance Refund' : 'คืนเงินมัดจำ', style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold, color: Colors.purple[800])),
           ]),
           const SizedBox(height: 12),
           if (_selectedCustomer == null)
-            const Text('กรุณาเลือกลูกค้าก่อน', style: TextStyle(color: Colors.grey))
+            Text(isEnglish ? 'Please select a customer first' : 'กรุณาเลือกลูกค้าก่อน', style: const TextStyle(color: Colors.grey))
           else if (_openAdvancesForRefund.isEmpty)
-            const Text('ไม่พบใบรับเงินมัดจำค้างคืน', style: TextStyle(color: Colors.grey))
+            Text(isEnglish ? 'No advance receipts pending refund' : 'ไม่พบใบรับเงินมัดจำค้างคืน', style: const TextStyle(color: Colors.grey))
           else
             LayoutBuilder(
               builder: (context, constraints) => SingleChildScrollView(
@@ -2652,12 +2691,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                     columnSpacing: 12,
                     dataRowMinHeight: 36,
                     dataRowMaxHeight: 46,
-                    columns: const [
-                      DataColumn(label: Text('เลขที่มัดจำ', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(label: Text('ยอดมัดจำ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                      DataColumn(label: Text('คงเหลือ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                      DataColumn(label: Text('คืนมัดจำ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                    columns: [
+                      DataColumn(label: Text(isEnglish ? 'Advance No.' : 'เลขที่มัดจำ', style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text(isEnglish ? 'Advance Amount' : 'ยอดมัดจำ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      DataColumn(label: Text(isEnglish ? 'Balance' : 'คงเหลือ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      DataColumn(label: Text(isEnglish ? 'Refund' : 'คืนมัดจำ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                     ],
                     rows: _openAdvancesForRefund.where((adv) => _isInvoiceDateValid(adv.docDate)).map((adv) {
                       final existing = _advanceRefundRows.where((a) => a.appliedToId == adv.id).firstOrNull;
@@ -2706,7 +2745,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ),
             ),
           const SizedBox(height: 8),
-          Text('ยอดคืนมัดจำรวม: ${_fmt.format(totalRefund)} $currency',
+          Text('${isEnglish ? 'Total Advance Refund' : 'ยอดคืนมัดจำรวม'}: ${_fmt.format(totalRefund)} $currency',
               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple[800])),
         ]),
       ),
@@ -2714,6 +2753,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   }
 
   Widget _buildPaymentSection() {
+    final isEnglish = _isEnglish;
     final currency = _selectedCurrency?.currencyCode ?? 'THB';
     final totalPayments = _paymentRows.fold(0.0, (s, r) => s + (double.tryParse(r.amountCtrl.text) ?? 0));
     final cashExpected = _totalAmountFc;
@@ -2727,7 +2767,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           Row(children: [
             Icon(Icons.payment, size: 18, color: Colors.green[700]),
             const SizedBox(width: 6),
-            Text('วิธีรับชำระเงิน', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            Text(isEnglish ? 'Payment Methods' : 'วิธีรับชำระเงิน', style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold, color: Colors.green[800])),
             const SizedBox(width: 4),
             IconButton(
@@ -2755,7 +2795,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   });
                 },
                 icon: const Icon(Icons.add, size: 14),
-                label: const Text('เพิ่มวิธีชำระ'),
+                label: Text(isEnglish ? 'Add Payment Method' : 'เพิ่มวิธีชำระ'),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[700],
                     foregroundColor: Colors.white,
@@ -2767,10 +2807,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
           // Payment row cards
           if (_paymentRows.isEmpty)
-            const Center(child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Text('ยังไม่มีรายการวิธีชำระ — คลิก "เพิ่มวิธีชำระ" เพื่อเพิ่ม',
-                  style: TextStyle(color: Colors.grey)),
+            Center(child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                  isEnglish
+                      ? 'No payment methods yet — click "Add Payment Method" to add'
+                      : 'ยังไม่มีรายการวิธีชำระ — คลิก "เพิ่มวิธีชำระ" เพื่อเพิ่ม',
+                  style: const TextStyle(color: Colors.grey)),
             ))
           else
             ...(_paymentRows.asMap().entries.map((e) {
@@ -2787,12 +2830,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           // Summary row
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text(
-              'รวมชำระ: ${_fmt.format(totalPayments)} $currency   |   ยอดคาดหวัง: ${_fmt.format(cashExpected)} $currency',
+              '${isEnglish ? 'Total Paid' : 'รวมชำระ'}: ${_fmt.format(totalPayments)} $currency   |   ${isEnglish ? 'Expected' : 'ยอดคาดหวัง'}: ${_fmt.format(cashExpected)} $currency',
               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[800]),
             ),
             if (diff.abs() > 0.005)
               Text(
-                'ส่วนต่าง: ${_fmt.format(diff)} $currency',
+                '${isEnglish ? 'Difference' : 'ส่วนต่าง'}: ${_fmt.format(diff)} $currency',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: diff > 0 ? Colors.orange[800] : Colors.red[700]),
@@ -2804,6 +2847,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   }
 
   Widget _buildPaymentRowCard(int index, _PaymentRow r) {
+    final isEnglish = _isEnglish;
     final type = r.paymentMethodType;
     final isCheck     = type == 'CHECK';
     final isTransfer  = type == 'TRANSFER' || type == 'MOBILE_BANKING';
@@ -2866,7 +2910,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           Expanded(
             flex: 2,
             child: _payField(
-              label: 'จำนวนเงิน *',
+              label: isEnglish ? 'Amount *' : 'จำนวนเงิน *',
               ctrl: r.amountCtrl,
               hint: '0.00',
               numeric: true,
@@ -2888,7 +2932,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               },
               child: InputDecorator(
                 decoration: InputDecoration(
-                  labelText: isCheck ? 'วันที่บนเช็ค' : isBillOfEx ? 'วันครบกำหนด' : 'วันที่ชำระ',
+                  labelText: isCheck
+                      ? (isEnglish ? 'Check Date' : 'วันที่บนเช็ค')
+                      : isBillOfEx
+                          ? (isEnglish ? 'Due Date' : 'วันครบกำหนด')
+                          : (isEnglish ? 'Payment Date' : 'วันที่ชำระ'),
                   border: const OutlineInputBorder(),
                   isDense: true,
                   suffixIcon: _isReadOnly ? null : const Icon(Icons.calendar_today, size: 14),
@@ -2901,7 +2949,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           const SizedBox(width: 8),
           Expanded(
             flex: 3,
-            child: _payField(label: 'หมายเหตุ', ctrl: r.remarkCtrl),
+            child: _payField(label: isEnglish ? 'Remark' : 'หมายเหตุ', ctrl: r.remarkCtrl),
           ),
         ]),
 
@@ -2914,7 +2962,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             Expanded(
               flex: 2,
               child: _payField(
-                label: isCheck ? 'เลขที่เช็ค *' : isBillOfEx ? 'เลขที่ตั๋ว *' : 'เลขอ้างอิง / Slip No',
+                label: isCheck
+                    ? (isEnglish ? 'Check No. *' : 'เลขที่เช็ค *')
+                    : isBillOfEx
+                        ? (isEnglish ? 'Bill No. *' : 'เลขที่ตั๋ว *')
+                        : (isEnglish ? 'Reference / Slip No.' : 'เลขอ้างอิง / Slip No'),
                 ctrl: r.refNoCtrl,
                 hint: isCheck ? 'XXXXXXXXXX' : null,
               ),
@@ -2923,7 +2975,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             Expanded(
               flex: 2,
               child: _payField(
-                label: isCheck ? 'ธนาคารผู้ออกเช็ค' : isBillOfEx ? 'ธนาคาร (ผู้จ่าย)' : 'โอนจากธนาคาร',
+                label: isCheck
+                    ? (isEnglish ? 'Issuing Bank' : 'ธนาคารผู้ออกเช็ค')
+                    : isBillOfEx
+                        ? (isEnglish ? 'Bank (Payer)' : 'ธนาคาร (ผู้จ่าย)')
+                        : (isEnglish ? 'Transfer From Bank' : 'โอนจากธนาคาร'),
                 ctrl: r.drawerBankNameCtrl,
               ),
             ),
@@ -2931,7 +2987,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             Expanded(
               flex: 2,
               child: _payField(
-                label: 'สาขา',
+                label: isEnglish ? 'Branch' : 'สาขา',
                 ctrl: r.drawerBankBranchCtrl,
               ),
             ),
@@ -2940,7 +2996,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               Expanded(
                 flex: 2,
                 child: _payField(
-                  label: 'เลขที่บัญชี (เจ้าของเช็ค)',
+                  label: isEnglish ? 'Account No. (Drawer)' : 'เลขที่บัญชี (เจ้าของเช็ค)',
                   ctrl: r.drawerAccountNoCtrl,
                 ),
               ),
@@ -2955,9 +3011,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             Expanded(
               flex: 3,
               child: _payField(
-                label: 'เลขที่อ้างอิง (Ref No) *',
+                label: isEnglish ? 'Reference No. (Ref No) *' : 'เลขที่อ้างอิง (Ref No) *',
                 ctrl: r.refNoCtrl,
-                hint: 'เลขที่ Transaction จากระบบ PromptPay',
+                hint: isEnglish ? 'Transaction No. from PromptPay system' : 'เลขที่ Transaction จากระบบ PromptPay',
               ),
             ),
           ]),
@@ -2970,14 +3026,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             Expanded(
               flex: 2,
               child: _isReadOnly
-                ? _payField(label: 'ประเภทบัตร', ctrl: TextEditingController(text: cmCardNetworkOptions[r.cardType] ?? r.cardType ?? ''))
+                ? _payField(label: isEnglish ? 'Card Type' : 'ประเภทบัตร', ctrl: TextEditingController(text: cmCardNetworkOptions[r.cardType] ?? r.cardType ?? ''))
                 : InputDecorator(
-                    decoration: const InputDecoration(labelText: 'ประเภทบัตร', border: OutlineInputBorder(), isDense: true),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Card Type' : 'ประเภทบัตร', border: const OutlineInputBorder(), isDense: true),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: r.cardType,
                         isDense: true,
-                        hint: const Text('เลือก', style: TextStyle(fontSize: 12)),
+                        hint: Text(isEnglish ? 'Select' : 'เลือก', style: const TextStyle(fontSize: 12)),
                         items: cmCardNetworkOptions.entries.map((e) =>
                             DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 12)))).toList(),
                         onChanged: (v) => setState(() => r.cardType = v),
@@ -2989,7 +3045,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             Expanded(
               flex: 1,
               child: _payField(
-                label: '4 หลักท้าย *',
+                label: isEnglish ? 'Last 4 Digits *' : '4 หลักท้าย *',
                 ctrl: r.cardLast4Ctrl,
                 hint: 'XXXX',
                 maxLength: 4,
@@ -3000,16 +3056,16 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             Expanded(
               flex: 2,
               child: _payField(
-                label: 'รหัสอนุมัติ (Approval Code) *',
+                label: isEnglish ? 'Approval Code *' : 'รหัสอนุมัติ (Approval Code) *',
                 ctrl: r.approvalCodeCtrl,
-                hint: 'ใช้ตรวจสอบย้อนหลัง',
+                hint: isEnglish ? 'For later verification' : 'ใช้ตรวจสอบย้อนหลัง',
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               flex: 2,
               child: _payField(
-                label: 'รหัสเครื่อง EDC (Terminal ID)',
+                label: isEnglish ? 'Terminal ID (EDC)' : 'รหัสเครื่อง EDC (Terminal ID)',
                 ctrl: r.terminalIdCtrl,
               ),
             ),
@@ -3069,6 +3125,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   }
 
   Widget _buildTotalsSection() {
+    final isEnglish = _isEnglish;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -3083,13 +3140,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               defaultVerticalAlignment: TableCellVerticalAlignment.middle,
               children: [
                 if (!_isReceipt && !_isAdvanceRefund && !_isBillCollection) ...[
-                  _totalRow('ยอดรวมสินค้า', _subtotalFc),
-                  _totalRow('ส่วนลดรวม', _discountAmountFc),
-                  _totalRow('ยอดก่อน VAT', _beforeVatFc),
+                  _totalRow(isEnglish ? 'Subtotal' : 'ยอดรวมสินค้า', _subtotalFc),
+                  _totalRow(isEnglish ? 'Total Discount' : 'ส่วนลดรวม', _discountAmountFc),
+                  _totalRow(isEnglish ? 'Amount Before VAT' : 'ยอดก่อน VAT', _beforeVatFc),
                   ..._buildVatRows(),
                 ],
                 TableRow(children: [
-                  const Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('ยอดรวมสุทธิ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                  Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(isEnglish ? 'Net Total' : 'ยอดรวมสุทธิ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                   Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(
                     '${_fmt.format(_totalAmountFc)} ${_selectedCurrency?.currencyCode ?? 'THB'}',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -3097,7 +3154,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   )),
                 ]),
                 if (_exchangeRate != 1.0)
-                  _totalRow('ยอดรวม (THB)', _totalAmountFc * _exchangeRate),
+                  _totalRow(isEnglish ? 'Total (THB)' : 'ยอดรวม (THB)', _totalAmountFc * _exchangeRate),
               ],
             ),
           ),
@@ -3121,6 +3178,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   }
 
   List<TableRow> _buildVatRows() {
+    final isEnglish = _isEnglish;
     final deferredVat = _detailRows
         .where((r) => r.isDeferredVat && r.vatType != 'NOVAT')
         .fold(0.0, (s, r) {
@@ -3132,14 +3190,15 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         });
     if (deferredVat > 0) {
       return [
-        _totalRow('VAT (ทันที)', _vatAmountFc - deferredVat),
-        _totalRowColored('VAT (รอตัด)', deferredVat, Colors.orange[800]!),
+        _totalRow(isEnglish ? 'VAT (Immediate)' : 'VAT (ทันที)', _vatAmountFc - deferredVat),
+        _totalRowColored(isEnglish ? 'VAT (Deferred)' : 'VAT (รอตัด)', deferredVat, Colors.orange[800]!),
       ];
     }
     return [_totalRow('VAT', _vatAmountFc)];
   }
 
   Widget _buildActionButtons() {
+    final isEnglish = _isEnglish;
     final isDraft = _status == 'Draft';
     final isPosted = _status == 'Posted';
     return Container(
@@ -3150,14 +3209,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         ElevatedButton.icon(
           onPressed: () => _save('Draft'),
           icon: const Icon(Icons.save_outlined, size: 16),
-          label: const Text('บันทึก Draft'),
+          label: Text(isEnglish ? 'Save Draft' : 'บันทึก Draft'),
           style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700], foregroundColor: Colors.white),
         ),
         const SizedBox(width: 8),
         ElevatedButton.icon(
           onPressed: () => _save('Post'),
           icon: const Icon(Icons.check_circle_outline, size: 16),
-          label: const Text('Post เอกสาร'),
+          label: Text(isEnglish ? 'Post Document' : 'Post เอกสาร'),
           style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
         ),
         const SizedBox(width: 8),
@@ -3167,11 +3226,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (_) => AlertDialog(
-                  title: const Text('ลบ Draft'),
-                  content: const Text('ต้องการลบเอกสาร Draft นี้?'),
+                  title: Text(isEnglish ? 'Delete Draft' : 'ลบ Draft'),
+                  content: Text(isEnglish ? 'Do you want to delete this draft document?' : 'ต้องการลบเอกสาร Draft นี้?'),
                   actions: [
-                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
-                    ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: const Text('ลบ')),
+                    TextButton(onPressed: () => Navigator.pop(context, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+                    ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: Text(isEnglish ? 'Delete' : 'ลบ')),
                   ],
                 ),
               );
@@ -3181,7 +3240,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               }
             },
             icon: const Icon(Icons.delete_outline, size: 16),
-            label: const Text('ลบ'),
+            label: Text(isEnglish ? 'Delete' : 'ลบ'),
             style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
           ),
       ],
@@ -3189,7 +3248,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         ElevatedButton.icon(
           onPressed: _void,
           icon: const Icon(Icons.cancel_outlined, size: 16),
-          label: const Text('ยกเลิก (Void)'),
+          label: Text(isEnglish ? 'Void' : 'ยกเลิก (Void)'),
           style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
         ),
       const Spacer(),
@@ -3197,20 +3256,21 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         OutlinedButton.icon(
           onPressed: _showGlEntryDialog,
           icon: const Icon(Icons.account_balance_outlined, size: 16),
-          label: Text(isPosted ? 'GL Entry' : 'ตัวอย่าง GL'),
+          label: Text(isPosted ? 'GL Entry' : (isEnglish ? 'GL Preview' : 'ตัวอย่าง GL')),
           style: OutlinedButton.styleFrom(foregroundColor: Colors.indigo[700]),
         ),
         const SizedBox(width: 8),
       ],
       TextButton(
         onPressed: widget.onCancel,
-        child: const Text('กลับ'),
+        child: Text(isEnglish ? 'Back' : 'กลับ'),
       ),
     ]));
   }
 
   // ── GL Account Search Dialog ────────────────────────────────────────────────
   Future<void> _showGlAccountSearchDialog(_GlEditRow r) async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     final searchCtrl = TextEditingController();
     final available = _accounts.where((a) => a.isNormalAccount && a.isActive).toList();
     List<Account> filtered = List.from(available);
@@ -3227,12 +3287,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 final lq = q.toLowerCase();
                 filtered = available.where((a) =>
                   a.accountCode.toLowerCase().contains(lq) ||
-                  a.accountNameThai.toLowerCase().contains(lq)).toList();
+                  a.accountNameThai.toLowerCase().contains(lq) ||
+                  a.accountNameEng.toLowerCase().contains(lq)).toList();
               }
             });
           }
           return AlertDialog(
-            title: const Text('เลือกรหัสบัญชี'),
+            title: Text(isEnglish ? 'Select Account Code' : 'เลือกรหัสบัญชี'),
             content: SizedBox(
               width: 520,
               height: 420,
@@ -3240,23 +3301,24 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 TextField(
                   controller: searchCtrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search code / account name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                   onChanged: doFilter,
                 ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: filtered.isEmpty
-                    ? const Center(child: Text('ไม่พบบัญชี'))
+                    ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี'))
                     : ListView.builder(
                         itemCount: filtered.length,
                         itemBuilder: (_, i) {
                           final a = filtered[i];
                           final isSelected = r.acctCodeCtrl.text == a.accountCode;
+                          final displayName = isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
                           return ListTile(
                             dense: true,
                             selected: isSelected,
@@ -3267,12 +3329,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                             title: Row(children: [
                               SizedBox(width: 90, child: Text(a.accountCode,
                                 style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo[700]))),
-                              Expanded(child: Text(a.accountNameThai, overflow: TextOverflow.ellipsis)),
+                              Expanded(child: Text(displayName, overflow: TextOverflow.ellipsis)),
                             ]),
                             onTap: () {
                               setState(() {
                                 r.acctCodeCtrl.text = a.accountCode;
-                                r.accountName = a.accountNameThai;
+                                r.accountName = displayName;
                               });
                               Navigator.of(ctx).pop();
                             },
@@ -3283,7 +3345,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ]),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
             ],
           );
         },
@@ -3312,6 +3374,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
   // ── Inline GL Section ────────────────────────────────────────────────────
   Widget _buildGlSection() {
+    final isEnglish = _isEnglish;
     final fmt = NumberFormat('#,##0.00');
     final totalDebit  = _glEditRows.fold(0.0, (s, r) => s + r.debit);
     final totalCredit = _glEditRows.fold(0.0, (s, r) => s + r.credit);
@@ -3328,7 +3391,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         Icon(isBalanced ? Icons.check_circle_outline : Icons.warning_amber_outlined,
           size: 14, color: isBalanced ? Colors.green[700] : Colors.red[700]),
         const SizedBox(width: 4),
-        Text(isBalanced ? 'สมดุล' : 'ไม่สมดุล',
+        Text(isBalanced ? (isEnglish ? 'Balanced' : 'สมดุล') : (isEnglish ? 'Unbalanced' : 'ไม่สมดุล'),
           style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
             color: isBalanced ? Colors.green[700] : Colors.red[700])),
         const SizedBox(width: 12),
@@ -3343,7 +3406,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
-          _status == 'Posted' ? 'GL จริง (Posted)' : 'ตัวอย่าง GL (Draft)',
+          _status == 'Posted' ? (isEnglish ? 'Actual GL (Posted)' : 'GL จริง (Posted)') : (isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่าง GL (Draft)'),
           style: TextStyle(fontSize: 11,
             color: _status == 'Posted' ? Colors.blue[800] : Colors.orange[800])),
       ),
@@ -3354,10 +3417,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       tableContent = const Padding(padding: EdgeInsets.all(24),
         child: Center(child: CircularProgressIndicator()));
     } else if (_glEditRows.isEmpty) {
-      tableContent = const Padding(
-        padding: EdgeInsets.only(top: 8),
-        child: Text('ยังไม่มีรายการ — กรุณาป้อนรายการสินค้า/บริการด้านบน',
-          style: TextStyle(color: Colors.grey, fontSize: 13)),
+      tableContent = Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          isEnglish
+              ? 'No items yet — please enter item/service details above'
+              : 'ยังไม่มีรายการ — กรุณาป้อนรายการสินค้า/บริการด้านบน',
+          style: const TextStyle(color: Colors.grey, fontSize: 13)),
       );
     } else {
       const double wNo   = 36;
@@ -3460,22 +3526,22 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
         final headerRow = Row(children: [
           hdr('#', w: wNo, align: TextAlign.center),
-          hdr('รหัสบัญชี', w: wCode),
-          hdr('ชื่อบัญชี', w: wName),
-          hdr('รายละเอียด', w: wDesc),
+          hdr(isEnglish ? 'Account Code' : 'รหัสบัญชี', w: wCode),
+          hdr(isEnglish ? 'Account Name' : 'ชื่อบัญชี', w: wName),
+          hdr(isEnglish ? 'Description' : 'รายละเอียด', w: wDesc),
           if (hasFc) ...[
-            hdr('เดบิต ($fcLabel)', w: wAmt, align: TextAlign.right),
-            hdr('เครดิต ($fcLabel)', w: wAmt, align: TextAlign.right),
+            hdr('${isEnglish ? 'Debit' : 'เดบิต'} ($fcLabel)', w: wAmt, align: TextAlign.right),
+            hdr('${isEnglish ? 'Credit' : 'เครดิต'} ($fcLabel)', w: wAmt, align: TextAlign.right),
           ],
-          hdr('เดบิต ($lcLabel)', w: wAmt, align: TextAlign.right),
-          hdr('เครดิต ($lcLabel)', w: wAmt, align: TextAlign.right),
-          for (final dt in activeDims) hdr(dt.nameThai, w: wDim),
+          hdr('${isEnglish ? 'Debit' : 'เดบิต'} ($lcLabel)', w: wAmt, align: TextAlign.right),
+          hdr('${isEnglish ? 'Credit' : 'เครดิต'} ($lcLabel)', w: wAmt, align: TextAlign.right),
+          for (final dt in activeDims) hdr(isEnglish && (dt.nameEng ?? '').isNotEmpty ? dt.nameEng! : dt.nameThai, w: wDim),
         ]);
 
         final totalsRow = Row(children: [
           SizedBox(width: wNo + wCode + wName),
           Container(width: wDesc, padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            child: const Text('รวม', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            child: Text(isEnglish ? 'Total' : 'รวม', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
               textAlign: TextAlign.right)),
           if (hasFc) ...[
             Container(width: wAmt, padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -3526,7 +3592,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _sectionHeader('รายการบัญชี GL', _glSectionExpanded,
+        _sectionHeader(isEnglish ? 'GL Entries' : 'รายการบัญชี GL', _glSectionExpanded,
           () => setState(() => _glSectionExpanded = !_glSectionExpanded),
           icon: Icons.account_balance_outlined,
           trailing: sectionTrailing),
@@ -3541,6 +3607,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   // ── GL Entry dialog ───────────────────────────────────────────────────────
 
   Future<void> _showGlEntryDialog() async {
+    final isEnglish = _isEnglish;
     final isPosted = _status == 'Posted';
 
     if (isPosted && _glEntryId != null) {
@@ -3557,7 +3624,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         final header = result['header'] as GlEntryHeader;
         final details = result['details'] as List<GlEntryDetail>;
         _showGlDialog(
-          title: 'GL Entry — รายการลงบัญชีจริง',
+          title: isEnglish ? 'GL Entry — Actual Posted Entries' : 'GL Entry — รายการลงบัญชีจริง',
           statusLabel: 'Posted',
           statusColor: Colors.teal,
           glDocNo: header.docNo,
@@ -3570,7 +3637,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       } catch (e) {
         if (!mounted) return;
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('โหลด GL ล้มเหลว: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Failed to load GL: $e' : 'โหลด GL ล้มเหลว: $e')));
       }
     } else {
       // Draft preview: fetch deferred VAT proportions first (only for Receipt)
@@ -3588,7 +3655,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       if (!mounted) return;
       Navigator.of(context).pop();
       _showGlDialog(
-        title: 'ตัวอย่าง GL Entry (Draft)',
+        title: isEnglish ? 'GL Entry Preview (Draft)' : 'ตัวอย่าง GL Entry (Draft)',
         statusLabel: 'Draft Preview',
         statusColor: Colors.orange[700]!,
         glDocNo: '—',
@@ -3630,6 +3697,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     required List<_GlLine> lines,
     String currencyCode = '',
   }) {
+    final isEnglish = _isEnglish;
     final fmt = NumberFormat('#,##0.00');
     final dateFmt = DateFormat('dd/MM/yyyy');
     final totalDebit   = lines.fold(0.0, (s, l) => s + l.debit);
@@ -3655,24 +3723,24 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             decoration: BoxDecoration(color: Colors.grey[200]),
             children: [
               cell('#',                   bold: true, align: TextAlign.center),
-              cell('รหัสบัญชี',            bold: true),
-              cell('ชื่อบัญชี',             bold: true),
-              cell('รายละเอียด',            bold: true),
-              cell('เดบิต ($fcLabel)',      bold: true, align: TextAlign.right),
-              cell('เครดิต ($fcLabel)',     bold: true, align: TextAlign.right),
-              cell('เดบิต ($lcLabel)',      bold: true, align: TextAlign.right),
-              cell('เครดิต ($lcLabel)',     bold: true, align: TextAlign.right),
+              cell(isEnglish ? 'Account Code' : 'รหัสบัญชี',            bold: true),
+              cell(isEnglish ? 'Account Name' : 'ชื่อบัญชี',             bold: true),
+              cell(isEnglish ? 'Description' : 'รายละเอียด',            bold: true),
+              cell('${isEnglish ? 'Debit' : 'เดบิต'} ($fcLabel)',      bold: true, align: TextAlign.right),
+              cell('${isEnglish ? 'Credit' : 'เครดิต'} ($fcLabel)',     bold: true, align: TextAlign.right),
+              cell('${isEnglish ? 'Debit' : 'เดบิต'} ($lcLabel)',      bold: true, align: TextAlign.right),
+              cell('${isEnglish ? 'Credit' : 'เครดิต'} ($lcLabel)',     bold: true, align: TextAlign.right),
             ],
           )
         : TableRow(
             decoration: BoxDecoration(color: Colors.grey[200]),
             children: [
               cell('#',        bold: true, align: TextAlign.center),
-              cell('รหัสบัญชี', bold: true),
-              cell('ชื่อบัญชี',  bold: true),
-              cell('รายละเอียด', bold: true),
-              cell('เดบิต',     bold: true, align: TextAlign.right),
-              cell('เครดิต',    bold: true, align: TextAlign.right),
+              cell(isEnglish ? 'Account Code' : 'รหัสบัญชี', bold: true),
+              cell(isEnglish ? 'Account Name' : 'ชื่อบัญชี',  bold: true),
+              cell(isEnglish ? 'Description' : 'รายละเอียด', bold: true),
+              cell(isEnglish ? 'Debit' : 'เดบิต',     bold: true, align: TextAlign.right),
+              cell(isEnglish ? 'Credit' : 'เครดิต',    bold: true, align: TextAlign.right),
             ],
           );
 
@@ -3704,7 +3772,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     TableRow totalsRow = hasFc
         ? TableRow(decoration: BoxDecoration(color: Colors.grey[100]), children: [
             cell(''), cell(''), cell(''),
-            cell('รวม', bold: true, align: TextAlign.right),
+            cell(isEnglish ? 'Total' : 'รวม', bold: true, align: TextAlign.right),
             cell(fmt.format(totalDebitFc),  bold: true, align: TextAlign.right, color: Colors.blue[700]),
             cell(fmt.format(totalCreditFc), bold: true, align: TextAlign.right, color: Colors.red[700]),
             cell(fmt.format(totalDebit),    bold: true, align: TextAlign.right, color: Colors.blue[800]),
@@ -3712,7 +3780,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           ])
         : TableRow(decoration: BoxDecoration(color: Colors.grey[100]), children: [
             cell(''), cell(''), cell(''),
-            cell('รวม', bold: true, align: TextAlign.right),
+            cell(isEnglish ? 'Total' : 'รวม', bold: true, align: TextAlign.right),
             cell(fmt.format(totalDebit),  bold: true, align: TextAlign.right, color: Colors.blue[800]),
             cell(fmt.format(totalCredit), bold: true, align: TextAlign.right, color: Colors.red[800]),
           ]);
@@ -3735,7 +3803,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(color: Colors.indigo[50], borderRadius: BorderRadius.circular(8)),
-                    child: Text('สกุลเงิน: $fcLabel', style: TextStyle(fontSize: 11, color: Colors.indigo[700], fontWeight: FontWeight.w600)),
+                    child: Text('${isEnglish ? 'Currency' : 'สกุลเงิน'}: $fcLabel', style: TextStyle(fontSize: 11, color: Colors.indigo[700], fontWeight: FontWeight.w600)),
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -3754,8 +3822,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               Wrap(spacing: 24, runSpacing: 6, children: [
                 _glInfoChip('GL Doc', glDocNo),
                 _glInfoChip('AR Doc', refDocNo),
-                _glInfoChip('วันที่', dateFmt.format(docDate)),
-                if (description.isNotEmpty) _glInfoChip('คำอธิบาย', description),
+                _glInfoChip(isEnglish ? 'Date' : 'วันที่', dateFmt.format(docDate)),
+                if (description.isNotEmpty) _glInfoChip(isEnglish ? 'Description' : 'คำอธิบาย', description),
               ]),
               const SizedBox(height: 16),
               // ── Table ──
@@ -3797,8 +3865,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 const SizedBox(width: 6),
                 Text(
                   isBalanced
-                      ? 'บาลานซ์ถูกต้อง (Balanced)'
-                      : 'ไม่บาลานซ์ — ส่วนต่าง ${fmt.format((totalDebit - totalCredit).abs())} $lcLabel',
+                      ? (isEnglish ? 'Balanced' : 'บาลานซ์ถูกต้อง (Balanced)')
+                      : '${isEnglish ? 'Unbalanced — difference' : 'ไม่บาลานซ์ — ส่วนต่าง'} ${fmt.format((totalDebit - totalCredit).abs())} $lcLabel',
                   style: TextStyle(
                     color: isBalanced ? Colors.teal : Colors.orange,
                     fontWeight: FontWeight.w600,
@@ -3806,7 +3874,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   ),
                 ),
                 const Spacer(),
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('ปิด')),
+                TextButton(onPressed: () => Navigator.pop(context), child: Text(isEnglish ? 'Close' : 'ปิด')),
               ]),
             ]),
           ),
@@ -3823,6 +3891,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   // ── Client-side GL preview for Draft ──────────────────────────────────────
 
   List<_GlLine> _computeGlPreview({double deferredVatLc = 0}) {
+    final isEnglish = _isEnglish;
     final lines = <_GlLine>[];
     final lc = _exchangeRate;
     final isFcDoc = _selectedCurrency?.baseCurrencyFlag == false;
@@ -3831,47 +3900,63 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
     if (setup == null) {
       if (_totalAmountFc == 0 && _detailRows.isEmpty && _applyRows.isEmpty && _advanceRefundRows.isEmpty) return lines;
+      final arLabel = isEnglish ? 'Accounts Receivable' : 'ลูกหนี้การค้า';
+      final notSetupArLabel = isEnglish ? '!AR account not configured' : '!ยังไม่ตั้งค่าบัญชีลูกหนี้';
+      final notSetupRevLabel = isEnglish ? '!Revenue account not configured' : '!ยังไม่ตั้งค่าบัญชีรายได้';
+      final notSetupLabel = isEnglish ? 'Not configured' : 'ยังไม่ตั้งค่าบัญชี';
+      final revenueDefaultDesc = isEnglish ? 'Revenue' : 'รายได้';
+      final notSetupVatLabel = isEnglish ? '!VAT account not configured' : '!ยังไม่ตั้งค่าบัญชี VAT';
+      final vatDesc = isEnglish ? 'VAT' : 'ภาษีมูลค่าเพิ่ม';
+      final notSetupCashLabel = isEnglish ? '!Cash account not configured' : '!ยังไม่ตั้งค่าบัญชีเงินสด';
+      final cashBankLabel = isEnglish ? 'Cash/Bank' : 'เงินสด/ธนาคาร';
+      final advanceReceivedDesc = isEnglish ? 'Advance Received' : 'รับมัดจำ';
+      final notSetupAdvanceLabel = isEnglish ? '!Advance account not configured' : '!ยังไม่ตั้งค่าบัญชีมัดจำ';
+      final advanceReceivedLabel = isEnglish ? 'Advance Received' : 'มัดจำรับ';
+      final advanceRefundDesc = isEnglish ? 'Advance Refund' : 'คืนมัดจำ';
+      final payAdvanceRefundDesc = isEnglish ? 'Pay Advance Refund' : 'จ่ายคืนเงินมัดจำ';
+      final receivePaymentDesc = isEnglish ? 'Receive Payment' : 'รับชำระ';
+      final settleDebtDesc = isEnglish ? 'Settle Debt' : 'ชำระหนี้';
       if (sysType == arDocTypeInvoice || sysType == arDocTypeDebitNote || sysType == arDocTypeDebitNoteWithBill) {
-        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีลูกหนี้', 'ลูกหนี้การค้า', 'ลูกหนี้การค้า', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        lines.add(_GlLine(notSetupArLabel, arLabel, arLabel, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
         for (final r in _detailRows) {
           final qty      = double.tryParse(r.qtyCtrl.text)    ?? 0;
           final price    = double.tryParse(r.priceCtrl.text)  ?? 0;
           final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
           final afterDisc = qty * price * (1 - discPct / 100);
           final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
-          final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : 'รายได้';
-          lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีรายได้', 'ยังไม่ตั้งค่าบัญชี', desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
-          if (vat > 0) lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชี VAT', 'VAT Output', 'ภาษีมูลค่าเพิ่ม', 0, vat * lc, 0, isFcDoc ? vat : 0));
+          final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : revenueDefaultDesc;
+          lines.add(_GlLine(notSetupRevLabel, notSetupLabel, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
+          if (vat > 0) lines.add(_GlLine(notSetupVatLabel, 'VAT Output', vatDesc, 0, vat * lc, 0, isFcDoc ? vat : 0));
         }
       } else if (sysType == arDocTypeCreditNote) {
-        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีลูกหนี้', 'ลูกหนี้การค้า', 'ลูกหนี้การค้า', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+        lines.add(_GlLine(notSetupArLabel, arLabel, arLabel, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
         for (final r in _detailRows) {
           final qty      = double.tryParse(r.qtyCtrl.text)    ?? 0;
           final price    = double.tryParse(r.priceCtrl.text)  ?? 0;
           final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
           final afterDisc = qty * price * (1 - discPct / 100);
           final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
-          final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : 'รายได้';
-          lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีรายได้', 'ยังไม่ตั้งค่าบัญชี', desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
-          if (vat > 0) lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชี VAT', 'VAT Output', 'ภาษีมูลค่าเพิ่ม', vat * lc, 0, isFcDoc ? vat : 0, 0));
+          final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : revenueDefaultDesc;
+          lines.add(_GlLine(notSetupRevLabel, notSetupLabel, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
+          if (vat > 0) lines.add(_GlLine(notSetupVatLabel, 'VAT Output', vatDesc, vat * lc, 0, isFcDoc ? vat : 0, 0));
         }
       } else if (sysType == arDocTypeCreditNoteWithBill) {
         for (final a in _applyRows) {
-          lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีรายได้', 'ยังไม่ตั้งค่าบัญชี', 'ลดหนี้ ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
+          lines.add(_GlLine(notSetupRevLabel, notSetupLabel, '${isEnglish ? 'Credit Note' : 'ลดหนี้'} ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
         }
-        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีลูกหนี้', 'ลูกหนี้การค้า', 'ลูกหนี้การค้า', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+        lines.add(_GlLine(notSetupArLabel, arLabel, arLabel, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       } else if (sysType == arDocTypeAdvanceReceipt) {
-        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีเงินสด', 'เงินสด/ธนาคาร', 'รับมัดจำ', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
-        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีมัดจำ', 'มัดจำรับ', 'มัดจำรับ', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+        lines.add(_GlLine(notSetupCashLabel, cashBankLabel, advanceReceivedDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        lines.add(_GlLine(notSetupAdvanceLabel, advanceReceivedLabel, advanceReceivedLabel, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       } else if (sysType == arDocTypeAdvanceRefund) {
-        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีมัดจำ', 'มัดจำรับ', 'คืนมัดจำ', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
-        lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีเงินสด', 'เงินสด/ธนาคาร', 'จ่ายคืนเงินมัดจำ', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+        lines.add(_GlLine(notSetupAdvanceLabel, advanceReceivedLabel, advanceRefundDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        lines.add(_GlLine(notSetupCashLabel, cashBankLabel, payAdvanceRefundDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       } else if (sysType == arDocTypeReceipt) {
         for (final a in _applyRows) {
-          lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีเงินสด', 'เงินสด/ธนาคาร', 'รับชำระ ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
+          lines.add(_GlLine(notSetupCashLabel, cashBankLabel, '$receivePaymentDesc ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
         }
         if (lines.isNotEmpty) {
-          lines.add(_GlLine('!ยังไม่ตั้งค่าบัญชีลูกหนี้', 'ลูกหนี้การค้า', 'ชำระหนี้', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+          lines.add(_GlLine(notSetupArLabel, arLabel, settleDebtDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
         }
       }
       return lines;
@@ -3887,10 +3972,37 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     }
     String acctName(int? id, String? fallback) {
       if (id != null) {
-        try { return _accounts.firstWhere((a) => a.id == id).accountNameThai; } catch (_) {}
+        try {
+          final acc = _accounts.firstWhere((a) => a.id == id);
+          return _isEnglish && acc.accountNameEng.isNotEmpty ? acc.accountNameEng : acc.accountNameThai;
+        } catch (_) {}
       }
       return fallback ?? '';
     }
+
+    final arDesc = isEnglish ? 'Accounts Receivable' : 'ลูกหนี้การค้า';
+    final revenueDefaultDesc = isEnglish ? 'Revenue' : 'รายได้';
+    final notSetupDiscountLabel = isEnglish ? '!Discount account not configured' : '!ยังไม่ตั้งค่าบัญชีส่วนลด';
+    final discountPaidLabel = isEnglish ? 'Discount Paid' : 'ส่วนลดจ่าย';
+    final notSetupVatPendingLabel = isEnglish ? '!Deferred VAT not configured' : '!ยังไม่ตั้งค่า VAT รอตัด';
+    final deferredVatLabel = isEnglish ? 'Deferred VAT' : 'VAT รอตัดบัญชี';
+    final notSetupVatLabel2 = isEnglish ? '!VAT account not configured' : '!ยังไม่ตั้งค่าบัญชี VAT';
+    final vatDesc2 = isEnglish ? 'VAT' : 'ภาษีมูลค่าเพิ่ม';
+    final creditNoteDesc = isEnglish ? 'Credit Note' : 'ลดหนี้';
+    final advanceReceivedDesc2 = isEnglish ? 'Advance Received' : 'รับมัดจำ';
+    final advanceReceivedLabel2 = isEnglish ? 'Advance Received' : 'มัดจำรับ';
+    final advanceRefundDesc2 = isEnglish ? 'Advance Refund' : 'คืนมัดจำ';
+    final payAdvanceRefundDesc2 = isEnglish ? 'Pay Advance Refund' : 'จ่ายคืนเงินมัดจำ';
+    final receivePaymentDesc2 = isEnglish ? 'Receive Payment' : 'รับชำระ';
+    final advanceDeductDesc = isEnglish ? 'Advance Deducted' : 'ตัดมัดจำ';
+    final settleDebtDesc2 = isEnglish ? 'Settle Debt' : 'ชำระหนี้';
+    final fxGainName = isEnglish ? 'Exchange Gain' : 'กำไรอัตราแลกเปลี่ยน';
+    final fxGainDesc = isEnglish ? 'Exchange Gain' : 'กำไรจากอัตราแลกเปลี่ยน';
+    final fxLossName = isEnglish ? 'Exchange Loss' : 'ขาดทุนอัตราแลกเปลี่ยน';
+    final fxLossDesc = isEnglish ? 'Exchange Loss' : 'ขาดทุนจากอัตราแลกเปลี่ยน';
+    final deferredVatRecognizedName = isEnglish ? 'Deferred VAT' : 'VAT รอตัดบัญชี';
+    final deferredVatRecognizeDesc = isEnglish ? 'Recognize Deferred VAT' : 'รับรู้ VAT รอตัดบัญชี';
+    final deferredVatRecognizedDesc = isEnglish ? 'Deferred VAT Recognized' : 'VAT รอตัดบัญชีที่รับรู้';
 
     // AR account: setup → customer group → customer
     final arAccountId = setup.arAccountId
@@ -3952,7 +4064,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
     // ── Invoice (10) / DN (30) / DN-with-bill (35) ────────────────────────
     if (sysType == arDocTypeInvoice || sysType == arDocTypeDebitNote || sysType == arDocTypeDebitNoteWithBill) {
-      lines.add(_GlLine(arCode, arName, 'ลูกหนี้การค้า', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+      lines.add(_GlLine(arCode, arName, arDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
       for (final r in _detailRows) {
         final qty      = double.tryParse(r.qtyCtrl.text) ?? 0;
         final price    = double.tryParse(r.priceCtrl.text) ?? 0;
@@ -3963,20 +4075,20 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         final vat      = afterDisc * r.vatRate / 100;
         final revCode  = acctCode(r.revenueAccountId, setup.revenueAccountCode);
         final revName  = acctName(r.revenueAccountId, setup.revenueAccountName);
-        final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : 'รายได้');
+        final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : revenueDefaultDesc);
         if (setup.discountAccountId != null && disc > 0) {
           lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, 0, sub * lc, 0, isFcDoc ? sub : 0));
-          final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, '!ยังไม่ตั้งค่าบัญชีส่วนลด');
-          final discName = setup.discountAccountName ?? acctName(setup.discountAccountId, 'ส่วนลดจ่าย');
-          lines.add(_GlLine(discCode, discName.isEmpty ? 'ส่วนลดจ่าย' : discName, 'ส่วนลดจ่าย', disc * lc, 0, isFcDoc ? disc : 0, 0));
+          final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, notSetupDiscountLabel);
+          final discName = setup.discountAccountName ?? acctName(setup.discountAccountId, discountPaidLabel);
+          lines.add(_GlLine(discCode, discName.isEmpty ? discountPaidLabel : discName, discountPaidLabel, disc * lc, 0, isFcDoc ? disc : 0, 0));
         } else {
           lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
         }
         if (vat > 0) {
           String vatAcctCode, vatAcctName;
           if (r.isDeferredVat) {
-            vatAcctCode = setup.vatPendingOutputAccountCode ?? '!ยังไม่ตั้งค่า VAT รอตัด';
-            vatAcctName = setup.vatPendingOutputAccountName ?? 'VAT รอตัดบัญชี';
+            vatAcctCode = setup.vatPendingOutputAccountCode ?? notSetupVatPendingLabel;
+            vatAcctName = setup.vatPendingOutputAccountName ?? deferredVatLabel;
           } else {
             final vr = _vatRates.cast<VatRate?>().firstWhere((v) => v?.vatCode == r.vatType, orElse: () => null);
             if (vr?.glAccountCode != null && vr!.glAccountCode!.isNotEmpty) {
@@ -3986,17 +4098,17 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               vatAcctCode = setup.vatOutputAccountCode!;
               vatAcctName = setup.vatOutputAccountName ?? 'VAT Output';
             } else {
-              vatAcctCode = '!ยังไม่ตั้งค่าบัญชี VAT';
+              vatAcctCode = notSetupVatLabel2;
               vatAcctName = 'VAT Output';
             }
           }
-          lines.add(_GlLine(vatAcctCode, vatAcctName, 'ภาษีมูลค่าเพิ่ม', 0, vat * lc, 0, isFcDoc ? vat : 0));
+          lines.add(_GlLine(vatAcctCode, vatAcctName, vatDesc2, 0, vat * lc, 0, isFcDoc ? vat : 0));
         }
       }
     }
     // ── Credit Note (50) ──────────────────────────────────────────────────
     else if (sysType == arDocTypeCreditNote) {
-      lines.add(_GlLine(arCode, arName, 'ลูกหนี้การค้า', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      lines.add(_GlLine(arCode, arName, arDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       for (final r in _detailRows) {
         final qty      = double.tryParse(r.qtyCtrl.text) ?? 0;
         final price    = double.tryParse(r.priceCtrl.text) ?? 0;
@@ -4007,20 +4119,20 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         final vat      = afterDisc * r.vatRate / 100;
         final revCode  = acctCode(r.revenueAccountId, setup.revenueAccountCode);
         final revName  = acctName(r.revenueAccountId, setup.revenueAccountName);
-        final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : 'รายได้');
+        final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : revenueDefaultDesc);
         if (setup.discountAccountId != null && disc > 0) {
           lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, sub * lc, 0, isFcDoc ? sub : 0, 0));
-          final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, '!ยังไม่ตั้งค่าบัญชีส่วนลด');
-          final discName = setup.discountAccountName ?? acctName(setup.discountAccountId, 'ส่วนลดจ่าย');
-          lines.add(_GlLine(discCode, discName.isEmpty ? 'ส่วนลดจ่าย' : discName, 'ส่วนลดจ่าย', 0, disc * lc, 0, isFcDoc ? disc : 0));
+          final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, notSetupDiscountLabel);
+          final discName = setup.discountAccountName ?? acctName(setup.discountAccountId, discountPaidLabel);
+          lines.add(_GlLine(discCode, discName.isEmpty ? discountPaidLabel : discName, discountPaidLabel, 0, disc * lc, 0, isFcDoc ? disc : 0));
         } else {
           lines.add(_GlLine(revCode, revName.isEmpty ? 'Revenue' : revName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
         }
         if (vat > 0) {
           String vatAcctCode, vatAcctName;
           if (r.isDeferredVat) {
-            vatAcctCode = setup.vatPendingOutputAccountCode ?? '!ยังไม่ตั้งค่า VAT รอตัด';
-            vatAcctName = setup.vatPendingOutputAccountName ?? 'VAT รอตัดบัญชี';
+            vatAcctCode = setup.vatPendingOutputAccountCode ?? notSetupVatPendingLabel;
+            vatAcctName = setup.vatPendingOutputAccountName ?? deferredVatLabel;
           } else {
             final vr = _vatRates.cast<VatRate?>().firstWhere((v) => v?.vatCode == r.vatType, orElse: () => null);
             if (vr?.glAccountCode != null && vr!.glAccountCode!.isNotEmpty) {
@@ -4030,11 +4142,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               vatAcctCode = setup.vatOutputAccountCode!;
               vatAcctName = setup.vatOutputAccountName ?? 'VAT Output';
             } else {
-              vatAcctCode = '!ยังไม่ตั้งค่าบัญชี VAT';
+              vatAcctCode = notSetupVatLabel2;
               vatAcctName = 'VAT Output';
             }
           }
-          lines.add(_GlLine(vatAcctCode, vatAcctName, 'ภาษีมูลค่าเพิ่ม', vat * lc, 0, isFcDoc ? vat : 0, 0));
+          lines.add(_GlLine(vatAcctCode, vatAcctName, vatDesc2, vat * lc, 0, isFcDoc ? vat : 0, 0));
         }
       }
     }
@@ -4043,31 +4155,31 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       final revCode = setup.revenueAccountCode ?? '—';
       final revName = setup.revenueAccountName ?? 'Revenue';
       for (final a in _applyRows) {
-        lines.add(_GlLine(revCode, revName, 'ลดหนี้ ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
+        lines.add(_GlLine(revCode, revName, '$creditNoteDesc ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
       }
-      lines.add(_GlLine(arCode, arName, 'ลูกหนี้การค้า', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      lines.add(_GlLine(arCode, arName, arDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
     }
     // ── Advance Receipt (60) ────────────────────────────────────────────
     else if (sysType == arDocTypeAdvanceReceipt) {
       if (_paymentRows.isEmpty) {
-        lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'รับมัดจำ', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', advanceReceivedDesc2, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
       } else {
         for (final p in _paymentRows) {
           final amt = double.tryParse(p.amountCtrl.text) ?? 0;
           lines.add(_GlLine(
             paymentAcctCode(p),
             paymentAcctName(p).isEmpty ? 'Cash' : paymentAcctName(p),
-            p.paymentMethodName ?? 'รับมัดจำ',
+            p.paymentMethodName ?? advanceReceivedDesc2,
             amt * lc, 0, isFcDoc ? amt : 0, 0,
           ));
         }
       }
-      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', 'มัดจำรับ', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', advanceReceivedLabel2, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
     }
     // ── Advance Refund (65) ──────────────────────────────────────────────
     else if (sysType == arDocTypeAdvanceRefund) {
-      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', 'คืนมัดจำ', _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
-      lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'จ่ายคืนเงินมัดจำ', 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance', advanceRefundDesc2, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+      lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', payAdvanceRefundDesc2, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
     }
     // ── Receipt (80) ────────────────────────────────────────────────────
     else if (sysType == arDocTypeReceipt) {
@@ -4100,7 +4212,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       // DR: Cash/Bank per payment method (or single cash line)
       if (_paymentRows.isEmpty) {
         if (totalCashLc > 0.005) {
-          lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', 'รับชำระ', totalCashLc, 0, isFcReceipt ? _totalAmountFc : 0, 0));
+          lines.add(_GlLine(setup.cashAccountCode ?? '—', setup.cashAccountName ?? 'Cash', receivePaymentDesc2, totalCashLc, 0, isFcReceipt ? _totalAmountFc : 0, 0));
         }
       } else {
         for (final p in _paymentRows) {
@@ -4109,7 +4221,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           lines.add(_GlLine(
             paymentAcctCode(p),
             paymentAcctName(p).isEmpty ? 'Cash' : paymentAcctName(p),
-            p.paymentMethodName ?? 'รับชำระ',
+            p.paymentMethodName ?? receivePaymentDesc2,
             amt * lc, 0, isFcReceipt ? amt : 0, 0,
           ));
         }
@@ -4119,7 +4231,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       if (totalAdvanceDeducted > 0.005) {
         lines.add(_GlLine(
           setup.advanceAccountCode ?? '—', setup.advanceAccountName ?? 'Advance',
-          'ตัดมัดจำ', totalAdvanceDeducted * lc, 0, isFcReceipt ? totalAdvanceDeducted : 0, 0,
+          advanceDeductDesc, totalAdvanceDeducted * lc, 0, isFcReceipt ? totalAdvanceDeducted : 0, 0,
         ));
       }
 
@@ -4129,7 +4241,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           ? (totalInvAtInvRate > 0 ? totalInvAtInvRate - totalCnAtInvRate : totalCashLc)
           : (totalInvoiceApplied > 0 ? (totalInvoiceApplied - totalCnDeducted) * lc : totalCashLc);
       if (arCreditLc > 0.005) {
-        lines.add(_GlLine(arCode, arName, 'ชำระหนี้', 0, arCreditLc, 0, arCreditFc));
+        lines.add(_GlLine(arCode, arName, settleDebtDesc2, 0, arCreditLc, 0, arCreditFc));
       }
 
       // FX Gain/Loss: difference between LC at receipt rate vs invoice rate (pure LC — no FC equivalent)
@@ -4138,15 +4250,15 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         if (fxNet >= 0.005 && setup.fxGainAccountId != null) {
           lines.add(_GlLine(
             setup.fxGainAccountCode ?? acctCode(setup.fxGainAccountId, '—'),
-            setup.fxGainAccountName?.isNotEmpty == true ? setup.fxGainAccountName! : acctName(setup.fxGainAccountId, 'กำไรอัตราแลกเปลี่ยน'),
-            'กำไรจากอัตราแลกเปลี่ยน',
+            setup.fxGainAccountName?.isNotEmpty == true ? setup.fxGainAccountName! : acctName(setup.fxGainAccountId, fxGainName),
+            fxGainDesc,
             0, fxNet,
           ));
         } else if (fxNet <= -0.005 && setup.fxLossAccountId != null) {
           lines.add(_GlLine(
             setup.fxLossAccountCode ?? acctCode(setup.fxLossAccountId, '—'),
-            setup.fxLossAccountName?.isNotEmpty == true ? setup.fxLossAccountName! : acctName(setup.fxLossAccountId, 'ขาดทุนอัตราแลกเปลี่ยน'),
-            'ขาดทุนจากอัตราแลกเปลี่ยน',
+            setup.fxLossAccountName?.isNotEmpty == true ? setup.fxLossAccountName! : acctName(setup.fxLossAccountId, fxLossName),
+            fxLossDesc,
             fxNet.abs(), 0,
           ));
         }
@@ -4156,13 +4268,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       if (deferredVatLc > 0.005 && setup.vatPendingOutputAccountId != null && setup.vatOutputAccountId != null) {
         lines.add(_GlLine(
           setup.vatPendingOutputAccountCode ?? acctCode(setup.vatPendingOutputAccountId, '—'),
-          setup.vatPendingOutputAccountName ?? acctName(setup.vatPendingOutputAccountId, 'VAT รอตัดบัญชี'),
-          'รับรู้ VAT รอตัดบัญชี', deferredVatLc, 0,
+          setup.vatPendingOutputAccountName ?? acctName(setup.vatPendingOutputAccountId, deferredVatRecognizedName),
+          deferredVatRecognizeDesc, deferredVatLc, 0,
         ));
         lines.add(_GlLine(
           setup.vatOutputAccountCode ?? acctCode(setup.vatOutputAccountId, '—'),
           setup.vatOutputAccountName ?? acctName(setup.vatOutputAccountId, 'VAT Output'),
-          'VAT รอตัดบัญชีที่รับรู้', 0, deferredVatLc,
+          deferredVatRecognizedDesc, 0, deferredVatLc,
         ));
       }
     }

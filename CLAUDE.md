@@ -79,6 +79,54 @@ The `Menu` model (`lib/sa/models/menu.dart`) contains a static `_staticWidgetBui
 2. Left panel: `MenuTreeView` (collapsible tree navigation)
 3. Right panel: `TabBar` + `TabBarView` — each selected menu item opens as a closeable tab
 
+### Bilingual Support (Thai / English)
+
+The app supports Thai/English switching via `LanguageProvider` (`lib/sa/services/sa_language_provider.dart`).
+
+**Rules — apply every time you touch a screen:**
+
+1. **Read language in `build()`** and save to instance variable:
+   ```dart
+   bool _isEnglish = false; // field in State class
+
+   @override
+   Widget build(BuildContext context) {
+     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+     _isEnglish = isEnglish; // lets async methods access it without context
+     ...
+   }
+   ```
+
+2. **Company name** — always use `company.displayName(isEnglish)`, never `.thaiName` directly:
+   ```dart
+   // Company model has: String displayName(bool isEnglish)
+   final companyName = _company?.displayName(_isEnglish) ?? '(No company name)';
+   ```
+
+3. **Account name in lists/trees** — `Account` has both `accountNameThai` and `accountNameEng`:
+   ```dart
+   isEnglish && item.accountNameEng.isNotEmpty
+       ? item.accountNameEng : item.accountNameThai
+   ```
+
+4. **Account type label** — use helper from `gl_account.dart`:
+   ```dart
+   import '../models/gl_account.dart';
+   accountTypeLabel(type, isEnglish) // returns Thai or English label
+   ```
+
+5. **In async methods** (PDF, Excel): use `final isEnglish = _isEnglish;` at the top — never pass `context` into async.
+
+6. **In dialog callbacks**: `final isEnglish = context.read<LanguageProvider>().isEnglish;`
+
+7. **Excel report headers**: bilingualize company name (`displayName`), report title, column headers, and print-date label.
+
+8. **PDF report headers**: same as Excel — company name, page label (`หน้า`/`Page`), printed-by (`พิมพ์โดย`/`Printed by`), print-date (`พิมพ์เมื่อ`/`Printed`).
+
+9. **`AppL10n`** (`lib/sa/services/sa_app_l10n.dart`) provides standard labels (close, cancel, save, etc.) — use it instead of hardcoding.
+
+---
+
 ### PDF / Printing
 
 The `pdf` and `printing` packages are used in the GL module for generating financial reports (financial report, general ledger, trial balance).

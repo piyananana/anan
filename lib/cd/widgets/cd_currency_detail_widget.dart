@@ -1,6 +1,9 @@
-﻿// widgets/zipcode_detail_form.dart
+// widgets/zipcode_detail_form.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_currency.dart';
 
 class CurrencyDetailWidget extends StatefulWidget {
@@ -33,7 +36,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
   late TextEditingController _symbolController;
   late bool _baseCurrencyFlag;
   late int _numOfDecimal;
-  late bool _isActive; 
+  late bool _isActive;
 
   final List<int> _numOfDecimals = [0, 1, 2, 3, 4, 5, 6];
   bool _isSaving = false;
@@ -50,7 +53,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
     _baseCurrencyFlag = _selected?.baseCurrencyFlag ?? false;
     _symbolController = TextEditingController(text: _selected?.symbol);
     _numOfDecimal = _selected?.numOfDecimal ?? 2;
-    _isActive = _selected?.isActive ?? true;  
+    _isActive = _selected?.isActive ?? true;
   }
 
   @override
@@ -66,11 +69,8 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
       _baseCurrencyFlag = _selected?.baseCurrencyFlag ?? false;
       _symbolController.text = _selected?.symbol ?? '';
       _numOfDecimal = _selected?.numOfDecimal ?? 2;
-      _isActive = _selected?.isActive ?? true;  
-
-      // *ไม่ต้องเรียก setState() เพราะการเปลี่ยนแปลงสถานะใน didUpdateWidget จะถูกนำไปใช้ในการ build ถัดไป*
+      _isActive = _selected?.isActive ?? true;
     } else if (widget.mode == Mode.add && oldWidget.mode != Mode.add) {
-      // กรณีเปลี่ยนเป็นโหมดเพิ่มข้อมูลใหม่
       _selected = null;
       _currencyCodeController.clear();
       _currencyNameThaiController.clear();
@@ -79,7 +79,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
       _baseCurrencyFlag = false;
       _symbolController.clear();
       _numOfDecimal = 2;
-      _isActive = true;  
+      _isActive = true;
     }
   }
 
@@ -113,9 +113,10 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
         await widget.onSubmit(newDetail);
       } catch (e) {
         if (mounted) {
+          final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('เกิดข้อผิดพลาด: $e'),
+              content: Text('${l.errorOccurred}: $e'),
               backgroundColor: Colors.red,
             ),
           );
@@ -132,10 +133,14 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+
     if (widget.isPlaceholder) {
-      return const Center(
-        child: Text(
-            'เลือกสกุลเงินเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มสกุลเงินใหม่'),
+      return Center(
+        child: Text(isEnglish
+            ? 'Select a currency to edit or press + to add new'
+            : 'เลือกสกุลเงินเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มสกุลเงินใหม่'),
       );
     }
 
@@ -149,11 +154,11 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.mode == Mode.view // _isViewing
-                  ? 'ดูข้อมูล'
-                  : widget.mode == Mode.edit // _isEditing
-                      ? 'แก้ไขข้อมูล'
-                      : 'เพิ่มข้อมูลใหม่',
+              widget.mode == Mode.view
+                  ? (isEnglish ? 'View' : 'ดูข้อมูล')
+                  : widget.mode == Mode.edit
+                      ? (isEnglish ? 'Edit' : 'แก้ไขข้อมูล')
+                      : (isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
@@ -166,13 +171,12 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                     style: const TextStyle(fontSize: 31, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                     decoration: const InputDecoration(
-                      labelText: 'รหัสสกุลเงิน (ISO 3-letter code)',
+                      labelText: 'Currency Code (ISO 3-letter)',
                       border: OutlineInputBorder(),
                     ),
-                    // maxLength: 3,
                     validator: (value) {
                       if (value == null || value.isEmpty || value.length != 3) {
-                        return 'โปรดระบุรหัส 3 ตัวอักษร';
+                        return isEnglish ? 'Please enter a 3-letter code' : 'โปรดระบุรหัส 3 ตัวอักษร';
                       }
                       return null;
                     },
@@ -185,16 +189,10 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                     controller: _symbolController,
                     style: const TextStyle(fontSize: 31, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
-                    decoration: const InputDecoration(
-                      labelText: 'สัญลักษณ์สกุลเงิน',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Currency Symbol' : 'สัญลักษณ์สกุลเงิน',
+                      border: const OutlineInputBorder(),
                     ),
-                    // validator: (value) {
-                    //   if (value == null || value.isEmpty) {
-                    //     return 'โปรดระบุสัญลักษณ์สกุลเงิน';
-                    //   }
-                    //   return null;
-                    // },
                   ),
                 ),
               ],
@@ -212,7 +210,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'โปรดระบุชื่อสกุลเงินภาษาไทย';
+                        return isEnglish ? 'Please enter Thai name' : 'โปรดระบุชื่อสกุลเงินภาษาไทย';
                       }
                       return null;
                     },
@@ -224,12 +222,12 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                     readOnly: readOnly,
                     controller: _currencyNameEngController,
                     decoration: const InputDecoration(
-                      labelText: 'ชื่อสกุลเงิน (อังกฤษ)',
+                      labelText: 'Currency Name (EN)',
                       border: OutlineInputBorder(),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'โปรดระบุชื่อสกุลเงินภาษาอังกฤษ';
+                        return isEnglish ? 'Please enter English name' : 'โปรดระบุชื่อสกุลเงินภาษาอังกฤษ';
                       }
                       return null;
                     },
@@ -241,8 +239,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                      'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
+                  child: Text('${l.status}: ${_isActive ? l.active : l.inactive}'),
                 ),
                 Switch(
                   value: _isActive,
@@ -261,8 +258,9 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                      'เป็นสกุลเงินหลักของระบบ: ${_baseCurrencyFlag ? 'เป็น' : 'ไม่เป็น'}'),
+                  child: Text(isEnglish
+                      ? 'Base currency of system: ${_baseCurrencyFlag ? 'Yes' : 'No'}'
+                      : 'เป็นสกุลเงินหลักของระบบ: ${_baseCurrencyFlag ? 'เป็น' : 'ไม่เป็น'}'),
                 ),
                 Switch(
                   value: _baseCurrencyFlag,
@@ -280,62 +278,52 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
               controller: _baseRateController,
               textAlign: TextAlign.right,
               style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                labelText: 'อัตราแลกเปลี่ยนพื้นฐาน (เทียบกับสกุลเงินหลัก)',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish
+                    ? 'Base Exchange Rate (vs. base currency)'
+                    : 'อัตราแลกเปลี่ยนพื้นฐาน (เทียบกับสกุลเงินหลัก)',
+                border: const OutlineInputBorder(),
               ),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               validator: (value) {
                 if (_baseCurrencyFlag) {
-                  value = '1.00'; // หากเป็นสกุลเงินหลัก ให้ตั้งค่า base rate เป็น 1.00 อัตโนมัติ
+                  value = '1.00';
                   return null;
                 } else if (value == null || double.tryParse(value) == null) {
-                  return 'โปรดระบุอัตราแลกเปลี่ยนที่ถูกต้อง';
+                  return isEnglish ? 'Please enter a valid rate' : 'โปรดระบุอัตราแลกเปลี่ยนที่ถูกต้อง';
                 }
                 return null;
               },
             ),
             const SizedBox(height: 16),
-            // Row(
-            //   children: [
-            //     // const Expanded(
-            //     //   child: 
-            //     //     Text('จำนวนทศนิยม'),
-            //     // ),
-            //   ],
-            // ),
-                DropdownButtonFormField<int>(
-                  isExpanded: true,
-                  value: _numOfDecimal,
-                  alignment: Alignment.centerRight,
-                  decoration: const InputDecoration(
-                    labelText:
-                        'เลือกจำนวนทศนิยม 0 - 6 ตำแหน่ง',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: _numOfDecimals.map((val) {
-                    return DropdownMenuItem(
-                      value: val,
-                      child: Text(val.toString()),
-                    );
-                  }).toList(),
-                  onChanged: readOnly ? null : (value) {
-                    if (value != null) {
-                      setState(() {
-                        _numOfDecimal = value;
-                      });
-                    }
-                  },
-                ),
-            const SizedBox(height: 16),
-            // --- สิ้นสุดการเพิ่ม Currency ---
-            const SizedBox(height: 32),
-            // --- Buttons ---
+            DropdownButtonFormField<int>(
+              isExpanded: true,
+              value: _numOfDecimal,
+              alignment: Alignment.centerRight,
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Decimal places (0–6)' : 'เลือกจำนวนทศนิยม 0 - 6 ตำแหน่ง',
+                border: const OutlineInputBorder(),
+              ),
+              items: _numOfDecimals.map((val) {
+                return DropdownMenuItem(
+                  value: val,
+                  child: Text(val.toString()),
+                );
+              }).toList(),
+              onChanged: readOnly ? null : (value) {
+                if (value != null) {
+                  setState(() {
+                    _numOfDecimal = value;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 48),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 widget.mode == Mode.view
-                    ? Container() // ไม่แสดงปุ่มเพิ่ม/บันทึก หากเป็นโหมดดูอย่างเดียว
+                    ? Container()
                     : Expanded(
                         child: ElevatedButton.icon(
                           onPressed: _isSaving ? null : _submitForm,
@@ -347,10 +335,10 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                                       strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.save),
                           label: Text(_isSaving
-                              ? 'กำลังบันทึก...'
+                              ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
                               : widget.mode == Mode.edit
-                                  ? 'บันทึก'
-                                  : 'เพิ่ม'),
+                                  ? l.save
+                                  : l.add),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue.shade700,
                             foregroundColor: Colors.white,
@@ -363,7 +351,7 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
                   child: ElevatedButton.icon(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
+                    label: Text(l.cancel),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade600,
                       foregroundColor: Colors.white,

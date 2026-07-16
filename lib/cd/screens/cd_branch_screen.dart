@@ -125,7 +125,7 @@ class _BranchScreenState extends State<BranchScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Export: ${e.toString()}')),
+              content: Text(isEnglish ? 'Export failed: ${e.toString()}' : 'เกิดข้อผิดพลาดในการ Export: ${e.toString()}')),
         );
       }
     } finally {
@@ -173,7 +173,7 @@ class _BranchScreenState extends State<BranchScreen>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')),
+                content: Text(isEnglish ? 'Delete all failed: ${e.toString()}' : 'เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')),
           );
         }
       }
@@ -238,7 +238,7 @@ class _BranchScreenState extends State<BranchScreen>
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
+            SnackBar(content: Text(isEnglish ? 'Delete failed: ${e.toString()}' : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
           );
         }
       }
@@ -270,7 +270,7 @@ class _BranchScreenState extends State<BranchScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish ? 'Save failed: ${e.toString()}' : 'เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')),
         );
       }
     }

@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/cd_vat_rate.dart';
 import '../services/cd_vat_rate_service.dart';
 
@@ -35,12 +36,14 @@ class VatRateListWidget extends StatefulWidget {
 
   static Future<void> search(BuildContext context,
       {required void Function(VatRate) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('ค้นหา อัตราภาษีมูลค่าเพิ่ม',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+            isEnglish ? 'Search VAT Rate' : 'ค้นหา อัตราภาษีมูลค่าเพิ่ม',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Container(
           width: 500,
           height: 600,
@@ -64,7 +67,8 @@ class VatRateListWidget extends StatefulWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+            child: Text(isEnglish ? 'Close' : 'ปิด',
+                style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -146,7 +150,7 @@ class VatRateListWidgetState extends State<VatRateListWidget>
     return items;
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
@@ -154,28 +158,28 @@ class VatRateListWidgetState extends State<VatRateListWidget>
           if (widget.enableAddButton)
             IconButton(
               icon: const Icon(Icons.add),
-              tooltip: 'เพิ่มอัตราภาษีใหม่',
+              tooltip: isEnglish ? 'Add New VAT Rate' : 'เพิ่มอัตราภาษีใหม่',
               onPressed: widget.onAdd,
             ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.sort),
-            tooltip: 'จัดเรียง',
+            tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
             onSelected: _onSortSelected,
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
-              PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
-              PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
-              PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'code_asc',  child: Text(isEnglish ? 'Code (A→Z)'  : 'รหัส (น้อยไปมาก)')),
+              PopupMenuItem(value: 'code_desc', child: Text(isEnglish ? 'Code (Z→A)'  : 'รหัส (มากไปน้อย)')),
+              PopupMenuItem(value: 'name_asc',  child: Text(isEnglish ? 'Name (A→Z)'  : 'ชื่อ (น้อยไปมาก)')),
+              PopupMenuItem(value: 'name_desc', child: Text(isEnglish ? 'Name (Z→A)'  : 'ชื่อ (มากไปน้อย)')),
             ],
           ),
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา (รหัส / ชื่อภาษี)',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: isEnglish ? 'Search (Code / VAT Name)' : 'ค้นหา (รหัส / ชื่อภาษี)',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (v) => setState(() => _searchQuery = v),
             ),
@@ -188,13 +192,16 @@ class VatRateListWidgetState extends State<VatRateListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final items = _filtered();
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${_lists.length} แถว'
-        : 'พบ ${items.length} จาก ${_lists.length} แถว';
+        ? (isEnglish ? 'Total ${_lists.length} rows' : 'ทั้งหมด ${_lists.length} แถว')
+        : (isEnglish
+            ? 'Found ${items.length} of ${_lists.length} rows'
+            : 'พบ ${items.length} จาก ${_lists.length} แถว');
     return Column(
       children: [
-        _buildHeader(),
+        _buildHeader(isEnglish),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           child: Align(
@@ -207,14 +214,26 @@ class VatRateListWidgetState extends State<VatRateListWidget>
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : items.isEmpty
-                  ? const Center(child: Text('ไม่พบข้อมูลอัตราภาษีมูลค่าเพิ่ม'))
+                  ? Center(child: Text(isEnglish
+                      ? 'No VAT rates found'
+                      : 'ไม่พบข้อมูลอัตราภาษีมูลค่าเพิ่ม'))
                   : ListView.builder(
                       itemCount: items.length,
                       itemBuilder: (context, index) {
                         final item = items[index];
+                        final displayName = isEnglish && item.vatNameEn != null
+                            ? item.vatNameEn!
+                            : item.vatNameTh;
+                        final presentLabel = isEnglish ? 'Present' : 'ปัจจุบัน';
                         final endLabel = item.endDate != null
                             ? _dateFmt.format(item.endDate!)
-                            : 'ปัจจุบัน';
+                            : presentLabel;
+                        final activeRange = isEnglish
+                            ? 'Valid: ${_dateFmt.format(item.effectiveDate)} – $endLabel'
+                            : 'ใช้งาน: ${_dateFmt.format(item.effectiveDate)} – $endLabel';
+                        final accountLabel = item.glAccountCode != null
+                            ? (isEnglish ? 'Account' : 'บัญชี')
+                            : null;
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8.0, vertical: 4.0),
@@ -236,7 +255,7 @@ class VatRateListWidgetState extends State<VatRateListWidget>
                               ),
                             ),
                             title: Text(
-                              '${item.vatCode}  ${item.vatNameTh}',
+                              '${item.vatCode}  $displayName',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: item.isActive ? null : Colors.grey,
@@ -244,9 +263,9 @@ class VatRateListWidgetState extends State<VatRateListWidget>
                             ),
                             subtitle: Text(
                               [
-                                'ใช้งาน: ${_dateFmt.format(item.effectiveDate)} – $endLabel',
+                                activeRange,
                                 if (item.glAccountCode != null)
-                                  'บัญชี: ${item.glAccountCode}  ${item.glAccountName ?? ''}',
+                                  '$accountLabel: ${item.glAccountCode}  ${item.glAccountName ?? ''}',
                                 if (item.remark != null && item.remark!.isNotEmpty)
                                   item.remark!,
                               ].join('\n'),

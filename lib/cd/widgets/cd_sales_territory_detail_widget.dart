@@ -1,8 +1,10 @@
-﻿// lib/cd/widgets/cd_sales_territory_detail_widget.dart
+// lib/cd/widgets/cd_sales_territory_detail_widget.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_sales_territory.dart';
 import '../services/cd_sales_territory_service.dart';
 
@@ -118,7 +120,7 @@ class SalesTerritoryDetailWidgetState
     }
   }
 
-  Future<void> _pickParent() async {
+  Future<void> _pickParent(bool isEnglish) async {
     final List<SalesTerritory> all;
     try {
       all = await Provider.of<SalesTerritoryService>(context, listen: false)
@@ -126,11 +128,12 @@ class SalesTerritoryDetailWidgetState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('โหลดข้อมูลเขตล้มเหลว: $e')));
+            SnackBar(content: Text(isEnglish
+                ? 'Failed to load territories: $e'
+                : 'โหลดข้อมูลเขตล้มเหลว: $e')));
       }
       return;
     }
-    // ตัดตัวเอง (กัน circular) กรณีแก้ไข
     final choices = all
         .where((t) => t.id != widget.selected?.id)
         .toList()
@@ -141,8 +144,9 @@ class SalesTerritoryDetailWidgetState
       context: context,
       builder: (ctx) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('เลือกเขตแม่',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+            isEnglish ? 'Select Parent Territory' : 'เลือกเขตแม่',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: 500,
           height: 500,
@@ -150,8 +154,11 @@ class SalesTerritoryDetailWidgetState
             itemCount: choices.length,
             itemBuilder: (_, i) {
               final t = choices[i];
+              final displayName = isEnglish && t.territoryNameEng != null && t.territoryNameEng!.isNotEmpty
+                  ? t.territoryNameEng!
+                  : t.territoryNameThai;
               return ListTile(
-                title: Text('${t.territoryCode} — ${t.territoryNameThai}'),
+                title: Text('${t.territoryCode} — $displayName'),
                 onTap: () {
                   setState(() {
                     _parentId = t.id;
@@ -167,8 +174,8 @@ class SalesTerritoryDetailWidgetState
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child:
-                  const Text('ยกเลิก', style: TextStyle(color: Colors.red))),
+              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก',
+                  style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -195,7 +202,7 @@ class SalesTerritoryDetailWidgetState
     }
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit(bool isEnglish) async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     try {
@@ -217,9 +224,10 @@ class SalesTerritoryDetailWidgetState
       await widget.onSubmit(row);
     } catch (e) {
       if (mounted) {
+        final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาด: $e'),
+              content: Text('${l.errorOccurred}: $e'),
               backgroundColor: Colors.red),
         );
       }
@@ -233,10 +241,14 @@ class SalesTerritoryDetailWidgetState
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+
     if (widget.isPlaceholder) {
-      return const Center(
-          child: Text(
-              'เลือกเขตการขายเพื่อแก้ไข หรือ กดปุ่ม + เพื่อเพิ่มใหม่'));
+      return Center(
+          child: Text(isEnglish
+              ? 'Select a territory to edit or press + to add new'
+              : 'เลือกเขตการขายเพื่อแก้ไข หรือ กดปุ่ม + เพื่อเพิ่มใหม่'));
     }
 
     final bool ro = widget.mode == Mode.view;
@@ -248,318 +260,317 @@ class SalesTerritoryDetailWidgetState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-                  Text(
-                    widget.mode == Mode.view
-                        ? 'ดูข้อมูลเขตการขาย'
-                        : widget.mode == Mode.edit
-                            ? 'แก้ไขเขตการขาย'
-                            : 'เพิ่มเขตการขาย',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 20),
+            Text(
+              widget.mode == Mode.view
+                  ? (isEnglish ? 'View Territory' : 'ดูข้อมูลเขตการขาย')
+                  : widget.mode == Mode.edit
+                      ? (isEnglish ? 'Edit Territory' : 'แก้ไขเขตการขาย')
+                      : (isEnglish ? 'Add Territory' : 'เพิ่มเขตการขาย'),
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 20),
 
-                  // รหัส
-                  TextFormField(
-                    controller: _codeCtrl,
-                    readOnly: widget.mode != Mode.add,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+            TextFormField(
+              controller: _codeCtrl,
+              readOnly: widget.mode != Mode.add,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Territory Code *' : 'รหัสเขตการขาย *',
+                border: const OutlineInputBorder(),
+              ),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? (isEnglish ? 'Please enter code' : 'โปรดระบุรหัส')
+                  : null,
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _nameThaCtrl,
+                    readOnly: ro,
                     decoration: const InputDecoration(
-                      labelText: 'รหัสเขตการขาย *',
+                      labelText: 'ชื่อเขต (ไทย) *',
                       border: OutlineInputBorder(),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'โปรดระบุรหัส' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? (isEnglish ? 'Please enter Thai name' : 'โปรดระบุชื่อภาษาไทย')
+                        : null,
                   ),
-                  const SizedBox(height: 12),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _nameEngCtrl,
+                    readOnly: ro,
+                    decoration: const InputDecoration(
+                      labelText: 'Territory Name (EN)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
 
-                  // ชื่อ ไทย / อังกฤษ
-                  Row(
+            InkWell(
+              onTap: ro ? null : () => _pickParent(isEnglish),
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Parent Territory (optional)' : 'เขตแม่ (ถ้ามี)',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _nameThaCtrl,
-                          readOnly: ro,
-                          decoration: const InputDecoration(
-                            labelText: 'ชื่อเขต (ไทย) *',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'โปรดระบุชื่อภาษาไทย'
-                              : null,
+                      if (_parentId != null && !ro)
+                        IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => setState(() {
+                            _parentId = null;
+                            _parentCode = null;
+                            _parentNameThai = null;
+                          }),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _nameEngCtrl,
-                          readOnly: ro,
-                          decoration: const InputDecoration(
-                            labelText: 'ชื่อเขต (อังกฤษ)',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
+                      const Icon(Icons.search),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                ),
+                child: Text(
+                  _parentId == null
+                      ? (isEnglish ? '— None —' : '— ไม่มี —')
+                      : '${_parentCode ?? ''} ${_parentNameThai ?? ''}',
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
 
-                  // เขตแม่
-                  InkWell(
-                    onTap: ro ? null : _pickParent,
+            TextFormField(
+              controller: _sortCtrl,
+              readOnly: ro,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Sort Order' : 'ลำดับการแสดง',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: ro ? null : () => _pickDate(true),
                     child: InputDecorator(
                       decoration: InputDecoration(
-                        labelText: 'เขตแม่ (ถ้ามี)',
+                        labelText: isEnglish ? 'Start Date' : 'วันที่เริ่มใช้',
                         border: const OutlineInputBorder(),
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (_parentId != null && !ro)
+                            if (_effectiveDateFrom != null && !ro)
                               IconButton(
                                 icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () => setState(() {
-                                  _parentId = null;
-                                  _parentCode = null;
-                                  _parentNameThai = null;
-                                }),
+                                onPressed: () => setState(
+                                    () => _effectiveDateFrom = null),
                               ),
-                            const Icon(Icons.search),
+                            const Icon(Icons.calendar_today, size: 18),
                           ],
                         ),
                       ),
-                      child: Text(
-                        _parentId == null
-                            ? '— ไม่มี —'
-                            : '${_parentCode ?? ''} ${_parentNameThai ?? ''}',
+                      child: Text(_formatDate(_effectiveDateFrom).isEmpty
+                          ? '—'
+                          : _formatDate(_effectiveDateFrom)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: InkWell(
+                    onTap: ro ? null : () => _pickDate(false),
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'End Date' : 'วันที่สิ้นสุด',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_effectiveDateTo != null && !ro)
+                              IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () => setState(
+                                    () => _effectiveDateTo = null),
+                              ),
+                            const Icon(Icons.calendar_today, size: 18),
+                          ],
+                        ),
+                      ),
+                      child: Text(_formatDate(_effectiveDateTo).isEmpty
+                          ? '—'
+                          : _formatDate(_effectiveDateTo)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            TextFormField(
+              controller: _descCtrl,
+              readOnly: ro,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: l.description,
+                border: const OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                    child: Text('${l.status}: ${_isActive ? l.active : l.inactive}')),
+                Switch(
+                  value: _isActive,
+                  onChanged: ro
+                      ? null
+                      : (v) => setState(() => _isActive = v),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            Row(
+              children: [
+                if (widget.mode != Mode.view)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isSaving ? null : () => _submit(isEnglish),
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.save),
+                      label: Text(_isSaving
+                          ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
+                          : widget.mode == Mode.edit ? l.save : l.add),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade700,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-
-                  // sort_order
-                  TextFormField(
-                    controller: _sortCtrl,
-                    readOnly: ro,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      labelText: 'ลำดับการแสดง',
-                      border: OutlineInputBorder(),
+                if (widget.mode != Mode.view) const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: widget.onCancel,
+                    icon: const Icon(Icons.cancel),
+                    label: Text(l.cancel),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                ),
+              ],
+            ),
 
-                  // วันที่เริ่ม/สิ้นสุด
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: ro ? null : () => _pickDate(true),
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'วันที่เริ่มใช้',
-                              border: const OutlineInputBorder(),
-                              suffixIcon: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (_effectiveDateFrom != null && !ro)
-                                    IconButton(
-                                      icon: const Icon(Icons.clear, size: 18),
-                                      onPressed: () => setState(
-                                          () => _effectiveDateFrom = null),
-                                    ),
-                                  const Icon(Icons.calendar_today, size: 18),
-                                ],
-                              ),
-                            ),
-                            child: Text(_formatDate(_effectiveDateFrom).isEmpty
-                                ? '—'
-                                : _formatDate(_effectiveDateFrom)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: InkWell(
-                          onTap: ro ? null : () => _pickDate(false),
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'วันที่สิ้นสุด',
-                              border: const OutlineInputBorder(),
-                              suffixIcon: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (_effectiveDateTo != null && !ro)
-                                    IconButton(
-                                      icon: const Icon(Icons.clear, size: 18),
-                                      onPressed: () => setState(
-                                          () => _effectiveDateTo = null),
-                                    ),
-                                  const Icon(Icons.calendar_today, size: 18),
-                                ],
-                              ),
-                            ),
-                            child: Text(_formatDate(_effectiveDateTo).isEmpty
-                                ? '—'
-                                : _formatDate(_effectiveDateTo)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // คำอธิบาย
-                  TextFormField(
-                    controller: _descCtrl,
-                    readOnly: ro,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'คำอธิบาย',
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
+            if (widget.selected?.id != null) ...[
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Text(
+                      isEnglish ? 'Assigned Salespersons' : 'พนักงานขายที่รับผิดชอบ',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const Spacer(),
+                  if (_loadingMembers)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // สถานะ
-                  Row(
-                    children: [
-                      Expanded(
-                          child: Text(
-                              'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
-                      Switch(
-                        value: _isActive,
-                        onChanged: ro
-                            ? null
-                            : (v) => setState(() => _isActive = v),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // ปุ่ม
-                  Row(
-                    children: [
-                      if (widget.mode != Mode.view)
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _isSaving ? null : _submit,
-                            icon: _isSaving
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.save),
-                            label: Text(_isSaving
-                                ? 'กำลังบันทึก...'
-                                : widget.mode == Mode.edit
-                                    ? 'บันทึก'
-                                    : 'เพิ่ม'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue.shade700,
-                              foregroundColor: Colors.white,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 12),
-                            ),
+                ],
+              ),
+              const Divider(),
+              if (!_loadingMembers && _members.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                      isEnglish
+                          ? '— No salespersons assigned to this territory —'
+                          : '— ยังไม่มีพนักงานขายในเขตนี้ —',
+                      style: const TextStyle(color: Colors.grey)),
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _members.length,
+                  itemBuilder: (ctx, i) {
+                    final m = _members[i];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        leading: Icon(
+                          m.isPrimary ? Icons.star : Icons.star_border,
+                          color: m.isPrimary ? Colors.amber : Colors.grey,
+                        ),
+                        title: Text(
+                          '${m.salespersonCode} — ${m.salespersonNameThai}',
+                          style: TextStyle(
+                            color: m.isActive ? null : Colors.grey,
                           ),
                         ),
-                      if (widget.mode != Mode.view) const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: widget.onCancel,
-                          icon: const Icon(Icons.cancel),
-                          label: const Text('ยกเลิก'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey.shade600,
-                            foregroundColor: Colors.white,
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 12),
-                          ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (m.isPrimary)
+                              Text(isEnglish ? 'Primary Territory' : 'เขตหลัก',
+                                  style: const TextStyle(color: Colors.amber)),
+                            Text(
+                              _salespersonTypeLabel(m.salespersonType, isEnglish),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            if (m.effectiveDateFrom != null ||
+                                m.effectiveDateTo != null)
+                              Text(
+                                '${_formatDate(m.effectiveDateFrom)} — ${_formatDate(m.effectiveDateTo)}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                  // ─── พนักงานขายที่รับผิดชอบ ───────────────────────
-                  if (widget.selected?.id != null) ...[
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Text('พนักงานขายที่รับผิดชอบ',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const Spacer(),
-                        if (_loadingMembers)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                      ],
-                    ),
-                    const Divider(),
-                    if (!_loadingMembers && _members.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: Text('— ยังไม่มีพนักงานขายในเขตนี้ —',
-                            style: TextStyle(color: Colors.grey)),
-                      )
-                    else
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _members.length,
-                        itemBuilder: (ctx, i) {
-                          final m = _members[i];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            child: ListTile(
-                              leading: Icon(
-                                m.isPrimary ? Icons.star : Icons.star_border,
-                                color: m.isPrimary
-                                    ? Colors.amber
-                                    : Colors.grey,
-                              ),
-                              title: Text(
-                                '${m.salespersonCode} — ${m.salespersonNameThai}',
-                                style: TextStyle(
-                                  color: m.isActive ? null : Colors.grey,
-                                ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (m.isPrimary)
-                                    const Text('เขตหลัก',
-                                        style: TextStyle(color: Colors.amber)),
-                                  Text(
-                                    _salespersonTypeLabel(m.salespersonType),
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  if (m.effectiveDateFrom != null ||
-                                      m.effectiveDateTo != null)
-                                    Text(
-                                      '${_formatDate(m.effectiveDateFrom)} — ${_formatDate(m.effectiveDateTo)}',
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                  ],
+                    );
+                  },
+                ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  String _salespersonTypeLabel(String type) {
-    const labels = {
-      'EMPLOYEE': 'พนักงานภายใน',
-      'INDIVIDUAL': 'บุคคลภายนอก',
-      'COMPANY': 'บริษัท/นิติบุคคล',
-    };
-    return labels[type] ?? type;
+  String _salespersonTypeLabel(String type, bool isEnglish) {
+    if (isEnglish) {
+      const labels = {
+        'EMPLOYEE': 'Internal Employee',
+        'INDIVIDUAL': 'External Individual',
+        'COMPANY': 'Company / Legal Entity',
+      };
+      return labels[type] ?? type;
+    } else {
+      const labels = {
+        'EMPLOYEE': 'พนักงานภายใน',
+        'INDIVIDUAL': 'บุคคลภายนอก',
+        'COMPANY': 'บริษัท/นิติบุคคล',
+      };
+      return labels[type] ?? type;
+    }
   }
 }

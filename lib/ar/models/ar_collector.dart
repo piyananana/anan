@@ -7,6 +7,16 @@ const arCollectorTypeOptions = {
   'COMPANY': 'บริษัท/นิติบุคคล',
 };
 
+const arCollectorTypeOptionsEng = {
+  'EMPLOYEE': 'Employee',
+  'INDIVIDUAL': 'Individual',
+  'COMPANY': 'Company/Juristic Person',
+};
+
+String arCollectorTypeLabel(String type, bool isEnglish) => isEnglish
+    ? (arCollectorTypeOptionsEng[type] ?? type)
+    : (arCollectorTypeOptions[type] ?? type);
+
 class ArCollector {
   final int? id;
   final String collectorCode;
@@ -16,8 +26,6 @@ class ArCollector {
   final String? taxId;
   final int? branchId;
   final String? branchNameThai;
-  final int? businessUnitId;
-  final String? businessUnitName;
   final String? phone;
   final String? email;
   final String? address;
@@ -38,8 +46,6 @@ class ArCollector {
     this.taxId,
     this.branchId,
     this.branchNameThai,
-    this.businessUnitId,
-    this.businessUnitName,
     this.phone,
     this.email,
     this.address,
@@ -61,8 +67,6 @@ class ArCollector {
         taxId: json['tax_id'] as String?,
         branchId: json['branch_id'] as int?,
         branchNameThai: json['branch_name_thai'] as String?,
-        businessUnitId: json['business_unit_id'] as int?,
-        businessUnitName: json['business_unit_name'] as String?,
         phone: json['phone'] as String?,
         email: json['email'] as String?,
         address: json['address'] as String?,
@@ -87,7 +91,6 @@ class ArCollector {
         'collector_type': collectorType,
         'tax_id': taxId,
         'branch_id': branchId,
-        'business_unit_id': businessUnitId,
         'phone': phone,
         'email': email,
         'address': address,

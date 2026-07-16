@@ -1,8 +1,10 @@
 ﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 
 class GlResetScreen extends StatefulWidget {
@@ -66,8 +68,10 @@ class _GlResetScreenState extends State<GlResetScreen> {
     }
   }
 
-  bool get _canExecute =>
-      _confirmCtrl.text.trim() == 'ยืนยัน' &&
+  bool get _canExecute {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final keyword = isEnglish ? 'CONFIRM' : 'ยืนยัน';
+    return _confirmCtrl.text.trim() == keyword &&
       (_deleteEntries ||
           _resetDocNumbers ||
           _resetFinancialReports ||
@@ -75,24 +79,28 @@ class _GlResetScreenState extends State<GlResetScreen> {
           _resetDimensions ||
           _resetFiscalYears ||
           _resetChartOfAccounts) &&
-      !_isExecuting;
+        !_isExecuting;
+  }
 
   Future<void> _execute() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
-          SizedBox(width: 8),
-          Text('ยืนยันการลบข้อมูล'),
+        title: Row(children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+          const SizedBox(width: 8),
+          Text(isEnglish ? 'Confirm Delete' : 'ยืนยัน ลบข้อมูล'),
         ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'การดำเนินการนี้ไม่สามารถยกเลิกได้!\nข้อมูลที่ลบจะหายไปถาวร',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            Text(
+              isEnglish
+                  ? 'This action cannot be undone!\nDeleted data will be permanently lost.'
+                  : 'การดำเนินการนี้ไม่สามารถยกเลิกได้!\nข้อมูลที่ลบจะหายไปถาวร',
+              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             if (_deleteEntries) ...[
@@ -118,11 +126,11 @@ class _GlResetScreenState extends State<GlResetScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('ยืนยัน ลบข้อมูล'),
+            child: Text(isEnglish ? 'Confirm Delete' : 'ยืนยัน ลบข้อมูล'),
           ),
         ],
       ),
@@ -261,6 +269,7 @@ class _GlResetScreenState extends State<GlResetScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -269,7 +278,7 @@ class _GlResetScreenState extends State<GlResetScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรช',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรช',
             onPressed: _loadCounts,
           ),
         ],
@@ -456,7 +465,9 @@ class _GlResetScreenState extends State<GlResetScreen> {
                 TextFormField(
                   controller: _confirmCtrl,
                   decoration: InputDecoration(
-                    labelText: 'พิมพ์ "ยืนยัน" เพื่อเปิดใช้ปุ่มลบ',
+                    labelText: isEnglish
+                        ? 'Type "CONFIRM" to enable the delete button'
+                        : 'พิมพ์ "ยืนยัน" เพื่อเปิดใช้ปุ่มลบ',
                     border: const OutlineInputBorder(),
                     filled: true,
                     fillColor: Colors.grey[50],
@@ -478,7 +489,9 @@ class _GlResetScreenState extends State<GlResetScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.delete_forever),
                     label: Text(
-                      _isExecuting ? 'กำลังลบข้อมูล...' : 'ลบข้อมูลที่เลือก',
+                      _isExecuting
+                          ? (isEnglish ? 'Deleting...' : 'กำลังลบข้อมูล...')
+                          : (isEnglish ? 'Delete Selected' : 'ลบข้อมูลที่เลือก'),
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
@@ -492,7 +505,9 @@ class _GlResetScreenState extends State<GlResetScreen> {
                 const SizedBox(height: 12),
                 Center(
                   child: Text(
-                    'ปุ่มจะพร้อมใช้งานเมื่อพิมพ์ "ยืนยัน" และเลือกอย่างน้อย 1 รายการ',
+                    isEnglish
+                        ? 'Button is enabled when you type "CONFIRM" and select at least 1 item'
+                        : 'ปุ่มจะพร้อมใช้งานเมื่อพิมพ์ "ยืนยัน" และเลือกอย่างน้อย 1 รายการ',
                     style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                 ),

@@ -46,6 +46,7 @@ class _ArBillingPlanReportScreenState
   bool   _isDraggingDivider = false;
   int    _pdfKey      = 0;
   bool   _isExporting = false;
+  bool   _isEnglish   = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -102,14 +103,14 @@ class _ArBillingPlanReportScreenState
         customerCodeTo:     _customerCodeTo,
       );
       if (raw.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('ไม่พบข้อมูลในช่วงวันที่ที่เลือก')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(_isEnglish ? 'No data found for the selected date range' : 'ไม่พบข้อมูลในช่วงวันที่ที่เลือก')));
       }
       setState(() { _reportData = raw; _pdfKey++; });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -134,6 +135,7 @@ class _ArBillingPlanReportScreenState
   // ─── PDF ──────────────────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish = _isEnglish;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -142,11 +144,11 @@ class _ArBillingPlanReportScreenState
     final fontBold   = pw.Font.ttf(fontBoldData);
     final fontItalic = pw.Font.ttf(fontItalicData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
+    final companyName  = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final dateRangeLine =
-        'วันที่วางบิล ${DateFormat('dd/MM/yyyy').format(_dateFrom)}'
+        '${isEnglish ? 'Billing date' : 'วันที่วางบิล'} ${DateFormat('dd/MM/yyyy').format(_dateFrom)}'
         ' – ${DateFormat('dd/MM/yyyy').format(_dateTo)}';
 
     // Conditions line
@@ -155,26 +157,27 @@ class _ArBillingPlanReportScreenState
       final names = _selectedGroupIds.map((id) {
         final g = _customerGroups.firstWhere((g) => g.id == id,
             orElse: () => _customerGroups.first);
-        return '${g.groupCode} ${g.groupNameThai}';
+        return '${g.groupCode} ${isEnglish && g.groupNameEng.isNotEmpty ? g.groupNameEng : g.groupNameThai}';
       }).join(', ');
-      conditions.add('กลุ่มลูกค้า: $names');
+      conditions.add('${isEnglish ? 'Customer Group' : 'กลุ่มลูกค้า'}: $names');
     }
     if (_selectedCollectorId != null) {
       final c = _collectors.firstWhere((c) => c.id == _selectedCollectorId,
           orElse: () => _collectors.first);
-      conditions.add('ผู้วางบิล: ${c.collectorCode} ${c.collectorNameThai}');
+      conditions.add('${isEnglish ? 'Biller' : 'ผู้วางบิล'}: ${c.collectorCode} ${c.collectorNameThai}');
     }
     if ((_customerCodeFrom ?? '').isNotEmpty ||
         (_customerCodeTo   ?? '').isNotEmpty) {
       final from = _customerCodeFrom ?? '';
       final to   = _customerCodeTo   ?? '';
+      final all = isEnglish ? '(All)' : '(ทั้งหมด)';
       conditions.add(
-          'รหัสลูกค้า: ${from.isEmpty ? '(ทั้งหมด)' : from}'
-          ' – ${to.isEmpty   ? '(ทั้งหมด)' : to}');
+          '${isEnglish ? 'Customer code' : 'รหัสลูกค้า'}: ${from.isEmpty ? all : from}'
+          ' – ${to.isEmpty   ? all : to}');
     }
-    if (_pageBreakPerCollector) conditions.add('ขึ้นหน้าใหม่ทุกผู้วางบิล');
+    if (_pageBreakPerCollector) conditions.add(isEnglish ? 'Page break per biller' : 'ขึ้นหน้าใหม่ทุกผู้วางบิล');
     final conditionLine =
-        conditions.isEmpty ? 'ทุกลูกค้า' : conditions.join(' | ');
+        conditions.isEmpty ? (isEnglish ? 'All customers' : 'ทุกลูกค้า') : conditions.join(' | ');
 
     final pageBreak = _pageBreakPerCollector;
 
@@ -185,12 +188,12 @@ class _ArBillingPlanReportScreenState
             child: pw.Text(companyName,
                 style: const pw.TextStyle(fontSize: 11))),
         pw.Expanded(flex: 6,
-            child: pw.Text('รายงานกำหนดวางบิล',
+            child: pw.Text(isEnglish ? 'Billing Schedule Report' : 'รายงานกำหนดวางบิล',
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 15,
                     fontWeight: pw.FontWeight.bold))),
         pw.Expanded(flex: 3,
-            child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+            child: pw.Text(isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -202,7 +205,7 @@ class _ArBillingPlanReportScreenState
                 textAlign: pw.TextAlign.center,
                 style: const pw.TextStyle(fontSize: 10))),
         pw.Expanded(flex: 3,
-            child: pw.Text('พิมพ์โดย $userName',
+            child: pw.Text(isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -212,7 +215,7 @@ class _ArBillingPlanReportScreenState
             child: pw.Text('* $conditionLine',
                 style: const pw.TextStyle(fontSize: 9))),
         pw.Expanded(flex: 3,
-            child: pw.Text('พิมพ์เมื่อ $printDateStr',
+            child: pw.Text(isEnglish ? 'Printed: $printDateStr' : 'พิมพ์เมื่อ $printDateStr',
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -266,16 +269,16 @@ class _ArBillingPlanReportScreenState
     pw.TableRow headerRow() => pw.TableRow(
       decoration: const pw.BoxDecoration(color: cGreen),
       children: [
-        hCell('วันที่วางบิล'),
-        hCell('ประเภท\nเอกสาร', a: pw.TextAlign.left),
-        hCell('เลขที่เอกสาร'),
-        hCell('วันแจ้งหนี้'),
-        hCell('วันครบ\nกำหนด'),
-        hCell('วันชำระ\n(คาดว่า)'),
-        hCell('รหัส – ชื่อลูกหนี้', a: pw.TextAlign.left),
-        hCell('เบอร์โทร'),
-        hCell('ยอดคงค้าง'),
-        hCell('อ้างอิง'),
+        hCell(isEnglish ? 'Billing Date' : 'วันที่วางบิล'),
+        hCell(isEnglish ? 'Doc\nType' : 'ประเภท\nเอกสาร', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร'),
+        hCell(isEnglish ? 'Invoice\nDate' : 'วันแจ้งหนี้'),
+        hCell(isEnglish ? 'Due\nDate' : 'วันครบ\nกำหนด'),
+        hCell(isEnglish ? 'Expected\nPayment' : 'วันชำระ\n(คาดว่า)'),
+        hCell(isEnglish ? 'Code – Customer Name' : 'รหัส – ชื่อลูกหนี้', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Phone' : 'เบอร์โทร'),
+        hCell(isEnglish ? 'Outstanding' : 'ยอดคงค้าง'),
+        hCell(isEnglish ? 'Ref' : 'อ้างอิง'),
       ],
     );
 
@@ -315,7 +318,7 @@ class _ArBillingPlanReportScreenState
           children: [
             dCell('', styleBold), dCell('', styleBold), dCell('', styleBold),
             dCell('', styleBold), dCell('', styleBold), dCell('', styleBold),
-            dCell('รวม ${invoices.length} รายการ', styleBold),
+            dCell(isEnglish ? 'Total ${invoices.length} items' : 'รวม ${invoices.length} รายการ', styleBold),
             dCell('', styleBold),
             numCell(totalBal, styleBold),
             dCell('', styleBold),
@@ -363,7 +366,7 @@ class _ArBillingPlanReportScreenState
                 dCell('', styleBold), dCell('', styleBold),
                 dCell('', styleBold), dCell('', styleBold),
                 dCell('', styleBold), dCell('', styleBold),
-                dCell('รวมทุกผู้วางบิล $grandCnt รายการ', styleBold),
+                dCell(isEnglish ? 'Total (all billers) $grandCnt items' : 'รวมทุกผู้วางบิล $grandCnt รายการ', styleBold),
                 dCell('', styleBold),
                 numCell(grandBal, styleBold),
                 dCell('', styleBold),
@@ -421,6 +424,7 @@ class _ArBillingPlanReportScreenState
   @override
   Widget build(BuildContext context) {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    _isEnglish = l.isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -461,8 +465,9 @@ class _ArBillingPlanReportScreenState
                               : Icons.filter_list,
                           color: Colors.white, size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip:
-                          _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (l.isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                          : (l.isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
                       onPressed: () => setState(
                           () => _isFilterExpanded = !_isFilterExpanded),
                     ),
@@ -490,22 +495,22 @@ class _ArBillingPlanReportScreenState
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const Text('เงื่อนไขรายงาน',
-                                          style: TextStyle(
+                                      Text(l.isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                          style: const TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 16)),
                                       const SizedBox(height: 16),
 
                                       // วันที่วางบิล ตั้งแต่
                                       _buildDateField(
-                                        label: 'วันที่วางบิล ตั้งแต่',
+                                        label: l.isEnglish ? 'Billing Date From' : 'วันที่วางบิล ตั้งแต่',
                                         date: _dateFrom,
                                         onPick: (d) =>
                                             setState(() => _dateFrom = d),
                                       ),
                                       const SizedBox(height: 12),
                                       _buildDateField(
-                                        label: 'วันที่วางบิล ถึง',
+                                        label: l.isEnglish ? 'Billing Date To' : 'วันที่วางบิล ถึง',
                                         date: _dateTo,
                                         onPick: (d) =>
                                             setState(() => _dateTo = d),
@@ -528,14 +533,14 @@ class _ArBillingPlanReportScreenState
                                       DropdownButtonFormField<int?>(
                                         isExpanded: true,
                                         value: _selectedCollectorId,
-                                        decoration: const InputDecoration(
-                                            labelText: 'ผู้วางบิล',
-                                            border: OutlineInputBorder(),
+                                        decoration: InputDecoration(
+                                            labelText: l.isEnglish ? 'Biller' : 'ผู้วางบิล',
+                                            border: const OutlineInputBorder(),
                                             isDense: true),
                                         items: [
-                                          const DropdownMenuItem<int?>(
+                                          DropdownMenuItem<int?>(
                                               value: null,
-                                              child: Text('— ทั้งหมด —')),
+                                              child: Text(l.isEnglish ? '— All —' : '— ทั้งหมด —')),
                                           ..._collectors.map((c) =>
                                               DropdownMenuItem<int?>(
                                                 value: c.id,
@@ -552,7 +557,7 @@ class _ArBillingPlanReportScreenState
                                       // รหัสลูกค้า ตั้งแต่ / ถึง
                                       const SizedBox(height: 12),
                                       _buildCustomerCodeField(
-                                        label: 'รหัสลูกค้า ตั้งแต่',
+                                        label: l.isEnglish ? 'Customer Code From' : 'รหัสลูกค้า ตั้งแต่',
                                         displayText: _fromLabel,
                                         onPick: () =>
                                             _pickCustomer(isFrom: true),
@@ -563,7 +568,7 @@ class _ArBillingPlanReportScreenState
                                       ),
                                       const SizedBox(height: 8),
                                       _buildCustomerCodeField(
-                                        label: 'รหัสลูกค้า ถึง',
+                                        label: l.isEnglish ? 'Customer Code To' : 'รหัสลูกค้า ถึง',
                                         displayText: _toLabel,
                                         onPick: () =>
                                             _pickCustomer(isFrom: false),
@@ -578,11 +583,11 @@ class _ArBillingPlanReportScreenState
 
                                       // ขึ้นหน้าใหม่ทุกผู้วางบิล
                                       Row(children: [
-                                        const Expanded(
+                                        Expanded(
                                           child: Text(
-                                              'ขึ้นหน้าใหม่ทุกผู้วางบิล',
+                                              l.isEnglish ? 'Page break per biller' : 'ขึ้นหน้าใหม่ทุกผู้วางบิล',
                                               style:
-                                                  TextStyle(fontSize: 13)),
+                                                  const TextStyle(fontSize: 13)),
                                         ),
                                         Switch(
                                           value: _pageBreakPerCollector,
@@ -606,7 +611,7 @@ class _ArBillingPlanReportScreenState
                                   height: 50,
                                   child: ElevatedButton.icon(
                                     icon: const Icon(Icons.picture_as_pdf),
-                                    label: const Text('ประมวลผลรายงาน'),
+                                    label: Text(l.isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                     style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.teal[800],
                                         foregroundColor: Colors.white),
@@ -647,9 +652,10 @@ class _ArBillingPlanReportScreenState
                           ? const Center(
                               child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(
-                                  child: Text(
-                                      'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(
+                                  child: Text(l.isEnglish
+                                      ? 'Please select filter conditions and click Generate Report'
+                                      : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
@@ -720,6 +726,7 @@ class _ArBillingPlanReportScreenState
     required VoidCallback onPick,
     required VoidCallback onClear,
   }) {
+    final isEnglish = _isEnglish;
     final hasValue = displayText.isNotEmpty;
     return InputDecorator(
       decoration: InputDecoration(
@@ -751,7 +758,7 @@ class _ArBillingPlanReportScreenState
       child: InkWell(
         onTap: onPick,
         child: Text(
-          hasValue ? displayText : '— ทั้งหมด —',
+          hasValue ? displayText : (isEnglish ? '— All —' : '— ทั้งหมด —'),
           style: TextStyle(
               fontSize: 13,
               color: hasValue ? Colors.black87 : Colors.black38),
@@ -764,6 +771,7 @@ class _ArBillingPlanReportScreenState
   // ─── Excel Export ─────────────────────────────────────────────────────────
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -777,11 +785,14 @@ class _ArBillingPlanReportScreenState
       final grandBg = ExcelColor.fromHexString('#A9D18E');
 
       final _tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานกำหนดวางบิล', bold: true);
-      _xlCell(s, 2, 0, 'วันที่วางบิล: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $_tsLabel');
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, isEnglish ? 'Billing Schedule Report' : 'รายงานกำหนดวางบิล', bold: true);
+      _xlCell(s, 2, 0, '${isEnglish ? 'Billing date' : 'วันที่วางบิล'}: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $_tsLabel');
 
-      final hdrs = ['วันที่วางบิล', 'ประเภทเอกสาร', 'เลขที่เอกสาร',
+      final hdrs = isEnglish
+          ? ['Billing Date', 'Doc Type', 'Doc No.', 'Invoice Date', 'Due Date', 'Expected Payment',
+              'Code – Customer Name', 'Phone', 'Outstanding', 'Ref']
+          : ['วันที่วางบิล', 'ประเภทเอกสาร', 'เลขที่เอกสาร',
           'วันแจ้งหนี้', 'วันครบกำหนด', 'วันชำระ (คาดว่า)',
           'รหัส – ชื่อลูกหนี้', 'เบอร์โทร', 'ยอดคงค้าง', 'อ้างอิง'];
       for (int i = 0; i < hdrs.length; i++) {
@@ -824,7 +835,7 @@ class _ArBillingPlanReportScreenState
         // Subtotal per collector
         _xlCell(s, row, 0, '',                           bg: totBg);
         for (int i = 1; i <= 5; i++) _xlCell(s, row, i, '', bg: totBg);
-        _xlCell(s, row, 6, 'รวม ${invoices.length} รายการ', bg: totBg, bold: true);
+        _xlCell(s, row, 6, isEnglish ? 'Total ${invoices.length} items' : 'รวม ${invoices.length} รายการ', bg: totBg, bold: true);
         _xlCell(s, row, 7, '',                           bg: totBg);
         _xlCell(s, row, 8, totalBal, bg: totBg, bold: true, align: HorizontalAlign.Right);
         _xlCell(s, row, 9, '',                           bg: totBg);
@@ -835,14 +846,14 @@ class _ArBillingPlanReportScreenState
 
       // Grand total
       for (int i = 0; i < 6; i++) _xlCell(s, row, i, '', bg: grandBg);
-      _xlCell(s, row, 6, 'รวมทุกผู้วางบิล $grandCnt รายการ', bg: grandBg, bold: true);
+      _xlCell(s, row, 6, isEnglish ? 'Total (all billers) $grandCnt items' : 'รวมทุกผู้วางบิล $grandCnt รายการ', bg: grandBg, bold: true);
       _xlCell(s, row, 7, '', bg: grandBg);
       _xlCell(s, row, 8, grandBal, bg: grandBg, bold: true, align: HorizontalAlign.Right);
       _xlCell(s, row, 9, '', bg: grandBg);
 
       final bytes = ex.encode();
       if (bytes == null) return;
-      const title = 'รายงานกำหนดวางบิล';
+      final title = isEnglish ? 'AR_Billing_Schedule_Report' : 'รายงานกำหนดวางบิล';
       final ts    = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       await downloadFile(bytes, '${title}_$ts.xlsx');
     } finally {
@@ -922,8 +933,8 @@ class _BillingPlanCustomerSearchDialogState
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.teal[800],
-              child: const Text('ค้นหาลูกค้า',
-                  style: TextStyle(
+              child: Text(l.isEnglish ? 'Search Customer' : 'ค้นหาลูกค้า',
+                  style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 15)),
@@ -933,10 +944,10 @@ class _BillingPlanCustomerSearchDialogState
               child: TextField(
                 controller: _searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหาจากรหัสหรือชื่อลูกค้า',
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: l.isEnglish ? 'Search by customer code or name' : 'ค้นหาจากรหัสหรือชื่อลูกค้า',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
                 onChanged: _search,
@@ -946,16 +957,16 @@ class _BillingPlanCustomerSearchDialogState
               color: Colors.grey[200],
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 6),
-              child: const Row(children: [
+              child: Row(children: [
                 SizedBox(
                     width: 100,
-                    child: Text('รหัส',
-                        style: TextStyle(
+                    child: Text(l.isEnglish ? 'Code' : 'รหัส',
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12))),
                 Expanded(
-                    child: Text('ชื่อลูกค้า',
-                        style: TextStyle(
+                    child: Text(l.isEnglish ? 'Customer Name' : 'ชื่อลูกค้า',
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12))),
               ]),
@@ -965,9 +976,9 @@ class _BillingPlanCustomerSearchDialogState
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _customers.isEmpty
-                      ? const Center(
-                          child: Text('ไม่พบข้อมูล',
-                              style: TextStyle(color: Colors.grey)))
+                      ? Center(
+                          child: Text(l.isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+                              style: const TextStyle(color: Colors.grey)))
                       : ListView.separated(
                           controller: _scrollCtrl,
                           itemCount: _customers.length,
@@ -990,7 +1001,10 @@ class _BillingPlanCustomerSearchDialogState
                                                 FontWeight.w500)),
                                   ),
                                   Expanded(
-                                    child: Text(c.customerNameTh,
+                                    child: Text(
+                                        l.isEnglish && (c.customerNameEn?.isNotEmpty ?? false)
+                                            ? c.customerNameEn!
+                                            : c.customerNameTh,
                                         style: const TextStyle(
                                             fontSize: 13),
                                         overflow:

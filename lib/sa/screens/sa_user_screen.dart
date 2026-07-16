@@ -111,8 +111,10 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text('คุณแน่ใจหรือไม่ที่จะลบผู้ใช้ "${user.firstName} ${user.lastName}" ?'),
+        title: Text(l.confirmDelete),
+        content: Text(l.isEnglish
+            ? 'Are you sure you want to delete user "${user.firstName} ${user.lastName}"?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบผู้ใช้ "${user.firstName} ${user.lastName}" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -134,13 +136,13 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
         _onFormCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ลบผู้ใช้สำเร็จ')),
+            SnackBar(content: Text(l.isEnglish ? 'User deleted successfully' : 'ลบผู้ใช้สำเร็จ')),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาดในการลบผู้ใช้: ${e.toString()}')),
+            SnackBar(content: Text(l.isEnglish ? 'Error deleting user: ${e.toString()}' : 'เกิดข้อผิดพลาดในการลบผู้ใช้: ${e.toString()}')),
           );
         }
       }
@@ -148,20 +150,21 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
   }
 
   Future<void> _onFormSubmit(User user) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final userService = Provider.of<UserService>(context, listen: false);
       if (_selectedUserForEdit == null) {
         await userService.addUser(user);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('เพิ่มผู้ใช้สำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'User added successfully' : 'เพิ่มผู้ใช้สำเร็จ')),
           );
         }
       } else {
         await userService.updateUser(user);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('บันทึกผู้ใช้สำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'User saved successfully' : 'บันทึกผู้ใช้สำเร็จ')),
           );
         }
       }
@@ -170,7 +173,7 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการบันทึกผู้ใช้: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish ? 'Error saving user: ${e.toString()}' : 'เกิดข้อผิดพลาดในการบันทึกผู้ใช้: ${e.toString()}')),
         );
       }
     }
@@ -197,7 +200,7 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: _fetchUsers,
           ),
           const SizedBox(width: 8),
@@ -283,10 +286,13 @@ class _UserScreenState extends State<UserScreen> with AutomaticKeepAliveClientMi
   }
 
   Widget _buildDetailForm() {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     switch (_formState) {
       case UserFormState.none:
-        return const Center(
-          child: Text('เลือกผู้ใช้เพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มผู้ใช้ใหม่'),
+        return Center(
+          child: Text(isEnglish
+              ? 'Select a user to edit or delete, or press + to add a new user'
+              : 'เลือกผู้ใช้เพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มผู้ใช้ใหม่'),
         );
       case UserFormState.adding:
         return UserDetailForm(

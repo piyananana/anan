@@ -90,7 +90,7 @@ class _BankScreenState extends State<BankScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('ลบล้มเหลว: $e'),
+              content: Text(isEnglish ? 'Delete failed: $e' : 'ลบล้มเหลว: $e'),
               backgroundColor: Colors.red),
         );
       }
@@ -128,7 +128,7 @@ class _BankScreenState extends State<BankScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('บันทึกล้มเหลว: $e'),
+              content: Text(isEnglish ? 'Save failed: $e' : 'บันทึกล้มเหลว: $e'),
               backgroundColor: Colors.red),
         );
       }

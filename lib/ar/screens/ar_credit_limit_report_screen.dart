@@ -16,7 +16,9 @@ import '../../cd/services/cd_salesperson_service.dart';
 import '../../sa/models/sa_company.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 import 'package:excel/excel.dart';
+import 'package:provider/provider.dart';
 import '../../utils/file_download.dart';
 import '../widgets/ar_customer_group_multi_picker.dart';
 
@@ -42,6 +44,7 @@ class _ArCreditLimitReportScreenState
   bool   _isDraggingDivider = false;
   int    _pdfKey            = 0;
   bool   _isExporting       = false;
+  bool   _isEnglish         = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -94,13 +97,13 @@ class _ArCreditLimitReportScreenState
       );
       if (raw.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ไม่พบข้อมูลตามเงื่อนไขที่เลือก')));
+            SnackBar(content: Text(_isEnglish ? 'No data found for the selected conditions' : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')));
       }
       setState(() { _reportData = raw; _pdfKey++; });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -114,13 +117,14 @@ class _ArCreditLimitReportScreenState
   // ─── PDF ──────────────────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish = _isEnglish;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
     final font     = pw.Font.ttf(fontData);
     final fontBold = pw.Font.ttf(fontBoldData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
+    final companyName  = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
@@ -130,28 +134,29 @@ class _ArCreditLimitReportScreenState
       final names = _selectedGroupIds.map((id) {
         final g = _customerGroups.firstWhere((g) => g.id == id,
             orElse: () => _customerGroups.first);
-        return '${g.groupCode} ${g.groupNameThai}';
+        return '${g.groupCode} ${isEnglish && g.groupNameEng.isNotEmpty ? g.groupNameEng : g.groupNameThai}';
       }).join(', ');
-      conditions.add('กลุ่ม: $names');
+      conditions.add('${isEnglish ? 'Group' : 'กลุ่ม'}: $names');
     }
     if (_selectedSalespersonId != null) {
       final s = _salespersons.firstWhere((s) => s.id == _selectedSalespersonId,
           orElse: () => _salespersons.first);
-      conditions.add('พนักงานขาย: ${s.salespersonCode} ${s.salespersonNameThai}');
+      conditions.add('${isEnglish ? 'Salesperson' : 'พนักงานขาย'}: ${s.salespersonCode} ${s.salespersonNameThai}');
     }
     if ((_customerCodeFrom ?? '').isNotEmpty ||
         (_customerCodeTo   ?? '').isNotEmpty) {
-      final f = (_customerCodeFrom ?? '').isEmpty ? '(ทั้งหมด)' : _customerCodeFrom!;
-      final t = (_customerCodeTo   ?? '').isEmpty ? '(ทั้งหมด)' : _customerCodeTo!;
-      conditions.add('รหัสลูกค้า: $f – $t');
+      final all = isEnglish ? '(All)' : '(ทั้งหมด)';
+      final f = (_customerCodeFrom ?? '').isEmpty ? all : _customerCodeFrom!;
+      final t = (_customerCodeTo   ?? '').isEmpty ? all : _customerCodeTo!;
+      conditions.add('${isEnglish ? 'Customer code' : 'รหัสลูกค้า'}: $f – $t');
     }
     if (_creditStatus.isNotEmpty) {
-      conditions.add('สถานะ: ${_statusLabel(_creditStatus)}');
+      conditions.add('${isEnglish ? 'Status' : 'สถานะ'}: ${_statusLabel(_creditStatus, isEnglish)}');
     }
     switch (_sortBy) {
-      case 'remaining_asc':  conditions.add('เรียงวงเงินคงเหลือน้อยไปมาก'); break;
-      case 'remaining_desc': conditions.add('เรียงวงเงินคงเหลือมากไปน้อย'); break;
-      default:               conditions.add('เรียงรหัสลูกหนี้');
+      case 'remaining_asc':  conditions.add(isEnglish ? 'Sort by remaining limit, low to high' : 'เรียงวงเงินคงเหลือน้อยไปมาก'); break;
+      case 'remaining_desc': conditions.add(isEnglish ? 'Sort by remaining limit, high to low' : 'เรียงวงเงินคงเหลือมากไปน้อย'); break;
+      default:               conditions.add(isEnglish ? 'Sort by customer code' : 'เรียงรหัสลูกหนี้');
     }
     final conditionLine = conditions.join(' | ');
 
@@ -162,12 +167,12 @@ class _ArCreditLimitReportScreenState
             child: pw.Text(companyName,
                 style: const pw.TextStyle(fontSize: 11))),
         pw.Expanded(flex: 6,
-            child: pw.Text('รายงานวงเงินคงเหลือลูกหนี้',
+            child: pw.Text(isEnglish ? 'AR Credit Limit Report' : 'รายงานวงเงินคงเหลือลูกหนี้',
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 15,
                     fontWeight: pw.FontWeight.bold))),
         pw.Expanded(flex: 3,
-            child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+            child: pw.Text(isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -175,11 +180,12 @@ class _ArCreditLimitReportScreenState
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.SizedBox()),
         pw.Expanded(flex: 6,
-            child: pw.Text('ณ วันที่ ${DateFormat('dd/MM/yyyy').format(DateTime.now())}',
+            child: pw.Text(
+                '${isEnglish ? 'As of' : 'ณ วันที่'} ${DateFormat('dd/MM/yyyy').format(DateTime.now())}',
                 textAlign: pw.TextAlign.center,
                 style: const pw.TextStyle(fontSize: 10))),
         pw.Expanded(flex: 3,
-            child: pw.Text('พิมพ์โดย $userName',
+            child: pw.Text(isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -189,7 +195,7 @@ class _ArCreditLimitReportScreenState
             child: pw.Text('* $conditionLine',
                 style: const pw.TextStyle(fontSize: 9))),
         pw.Expanded(flex: 3,
-            child: pw.Text('พิมพ์เมื่อ $printDateStr',
+            child: pw.Text(isEnglish ? 'Printed: $printDateStr' : 'พิมพ์เมื่อ $printDateStr',
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -244,11 +250,11 @@ class _ArCreditLimitReportScreenState
     final headerRow = pw.TableRow(
       decoration: const pw.BoxDecoration(color: cGreen),
       children: [
-        hCell('รหัส – ชื่อลูกหนี้', a: pw.TextAlign.left),
-        hCell('วงเงินรวม'),
-        hCell('หนี้คงค้าง'),
-        hCell('วงเงินคงเหลือ'),
-        hCell('สถานะวงเงิน'),
+        hCell(isEnglish ? 'Code – Customer Name' : 'รหัส – ชื่อลูกหนี้', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Credit Limit' : 'วงเงินรวม'),
+        hCell(isEnglish ? 'Outstanding' : 'หนี้คงค้าง'),
+        hCell(isEnglish ? 'Remaining Limit' : 'วงเงินคงเหลือ'),
+        hCell(isEnglish ? 'Status' : 'สถานะวงเงิน'),
       ],
     );
 
@@ -297,7 +303,7 @@ class _ArCreditLimitReportScreenState
             remaining < 0 ? tBold(9) : tNormal(9),
             a: pw.TextAlign.right,
           ),
-          dCell(_statusLabel(status), statusStyle,
+          dCell(_statusLabel(status, isEnglish), statusStyle,
               a: pw.TextAlign.center),
         ],
       ));
@@ -308,8 +314,10 @@ class _ArCreditLimitReportScreenState
       decoration: const pw.BoxDecoration(
           color: PdfColor(0.75, 0.88, 0.83)),
       children: [
-        dCell('รวม $totalCustomers ลูกหนี้'
-            '${overCount > 0 ? ' (เกินวงเงิน $overCount ราย)' : ''}',
+        dCell(isEnglish
+            ? 'Total $totalCustomers customers${overCount > 0 ? ' (over limit: $overCount)' : ''}'
+            : 'รวม $totalCustomers ลูกหนี้'
+                '${overCount > 0 ? ' (เกินวงเงิน $overCount ราย)' : ''}',
             tBold(9)),
         amtCellDash(grandLimit,       tBold(9)),
         amtCellDash(grandOutstanding, tBold(9)),
@@ -338,7 +346,16 @@ class _ArCreditLimitReportScreenState
     return doc.save();
   }
 
-  static String _statusLabel(String status) {
+  static String _statusLabel(String status, bool isEnglish) {
+    if (isEnglish) {
+      switch (status) {
+        case 'over':      return 'Over Limit';
+        case 'remaining': return 'Within Limit';
+        case 'full':      return 'Full Limit Remaining';
+        case 'no_limit':  return 'No Limit Specified';
+        default:          return status;
+      }
+    }
     switch (status) {
       case 'over':      return 'เกินวงเงิน';
       case 'remaining': return 'ยังเหลือวงเงิน';
@@ -352,6 +369,8 @@ class _ArCreditLimitReportScreenState
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -392,7 +411,9 @@ class _ArCreditLimitReportScreenState
                               : Icons.filter_list,
                           color: Colors.white, size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
                       onPressed: () => setState(
                           () => _isFilterExpanded = !_isFilterExpanded),
                     ),
@@ -417,8 +438,8 @@ class _ArCreditLimitReportScreenState
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('เงื่อนไขรายงาน',
-                                        style: TextStyle(
+                                    Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                        style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 16)),
                                     const SizedBox(height: 16),
@@ -427,7 +448,7 @@ class _ArCreditLimitReportScreenState
                                     ArCustomerGroupMultiPicker(
                                       groups: _customerGroups,
                                       selectedIds: _selectedGroupIds,
-                                      label: 'กลุ่มลูกหนี้',
+                                      label: isEnglish ? 'Customer Groups' : 'กลุ่มลูกหนี้',
                                       onChanged: (v) =>
                                           setState(() => _selectedGroupIds = v),
                                     ),
@@ -437,14 +458,14 @@ class _ArCreditLimitReportScreenState
                                     DropdownButtonFormField<int?>(
                                       isExpanded: true,
                                       value: _selectedSalespersonId,
-                                      decoration: const InputDecoration(
-                                          labelText: 'พนักงานขาย',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Salesperson' : 'พนักงานขาย',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
                                       items: [
-                                        const DropdownMenuItem<int?>(
+                                        DropdownMenuItem<int?>(
                                             value: null,
-                                            child: Text('— ทั้งหมด —')),
+                                            child: Text(isEnglish ? '— All —' : '— ทั้งหมด —')),
                                         ..._salespersons.map((s) =>
                                             DropdownMenuItem<int?>(
                                               value: s.id,
@@ -460,7 +481,7 @@ class _ArCreditLimitReportScreenState
 
                                     // รหัสลูกหนี้ ตั้งแต่ / ถึง
                                     _buildCustomerCodeField(
-                                        label: 'รหัสลูกหนี้ ตั้งแต่',
+                                        label: isEnglish ? 'Customer Code From' : 'รหัสลูกหนี้ ตั้งแต่',
                                         displayText: _fromLabel,
                                         onPick: () =>
                                             _pickCustomer(isFrom: true),
@@ -470,7 +491,7 @@ class _ArCreditLimitReportScreenState
                                         })),
                                     const SizedBox(height: 8),
                                     _buildCustomerCodeField(
-                                        label: 'รหัสลูกหนี้ ถึง',
+                                        label: isEnglish ? 'Customer Code To' : 'รหัสลูกหนี้ ถึง',
                                         displayText: _toLabel,
                                         onPick: () =>
                                             _pickCustomer(isFrom: false),
@@ -486,26 +507,26 @@ class _ArCreditLimitReportScreenState
                                     // สถานะวงเงิน
                                     DropdownButtonFormField<String>(
                                       value: _creditStatus,
-                                      decoration: const InputDecoration(
-                                          labelText: 'สถานะวงเงิน',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Credit Status' : 'สถานะวงเงิน',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
-                                      items: const [
+                                      items: [
                                         DropdownMenuItem(
                                             value: '',
-                                            child: Text('— ทั้งหมด —')),
+                                            child: Text(isEnglish ? '— All —' : '— ทั้งหมด —')),
                                         DropdownMenuItem(
                                             value: 'over',
-                                            child: Text('เกินวงเงิน')),
+                                            child: Text(isEnglish ? 'Over Limit' : 'เกินวงเงิน')),
                                         DropdownMenuItem(
                                             value: 'remaining',
-                                            child: Text('ยังเหลือวงเงิน')),
+                                            child: Text(isEnglish ? 'Within Limit' : 'ยังเหลือวงเงิน')),
                                         DropdownMenuItem(
                                             value: 'full',
-                                            child: Text('เหลือเต็มวงเงิน')),
+                                            child: Text(isEnglish ? 'Full Limit Remaining' : 'เหลือเต็มวงเงิน')),
                                         DropdownMenuItem(
                                             value: 'no_limit',
-                                            child: Text('ไม่ระบุวงเงิน')),
+                                            child: Text(isEnglish ? 'No Limit Specified' : 'ไม่ระบุวงเงิน')),
                                       ],
                                       onChanged: (v) {
                                         if (v != null) {
@@ -518,20 +539,20 @@ class _ArCreditLimitReportScreenState
                                     // จัดเรียงข้อมูล
                                     DropdownButtonFormField<String>(
                                       value: _sortBy,
-                                      decoration: const InputDecoration(
-                                          labelText: 'จัดเรียงข้อมูล',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Sort By' : 'จัดเรียงข้อมูล',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
-                                      items: const [
+                                      items: [
                                         DropdownMenuItem(
                                             value: 'customer',
-                                            child: Text('รหัสลูกหนี้')),
+                                            child: Text(isEnglish ? 'Customer Code' : 'รหัสลูกหนี้')),
                                         DropdownMenuItem(
                                             value: 'remaining_asc',
-                                            child: Text('วงเงินคงเหลือ น้อยไปมาก')),
+                                            child: Text(isEnglish ? 'Remaining Limit, Low to High' : 'วงเงินคงเหลือ น้อยไปมาก')),
                                         DropdownMenuItem(
                                             value: 'remaining_desc',
-                                            child: Text('วงเงินคงเหลือ มากไปน้อย')),
+                                            child: Text(isEnglish ? 'Remaining Limit, High to Low' : 'วงเงินคงเหลือ มากไปน้อย')),
                                       ],
                                       onChanged: (v) {
                                         if (v != null) {
@@ -551,7 +572,7 @@ class _ArCreditLimitReportScreenState
                                 height: 50,
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.picture_as_pdf),
-                                  label: const Text('ประมวลผลรายงาน'),
+                                  label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                   style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.teal[800],
                                       foregroundColor: Colors.white),
@@ -588,8 +609,8 @@ class _ArCreditLimitReportScreenState
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(
-                                  child: Text('กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(
+                                  child: Text(isEnglish ? 'Please select filter conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
@@ -629,6 +650,7 @@ class _ArCreditLimitReportScreenState
   // ─── Excel Export ─────────────────────────────────────────────────────────
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -641,11 +663,13 @@ class _ArCreditLimitReportScreenState
       final totBg = ExcelColor.fromHexString('#BDD7EE');
 
       final _tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานวงเงินคงเหลือลูกหนี้', bold: true);
-      _xlCell(s, 2, 0, 'พิมพ์วันที่: $_tsLabel');
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, isEnglish ? 'AR Credit Limit Report' : 'รายงานวงเงินคงเหลือลูกหนี้', bold: true);
+      _xlCell(s, 2, 0, '${isEnglish ? 'Printed: ' : 'พิมพ์วันที่: '}$_tsLabel');
 
-      final hdrs = ['รหัส – ชื่อลูกหนี้', 'วงเงินรวม', 'หนี้คงค้าง', 'วงเงินคงเหลือ', 'สถานะวงเงิน'];
+      final hdrs = isEnglish
+          ? ['Code – Customer Name', 'Credit Limit', 'Outstanding', 'Remaining Limit', 'Status']
+          : ['รหัส – ชื่อลูกหนี้', 'วงเงินรวม', 'หนี้คงค้าง', 'วงเงินคงเหลือ', 'สถานะวงเงิน'];
       for (int i = 0; i < hdrs.length; i++) {
         _xlCell(s, 3, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
       }
@@ -672,12 +696,14 @@ class _ArCreditLimitReportScreenState
         _xlCell(s, row, 1, limit,       align: HorizontalAlign.Right);
         _xlCell(s, row, 2, outstanding, align: HorizontalAlign.Right);
         _xlCell(s, row, 3, limit <= 0 ? '-' : remaining, align: HorizontalAlign.Right);
-        _xlCell(s, row, 4, _statusLabel(status), align: HorizontalAlign.Center);
+        _xlCell(s, row, 4, _statusLabel(status, isEnglish), align: HorizontalAlign.Center);
         row++;
       }
 
-      final totalLabel = 'รวม $totalCustomers ลูกหนี้'
-          '${overCount > 0 ? ' (เกินวงเงิน $overCount ราย)' : ''}';
+      final totalLabel = isEnglish
+          ? 'Total $totalCustomers customers${overCount > 0 ? ' (over limit: $overCount)' : ''}'
+          : 'รวม $totalCustomers ลูกหนี้'
+              '${overCount > 0 ? ' (เกินวงเงิน $overCount ราย)' : ''}';
       _xlCell(s, row, 0, totalLabel,       bg: totBg, bold: true);
       _xlCell(s, row, 1, grandLimit,       bg: totBg, bold: true, align: HorizontalAlign.Right);
       _xlCell(s, row, 2, grandOutstanding, bg: totBg, bold: true, align: HorizontalAlign.Right);
@@ -686,7 +712,7 @@ class _ArCreditLimitReportScreenState
 
       final bytes = ex.encode();
       if (bytes == null) return;
-      const title = 'รายงานวงเงินคงเหลือลูกหนี้';
+      final title = isEnglish ? 'AR_Credit_Limit_Report' : 'รายงานวงเงินคงเหลือลูกหนี้';
       final ts    = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       await downloadFile(bytes, '${title}_$ts.xlsx');
     } finally {
@@ -713,6 +739,7 @@ class _ArCreditLimitReportScreenState
     required VoidCallback onPick,
     required VoidCallback onClear,
   }) {
+    final isEnglish = _isEnglish;
     final hasValue = displayText.isNotEmpty;
     return InputDecorator(
       decoration: InputDecoration(
@@ -736,7 +763,7 @@ class _ArCreditLimitReportScreenState
       child: InkWell(
         onTap: onPick,
         child: Text(
-          hasValue ? displayText : '— ทั้งหมด —',
+          hasValue ? displayText : (isEnglish ? '— All —' : '— ทั้งหมด —'),
           style: TextStyle(
               fontSize: 13,
               color: hasValue ? Colors.black87 : Colors.black38),
@@ -793,6 +820,7 @@ class _CreditLimitCustomerSearchDialogState
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -802,8 +830,8 @@ class _CreditLimitCustomerSearchDialogState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.teal[800],
-              child: const Text('ค้นหาลูกหนี้',
-                  style: TextStyle(
+              child: Text(isEnglish ? 'Search Customer' : 'ค้นหาลูกหนี้',
+                  style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 15)),
@@ -813,10 +841,10 @@ class _CreditLimitCustomerSearchDialogState
               child: TextField(
                 controller: _ctrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                    hintText: 'ค้นหาจากรหัสหรือชื่อลูกหนี้',
-                    prefixIcon: Icon(Icons.search, size: 18),
-                    border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search by customer code or name' : 'ค้นหาจากรหัสหรือชื่อลูกหนี้',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    border: const OutlineInputBorder(),
                     isDense: true),
                 onChanged: _search,
               ),
@@ -824,13 +852,13 @@ class _CreditLimitCustomerSearchDialogState
             Container(
               color: Colors.grey[200],
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: const Row(children: [
+              child: Row(children: [
                 SizedBox(width: 100,
-                    child: Text('รหัส',
-                        style: TextStyle(
+                    child: Text(isEnglish ? 'Code' : 'รหัส',
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 12))),
-                Expanded(child: Text('ชื่อลูกหนี้',
-                    style: TextStyle(
+                Expanded(child: Text(isEnglish ? 'Customer Name' : 'ชื่อลูกหนี้',
+                    style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 12))),
               ]),
             ),
@@ -839,9 +867,9 @@ class _CreditLimitCustomerSearchDialogState
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _list.isEmpty
-                      ? const Center(
-                          child: Text('ไม่พบข้อมูล',
-                              style: TextStyle(color: Colors.grey)))
+                      ? Center(
+                          child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+                              style: const TextStyle(color: Colors.grey)))
                       : ListView.separated(
                           controller: _scroll,
                           itemCount: _list.length,
@@ -861,7 +889,10 @@ class _CreditLimitCustomerSearchDialogState
                                               fontSize: 13,
                                               fontWeight: FontWeight.w500))),
                                   Expanded(
-                                      child: Text(c.customerNameTh,
+                                      child: Text(
+                                          isEnglish && (c.customerNameEn?.isNotEmpty ?? false)
+                                              ? c.customerNameEn!
+                                              : c.customerNameTh,
                                           style: const TextStyle(fontSize: 13),
                                           overflow: TextOverflow.ellipsis)),
                                 ]),
@@ -877,7 +908,7 @@ class _CreditLimitCustomerSearchDialogState
                 children: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('ยกเลิก')),
+                      child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
                 ],
               ),
             ),

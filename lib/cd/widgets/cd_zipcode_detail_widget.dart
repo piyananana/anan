@@ -1,6 +1,9 @@
-﻿// widgets/zipcode_detail_form.dart
+// widgets/zipcode_detail_form.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_zipcode.dart';
 
 class ZipcodeDetailWidget extends StatefulWidget {
@@ -30,7 +33,7 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
   late TextEditingController _districtController;
   late TextEditingController _provinceController;
   late TextEditingController _zipcodeController;
-  
+
   bool _isSaving = false;
 
   @override
@@ -54,10 +57,7 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
       _districtController.text = _selected?.district ?? '';
       _provinceController.text = _selected?.province ?? '';
       _zipcodeController.text = _selected?.zipcode ?? '';
-
-      // *ไม่ต้องเรียก setState() เพราะการเปลี่ยนแปลงสถานะใน didUpdateWidget จะถูกนำไปใช้ในการ build ถัดไป*
     } else if (widget.mode == Mode.add  && oldWidget.mode != Mode.add) {
-      // กรณีเพิ่มข้อมูลใหม่ ให้ล้างฟิลด์
       _selected = null;
       _subDistrictController.clear();
       _districtController.clear();
@@ -91,9 +91,10 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
         await widget.onSubmit(newDetail);
       } catch (e) {
         if (mounted) {
+          final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('เกิดข้อผิดพลาด: $e'),
+              content: Text('${l.errorOccurred}: $e'),
               backgroundColor: Colors.red,
             ),
           );
@@ -110,10 +111,14 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+
     if (widget.isPlaceholder) {
-      return const Center(
-        child: Text(
-            'เลือกรหัสไปรษณีย์เพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มรหัสไปรษณีย์ใหม่'),
+      return Center(
+        child: Text(isEnglish
+            ? 'Select a zipcode to edit or press + to add new'
+            : 'เลือกรหัสไปรษณีย์เพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มรหัสไปรษณีย์ใหม่'),
       );
     }
 
@@ -127,24 +132,24 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.mode == Mode.view // _isViewing
-                  ? 'ดูข้อมูลรหัสไปรษณีย์'
-                  : widget.mode == Mode.edit // _isEditing
-                      ? 'แก้ไขรหัสไปรษณีย์'
-                      : 'เพิ่มรหัสไปรษณีย์ใหม่',
+              widget.mode == Mode.view
+                  ? (isEnglish ? 'View Zipcode' : 'ดูข้อมูลรหัสไปรษณีย์')
+                  : widget.mode == Mode.edit
+                      ? (isEnglish ? 'Edit Zipcode' : 'แก้ไขรหัสไปรษณีย์')
+                      : (isEnglish ? 'Add Zipcode' : 'เพิ่มรหัสไปรษณีย์ใหม่'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
             TextFormField(
               readOnly: readOnly,
               controller: _subDistrictController,
-              decoration: const InputDecoration(
-                labelText: 'ตำบล/แขวง',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Sub-district / Khwaeng' : 'ตำบล/แขวง',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'กรุณาป้อนชื่อตำบล/แขวง';
+                  return isEnglish ? 'Please enter sub-district' : 'กรุณาป้อนชื่อตำบล/แขวง';
                 }
                 return null;
               },
@@ -153,13 +158,13 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
             TextFormField(
               readOnly: readOnly,
               controller: _districtController,
-              decoration: const InputDecoration(
-                labelText: 'อำเภอ/เขต',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'District / Khet' : 'อำเภอ/เขต',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'กรุณาป้อนชื่ออำเภอ/เขต';
+                  return isEnglish ? 'Please enter district' : 'กรุณาป้อนชื่ออำเภอ/เขต';
                 }
                 return null;
               },
@@ -168,13 +173,13 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
             TextFormField(
               readOnly: readOnly,
               controller: _provinceController,
-              decoration: const InputDecoration(
-                labelText: 'จังหวัด',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Province' : 'จังหวัด',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'กรุณาป้อนชื่อจังหวัด';
+                  return isEnglish ? 'Please enter province' : 'กรุณาป้อนชื่อจังหวัด';
                 }
                 return null;
               },
@@ -183,26 +188,23 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
             TextFormField(
               readOnly: readOnly,
               controller: _zipcodeController,
-              decoration: const InputDecoration(
-                labelText: 'รหัสไปรษณีย์',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Zipcode' : 'รหัสไปรษณีย์',
+                border: const OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'กรุณาป้อนรหัสไปรษณีย์';
+                  return isEnglish ? 'Please enter zipcode' : 'กรุณาป้อนรหัสไปรษณีย์';
                 }
                 return null;
               },
             ),
-            const SizedBox(height: 16),
-            // --- สิ้นสุดการเพิ่ม Zipcode ---
-            const SizedBox(height: 32),
-            // --- Buttons ---
+            const SizedBox(height: 48),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 widget.mode == Mode.view
-                    ? Container() // ไม่แสดงปุ่มเพิ่ม/บันทึก หากเป็นโหมดดูอย่างเดียว
+                    ? Container()
                     : Expanded(
                         child: ElevatedButton.icon(
                           onPressed: _isSaving ? null : _submitForm,
@@ -214,10 +216,10 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
                                       strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.save),
                           label: Text(_isSaving
-                              ? 'กำลังบันทึก...'
+                              ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
                               : widget.mode == Mode.edit
-                                  ? 'บันทึก'
-                                  : 'เพิ่ม'),
+                                  ? l.save
+                                  : l.add),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue.shade700,
                             foregroundColor: Colors.white,
@@ -230,7 +232,7 @@ class ZipcodeDetailWidgetState extends State<ZipcodeDetailWidget> {
                   child: ElevatedButton.icon(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.cancel),
-                    label: const Text('ยกเลิก'),
+                    label: Text(l.cancel),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade600,
                       foregroundColor: Colors.white,

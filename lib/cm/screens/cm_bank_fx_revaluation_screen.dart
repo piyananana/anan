@@ -1061,9 +1061,10 @@ class _AccountPickerDialogState extends State<_AccountPickerDialog> {
         ? widget.accounts
         : widget.accounts.where((a) =>
             a.accountCode.toLowerCase().contains(_q.toLowerCase()) ||
-            a.accountNameThai.toLowerCase().contains(_q.toLowerCase())).toList();
+            a.accountNameThai.toLowerCase().contains(_q.toLowerCase()) ||
+            a.accountNameEng.toLowerCase().contains(_q.toLowerCase())).toList();
     return AlertDialog(
-      title: const Text('เลือกผังบัญชี'),
+      title: Text(l.isEnglish ? 'Select Chart of Accounts' : 'เลือกผังบัญชี'),
       content: SizedBox(
         width: 480,
         height: 400,
@@ -1071,7 +1072,7 @@ class _AccountPickerDialogState extends State<_AccountPickerDialog> {
           children: [
             TextField(
               autofocus: true,
-              decoration: const InputDecoration(hintText: 'ค้นหา...', prefixIcon: Icon(Icons.search), isDense: true, border: OutlineInputBorder()),
+              decoration: InputDecoration(hintText: '${l.search}...', prefixIcon: const Icon(Icons.search), isDense: true, border: const OutlineInputBorder()),
               onChanged: (v) => setState(() => _q = v),
             ),
             const SizedBox(height: 8),
@@ -1080,9 +1081,10 @@ class _AccountPickerDialogState extends State<_AccountPickerDialog> {
                 itemCount: filtered.length,
                 itemBuilder: (_, i) {
                   final a = filtered[i];
+                  final name = l.isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
                   return ListTile(
                     dense: true,
-                    title: Text('${a.accountCode}  ${a.accountNameThai}', style: const TextStyle(fontSize: 12)),
+                    title: Text('${a.accountCode}  $name', style: const TextStyle(fontSize: 12)),
                     onTap: () => Navigator.pop(context, a),
                   );
                 },

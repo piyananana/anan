@@ -80,6 +80,11 @@ class Company {
     );
   }
 
+  String displayName(bool isEnglish) =>
+      isEnglish && englishName != null && englishName!.isNotEmpty
+          ? englishName!
+          : thaiName;
+
   // สำหรับส่งข้อมูลไป Backend (POST/PUT)
   Map<String, String> toFormJson() { // ใช้ String เพื่อให้เข้ากับ Multipart request
     return {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/gl_account.dart';
 import '../services/gl_account_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 
 class AccountListTreeWidget extends StatefulWidget {
   final bool enableAddRootButton;
@@ -42,17 +43,17 @@ class AccountListTreeWidget extends StatefulWidget {
   // เมธอด static สำหรับแสดง Dialog
   static Future<void> search(BuildContext context,
       {required void Function(Account) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          // กำหนดขนาดให้ใหญ่ขึ้นเพื่อให้ใช้งานสะดวก
           contentPadding: EdgeInsets.zero,
-          title: const Text('ค้นหา ผังบัญชี',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          title: Text(isEnglish ? 'Search Chart of Accounts' : 'ค้นหา ผังบัญชี',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           content: Container(
-            width: 500, // กำหนดความกว้างที่เหมาะสม
-            height: 600, // กำหนดความสูงที่เหมาะสม
+            width: 500,
+            height: 600,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(10.0),
@@ -75,7 +76,7 @@ class AccountListTreeWidget extends StatefulWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+              child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -88,14 +89,10 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
     with AutomaticKeepAliveClientMixin {
   List<Account> _lists = [];
   bool _isLoading = false;
-  String _error = '';
   final Map<int, bool> _expandedState = {};
 
   Future<void> _fetchLists() async {
-    setState(() {
-      _isLoading = true;
-      _error = '';
-    });
+    setState(() => _isLoading = true);
     try {
       final dataService = Provider.of<AccountService>(context, listen: false);
       final fetched = widget.showInactive
@@ -106,13 +103,13 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
         _isLoading = false;
       });
     } catch (e) {
-      setState(() {
-        _error = 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}';
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       if (mounted) {
+        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_error)),
+          SnackBar(content: Text(isEnglish
+              ? 'Failed to load data: ${e.toString()}'
+              : 'ไม่สามารถโหลดข้อมูลได้: ${e.toString()}')),
         );
       }
     }
@@ -133,17 +130,17 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
     super.dispose();
   }
 
-  Widget _buildListHeader() {
+  Widget _buildListHeader(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
         children: [
           widget.enableAddRootButton
-              ? Expanded(child: 
+              ? Expanded(child:
                   ElevatedButton.icon(
                     onPressed: () => widget.onAddRoot(),
                     icon: const Icon(Icons.add),
-                    label: const Text('เพิ่มหมวดหลัก')
+                    label: Text(isEnglish ? 'Add Root Account' : 'เพิ่มหมวดหลัก')
                   )
               )
               : const SizedBox.shrink(),
@@ -158,7 +155,7 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
   }
 
   // --- Build Methods ---
-  Widget _buildNode(Account item, int level) {
+  Widget _buildNode(Account item, int level, bool isEnglish) {
     final bool isHeader   = item.isNormalAccount == false;
     final bool isInactive = !item.isActive;
     final List<Account> children = _buildTree(_lists, item.id);
@@ -203,7 +200,9 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${item.accountCode} ${item.accountNameThai}',
+                    isEnglish && item.accountNameEng.isNotEmpty
+                        ? '${item.accountCode} ${item.accountNameEng}'
+                        : '${item.accountCode} ${item.accountNameThai}',
                     style: TextStyle(
                       fontSize: 16,
                       color: textColor,
@@ -217,14 +216,14 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                   IconButton(
                     icon: Icon(Icons.add_circle_outline,
                         size: 20, color: actionColor),
-                    tooltip: 'เพิ่มรายการย่อย',
+                    tooltip: isEnglish ? 'Add child' : 'เพิ่มรายการย่อย',
                     onPressed: () => widget.onAddChild(item),
                   ),
                 // Icon ปุ่ม Edit
                 widget.enableEditButton
                     ? IconButton(
                         icon: Icon(Icons.edit, color: actionColor, size: 20),
-                        tooltip: 'แก้ไข',
+                        tooltip: isEnglish ? 'Edit' : 'แก้ไข',
                         onPressed: () => widget.onEdit(item),
                       )
                     : const SizedBox.shrink(),
@@ -232,14 +231,15 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                 widget.enableDeleteButton
                     ? IconButton(
                         icon: Icon(Icons.delete, size: 20, color: deleteColor),
-                        tooltip: 'ลบ',
+                        tooltip: isEnglish ? 'Delete' : 'ลบ',
                         onPressed: () {
                           if (_buildTree(_lists, item.id).isNotEmpty &&
                               item.isNormalAccount == false) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'ไม่สามารถลบรายการที่มีรายการย่อยได้ กรุณาลบรายการย่อยออกก่อน'),
+                              SnackBar(
+                                  content: Text(isEnglish
+                                      ? 'Cannot delete account with children. Remove children first.'
+                                      : 'ไม่สามารถลบรายการที่มีรายการย่อยได้ กรุณาลบรายการย่อยออกก่อน'),
                                   backgroundColor: Colors.red),
                             );
                           } else {
@@ -259,9 +259,10 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                             Navigator.of(context).pop();
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'ไม่สามารถใช้ได้ เนื่องจากเป็นหัวบัญชี หรือ หยุดใช้'),
+                              SnackBar(
+                                  content: Text(isEnglish
+                                      ? 'Cannot use: this is a header account or inactive'
+                                      : 'ไม่สามารถใช้ได้ เนื่องจากเป็นหัวบัญชี หรือ หยุดใช้'),
                                   backgroundColor: Colors.red),
                             );
                           }
@@ -275,7 +276,7 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
         if (isExpanded && hasChildren)
           Column(
             children:
-                children.map((child) => _buildNode(child, level + 1)).toList(),
+                children.map((child) => _buildNode(child, level + 1, isEnglish)).toList(),
           ),
       ],
     );
@@ -288,12 +289,13 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
 
     final List<Account> topLevelLists = _buildTree(_lists, null);
 
     return Column(
       children: [
-        _buildListHeader(),
+        _buildListHeader(isEnglish),
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -301,7 +303,7 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                   child: ListView.builder(
                     itemCount: topLevelLists.length,
                     itemBuilder: (context, index) {
-                      return _buildNode(topLevelLists[index], 0);
+                      return _buildNode(topLevelLists[index], 0, isEnglish);
                     },
                   ),
                 ),

@@ -33,6 +33,8 @@ class DailyTransactionReportScreen extends StatefulWidget {
 
 class _DailyTransactionReportScreenState
     extends State<DailyTransactionReportScreen> {
+  bool _isEnglish = false;
+
   // Services
   final CompanyService _companyService = CompanyService();
   final PeriodService _periodService = PeriodService();
@@ -139,7 +141,7 @@ class _DailyTransactionReportScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error loading master: $e')));
+            .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error loading master data: $e' : 'เกิดข้อผิดพลาดในการโหลดข้อมูลหลัก: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -175,9 +177,10 @@ class _DailyTransactionReportScreenState
   }
 
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     if (_selectedYear == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรุณาเลือกปีบัญชี')));
+          SnackBar(content: Text(isEnglish ? 'Please select a fiscal year' : 'กรุณาเลือกปีบัญชี')));
       return;
     }
     setState(() {
@@ -207,12 +210,12 @@ class _DailyTransactionReportScreenState
       });
       if (data.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ไม่พบข้อมูลตามเงื่อนไขที่เลือก')));
+            SnackBar(content: Text(isEnglish ? 'No data found for the selected conditions' : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -227,7 +230,8 @@ class _DailyTransactionReportScreenState
     required Set<String> selected,
     required Function(Set<String>) onChanged,
   }) async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     Set<String> temp = Set.from(selected);
     await showDialog(
       context: context,
@@ -240,7 +244,7 @@ class _DailyTransactionReportScreenState
             child: Column(
               children: [
                 CheckboxListTile(
-                  title: const Text('เลือกทั้งหมด'),
+                  title: Text(isEnglish ? 'Select All' : 'เลือกทั้งหมด'),
                   value: temp.length == options.length
                       ? true
                       : (temp.isEmpty ? false : null),
@@ -286,7 +290,7 @@ class _DailyTransactionReportScreenState
                   onChanged(temp);
                   Navigator.pop(ctx);
                 },
-                child: const Text('ตกลง')),
+                child: Text(isEnglish ? 'OK' : 'ตกลง')),
           ],
         ),
       ),
@@ -299,7 +303,7 @@ class _DailyTransactionReportScreenState
       String label, List<Map<String, dynamic>> options, Set<String> selected,
       Function(Set<String>) onChanged) {
     final displayText = selected.isEmpty || selected.length == options.length
-        ? 'ทั้งหมด'
+        ? (_isEnglish ? 'All' : 'ทั้งหมด')
         : selected.join(', ');
     return InkWell(
       onTap: () => _showMultiSelectDialog(
@@ -349,6 +353,7 @@ class _DailyTransactionReportScreenState
   // ── Excel Export ─────────────────────────────────────────────────────────
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -360,20 +365,24 @@ class _DailyTransactionReportScreenState
       final detBg = ExcelColor.fromHexString('#F2F2F2');
 
       final _periodLabel = _selectedPeriod != null
-          ? 'งวด ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}'
-          : 'ปี ${_selectedYear?.fyCode ?? ''}';
+          ? isEnglish
+              ? 'Period ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}'
+              : 'งวด ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}'
+          : isEnglish
+              ? 'Year ${_selectedYear?.fyCode ?? ''}'
+              : 'ปี ${_selectedYear?.fyCode ?? ''}';
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'บันทึกรายการบัญชี (Daily Transaction)', bold: true);
-      _xlCell(s, 2, 0, '$_periodLabel  |  พิมพ์: $_ts');
+      _xlCell(s, 0, 0, _company?.displayName(_isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, _isEnglish ? 'Daily Transaction' : 'บันทึกรายการบัญชี (Daily Transaction)', bold: true);
+      _xlCell(s, 2, 0, '$_periodLabel  |  ${isEnglish ? 'Printed: $_ts' : 'พิมพ์: $_ts'}');
 
       int r = 3;
-      _xlCell(s, r, 0, 'รหัสบัญชี', bg: hdrBg, bold: true);
-      _xlCell(s, r, 1, 'ชื่อบัญชี', bg: hdrBg, bold: true);
-      _xlCell(s, r, 2, 'สาขา/มิติ', bg: hdrBg, bold: true);
-      _xlCell(s, r, 3, 'คำอธิบายรายการ', bg: hdrBg, bold: true);
-      _xlCell(s, r, 4, 'เดบิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 5, 'เครดิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 0, isEnglish ? 'Account Code' : 'รหัสบัญชี', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, isEnglish ? 'Account Name' : 'ชื่อบัญชี', bg: hdrBg, bold: true);
+      _xlCell(s, r, 2, isEnglish ? 'Branch/Dim' : 'สาขา/มิติ', bg: hdrBg, bold: true);
+      _xlCell(s, r, 3, isEnglish ? 'Description' : 'คำอธิบายรายการ', bg: hdrBg, bold: true);
+      _xlCell(s, r, 4, isEnglish ? 'Debit' : 'เดบิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 5, isEnglish ? 'Credit' : 'เครดิต', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       r++;
 
       for (final entry in _reportData) {
@@ -396,7 +405,9 @@ class _DailyTransactionReportScreenState
         double sumDr = 0, sumCr = 0;
         for (final d in details) {
           final accCode = d['account_code'] ?? '';
-          final accName = d['account_name_thai'] ?? '';
+          final accName = isEnglish
+              ? (d['account_name_eng']?.toString().isNotEmpty == true ? d['account_name_eng'].toString() : d['account_name_thai']?.toString() ?? '')
+              : d['account_name_thai']?.toString() ?? '';
           final dr = (d['debit_lc'] as num).toDouble();
           final cr = (d['credit_lc'] as num).toDouble();
           final desc = d['description'] ?? '';
@@ -422,7 +433,7 @@ class _DailyTransactionReportScreenState
         }
 
         // Subtotal row
-        _xlCell(s, r, 0, 'รวม', bg: totBg, bold: true);
+        _xlCell(s, r, 0, isEnglish ? 'Total' : 'รวม', bg: totBg, bold: true);
         _xlCell(s, r, 1, '', bg: totBg);
         _xlCell(s, r, 2, '', bg: totBg);
         _xlCell(s, r, 3, '', bg: totBg);
@@ -454,6 +465,7 @@ class _DailyTransactionReportScreenState
   // ── PDF Generation ───────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish = _isEnglish;
     final doc = pw.Document();
     final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -462,14 +474,18 @@ class _DailyTransactionReportScreenState
     final fmt = NumberFormat('#,##0.00', 'en_US');
     final dfmt = DateFormat('dd/MM/yyyy');
 
-    final companyName = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
-    final userName = _headers['UserName'] ?? '(ไม่ระบุชื่อ)';
+    final companyName = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
+    final userName = _headers['UserName'] ?? (isEnglish ? '(Unknown user)' : '(ไม่ระบุชื่อ)');
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
     // Period / date label
     String periodLabel = _selectedPeriod != null
-        ? 'งวด ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}'
-        : 'ปี ${_selectedYear?.fyCode ?? ''}';
+        ? isEnglish
+            ? 'Period ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}'
+            : 'งวด ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}'
+        : isEnglish
+            ? 'Year ${_selectedYear?.fyCode ?? ''}'
+            : 'ปี ${_selectedYear?.fyCode ?? ''}';
     String dateRangeLabel = '';
     if (_docDateFrom != null && _docDateTo != null) {
       dateRangeLabel =
@@ -500,14 +516,14 @@ class _DailyTransactionReportScreenState
                   style: const pw.TextStyle(fontSize: 12))),
           pw.Expanded(
               flex: 7,
-              child: pw.Text('บันทึกรายการบัญชี (Daily Transaction)',
+              child: pw.Text(isEnglish ? 'Daily Transaction' : 'บันทึกรายการบัญชี (Daily Transaction)',
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(
                       fontSize: 16, fontWeight: pw.FontWeight.bold))),
           pw.Expanded(
               flex: 3,
               child: pw.Text(
-                  'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+                  isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
                   textAlign: pw.TextAlign.right,
                   style: const pw.TextStyle(fontSize: 12))),
         ]),
@@ -521,7 +537,7 @@ class _DailyTransactionReportScreenState
                   style: const pw.TextStyle(fontSize: 12))),
           pw.Expanded(
               flex: 3,
-              child: pw.Text('พิมพ์โดย $userName',
+              child: pw.Text(isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
                   textAlign: pw.TextAlign.right,
                   style: const pw.TextStyle(fontSize: 12))),
         ]),
@@ -530,7 +546,7 @@ class _DailyTransactionReportScreenState
           pw.Expanded(flex: 10, child: pw.Text('')),
           pw.Expanded(
               flex: 3,
-              child: pw.Text('พิมพ์เมื่อ $printDateStr',
+              child: pw.Text(isEnglish ? 'Printed $printDateStr' : 'พิมพ์เมื่อ $printDateStr',
                   textAlign: pw.TextAlign.right,
                   style: const pw.TextStyle(fontSize: 12))),
         ]),
@@ -545,14 +561,9 @@ class _DailyTransactionReportScreenState
             pw.TableRow(
               decoration:
                   const pw.BoxDecoration(color: PdfColors.grey300),
-              children: [
-                'รหัสบัญชี',
-                'ชื่อบัญชี',
-                'สาขา/มิติ',
-                'คำอธิบายรายการ',
-                'เดบิต',
-                'เครดิต',
-              ]
+              children: (isEnglish
+                  ? ['Account Code', 'Account Name', 'Branch/Dim', 'Description', 'Debit', 'Credit']
+                  : ['รหัสบัญชี', 'ชื่อบัญชี', 'สาขา/มิติ', 'คำอธิบายรายการ', 'เดบิต', 'เครดิต'])
                   .asMap()
                   .entries
                   .map((e) => pw.Padding(
@@ -610,7 +621,7 @@ class _DailyTransactionReportScreenState
               pw.Padding(
                 padding: const pw.EdgeInsets.fromLTRB(6, 4, 4, 4),
                 child: pw.Text(
-                  'วันที่: $docDate   '
+                  '${isEnglish ? 'Date: $docDate' : 'วันที่: $docDate'}   '
                   '${docCode.isNotEmpty ? '$docCode  ' : ''}'
                   '${docNo.isNotEmpty ? '$docNo  ' : ''}'
                   '${description.isNotEmpty ? '| $description' : ''}',
@@ -622,7 +633,7 @@ class _DailyTransactionReportScreenState
                 padding: const pw.EdgeInsets.fromLTRB(4, 4, 6, 4),
                 child: pw.Text(
                   [
-                    if (refDocCode.isNotEmpty) 'อ้างอิง: $refDocCode',
+                    if (refDocCode.isNotEmpty) isEnglish ? 'Ref: $refDocCode' : 'อ้างอิง: $refDocCode',
                     if (refDocNo.isNotEmpty) refDocNo,
                     if (refDocDate.isNotEmpty) refDocDate,
                   ].join('  '),
@@ -638,7 +649,9 @@ class _DailyTransactionReportScreenState
       // 2. Detail rows
       final detailRows = details.map((d) {
         final accCode = d['account_code'] ?? '';
-        final accName = d['account_name_thai'] ?? '';
+        final accName = isEnglish
+            ? (d['account_name_eng']?.toString().isNotEmpty == true ? d['account_name_eng'].toString() : d['account_name_thai']?.toString() ?? '')
+            : d['account_name_thai']?.toString() ?? '';
         final dr = (d['debit_lc'] as num).toDouble();
         final cr = (d['credit_lc'] as num).toDouble();
         final desc = d['description'] ?? '';
@@ -721,7 +734,7 @@ class _DailyTransactionReportScreenState
                 padding: const pw.EdgeInsets.all(3),
                 child: isBalanced
                     ? pw.SizedBox()
-                    : pw.Text('[!] ไม่ดุล!',
+                    : pw.Text(isEnglish ? '[!] Unbalanced!' : '[!] ไม่ดุล!',
                         style: pw.TextStyle(
                             fontSize: 10,
                             fontWeight: pw.FontWeight.bold,
@@ -732,7 +745,7 @@ class _DailyTransactionReportScreenState
                 padding: const pw.EdgeInsets.all(3),
                 child: pw.Align(
                   alignment: pw.Alignment.centerRight,
-                  child: pw.Text('ยอดรวมเดบิต / เครดิต',
+                  child: pw.Text(isEnglish ? 'Total Debit / Credit' : 'ยอดรวมเดบิต / เครดิต',
                       style: pw.TextStyle(
                           fontWeight: pw.FontWeight.bold, fontSize: 10)),
                 ),
@@ -781,7 +794,8 @@ class _DailyTransactionReportScreenState
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -802,7 +816,7 @@ class _DailyTransactionReportScreenState
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
             onPressed: _loadMasterData,
           ),
         ],
@@ -825,7 +839,9 @@ class _DailyTransactionReportScreenState
               ),
               padding: EdgeInsets.zero,
               onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
-              tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+              tooltip: _isFilterExpanded
+                  ? (isEnglish ? 'Collapse Filter' : 'ย่อเงื่อนไข')
+                  : (isEnglish ? 'Expand Filter' : 'ขยายเงื่อนไข'),
             ),
           ),
           AnimatedContainer(
@@ -849,8 +865,8 @@ class _DailyTransactionReportScreenState
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('เงื่อนไขรายงาน',
-                                style: TextStyle(
+                            Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16)),
                             const SizedBox(height: 14),
@@ -864,9 +880,9 @@ class _DailyTransactionReportScreenState
                                       value: fy,
                                       child: Text(fy.fyCode)))
                                   .toList(),
-                              decoration: const InputDecoration(
-                                  labelText: 'ปีบัญชี',
-                                  border: OutlineInputBorder()),
+                              decoration: InputDecoration(
+                                  labelText: isEnglish ? 'Fiscal Year' : 'ปีบัญชี',
+                                  border: const OutlineInputBorder()),
                               onChanged: (v) async {
                                 if (v != null) {
                                   setState(() => _selectedYear = v);
@@ -881,18 +897,18 @@ class _DailyTransactionReportScreenState
                               isExpanded: true,
                               value: _selectedPeriod,
                               items: [
-                                const DropdownMenuItem<PostingPeriod?>(
+                                DropdownMenuItem<PostingPeriod?>(
                                     value: null,
-                                    child: Text('ทุกงวด (ตั้งแต่ต้นปี)')),
+                                    child: Text(isEnglish ? 'All Periods (From Year Start)' : 'ทุกงวด (ตั้งแต่ต้นปี)')),
                                 ..._periods.map((p) =>
                                     DropdownMenuItem(
                                         value: p,
                                         child: Text(
                                             '${p.periodNumber} - ${p.periodName}'))),
                               ],
-                              decoration: const InputDecoration(
-                                  labelText: 'งวด',
-                                  border: OutlineInputBorder()),
+                              decoration: InputDecoration(
+                                  labelText: isEnglish ? 'Period' : 'งวด',
+                                  border: const OutlineInputBorder()),
                               onChanged: (v) {
                                 setState(() => _selectedPeriod = v);
                                 _applyPeriodDefaults(v);
@@ -904,12 +920,12 @@ class _DailyTransactionReportScreenState
                             if (_allowedBranches.isNotEmpty) DropdownButtonFormField<int?>(
                               value: _selectedBranchId,
                               isExpanded: true,
-                              decoration: const InputDecoration(
-                                  labelText: 'สาขา',
-                                  border: OutlineInputBorder()),
+                              decoration: InputDecoration(
+                                  labelText: isEnglish ? 'Branch' : 'สาขา',
+                                  border: const OutlineInputBorder()),
                               items: [
-                                const DropdownMenuItem<int?>(
-                                    value: null, child: Text('— ทุกสาขา —')),
+                                DropdownMenuItem<int?>(
+                                    value: null, child: Text(isEnglish ? '— All Branches —' : '— ทุกสาขา —')),
                                 ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
                                       value: b.branchId,
                                       child: Text(
@@ -922,28 +938,28 @@ class _DailyTransactionReportScreenState
                             const SizedBox(height: 14),
 
                             // ── วันที่เอกสาร ──
-                            _buildSectionLabel('วันที่เอกสาร'),
+                            _buildSectionLabel(isEnglish ? 'Document Date' : 'วันที่เอกสาร'),
                             const SizedBox(height: 6),
                             Row(children: [
                               Expanded(
                                   child: _buildDateField(
-                                      'จาก',
+                                      isEnglish ? 'From' : 'จาก',
                                       _docDateFrom,
                                       (d) => _docDateFrom = d)),
                               const SizedBox(width: 8),
                               Expanded(
                                   child: _buildDateField(
-                                      'ถึง',
+                                      isEnglish ? 'To' : 'ถึง',
                                       _docDateTo,
                                       (d) => _docDateTo = d)),
                             ]),
                             const SizedBox(height: 14),
 
                             // ── ประเภทเอกสาร GL ──
-                            _buildSectionLabel('เอกสาร GL'),
+                            _buildSectionLabel(isEnglish ? 'GL Document' : 'เอกสาร GL'),
                             const SizedBox(height: 6),
                             _buildMultiSelectField(
-                                'ประเภทเอกสาร GL',
+                                isEnglish ? 'GL Doc Type' : 'ประเภทเอกสาร GL',
                                 _glDocTypes,
                                 _selectedDocCodes,
                                 (v) => _selectedDocCodes = v),
@@ -952,23 +968,23 @@ class _DailyTransactionReportScreenState
                               Expanded(
                                   child: TextField(
                                       controller: _docNoFromCtrl,
-                                      decoration: const InputDecoration(
-                                          labelText: 'เลขที่เอกสาร จาก',
-                                          border: OutlineInputBorder()))),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Doc No. From' : 'เลขที่เอกสาร จาก',
+                                          border: const OutlineInputBorder()))),
                               const SizedBox(width: 8),
                               Expanded(
                                   child: TextField(
                                       controller: _docNoToCtrl,
-                                      decoration: const InputDecoration(
-                                          labelText: 'เลขที่เอกสาร ถึง',
-                                          border: OutlineInputBorder()))),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Doc No. To' : 'เลขที่เอกสาร ถึง',
+                                          border: const OutlineInputBorder()))),
                             ]),
                             const SizedBox(height: 14),
 
                             // ── เอกสารอ้างอิง ──
                             Row(
                               children: [
-                                Expanded(child: _buildSectionLabel('เอกสารอ้างอิง')),
+                                Expanded(child: _buildSectionLabel(isEnglish ? 'Reference Document' : 'เอกสารอ้างอิง')),
                                 Switch(
                                   value: _useRefDocFilter,
                                   activeColor: Colors.indigo[800],
@@ -985,7 +1001,7 @@ class _DailyTransactionReportScreenState
                                 child: Column(
                                   children: [
                                     _buildMultiSelectField(
-                                        'ประเภทเอกสารอ้างอิง',
+                                        isEnglish ? 'Ref Doc Type' : 'ประเภทเอกสารอ้างอิง',
                                         _refDocTypes,
                                         _selectedRefDocCodes,
                                         (v) => _selectedRefDocCodes = v),
@@ -994,30 +1010,30 @@ class _DailyTransactionReportScreenState
                                       Expanded(
                                           child: TextField(
                                               controller: _refDocNoFromCtrl,
-                                              decoration: const InputDecoration(
-                                                  labelText: 'เลขที่อ้างอิง จาก',
-                                                  border: OutlineInputBorder()))),
+                                              decoration: InputDecoration(
+                                                  labelText: isEnglish ? 'Ref No. From' : 'เลขที่อ้างอิง จาก',
+                                                  border: const OutlineInputBorder()))),
                                       const SizedBox(width: 8),
                                       Expanded(
                                           child: TextField(
                                               controller: _refDocNoToCtrl,
-                                              decoration: const InputDecoration(
-                                                  labelText: 'เลขที่อ้างอิง ถึง',
-                                                  border: OutlineInputBorder()))),
+                                              decoration: InputDecoration(
+                                                  labelText: isEnglish ? 'Ref No. To' : 'เลขที่อ้างอิง ถึง',
+                                                  border: const OutlineInputBorder()))),
                                     ]),
                                     const SizedBox(height: 8),
-                                    _buildSectionLabel('วันที่เอกสารอ้างอิง'),
+                                    _buildSectionLabel(isEnglish ? 'Ref Document Date' : 'วันที่เอกสารอ้างอิง'),
                                     const SizedBox(height: 6),
                                     Row(children: [
                                       Expanded(
                                           child: _buildDateField(
-                                              'จาก',
+                                              isEnglish ? 'From' : 'จาก',
                                               _refDocDateFrom,
                                               (d) => _refDocDateFrom = d)),
                                       const SizedBox(width: 8),
                                       Expanded(
                                           child: _buildDateField(
-                                              'ถึง',
+                                              isEnglish ? 'To' : 'ถึง',
                                               _refDocDateTo,
                                               (d) => _refDocDateTo = d)),
                                     ]),
@@ -1043,7 +1059,7 @@ class _DailyTransactionReportScreenState
                                     strokeWidth: 2,
                                     color: Colors.white))
                             : const Icon(Icons.picture_as_pdf),
-                        label: const Text('ประมวลผลรายงาน'),
+                        label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                         style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.indigo[800],
                             foregroundColor: Colors.white),
@@ -1086,8 +1102,8 @@ class _DailyTransactionReportScreenState
             child: Container(
               color: Colors.grey[200],
               child: !_reportGenerated
-                  ? const Center(
-                      child: Text('กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                  ? Center(
+                      child: Text(isEnglish ? 'Select conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                   : PdfPreview(
                       build: (f) => _generatePdf(f),
                       initialPageFormat: PdfPageFormat.a4.landscape,

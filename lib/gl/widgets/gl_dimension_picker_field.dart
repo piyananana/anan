@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/gl_dimension.dart';
+import '../../sa/services/sa_language_provider.dart';
 
 /// Reusable dimension picker field with searchable dialog.
 /// ใช้แทน DropdownButtonFormField สำหรับ GL/AR dimension ทุกหน้าจอ
@@ -22,6 +24,7 @@ class GlDimensionPickerField extends StatelessWidget {
   });
 
   Future<void> _openDialog(BuildContext context) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final searchCtrl = TextEditingController();
     // แสดงเฉพาะ leaf nodes (ไม่มีลูก) — parent ไม่สามารถเลือกลงรายการได้
     final parentIds = values.map((v) => v.parentId).whereType<int>().toSet();
@@ -46,11 +49,13 @@ class GlDimensionPickerField extends StatelessWidget {
           });
         }
 
+        final typeLabel = isEnglish ? (dimType.nameEng ?? dimType.nameThai) : dimType.nameThai;
+
         return AlertDialog(
           title: Row(children: [
             const Icon(Icons.tune, size: 20, color: Colors.teal),
             const SizedBox(width: 8),
-            Text('เลือก${dimType.nameThai}'),
+            Text(isEnglish ? 'Select $typeLabel' : 'เลือก${dimType.nameThai}'),
           ]),
           content: SizedBox(
             width: 480,
@@ -59,12 +64,12 @@ class GlDimensionPickerField extends StatelessWidget {
               TextField(
                 controller: searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา รหัส / ชื่อ',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search Code / Name' : 'ค้นหา รหัส / ชื่อ',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                 ),
                 onChanged: doFilter,
               ),
@@ -81,7 +86,7 @@ class GlDimensionPickerField extends StatelessWidget {
                     child: Row(children: [
                       const Icon(Icons.clear, size: 16, color: Colors.grey),
                       const SizedBox(width: 8),
-                      Text('— ล้างค่า —', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                      Text(isEnglish ? '— Clear —' : '— ล้างค่า —', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
                     ]),
                   ),
                 ),
@@ -89,7 +94,7 @@ class GlDimensionPickerField extends StatelessWidget {
                 child: values.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : filtered.isEmpty
-                        ? const Center(child: Text('ไม่พบข้อมูล', style: TextStyle(color: Colors.grey)))
+                        ? Center(child: Text(isEnglish ? 'No data' : 'ไม่พบข้อมูล', style: const TextStyle(color: Colors.grey)))
                         : ListView.builder(
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
@@ -117,7 +122,7 @@ class GlDimensionPickerField extends StatelessWidget {
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ปิด')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Close' : 'ปิด')),
           ],
         );
       }),
@@ -127,6 +132,7 @@ class GlDimensionPickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final hasValue = selected != null;
 
     // ใน DataTable (isDense=true): ไม่แสดง label เพราะ column header แสดงอยู่แล้ว
@@ -197,7 +203,7 @@ class GlDimensionPickerField extends StatelessWidget {
                     ],
                   )
                 : Text(
-                    hasValue ? '${selected!.valueCode} — ${selected!.valueNameThai}' : '— ไม่ระบุ —',
+                    hasValue ? '${selected!.valueCode} — ${selected!.valueNameThai}' : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
                     style: TextStyle(
                       fontSize: 13,
                       color: hasValue ? Colors.teal[700] : Colors.grey[500],

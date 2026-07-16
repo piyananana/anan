@@ -1,6 +1,7 @@
-﻿// widgets/cd_zipcode_list_widget.dart
+// widgets/cd_zipcode_list_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/cd_currency.dart';
 import '../services/cd_currency_service.dart';
 
@@ -35,20 +36,20 @@ class CurrencyListWidget extends StatefulWidget {
   @override
   State<CurrencyListWidget> createState() => CurrencyListWidgetState();
 
-  // เมธอด static สำหรับแสดง Dialog
   static Future<void> search(BuildContext context,
       {required void Function(Currency) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          // กำหนดขนาดให้ใหญ่ขึ้นเพื่อให้ใช้งานสะดวก
           contentPadding: EdgeInsets.zero,
-          title: const Text('ค้นหา สกุลเงินและอัตราแลกเปลี่ยน',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          title: Text(
+              isEnglish ? 'Search Currency & Exchange Rate' : 'ค้นหา สกุลเงินและอัตราแลกเปลี่ยน',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           content: Container(
-            width: 500, // กำหนดความกว้างที่เหมาะสม
-            height: 600, // กำหนดความสูงที่เหมาะสม
+            width: 500,
+            height: 600,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(10.0),
@@ -70,7 +71,8 @@ class CurrencyListWidget extends StatefulWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+              child: Text(isEnglish ? 'Close' : 'ปิด',
+                  style: const TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -90,19 +92,18 @@ class CurrencyListWidgetState extends State<CurrencyListWidget>
   bool _isLoading = false;
   String _error = '';
 
-  List<Currency> _filterAndSort() {
+  List<Currency> _filterAndSort(bool isEnglish) {
     List<Currency> displayLists = List.from(_lists);
     if (widget.enableCardSelect) displayLists = displayLists.where((e) => e.isActive).toList();
-    // 1. Filter
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toUpperCase();
       displayLists = displayLists.where((row) {
         return row.currencyCode.toUpperCase().contains(query) ||
             row.currencyNameThai.toUpperCase().contains(query) ||
+            row.currencyNameEng.toUpperCase().contains(query) ||
             row.baseCurrencyFlag;
       }).toList();
     }
-    // 2. Sort
     displayLists.sort((a, b) {
       switch (_sortBy) {
         case 'base_asc':
@@ -168,7 +169,7 @@ class CurrencyListWidgetState extends State<CurrencyListWidget>
     });
   }
 
-  Widget _buildListHeader() {
+  Widget _buildListHeader(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Row(
@@ -176,34 +177,34 @@ class CurrencyListWidgetState extends State<CurrencyListWidget>
           widget.enableAddButton
               ? IconButton(
                   icon: const Icon(Icons.add),
-                  tooltip: 'เพิ่มข้อมูลใหม่',
+                  tooltip: isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่',
                   onPressed: () => widget.onAdd(),
                 )
               : const SizedBox.shrink(),
           widget.enableSortButton
               ? PopupMenuButton<String>(
                   icon: const Icon(Icons.sort),
-                  tooltip: 'จัดเรียง',
+                  tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
                   onSelected: (result) {
                     _onSortSelected(result);
                   },
                   itemBuilder: (BuildContext context) =>
                       <PopupMenuEntry<String>>[
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'base_asc',
-                      child: Text('สกุลเงินหลักอยู่ท้าย'),
+                      child: Text(isEnglish ? 'Base currency last' : 'สกุลเงินหลักอยู่ท้าย'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'base_desc',
-                      child: Text('สกุลเงินหลักขึ้นก่อน'),
+                      child: Text(isEnglish ? 'Base currency first' : 'สกุลเงินหลักขึ้นก่อน'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'code_asc',
-                      child: Text('รหัสสกุลเงิน (น้อยไปมาก)'),
+                      child: Text(isEnglish ? 'Code (A→Z)' : 'รหัสสกุลเงิน (น้อยไปมาก)'),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'code_desc',
-                      child: Text('รหัสสกุลเงิน (มากไปน้อย)'),
+                      child: Text(isEnglish ? 'Code (Z→A)' : 'รหัสสกุลเงิน (มากไปน้อย)'),
                     ),
                   ],
                 )
@@ -211,12 +212,13 @@ class CurrencyListWidgetState extends State<CurrencyListWidget>
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา (สกุลเงินและอัตราแลกเปลี่ยน)',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                // border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: isEnglish
+                    ? 'Search (Currency Code / Name)'
+                    : 'ค้นหา (สกุลเงินและอัตราแลกเปลี่ยน)',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (value) {
                 setState(() {
@@ -231,21 +233,23 @@ class CurrencyListWidgetState extends State<CurrencyListWidget>
   }
 
   @override
-  // TODO: implement wantKeepAlive
   bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
 
-    _searchResult = _filterAndSort();
+    _searchResult = _filterAndSort(isEnglish);
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${_lists.length} แถว'
-        : 'พบ ${_searchResult.length} จาก ${_lists.length} แถว';
+        ? (isEnglish ? 'Total ${_lists.length} rows' : 'ทั้งหมด ${_lists.length} แถว')
+        : (isEnglish
+            ? 'Found ${_searchResult.length} of ${_lists.length} rows'
+            : 'พบ ${_searchResult.length} จาก ${_lists.length} แถว');
 
     return Column(
       children: [
-        _buildListHeader(),
+        _buildListHeader(isEnglish),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           child: Align(
@@ -258,26 +262,23 @@ class CurrencyListWidgetState extends State<CurrencyListWidget>
           child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _searchResult.isEmpty
-              ? const Center(child: Text('ไม่พบสกุลเงินและอัตราแลกเปลี่ยน'))
+              ? Center(child: Text(isEnglish
+                  ? 'No currencies found'
+                  : 'ไม่พบสกุลเงินและอัตราแลกเปลี่ยน'))
               : ListView.builder(
                   itemCount: _searchResult.length,
                   itemBuilder: (context, index) {
                     final item = _searchResult[index];
+                    final displayName = isEnglish ? item.currencyNameEng : item.currencyNameThai;
+                    final baseFlagLabel = isEnglish ? '(Base Currency)' : '(สกุลเงินหลัก)';
                     return Card(
                       margin: const EdgeInsets.symmetric(
                           horizontal: 8.0, vertical: 4.0),
                       child: ListTile(
-                        // leading: Text('${(index + 1).toString()}.'),
-                        // // CircleAvatar(
-                        // //   child: Text((index + 1).toString()),
-                        // // ),
-                        // // title: Text(item.item),
                         title: Text(
-                            '${item.currencyCode} (${item.symbol}) ${item.currencyNameThai} ${item.baseCurrencyFlag ? "(สกุลเงินหลัก)" : ""}',
+                            '${item.currencyCode} (${item.symbol}) $displayName'
+                            '${item.baseCurrencyFlag ? ' $baseFlagLabel' : ''}',
                             style: TextStyle(fontWeight: item.baseCurrencyFlag ? FontWeight.bold : FontWeight.normal),),
-                        // subtitle: Text(
-                        //     '${item.subDistrict} ${item.district} ${item.province}'),
-                        // isThreeLine: true,
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

@@ -17,7 +17,9 @@ import '../../sa/models/sa_company.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 import 'package:excel/excel.dart';
+import 'package:provider/provider.dart';
 import '../../utils/file_download.dart';
 import '../widgets/ar_customer_group_multi_picker.dart';
 
@@ -44,6 +46,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
   bool _isDraggingDivider = false;
   int _pdfKey = 0;
   bool _isExporting = false;
+  bool _isEnglish = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -95,9 +98,9 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
   //   0 = เกินกำหนดแล้ว
   //   1..N-1 = calendar months forward from asOfDate
   //   N = last month + "+" (catch-all for far future)
-  List<String> get _dynamicBucketLabels {
+  List<String> _dynamicBucketLabels(bool isEnglish) {
     final I = _columnInterval;
-    final labels = <String>['เกินกำหนดแล้ว'];
+    final labels = <String>[isEnglish ? 'Overdue' : 'เกินกำหนดแล้ว'];
     for (int i = 0; i < _columnCount - 1; i++) {
       final dt =
           DateTime(_asOfDate.year, _asOfDate.month + i * I, 1);
@@ -148,6 +151,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
   }
 
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     setState(() {
       _isLoading = true;
       _reportData = [];
@@ -207,8 +211,10 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
       }
 
       if (filtered.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('ไม่พบข้อมูลลูกหนี้ ณ วันที่ที่เลือก')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'No receivable data found as of the selected date'
+                : 'ไม่พบข้อมูลลูกหนี้ ณ วันที่ที่เลือก')));
       }
 
       setState(() {
@@ -218,8 +224,9 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -233,6 +240,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
   // ─── Excel ────────────────────────────────────────────────────────────────────
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -243,7 +251,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
       final totBg = ExcelColor.fromHexString('#BDD7EE');
       final detBg = ExcelColor.fromHexString('#F2F2F2');
 
-      final bucketLabels = _dynamicBucketLabels;
+      final bucketLabels = _dynamicBucketLabels(isEnglish);
       final totalBuckets = _totalBuckets;
       String fmtDate(String? raw) {
         if (raw == null || raw.isEmpty) return '';
@@ -254,17 +262,28 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
       }
 
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานกำหนดชำระลูกหนี้', bold: true);
-      _xlCell(s, 2, 0, 'ณ วันที่: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  พิมพ์: $_ts');
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0,
+          isEnglish ? 'AR Due Date Report' : 'รายงานกำหนดชำระลูกหนี้',
+          bold: true);
+      _xlCell(
+          s,
+          2,
+          0,
+          isEnglish
+              ? 'As of: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  Printed: $_ts'
+              : 'ณ วันที่: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  พิมพ์: $_ts');
 
       int r = 3;
-      _xlCell(s, r, 0, 'รหัสลูกหนี้', bg: hdrBg, bold: true);
-      _xlCell(s, r, 1, 'ชื่อลูกหนี้', bg: hdrBg, bold: true);
+      _xlCell(s, r, 0, isEnglish ? 'Customer Code' : 'รหัสลูกหนี้',
+          bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, isEnglish ? 'Customer Name' : 'ชื่อลูกหนี้',
+          bg: hdrBg, bold: true);
       for (int b = 0; b < totalBuckets; b++) {
         _xlCell(s, r, 2 + b, bucketLabels[b], bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       }
-      _xlCell(s, r, 2 + totalBuckets, 'รวม', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 2 + totalBuckets, isEnglish ? 'Total' : 'รวม',
+          bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       r++;
 
       final grandBuckets = List<double>.filled(totalBuckets, 0.0);
@@ -302,7 +321,8 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
         r++;
       }
 
-      _xlCell(s, r, 0, 'รวมทั้งสิ้น', bg: totBg, bold: true);
+      _xlCell(s, r, 0, isEnglish ? 'Grand Total' : 'รวมทั้งสิ้น',
+          bg: totBg, bold: true);
       _xlCell(s, r, 1, '', bg: totBg);
       for (int b = 0; b < totalBuckets; b++) {
         _xlCell(s, r, 2 + b, DoubleCellValue(grandBuckets[b]), bg: totBg, bold: true, align: HorizontalAlign.Right);
@@ -332,6 +352,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
   // ─── PDF ──────────────────────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish       = _isEnglish;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -340,12 +361,16 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
     final fontBold       = pw.Font.ttf(fontBoldData);
     final fontItalic     = pw.Font.ttf(fontItalicData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
-    final userName     = _headers?['UserName'] ?? '(ไม่ระบุชื่อ)';
+    final companyName  = _company?.displayName(isEnglish) ??
+        (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
+    final userName     = _headers?['UserName'] ??
+        (isEnglish ? '(No name)' : '(ไม่ระบุชื่อ)');
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-    final asOfLine     = 'ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_asOfDate)}';
+    final asOfLine     = isEnglish
+        ? 'As of ${DateFormat('dd/MM/yyyy').format(_asOfDate)}'
+        : 'ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_asOfDate)}';
 
-    final bucketLabels = _dynamicBucketLabels;
+    final bucketLabels = _dynamicBucketLabels(isEnglish);
     final totalBuckets = _totalBuckets;
     final showDetail   = _showDetail;
     final sortOrder    = _sortOrder;
@@ -356,7 +381,8 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
       final b = _allowedBranches.firstWhere(
           (b) => b.branchId == _selectedBranchId,
           orElse: () => _allowedBranches.first);
-      conditions.add('สาขา: ${b.branchCode} ${b.branchNameThai}');
+      conditions.add(
+          '${isEnglish ? 'Branch' : 'สาขา'}: ${b.branchCode} ${b.branchNameThai}');
     }
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
@@ -364,26 +390,36 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
             orElse: () => _customerGroups.first);
         return '${g.groupCode} ${g.groupNameThai}';
       }).join(', ');
-      conditions.add('กลุ่มลูกค้า: $names');
+      conditions
+          .add('${isEnglish ? 'Customer group' : 'กลุ่มลูกค้า'}: $names');
     }
     if (_selectedSalespersonId != null) {
       final sp = _salespersons.firstWhere(
           (s) => s.id == _selectedSalespersonId,
           orElse: () => _salespersons.first);
-      conditions.add('พนักงานขาย: ${sp.salespersonCode} ${sp.salespersonNameThai}');
+      conditions.add(
+          '${isEnglish ? 'Salesperson' : 'พนักงานขาย'}: ${sp.salespersonCode} ${sp.salespersonNameThai}');
     }
     if ((_customerCodeFrom ?? '').isNotEmpty || (_customerCodeTo ?? '').isNotEmpty) {
+      final all  = isEnglish ? '(All)' : '(ทั้งหมด)';
       final from = _customerCodeFrom ?? '';
       final to   = _customerCodeTo ?? '';
       conditions.add(
-          'รหัสลูกค้า: ${from.isEmpty ? '(ทั้งหมด)' : from} – ${to.isEmpty ? '(ทั้งหมด)' : to}');
+          '${isEnglish ? 'Customer code' : 'รหัสลูกค้า'}: ${from.isEmpty ? all : from} – ${to.isEmpty ? all : to}');
     }
-    conditions.add('คอลัมน์: $_columnCount คอลัมน์  ทุก $_columnInterval เดือน');
+    conditions.add(isEnglish
+        ? 'Columns: $_columnCount columns  every $_columnInterval month(s)'
+        : 'คอลัมน์: $_columnCount คอลัมน์  ทุก $_columnInterval เดือน');
     if (sortOrder != 'none') {
-      conditions.add(
-          'เรียงยอด: ${sortOrder == 'desc' ? 'มากไปน้อย' : 'น้อยไปมาก'}');
+      conditions.add(isEnglish
+          ? 'Sort by amount: ${sortOrder == 'desc' ? 'Descending' : 'Ascending'}'
+          : 'เรียงยอด: ${sortOrder == 'desc' ? 'มากไปน้อย' : 'น้อยไปมาก'}');
     }
-    if (showDetail) conditions.add('แสดงรายละเอียดใบแจ้งหนี้');
+    if (showDetail) {
+      conditions.add(isEnglish
+          ? 'Show invoice details'
+          : 'แสดงรายละเอียดใบแจ้งหนี้');
+    }
     final conditionLine = '* ${conditions.join(' | ')}';
 
     final numFmt = NumberFormat('#,##0.00', 'en_US');
@@ -462,13 +498,19 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                         style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 7,
-                    child: pw.Text('รายงานกำหนดชำระลูกหนี้',
+                    child: pw.Text(
+                        isEnglish
+                            ? 'AR Due Date Report'
+                            : 'รายงานกำหนดชำระลูกหนี้',
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(
                             fontSize: 16, fontWeight: pw.FontWeight.bold))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+                    child: pw.Text(
+                        isEnglish
+                            ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}'
+                            : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12))),
               ],
@@ -487,7 +529,8 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                         style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text('พิมพ์โดย $userName',
+                    child: pw.Text(
+                        isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12))),
               ],
@@ -503,7 +546,10 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                         style: const pw.TextStyle(fontSize: 10))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text('พิมพ์เมื่อ $printDateStr',
+                    child: pw.Text(
+                        isEnglish
+                            ? 'Printed: $printDateStr'
+                            : 'พิมพ์เมื่อ $printDateStr',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12))),
               ],
@@ -581,9 +627,15 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
             final bal      = (inv['balance_amount_lc'] as num?)?.toDouble() ?? 0.0;
             final bucket   = _bucketForDueDate(dueStr);
             final dateParts = <String>[];
-            if (docDate.isNotEmpty) dateParts.add('แจ้ง:$docDate');
-            if (billDate.isNotEmpty) dateParts.add('บิล:$billDate');
-            if (dueDate.isNotEmpty) dateParts.add('ครบ:$dueDate');
+            if (docDate.isNotEmpty) {
+              dateParts.add('${isEnglish ? 'Doc' : 'แจ้ง'}:$docDate');
+            }
+            if (billDate.isNotEmpty) {
+              dateParts.add('${isEnglish ? 'Bill' : 'บิล'}:$billDate');
+            }
+            if (dueDate.isNotEmpty) {
+              dateParts.add('${isEnglish ? 'Due' : 'ครบ'}:$dueDate');
+            }
             final dateText = dateParts.join('  ');
             final bks   = List<double>.filled(totalBuckets, 0);
             bks[bucket] = bal;
@@ -605,36 +657,45 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
               decoration: const pw.BoxDecoration(
                   color: PdfColor(0.87, 0.94, 0.92)),
               children: [
-                hCell(showDetail ? 'รหัส / ใบแจ้งหนี้' : 'รหัส',
+                hCell(
+                    showDetail
+                        ? (isEnglish ? 'Code / Invoice' : 'รหัส / ใบแจ้งหนี้')
+                        : (isEnglish ? 'Code' : 'รหัส'),
                     a: pw.TextAlign.left),
-                hCell(showDetail
-                    ? 'ชื่อลูกค้า / วันแจ้งหนี้,วางบิล,ครบกำหนด'
-                    : 'ชื่อลูกค้า',
+                hCell(
+                    showDetail
+                        ? (isEnglish
+                            ? 'Customer / Doc,Bill,Due Date'
+                            : 'ชื่อลูกค้า / วันแจ้งหนี้,วางบิล,ครบกำหนด')
+                        : (isEnglish ? 'Customer' : 'ชื่อลูกค้า'),
                     a: pw.TextAlign.left),
                 ...bucketLabels.map((l) => hCell(l)),
-                hCell('รวม'),
+                hCell(isEnglish ? 'Total' : 'รวม'),
               ],
             ),
           ];
 
+          final noCondText = isEnglish ? '(Not specified)' : '(ไม่ระบุเงื่อนไข)';
           for (final r in rows) {
             tableRows.add(summaryRow(r.code, r.name, r.buckets, r.total));
             if (showDetail) {
               final billTexts = r.billingConds
-                  .map(_billingCondSummary)
-                  .where((s) => s != '(ไม่ระบุเงื่อนไข)')
+                  .map((b) => _billingCondSummary(b, isEnglish))
+                  .where((s) => s != noCondText)
                   .toList();
               final payTexts = r.paymentConds
-                  .map(_paymentCondSummary)
-                  .where((s) => s != '(ไม่ระบุเงื่อนไข)')
+                  .map((p) => _paymentCondSummary(p, isEnglish))
+                  .where((s) => s != noCondText)
                   .toList();
               if (billTexts.isNotEmpty || payTexts.isNotEmpty) {
                 final lines = <String>[];
                 if (billTexts.isNotEmpty) {
-                  lines.add('วางบิล: ${billTexts.join(' / ')}');
+                  lines.add(
+                      '${isEnglish ? 'Billing' : 'วางบิล'}: ${billTexts.join(' / ')}');
                 }
                 if (payTexts.isNotEmpty) {
-                  lines.add('ชำระ:   ${payTexts.join(' / ')}');
+                  lines.add(
+                      '${isEnglish ? 'Payment' : 'ชำระ'}:   ${payTexts.join(' / ')}');
                 }
                 tableRows.add(conditionsRow(lines.join('\n')));
               }
@@ -644,7 +705,8 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
             }
           }
 
-          tableRows.add(summaryRow('', 'รวมทั้งหมด', grand, grandTotal,
+          tableRows.add(summaryRow(
+              '', isEnglish ? 'Grand Total' : 'รวมทั้งหมด', grand, grandTotal,
               isTotal: true,
               bg: const PdfColor(0.87, 0.94, 0.92)));
 
@@ -666,6 +728,8 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -707,7 +771,9 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                           color: Colors.white,
                           size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
                       onPressed: () => setState(
                           () => _isFilterExpanded = !_isFilterExpanded),
                     ),
@@ -735,8 +801,8 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const Text('เงื่อนไขรายงาน',
-                                          style: TextStyle(
+                                      Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                          style: const TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 16)),
                                       const SizedBox(height: 16),
@@ -755,9 +821,9 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                     }
                                   },
                                   child: InputDecorator(
-                                    decoration: const InputDecoration(
-                                      labelText: 'ณ วันที่',
-                                      border: OutlineInputBorder(),
+                                    decoration: InputDecoration(
+                                      labelText: isEnglish ? 'As of' : 'ณ วันที่',
+                                      border: const OutlineInputBorder(),
                                       isDense: true,
                                       suffixIcon: Icon(
                                           Icons.calendar_today, size: 16),
@@ -773,14 +839,14 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                   DropdownButtonFormField<int?>(
                                     isExpanded: true,
                                     value: _selectedBranchId,
-                                    decoration: const InputDecoration(
-                                        labelText: 'สาขา',
-                                        border: OutlineInputBorder(),
+                                    decoration: InputDecoration(
+                                        labelText: isEnglish ? 'Branch' : 'สาขา',
+                                        border: const OutlineInputBorder(),
                                         isDense: true),
                                     items: [
-                                      const DropdownMenuItem<int?>(
+                                      DropdownMenuItem<int?>(
                                           value: null,
-                                          child: Text('— ทุกสาขา —')),
+                                          child: Text(isEnglish ? '— All Branches —' : '— ทุกสาขา —')),
                                       ..._allowedBranches.map((b) =>
                                           DropdownMenuItem<int?>(
                                             value: b.branchId,
@@ -809,14 +875,14 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                 DropdownButtonFormField<int?>(
                                   isExpanded: true,
                                   value: _selectedSalespersonId,
-                                  decoration: const InputDecoration(
-                                      labelText: 'พนักงานขาย',
-                                      border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                      labelText: isEnglish ? 'Salesperson' : 'พนักงานขาย',
+                                      border: const OutlineInputBorder(),
                                       isDense: true),
                                   items: [
-                                    const DropdownMenuItem<int?>(
+                                    DropdownMenuItem<int?>(
                                         value: null,
-                                        child: Text('— ทั้งหมด —')),
+                                        child: Text(isEnglish ? '— All —' : '— ทั้งหมด —')),
                                     ..._salespersons.map((s) =>
                                         DropdownMenuItem<int?>(
                                           value: s.id,
@@ -833,7 +899,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                 // รหัสลูกค้าตั้งแต่
                                 const SizedBox(height: 12),
                                 _buildCustomerCodeField(
-                                  label: 'รหัสลูกค้า ตั้งแต่',
+                                  label: isEnglish ? 'Customer Code From' : 'รหัสลูกค้า ตั้งแต่',
                                   displayText: _fromLabel,
                                   onPick: () => _pickCustomer(isFrom: true),
                                   onClear: () => setState(() {
@@ -843,7 +909,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 _buildCustomerCodeField(
-                                  label: 'รหัสลูกค้า ถึง',
+                                  label: isEnglish ? 'Customer Code To' : 'รหัสลูกค้า ถึง',
                                   displayText: _toLabel,
                                   onPick: () => _pickCustomer(isFrom: false),
                                   onClear: () => setState(() {
@@ -860,14 +926,14 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                 DropdownButtonFormField<int>(
                                   isExpanded: true,
                                   value: _columnCount,
-                                  decoration: const InputDecoration(
-                                      labelText: 'จำนวนคอลัมน์กำหนดชำระ',
-                                      border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                      labelText: isEnglish ? 'Number of Due Date Columns' : 'จำนวนคอลัมน์กำหนดชำระ',
+                                      border: const OutlineInputBorder(),
                                       isDense: true),
                                   items: [2, 3, 4, 5]
                                       .map((n) => DropdownMenuItem<int>(
                                           value: n,
-                                          child: Text('$n คอลัมน์')))
+                                          child: Text(isEnglish ? '$n columns' : '$n คอลัมน์')))
                                       .toList(),
                                   onChanged: (v) {
                                     if (v != null) {
@@ -883,11 +949,11 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                   controller: _monthsIntervalCtrl,
                                   keyboardType: TextInputType.number,
                                   textAlign: TextAlign.right,
-                                  decoration: const InputDecoration(
-                                    labelText: 'จำนวนเดือนต่อคอลัมน์',
-                                    border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                    labelText: isEnglish ? 'Months per Column' : 'จำนวนเดือนต่อคอลัมน์',
+                                    border: const OutlineInputBorder(),
                                     isDense: true,
-                                    suffixText: 'เดือน',
+                                    suffixText: isEnglish ? 'months' : 'เดือน',
                                   ),
                                   onEditingComplete: _onSettingChanged,
                                 ),
@@ -897,20 +963,20 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                 DropdownButtonFormField<String>(
                                   isExpanded: true,
                                   value: _sortOrder,
-                                  decoration: const InputDecoration(
-                                      labelText: 'เรียงตามยอดรวม',
-                                      border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                      labelText: isEnglish ? 'Sort by Total' : 'เรียงตามยอดรวม',
+                                      border: const OutlineInputBorder(),
                                       isDense: true),
-                                  items: const [
+                                  items: [
                                     DropdownMenuItem(
                                         value: 'none',
-                                        child: Text('— ไม่ระบุ —')),
+                                        child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
                                     DropdownMenuItem(
                                         value: 'desc',
-                                        child: Text('มากไปน้อย ↓')),
+                                        child: Text(isEnglish ? 'High to Low ↓' : 'มากไปน้อย ↓')),
                                     DropdownMenuItem(
                                         value: 'asc',
-                                        child: Text('น้อยไปมาก ↑')),
+                                        child: Text(isEnglish ? 'Low to High ↑' : 'น้อยไปมาก ↑')),
                                   ],
                                   onChanged: (v) {
                                     if (v != null) {
@@ -926,9 +992,9 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                 // แสดงรายละเอียด
                                 Row(
                                   children: [
-                                    const Expanded(
-                                      child: Text('แสดงรายละเอียดใบแจ้งหนี้',
-                                          style: TextStyle(fontSize: 13)),
+                                    Expanded(
+                                      child: Text(isEnglish ? 'Show invoice details' : 'แสดงรายละเอียดใบแจ้งหนี้',
+                                          style: const TextStyle(fontSize: 13)),
                                     ),
                                     Switch(
                                       value: _showDetail,
@@ -953,7 +1019,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                                   height: 50,
                                   child: ElevatedButton.icon(
                                     icon: const Icon(Icons.picture_as_pdf),
-                                    label: const Text('ประมวลผลรายงาน'),
+                                    label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                     style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.teal[800],
                                         foregroundColor: Colors.white),
@@ -1125,6 +1191,7 @@ class _DueReportCustomerSearchDialogState
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Dialog(
       child: SizedBox(
         width: 520,
@@ -1136,8 +1203,8 @@ class _DueReportCustomerSearchDialogState
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.teal[800],
-              child: const Text('ค้นหาลูกค้า',
-                  style: TextStyle(
+              child: Text(isEnglish ? 'Search Customer' : 'ค้นหาลูกค้า',
+                  style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 15)),
@@ -1147,10 +1214,10 @@ class _DueReportCustomerSearchDialogState
               child: TextField(
                 controller: _searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหาจากรหัสหรือชื่อลูกค้า',
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search by customer code or name' : 'ค้นหาจากรหัสหรือชื่อลูกค้า',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
                 onChanged: _search,
@@ -1160,16 +1227,16 @@ class _DueReportCustomerSearchDialogState
               color: Colors.grey[200],
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: const Row(
+              child: Row(
                 children: [
                   SizedBox(
                       width: 100,
-                      child: Text('รหัส',
-                          style: TextStyle(
+                      child: Text(isEnglish ? 'Code' : 'รหัส',
+                          style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 12))),
                   Expanded(
-                      child: Text('ชื่อลูกค้า',
-                          style: TextStyle(
+                      child: Text(isEnglish ? 'Customer Name' : 'ชื่อลูกค้า',
+                          style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 12))),
                 ],
               ),
@@ -1179,9 +1246,9 @@ class _DueReportCustomerSearchDialogState
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _customers.isEmpty
-                      ? const Center(
-                          child: Text('ไม่พบข้อมูล',
-                              style: TextStyle(color: Colors.grey)))
+                      ? Center(
+                          child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+                              style: const TextStyle(color: Colors.grey)))
                       : ListView.separated(
                           controller: _scrollCtrl,
                           itemCount: _customers.length,
@@ -1204,7 +1271,10 @@ class _DueReportCustomerSearchDialogState
                                               fontWeight: FontWeight.w500)),
                                     ),
                                     Expanded(
-                                      child: Text(c.customerNameTh,
+                                      child: Text(
+                                          isEnglish && (c.customerNameEn?.isNotEmpty ?? false)
+                                              ? c.customerNameEn!
+                                              : c.customerNameTh,
                                           style:
                                               const TextStyle(fontSize: 13),
                                           overflow: TextOverflow.ellipsis),
@@ -1225,7 +1295,7 @@ class _DueReportCustomerSearchDialogState
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('ยกเลิก'),
+                    child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
                   ),
                 ],
               ),
@@ -1242,52 +1312,62 @@ class _DueReportCustomerSearchDialogState
 const _dueRptDayNames = [
   'อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'
 ];
+const _dueRptDayNamesEn = [
+  'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'
+];
 const _dueRptWeekNames = {
   1: 'แรก', 2: 'ที่2', 3: 'ที่3', 4: 'ที่4', -1: 'สุดท้าย'
 };
+const _dueRptWeekNamesEn = {
+  1: '1st', 2: '2nd', 3: '3rd', 4: '4th', -1: 'Last'
+};
 
-String _billingCondSummary(ArCustomerBillingCondition b) {
+String _billingCondSummary(ArCustomerBillingCondition b, bool isEnglish) {
+  final dayNames = isEnglish ? _dueRptDayNamesEn : _dueRptDayNames;
+  final weekNames = isEnglish ? _dueRptWeekNamesEn : _dueRptWeekNames;
   final parts = <String>[];
-  if (b.billWithDelivery) parts.add('วางบิลพร้อมส่งของ');
+  if (b.billWithDelivery) parts.add(isEnglish ? 'Bill with delivery' : 'วางบิลพร้อมส่งของ');
   if (b.billingDayOfMonth.isNotEmpty) {
     parts.add(b.billingDayOfMonth
-        .map((d) => d == 31 ? 'สิ้นเดือน' : 'วันที่ $d')
+        .map((d) => d == 31 ? (isEnglish ? 'End of month' : 'สิ้นเดือน') : (isEnglish ? 'Day $d' : 'วันที่ $d'))
         .join(', '));
   }
   if (b.billingDayOfWeek.isNotEmpty) {
     parts.add(
-        'วัน${b.billingDayOfWeek.map((d) => _dueRptDayNames[d]).join('-')}');
+        '${isEnglish ? 'Day' : 'วัน'}${b.billingDayOfWeek.map((d) => dayNames[d]).join('-')}');
   }
   if (b.billingWeekOfMonth.isNotEmpty) {
-    parts.add('สัปดาห์${b.billingWeekOfMonth.map((w) => _dueRptWeekNames[w] ?? '$w').join('/')}');
+    parts.add('${isEnglish ? 'Week' : 'สัปดาห์'}${b.billingWeekOfMonth.map((w) => weekNames[w] ?? '$w').join('/')}');
   }
   if (b.billingTimeFrom != null || b.billingTimeTo != null) {
     parts.add('${b.billingTimeFrom ?? ''}–${b.billingTimeTo ?? ''}');
   }
-  if (b.dueFromBillingDate) parts.add('due นับจากวางบิล');
-  return parts.isEmpty ? '(ไม่ระบุเงื่อนไข)' : parts.join('  ·  ');
+  if (b.dueFromBillingDate) parts.add(isEnglish ? 'Due from billing date' : 'due นับจากวางบิล');
+  return parts.isEmpty ? (isEnglish ? '(Not specified)' : '(ไม่ระบุเงื่อนไข)') : parts.join('  ·  ');
 }
 
-String _paymentCondSummary(ArCustomerPaymentCondition p) {
+String _paymentCondSummary(ArCustomerPaymentCondition p, bool isEnglish) {
+  final dayNames = isEnglish ? _dueRptDayNamesEn : _dueRptDayNames;
+  final weekNames = isEnglish ? _dueRptWeekNamesEn : _dueRptWeekNames;
   final parts = <String>[];
   if (p.paymentDayOfMonth.isNotEmpty) {
     parts.add(p.paymentDayOfMonth
-        .map((d) => d == 31 ? 'สิ้นเดือน' : 'วันที่ $d')
+        .map((d) => d == 31 ? (isEnglish ? 'End of month' : 'สิ้นเดือน') : (isEnglish ? 'Day $d' : 'วันที่ $d'))
         .join(', '));
   }
   if (p.paymentDayOfWeek.isNotEmpty) {
     parts.add(
-        'วัน${p.paymentDayOfWeek.map((d) => _dueRptDayNames[d]).join('-')}');
+        '${isEnglish ? 'Day' : 'วัน'}${p.paymentDayOfWeek.map((d) => dayNames[d]).join('-')}');
   }
   if (p.paymentWeekOfMonth.isNotEmpty) {
-    parts.add('สัปดาห์${p.paymentWeekOfMonth.map((w) => _dueRptWeekNames[w] ?? '$w').join('/')}');
+    parts.add('${isEnglish ? 'Week' : 'สัปดาห์'}${p.paymentWeekOfMonth.map((w) => weekNames[w] ?? '$w').join('/')}');
   }
   if (p.withinMonthsFromBilling > 0) {
-    parts.add('ภายใน ${p.withinMonthsFromBilling} เดือนจากวางบิล');
+    parts.add(isEnglish ? 'Within ${p.withinMonthsFromBilling} months from billing' : 'ภายใน ${p.withinMonthsFromBilling} เดือนจากวางบิล');
   }
-  if (p.additionalDays != 0) parts.add('+${p.additionalDays} วัน');
+  if (p.additionalDays != 0) parts.add(isEnglish ? '+${p.additionalDays} days' : '+${p.additionalDays} วัน');
   if (p.paymentTimeFrom != null || p.paymentTimeTo != null) {
     parts.add('${p.paymentTimeFrom ?? ''}–${p.paymentTimeTo ?? ''}');
   }
-  return parts.isEmpty ? '(ไม่ระบุเงื่อนไข)' : parts.join('  ·  ');
+  return parts.isEmpty ? (isEnglish ? '(Not specified)' : '(ไม่ระบุเงื่อนไข)') : parts.join('  ·  ');
 }

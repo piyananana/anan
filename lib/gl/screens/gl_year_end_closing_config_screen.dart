@@ -1,5 +1,7 @@
 ﻿// lib/gl/screens/gl_year_end_closing_config_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/gl_account.dart';
 import '../models/gl_year_end_closing.dart';
@@ -88,27 +90,29 @@ class _YearEndClosingConfigScreenState
         }
       });
     } catch (e) {
-      setState(() => _errorMsg = e.toString());
+      final isEnglish = mounted ? Provider.of<LanguageProvider>(context, listen: false).isEnglish : false;
+      setState(() => _errorMsg = (isEnglish ? 'Error loading data: ' : 'เกิดข้อผิดพลาดในการโหลดข้อมูล: ') + e.toString());
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
   Future<void> _save() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     if (_selectedIncomeSummary == null) {
-      setState(() => _errorMsg = 'กรุณาเลือกบัญชีสรุปกำไรขาดทุน');
+      setState(() => _errorMsg = isEnglish ? 'Please select Income Summary account' : 'กรุณาเลือกบัญชีสรุปกำไรขาดทุน');
       return;
     }
     if (_selectedRetainedEarnings == null) {
-      setState(() => _errorMsg = 'กรุณาเลือกบัญชีกำไรสะสม');
+      setState(() => _errorMsg = isEnglish ? 'Please select Retained Earnings account' : 'กรุณาเลือกบัญชีกำไรสะสม');
       return;
     }
     if (_selectedClosingDoc == null) {
-      setState(() => _errorMsg = 'กรุณาเลือกประเภทเอกสารปิดบัญชี');
+      setState(() => _errorMsg = isEnglish ? 'Please select closing document type' : 'กรุณาเลือกประเภทเอกสารปิดบัญชี');
       return;
     }
     if (_selectedCarryForwardDoc == null) {
-      setState(() => _errorMsg = 'กรุณาเลือกประเภทเอกสารยกยอด');
+      setState(() => _errorMsg = isEnglish ? 'Please select carry-forward document type' : 'กรุณาเลือกประเภทเอกสารยกยอด');
       return;
     }
 
@@ -128,10 +132,10 @@ class _YearEndClosingConfigScreenState
       await _service.saveConfig(config);
       setState(() {
         _existingConfig = config;
-        _successMsg = 'บันทึกการตั้งค่าเรียบร้อยแล้ว';
+        _successMsg = isEnglish ? 'Settings saved successfully' : 'บันทึกการตั้งค่าเรียบร้อยแล้ว';
       });
     } catch (e) {
-      setState(() => _errorMsg = e.toString());
+      setState(() => _errorMsg = (isEnglish ? 'Error saving data: ' : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล: ') + e.toString());
     } finally {
       setState(() => _isSaving = false);
     }
@@ -139,6 +143,7 @@ class _YearEndClosingConfigScreenState
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -147,7 +152,7 @@ class _YearEndClosingConfigScreenState
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
             onPressed: _loadData,
           ),
         ],
@@ -171,25 +176,26 @@ class _YearEndClosingConfigScreenState
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: Colors.indigo.shade200),
                         ),
-                        child: const Column(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(children: [
-                              Icon(Icons.info_outline, color: Colors.indigo),
-                              SizedBox(width: 8),
+                              const Icon(Icons.info_outline, color: Colors.indigo),
+                              const SizedBox(width: 8),
                               Text(
-                                'การตั้งค่าการปิดบัญชีสิ้นปี',
-                                style: TextStyle(
+                                isEnglish ? 'Year-End Closing Configuration' : 'การตั้งค่าการปิดบัญชีสิ้นปี',
+                                style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
                                     color: Colors.indigo),
                               ),
                             ]),
-                            SizedBox(height: 8),
+                            const SizedBox(height: 8),
                             Text(
-                              'กำหนดบัญชีและประเภทเอกสารที่ใช้ในกระบวนการปิดบัญชีสิ้นปี'
-                              ' ระบบจะใช้ข้อมูลเหล่านี้ในการสร้างรายการโอนโดยอัตโนมัติ',
-                              style: TextStyle(color: Colors.indigo),
+                              isEnglish
+                                  ? 'Set up the accounts and document types used in the year-end closing process. The system will use these to create transfer entries automatically.'
+                                  : 'กำหนดบัญชีและประเภทเอกสารที่ใช้ในกระบวนการปิดบัญชีสิ้นปี ระบบจะใช้ข้อมูลเหล่านี้ในการสร้างรายการโอนโดยอัตโนมัติ',
+                              style: const TextStyle(color: Colors.indigo),
                             ),
                           ],
                         ),
@@ -214,12 +220,13 @@ class _YearEndClosingConfigScreenState
 
                       // ── Section: บัญชี ────────────────────────────────────
                       _SectionCard(
-                        title: 'บัญชีที่ใช้ในการปิดบัญชี',
+                        title: isEnglish ? 'Accounts Used for Year-End Closing' : 'บัญชีที่ใช้ในการปิดบัญชี',
                         children: [
                           _AccountSearchField(
-                            label: 'บัญชีสรุปกำไรขาดทุน (Income Summary)',
-                            helperText:
-                                'บัญชีกลางที่รับโอนยอดรายได้และค่าใช้จ่ายทั้งหมด (เช่น 3-1000)',
+                            label: isEnglish ? 'Income Summary Account' : 'บัญชีสรุปกำไรขาดทุน (Income Summary)',
+                            helperText: isEnglish
+                                ? 'The central account that receives all revenue and expense transfers (e.g. 3-1000)'
+                                : 'บัญชีกลางที่รับโอนยอดรายได้และค่าใช้จ่ายทั้งหมด (เช่น 3-1000)',
                             accounts: _allAccounts,
                             selected: _selectedIncomeSummary,
                             onSelected: (acc) =>
@@ -227,9 +234,10 @@ class _YearEndClosingConfigScreenState
                           ),
                           const SizedBox(height: 24),
                           _AccountSearchField(
-                            label: 'บัญชีกำไรสะสม (Retained Earnings)',
-                            helperText:
-                                'บัญชีที่รับโอนกำไร/ขาดทุนสุทธิเข้าส่วนของผู้ถือหุ้น (เช่น 3-2000)',
+                            label: isEnglish ? 'Retained Earnings Account' : 'บัญชีกำไรสะสม (Retained Earnings)',
+                            helperText: isEnglish
+                                ? 'The account that receives net income/loss transferred to equity (e.g. 3-2000)'
+                                : 'บัญชีที่รับโอนกำไร/ขาดทุนสุทธิเข้าส่วนของผู้ถือหุ้น (เช่น 3-2000)',
                             accounts: _allAccounts,
                             selected: _selectedRetainedEarnings,
                             onSelected: (acc) => setState(
@@ -241,12 +249,13 @@ class _YearEndClosingConfigScreenState
 
                       // ── Section: ประเภทเอกสาร ─────────────────────────────
                       _SectionCard(
-                        title: 'ประเภทเอกสารสำหรับรายการที่สร้างอัตโนมัติ',
+                        title: isEnglish ? 'Document Types for Auto-Generated Entries' : 'ประเภทเอกสารสำหรับรายการที่สร้างอัตโนมัติ',
                         children: [
                           _DocTypePickerField(
-                            label: 'เอกสารปิดบัญชีรายได้/ค่าใช้จ่าย (ขั้นตอน 3 & 4)',
-                            helperText:
-                                'ใช้สร้างรายการโอนบัญชีรายได้/ค่าใช้จ่าย และโอนกำไรสุทธิ',
+                            label: isEnglish ? 'Revenue/Expense Closing Document (Steps 3 & 4)' : 'เอกสารปิดบัญชีรายได้/ค่าใช้จ่าย (ขั้นตอน 3 & 4)',
+                            helperText: isEnglish
+                                ? 'Used to create revenue/expense transfer entries and net income transfer'
+                                : 'ใช้สร้างรายการโอนบัญชีรายได้/ค่าใช้จ่าย และโอนกำไรสุทธิ',
                             docTypes: _docTypes,
                             selected: _selectedClosingDoc,
                             onChanged: (d) =>
@@ -254,9 +263,10 @@ class _YearEndClosingConfigScreenState
                           ),
                           const SizedBox(height: 20),
                           _DocTypePickerField(
-                            label: 'เอกสารยกยอดงบดุล (ขั้นตอน 5)',
-                            helperText:
-                                'ใช้สร้างรายการยกยอดสินทรัพย์/หนี้สิน/ทุนไปปีถัดไป',
+                            label: isEnglish ? 'Balance Sheet Carry-Forward Document (Step 5)' : 'เอกสารยกยอดงบดุล (ขั้นตอน 5)',
+                            helperText: isEnglish
+                                ? 'Used to create asset/liability/equity carry-forward entries to the next year'
+                                : 'ใช้สร้างรายการยกยอดสินทรัพย์/หนี้สิน/ทุนไปปีถัดไป',
                             docTypes: _docTypes,
                             selected: _selectedCarryForwardDoc,
                             onChanged: (d) =>
@@ -282,8 +292,8 @@ class _YearEndClosingConfigScreenState
                                 )
                               : const Icon(Icons.save),
                           label: Text(_isSaving
-                              ? 'กำลังบันทึก...'
-                              : 'บันทึกการตั้งค่า'),
+                              ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
+                              : (isEnglish ? 'Save Settings' : 'บันทึกการตั้งค่า')),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.indigo,
                             foregroundColor: Colors.white,
@@ -349,6 +359,7 @@ class _DocTypePickerField extends StatelessWidget {
   });
 
   Future<void> _openDialog(BuildContext context) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final searchCtrl = TextEditingController();
     List<ModuleDocument> filtered = List.from(docTypes);
 
@@ -364,14 +375,15 @@ class _DocTypePickerField extends StatelessWidget {
               filtered = docTypes
                   .where((d) =>
                       d.docCode.toLowerCase().contains(lq) ||
-                      d.docNameThai.toLowerCase().contains(lq))
+                      d.docNameThai.toLowerCase().contains(lq) ||
+                      d.docNameEng.toLowerCase().contains(lq))
                   .toList();
             }
           });
         }
 
         return AlertDialog(
-          title: Text('เลือก$label'),
+          title: Text('${isEnglish ? 'Select' : 'เลือก'} $label'),
           content: SizedBox(
             width: 520,
             height: 420,
@@ -380,21 +392,21 @@ class _DocTypePickerField extends StatelessWidget {
                 TextField(
                   controller: searchCtrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา รหัส / ชื่อประเภทเอกสาร',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search code / document type name' : 'ค้นหา รหัส / ชื่อประเภทเอกสาร',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
                     contentPadding:
-                        EdgeInsets.symmetric(horizontal: 10),
+                        const EdgeInsets.symmetric(horizontal: 10),
                   ),
                   onChanged: doFilter,
                 ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: docTypes.isEmpty
-                      ? const Center(child: Text('ไม่พบประเภทเอกสาร GL'))
+                      ? Center(child: Text(isEnglish ? 'No GL document types found' : 'ไม่พบประเภทเอกสาร GL'))
                       : filtered.isEmpty
-                          ? const Center(child: Text('ไม่พบข้อมูล'))
+                          ? Center(child: Text(isEnglish ? 'No results' : 'ไม่พบข้อมูล'))
                           : ListView.builder(
                               itemCount: filtered.length,
                               itemBuilder: (_, i) {
@@ -419,7 +431,10 @@ class _DocTypePickerField extends StatelessWidget {
                                               color: Colors.indigo),
                                         ),
                                       ),
-                                      Expanded(child: Text(d.docNameThai)),
+                                      Expanded(
+                                          child: Text(isEnglish && d.docNameEng.isNotEmpty
+                                              ? d.docNameEng
+                                              : d.docNameThai)),
                                     ],
                                   ),
                                   onTap: () {
@@ -436,7 +451,7 @@ class _DocTypePickerField extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ปิด'),
+              child: Text(isEnglish ? 'Close' : 'ปิด'),
             ),
           ],
         );
@@ -447,6 +462,7 @@ class _DocTypePickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -473,19 +489,19 @@ class _DocTypePickerField extends StatelessWidget {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              '${selected!.docCode} — ${selected!.docNameThai}',
+                              '${selected!.docCode} — ${isEnglish && selected!.docNameEng.isNotEmpty ? selected!.docNameEng : selected!.docNameThai}',
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
                       )
-                    : const Text('— ไม่ระบุ —',
-                        style: TextStyle(color: Colors.grey)),
+                    : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                        style: const TextStyle(color: Colors.grey)),
               ),
               IconButton(
                 icon: const Icon(Icons.search, color: Colors.blue),
-                tooltip: 'ค้นหาประเภทเอกสาร',
+                tooltip: isEnglish ? 'Search document type' : 'ค้นหาประเภทเอกสาร',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 onPressed: () => _openDialog(context),
@@ -494,7 +510,7 @@ class _DocTypePickerField extends StatelessWidget {
                 IconButton(
                   icon:
                       const Icon(Icons.clear, color: Colors.red, size: 18),
-                  tooltip: 'ล้างการเลือก',
+                  tooltip: isEnglish ? 'Clear selection' : 'ล้างการเลือก',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => onChanged(null),
@@ -525,6 +541,7 @@ class _AccountSearchField extends StatelessWidget {
   });
 
   Future<void> _openDialog(BuildContext context) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final searchCtrl = TextEditingController();
     final sorted = List<Account>.from(accounts)
       ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
@@ -550,7 +567,7 @@ class _AccountSearchField extends StatelessWidget {
         }
 
         return AlertDialog(
-          title: Text('เลือก$label'),
+          title: Text('${isEnglish ? 'Select' : 'เลือก'} $label'),
           content: SizedBox(
             width: 520,
             height: 420,
@@ -559,12 +576,12 @@ class _AccountSearchField extends StatelessWidget {
                 TextField(
                   controller: searchCtrl,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search code / account name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
                     contentPadding:
-                        EdgeInsets.symmetric(horizontal: 10),
+                        const EdgeInsets.symmetric(horizontal: 10),
                   ),
                   onChanged: doFilter,
                 ),
@@ -573,7 +590,7 @@ class _AccountSearchField extends StatelessWidget {
                   child: accounts.isEmpty
                       ? const Center(child: CircularProgressIndicator())
                       : filtered.isEmpty
-                          ? const Center(child: Text('ไม่พบบัญชี'))
+                          ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี'))
                           : ListView.builder(
                               itemCount: filtered.length,
                               itemBuilder: (_, i) {
@@ -600,7 +617,9 @@ class _AccountSearchField extends StatelessWidget {
                                         ),
                                       ),
                                       Expanded(
-                                          child: Text(a.accountNameThai)),
+                                          child: Text(isEnglish && a.accountNameEng.isNotEmpty
+                                              ? a.accountNameEng
+                                              : a.accountNameThai)),
                                       const SizedBox(width: 8),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
@@ -611,8 +630,7 @@ class _AccountSearchField extends StatelessWidget {
                                               BorderRadius.circular(4),
                                         ),
                                         child: Text(
-                                          accountTypeOptions[a.accountType] ??
-                                              a.accountType,
+                                          accountTypeLabel(a.accountType, isEnglish),
                                           style: const TextStyle(
                                               fontSize: 11,
                                               color: Colors.grey),
@@ -634,7 +652,7 @@ class _AccountSearchField extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ปิด'),
+              child: Text(isEnglish ? 'Close' : 'ปิด'),
             ),
           ],
         );
@@ -645,6 +663,7 @@ class _AccountSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -671,7 +690,7 @@ class _AccountSearchField extends StatelessWidget {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              '${selected!.accountCode} — ${selected!.accountNameThai}',
+                              '${selected!.accountCode} — ${isEnglish && selected!.accountNameEng.isNotEmpty ? selected!.accountNameEng : selected!.accountNameThai}',
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold),
                             ),
@@ -685,20 +704,19 @@ class _AccountSearchField extends StatelessWidget {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              accountTypeOptions[selected!.accountType] ??
-                                  selected!.accountType,
+                              accountTypeLabel(selected!.accountType, isEnglish),
                               style: const TextStyle(
                                   fontSize: 11, color: Colors.grey),
                             ),
                           ),
                         ],
                       )
-                    : const Text('— ไม่ระบุ —',
-                        style: TextStyle(color: Colors.grey)),
+                    : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                        style: const TextStyle(color: Colors.grey)),
               ),
               IconButton(
                 icon: const Icon(Icons.search, color: Colors.blue),
-                tooltip: 'ค้นหาบัญชี',
+                tooltip: isEnglish ? 'Search account' : 'ค้นหาบัญชี',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 onPressed: () => _openDialog(context),
@@ -707,7 +725,7 @@ class _AccountSearchField extends StatelessWidget {
                 IconButton(
                   icon:
                       const Icon(Icons.clear, color: Colors.red, size: 18),
-                  tooltip: 'ล้างการเลือก',
+                  tooltip: isEnglish ? 'Clear selection' : 'ล้างการเลือก',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => onSelected(null),

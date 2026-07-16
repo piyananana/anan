@@ -54,6 +54,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
 
 // --- ปรับปรุง: Import/Export Logic ---
   Future<void> _importData() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() {
       _isImportOrExport = true;
     });
@@ -79,13 +80,13 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
         widget.onFieldsChanged(); // แจ้ง Home Screen ด้วย
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Import สำเร็จ!'),),
+            SnackBar(content: Text(isEnglish ? 'Import successful!' : 'Import สำเร็จ!')),
           );
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ยกเลิกการเลือกไฟล์')),
+            SnackBar(content: Text(isEnglish ? 'File selection canceled' : 'ยกเลิกการเลือกไฟล์')),
           );
         }
       }
@@ -93,7 +94,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Import: ${e.toString()}'),),
+              content: Text(isEnglish ? 'Error importing: ${e.toString()}' : 'เกิดข้อผิดพลาดในการ Import: ${e.toString()}')),
         );
       }
     } finally {
@@ -104,6 +105,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
   }
 
   Future<void> _exportData() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() {
       _isImportOrExport = true;
     });
@@ -112,15 +114,15 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
           .exportDataExcel();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads'),),
+          SnackBar(
+              content: Text(isEnglish ? 'Export successful! File saved to Downloads' : 'Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Export: ${e.toString()}'),),
+              content: Text(isEnglish ? 'Error exporting: ${e.toString()}' : 'เกิดข้อผิดพลาดในการ Export: ${e.toString()}')),
         );
       }
     } finally {
@@ -136,9 +138,10 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('ยืนยันการลบทั้งหมด'),
-          content: const Text(
-              'คุณแน่ใจหรือไม่ว่าต้องการลบทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้!'),
+          title: Text(l.isEnglish ? 'Confirm Delete All' : 'ยืนยันการลบทั้งหมด'),
+          content: Text(l.isEnglish
+              ? 'Are you sure you want to delete everything? This action cannot be undone!'
+              : 'คุณแน่ใจหรือไม่ว่าต้องการลบทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้!'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -160,12 +163,12 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('ลบทั้งหมดสำเร็จ'),));
+              SnackBar(content: Text(l.isEnglish ? 'All items deleted successfully' : 'ลบทั้งหมดสำเร็จ')));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}'),));
+              content: Text(l.isEnglish ? 'Error deleting all: ${e.toString()}' : 'เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')));
         }
       }
     }
@@ -204,9 +207,10 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-          title: const Text('ยืนยันการลบ'),
-          content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบ "${row.docCode} ${row.docNameThai}"?'),
+          title: Text(l.confirmDelete),
+          content: Text(l.isEnglish
+              ? 'Are you sure you want to delete "${row.docCode} ${row.docNameThai}"?'
+              : 'คุณแน่ใจหรือไม่ที่จะลบ "${row.docCode} ${row.docNameThai}"?'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -227,32 +231,33 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('ลบ "${row.docCode} ${row.docNameThai}" สำเร็จ')));
+              SnackBar(content: Text(l.isEnglish ? 'Deleted "${row.docCode} ${row.docNameThai}" successfully' : 'ลบ "${row.docCode} ${row.docNameThai}" สำเร็จ')));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')));
+              content: Text(l.isEnglish ? 'Error deleting: ${e.toString()}' : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')));
         }
       }
     }
   }
 
   Future<void> _onSubmit(ModuleDocument row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final dataService = Provider.of<ModuleDocumentService>(context, listen: false);
       if (_mode == Mode.addRoot || _mode == Mode.addChild) {
         await dataService.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เพิ่มข้อมูล "${row.docCode} ${row.docNameThai}" สำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'Added "${row.docCode} ${row.docNameThai}" successfully' : 'เพิ่มข้อมูล "${row.docCode} ${row.docNameThai}" สำเร็จ')),
           );
         }
       } else if (_mode == Mode.edit && _selectedData != null) {
         await dataService.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('บันทึกข้อมูล "${row.docCode} ${row.docNameThai}" สำเร็จ')),
+            SnackBar(content: Text(isEnglish ? 'Saved "${row.docCode} ${row.docNameThai}" successfully' : 'บันทึกข้อมูล "${row.docCode} ${row.docNameThai}" สำเร็จ')),
           );
         }
       }
@@ -261,7 +266,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')));
+            SnackBar(content: Text(isEnglish ? 'Error saving: ${e.toString()}' : 'เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')));
       }
     }
   }
@@ -293,7 +298,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: () {
               _listWidgetKey.currentState?.refresh();
               _onCancel();
@@ -347,7 +352,9 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (l.isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                      : (l.isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(

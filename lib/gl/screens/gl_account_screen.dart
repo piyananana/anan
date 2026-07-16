@@ -37,6 +37,7 @@ class _AccountScreenState extends State<AccountScreen>
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
   bool _isDraggingDivider = false;
+  bool _isEnglish = false;
 
   @override
   void initState() {
@@ -54,6 +55,7 @@ class _AccountScreenState extends State<AccountScreen>
 
 // --- ปรับปรุง: Import/Export Logic ---
   Future<void> _importData() async {
+    final isEnglish = _isEnglish;
     setState(() {
       _isImportOrExport = true;
     });
@@ -79,13 +81,13 @@ class _AccountScreenState extends State<AccountScreen>
         widget.onFieldsChanged(); // แจ้ง Home Screen ด้วย
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Import สำเร็จ!'),),
+            SnackBar(content: Text(isEnglish ? 'Import successful!' : 'Import สำเร็จ!')),
           );
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ยกเลิกการเลือกไฟล์')),
+            SnackBar(content: Text(isEnglish ? 'File selection cancelled' : 'ยกเลิกการเลือกไฟล์')),
           );
         }
       }
@@ -93,7 +95,9 @@ class _AccountScreenState extends State<AccountScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Import: ${e.toString()}'),),
+              content: Text(isEnglish
+                  ? 'Error importing: ${e.toString()}'
+                  : 'เกิดข้อผิดพลาดในการ Import: ${e.toString()}'),),
         );
       }
     } finally {
@@ -104,6 +108,7 @@ class _AccountScreenState extends State<AccountScreen>
   }
 
   Future<void> _exportData() async {
+    final isEnglish = _isEnglish;
     setState(() {
       _isImportOrExport = true;
     });
@@ -112,15 +117,19 @@ class _AccountScreenState extends State<AccountScreen>
           .exportDataExcel();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads'),),
+          SnackBar(
+              content: Text(isEnglish
+                  ? 'Export successful! File saved in Downloads'
+                  : 'Export สำเร็จ! ไฟล์ถูกบันทึกใน Downloads'),),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการ Export: ${e.toString()}'),),
+              content: Text(isEnglish
+                  ? 'Error exporting: ${e.toString()}'
+                  : 'เกิดข้อผิดพลาดในการ Export: ${e.toString()}'),),
         );
       }
     } finally {
@@ -131,14 +140,16 @@ class _AccountScreenState extends State<AccountScreen>
   }
 
   Future<void> _deleteRows() async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = _isEnglish;
+    final l = AppL10n(isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('ยืนยันการลบทั้งหมด'),
-          content: const Text(
-              'คุณแน่ใจหรือไม่ว่าต้องการลบทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้!'),
+          title: Text(isEnglish ? 'Confirm Delete All' : 'ยืนยันการลบทั้งหมด'),
+          content: Text(isEnglish
+              ? 'Are you sure you want to delete all data? This action cannot be undone!'
+              : 'คุณแน่ใจหรือไม่ว่าต้องการลบทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้!'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -160,12 +171,14 @@ class _AccountScreenState extends State<AccountScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('ลบทั้งหมดสำเร็จ'),));
+              SnackBar(content: Text(isEnglish ? 'All data deleted successfully' : 'ลบทั้งหมดสำเร็จ')));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}'),));
+              content: Text(isEnglish
+                  ? 'Error deleting all data: ${e.toString()}'
+                  : 'เกิดข้อผิดพลาดในการลบทั้งหมด: ${e.toString()}')));
         }
       }
     }
@@ -200,13 +213,18 @@ class _AccountScreenState extends State<AccountScreen>
   }
 
   Future<void> _onDelete(Account row) async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = _isEnglish;
+    final l = AppL10n(isEnglish);
+    final rowName = isEnglish && row.accountNameEng.isNotEmpty
+        ? row.accountNameEng
+        : row.accountNameThai;
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-          title: const Text('ยืนยันการลบ'),
-          content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบ "${row.accountCode} ${row.accountNameThai}"?'),
+          title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+          content: Text(isEnglish
+              ? 'Are you sure you want to delete "${row.accountCode} $rowName"?'
+              : 'คุณแน่ใจหรือไม่ที่จะลบ "${row.accountCode} $rowName"?'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -227,32 +245,44 @@ class _AccountScreenState extends State<AccountScreen>
         _onCancel();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('ลบ "${row.accountCode} ${row.accountNameThai}" สำเร็จ')));
+              SnackBar(content: Text(isEnglish
+                  ? 'Deleted "${row.accountCode} $rowName" successfully'
+                  : 'ลบ "${row.accountCode} $rowName" สำเร็จ')));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')));
+              content: Text(isEnglish
+                  ? 'Error deleting: ${e.toString()}'
+                  : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')));
         }
       }
     }
   }
 
   Future<void> _onSubmit(Account row) async {
+    final isEnglish = _isEnglish;
+    final rowName = isEnglish && row.accountNameEng.isNotEmpty
+        ? row.accountNameEng
+        : row.accountNameThai;
     try {
       final dataService = Provider.of<AccountService>(context, listen: false);
       if (_mode == AccountMode.addRoot || _mode == AccountMode.addChild) {
         await dataService.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เพิ่มข้อมูล "${row.accountCode} ${row.accountNameThai}" สำเร็จ')),
+            SnackBar(content: Text(isEnglish
+                ? 'Added "${row.accountCode} $rowName" successfully'
+                : 'เพิ่มข้อมูล "${row.accountCode} $rowName" สำเร็จ')),
           );
         }
       } else if (_mode == AccountMode.edit && _selectedData != null) {
         await dataService.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('บันทึกข้อมูล "${row.accountCode} ${row.accountNameThai}" สำเร็จ')),
+            SnackBar(content: Text(isEnglish
+                ? 'Saved "${row.accountCode} $rowName" successfully'
+                : 'บันทึกข้อมูล "${row.accountCode} $rowName" สำเร็จ')),
           );
         }
       }
@@ -261,7 +291,9 @@ class _AccountScreenState extends State<AccountScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')));
+            SnackBar(content: Text(isEnglish
+                ? 'Error saving: ${e.toString()}'
+                : 'เกิดข้อผิดพลาดในการบันทึก: ${e.toString()}')));
       }
     }
   }
@@ -283,7 +315,8 @@ class _AccountScreenState extends State<AccountScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context); // This is crucial for AutomaticKeepAliveClientMixin
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
 
     return Scaffold(
       appBar: AppBar(
@@ -293,7 +326,7 @@ class _AccountScreenState extends State<AccountScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: () {
               _listWidgetKey.currentState?.refresh();
               _onCancel();
@@ -320,7 +353,9 @@ class _AccountScreenState extends State<AccountScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                      : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(

@@ -21,6 +21,8 @@ import '../../gl/models/gl_dimension.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 
 class TrialBalanceReportScreen extends StatefulWidget {
   const TrialBalanceReportScreen({super.key});
@@ -71,6 +73,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
   bool _isFilterExpanded = true;
   double _filterPanelWidth = 350.0;
   bool _isDraggingDivider = false;
+  bool _isEnglish = false;
 
   @override
   void initState() {
@@ -110,7 +113,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error loading master: $e')));
+            .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error loading master data: $e' : 'เกิดข้อผิดพลาดในการโหลดข้อมูลหลัก: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -141,7 +144,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
       if (data.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ไม่พบข้อมูลในปีบัญชีที่เลือก')),
+            SnackBar(content: Text(_isEnglish ? 'No data found for selected fiscal year' : 'ไม่พบข้อมูลในปีบัญชีที่เลือก')),
           );
         }
         return;
@@ -155,7 +158,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -190,6 +193,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
   Future<void> _exportExcel() async {
     _isExporting = true;
     setState(() {});
+    final bool isEnglish = _isEnglish;
     try {
       final ex = Excel.createExcel();
       ex.rename('Sheet1', 'TrialBalance');
@@ -201,18 +205,18 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
           ? 'งวด ${_selectedPeriod!.periodNumber} - ${_selectedPeriod!.periodName}'
           : 'ปี ${_selectedYear?.fyCode ?? ''}';
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'งบทดลอง (Trial Balance)', bold: true);
-      _xlCell(s, 2, 0, '$_periodLabel  |  พิมพ์: $_ts');
+      _xlCell(s, 0, 0, _company?.displayName(_isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, _isEnglish ? 'Trial Balance' : 'งบทดลอง (Trial Balance)', bold: true);
+      _xlCell(s, 2, 0, '$_periodLabel  |  ${isEnglish ? 'Printed:' : 'พิมพ์:'} $_ts');
 
       int r = 3;
-      _xlCell(s, r, 0, 'รหัส/ชื่อบัญชี', bg: hdrBg, bold: true);
-      _xlCell(s, r, 1, 'ยอดยกมา-Dr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 2, 'ยอดยกมา-Cr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 3, 'ยอดในงวด-Dr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 4, 'ยอดในงวด-Cr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 5, 'ยอดยกไป-Dr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 6, 'ยอดยกไป-Cr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 0, isEnglish ? 'Code/Account' : 'รหัส/ชื่อบัญชี', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, isEnglish ? 'Opening-Dr' : 'ยอดยกมา-Dr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 2, isEnglish ? 'Opening-Cr' : 'ยอดยกมา-Cr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 3, isEnglish ? 'Period-Dr' : 'ยอดในงวด-Dr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 4, isEnglish ? 'Period-Cr' : 'ยอดในงวด-Cr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 5, isEnglish ? 'Closing-Dr' : 'ยอดยกไป-Dr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 6, isEnglish ? 'Closing-Cr' : 'ยอดยกไป-Cr', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       r++;
 
       double sumBegDr = 0, sumBegCr = 0;
@@ -222,7 +226,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
       for (final row in _reportData) {
         final isHeader = row['is_header'] == true;
         final code = row['account_code']?.toString() ?? '';
-        final name = row['account_name_thai']?.toString() ?? '';
+        final name = isEnglish ? (row['account_name_eng']?.toString().isNotEmpty == true ? row['account_name_eng'].toString() : row['account_name_thai'].toString()) : row['account_name_thai'].toString();
         final begDr  = double.tryParse(row['beg_dr'].toString())  ?? 0;
         final begCr  = double.tryParse(row['beg_cr'].toString())  ?? 0;
         final mvmtDr = double.tryParse(row['mvmt_dr'].toString()) ?? 0;
@@ -247,7 +251,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
       }
 
       // Grand total row
-      _xlCell(s, r, 0, 'รวมทั้งสิ้น', bg: totBg, bold: true);
+      _xlCell(s, r, 0, isEnglish ? 'Grand Total' : 'รวมทั้งสิ้น', bg: totBg, bold: true);
       _xlCell(s, r, 1, DoubleCellValue(sumBegDr),  bg: totBg, bold: true, align: HorizontalAlign.Right);
       _xlCell(s, r, 2, DoubleCellValue(sumBegCr),  bg: totBg, bold: true, align: HorizontalAlign.Right);
       _xlCell(s, r, 3, DoubleCellValue(sumMvmtDr), bg: totBg, bold: true, align: HorizontalAlign.Right);
@@ -286,30 +290,32 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
     final fontBold = pw.Font.ttf(fontBoldData);
     final fontItalic = pw.Font.ttf(fontItalicData);
 
-    String companyName =
-        _company != null ? _company!.thaiName : "(ไม่ระบุชื่อบริษัท)";
-    final String userName = headers['UserName'] ?? "(ไม่ระบุชื่อ)";
+    final bool isEnglish = _isEnglish;
+    String companyName = _company != null
+        ? _company!.displayName(isEnglish)
+        : (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
+    final String userName = headers['UserName'] ?? (isEnglish ? '(Unknown user)' : '(ไม่ระบุชื่อ)');
     final String printDateStr =
         DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
     String periodLine = _selectedPeriod != null
-        ? "วันที่ ${_selectedPeriod!.periodEndDate.day} ${_selectedPeriod!.periodName} ${_selectedYear!.fyCode}"
-        : "ปี ${_selectedYear?.fyCode}";
+        ? "${isEnglish ? "As of" : "วันที่"} ${_selectedPeriod!.periodEndDate.day} ${_selectedPeriod!.periodName} ${_selectedYear!.fyCode}"
+        : "${isEnglish ? "Year" : "ปี"} ${_selectedYear?.fyCode}";
 
     List<String> conditions = [];
     if (!_showDimensions) {
-      conditions.add("ไม่แสดงสาขา/มิติ");
+      conditions.add(isEnglish ? "No Branch/Dim" : "ไม่แสดงสาขา/มิติ");
     }
     if (_hideZero) {
-      conditions.add("ซ่อนบัญชีที่ยอดเป็นศูนย์");
+      conditions.add(isEnglish ? "Hide zero-balance accounts" : "ซ่อนบัญชีที่ยอดเป็นศูนย์");
     }
     if (_showHierarchy) {
-      conditions.add("แสดงแบบโครงสร้างบัญชี");
+      conditions.add(isEnglish ? "Show as Chart of Accounts" : "แสดงแบบโครงสร้างบัญชี");
     } else {
-      conditions.add("แสดงเฉพาะบัญชีที่ใช้ทำรายการ");
-    } 
-    if (_showHierarchy && _showOnlyHeaders) conditions.add("เฉพาะหัวบัญชี");
-    if (_showHierarchy && _showHeaderTotals) conditions.add("ยอดรวมหัวบัญชี");
+      conditions.add(isEnglish ? "Detail accounts only" : "แสดงเฉพาะบัญชีที่ใช้ทำรายการ");
+    }
+    if (_showHierarchy && _showOnlyHeaders) conditions.add(isEnglish ? "Header accounts only" : "เฉพาะหัวบัญชี");
+    if (_showHierarchy && _showHeaderTotals) conditions.add(isEnglish ? "Show header totals" : "ยอดรวมหัวบัญชี");
 
     String conditionLine = "* ${conditions.join(", ")}";
 
@@ -390,14 +396,14 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 7,
-                    child: pw.Text("งบทดลอง (Trial Balance)",
+                    child: pw.Text(isEnglish ? 'Trial Balance' : 'งบทดลอง (Trial Balance)',
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(
                             fontSize: 16, fontWeight: pw.FontWeight.bold))),
                 pw.Expanded(
                     flex: 3,
                     child: pw.Text(
-                        "หน้า ${context.pageNumber}/${context.pagesCount}",
+                        isEnglish ? "Page ${context.pageNumber}/${context.pagesCount}" : "หน้า ${context.pageNumber}/${context.pagesCount}",
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12)))
               ],
@@ -417,7 +423,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text("พิมพ์โดย $userName",
+                    child: pw.Text(isEnglish ? "Printed by $userName" : "พิมพ์โดย $userName",
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12)))
               ],
@@ -433,7 +439,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         style: const pw.TextStyle(fontSize: 10))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text("พิมพ์เมื่อ $printDateStr",
+                    child: pw.Text(isEnglish ? "Printed: $printDateStr" : "พิมพ์เมื่อ $printDateStr",
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12)))
               ],
@@ -457,7 +463,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                           left: pw.BorderSide(color: PdfColors.grey800),
                         )),
                         alignment: pw.Alignment.center,
-                        child: pw.Text("รหัส/ชื่อบัญชี",
+                        child: pw.Text(isEnglish ? 'Code/Account' : 'รหัส/ชื่อบัญชี',
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -470,7 +476,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                           left: pw.BorderSide(color: PdfColors.grey800),
                         )),
                         alignment: pw.Alignment.center,
-                        child: pw.Text("ยอดยกมา",
+                        child: pw.Text(isEnglish ? 'Opening Balance' : 'ยอดยกมา',
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -483,7 +489,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                           left: pw.BorderSide(color: PdfColors.grey800),
                         )),
                         alignment: pw.Alignment.center,
-                        child: pw.Text("ยอดในงวด",
+                        child: pw.Text(isEnglish ? 'Period Movement' : 'ยอดในงวด',
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -497,7 +503,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                                 right:
                                     pw.BorderSide(color: PdfColors.grey800))),
                         alignment: pw.Alignment.center,
-                        child: pw.Text("ยอดยกไป",
+                        child: pw.Text(isEnglish ? 'Closing Balance' : 'ยอดยกไป',
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -525,7 +531,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         )),
                         alignment: pw.Alignment.center,
                         child: pw.Text(
-                            _showDimensions ? "สาขา/มิติ" : "-",
+                            _showDimensions ? (isEnglish ? "Branch/Dim" : "สาขา/มิติ") : "-",
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -539,7 +545,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                           bottom: pw.BorderSide(color: PdfColors.grey800),
                         )),
                         alignment: pw.Alignment.center,
-                        child: pw.Text("เดบิต",
+                        child: pw.Text(isEnglish ? 'Debit' : 'เดบิต',
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -553,7 +559,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                           bottom: pw.BorderSide(color: PdfColors.grey800),
                         )),
                         alignment: pw.Alignment.center,
-                        child: pw.Text("เครดิต",
+                        child: pw.Text(isEnglish ? 'Credit' : 'เครดิต',
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -567,7 +573,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                           bottom: pw.BorderSide(color: PdfColors.grey800),
                         )),
                         alignment: pw.Alignment.center,
-                        child: pw.Text("เดบิต",
+                        child: pw.Text(isEnglish ? 'Debit' : 'เดบิต',
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -581,7 +587,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                           bottom: pw.BorderSide(color: PdfColors.grey800),
                         )),
                         alignment: pw.Alignment.center,
-                        child: pw.Text("เครดิต",
+                        child: pw.Text(isEnglish ? 'Credit' : 'เครดิต',
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -595,7 +601,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                           bottom: pw.BorderSide(color: PdfColors.grey800),
                         )),
                         alignment: pw.Alignment.center,
-                        child: pw.Text("เดบิต",
+                        child: pw.Text(isEnglish ? 'Debit' : 'เดบิต',
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -610,7 +616,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                                 right:
                                     pw.BorderSide(color: PdfColors.grey800))),
                         alignment: pw.Alignment.center,
-                        child: pw.Text("เครดิต",
+                        child: pw.Text(isEnglish ? 'Credit' : 'เครดิต',
                             style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 12)))),
@@ -647,7 +653,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                   padding: pw.EdgeInsets.only(
                       left: indent, right: 8, top: 4, bottom: 4),
                   child: pw.Text(
-                      "${row['account_code']} ${row['account_name_thai']}",
+                      "${row['account_code']} ${isEnglish ? (row['account_name_eng']?.toString().isNotEmpty == true ? row['account_name_eng'].toString() : row['account_name_thai'].toString()) : row['account_name_thai'].toString()}",
                       style: textStyle),
                 ),
                 pw.Padding(
@@ -802,7 +808,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         bottom: pw.BorderSide(color: PdfColors.grey800),
                       )),
                       alignment: pw.Alignment.center,
-                      child: pw.Text("ยอดรวม",
+                      child: pw.Text(isEnglish ? 'Grand Total' : 'ยอดรวม',
                           style: pw.TextStyle(
                               fontWeight: pw.FontWeight.bold, fontSize: 12)))),
               pw.Expanded(
@@ -897,6 +903,8 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -917,7 +925,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
             onPressed: _loadMasterData,
           ),
         ],
@@ -940,7 +948,9 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
               ),
               padding: EdgeInsets.zero,
               onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
-              tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+              tooltip: _isFilterExpanded
+                  ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                  : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
             ),
           ),
           AnimatedContainer(
@@ -960,13 +970,13 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('เงื่อนไขรายงาน', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<FiscalYear>(
                       isExpanded: true,
                       value: _selectedYear,
                       items: _fiscalYears.map((fy) => DropdownMenuItem(value: fy, child: Text(fy.fyCode))).toList(),
-                      decoration: const InputDecoration(labelText: 'ปีบัญชี', border: OutlineInputBorder()),
+                      decoration: InputDecoration(labelText: isEnglish ? 'Fiscal Year' : 'ปีบัญชี', border: const OutlineInputBorder()),
                       onChanged: (val) async {
                         if (val != null) {
                            setState(() => _selectedYear = val);
@@ -979,10 +989,10 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       isExpanded: true,
                       value: _selectedPeriod,
                       items: [
-                        const DropdownMenuItem<PostingPeriod>(value: null, child: Text("ทุกงวด (ตั้งแต่ต้นปี)")),
+                        DropdownMenuItem<PostingPeriod>(value: null, child: Text(isEnglish ? 'All Periods (From Year Start)' : 'ทุกงวด (ตั้งแต่ต้นปี)')),
                         ..._periods.skip(1).map((p) => DropdownMenuItem(value: p, child: Text("${p.periodNumber} - ${p.periodName}"))),
                       ],
-                      decoration: const InputDecoration(labelText: 'งวดเดือน', border: OutlineInputBorder()),
+                      decoration: InputDecoration(labelText: isEnglish ? 'Period' : 'งวดเดือน', border: const OutlineInputBorder()),
                       onChanged: (val) => setState(() => _selectedPeriod = val),
                     ),
                     if (_allowedBranches.isNotEmpty) ...[
@@ -990,9 +1000,9 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       DropdownButtonFormField<int?>(
                         value: _selectedBranchId,
                         isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'สาขา', border: OutlineInputBorder()),
+                        decoration: InputDecoration(labelText: isEnglish ? 'Branch' : 'สาขา', border: const OutlineInputBorder()),
                         items: [
-                          const DropdownMenuItem<int?>(value: null, child: Text('— ทุกสาขา —')),
+                          DropdownMenuItem<int?>(value: null, child: Text(isEnglish ? '— All Branches —' : '— ทุกสาขา —')),
                           ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
                             value: b.branchId,
                             child: Text('${b.branchCode}  ${b.branchNameThai}', overflow: TextOverflow.ellipsis),
@@ -1005,13 +1015,13 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                     // แสดงเฉพาะเมื่อมี dimension type ที่ active
                     if (_activeDimTypes.isNotEmpty)
                       SwitchListTile(
-                        title: const Text('แสดงสาขา/มิติ'),
+                        title: Text(isEnglish ? 'Show Branch/Dimension' : 'แสดงสาขา/มิติ'),
                         value: _showDimensions,
                         onChanged: (v) => setState(() => _showDimensions = v),
                         contentPadding: EdgeInsets.zero,
                       ),
                     SwitchListTile(
-                      title: const Text('ซ่อนบัญชีที่ยอดเป็นศูนย์'),
+                      title: Text(isEnglish ? 'Hide zero-balance accounts' : 'ซ่อนบัญชีที่ยอดเป็นศูนย์'),
                       value: _hideZero,
                       onChanged: (v) => setState(() => _hideZero = v),
                       contentPadding: EdgeInsets.zero,
@@ -1019,8 +1029,8 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 
                     const Divider(),
                     SwitchListTile(
-                      title: const Text('แสดงแบบผังบัญชี (Hierarchy)'),
-                      subtitle: const Text('แสดงบัญชีคุมและย่อหน้า'),
+                      title: Text(isEnglish ? 'Show as Chart of Accounts (Hierarchy)' : 'แสดงแบบผังบัญชี (Hierarchy)'),
+                      subtitle: Text(isEnglish ? 'Show header accounts with indentation' : 'แสดงบัญชีคุมและย่อหน้า'),
                       value: _showHierarchy,
                       onChanged: (v) {
                         setState(() {
@@ -1033,9 +1043,8 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       },
                       contentPadding: EdgeInsets.zero,
                     ),
-                    // [NEW] Show Only Headers
                     SwitchListTile(
-                      title: const Text('แสดงเฉพาะหัวบัญชี'),
+                      title: Text(isEnglish ? 'Show header accounts only' : 'แสดงเฉพาะหัวบัญชี'),
                       value: _showOnlyHeaders,
                       onChanged: _showHierarchy
                         ? (v) => setState(() => _showOnlyHeaders = v)
@@ -1043,11 +1052,11 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       contentPadding: EdgeInsets.zero,
                     ),
                     SwitchListTile(
-                      title: const Text('แสดงยอดรวมที่หัวบัญชี'),
+                      title: Text(isEnglish ? 'Show totals at header accounts' : 'แสดงยอดรวมที่หัวบัญชี'),
                       value: _showHeaderTotals,
                       onChanged: _showHierarchy
                         ? (v) => setState(() => _showHeaderTotals = v)
-                        : null, // Disabled if Hierarchy OFF or ShowOnlyHeaders ON (because logic forces it ON)
+                        : null,
                       contentPadding: EdgeInsets.zero,
                     ),
 
@@ -1057,7 +1066,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                       height: 50,
                       child: ElevatedButton.icon(
                         icon: const Icon(Icons.picture_as_pdf),
-                        label: const Text('ประมวลผลรายงาน'),
+                        label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900], foregroundColor: Colors.white),
                         onPressed: _generateReport,
                       ),
@@ -1096,7 +1105,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
             child: Container(
               color: Colors.grey[200],
               child: _reportData.isEmpty
-                  ? const Center(child: Text("กรุณาเลือกเงื่อนไขและกดประมวลผล"))
+                  ? Center(child: Text(isEnglish ? 'Select filter conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                   : PdfPreview(
                       build: (format) => _generatePdf(format),
                       initialPageFormat: PdfPageFormat.a4.landscape,

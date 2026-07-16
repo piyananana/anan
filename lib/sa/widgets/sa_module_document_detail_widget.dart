@@ -1235,8 +1235,9 @@ class ModuleDocumentDetailWidgetState
       return Image.memory(base64Decode(data),
           height: 60, fit: BoxFit.contain);
     } catch (_) {
-      return const Text('ไม่สามารถแสดงรูปได้',
-          style: TextStyle(color: Colors.red, fontSize: 11));
+      final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+      return Text(isEnglish ? 'Unable to display image' : 'ไม่สามารถแสดงรูปได้',
+          style: const TextStyle(color: Colors.red, fontSize: 11));
     }
   }
 }

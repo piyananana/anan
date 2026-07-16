@@ -75,9 +75,10 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text(
-            'ลบ "${row.collectorCode} (${row.collectorNameThai})" ใช่หรือไม่?'),
+        title: Text(l.confirmDelete),
+        content: Text(l.isEnglish
+            ? 'Delete "${row.collectorCode} (${row.collectorNameEng?.isNotEmpty == true ? row.collectorNameEng : row.collectorNameThai})"?'
+            : 'ลบ "${row.collectorCode} (${row.collectorNameThai})" ใช่หรือไม่?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -96,30 +97,31 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
       _onCancel();
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+            .showSnackBar(SnackBar(content: Text(l.isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('ลบล้มเหลว: $e')));
+            .showSnackBar(SnackBar(content: Text(l.isEnglish ? 'Delete failed: $e' : 'ลบล้มเหลว: $e')));
       }
     }
   }
 
   Future<void> _onSubmit(ArCollector row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       final svc = Provider.of<ArCollectorService>(context, listen: false);
       if (_selected == null) {
         await svc.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
         }
       } else {
         await svc.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
         }
       }
       _listKey.currentState?.refresh();
@@ -128,7 +130,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e')));
+            .showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     }
   }
@@ -150,7 +152,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: () {
               _listKey.currentState?.refresh();
               _onCancel();
@@ -180,8 +182,9 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () => setState(
                       () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip:
-                      _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (l.isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                      : (l.isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
               // left panel

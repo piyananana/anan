@@ -35,6 +35,7 @@ class GlEntryListWidget extends StatefulWidget {
 }
 
 class _GlEntryListWidgetState extends State<GlEntryListWidget> {
+  bool _isEnglish = false;
   final GlEntryService _entryService = GlEntryService();
   final PeriodService _periodService = PeriodService();
   final GlDimensionService _dimService = GlDimensionService();
@@ -127,8 +128,11 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
       await _fetchEntries();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error loading master data: $e')));
+        final isEnglish = _isEnglish;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'Error loading master data: $e'
+                : 'เกิดข้อผิดพลาดในการโหลดข้อมูลหลัก: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -151,8 +155,11 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error fetching periods: $e')));
+        final isEnglish = _isEnglish;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'Error fetching periods: $e'
+                : 'เกิดข้อผิดพลาดในการโหลดงวดบัญชี: $e')));
       }
     }
   }
@@ -175,8 +182,11 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error fetching entries: $e')));
+        final isEnglish = _isEnglish;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'Error fetching entries: $e'
+                : 'เกิดข้อผิดพลาดในการโหลดรายการ: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -221,12 +231,15 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   }
 
   Future<void> _deleteEntry(int id) async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: const Text('ต้องการลบรายการนี้ใช่หรือไม่?'),
+        title: Text(l.confirmDelete),
+        content: Text(isEnglish
+            ? 'Are you sure you want to delete this entry?'
+            : 'ต้องการลบรายการนี้ใช่หรือไม่?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -242,13 +255,13 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
         await _entryService.deleteEntry(id);
         _fetchEntries();
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('ลบรายการสำเร็จ')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(isEnglish ? 'Deleted successfully' : 'ลบรายการสำเร็จ')));
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text('ลบไม่สำเร็จ: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(isEnglish ? 'Delete failed: $e' : 'ลบไม่สำเร็จ: $e')));
         }
       }
     }
@@ -278,7 +291,8 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Column(
       children: [
         _buildFilterRow(),
@@ -290,8 +304,12 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
               alignment: Alignment.centerLeft,
               child: Text(
                 _hasActiveFilters
-                    ? 'พบ ${_filteredEntries.length} รายการ จาก ${_entries.length} รายการ'
-                    : '${_filteredEntries.length} รายการ',
+                    ? (isEnglish
+                        ? 'Found ${_filteredEntries.length} of ${_entries.length} entries'
+                        : 'พบ ${_filteredEntries.length} รายการ จาก ${_entries.length} รายการ')
+                    : (isEnglish
+                        ? '${_filteredEntries.length} entries'
+                        : '${_filteredEntries.length} รายการ'),
                 style: const TextStyle(fontSize: 12, color: Colors.black87),
               ),
             ),
@@ -306,7 +324,8 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   }
 
   Widget _buildFilterRow() {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = _isEnglish;
+    final l = AppL10n(isEnglish);
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
       child: Column(
@@ -320,8 +339,8 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                 child: DropdownButtonFormField<FiscalYear>(
                   value: _selectedFiscalYear,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                      labelText: 'ปีบัญชี', isDense: true, border: OutlineInputBorder()),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Fiscal Year' : 'ปีบัญชี', isDense: true, border: const OutlineInputBorder()),
                   items: _fiscalYears
                       .map((fy) => DropdownMenuItem(
                           value: fy,
@@ -345,8 +364,8 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                 child: DropdownButtonFormField<PostingPeriod>(
                   value: _selectedPeriod,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                      labelText: 'งวด', isDense: true, border: OutlineInputBorder()),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Period' : 'งวด', isDense: true, border: const OutlineInputBorder()),
                   items: _periods
                       .map((p) => DropdownMenuItem(
                           value: p,
@@ -364,13 +383,13 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                 child: DropdownButtonFormField<String?>(
                   value: _selectedStatus,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                      labelText: 'สถานะ', isDense: true, border: OutlineInputBorder()),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('ทั้งหมด')),
-                    DropdownMenuItem(value: 'Draft', child: Text('Draft')),
-                    DropdownMenuItem(value: 'Posted', child: Text('Posted')),
-                    DropdownMenuItem(value: 'Deleted', child: Text('Deleted')),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Status' : 'สถานะ', isDense: true, border: const OutlineInputBorder()),
+                  items: [
+                    DropdownMenuItem(value: null, child: Text(l.all)),
+                    const DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                    const DropdownMenuItem(value: 'Posted', child: Text('Posted')),
+                    const DropdownMenuItem(value: 'Deleted', child: Text('Deleted')),
                   ],
                   onChanged: (v) => setState(() {
                     _selectedStatus = v;
@@ -385,10 +404,11 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                   child: DropdownButtonFormField<UserBranch?>(
                     value: _selectedBranchFilter,
                     isExpanded: true,
-                    decoration: const InputDecoration(
-                        labelText: 'สาขา', isDense: true, border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText: isEnglish ? 'Branch' : 'สาขา', isDense: true, border: const OutlineInputBorder()),
                     items: [
-                      const DropdownMenuItem<UserBranch?>(value: null, child: Text('ทุกสาขา')),
+                      DropdownMenuItem<UserBranch?>(
+                          value: null, child: Text(isEnglish ? 'All Branches' : 'ทุกสาขา')),
                       ..._allowedBranches.map((b) => DropdownMenuItem(
                             value: b,
                             child: Text('${b.branchCode} ${b.branchNameThai}',
@@ -437,11 +457,13 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
               Expanded(
                 child: TextField(
                   controller: _searchCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'ค้นหา (เลขที่เอกสาร / คำอธิบาย / เลขที่อ้างอิง)',
+                  decoration: InputDecoration(
+                    labelText: isEnglish
+                        ? 'Search (Doc No. / Description / Reference No.)'
+                        : 'ค้นหา (เลขที่เอกสาร / คำอธิบาย / เลขที่อ้างอิง)',
                     isDense: true,
-                    border: OutlineInputBorder(),
-                    suffixIcon: Icon(Icons.search, size: 16),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: const Icon(Icons.search, size: 16),
                   ),
                   onChanged: (_) => setState(() => _applyFilter()),
                   onSubmitted: (_) => setState(() => _applyFilter()),
@@ -451,7 +473,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
               ElevatedButton.icon(
                 onPressed: widget.onAddPressed,
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('เพิ่มรายการ'),
+                label: Text(isEnglish ? 'Add Entry' : 'เพิ่มรายการ'),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
               ),
@@ -478,11 +500,12 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   }
 
   Widget _buildTable() {
+    final isEnglish = _isEnglish;
     if (_filteredEntries.isEmpty) {
       return Center(
         child: Text(_entries.isEmpty
-            ? 'ไม่พบรายการบัญชีตามเงื่อนไข'
-            : 'ไม่พบรายการที่ตรงกับคำค้น'),
+            ? (isEnglish ? 'No entries match the conditions' : 'ไม่พบรายการบัญชีตามเงื่อนไข')
+            : (isEnglish ? 'No entries match the search' : 'ไม่พบรายการที่ตรงกับคำค้น')),
       );
     }
     return LayoutBuilder(
@@ -494,15 +517,15 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
             columnSpacing: 12,
             dataRowMinHeight: 32,
             dataRowMaxHeight: 42,
-            columns: const [
-              DataColumn(label: Text('เลขที่เอกสาร', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ประเภท', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('อ้างอิง', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('คำอธิบาย', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ยอดเดบิต', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-              DataColumn(label: Text('สถานะ', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('จัดการ', style: TextStyle(fontWeight: FontWeight.bold))),
+            columns: [
+              DataColumn(label: Text(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Type' : 'ประเภท', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Reference' : 'อ้างอิง', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Description' : 'คำอธิบาย', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Debit Amount' : 'ยอดเดบิต', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+              DataColumn(label: Text(isEnglish ? 'Status' : 'สถานะ', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Actions' : 'จัดการ', style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
             rows: _filteredEntries.map((item) {
               final isDraft = item.status == 'Draft';
@@ -545,21 +568,21 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                     if (isDraft)
                       IconButton(
                         icon: const Icon(Icons.edit, size: 16),
-                        tooltip: 'แก้ไข',
+                        tooltip: isEnglish ? 'Edit' : 'แก้ไข',
                         onPressed: () => widget.onEditPressed(item.id),
                         visualDensity: VisualDensity.compact,
                       )
                     else
                       IconButton(
                         icon: const Icon(Icons.visibility, size: 16),
-                        tooltip: 'ดู',
+                        tooltip: isEnglish ? 'View' : 'ดู',
                         onPressed: () => widget.onViewPressed(item.id),
                         visualDensity: VisualDensity.compact,
                       ),
                     if (isDraft)
                       IconButton(
                         icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                        tooltip: 'ลบ',
+                        tooltip: isEnglish ? 'Delete' : 'ลบ',
                         onPressed: () => _deleteEntry(item.id),
                         visualDensity: VisualDensity.compact,
                       ),

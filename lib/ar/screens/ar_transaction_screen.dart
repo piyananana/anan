@@ -1,5 +1,7 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../widgets/ar_transaction_list_widget.dart';
 import '../widgets/ar_transaction_detail_widget.dart';
 
@@ -64,6 +66,7 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -72,7 +75,7 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
             onPressed: () => setState(() {
               _shouldRefreshList = true;
               _selectedTransactionId = null;
@@ -96,9 +99,9 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
             labelColor: Colors.teal[800],
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: const [
-              Tab(text: 'ค้นหา/เพิ่มธุรกรรม'),
-              Tab(text: 'รายละเอียดธุรกรรม'),
+            tabs: [
+              Tab(text: isEnglish ? 'Search / Add Transaction' : 'ค้นหา/เพิ่มธุรกรรม'),
+              Tab(text: isEnglish ? 'Transaction Details' : 'รายละเอียดธุรกรรม'),
             ],
           ),
           Expanded(

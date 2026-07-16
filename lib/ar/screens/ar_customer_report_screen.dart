@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:excel/excel.dart';
+import 'package:provider/provider.dart';
 
 import '../models/ar_customer.dart';
 import '../models/ar_customer_group.dart';
@@ -16,6 +17,7 @@ import '../../cd/services/cd_salesperson_service.dart';
 import '../../sa/models/sa_company.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../utils/file_download.dart';
 
 // ---------------------------------------------------------------------------
@@ -33,16 +35,16 @@ enum _Category {
 }
 
 extension _CatLabel on _Category {
-  String get label {
+  String label(bool isEnglish) {
     switch (this) {
-      case _Category.generalInfo:      return 'ข้อมูลทั่วไป';
-      case _Category.salesTerritory:   return 'เขตการขายและพนักงานขาย';
-      case _Category.billingCondition: return 'เงื่อนไขการวางบิล';
-      case _Category.paymentCondition: return 'เงื่อนไขการรับชำระเงิน';
-      case _Category.address:          return 'ที่อยู่';
-      case _Category.contact:          return 'ผู้ติดต่อ';
-      case _Category.bankAccount:      return 'บัญชีธนาคาร';
-      case _Category.arAccount:        return 'รหัสบัญชีลูกหนี้';
+      case _Category.generalInfo:      return isEnglish ? 'General Information'          : 'ข้อมูลทั่วไป';
+      case _Category.salesTerritory:   return isEnglish ? 'Sales Territory & Salesperson' : 'เขตการขายและพนักงานขาย';
+      case _Category.billingCondition: return isEnglish ? 'Billing Condition'             : 'เงื่อนไขการวางบิล';
+      case _Category.paymentCondition: return isEnglish ? 'Payment Condition'             : 'เงื่อนไขการรับชำระเงิน';
+      case _Category.address:          return isEnglish ? 'Address'                       : 'ที่อยู่';
+      case _Category.contact:          return isEnglish ? 'Contact'                       : 'ผู้ติดต่อ';
+      case _Category.bankAccount:      return isEnglish ? 'Bank Account'                  : 'บัญชีธนาคาร';
+      case _Category.arAccount:        return isEnglish ? 'AR Account Code'               : 'รหัสบัญชีลูกหนี้';
     }
   }
 }
@@ -70,6 +72,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
   bool   _isDraggingDivider = false;
   int    _pdfKey            = 0;
   bool   _isExporting       = false;
+  bool   _isEnglish         = false;
 
   Company?              _company;
   Map<String, String>?  _headers;
@@ -121,6 +124,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
       }.contains(c));
 
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     setState(() { _isLoading = true; _reportData = []; });
     try {
       var list = await _customerSvc.fetchRows();
@@ -162,14 +166,17 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
       }
 
       if (finalList.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ไม่พบข้อมูลตามเงื่อนไขที่เลือก')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'No data found for the selected conditions'
+                : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')));
       }
       if (mounted) setState(() { _reportData = finalList; _pdfKey++; });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -178,59 +185,71 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
 
   // ─── formatters ───────────────────────────────────────────────────────────
 
-  static String _billingCondStr(ArCustomerBillingCondition bc) {
+  static String _billingCondStr(ArCustomerBillingCondition bc, bool isEnglish) {
     final p = <String>[];
     if (bc.billWithDelivery) {
-      p.add('วางบิลพร้อมส่งของ');
+      p.add(isEnglish ? 'Bill together with delivery' : 'วางบิลพร้อมส่งของ');
     } else {
       if (bc.billingDayOfMonth.isNotEmpty) {
-        p.add('วันที่: ${bc.billingDayOfMonth.map((d) => d == 31 ? "สิ้นเดือน" : "$d").join(", ")}');
+        p.add('${isEnglish ? "Date" : "วันที่"}: ${bc.billingDayOfMonth.map((d) => d == 31 ? (isEnglish ? "End of month" : "สิ้นเดือน") : "$d").join(", ")}');
       }
       if (bc.billingDayOfWeek.isNotEmpty) {
-        const dow = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
-        p.add('วัน: ${bc.billingDayOfWeek.map((d) => dow[d]).join(", ")}');
+        final dow = isEnglish
+            ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+            : ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+        p.add('${isEnglish ? "Day" : "วัน"}: ${bc.billingDayOfWeek.map((d) => dow[d]).join(", ")}');
       }
       if (bc.billingWeekOfMonth.isNotEmpty) {
-        p.add('สัปดาห์: ${bc.billingWeekOfMonth.map((w) => w == -1 ? "สุดท้าย" : "ที่$w").join(", ")}');
+        p.add('${isEnglish ? "Week" : "สัปดาห์"}: ${bc.billingWeekOfMonth.map((w) => w == -1 ? (isEnglish ? "Last" : "สุดท้าย") : (isEnglish ? "$w" : "ที่$w")).join(", ")}');
       }
     }
     if ((bc.billingTimeFrom ?? '').isNotEmpty || (bc.billingTimeTo ?? '').isNotEmpty) {
-      p.add('เวลา: ${bc.billingTimeFrom ?? ""}–${bc.billingTimeTo ?? ""}');
+      p.add('${isEnglish ? "Time" : "เวลา"}: ${bc.billingTimeFrom ?? ""}–${bc.billingTimeTo ?? ""}');
     }
-    if (bc.dueFromBillingDate) p.add('Due จากวันวางบิล');
-    if ((bc.remark ?? '').isNotEmpty) p.add('หมายเหตุ: ${bc.remark}');
-    return p.isEmpty ? '(ไม่ระบุรายละเอียด)' : p.join('  |  ');
+    if (bc.dueFromBillingDate) {
+      p.add(isEnglish ? 'Due date from billing date' : 'Due จากวันวางบิล');
+    }
+    if ((bc.remark ?? '').isNotEmpty) p.add('${isEnglish ? "Remark" : "หมายเหตุ"}: ${bc.remark}');
+    return p.isEmpty ? (isEnglish ? '(Not specified)' : '(ไม่ระบุรายละเอียด)') : p.join('  |  ');
   }
 
-  static String _paymentCondStr(ArCustomerPaymentCondition pc) {
+  static String _paymentCondStr(ArCustomerPaymentCondition pc, bool isEnglish) {
     final p = <String>[];
     if (pc.paymentDayOfMonth.isNotEmpty) {
-      p.add('วันที่: ${pc.paymentDayOfMonth.map((d) => d == 31 ? "สิ้นเดือน" : "$d").join(", ")}');
+      p.add('${isEnglish ? "Date" : "วันที่"}: ${pc.paymentDayOfMonth.map((d) => d == 31 ? (isEnglish ? "End of month" : "สิ้นเดือน") : "$d").join(", ")}');
     }
     if (pc.paymentDayOfWeek.isNotEmpty) {
-      const dow = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
-      p.add('วัน: ${pc.paymentDayOfWeek.map((d) => dow[d]).join(", ")}');
+      final dow = isEnglish
+          ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+          : ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+      p.add('${isEnglish ? "Day" : "วัน"}: ${pc.paymentDayOfWeek.map((d) => dow[d]).join(", ")}');
     }
     if (pc.paymentWeekOfMonth.isNotEmpty) {
-      p.add('สัปดาห์: ${pc.paymentWeekOfMonth.map((w) => w == -1 ? "สุดท้าย" : "ที่$w").join(", ")}');
+      p.add('${isEnglish ? "Week" : "สัปดาห์"}: ${pc.paymentWeekOfMonth.map((w) => w == -1 ? (isEnglish ? "Last" : "สุดท้าย") : (isEnglish ? "$w" : "ที่$w")).join(", ")}');
     }
     if ((pc.paymentTimeFrom ?? '').isNotEmpty || (pc.paymentTimeTo ?? '').isNotEmpty) {
-      p.add('เวลา: ${pc.paymentTimeFrom ?? ""}–${pc.paymentTimeTo ?? ""}');
+      p.add('${isEnglish ? "Time" : "เวลา"}: ${pc.paymentTimeFrom ?? ""}–${pc.paymentTimeTo ?? ""}');
     }
-    if (pc.withinMonthsFromBilling > 0) p.add('ภายใน ${pc.withinMonthsFromBilling} เดือน');
-    if (pc.additionalDays != 0) p.add('บวก ${pc.additionalDays} วัน');
-    if ((pc.remark ?? '').isNotEmpty) p.add('หมายเหตุ: ${pc.remark}');
-    return p.isEmpty ? '(ไม่ระบุรายละเอียด)' : p.join('  |  ');
+    if (pc.withinMonthsFromBilling > 0) {
+      p.add(isEnglish ? 'Within ${pc.withinMonthsFromBilling} month(s)' : 'ภายใน ${pc.withinMonthsFromBilling} เดือน');
+    }
+    if (pc.additionalDays != 0) {
+      p.add(isEnglish ? 'Plus ${pc.additionalDays} day(s)' : 'บวก ${pc.additionalDays} วัน');
+    }
+    if ((pc.remark ?? '').isNotEmpty) p.add('${isEnglish ? "Remark" : "หมายเหตุ"}: ${pc.remark}');
+    return p.isEmpty ? (isEnglish ? '(Not specified)' : '(ไม่ระบุรายละเอียด)') : p.join('  |  ');
   }
 
-  static String _addressStr(ArCustomerAddress a) {
-    final typeName = {'billing': 'วางบิล', 'shipping': 'จัดส่ง', 'main': 'หลัก'}[a.addressType] ?? a.addressType;
+  static String _addressStr(ArCustomerAddress a, bool isEnglish) {
+    final typeName = isEnglish
+        ? {'billing': 'Billing', 'shipping': 'Shipping', 'main': 'Main'}[a.addressType] ?? a.addressType
+        : {'billing': 'วางบิล', 'shipping': 'จัดส่ง', 'main': 'หลัก'}[a.addressType] ?? a.addressType;
     final parts = [
       '[$typeName]${a.isDefault ? "(default)" : ""}',
       if ((a.addressNo ?? '').isNotEmpty) a.addressNo!,
       if ((a.addressBuildingVillage ?? '').isNotEmpty) a.addressBuildingVillage!,
-      if ((a.addressAlley ?? '').isNotEmpty) 'ซ.${a.addressAlley}',
-      if ((a.addressRoad ?? '').isNotEmpty) 'ถ.${a.addressRoad}',
+      if ((a.addressAlley ?? '').isNotEmpty) '${isEnglish ? "Soi" : "ซ."}${a.addressAlley}',
+      if ((a.addressRoad ?? '').isNotEmpty) '${isEnglish ? "Rd." : "ถ."}${a.addressRoad}',
       if ((a.addressSubDistrict ?? '').isNotEmpty) a.addressSubDistrict!,
       if ((a.addressDistrict ?? '').isNotEmpty) a.addressDistrict!,
       if ((a.addressProvince ?? '').isNotEmpty) a.addressProvince!,
@@ -240,140 +259,148 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
     return parts.join(' ');
   }
 
-  static String _contactStr(ArCustomerContact ct) {
+  static String _contactStr(ArCustomerContact ct, bool isEnglish) {
     return [
       if (ct.isDefault) '(default)',
       ct.contactName,
       if ((ct.position ?? '').isNotEmpty) ct.position!,
-      if ((ct.phone ?? '').isNotEmpty) 'โทร:${ct.phone}',
-      if ((ct.mobile ?? '').isNotEmpty) 'มือถือ:${ct.mobile}',
+      if ((ct.phone ?? '').isNotEmpty) '${isEnglish ? "Tel" : "โทร"}:${ct.phone}',
+      if ((ct.mobile ?? '').isNotEmpty) '${isEnglish ? "Mobile" : "มือถือ"}:${ct.mobile}',
       if ((ct.email ?? '').isNotEmpty) 'Email:${ct.email}',
     ].join('  ');
   }
 
-  static String _bankStr(ArCustomerBankAccount ba) {
-    final t = ba.accountType == 'current' ? 'กระแสรายวัน'
-            : ba.accountType == 'savings'  ? 'ออมทรัพย์' : ba.accountType;
+  static String _bankStr(ArCustomerBankAccount ba, bool isEnglish) {
+    final t = ba.accountType == 'current'
+        ? (isEnglish ? 'Current' : 'กระแสรายวัน')
+        : ba.accountType == 'savings'
+            ? (isEnglish ? 'Savings' : 'ออมทรัพย์')
+            : ba.accountType;
     return [
       if (ba.isDefault) '(default)',
-      '${ba.bankName ?? ""}${(ba.branchName ?? "").isNotEmpty ? " สาขา ${ba.branchName}" : ""}',
-      if ((ba.accountNumber ?? '').isNotEmpty) 'เลขบัญชี:${ba.accountNumber}',
-      if ((ba.accountName ?? '').isNotEmpty)   'ชื่อ:${ba.accountName}',
+      '${ba.bankName ?? ""}${(ba.branchName ?? "").isNotEmpty ? " ${isEnglish ? "Branch" : "สาขา"} ${ba.branchName}" : ""}',
+      if ((ba.accountNumber ?? '').isNotEmpty) '${isEnglish ? "Account No." : "เลขบัญชี"}:${ba.accountNumber}',
+      if ((ba.accountName ?? '').isNotEmpty)   '${isEnglish ? "Name" : "ชื่อ"}:${ba.accountName}',
       '[$t]',
     ].where((s) => s.trim().isNotEmpty).join('  ');
   }
 
-  List<String> _catLines(ArCustomer c, _Category cat) {
+  List<String> _catLines(ArCustomer c, _Category cat, bool isEnglish) {
     switch (cat) {
       case _Category.generalInfo:
         final p = <String>[];
-        if ((c.taxId ?? '').isNotEmpty)              p.add('เลขผู้เสียภาษี: ${c.taxId}');
-        if ((c.businessTypeNameThai ?? '').isNotEmpty) p.add('ประเภทธุรกิจ: ${c.businessTypeCode} ${c.businessTypeNameThai}');
-        if ((c.customerGroupName ?? '').isNotEmpty)  p.add('กลุ่มลูกค้า: ${c.customerGroupCode} ${c.customerGroupName}');
-        p.add('สกุลเงิน: ${c.currencyCode}');
+        if ((c.taxId ?? '').isNotEmpty) p.add('${isEnglish ? "Tax ID" : "เลขผู้เสียภาษี"}: ${c.taxId}');
+        if ((c.businessTypeNameThai ?? '').isNotEmpty) p.add('${isEnglish ? "Business Type" : "ประเภทธุรกิจ"}: ${c.businessTypeCode} ${c.businessTypeNameThai}');
+        if ((c.customerGroupName ?? '').isNotEmpty)  p.add('${isEnglish ? "Customer Group" : "กลุ่มลูกค้า"}: ${c.customerGroupCode} ${c.customerGroupName}');
+        p.add('${isEnglish ? "Currency" : "สกุลเงิน"}: ${c.currencyCode}');
         final credit = [
-          if (c.creditTermMonths > 0) '${c.creditTermMonths} เดือน',
-          if (c.creditTermDays  > 0) '${c.creditTermDays} วัน',
+          if (c.creditTermMonths > 0) isEnglish ? '${c.creditTermMonths} month(s)' : '${c.creditTermMonths} เดือน',
+          if (c.creditTermDays  > 0) isEnglish ? '${c.creditTermDays} day(s)' : '${c.creditTermDays} วัน',
         ].join(' ');
-        if (credit.isNotEmpty) p.add('เครดิต: $credit');
-        if (c.creditLimit   > 0) p.add('วงเงิน: ${NumberFormat("#,##0.00").format(c.creditLimit)}');
-        if (c.discountPercent > 0) p.add('ส่วนลด: ${c.discountPercent}%');
-        p.add('วางบิล: ${c.requiresBilling ? "ต้องวางบิล" : "ไม่บังคับ"}');
-        p.add('สถานะ: ${c.isActive ? "ใช้งาน" : "ไม่ใช้งาน"}');
-        if ((c.remark ?? '').isNotEmpty) p.add('หมายเหตุ: ${c.remark}');
+        if (credit.isNotEmpty) p.add('${isEnglish ? "Credit Term" : "เครดิต"}: $credit');
+        if (c.creditLimit   > 0) p.add('${isEnglish ? "Credit Limit" : "วงเงิน"}: ${NumberFormat("#,##0.00").format(c.creditLimit)}');
+        if (c.discountPercent > 0) p.add('${isEnglish ? "Discount" : "ส่วนลด"}: ${c.discountPercent}%');
+        p.add('${isEnglish ? "Billing" : "วางบิล"}: ${c.requiresBilling ? (isEnglish ? "Required" : "ต้องวางบิล") : (isEnglish ? "Not required" : "ไม่บังคับ")}');
+        p.add('${isEnglish ? "Status" : "สถานะ"}: ${c.isActive ? (isEnglish ? "Active" : "ใช้งาน") : (isEnglish ? "Inactive" : "ไม่ใช้งาน")}');
+        if ((c.remark ?? '').isNotEmpty) p.add('${isEnglish ? "Remark" : "หมายเหตุ"}: ${c.remark}');
         return [p.join('  |  ')];
 
       case _Category.salesTerritory:
         final p = <String>[];
         if ((c.salesTerritoryNameThai ?? '').isNotEmpty) {
-          p.add('เขตการขาย: ${c.salesTerritoryCode} ${c.salesTerritoryNameThai}');
+          p.add('${isEnglish ? "Sales Territory" : "เขตการขาย"}: ${c.salesTerritoryCode} ${c.salesTerritoryNameThai}');
         }
         if ((c.salespersonNameThai ?? '').isNotEmpty) {
-          p.add('พนักงานขาย: ${c.salespersonCode} ${c.salespersonNameThai}');
+          p.add('${isEnglish ? "Salesperson" : "พนักงานขาย"}: ${c.salespersonCode} ${c.salespersonNameThai}');
         }
         if ((c.billingCollectorNameThai ?? '').isNotEmpty) {
-          p.add('ผู้วางบิล: ${c.billingCollectorCode} ${c.billingCollectorNameThai}');
+          p.add('${isEnglish ? "Billing Collector" : "ผู้วางบิล"}: ${c.billingCollectorCode} ${c.billingCollectorNameThai}');
         }
         if ((c.collectionCollectorNameThai ?? '').isNotEmpty) {
-          p.add('ผู้รับชำระ: ${c.collectionCollectorCode} ${c.collectionCollectorNameThai}');
+          p.add('${isEnglish ? "Collection Collector" : "ผู้รับชำระ"}: ${c.collectionCollectorCode} ${c.collectionCollectorNameThai}');
         }
-        return p.isEmpty ? ['(ไม่มีข้อมูล)'] : [p.join('  |  ')];
+        return p.isEmpty ? [isEnglish ? '(No data)' : '(ไม่มีข้อมูล)'] : [p.join('  |  ')];
 
       case _Category.billingCondition:
         return c.billingConditions.isEmpty
-            ? ['(ไม่มีเงื่อนไขการวางบิล)']
-            : c.billingConditions.map(_billingCondStr).toList();
+            ? [isEnglish ? '(No billing condition)' : '(ไม่มีเงื่อนไขการวางบิล)']
+            : c.billingConditions.map((bc) => _billingCondStr(bc, isEnglish)).toList();
 
       case _Category.paymentCondition:
         return c.paymentConditions.isEmpty
-            ? ['(ไม่มีเงื่อนไขการรับชำระ)']
-            : c.paymentConditions.map(_paymentCondStr).toList();
+            ? [isEnglish ? '(No payment condition)' : '(ไม่มีเงื่อนไขการรับชำระ)']
+            : c.paymentConditions.map((pc) => _paymentCondStr(pc, isEnglish)).toList();
 
       case _Category.address:
         return c.addresses.isEmpty
-            ? ['(ไม่มีที่อยู่)']
-            : c.addresses.map(_addressStr).toList();
+            ? [isEnglish ? '(No address)' : '(ไม่มีที่อยู่)']
+            : c.addresses.map((a) => _addressStr(a, isEnglish)).toList();
 
       case _Category.contact:
         return c.contacts.isEmpty
-            ? ['(ไม่มีผู้ติดต่อ)']
-            : c.contacts.map(_contactStr).toList();
+            ? [isEnglish ? '(No contact)' : '(ไม่มีผู้ติดต่อ)']
+            : c.contacts.map((ct) => _contactStr(ct, isEnglish)).toList();
 
       case _Category.bankAccount:
         return c.bankAccounts.isEmpty
-            ? ['(ไม่มีบัญชีธนาคาร)']
-            : c.bankAccounts.map(_bankStr).toList();
+            ? [isEnglish ? '(No bank account)' : '(ไม่มีบัญชีธนาคาร)']
+            : c.bankAccounts.map((ba) => _bankStr(ba, isEnglish)).toList();
 
       case _Category.arAccount:
         final p = <String>[];
         if ((c.arAccountCode ?? '').isNotEmpty) {
-          p.add('บัญชีลูกหนี้: ${c.arAccountCode} ${c.arAccountNameThai ?? ""}');
+          p.add('${isEnglish ? "AR Account" : "บัญชีลูกหนี้"}: ${c.arAccountCode} ${c.arAccountNameThai ?? ""}');
         }
         if ((c.groupArAccountCode ?? '').isNotEmpty) {
-          p.add('บัญชีกลุ่ม: ${c.groupArAccountCode} ${c.groupArAccountNameThai ?? ""}');
+          p.add('${isEnglish ? "Group Account" : "บัญชีกลุ่ม"}: ${c.groupArAccountCode} ${c.groupArAccountNameThai ?? ""}');
         }
-        return p.isEmpty ? ['(ไม่ระบุรหัสบัญชีลูกหนี้)'] : [p.join('  |  ')];
+        return p.isEmpty ? [isEnglish ? '(AR account code not specified)' : '(ไม่ระบุรหัสบัญชีลูกหนี้)'] : [p.join('  |  ')];
     }
   }
 
-  String _conditionLine() {
+  String _conditionLine(bool isEnglish) {
     final p = <String>[];
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
         final g = _groups.firstWhere((g) => g.id == id,
             orElse: () => _groups.first);
-        return g.groupNameThai;
+        return isEnglish && g.groupNameEng.isNotEmpty ? g.groupNameEng : g.groupNameThai;
       }).join(', ');
-      p.add('กลุ่ม: $names');
+      p.add('${isEnglish ? "Group" : "กลุ่ม"}: $names');
     }
     if (_selectedSalespersonId != null) {
       final s = _salespersons.firstWhere((s) => s.id == _selectedSalespersonId,
           orElse: () => _salespersons.first);
-      p.add('พนักงานขาย: ${s.salespersonCode} ${s.salespersonNameThai}');
+      final name = isEnglish && (s.salespersonNameEng ?? '').isNotEmpty
+          ? s.salespersonNameEng!
+          : s.salespersonNameThai;
+      p.add('${isEnglish ? "Salesperson" : "พนักงานขาย"}: ${s.salespersonCode} $name');
     }
     if ((_customerCodeFrom ?? '').isNotEmpty || (_customerCodeTo ?? '').isNotEmpty) {
-      final f = (_customerCodeFrom ?? '').isEmpty ? '(ทั้งหมด)' : _customerCodeFrom!;
-      final t = (_customerCodeTo   ?? '').isEmpty ? '(ทั้งหมด)' : _customerCodeTo!;
-      p.add('รหัส: $f – $t');
+      final all = isEnglish ? '(All)' : '(ทั้งหมด)';
+      final f = (_customerCodeFrom ?? '').isEmpty ? all : _customerCodeFrom!;
+      final t = (_customerCodeTo   ?? '').isEmpty ? all : _customerCodeTo!;
+      p.add('${isEnglish ? "Code" : "รหัส"}: $f – $t');
     }
-    if (_status == 'active')   p.add('สถานะ: ใช้งาน');
-    if (_status == 'inactive') p.add('สถานะ: ไม่ใช้งาน');
-    return p.isEmpty ? 'ทั้งหมด' : p.join(' | ');
+    if (_status == 'active')   p.add(isEnglish ? 'Status: Active'   : 'สถานะ: ใช้งาน');
+    if (_status == 'inactive') p.add(isEnglish ? 'Status: Inactive' : 'สถานะ: ไม่ใช้งาน');
+    return p.isEmpty ? (isEnglish ? 'All' : 'ทั้งหมด') : p.join(' | ');
   }
 
   // ─── PDF ──────────────────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish     = _isEnglish;
     final doc          = pw.Document();
     final fontData     = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
     final font         = pw.Font.ttf(fontData);
     final fontBold     = pw.Font.ttf(fontBoldData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
+    final companyName  = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-    final condLine     = _conditionLine();
+    final condLine     = _conditionLine(isEnglish);
 
     const mg = 20.0;
     final pageW = format.width - mg * 2;
@@ -412,13 +439,13 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
         border: pw.Border(bottom: pw.BorderSide(color: cBorder, width: 0.5)),
       ),
       child: pw.Row(children: [
-        box(codeW,   'รหัสลูกค้า',           tB(9)),
+        box(codeW,   isEnglish ? 'Customer Code' : 'รหัสลูกค้า',           tB(9)),
         pw.Container(width: 0.5, color: cBorder),
-        box(nameTHW, 'ชื่อลูกค้า (ไทย)',      tB(9)),
+        box(nameTHW, isEnglish ? 'Customer Name (TH)' : 'ชื่อลูกค้า (ไทย)',      tB(9)),
         pw.Container(width: 0.5, color: cBorder),
-        box(nameENW, 'ชื่อลูกค้า (อังกฤษ)',   tB(9)),
+        box(nameENW, isEnglish ? 'Customer Name (EN)' : 'ชื่อลูกค้า (อังกฤษ)',   tB(9)),
         pw.Container(width: 0.5, color: cBorder),
-        box(oldW,    'รหัสเก่า',               tB(9)),
+        box(oldW,    isEnglish ? 'Old Code' : 'รหัสเก่า',               tB(9)),
       ]),
     );
 
@@ -426,15 +453,15 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
     pw.Widget Function(pw.Context) pageHeader() => (ctx) => pw.Column(children: [
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.Text(companyName, style: tN(11))),
-        pw.Expanded(flex: 6, child: pw.Text('รายงานข้อมูลลูกค้า',
+        pw.Expanded(flex: 6, child: pw.Text(isEnglish ? 'Customer Master Report' : 'รายงานข้อมูลลูกค้า',
             textAlign: pw.TextAlign.center, style: tB(15))),
-        pw.Expanded(flex: 3, child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+        pw.Expanded(flex: 3, child: pw.Text('${isEnglish ? "Page" : "หน้า"} ${ctx.pageNumber}/${ctx.pagesCount}',
             textAlign: pw.TextAlign.right, style: tN(10))),
       ]),
       pw.SizedBox(height: 3),
       pw.Row(children: [
         pw.Expanded(flex: 9, child: pw.SizedBox()),
-        pw.Expanded(flex: 3, child: pw.Text('พิมพ์โดย $userName',
+        pw.Expanded(flex: 3, child: pw.Text('${isEnglish ? "Printed by" : "พิมพ์โดย"} $userName',
             textAlign: pw.TextAlign.right, style: tN(10))),
       ]),
       pw.SizedBox(height: 2),
@@ -442,7 +469,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
         pw.Expanded(flex: 9,
             child: pw.Text('* $condLine', style: tN(9))),
         pw.Expanded(flex: 3,
-            child: pw.Text('พิมพ์เมื่อ $printDateStr',
+            child: pw.Text('${isEnglish ? "Printed" : "พิมพ์เมื่อ"} $printDateStr',
                 textAlign: pw.TextAlign.right, style: tN(10))),
       ]),
       pw.SizedBox(height: 4),
@@ -489,13 +516,13 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
 
         // Category sections — ชื่อหมวด + รายละเอียดในบรรทัดเดียวกัน wrap อัตโนมัติ
         for (final cat in _selectedCategories) {
-          final lines = _catLines(c, cat);
+          final lines = _catLines(c, cat, isEnglish);
           content.add(pw.Container(
             padding: const pw.EdgeInsets.symmetric(horizontal: hp, vertical: 2),
             child: pw.RichText(
               text: pw.TextSpan(children: [
                 pw.TextSpan(
-                  text: '${cat.label}  ',
+                  text: '${cat.label(isEnglish)}  ',
                   style: pw.TextStyle(
                       font: fontBold,
                       fontSize: 8.5,
@@ -519,14 +546,16 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
       // Group subtotal row
       final first = groupCustomers.first;
       final groupLabel = groupKey.isEmpty
-          ? '(ไม่ระบุกลุ่ม)'
+          ? (isEnglish ? '(No group)' : '(ไม่ระบุกลุ่ม)')
           : '$groupKey  ${first.customerGroupName ?? ""}';
       content.add(pw.Container(
         width: pageW,
         color: cGroupTot,
         padding: const pw.EdgeInsets.symmetric(horizontal: hp + 4, vertical: vp),
         child: pw.Text(
-          'รวมกลุ่ม $groupLabel:  ${groupCustomers.length} ลูกค้า',
+          isEnglish
+              ? 'Group total $groupLabel:  ${groupCustomers.length} customer(s)'
+              : 'รวมกลุ่ม $groupLabel:  ${groupCustomers.length} ลูกค้า',
           style: tB(9),
         ),
       ));
@@ -537,7 +566,11 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
       width: pageW,
       color: cTotal,
       padding: const pw.EdgeInsets.symmetric(horizontal: hp + 4, vertical: vp + 1),
-      child: pw.Text('รวมทั้งสิ้น ${_reportData.length} ลูกค้า', style: tB(9)),
+      child: pw.Text(
+          isEnglish
+              ? 'Grand total ${_reportData.length} customer(s)'
+              : 'รวมทั้งสิ้น ${_reportData.length} ลูกค้า',
+          style: tB(9)),
     ));
 
     doc.addPage(
@@ -556,10 +589,11 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
   // ─── Excel ────────────────────────────────────────────────────────────────
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     setState(() => _isExporting = true);
     try {
       final ex = Excel.createExcel();
-      const sName = 'ลูกค้า';
+      final sName = isEnglish ? 'Customer' : 'ลูกค้า';
       ex.rename('Sheet1', sName);
       final s = ex[sName];
 
@@ -567,19 +601,21 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
       final totBg  = ExcelColor.fromHexString('#BDD7EE');
       final catBg  = ExcelColor.fromHexString('#D0E4F7');
 
-      _xl(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xl(s, 1, 0, 'รายงานข้อมูลลูกค้า', bold: true);
-      _xl(s, 2, 0, 'เงื่อนไข: ${_conditionLine()}');
-      _xl(s, 3, 0, 'พิมพ์: ${DateFormat("dd/MM/yyyy HH:mm").format(DateTime.now())}');
+      _xl(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xl(s, 1, 0, isEnglish ? 'Customer Master Report' : 'รายงานข้อมูลลูกค้า', bold: true);
+      _xl(s, 2, 0, '${isEnglish ? "Condition" : "เงื่อนไข"}: ${_conditionLine(isEnglish)}');
+      _xl(s, 3, 0, '${isEnglish ? "Printed" : "พิมพ์"}: ${DateFormat("dd/MM/yyyy HH:mm").format(DateTime.now())}');
 
-      const hdrs = ['รหัสลูกค้า', 'ชื่อลูกค้า (ไทย)', 'ชื่อลูกค้า (อังกฤษ)', 'รหัสเก่า'];
+      final hdrs = isEnglish
+          ? ['Customer Code', 'Customer Name (TH)', 'Customer Name (EN)', 'Old Code']
+          : ['รหัสลูกค้า', 'ชื่อลูกค้า (ไทย)', 'ชื่อลูกค้า (อังกฤษ)', 'รหัสเก่า'];
       for (int i = 0; i < hdrs.length; i++) {
         _xl(s, 5, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
       }
       // Category header column
       if (_selectedCategories.isNotEmpty) {
-        _xl(s, 5, 4, 'หมวด', bg: hdrBg, bold: true);
-        _xl(s, 5, 5, 'รายละเอียด', bg: hdrBg, bold: true);
+        _xl(s, 5, 4, isEnglish ? 'Category' : 'หมวด', bg: hdrBg, bold: true);
+        _xl(s, 5, 5, isEnglish ? 'Details' : 'รายละเอียด', bg: hdrBg, bold: true);
       }
 
       int row = 6;
@@ -593,7 +629,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
         } else {
           bool firstCat = true;
           for (final cat in _selectedCategories) {
-            final lines = _catLines(c, cat);
+            final lines = _catLines(c, cat, isEnglish);
             for (int li = 0; li < lines.length; li++) {
               if (firstCat && li == 0) {
                 _xl(s, row, 0, c.customerCode);
@@ -602,7 +638,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
                 _xl(s, row, 3, c.oldCustomerCode ?? '');
                 firstCat = false;
               }
-              _xl(s, row, 4, cat.label, bg: catBg);
+              _xl(s, row, 4, cat.label(isEnglish), bg: catBg);
               _xl(s, row, 5, lines[li]);
               row++;
             }
@@ -610,13 +646,17 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
         }
       }
 
-      _xl(s, row, 0, 'รวมทั้งสิ้น ${_reportData.length} ลูกค้า',
+      _xl(s, row, 0,
+          isEnglish
+              ? 'Grand total ${_reportData.length} customer(s)'
+              : 'รวมทั้งสิ้น ${_reportData.length} ลูกค้า',
           bg: totBg, bold: true);
 
       final bytes = ex.encode();
       if (bytes == null) return;
       final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      await downloadFile(bytes, 'รายงานข้อมูลลูกค้า_$ts.xlsx');
+      await downloadFile(bytes,
+          isEnglish ? 'CustomerReport_$ts.xlsx' : 'รายงานข้อมูลลูกค้า_$ts.xlsx');
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
@@ -642,7 +682,10 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
     );
     if (result == null || !mounted) return;
     setState(() {
-      final label = '${result.customerCode}  ${result.customerNameTh}';
+      final displayName = _isEnglish && (result.customerNameEn ?? '').isNotEmpty
+          ? result.customerNameEn!
+          : result.customerNameTh;
+      final label = '${result.customerCode}  $displayName';
       if (isFrom) {
         _customerCodeFrom = result.customerCode;
         _fromLabel        = label;
@@ -654,28 +697,32 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
   }
 
   Future<void> _pickGroups() async {
+    final isEnglish = _isEnglish;
     final result = await showDialog<List<int>>(
       context: context,
       builder: (_) => _MultiPickerDialog<ArCustomerGroup>(
-        title: 'เลือกกลุ่มลูกค้า',
+        title: isEnglish ? 'Select Customer Groups' : 'เลือกกลุ่มลูกค้า',
         items: _groups,
         selected: _selectedGroupIds,
         idOf: (g) => g.id!,
-        labelOf: (g) => '${g.groupCode}  ${g.groupNameThai}',
+        labelOf: (g) => '${g.groupCode}  ${isEnglish && g.groupNameEng.isNotEmpty ? g.groupNameEng : g.groupNameThai}',
+        isEnglish: isEnglish,
       ),
     );
     if (result != null && mounted) setState(() => _selectedGroupIds = result);
   }
 
   Future<void> _pickCategories() async {
+    final isEnglish = _isEnglish;
     final result = await showDialog<List<int>>(
       context: context,
       builder: (_) => _MultiPickerDialog<_Category>(
-        title: 'เลือกหมวดรายละเอียด',
+        title: isEnglish ? 'Select Detail Categories' : 'เลือกหมวดรายละเอียด',
         items: _Category.values,
         selected: _selectedCategories.map((c) => c.index).toList(),
         idOf: (c) => c.index,
-        labelOf: (c) => c.label,
+        labelOf: (c) => c.label(isEnglish),
+        isEnglish: isEnglish,
       ),
     );
     if (result != null && mounted) {
@@ -714,7 +761,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
       child: InkWell(
         onTap: onPick,
         child: Text(
-          hasValue ? displayText : '— ทั้งหมด —',
+          hasValue ? displayText : (_isEnglish ? '— All —' : '— ทั้งหมด —'),
           style: TextStyle(
               fontSize: 13,
               color: hasValue ? Colors.black87 : Colors.black38),
@@ -754,7 +801,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
       child: InkWell(
         onTap: onTap,
         child: Text(
-          hasValue ? 'เลือก $count รายการ' : allLabel,
+          hasValue ? (_isEnglish ? '$count selected' : 'เลือก $count รายการ') : allLabel,
           style: TextStyle(
               fontSize: 13,
               color: hasValue ? Colors.black87 : Colors.black38),
@@ -765,6 +812,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
   }
 
   Widget _buildFilterPanel() {
+    final isEnglish = _isEnglish;
     return Card(
       margin: const EdgeInsets.all(8),
       child: Column(children: [
@@ -774,15 +822,15 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('เงื่อนไขรายงาน',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 16),
 
                 // กลุ่มลูกค้า (multi-select)
                 _buildMultiField(
-                  label: 'กลุ่มลูกค้า',
+                  label: isEnglish ? 'Customer Group' : 'กลุ่มลูกค้า',
                   count: _selectedGroupIds.length,
-                  allLabel: '— ทุกกลุ่ม —',
+                  allLabel: isEnglish ? '— All Groups —' : '— ทุกกลุ่ม —',
                   onTap: _pickGroups,
                   onClear: () => setState(() => _selectedGroupIds = []),
                 ),
@@ -792,15 +840,16 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
                 DropdownButtonFormField<int?>(
                   isExpanded: true,
                   value: _selectedSalespersonId,
-                  decoration: const InputDecoration(
-                      labelText: 'พนักงานขาย',
-                      border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Salesperson' : 'พนักงานขาย',
+                      border: const OutlineInputBorder(),
                       isDense: true),
                   items: [
-                    const DropdownMenuItem<int?>(value: null, child: Text('— ทั้งหมด —')),
+                    DropdownMenuItem<int?>(value: null, child: Text(isEnglish ? '— All —' : '— ทั้งหมด —')),
                     ..._salespersons.map((s) => DropdownMenuItem<int?>(
                           value: s.id,
-                          child: Text('${s.salespersonCode}  ${s.salespersonNameThai}',
+                          child: Text(
+                              '${s.salespersonCode}  ${isEnglish && (s.salespersonNameEng ?? "").isNotEmpty ? s.salespersonNameEng! : s.salespersonNameThai}',
                               overflow: TextOverflow.ellipsis),
                         )),
                   ],
@@ -810,7 +859,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
 
                 // รหัสลูกค้า ตั้งแต่ / ถึง
                 _buildPickerField(
-                  label: 'รหัสลูกค้า ตั้งแต่',
+                  label: isEnglish ? 'Customer Code From' : 'รหัสลูกค้า ตั้งแต่',
                   displayText: _fromLabel,
                   onPick: () => _pickCustomer(isFrom: true),
                   onClear: () => setState(() {
@@ -820,7 +869,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
                 ),
                 const SizedBox(height: 8),
                 _buildPickerField(
-                  label: 'รหัสลูกค้า ถึง',
+                  label: isEnglish ? 'Customer Code To' : 'รหัสลูกค้า ถึง',
                   displayText: _toLabel,
                   onPick: () => _pickCustomer(isFrom: false),
                   onClear: () => setState(() {
@@ -833,14 +882,14 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
                 // สถานะ
                 DropdownButtonFormField<String>(
                   value: _status,
-                  decoration: const InputDecoration(
-                      labelText: 'สถานะ',
-                      border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Status' : 'สถานะ',
+                      border: const OutlineInputBorder(),
                       isDense: true),
-                  items: const [
-                    DropdownMenuItem(value: '', child: Text('— ทั้งหมด —')),
-                    DropdownMenuItem(value: 'active',   child: Text('ใช้งาน')),
-                    DropdownMenuItem(value: 'inactive', child: Text('ไม่ใช้งาน')),
+                  items: [
+                    DropdownMenuItem(value: '', child: Text(isEnglish ? '— All —' : '— ทั้งหมด —')),
+                    DropdownMenuItem(value: 'active',   child: Text(isEnglish ? 'Active'   : 'ใช้งาน')),
+                    DropdownMenuItem(value: 'inactive', child: Text(isEnglish ? 'Inactive' : 'ไม่ใช้งาน')),
                   ],
                   onChanged: (v) { if (v != null) setState(() => _status = v); },
                 ),
@@ -848,9 +897,9 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
 
                 // หมวด (multi-select)
                 _buildMultiField(
-                  label: 'หมวดรายละเอียด',
+                  label: isEnglish ? 'Detail Categories' : 'หมวดรายละเอียด',
                   count: _selectedCategories.length,
-                  allLabel: '— ข้อมูลหลักเท่านั้น —',
+                  allLabel: isEnglish ? '— Master data only —' : '— ข้อมูลหลักเท่านั้น —',
                   onTap: _pickCategories,
                   onClear: () => setState(() => _selectedCategories = []),
                 ),
@@ -860,7 +909,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
                     spacing: 4,
                     runSpacing: 2,
                     children: _selectedCategories.map((cat) => Chip(
-                      label: Text(cat.label, style: const TextStyle(fontSize: 11)),
+                      label: Text(cat.label(isEnglish), style: const TextStyle(fontSize: 11)),
                       padding: EdgeInsets.zero,
                       visualDensity: VisualDensity.compact,
                       backgroundColor: Colors.orange[50],
@@ -879,7 +928,7 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
             height: 50,
             child: ElevatedButton.icon(
               icon: const Icon(Icons.picture_as_pdf),
-              label: const Text('ประมวลผลรายงาน'),
+              label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange[700],
                   foregroundColor: Colors.white),
@@ -895,6 +944,8 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -937,7 +988,9 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
                               : Icons.filter_list,
                           color: Colors.white, size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
                       onPressed: () =>
                           setState(() => _isFilterExpanded = !_isFilterExpanded),
                     ),
@@ -981,8 +1034,10 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(
-                                  child: Text('กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(
+                                  child: Text(isEnglish
+                                      ? 'Please select conditions and click Generate Report'
+                                      : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
@@ -1041,6 +1096,7 @@ class _CustomerPickerDialogState extends State<_CustomerPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -1048,8 +1104,8 @@ class _CustomerPickerDialogState extends State<_CustomerPickerDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.orange[700],
-            child: const Text('ค้นหาลูกค้า',
-                style: TextStyle(color: Colors.white,
+            child: Text(isEnglish ? 'Search Customer' : 'ค้นหาลูกค้า',
+                style: const TextStyle(color: Colors.white,
                     fontWeight: FontWeight.bold, fontSize: 15)),
           ),
           Padding(
@@ -1057,10 +1113,12 @@ class _CustomerPickerDialogState extends State<_CustomerPickerDialog> {
             child: TextField(
               controller: _ctrl,
               autofocus: true,
-              decoration: const InputDecoration(
-                  hintText: 'ค้นหาจากรหัสหรือชื่อลูกค้า',
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                  hintText: isEnglish
+                      ? 'Search by customer code or name'
+                      : 'ค้นหาจากรหัสหรือชื่อลูกค้า',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  border: const OutlineInputBorder(),
                   isDense: true),
               onChanged: _search,
             ),
@@ -1068,12 +1126,12 @@ class _CustomerPickerDialogState extends State<_CustomerPickerDialog> {
           Container(
             color: Colors.grey[200],
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: const Row(children: [
+            child: Row(children: [
               SizedBox(width: 100,
-                  child: Text('รหัส',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(child: Text('ชื่อลูกค้า',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  child: Text(isEnglish ? 'Code' : 'รหัส',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+              Expanded(child: Text(isEnglish ? 'Customer Name' : 'ชื่อลูกค้า',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
             ]),
           ),
           const Divider(height: 1),
@@ -1081,15 +1139,18 @@ class _CustomerPickerDialogState extends State<_CustomerPickerDialog> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _list.isEmpty
-                    ? const Center(
-                        child: Text('ไม่พบข้อมูล',
-                            style: TextStyle(color: Colors.grey)))
+                    ? Center(
+                        child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+                            style: const TextStyle(color: Colors.grey)))
                     : ListView.separated(
                         itemCount: _list.length,
                         separatorBuilder: (_, __) =>
                             const Divider(height: 1, indent: 12),
                         itemBuilder: (ctx, i) {
                           final c = _list[i];
+                          final displayName = isEnglish && (c.customerNameEn ?? '').isNotEmpty
+                              ? c.customerNameEn!
+                              : c.customerNameTh;
                           return InkWell(
                             onTap: () => Navigator.pop(ctx, c),
                             child: Padding(
@@ -1102,7 +1163,7 @@ class _CustomerPickerDialogState extends State<_CustomerPickerDialog> {
                                             fontSize: 13,
                                             fontWeight: FontWeight.w500))),
                                 Expanded(
-                                    child: Text(c.customerNameTh,
+                                    child: Text(displayName,
                                         style: const TextStyle(fontSize: 13),
                                         overflow: TextOverflow.ellipsis)),
                               ]),
@@ -1116,7 +1177,7 @@ class _CustomerPickerDialogState extends State<_CustomerPickerDialog> {
             child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('ยกเลิก')),
+                  child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
             ]),
           ),
         ]),
@@ -1134,6 +1195,7 @@ class _MultiPickerDialog<T> extends StatefulWidget {
   final List<int> selected;
   final int Function(T) idOf;
   final String Function(T) labelOf;
+  final bool isEnglish;
 
   const _MultiPickerDialog({
     required this.title,
@@ -1141,6 +1203,7 @@ class _MultiPickerDialog<T> extends StatefulWidget {
     required this.selected,
     required this.idOf,
     required this.labelOf,
+    required this.isEnglish,
   });
 
   @override
@@ -1207,19 +1270,20 @@ class _MultiPickerDialogState<T> extends State<_MultiPickerDialog<T>> {
                   });
                 },
                 child: Text(_selected.length == widget.items.length
-                    ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'),
+                    ? (widget.isEnglish ? 'Deselect All' : 'ยกเลิกทั้งหมด')
+                    : (widget.isEnglish ? 'Select All' : 'เลือกทั้งหมด')),
               ),
               Row(children: [
                 TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('ยกเลิก')),
+                    child: Text(widget.isEnglish ? 'Cancel' : 'ยกเลิก')),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context, _selected),
                   style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange[700],
                       foregroundColor: Colors.white),
-                  child: const Text('ตกลง'),
+                  child: Text(widget.isEnglish ? 'OK' : 'ตกลง'),
                 ),
               ]),
             ]),

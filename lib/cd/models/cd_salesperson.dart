@@ -77,8 +77,6 @@ class Salesperson {
   final String? taxId;
   final int? branchId;
   final String? branchNameThai;
-  final int? businessUnitId;
-  final String? businessUnitName;
   final String? phone;
   final String? email;
   final String? address;
@@ -103,8 +101,6 @@ class Salesperson {
     this.taxId,
     this.branchId,
     this.branchNameThai,
-    this.businessUnitId,
-    this.businessUnitName,
     this.phone,
     this.email,
     this.address,
@@ -130,8 +126,6 @@ class Salesperson {
         taxId: json['tax_id'] as String?,
         branchId: json['branch_id'] as int?,
         branchNameThai: json['branch_name_thai'] as String?,
-        businessUnitId: json['business_unit_id'] as int?,
-        businessUnitName: json['business_unit_name'] as String?,
         phone: json['phone'] as String?,
         email: json['email'] as String?,
         address: json['address'] as String?,
@@ -162,7 +156,6 @@ class Salesperson {
         'user_id': userId,
         'tax_id': taxId,
         'branch_id': branchId,
-        'business_unit_id': businessUnitId,
         'phone': phone,
         'email': email,
         'address': address,

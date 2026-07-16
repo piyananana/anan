@@ -31,6 +31,17 @@ const Map<String, String> accountTypeOptions = {
   'EXPENSE': 'ค่าใช้จ่าย',
 };
 
+const Map<String, String> accountTypeOptionsEng = {
+  'ASSET': 'Asset',
+  'LIABILITY': 'Liability',
+  'EQUITY': 'Equity',
+  'REVENUE': 'Revenue',
+  'EXPENSE': 'Expense',
+};
+
+String accountTypeLabel(String type, bool isEnglish) =>
+    isEnglish ? (accountTypeOptionsEng[type] ?? type) : (accountTypeOptions[type] ?? type);
+
 class Account {
   final int id;
   final String accountCode;

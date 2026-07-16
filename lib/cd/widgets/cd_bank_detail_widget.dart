@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_bank.dart';
 import '../models/cd_bank_branch.dart';
 import '../services/cd_bank_branch_service.dart';
@@ -230,7 +229,6 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    final l = AppL10n(isEnglish);
 
     if (widget.isPlaceholder) {
       return Center(

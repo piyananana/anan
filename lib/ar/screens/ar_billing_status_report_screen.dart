@@ -40,6 +40,7 @@ class _ArBillingStatusReportScreenState
   final _branchService  = BranchService();
 
   bool   _isLoading         = false;
+  bool   _isEnglish         = false;
   bool   _isFilterExpanded  = true;
   double _filterPanelWidth  = 320.0;
   bool   _isDraggingDivider = false;
@@ -88,6 +89,7 @@ class _ArBillingStatusReportScreenState
   }
 
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     setState(() { _isLoading = true; _reportData = []; });
     try {
       final raw = await _reportService.getBillingStatusReport(
@@ -101,14 +103,16 @@ class _ArBillingStatusReportScreenState
         sortBy:           _sortBy,
       );
       if (raw.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('ไม่พบข้อมูลในช่วงวันที่ที่เลือก')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'No data found for the selected date range'
+                : 'ไม่พบข้อมูลในช่วงวันที่ที่เลือก')));
       }
       setState(() { _reportData = raw; _pdfKey++; });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -122,6 +126,7 @@ class _ArBillingStatusReportScreenState
   // ─── PDF ──────────────────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish       = _isEnglish;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -130,42 +135,52 @@ class _ArBillingStatusReportScreenState
     final fontBold   = pw.Font.ttf(fontBoldData);
     final fontItalic = pw.Font.ttf(fontItalicData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
+    final companyName  = _company?.displayName(isEnglish) ??
+        (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final dateRangeLine =
-        'วันที่วางบิล ${DateFormat('dd/MM/yyyy').format(_dateFrom)}'
+        '${isEnglish ? 'Billing date' : 'วันที่วางบิล'} ${DateFormat('dd/MM/yyyy').format(_dateFrom)}'
         ' – ${DateFormat('dd/MM/yyyy').format(_dateTo)}';
 
     final conditions = <String>[];
     if (_selectedBranchId != null) {
       final b = _branches.firstWhere((b) => b.id == _selectedBranchId,
           orElse: () => _branches.first);
-      conditions.add('สาขา: ${b.branchCode} ${b.branchNameThai}');
+      final bName = isEnglish && b.branchNameEng.isNotEmpty ? b.branchNameEng : b.branchNameThai;
+      conditions.add('${isEnglish ? 'Branch' : 'สาขา'}: ${b.branchCode} $bName');
     }
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
         final g = _customerGroups.firstWhere((g) => g.id == id,
             orElse: () => _customerGroups.first);
-        return '${g.groupCode} ${g.groupNameThai}';
+        final gName = isEnglish && g.groupNameEng.isNotEmpty ? g.groupNameEng : g.groupNameThai;
+        return '${g.groupCode} $gName';
       }).join(', ');
-      conditions.add('กลุ่ม: $names');
+      conditions.add('${isEnglish ? 'Group' : 'กลุ่ม'}: $names');
     }
     if ((_customerCodeFrom ?? '').isNotEmpty ||
         (_customerCodeTo ?? '').isNotEmpty) {
+      final allLabel = isEnglish ? '(All)' : '(ทั้งหมด)';
       conditions.add(
-          'รหัสลูกค้า: ${_customerCodeFrom?.isEmpty ?? true ? '(ทั้งหมด)' : _customerCodeFrom!}'
-          ' – ${_customerCodeTo?.isEmpty ?? true ? '(ทั้งหมด)' : _customerCodeTo!}');
+          '${isEnglish ? 'Customer code' : 'รหัสลูกค้า'}: ${_customerCodeFrom?.isEmpty ?? true ? allLabel : _customerCodeFrom!}'
+          ' – ${_customerCodeTo?.isEmpty ?? true ? allLabel : _customerCodeTo!}');
     }
-    conditions.add('สถานะ: ${const {
+    conditions.add('${isEnglish ? 'Status' : 'สถานะ'}: ${(isEnglish ? const {
+      'all': 'All',
+      'pending': 'Pending',
+      'paid': 'Paid',
+      'void': 'Void',
+    } : const {
       'all': 'ทั้งหมด',
       'pending': 'รอชำระ',
       'paid': 'ชำระแล้ว',
       'void': 'ยกเลิก',
-    }[_statusFilter] ?? 'ทั้งหมด'}');
+    })[_statusFilter] ?? (isEnglish ? 'All' : 'ทั้งหมด')}');
     conditions.add(_sortBy == 'customer'
-        ? 'เรียงตามรหัสลูกค้า' : 'เรียงตามประเภท+เลขที่');
-    if (_showDetail) conditions.add('แสดงรายละเอียด');
+        ? (isEnglish ? 'Sorted by customer code' : 'เรียงตามรหัสลูกค้า')
+        : (isEnglish ? 'Sorted by doc type + no.' : 'เรียงตามประเภท+เลขที่'));
+    if (_showDetail) conditions.add(isEnglish ? 'Show details' : 'แสดงรายละเอียด');
 
     final conditionLine = conditions.join(' | ');
     final showDetail    = _showDetail;
@@ -175,11 +190,13 @@ class _ArBillingStatusReportScreenState
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.Text(companyName,
             style: const pw.TextStyle(fontSize: 11))),
-        pw.Expanded(flex: 6, child: pw.Text('รายงานสถานะใบวางบิล',
+        pw.Expanded(flex: 6, child: pw.Text(
+            isEnglish ? 'Billing Status Report' : 'รายงานสถานะใบวางบิล',
             textAlign: pw.TextAlign.center,
             style: pw.TextStyle(fontSize: 15,
                 fontWeight: pw.FontWeight.bold))),
-        pw.Expanded(flex: 3, child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+        pw.Expanded(flex: 3, child: pw.Text(
+            isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
             textAlign: pw.TextAlign.right,
             style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -189,7 +206,8 @@ class _ArBillingStatusReportScreenState
         pw.Expanded(flex: 6, child: pw.Text(dateRangeLine,
             textAlign: pw.TextAlign.center,
             style: const pw.TextStyle(fontSize: 10))),
-        pw.Expanded(flex: 3, child: pw.Text('พิมพ์โดย $userName',
+        pw.Expanded(flex: 3, child: pw.Text(
+            isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
             textAlign: pw.TextAlign.right,
             style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -197,7 +215,8 @@ class _ArBillingStatusReportScreenState
       pw.Row(children: [
         pw.Expanded(flex: 9, child: pw.Text('* $conditionLine',
             style: const pw.TextStyle(fontSize: 9))),
-        pw.Expanded(flex: 3, child: pw.Text('พิมพ์เมื่อ $printDateStr',
+        pw.Expanded(flex: 3, child: pw.Text(
+            isEnglish ? 'Printed: $printDateStr' : 'พิมพ์เมื่อ $printDateStr',
             textAlign: pw.TextAlign.right,
             style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -248,13 +267,13 @@ class _ArBillingStatusReportScreenState
     final headerRow = pw.TableRow(
       decoration: const pw.BoxDecoration(color: cGreen),
       children: [
-        hCell('ประเภท\nเอกสาร', a: pw.TextAlign.left),
-        hCell('เลขที่ใบวางบิล'),
-        hCell('วันที่\nเอกสาร'),
-        hCell('รหัส – ชื่อลูกค้า', a: pw.TextAlign.left),
-        hCell('วางบิล\n(รอชำระ)'),
-        hCell('ชำระแล้ว'),
-        hCell('สถานะ'),
+        hCell(isEnglish ? 'Doc\nType' : 'ประเภท\nเอกสาร', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Billing Doc No.' : 'เลขที่ใบวางบิล'),
+        hCell(isEnglish ? 'Doc\nDate' : 'วันที่\nเอกสาร'),
+        hCell(isEnglish ? 'Code – Customer Name' : 'รหัส – ชื่อลูกค้า', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Billed\n(Pending)' : 'วางบิล\n(รอชำระ)'),
+        hCell(isEnglish ? 'Paid' : 'ชำระแล้ว'),
+        hCell(isEnglish ? 'Status' : 'สถานะ'),
       ],
     );
 
@@ -281,8 +300,10 @@ class _ArBillingStatusReportScreenState
       final paidAmt  = isVoid ? 0.0 : (total - balance);
 
       final statusLabel = isVoid
-          ? 'ยกเลิก'
-          : (balance > 0 ? 'รอชำระ' : 'ชำระแล้ว');
+          ? (isEnglish ? 'Void' : 'ยกเลิก')
+          : (balance > 0
+              ? (isEnglish ? 'Pending' : 'รอชำระ')
+              : (isEnglish ? 'Paid' : 'ชำระแล้ว'));
 
       grandPending += pending;
       grandPaid    += paidAmt;
@@ -342,7 +363,7 @@ class _ArBillingStatusReportScreenState
       decoration: const pw.BoxDecoration(
           color: PdfColor(0.75, 0.88, 0.83)),
       children: [
-        dCell('รวม $totalBcs รายการ', tBold(9)),
+        dCell(isEnglish ? 'Total $totalBcs items' : 'รวม $totalBcs รายการ', tBold(9)),
         dCell('', tBold(9)),
         dCell('', tBold(9)),
         dCell('', tBold(9)),
@@ -384,7 +405,9 @@ class _ArBillingStatusReportScreenState
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
+    final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -400,7 +423,7 @@ class _ArBillingStatusReportScreenState
           else
             IconButton(
               icon: const Icon(Icons.table_chart_outlined),
-              tooltip: 'Export Excel',
+              tooltip: isEnglish ? 'Export Excel' : 'ส่งออก Excel',
               onPressed: _reportData.isEmpty ? null : _exportExcel,
             ),
         ],
@@ -426,7 +449,8 @@ class _ArBillingStatusReportScreenState
                           color: Colors.white, size: 20),
                       padding: EdgeInsets.zero,
                       tooltip: _isFilterExpanded
-                          ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                          ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
                       onPressed: () => setState(
                           () => _isFilterExpanded = !_isFilterExpanded),
                     ),
@@ -453,20 +477,20 @@ class _ArBillingStatusReportScreenState
                                   crossAxisAlignment:
                                       CrossAxisAlignment.start,
                                   children: [
-                                    const Text('เงื่อนไขรายงาน',
-                                        style: TextStyle(
+                                    Text(isEnglish ? 'Report Filter' : 'เงื่อนไขรายงาน',
+                                        style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 16)),
                                     const SizedBox(height: 16),
 
                                     _buildDateField(
-                                        label: 'วันที่วางบิล ตั้งแต่',
+                                        label: isEnglish ? 'Billing date from' : 'วันที่วางบิล ตั้งแต่',
                                         date: _dateFrom,
                                         onPick: (d) =>
                                             setState(() => _dateFrom = d)),
                                     const SizedBox(height: 12),
                                     _buildDateField(
-                                        label: 'วันที่วางบิล ถึง',
+                                        label: isEnglish ? 'Billing date to' : 'วันที่วางบิล ถึง',
                                         date: _dateTo,
                                         onPick: (d) =>
                                             setState(() => _dateTo = d)),
@@ -479,19 +503,19 @@ class _ArBillingStatusReportScreenState
                                     DropdownButtonFormField<int?>(
                                       isExpanded: true,
                                       value: _selectedBranchId,
-                                      decoration: const InputDecoration(
-                                          labelText: 'สาขา',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Branch' : 'สาขา',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
                                       items: [
-                                        const DropdownMenuItem<int?>(
+                                        DropdownMenuItem<int?>(
                                             value: null,
-                                            child: Text('— ทุกสาขา —')),
+                                            child: Text(isEnglish ? '— All branches —' : '— ทุกสาขา —')),
                                         ..._branches.map((b) =>
                                             DropdownMenuItem<int?>(
                                               value: b.id,
                                               child: Text(
-                                                  '${b.branchCode}  ${b.branchNameThai}',
+                                                  '${b.branchCode}  ${isEnglish && b.branchNameEng.isNotEmpty ? b.branchNameEng : b.branchNameThai}',
                                                   overflow:
                                                       TextOverflow.ellipsis),
                                             )),
@@ -505,7 +529,7 @@ class _ArBillingStatusReportScreenState
                                     ArCustomerGroupMultiPicker(
                                       groups: _customerGroups,
                                       selectedIds: _selectedGroupIds,
-                                      label: 'กลุ่มลูกหนี้',
+                                      label: isEnglish ? 'Customer Group' : 'กลุ่มลูกหนี้',
                                       onChanged: (v) => setState(
                                           () => _selectedGroupIds = v),
                                     ),
@@ -513,7 +537,7 @@ class _ArBillingStatusReportScreenState
 
                                     // รหัสลูกหนี้ ตั้งแต่ / ถึง
                                     _buildCustomerCodeField(
-                                        label: 'รหัสลูกหนี้ ตั้งแต่',
+                                        label: isEnglish ? 'Customer code from' : 'รหัสลูกหนี้ ตั้งแต่',
                                         displayText: _fromLabel,
                                         onPick: () =>
                                             _pickCustomer(isFrom: true),
@@ -523,7 +547,7 @@ class _ArBillingStatusReportScreenState
                                         })),
                                     const SizedBox(height: 8),
                                     _buildCustomerCodeField(
-                                        label: 'รหัสลูกหนี้ ถึง',
+                                        label: isEnglish ? 'Customer code to' : 'รหัสลูกหนี้ ถึง',
                                         displayText: _toLabel,
                                         onPick: () =>
                                             _pickCustomer(isFrom: false),
@@ -539,23 +563,23 @@ class _ArBillingStatusReportScreenState
                                     // สถานะ
                                     DropdownButtonFormField<String>(
                                       value: _statusFilter,
-                                      decoration: const InputDecoration(
-                                          labelText: 'สถานะ',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: l.status,
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
-                                      items: const [
+                                      items: [
                                         DropdownMenuItem(
                                             value: 'all',
-                                            child: Text('— ทั้งหมด —')),
+                                            child: Text(isEnglish ? '— All —' : '— ทั้งหมด —')),
                                         DropdownMenuItem(
                                             value: 'pending',
-                                            child: Text('รอชำระ')),
+                                            child: Text(isEnglish ? 'Pending' : 'รอชำระ')),
                                         DropdownMenuItem(
                                             value: 'paid',
-                                            child: Text('ชำระแล้ว')),
+                                            child: Text(l.paid)),
                                         DropdownMenuItem(
                                             value: 'void',
-                                            child: Text('ยกเลิก')),
+                                            child: Text(l.voided)),
                                       ],
                                       onChanged: (v) {
                                         if (v != null)
@@ -567,17 +591,17 @@ class _ArBillingStatusReportScreenState
                                     // จัดเรียงข้อมูล
                                     DropdownButtonFormField<String>(
                                       value: _sortBy,
-                                      decoration: const InputDecoration(
-                                          labelText: 'จัดเรียงข้อมูล',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Sort by' : 'จัดเรียงข้อมูล',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
-                                      items: const [
+                                      items: [
                                         DropdownMenuItem(
                                             value: 'doc_type',
-                                            child: Text('ประเภท+เลขที่')),
+                                            child: Text(isEnglish ? 'Doc type + No.' : 'ประเภท+เลขที่')),
                                         DropdownMenuItem(
                                             value: 'customer',
-                                            child: Text('รหัสลูกค้า')),
+                                            child: Text(isEnglish ? 'Customer code' : 'รหัสลูกค้า')),
                                       ],
                                       onChanged: (v) {
                                         if (v != null) {
@@ -590,10 +614,10 @@ class _ArBillingStatusReportScreenState
 
                                     // แสดงรายละเอียด
                                     Row(children: [
-                                      const Expanded(
-                                        child: Text('แสดงรายละเอียด',
+                                      Expanded(
+                                        child: Text(isEnglish ? 'Show details' : 'แสดงรายละเอียด',
                                             style:
-                                                TextStyle(fontSize: 13)),
+                                                const TextStyle(fontSize: 13)),
                                       ),
                                       Switch(
                                         value: _showDetail,
@@ -616,7 +640,7 @@ class _ArBillingStatusReportScreenState
                                 height: 50,
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.picture_as_pdf),
-                                  label: const Text('ประมวลผลรายงาน'),
+                                  label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                   style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.teal[800],
                                       foregroundColor: Colors.white),
@@ -927,8 +951,8 @@ class _BillingStatusCustomerSearchDialogState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.teal[800],
-              child: const Text('ค้นหาลูกค้า',
-                  style: TextStyle(
+              child: Text(l.isEnglish ? 'Search Customer' : 'ค้นหาลูกค้า',
+                  style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 15)),
@@ -938,10 +962,10 @@ class _BillingStatusCustomerSearchDialogState
               child: TextField(
                 controller: _ctrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                    hintText: 'ค้นหาจากรหัสหรือชื่อลูกค้า',
-                    prefixIcon: Icon(Icons.search, size: 18),
-                    border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                    hintText: l.isEnglish ? 'Search by customer code or name' : 'ค้นหาจากรหัสหรือชื่อลูกค้า',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    border: const OutlineInputBorder(),
                     isDense: true),
                 onChanged: _search,
               ),
@@ -950,13 +974,13 @@ class _BillingStatusCustomerSearchDialogState
               color: Colors.grey[200],
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: const Row(children: [
+              child: Row(children: [
                 SizedBox(width: 100,
-                    child: Text('รหัส',
-                        style: TextStyle(
+                    child: Text(l.isEnglish ? 'Code' : 'รหัส',
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 12))),
-                Expanded(child: Text('ชื่อลูกค้า',
-                    style: TextStyle(
+                Expanded(child: Text(l.isEnglish ? 'Customer Name' : 'ชื่อลูกค้า',
+                    style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 12))),
               ]),
             ),
@@ -965,9 +989,9 @@ class _BillingStatusCustomerSearchDialogState
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _list.isEmpty
-                      ? const Center(
-                          child: Text('ไม่พบข้อมูล',
-                              style: TextStyle(color: Colors.grey)))
+                      ? Center(
+                          child: Text(l.isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+                              style: const TextStyle(color: Colors.grey)))
                       : ListView.separated(
                           controller: _scroll,
                           itemCount: _list.length,
@@ -988,7 +1012,10 @@ class _BillingStatusCustomerSearchDialogState
                                               fontWeight:
                                                   FontWeight.w500))),
                                   Expanded(
-                                      child: Text(c.customerNameTh,
+                                      child: Text(
+                                          l.isEnglish && (c.customerNameEn?.isNotEmpty ?? false)
+                                              ? c.customerNameEn!
+                                              : c.customerNameTh,
                                           style: const TextStyle(
                                               fontSize: 13),
                                           overflow:

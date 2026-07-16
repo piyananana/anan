@@ -175,22 +175,24 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
 
   Future<void> _confirmImport() async {
     if (_validatedHeaders.isEmpty) return;
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการนำเข้า'),
-        content: Text(
-            'ต้องการนำเข้ายอดยกมา $_validHeaders เอกสาร (รวม $_totalDetailRows บรรทัด) ใช่หรือไม่?'),
+        title: Text(isEnglish ? 'Confirm Import' : 'ยืนยันการนำเข้า'),
+        content: Text(isEnglish
+            ? 'Import $_validHeaders opening balance documents (total $_totalDetailRows lines)?'
+            : 'ต้องการนำเข้ายอดยกมา $_validHeaders เอกสาร (รวม $_totalDetailRows บรรทัด) ใช่หรือไม่?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ยกเลิก'),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('ยืนยัน', style: TextStyle(color: Colors.white)),
+            child: Text(isEnglish ? 'Confirm' : 'ยืนยัน', style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -259,6 +261,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF303F9F),
@@ -267,7 +270,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'เริ่มใหม่',
+            tooltip: isEnglish ? 'Reset' : 'เริ่มใหม่',
             onPressed: () => setState(() {
               _fileName = null;
               _fileBytes = null;
@@ -290,12 +293,12 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _buildTemplateSection(),
+          _buildTemplateSection(isEnglish),
           const SizedBox(height: 16),
-          _buildFilePickerSection(),
+          _buildFilePickerSection(isEnglish),
           if (_isValidated) ...[
             const SizedBox(height: 16),
-            _buildResultSection(),
+            _buildResultSection(isEnglish),
           ],
           const SizedBox(height: 80),
         ]),
@@ -313,8 +316,8 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check_circle_outline),
                   label: Text(_isImporting
-                      ? 'กำลังนำเข้า...'
-                      : 'ยืนยันนำเข้ายอดยกมา $_validHeaders เอกสาร'),
+                      ? (isEnglish ? 'Importing...' : 'กำลังนำเข้า...')
+                      : (isEnglish ? 'Confirm Import $_validHeaders Documents' : 'ยืนยันนำเข้ายอดยกมา $_validHeaders เอกสาร')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green.shade700,
                     foregroundColor: Colors.white,
@@ -348,16 +351,16 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
     }
   }
 
-  Widget _buildTemplateSection() {
+  Widget _buildTemplateSection(bool isEnglish) {
     return Card(
       child: ExpansionTile(
         leading: const Icon(Icons.table_chart_outlined, color: Color(0xFF303F9F)),
-        title: const Text('เทมเพลตนำเข้าข้อมูล', style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: const Text('คลิกเพื่อดูรายละเอียดคอลัมน์และรหัสอ้างอิงที่ใช้ได้'),
+        title: Text(isEnglish ? 'Import Template' : 'เทมเพลตนำเข้าข้อมูล', style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(isEnglish ? 'Click to see column details and available reference codes' : 'คลิกเพื่อดูรายละเอียดคอลัมน์และรหัสอ้างอิงที่ใช้ได้'),
         trailing: OutlinedButton.icon(
           onPressed: _downloadTemplate,
           icon: const Icon(Icons.download, size: 18),
-          label: const Text('ดาวน์โหลดเทมเพลต'),
+          label: Text(isEnglish ? 'Download Template' : 'ดาวน์โหลดเทมเพลต'),
           style: OutlinedButton.styleFrom(
             foregroundColor: const Color(0xFF303F9F),
             side: const BorderSide(color: Color(0xFF303F9F)),
@@ -460,14 +463,14 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
 
   // ─── File picker section ────────────────────────────────────────────────────
 
-  Widget _buildFilePickerSection() {
+  Widget _buildFilePickerSection(bool isEnglish) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('เลือกไฟล์นำเข้า', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(isEnglish ? 'Select Import File' : 'เลือกไฟล์นำเข้า', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 4),
-          const Text('รองรับไฟล์ .xlsx, .xls, .csv', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Text(isEnglish ? 'Supports .xlsx, .xls, .csv' : 'รองรับไฟล์ .xlsx, .xls, .csv', style: const TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
@@ -479,7 +482,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
                   color: Colors.grey.shade50,
                 ),
                 child: Text(
-                  _fileName ?? 'ยังไม่ได้เลือกไฟล์',
+                  _fileName ?? (isEnglish ? 'No file selected' : 'ยังไม่ได้เลือกไฟล์'),
                   style: TextStyle(color: _fileName != null ? Colors.black87 : Colors.grey),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -489,7 +492,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
             OutlinedButton.icon(
               onPressed: _pickFile,
               icon: const Icon(Icons.folder_open),
-              label: const Text('เลือกไฟล์'),
+              label: Text(isEnglish ? 'Browse' : 'เลือกไฟล์'),
             ),
             const SizedBox(width: 8),
             ElevatedButton.icon(
@@ -500,7 +503,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.fact_check_outlined),
-              label: const Text('ตรวจสอบ'),
+              label: Text(isEnglish ? 'Validate' : 'ตรวจสอบ'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF303F9F),
                 foregroundColor: Colors.white,
@@ -514,7 +517,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
 
   // ─── Validation result section ──────────────────────────────────────────────
 
-  Widget _buildResultSection() {
+  Widget _buildResultSection(bool isEnglish) {
     final allOk = _errorHeaders == 0;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       // Summary
@@ -532,8 +535,8 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
                 allOk
-                    ? 'ข้อมูลถูกต้องทั้งหมด พร้อมนำเข้า'
-                    : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่',
+                    ? (isEnglish ? 'All data is valid — ready to import' : 'ข้อมูลถูกต้องทั้งหมด พร้อมนำเข้า')
+                    : (isEnglish ? 'Invalid data found. Please fix the file and re-validate.' : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่'),
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
@@ -541,11 +544,15 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
               ),
               const SizedBox(height: 4),
               Text(
-                'เอกสารทั้งหมด: $_totalHeaders   ถูกต้อง: $_validHeaders   ไม่ถูกต้อง: $_errorHeaders',
+                isEnglish
+                    ? 'Total: $_totalHeaders   Valid: $_validHeaders   Invalid: $_errorHeaders'
+                    : 'เอกสารทั้งหมด: $_totalHeaders   ถูกต้อง: $_validHeaders   ไม่ถูกต้อง: $_errorHeaders',
                 style: const TextStyle(fontSize: 13),
               ),
               Text(
-                'รายการ (detail) ทั้งหมด: $_totalDetailRows   ถูกต้อง: $_validDetailRows',
+                isEnglish
+                    ? 'Detail rows total: $_totalDetailRows   Valid: $_validDetailRows'
+                    : 'รายการ (detail) ทั้งหมด: $_totalDetailRows   ถูกต้อง: $_validDetailRows',
                 style: const TextStyle(fontSize: 13),
               ),
             ]),
@@ -556,8 +563,8 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
       // Error table
       if (_errors.isNotEmpty) ...[
         const SizedBox(height: 16),
-        const Text('รายการที่ไม่ถูกต้อง',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
+        Text(isEnglish ? 'Invalid rows' : 'รายการที่ไม่ถูกต้อง',
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
         const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -594,8 +601,9 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
       if (_validHeaders > 0) ...[
         const SizedBox(height: 16),
         Text(
-          'ตัวอย่างเอกสาร (header)'
-          '${_validHeaders > 50 ? ' (แสดง 50 จาก $_validHeaders เอกสาร)' : ' ($_validHeaders เอกสาร)'}',
+          isEnglish
+              ? 'Document preview (header)${_validHeaders > 50 ? ' (showing 50 of $_validHeaders)' : ' ($_validHeaders documents)'}'
+              : 'ตัวอย่างเอกสาร (header)${_validHeaders > 50 ? ' (แสดง 50 จาก $_validHeaders เอกสาร)' : ' ($_validHeaders เอกสาร)'}',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         const SizedBox(height: 8),
@@ -608,21 +616,21 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
             child: DataTable(
               columnSpacing: 12,
               headingRowColor: WidgetStateProperty.all(const Color(0xFFE8EAF6)),
-              columns: const [
-                DataColumn(label: Text('เลขอ้างอิง')),
-                DataColumn(label: Text('เลขที่เอกสาร')),
-                DataColumn(label: Text('วันที่')),
-                DataColumn(label: Text('สาขา')),
-                DataColumn(label: Text('สกุลเงิน')),
-                DataColumn(label: Text('คำอธิบาย')),
-                DataColumn(label: Text('รวมเดบิต'), numeric: true),
-                DataColumn(label: Text('รวมเครดิต'), numeric: true),
+              columns: [
+                DataColumn(label: Text(isEnglish ? 'Ref No.' : 'เลขอ้างอิง')),
+                DataColumn(label: Text(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร')),
+                DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่')),
+                DataColumn(label: Text(isEnglish ? 'Branch' : 'สาขา')),
+                DataColumn(label: Text(isEnglish ? 'Currency' : 'สกุลเงิน')),
+                DataColumn(label: Text(isEnglish ? 'Description' : 'คำอธิบาย')),
+                DataColumn(label: Text(isEnglish ? 'Total Debit' : 'รวมเดบิต'), numeric: true),
+                DataColumn(label: Text(isEnglish ? 'Total Credit' : 'รวมเครดิต'), numeric: true),
               ],
               rows: _validatedHeaders
                   .take(50)
                   .map((r) => DataRow(cells: [
                         DataCell(Text(r['header_ref']?.toString() ?? '')),
-                        DataCell(Text(r['doc_no']?.toString() ?? '(อัตโนมัติ)')),
+                        DataCell(Text(r['doc_no']?.toString() ?? (isEnglish ? '(auto)' : '(อัตโนมัติ)'))),
                         DataCell(Text(r['doc_date']?.toString() ?? '')),
                         DataCell(Text(r['branch_code']?.toString() ?? '-')),
                         DataCell(Text(r['currency_code']?.toString() ?? '')),
@@ -646,8 +654,9 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
       if (_validatedDetails.isNotEmpty) ...[
         const SizedBox(height: 16),
         Text(
-          'ตัวอย่างรายการ (detail)'
-          '${_validatedDetails.length > 50 ? ' (แสดง 50 จาก ${_validatedDetails.length} รายการ)' : ' (${_validatedDetails.length} รายการ)'}',
+          isEnglish
+              ? 'Line preview (detail)${_validatedDetails.length > 50 ? ' (showing 50 of ${_validatedDetails.length})' : ' (${_validatedDetails.length} rows)'}'
+              : 'ตัวอย่างรายการ (detail)${_validatedDetails.length > 50 ? ' (แสดง 50 จาก ${_validatedDetails.length} รายการ)' : ' (${_validatedDetails.length} รายการ)'}',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         const SizedBox(height: 8),
@@ -661,12 +670,12 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
               columnSpacing: 12,
               headingRowColor: WidgetStateProperty.all(const Color(0xFFE8EAF6)),
               columns: [
-                const DataColumn(label: Text('เลขอ้างอิง')),
-                const DataColumn(label: Text('รหัสบัญชี')),
-                const DataColumn(label: Text('ชื่อบัญชี')),
-                const DataColumn(label: Text('คำอธิบาย')),
-                const DataColumn(label: Text('เดบิต'), numeric: true),
-                const DataColumn(label: Text('เครดิต'), numeric: true),
+                DataColumn(label: Text(isEnglish ? 'Ref No.' : 'เลขอ้างอิง')),
+                DataColumn(label: Text(isEnglish ? 'Account Code' : 'รหัสบัญชี')),
+                DataColumn(label: Text(isEnglish ? 'Account Name' : 'ชื่อบัญชี')),
+                DataColumn(label: Text(isEnglish ? 'Description' : 'คำอธิบาย')),
+                DataColumn(label: Text(isEnglish ? 'Debit' : 'เดบิต'), numeric: true),
+                DataColumn(label: Text(isEnglish ? 'Credit' : 'เครดิต'), numeric: true),
                 for (final dt in _dimensionTypes)
                   DataColumn(label: Text(dt['label']?.toString() ?? dt['type_code'].toString())),
               ],

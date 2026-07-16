@@ -1,7 +1,9 @@
 ﻿// lib/gl/screens/gl_year_end_closing_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/gl_period.dart';
 import '../models/gl_year_end_closing.dart';
@@ -220,17 +222,20 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
   });
 
   Future<void> _doStep6() => _runStep(() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการล็อคปีบัญชี'),
-        content: const Text('ปีบัญชีนี้จะถูกล็อคและไม่สามารถบันทึกรายการได้อีก ต้องการดำเนินการต่อหรือไม่?'),
+        title: Text(isEnglish ? 'Confirm Lock Fiscal Year' : 'ยืนยันการล็อคปีบัญชี'),
+        content: Text(isEnglish
+            ? 'This fiscal year will be locked and no more entries can be posted. Continue?'
+            : 'ปีบัญชีนี้จะถูกล็อคและไม่สามารถบันทึกรายการได้อีก ต้องการดำเนินการต่อหรือไม่?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('ยืนยัน', style: TextStyle(color: Colors.white)),
+            child: Text(isEnglish ? 'Confirm' : 'ยืนยัน', style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -244,6 +249,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -252,7 +258,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
             onPressed: _loadInitialData,
           ),
         ],
@@ -296,11 +302,11 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                         border: Border.all(color: Colors.orange),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(Icons.warning, color: Colors.orange),
-                          SizedBox(width: 8),
-                          Text('ยังไม่ได้ตั้งค่าการปิดบัญชี กรุณาตั้งค่าก่อน'),
+                          const Icon(Icons.warning, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          Text(isEnglish ? 'Year-end closing is not configured. Please set it up first.' : 'ยังไม่ได้ตั้งค่าการปิดบัญชี กรุณาตั้งค่าก่อน'),
                         ],
                       ),
                     ),
@@ -311,7 +317,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                       padding: const EdgeInsets.all(16),
                       child: Row(
                         children: [
-                          const Text('ปีบัญชีที่ต้องการปิด:', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(isEnglish ? 'Fiscal year to close:' : 'ปีบัญชีที่ต้องการปิด:', style: const TextStyle(fontWeight: FontWeight.bold)),
                           const SizedBox(width: 16),
                           SizedBox(
                             width: 280,
@@ -322,7 +328,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                                 border: OutlineInputBorder(),
                                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               ),
-                              hint: const Text('เลือกปีบัญชี'),
+                              hint: Text(isEnglish ? 'Select fiscal year' : 'เลือกปีบัญชี'),
                               items: _fiscalYears.map((fy) => DropdownMenuItem(
                                 value: fy,
                                 child: Text(fy.description ?? ''),
@@ -340,7 +346,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
 
                   if (_closing != null) ...[
                     const SizedBox(height: 16),
-                    _buildStepper(),
+                    _buildStepper(isEnglish),
                   ],
                 ],
               ),
@@ -348,7 +354,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
     );
   }
 
-  Widget _buildStepper() {
+  Widget _buildStepper(bool isEnglish) {
     final closing = _closing!;
     final currentStep = closing.currentStep;
 
@@ -358,26 +364,27 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
       steps: [
         // ── Step 1: Checklist ──────────────────────────────────────────────
         Step(
-          title: const Text('ตรวจสอบความพร้อม'),
-          subtitle: const Text('ตรวจสอบรายการที่ยังไม่ผ่านรายการและความสมดุล'),
+          title: Text(isEnglish ? 'Pre-close Checklist' : 'ตรวจสอบความพร้อม'),
+          subtitle: Text(isEnglish ? 'Check unposted entries and balances' : 'ตรวจสอบรายการที่ยังไม่ผ่านรายการและความสมดุล'),
           isActive: currentStep >= 0,
           state: closing.step1ChecklistOk == true ? StepState.complete : StepState.indexed,
           content: _StepCard(
             isDone: closing.step1ChecklistOk == true,
             isProcessing: _isProcessing,
+            isEnglish: isEnglish,
             children: [
               if (closing.step1Result != null) ...[
-                _ResultRow('รายการ Draft ที่ยังไม่ผ่านรายการ',
-                    '${closing.step1Result!['unposted_count'] ?? 0} รายการ'),
-                _ResultRow('รายการที่ไม่สมดุล',
-                    '${closing.step1Result!['unbalanced_count'] ?? 0} รายการ'),
+                _ResultRow(isEnglish ? 'Unposted draft entries' : 'รายการ Draft ที่ยังไม่ผ่านรายการ',
+                    '${closing.step1Result!['unposted_count'] ?? 0} ${isEnglish ? 'entries' : 'รายการ'}'),
+                _ResultRow(isEnglish ? 'Unbalanced entries' : 'รายการที่ไม่สมดุล',
+                    '${closing.step1Result!['unbalanced_count'] ?? 0} ${isEnglish ? 'entries' : 'รายการ'}'),
                 const SizedBox(height: 8),
               ],
               if (closing.step1ChecklistOk != true)
                 ElevatedButton.icon(
                   onPressed: _isProcessing ? null : _doStep1,
                   icon: const Icon(Icons.search),
-                  label: const Text('ตรวจสอบ'),
+                  label: Text(isEnglish ? 'Check' : 'ตรวจสอบ'),
                 ),
             ],
           ),
@@ -385,15 +392,18 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
 
         // ── Step 2: Adjusting ──────────────────────────────────────────────
         Step(
-          title: const Text('รายการปรับปรุง'),
-          subtitle: const Text('บันทึกรายการปรับปรุงก่อนปิดบัญชี'),
+          title: Text(isEnglish ? 'Adjusting Entries' : 'รายการปรับปรุง'),
+          subtitle: Text(isEnglish ? 'Post all adjusting entries before closing' : 'บันทึกรายการปรับปรุงก่อนปิดบัญชี'),
           isActive: currentStep >= 1,
           state: closing.step2AdjustingOk == true ? StepState.complete : StepState.indexed,
           content: _StepCard(
             isDone: closing.step2AdjustingOk == true,
             isProcessing: _isProcessing,
+            isEnglish: isEnglish,
             children: [
-              const Text('บันทึกรายการปรับปรุงผ่านหน้าจอบันทึกบัญชีทั่วไป (GL Entry) เมื่อเสร็จสิ้นให้กดยืนยัน'),
+              Text(isEnglish
+                  ? 'Post adjusting entries via GL Entry screen, then click Confirm.'
+                  : 'บันทึกรายการปรับปรุงผ่านหน้าจอบันทึกบัญชีทั่วไป (GL Entry) เมื่อเสร็จสิ้นให้กดยืนยัน'),
               const SizedBox(height: 8),
               if (closing.step2AdjustingOk != true)
                 ElevatedButton.icon(
@@ -404,7 +414,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                           await _loadClosing(_selectedYear!.id);
                         }),
                   icon: const Icon(Icons.check_circle),
-                  label: const Text('ยืนยันรายการปรับปรุงเสร็จสิ้น'),
+                  label: Text(isEnglish ? 'Confirm Adjusting Entries Done' : 'ยืนยันรายการปรับปรุงเสร็จสิ้น'),
                 ),
             ],
           ),
@@ -412,27 +422,29 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
 
         // ── Step 3: Close Rev/Exp ──────────────────────────────────────────
         Step(
-          title: const Text('ปิดบัญชีรายได้และค่าใช้จ่าย'),
-          subtitle: const Text('โอนยอดบัญชีรายได้/ค่าใช้จ่ายเข้าบัญชีกำไรขาดทุน'),
+          title: Text(isEnglish ? 'Close Revenue & Expense Accounts' : 'ปิดบัญชีรายได้และค่าใช้จ่าย'),
+          subtitle: Text(isEnglish ? 'Transfer revenue/expense balances to Income Summary' : 'โอนยอดบัญชีรายได้/ค่าใช้จ่ายเข้าบัญชีกำไรขาดทุน'),
           isActive: currentStep >= 2,
           state: closing.step3ClosingOk == true ? StepState.complete : StepState.indexed,
           content: _StepCard(
             isDone: closing.step3ClosingOk == true,
             isProcessing: _isProcessing,
+            isEnglish: isEnglish,
             children: [
               if (closing.step3EntryId != null)
-                _ResultRow('เลขที่เอกสาร', 'Entry ID: ${closing.step3EntryId}'),
+                _ResultRow(isEnglish ? 'Document No.' : 'เลขที่เอกสาร', 'Entry ID: ${closing.step3EntryId}'),
               if (_step3Preview.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                _PreviewTable(lines: _step3Preview, fmt: _fmt),
+                _PreviewTable(lines: _step3Preview, fmt: _fmt, isEnglish: isEnglish),
                 const SizedBox(height: 8),
               ],
               if (closing.step3ClosingOk != true) ...[
                 _DocDatePicker(
-                  label: 'วันที่เอกสาร',
+                  label: isEnglish ? 'Document Date' : 'วันที่เอกสาร',
                   value: _docDateStep3,
                   period: _lastPeriod,
                   onChanged: (d) => setState(() => _docDateStep3 = d),
+                  isEnglish: isEnglish,
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -440,14 +452,14 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                     ElevatedButton.icon(
                       onPressed: _isProcessing ? null : _doStep3Preview,
                       icon: const Icon(Icons.preview),
-                      label: const Text('ดูตัวอย่าง'),
+                      label: Text(isEnglish ? 'Preview' : 'ดูตัวอย่าง'),
                     ),
                     const SizedBox(width: 12),
                     if (_step3Preview.isNotEmpty)
                       ElevatedButton.icon(
                         onPressed: _isProcessing ? null : _doStep3Confirm,
                         icon: const Icon(Icons.done),
-                        label: const Text('ยืนยันการปิดบัญชี'),
+                        label: Text(isEnglish ? 'Confirm Closing' : 'ยืนยันการปิดบัญชี'),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                       ),
                   ],
@@ -459,28 +471,30 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
 
         // ── Step 4: Transfer Net Income ────────────────────────────────────
         Step(
-          title: const Text('โอนกำไร/ขาดทุนสุทธิ'),
-          subtitle: const Text('โอนยอดจากบัญชีกำไรขาดทุนเข้ากำไรสะสม'),
+          title: Text(isEnglish ? 'Transfer Net Income/Loss' : 'โอนกำไร/ขาดทุนสุทธิ'),
+          subtitle: Text(isEnglish ? 'Transfer balance from Income Summary to Retained Earnings' : 'โอนยอดจากบัญชีกำไรขาดทุนเข้ากำไรสะสม'),
           isActive: currentStep >= 3,
           state: closing.step4TransferOk == true ? StepState.complete : StepState.indexed,
           content: _StepCard(
             isDone: closing.step4TransferOk == true,
             isProcessing: _isProcessing,
+            isEnglish: isEnglish,
             children: [
               if (closing.step4EntryId != null)
-                _ResultRow('เลขที่เอกสาร', 'Entry ID: ${closing.step4EntryId}'),
+                _ResultRow(isEnglish ? 'Document No.' : 'เลขที่เอกสาร', 'Entry ID: ${closing.step4EntryId}'),
               if (_step4Preview != null) ...[
                 const SizedBox(height: 8),
-                _ResultRow('กำไร/ขาดทุนสุทธิ',
+                _ResultRow(isEnglish ? 'Net Income/Loss' : 'กำไร/ขาดทุนสุทธิ',
                     _fmt.format(_step4Preview!['net_income'] ?? 0)),
                 const SizedBox(height: 8),
               ],
               if (closing.step4TransferOk != true) ...[
                 _DocDatePicker(
-                  label: 'วันที่เอกสาร',
+                  label: isEnglish ? 'Document Date' : 'วันที่เอกสาร',
                   value: _docDateStep4,
                   period: _lastPeriod,
                   onChanged: (d) => setState(() => _docDateStep4 = d),
+                  isEnglish: isEnglish,
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -488,14 +502,14 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                     ElevatedButton.icon(
                       onPressed: _isProcessing ? null : _doStep4Preview,
                       icon: const Icon(Icons.preview),
-                      label: const Text('ดูตัวอย่าง'),
+                      label: Text(isEnglish ? 'Preview' : 'ดูตัวอย่าง'),
                     ),
                     const SizedBox(width: 12),
                     if (_step4Preview != null)
                       ElevatedButton.icon(
                         onPressed: _isProcessing ? null : _doStep4Confirm,
                         icon: const Icon(Icons.done),
-                        label: const Text('ยืนยันการโอน'),
+                        label: Text(isEnglish ? 'Confirm Transfer' : 'ยืนยันการโอน'),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                       ),
                   ],
@@ -507,21 +521,22 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
 
         // ── Step 5: Carry Forward ──────────────────────────────────────────
         Step(
-          title: const Text('ยกยอดงบดุลปีถัดไป'),
-          subtitle: const Text('สร้างรายการยกยอดในงวดแรกของปีบัญชีถัดไป'),
+          title: Text(isEnglish ? 'Carry Forward Balance Sheet' : 'ยกยอดงบดุลปีถัดไป'),
+          subtitle: Text(isEnglish ? 'Create opening entries in the first period of the next fiscal year' : 'สร้างรายการยกยอดในงวดแรกของปีบัญชีถัดไป'),
           isActive: currentStep >= 4,
           state: closing.step5CarryForwardOk == true ? StepState.complete : StepState.indexed,
           content: _StepCard(
             isDone: closing.step5CarryForwardOk == true,
             isProcessing: _isProcessing,
+            isEnglish: isEnglish,
             children: [
               if (closing.step5EntryId != null)
-                _ResultRow('เลขที่เอกสาร', 'Entry ID: ${closing.step5EntryId}'),
+                _ResultRow(isEnglish ? 'Document No.' : 'เลขที่เอกสาร', 'Entry ID: ${closing.step5EntryId}'),
               if (closing.step5CarryForwardOk != true) ...[
                 // Next year selector
                 Row(
                   children: [
-                    const Text('ปีบัญชีถัดไป:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(isEnglish ? 'Next fiscal year:' : 'ปีบัญชีถัดไป:', style: const TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(width: 12),
                     SizedBox(
                       width: 260,
@@ -532,7 +547,7 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                           border: OutlineInputBorder(),
                           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
-                        hint: const Text('เลือกปีบัญชีถัดไป'),
+                        hint: Text(isEnglish ? 'Select next fiscal year' : 'เลือกปีบัญชีถัดไป'),
                         items: _allFiscalYears
                             .where((fy) => _selectedYear == null || fy.id != _selectedYear!.id)
                             .map((fy) => DropdownMenuItem(
@@ -554,14 +569,15 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                 ),
                 const SizedBox(height: 8),
                 _DocDatePicker(
-                  label: 'วันที่เอกสาร (งวดแรกของปีถัดไป)',
+                  label: isEnglish ? 'Document Date (first period of next year)' : 'วันที่เอกสาร (งวดแรกของปีถัดไป)',
                   value: _docDateStep5,
                   period: _firstNextPeriod,
                   onChanged: (d) => setState(() => _docDateStep5 = d),
+                  isEnglish: isEnglish,
                 ),
                 const SizedBox(height: 8),
                 if (_step5Preview.isNotEmpty) ...[
-                  _PreviewTable(lines: _step5Preview, fmt: _fmt),
+                  _PreviewTable(lines: _step5Preview, fmt: _fmt, isEnglish: isEnglish),
                   const SizedBox(height: 8),
                 ],
                 Row(
@@ -569,14 +585,14 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                     ElevatedButton.icon(
                       onPressed: _isProcessing ? null : _doStep5Preview,
                       icon: const Icon(Icons.preview),
-                      label: const Text('ดูตัวอย่าง'),
+                      label: Text(isEnglish ? 'Preview' : 'ดูตัวอย่าง'),
                     ),
                     const SizedBox(width: 12),
                     if (_step5Preview.isNotEmpty)
                       ElevatedButton.icon(
                         onPressed: _isProcessing ? null : _doStep5Confirm,
                         icon: const Icon(Icons.done),
-                        label: const Text('ยืนยันการยกยอด'),
+                        label: Text(isEnglish ? 'Confirm Carry Forward' : 'ยืนยันการยกยอด'),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                       ),
                   ],
@@ -588,28 +604,29 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
 
         // ── Step 6: Lock Year ──────────────────────────────────────────────
         Step(
-          title: const Text('ล็อคปีบัญชี'),
-          subtitle: const Text('ปิดทุกงวดบัญชีและล็อคปีบัญชีนี้'),
+          title: Text(isEnglish ? 'Lock Fiscal Year' : 'ล็อคปีบัญชี'),
+          subtitle: Text(isEnglish ? 'Close all periods and lock this fiscal year' : 'ปิดทุกงวดบัญชีและล็อคปีบัญชีนี้'),
           isActive: currentStep >= 5,
           state: closing.step6LockOk == true ? StepState.complete : StepState.indexed,
           content: _StepCard(
             isDone: closing.step6LockOk == true,
             isProcessing: _isProcessing,
+            isEnglish: isEnglish,
             children: [
               if (closing.step6LockOk == true)
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.lock, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('ปีบัญชีถูกล็อคเรียบร้อยแล้ว',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                    const Icon(Icons.lock, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Text(isEnglish ? 'Fiscal year has been locked.' : 'ปีบัญชีถูกล็อคเรียบร้อยแล้ว',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
                   ],
                 )
               else
                 ElevatedButton.icon(
                   onPressed: _isProcessing ? null : _doStep6,
                   icon: const Icon(Icons.lock),
-                  label: const Text('ล็อคปีบัญชี'),
+                  label: Text(isEnglish ? 'Lock Fiscal Year' : 'ล็อคปีบัญชี'),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 ),
             ],
@@ -644,8 +661,9 @@ class _StatusChip extends StatelessWidget {
 class _StepCard extends StatelessWidget {
   final bool isDone;
   final bool isProcessing;
+  final bool isEnglish;
   final List<Widget> children;
-  const _StepCard({required this.isDone, required this.isProcessing, required this.children});
+  const _StepCard({required this.isDone, required this.isProcessing, required this.children, this.isEnglish = false});
 
   @override
   Widget build(BuildContext context) {
@@ -658,10 +676,10 @@ class _StepCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isDone)
-                  const Row(children: [
-                    Icon(Icons.check_circle, color: Colors.green),
-                    SizedBox(width: 8),
-                    Text('เสร็จสิ้น', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  Row(children: [
+                    const Icon(Icons.check_circle, color: Colors.green),
+                    const SizedBox(width: 8),
+                    Text(isEnglish ? 'Completed' : 'เสร็จสิ้น', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                   ]),
                 ...children,
               ],
@@ -692,7 +710,8 @@ class _ResultRow extends StatelessWidget {
 class _PreviewTable extends StatelessWidget {
   final List<ClosingPreviewLine> lines;
   final NumberFormat fmt;
-  const _PreviewTable({required this.lines, required this.fmt});
+  final bool isEnglish;
+  const _PreviewTable({required this.lines, required this.fmt, this.isEnglish = false});
 
   @override
   Widget build(BuildContext context) {
@@ -708,8 +727,8 @@ class _PreviewTable extends StatelessWidget {
         children: [
           TableRow(
             decoration: BoxDecoration(color: Colors.grey.shade200),
-            children: const [
-              _TH('รหัส'), _TH('ชื่อบัญชี'), _TH('เดบิต'), _TH('เครดิต'),
+            children: [
+              _TH(isEnglish ? 'Code' : 'รหัส'), _TH(isEnglish ? 'Account Name' : 'ชื่อบัญชี'), _TH(isEnglish ? 'Debit' : 'เดบิต'), _TH(isEnglish ? 'Credit' : 'เครดิต'),
             ],
           ),
           ...lines.map((l) => TableRow(children: [
@@ -755,12 +774,14 @@ class _DocDatePicker extends StatelessWidget {
   final DateTime? value;
   final PostingPeriod? period;
   final ValueChanged<DateTime?> onChanged;
+  final bool isEnglish;
 
   const _DocDatePicker({
     required this.label,
     required this.value,
     required this.period,
     required this.onChanged,
+    this.isEnglish = false,
   });
 
   @override
@@ -768,8 +789,8 @@ class _DocDatePicker extends StatelessWidget {
     final fmt = DateFormat('dd/MM/yyyy');
     final hasRange = period != null;
     final rangeText = hasRange
-        ? 'ช่วงงวด: ${fmt.format(period!.periodStartDate)} – ${fmt.format(period!.periodEndDate)}'
-        : 'กำลังโหลดข้อมูลงวด...';
+        ? '${isEnglish ? 'Period range' : 'ช่วงงวด'}: ${fmt.format(period!.periodStartDate)} – ${fmt.format(period!.periodEndDate)}'
+        : (isEnglish ? 'Loading period data...' : 'กำลังโหลดข้อมูลงวด...');
 
     return Row(
       children: [
@@ -807,7 +828,7 @@ class _DocDatePicker extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  value != null ? fmt.format(value!) : 'เลือกวันที่',
+                  value != null ? fmt.format(value!) : (isEnglish ? 'Select date' : 'เลือกวันที่'),
                   style: TextStyle(
                     color: hasRange ? Colors.black87 : Colors.grey,
                     fontWeight: FontWeight.w500,
