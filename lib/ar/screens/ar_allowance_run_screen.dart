@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_language_provider.dart';
@@ -19,6 +19,8 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
   final ArYearEndService _svc    = ArYearEndService();
   final _fmt     = NumberFormat('#,##0.00', 'en_US');
   final _dateFmt = DateFormat('dd/MM/yyyy');
+
+  bool _isEnglish = false;
 
   List<ArAllowanceRunHeader> _rows    = [];
   bool _isLoading = true;
@@ -107,6 +109,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
   }
 
   Future<void> _save() async {
+    final isEnglish = _isEnglish;
     setState(() => _isPreviewing = true);
     try {
       final id = await _svc.createAllowanceRun(
@@ -118,13 +121,14 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
       final newRow = _rows.firstWhere((r) => r.id == id);
       await _selectRow(newRow);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('บันทึก Draft สำเร็จ'), backgroundColor: Colors.teal));
+          SnackBar(content: Text(isEnglish ? 'Draft saved successfully' : 'บันทึก Draft สำเร็จ'), backgroundColor: Colors.teal));
     } catch (e) { if (mounted) _showError(e.toString()); }
     finally { setState(() => _isPreviewing = false); }
   }
 
   Future<void> _deleteDraft(int id) async {
-    final ok = await _confirm('ลบ Draft รายการนี้?');
+    final isEnglish = _isEnglish;
+    final ok = await _confirm(isEnglish ? 'Delete this Draft?' : 'ลบ Draft รายการนี้?');
     if (!ok) return;
     try {
       await _svc.deleteAllowanceRun(id);
@@ -134,7 +138,8 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
   }
 
   Future<void> _post(int id) async {
-    if (!await _confirm('Post รายการนี้และสร้าง GL entry?')) return;
+    final isEnglish = _isEnglish;
+    if (!await _confirm(isEnglish ? 'Post this entry and create a GL entry?' : 'Post รายการนี้และสร้าง GL entry?')) return;
     try {
       await _svc.postAllowanceRun(id);
       await _loadAll();
@@ -143,7 +148,8 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
   }
 
   Future<void> _void(int id) async {
-    if (!await _confirm('ยกเลิกรายการนี้? GL entry จะถูก reverse')) return;
+    final isEnglish = _isEnglish;
+    if (!await _confirm(isEnglish ? 'Void this entry? The GL entry will be reversed' : 'ยกเลิกรายการนี้? GL entry จะถูก reverse')) return;
     try {
       await _svc.voidAllowanceRun(id);
       await _loadAll();
@@ -156,7 +162,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
     return await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยัน'),
+        title: Text(l.isEnglish ? 'Confirm' : 'ยืนยัน'),
         content: Text(msg),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
@@ -176,90 +182,101 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
   Color _statusColor(String s) =>
       s == 'Posted' ? Colors.teal : s == 'Void' ? Colors.red : Colors.orange;
 
+  String _customerNameOf(Map<String, dynamic> d) {
+    final en = d['customer_name_en']?.toString();
+    if (_isEnglish && en != null && en.isNotEmpty) return en;
+    return d['customer_name_th']?.toString() ?? '';
+  }
+
   // ── Left panel ────────────────────────────────────────────────────────────
 
-  Widget _buildLeftPanel() => Column(children: [
-    Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      color: Colors.teal[50],
-      width: double.infinity,
-      child: FilledButton.icon(
-        icon: const Icon(Icons.add, size: 16),
-        label: const Text('สร้างใหม่'),
-        style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-        onPressed: () => setState(() {
-          _isCreating = true;
-          _selectedRow = null;
-          _previewDetails = [];
-        }),
+  Widget _buildLeftPanel() {
+    final isEnglish = _isEnglish;
+    return Column(children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        color: Colors.teal[50],
+        width: double.infinity,
+        child: FilledButton.icon(
+          icon: const Icon(Icons.add, size: 16),
+          label: Text(isEnglish ? 'New' : 'สร้างใหม่'),
+          style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+          onPressed: () => setState(() {
+            _isCreating = true;
+            _selectedRow = null;
+            _previewDetails = [];
+          }),
+        ),
       ),
-    ),
-    Expanded(
-      child: _rows.isEmpty
-          ? const Center(child: Text('ไม่มีรายการ', style: TextStyle(color: Colors.grey)))
-          : ListView.builder(
-              itemCount: _rows.length,
-              itemBuilder: (ctx, i) {
-                final r = _rows[i];
-                final selected = _selectedRow?.id == r.id;
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  color: selected ? Colors.teal[50] : null,
-                  shape: selected
-                      ? RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: BorderSide(color: Colors.teal.shade400, width: 1.5))
-                      : null,
-                  child: ListTile(
-                    dense: true,
-                    onTap: () => _selectRow(r),
-                    title: Text(_dateFmt.format(r.runDate),
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13,
-                            color: selected ? Colors.teal[800] : null)),
-                    subtitle: Row(children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: _statusColor(r.status).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(r.status,
-                            style: TextStyle(fontSize: 11, color: _statusColor(r.status))),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'ปรับ ${r.adjustmentAmount >= 0 ? '+' : ''}${_fmt.format(r.adjustmentAmount)}',
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                    ]),
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(_fmt.format(r.totalAllowance),
+      Expanded(
+        child: _rows.isEmpty
+            ? Center(child: Text(isEnglish ? 'No entries' : 'ไม่มีรายการ', style: const TextStyle(color: Colors.grey)))
+            : ListView.builder(
+                itemCount: _rows.length,
+                itemBuilder: (ctx, i) {
+                  final r = _rows[i];
+                  final selected = _selectedRow?.id == r.id;
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    color: selected ? Colors.teal[50] : null,
+                    shape: selected
+                        ? RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: Colors.teal.shade400, width: 1.5))
+                        : null,
+                    child: ListTile(
+                      dense: true,
+                      onTap: () => _selectRow(r),
+                      title: Text(_dateFmt.format(r.runDate),
                           style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.bold, fontSize: 13,
                               color: selected ? Colors.teal[800] : null)),
-                      if (r.status == 'Draft') ...[
-                        const SizedBox(width: 4),
-                        InkWell(
-                          onTap: () => _deleteDraft(r.id),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(Icons.delete_outline, size: 16, color: Colors.red[400]),
+                      subtitle: Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: _statusColor(r.status).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(4),
                           ),
+                          child: Text(r.status,
+                              style: TextStyle(fontSize: 11, color: _statusColor(r.status))),
                         ),
-                      ],
-                    ]),
-                  ),
-                );
-              },
-            ),
-    ),
-  ]);
+                        const SizedBox(width: 6),
+                        Text(
+                          '${isEnglish ? 'Adj.' : 'ปรับ'} ${r.adjustmentAmount >= 0 ? '+' : ''}${_fmt.format(r.adjustmentAmount)}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ]),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text(_fmt.format(r.totalAllowance),
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.bold,
+                                color: selected ? Colors.teal[800] : null)),
+                        if (r.status == 'Draft') ...[
+                          const SizedBox(width: 4),
+                          InkWell(
+                            onTap: () => _deleteDraft(r.id),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(Icons.delete_outline, size: 16, color: Colors.red[400]),
+                            ),
+                          ),
+                        ],
+                      ]),
+                    ),
+                  );
+                },
+              ),
+      ),
+    ]);
+  }
 
   // ── Create form ───────────────────────────────────────────────────────────
 
-  Widget _buildCreateForm() => SingleChildScrollView(
+  Widget _buildCreateForm() {
+    final isEnglish = _isEnglish;
+    return SingleChildScrollView(
     padding: const EdgeInsets.all(16),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
@@ -268,11 +285,11 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('คำนวณค่าเผื่อหนี้สงสัยจะสูญ',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal)),
+            Text(isEnglish ? 'Calculate Allowance for Doubtful Accounts' : 'คำนวณค่าเผื่อหนี้สงสัยจะสูญ',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal)),
             const Divider(height: 20),
             Wrap(spacing: 32, runSpacing: 12, children: [
-              _labelField('ปีบัญชี', SizedBox(
+              _labelField(isEnglish ? 'Fiscal Year' : 'ปีบัญชี', SizedBox(
                 width: 100,
                 child: DropdownButtonFormField<int>(
                   value: _periodYear,
@@ -285,7 +302,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
                   onChanged: (v) => setState(() => _periodYear = v ?? _periodYear),
                 ),
               )),
-              _labelField('วันที่คำนวณ', InkWell(
+              _labelField(isEnglish ? 'Calculation Date' : 'วันที่คำนวณ', InkWell(
                 onTap: () async {
                   final d = await showDatePicker(context: context,
                       initialDate: _runDate,
@@ -312,16 +329,16 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('หมายเหตุ',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(isEnglish ? 'Note' : 'หมายเหตุ',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 10),
             TextFormField(
               controller: _noteCtrl,
-              decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  hintText: 'ระบุหมายเหตุ (ถ้ามี)'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  hintText: isEnglish ? 'Enter a note (optional)' : 'ระบุหมายเหตุ (ถ้ามี)'),
               style: const TextStyle(fontSize: 14),
               maxLines: 2,
             ),
@@ -337,14 +354,14 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
               ? const SizedBox(width: 14, height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.preview, size: 16),
-          label: const Text('คำนวณ Preview'),
+          label: Text(isEnglish ? 'Calculate Preview' : 'คำนวณ Preview'),
           onPressed: _isPreviewing ? null : _preview,
         ),
         const SizedBox(width: 12),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: Colors.teal),
           onPressed: _isPreviewing ? null : _save,
-          child: const Text('บันทึก Draft'),
+          child: Text(isEnglish ? 'Save Draft' : 'บันทึก Draft'),
         ),
       ]),
 
@@ -357,6 +374,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
       ],
     ]),
   );
+  }
 
   Widget _labelField(String label, Widget child) => Row(
     mainAxisSize: MainAxisSize.min,
@@ -368,7 +386,9 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
     ],
   );
 
-  Widget _buildPreviewSummary() => Container(
+  Widget _buildPreviewSummary() {
+    final isEnglish = _isEnglish;
+    return Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: Colors.teal[50],
@@ -376,37 +396,39 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
       border: Border.all(color: Colors.teal[200]!),
     ),
     child: Column(children: [
-      _sumRow('ยอดที่ควรเป็น', _previewTotal),
-      _sumRow('ยอดสะสมที่มีอยู่แล้ว', _previewPrior),
+      _sumRow(isEnglish ? 'Required Allowance' : 'ยอดที่ควรเป็น', _previewTotal),
+      _sumRow(isEnglish ? 'Existing Accumulated Balance' : 'ยอดสะสมที่มีอยู่แล้ว', _previewPrior),
       const Divider(),
-      _sumRow('ยอดที่ต้องบันทึกเพิ่ม (GL)', _previewAdj, bold: true,
+      _sumRow(isEnglish ? 'Additional GL Entry Amount' : 'ยอดที่ต้องบันทึกเพิ่ม (GL)', _previewAdj, bold: true,
           color: _previewAdj >= 0 ? Colors.teal : Colors.red),
     ]),
   );
+  }
 
   Widget _buildPreviewTable() {
+    final isEnglish = _isEnglish;
     final table = DataTable(
       headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
       columnSpacing: 14,
       dataRowMinHeight: 36,
       dataRowMaxHeight: 48,
-      columns: const [
-        DataColumn(label: Text('รหัสลูกหนี้')),
-        DataColumn(label: Text('ชื่อลูกหนี้')),
-        DataColumn(label: Text('ใบแจ้งหนี้')),
-        DataColumn(label: Text('อ้างอิง')),
-        DataColumn(label: Text('ครบกำหนด')),
-        DataColumn(label: Text('อายุ (วัน)'),  numeric: true),
-        DataColumn(label: Text('ยอดค้าง'),     numeric: true),
-        DataColumn(label: Text('% สำรอง'),     numeric: true),
-        DataColumn(label: Text('ยอดสำรอง'),   numeric: true),
+      columns: [
+        DataColumn(label: Text(isEnglish ? 'Customer Code' : 'รหัสลูกหนี้')),
+        DataColumn(label: Text(isEnglish ? 'Customer Name' : 'ชื่อลูกหนี้')),
+        DataColumn(label: Text(isEnglish ? 'Invoice' : 'ใบแจ้งหนี้')),
+        DataColumn(label: Text(isEnglish ? 'Reference' : 'อ้างอิง')),
+        DataColumn(label: Text(isEnglish ? 'Due Date' : 'ครบกำหนด')),
+        DataColumn(label: Text(isEnglish ? 'Age (days)' : 'อายุ (วัน)'),  numeric: true),
+        DataColumn(label: Text(isEnglish ? 'Balance' : 'ยอดค้าง'),     numeric: true),
+        DataColumn(label: Text(isEnglish ? '% Reserve' : '% สำรอง'),     numeric: true),
+        DataColumn(label: Text(isEnglish ? 'Reserve Amount' : 'ยอดสำรอง'),   numeric: true),
       ],
       rows: _previewDetails.map((d) => DataRow(cells: [
         DataCell(Text(d['customer_code']?.toString() ?? '',
             style: const TextStyle(fontSize: 12))),
         DataCell(SizedBox(
           width: 160,
-          child: Text(d['customer_name_th']?.toString() ?? '',
+          child: Text(_customerNameOf(d),
               style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
         )),
         DataCell(Text(d['doc_no']?.toString() ?? '',
@@ -433,10 +455,10 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
           child: Row(children: [
-            const Text('ผลการคำนวณ',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(isEnglish ? 'Calculation Result' : 'ผลการคำนวณ',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(width: 12),
-            Text('${_previewDetails.length} รายการ',
+            Text(isEnglish ? '${_previewDetails.length} items' : '${_previewDetails.length} รายการ',
                 style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           ]),
         ),
@@ -473,14 +495,16 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
 
   // ── Detail view ───────────────────────────────────────────────────────────
 
-  Widget _buildDetail(ArAllowanceRunHeader row) => Column(children: [
+  Widget _buildDetail(ArAllowanceRunHeader row) {
+    final isEnglish = _isEnglish;
+    return Column(children: [
     Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: Colors.grey[50],
       child: Row(children: [
-        _infoChip('วันที่', _dateFmt.format(row.runDate)),
+        _infoChip(isEnglish ? 'Date' : 'วันที่', _dateFmt.format(row.runDate)),
         const SizedBox(width: 24),
-        _infoChip('ปีบัญชี', row.periodYear.toString()),
+        _infoChip(isEnglish ? 'Fiscal Year' : 'ปีบัญชี', row.periodYear.toString()),
         const SizedBox(width: 24),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -516,11 +540,11 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       color: Colors.teal[50],
       child: Row(children: [
-        _summaryCell('ยอดที่ควรเป็น', row.totalAllowance),
+        _summaryCell(isEnglish ? 'Required Allowance' : 'ยอดที่ควรเป็น', row.totalAllowance),
         const SizedBox(width: 32),
-        _summaryCell('ยอดสะสมเดิม', row.priorAllowance),
+        _summaryCell(isEnglish ? 'Prior Accumulated Balance' : 'ยอดสะสมเดิม', row.priorAllowance),
         const SizedBox(width: 32),
-        _summaryCell('บันทึก GL', row.adjustmentAmount,
+        _summaryCell(isEnglish ? 'GL Entry Amount' : 'บันทึก GL', row.adjustmentAmount,
             color: row.adjustmentAmount >= 0 ? Colors.teal : Colors.red),
         if (row.glDocNo != null) ...[
           const SizedBox(width: 32),
@@ -555,16 +579,16 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
                     child: DataTable(
                       headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
                       columnSpacing: 14,
-                      columns: const [
-                        DataColumn(label: Text('รหัสลูกหนี้')),
-                        DataColumn(label: Text('ชื่อลูกหนี้')),
-                        DataColumn(label: Text('ใบแจ้งหนี้')),
-                        DataColumn(label: Text('อ้างอิง')),
-                        DataColumn(label: Text('ครบกำหนด')),
-                        DataColumn(label: Text('อายุ (วัน)'),  numeric: true),
-                        DataColumn(label: Text('ยอดค้าง'),     numeric: true),
-                        DataColumn(label: Text('% สำรอง'),     numeric: true),
-                        DataColumn(label: Text('ยอดสำรอง'),   numeric: true),
+                      columns: [
+                        DataColumn(label: Text(isEnglish ? 'Customer Code' : 'รหัสลูกหนี้')),
+                        DataColumn(label: Text(isEnglish ? 'Customer Name' : 'ชื่อลูกหนี้')),
+                        DataColumn(label: Text(isEnglish ? 'Invoice' : 'ใบแจ้งหนี้')),
+                        DataColumn(label: Text(isEnglish ? 'Reference' : 'อ้างอิง')),
+                        DataColumn(label: Text(isEnglish ? 'Due Date' : 'ครบกำหนด')),
+                        DataColumn(label: Text(isEnglish ? 'Age (days)' : 'อายุ (วัน)'),  numeric: true),
+                        DataColumn(label: Text(isEnglish ? 'Balance' : 'ยอดค้าง'),     numeric: true),
+                        DataColumn(label: Text(isEnglish ? '% Reserve' : '% สำรอง'),     numeric: true),
+                        DataColumn(label: Text(isEnglish ? 'Reserve Amount' : 'ยอดสำรอง'),   numeric: true),
                       ],
                       rows: [
                         ..._details.map((d) => DataRow(cells: [
@@ -572,7 +596,10 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
                               style: const TextStyle(fontSize: 12))),
                           DataCell(SizedBox(
                             width: 160,
-                            child: Text(d.customerNameTh ?? '',
+                            child: Text(
+                                isEnglish && (d.customerNameEn ?? '').isNotEmpty
+                                    ? d.customerNameEn!
+                                    : (d.customerNameTh ?? ''),
                                 style: const TextStyle(fontSize: 12),
                                 overflow: TextOverflow.ellipsis),
                           )),
@@ -596,8 +623,8 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
                         DataRow(
                           color: WidgetStateProperty.all(Colors.teal[50]),
                           cells: [
-                            const DataCell(Text('รวม',
-                                style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataCell(Text(isEnglish ? 'Total' : 'รวม',
+                                style: const TextStyle(fontWeight: FontWeight.bold))),
                             const DataCell(SizedBox()), const DataCell(SizedBox()),
                             const DataCell(SizedBox()), const DataCell(SizedBox()),
                             const DataCell(SizedBox()), const DataCell(SizedBox()),
@@ -615,6 +642,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
             ),
     ),
   ]);
+  }
 
   Widget _sumRow(String label, double v, {bool bold = false, Color? color}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 3),
@@ -647,7 +675,8 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     super.build(context);
     return Scaffold(
       appBar: AppBar(
@@ -675,7 +704,9 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
                     padding: EdgeInsets.zero,
                     onPressed: () => setState(
                         () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                    tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                    tooltip: _isLeftPanelExpanded
+                        ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                        : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                   ),
                 ),
                 // Left panel (animated width)
@@ -715,10 +746,12 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
                       ? _buildCreateForm()
                       : _selectedRow != null
                           ? _buildDetail(_selectedRow!)
-                          : const Center(
+                          : Center(
                               child: Text(
-                                  'เลือกรายการทางซ้าย หรือกด "+ สร้างใหม่"',
-                                  style: TextStyle(color: Colors.grey))),
+                                  isEnglish
+                                      ? 'Select an entry on the left, or click "+ New"'
+                                      : 'เลือกรายการทางซ้าย หรือกด "+ สร้างใหม่"',
+                                  style: const TextStyle(color: Colors.grey))),
                 ),
               ]);
             }),

@@ -1,10 +1,12 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_module_document_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/ar_year_end.dart';
 import '../services/ar_year_end_service.dart';
 
@@ -24,6 +26,8 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
   late TabController _tabController;
   List<Account>        _accounts = [];
   List<ModuleDocument> _glDocs   = [];
+
+  bool _isEnglish = false;
 
   // Setup fields
   int? _fxGainId, _fxLossId, _ufxGainId, _ufxLossId;
@@ -95,8 +99,15 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
       ? null
       : _glDocs.cast<ModuleDocument?>().firstWhere((d) => d?.id == id, orElse: () => null);
 
+  String _accountLabel(Account a) =>
+      _isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
+
+  String _docLabel(ModuleDocument d) =>
+      _isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai;
+
   // ── Account picker dialog ─────────────────────────────────────────────────
   Future<Account?> _pickAccount(String title) async {
+    final isEnglish = _isEnglish;
     final searchCtrl = TextEditingController();
     List<Account> filtered = List.from(_accounts);
     Account? picked;
@@ -111,7 +122,8 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
                 ? List.from(_accounts)
                 : _accounts.where((a) =>
                     a.accountCode.toLowerCase().contains(lq) ||
-                    a.accountNameThai.toLowerCase().contains(lq)).toList();
+                    a.accountNameThai.toLowerCase().contains(lq) ||
+                    a.accountNameEng.toLowerCase().contains(lq)).toList();
           });
         }
 
@@ -123,11 +135,11 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
               TextField(
                 controller: searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search account code / name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   isDense: true,
                 ),
                 onChanged: doFilter,
@@ -141,7 +153,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
                     final a = filtered[i];
                     return ListTile(
                       dense: true,
-                      title: Text('${a.accountCode}  ${a.accountNameThai}',
+                      title: Text('${a.accountCode}  ${_accountLabel(a)}',
                           style: const TextStyle(fontSize: 13)),
                       onTap: () { picked = a; Navigator.of(ctx).pop(); },
                     );
@@ -151,7 +163,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ],
         );
       }),
@@ -162,6 +174,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
 
   // ── GL Doc picker dialog ──────────────────────────────────────────────────
   Future<ModuleDocument?> _pickGlDoc() async {
+    final isEnglish = _isEnglish;
     final searchCtrl = TextEditingController();
     List<ModuleDocument> filtered = List.from(_glDocs);
     ModuleDocument? picked;
@@ -170,18 +183,18 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
         return AlertDialog(
-          title: const Text('เลือกประเภทเอกสาร GL'),
+          title: Text(isEnglish ? 'Select GL Document Type' : 'เลือกประเภทเอกสาร GL'),
           content: SizedBox(
             width: 480, height: 380,
             child: Column(children: [
               TextField(
                 controller: searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search' : 'ค้นหา',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   isDense: true,
                 ),
                 onChanged: (q) {
@@ -191,7 +204,8 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
                         ? List.from(_glDocs)
                         : _glDocs.where((d) =>
                             d.docCode.toLowerCase().contains(lq) ||
-                            d.docNameThai.toLowerCase().contains(lq)).toList();
+                            d.docNameThai.toLowerCase().contains(lq) ||
+                            d.docNameEng.toLowerCase().contains(lq)).toList();
                   });
                 },
               ),
@@ -204,7 +218,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
                     final d = filtered[i];
                     return ListTile(
                       dense: true,
-                      title: Text('${d.docCode}  ${d.docNameThai}',
+                      title: Text('${d.docCode}  ${_docLabel(d)}',
                           style: const TextStyle(fontSize: 13)),
                       onTap: () { picked = d; Navigator.of(ctx).pop(); },
                     );
@@ -214,7 +228,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ],
         );
       }),
@@ -224,6 +238,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
   }
 
   Future<void> _saveSetup() async {
+    final isEnglish = _isEnglish;
     setState(() => _isSaving = true);
     try {
       final s = ArYearEndSetup(
@@ -237,7 +252,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
         allowanceGlDocId:          _allowDocId   == 0 ? null : _allowDocId,
       );
       await _svc.saveSetup(s);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ'), backgroundColor: Colors.teal));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ'), backgroundColor: Colors.teal));
     } catch (e) {
       if (mounted) _showError(e.toString());
     } finally {
@@ -246,10 +261,11 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
   }
 
   Future<void> _saveRules() async {
+    final isEnglish = _isEnglish;
     setState(() => _isSaving = true);
     try {
       await _svc.saveAllowanceRules(_rules);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ'), backgroundColor: Colors.teal));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ'), backgroundColor: Colors.teal));
     } catch (e) {
       if (mounted) _showError(e.toString());
     } finally {
@@ -264,6 +280,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
     required String dialogTitle,
     required void Function(int?) onChanged,
   }) {
+    final isEnglish = _isEnglish;
     final acc = _findAccount(selectedId);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -285,7 +302,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
               child: Row(children: [
                 Expanded(
                   child: Text(
-                    acc != null ? '${acc.accountCode}  ${acc.accountNameThai}' : '-- ไม่ได้ตั้งค่า --',
+                    acc != null ? '${acc.accountCode}  ${_accountLabel(acc)}' : (isEnglish ? '-- Not configured --' : '-- ไม่ได้ตั้งค่า --'),
                     style: TextStyle(
                       fontSize: 14,
                       color: acc != null ? Colors.black87 : Colors.grey[500],
@@ -309,6 +326,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
   }
 
   Widget _docPickerField(String label, int? selectedId, void Function(int?) onChanged) {
+    final isEnglish = _isEnglish;
     final doc = _findDoc(selectedId);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -330,7 +348,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
               child: Row(children: [
                 Expanded(
                   child: Text(
-                    doc != null ? '${doc.docCode}  ${doc.docNameThai}' : '-- ไม่ได้ตั้งค่า --',
+                    doc != null ? '${doc.docCode}  ${_docLabel(doc)}' : (isEnglish ? '-- Not configured --' : '-- ไม่ได้ตั้งค่า --'),
                     style: TextStyle(
                       fontSize: 14,
                       color: doc != null ? Colors.black87 : Colors.grey[500],
@@ -353,50 +371,64 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
     );
   }
 
-  Widget _buildSetupTab() => SingleChildScrollView(
-    padding: const EdgeInsets.all(24),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _sectionHeader('ปรับมูลค่าหนี้จากอัตราแลกเปลี่ยนแบบ Realized', 'บัญชีกำไร/ขาดทุนจากอัตราแลกเปลี่ยนที่ปรับจริง'),
-      _accountPickerField('บัญชีกำไรอัตราแลกเปลี่ยน', _fxGainId,
-          dialogTitle: 'บัญชีกำไรอัตราแลกเปลี่ยน',
-          onChanged: (v) => setState(() => _fxGainId = v)),
-      _accountPickerField('บัญชีขาดทุนอัตราแลกเปลี่ยน', _fxLossId,
-          dialogTitle: 'บัญชีขาดทุนอัตราแลกเปลี่ยน',
-          onChanged: (v) => setState(() => _fxLossId = v)),
-      const SizedBox(height: 8),
-      _sectionHeader('ปรับมูลค่าหนี้จากอัตราแลกเปลี่ยนแบบ Reversing', 'บัญชีกำไร/ขาดทุนจากอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง (กลับรายการต้นงวดใหม่)'),
-      _accountPickerField('บัญชีกำไรอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง', _ufxGainId,
-          dialogTitle: 'บัญชีกำไรอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง',
-          onChanged: (v) => setState(() => _ufxGainId = v)),
-      _accountPickerField('บัญชีขาดทุนอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง', _ufxLossId,
-          dialogTitle: 'บัญชีขาดทุนอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง',
-          onChanged: (v) => setState(() => _ufxLossId = v)),
-      const SizedBox(height: 8),
-      _sectionHeader('ค่าเผื่อหนี้สงสัยจะสูญ', 'บัญชีค่าเผื่อหนี้สงสัยจะสูญ'),
-      _accountPickerField('บัญชีค่าเผื่อหนี้สงสัยจะสูญ (ค่าใช้จ่าย)', _allowExpId,
-          dialogTitle: 'บัญชีค่าเผื่อหนี้สงสัยจะสูญ (ค่าใช้จ่าย)',
-          onChanged: (v) => setState(() => _allowExpId = v)),
-      _accountPickerField('บัญชีค่าเผื่อหนี้สงสัยจะสูญสะสม (contra)', _allowContraId,
-          dialogTitle: 'บัญชีค่าเผื่อหนี้สงสัยจะสูญสะสม',
-          onChanged: (v) => setState(() => _allowContraId = v)),
-      const SizedBox(height: 8),
-      _sectionHeader('ประเภทเอกสารบัญชีแยกประเภท', 'ประเภทเอกสาร GL ที่ใช้สร้างรายการปรับปรุงในบัญชีแยกประเภท'),
-      _docPickerField('ประเภทเอกสารปรับมูลค่าหนี้จากอัตราแลกเปลี่ยน', _fxRevalDocId, (v) => setState(() => _fxRevalDocId = v)),
-      _docPickerField('ประเภทเอกสารปรับปรุงค่าเผื่อหนี้สงสัยจะสูญ', _allowDocId, (v) => setState(() => _allowDocId = v)),
-      const SizedBox(height: 24),
-      Align(
-        alignment: Alignment.centerRight,
-        child: FilledButton(
-          onPressed: _isSaving ? null : _saveSetup,
-          style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-          child: _isSaving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Text('บันทึก'),
+  Widget _buildSetupTab() {
+    final isEnglish = _isEnglish;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader(
+            isEnglish ? 'Realized FX Revaluation' : 'ปรับมูลค่าหนี้จากอัตราแลกเปลี่ยนแบบ Realized',
+            isEnglish ? 'Realized FX gain/loss accounts' : 'บัญชีกำไร/ขาดทุนจากอัตราแลกเปลี่ยนที่ปรับจริง'),
+        _accountPickerField(isEnglish ? 'FX Gain Account' : 'บัญชีกำไรอัตราแลกเปลี่ยน', _fxGainId,
+            dialogTitle: isEnglish ? 'FX Gain Account' : 'บัญชีกำไรอัตราแลกเปลี่ยน',
+            onChanged: (v) => setState(() => _fxGainId = v)),
+        _accountPickerField(isEnglish ? 'FX Loss Account' : 'บัญชีขาดทุนอัตราแลกเปลี่ยน', _fxLossId,
+            dialogTitle: isEnglish ? 'FX Loss Account' : 'บัญชีขาดทุนอัตราแลกเปลี่ยน',
+            onChanged: (v) => setState(() => _fxLossId = v)),
+        const SizedBox(height: 8),
+        _sectionHeader(
+            isEnglish ? 'Reversing FX Revaluation' : 'ปรับมูลค่าหนี้จากอัตราแลกเปลี่ยนแบบ Reversing',
+            isEnglish
+                ? 'Unrealized FX gain/loss accounts (reversed at the start of the new period)'
+                : 'บัญชีกำไร/ขาดทุนจากอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง (กลับรายการต้นงวดใหม่)'),
+        _accountPickerField(isEnglish ? 'Unrealized FX Gain Account' : 'บัญชีกำไรอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง', _ufxGainId,
+            dialogTitle: isEnglish ? 'Unrealized FX Gain Account' : 'บัญชีกำไรอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง',
+            onChanged: (v) => setState(() => _ufxGainId = v)),
+        _accountPickerField(isEnglish ? 'Unrealized FX Loss Account' : 'บัญชีขาดทุนอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง', _ufxLossId,
+            dialogTitle: isEnglish ? 'Unrealized FX Loss Account' : 'บัญชีขาดทุนอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง',
+            onChanged: (v) => setState(() => _ufxLossId = v)),
+        const SizedBox(height: 8),
+        _sectionHeader(
+            isEnglish ? 'Allowance for Doubtful Accounts' : 'ค่าเผื่อหนี้สงสัยจะสูญ',
+            isEnglish ? 'Allowance for doubtful accounts' : 'บัญชีค่าเผื่อหนี้สงสัยจะสูญ'),
+        _accountPickerField(isEnglish ? 'Allowance Expense Account' : 'บัญชีค่าเผื่อหนี้สงสัยจะสูญ (ค่าใช้จ่าย)', _allowExpId,
+            dialogTitle: isEnglish ? 'Allowance Expense Account' : 'บัญชีค่าเผื่อหนี้สงสัยจะสูญ (ค่าใช้จ่าย)',
+            onChanged: (v) => setState(() => _allowExpId = v)),
+        _accountPickerField(isEnglish ? 'Allowance Contra Account' : 'บัญชีค่าเผื่อหนี้สงสัยจะสูญสะสม (contra)', _allowContraId,
+            dialogTitle: isEnglish ? 'Allowance Contra Account' : 'บัญชีค่าเผื่อหนี้สงสัยจะสูญสะสม',
+            onChanged: (v) => setState(() => _allowContraId = v)),
+        const SizedBox(height: 8),
+        _sectionHeader(
+            isEnglish ? 'GL Document Types' : 'ประเภทเอกสารบัญชีแยกประเภท',
+            isEnglish ? 'GL document types used to create adjustment entries' : 'ประเภทเอกสาร GL ที่ใช้สร้างรายการปรับปรุงในบัญชีแยกประเภท'),
+        _docPickerField(isEnglish ? 'FX Revaluation Document Type' : 'ประเภทเอกสารปรับมูลค่าหนี้จากอัตราแลกเปลี่ยน', _fxRevalDocId, (v) => setState(() => _fxRevalDocId = v)),
+        _docPickerField(isEnglish ? 'Allowance Adjustment Document Type' : 'ประเภทเอกสารปรับปรุงค่าเผื่อหนี้สงสัยจะสูญ', _allowDocId, (v) => setState(() => _allowDocId = v)),
+        const SizedBox(height: 24),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton(
+            onPressed: _isSaving ? null : _saveSetup,
+            style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+            child: _isSaving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Text(isEnglish ? 'Save' : 'บันทึก'),
+          ),
         ),
-      ),
-    ]),
-  );
+      ]),
+    );
+  }
 
   Widget _buildRulesTab() {
+    final isEnglish = _isEnglish;
     final fmt = NumberFormat('#,##0.00', 'en_US');
     return Column(children: [
       Expanded(
@@ -405,12 +437,12 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
           child: Column(children: [
             DataTable(
               headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
-              columns: const [
-                DataColumn(label: Text('อายุหนี้ตั้งแต่ (วัน)')),
-                DataColumn(label: Text('อายุหนี้ถึง (วัน)')),
-                DataColumn(label: Text('% สำรอง')),
-                DataColumn(label: Text('ใช้งาน')),
-                DataColumn(label: SizedBox()),
+              columns: [
+                DataColumn(label: Text(isEnglish ? 'Age From (days)' : 'อายุหนี้ตั้งแต่ (วัน)')),
+                DataColumn(label: Text(isEnglish ? 'Age To (days)' : 'อายุหนี้ถึง (วัน)')),
+                DataColumn(label: Text(isEnglish ? '% Reserve' : '% สำรอง')),
+                DataColumn(label: Text(isEnglish ? 'Active' : 'ใช้งาน')),
+                const DataColumn(label: SizedBox()),
               ],
               rows: _rules.asMap().entries.map((e) {
                 final i = e.key;
@@ -425,7 +457,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
                       ageToDays: v.isEmpty ? null : int.tryParse(v),
                       rate: r.rate, sortOrder: r.sortOrder, isActive: r.isActive,
                     ));
-                  }, hint: 'ไม่จำกัด')),
+                  }, hint: isEnglish ? 'Unlimited' : 'ไม่จำกัด')),
                   DataCell(_numField(fmt.format(r.rate), (v) {
                     setState(() => _rules[i] = r.copyWith(rate: double.tryParse(v.replaceAll(',', '')) ?? r.rate));
                   })),
@@ -448,7 +480,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
         child: Row(children: [
           OutlinedButton.icon(
             icon: const Icon(Icons.add, size: 16),
-            label: const Text('เพิ่มแถว'),
+            label: Text(isEnglish ? 'Add row' : 'เพิ่มแถว'),
             onPressed: () => setState(() => _rules.add(ArAllowanceRule(
               ageFromDays: 0, rate: 0, sortOrder: _rules.length,
             ))),
@@ -457,7 +489,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
           FilledButton(
             onPressed: _isSaving ? null : _saveRules,
             style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-            child: const Text('บันทึก'),
+            child: Text(isEnglish ? 'Save' : 'บันทึก'),
           ),
         ]),
       ),
@@ -488,6 +520,8 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -498,9 +532,9 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.teal[100],
           indicatorColor: Colors.white,
-          tabs: const [
-            Tab(text: 'ตั้งค่าบัญชี'),
-            Tab(text: 'ตั้งกฎเกณฑ์สำรองหนี้'),
+          tabs: [
+            Tab(text: isEnglish ? 'Account Setup' : 'ตั้งค่าบัญชี'),
+            Tab(text: isEnglish ? 'Allowance Rules' : 'ตั้งกฎเกณฑ์สำรองหนี้'),
           ],
         ),
       ),

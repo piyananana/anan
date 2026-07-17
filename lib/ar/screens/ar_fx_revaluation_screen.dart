@@ -1,6 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/ar_year_end.dart';
 import '../services/ar_year_end_service.dart';
 
@@ -17,6 +19,8 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
   final _fmt     = NumberFormat('#,##0.00', 'en_US');
   final _rateFmt = NumberFormat('#,##0.000000', 'en_US');
   final _dateFmt = DateFormat('dd/MM/yyyy');
+
+  bool _isEnglish = false;
 
   List<ArFxRevaluationHeader> _rows = [];
   bool _isLoading = true;
@@ -131,8 +135,9 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
   }
 
   Future<void> _preview() async {
+    final isEnglish = _isEnglish;
     final rates = _buildRates();
-    if (rates.isEmpty) { _showError('กรุณาใส่อัตราแลกเปลี่ยน ณ สิ้นปีอย่างน้อย 1 สกุล'); return; }
+    if (rates.isEmpty) { _showError(isEnglish ? 'Please enter the year-end exchange rate for at least 1 currency' : 'กรุณาใส่อัตราแลกเปลี่ยน ณ สิ้นปีอย่างน้อย 1 สกุล'); return; }
     setState(() => _isPreviewing = true);
     try {
       final data = await _svc.previewReval(
@@ -148,8 +153,9 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
   }
 
   Future<void> _save() async {
+    final isEnglish = _isEnglish;
     final rates = _buildRates();
-    if (rates.isEmpty) { _showError('กรุณาใส่อัตราแลกเปลี่ยน ณ สิ้นปีอย่างน้อย 1 สกุล'); return; }
+    if (rates.isEmpty) { _showError(isEnglish ? 'Please enter the year-end exchange rate for at least 1 currency' : 'กรุณาใส่อัตราแลกเปลี่ยน ณ สิ้นปีอย่างน้อย 1 สกุล'); return; }
     setState(() => _isPreviewing = true);
     try {
       final id = await _svc.createReval(
@@ -165,13 +171,14 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
       final newRow = _rows.firstWhere((r) => r.id == id);
       await _selectRow(newRow);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('บันทึก Draft สำเร็จ'), backgroundColor: Colors.teal));
+          SnackBar(content: Text(isEnglish ? 'Draft saved successfully' : 'บันทึก Draft สำเร็จ'), backgroundColor: Colors.teal));
     } catch (e) { _showError(e.toString()); }
     finally { setState(() => _isPreviewing = false); }
   }
 
   Future<void> _deleteDraft(int id) async {
-    final ok = await _confirm('ลบ Draft รายการนี้?');
+    final isEnglish = _isEnglish;
+    final ok = await _confirm(isEnglish ? 'Delete this Draft?' : 'ลบ Draft รายการนี้?');
     if (!ok) return;
     try {
       await _svc.deleteReval(id);
@@ -181,7 +188,8 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
   }
 
   Future<void> _post(int id) async {
-    final ok = await _confirm('Post รายการนี้และสร้าง GL entry?');
+    final isEnglish = _isEnglish;
+    final ok = await _confirm(isEnglish ? 'Post this entry and create a GL entry?' : 'Post รายการนี้และสร้าง GL entry?');
     if (!ok) return;
     try {
       await _svc.postReval(id);
@@ -192,7 +200,8 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
   }
 
   Future<void> _void(int id) async {
-    final ok = await _confirm('ยกเลิกรายการนี้? GL entry จะถูก reverse');
+    final isEnglish = _isEnglish;
+    final ok = await _confirm(isEnglish ? 'Void this entry? The GL entry will be reversed' : 'ยกเลิกรายการนี้? GL entry จะถูก reverse');
     if (!ok) return;
     try {
       await _svc.voidReval(id);
@@ -202,21 +211,24 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
     } catch (e) { _showError(e.toString()); }
   }
 
-  Future<bool> _confirm(String msg) async => await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('ยืนยัน'),
-      content: Text(msg),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-          child: const Text('ยืนยัน'),
-        ),
-      ],
-    ),
-  ) ?? false;
+  Future<bool> _confirm(String msg) async {
+    final isEnglish = _isEnglish;
+    return await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Confirm' : 'ยืนยัน'),
+        content: Text(msg),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+            child: Text(isEnglish ? 'Confirm' : 'ยืนยัน'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
 
   void _showError(String msg) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
@@ -224,90 +236,101 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
   Color _statusColor(String s) =>
       s == 'Posted' ? Colors.teal : s == 'Void' ? Colors.red : Colors.orange;
 
+  String _customerNameOf(Map<String, dynamic> d) {
+    final en = d['customer_name_en']?.toString();
+    if (_isEnglish && en != null && en.isNotEmpty) return en;
+    return d['customer_name_th']?.toString() ?? '';
+  }
+
   // ── Left panel ────────────────────────────────────────────────────────────
 
-  Widget _buildLeftPanel() => Column(children: [
-    Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      color: Colors.teal[50],
-      width: double.infinity,
-      child: FilledButton.icon(
-        icon: const Icon(Icons.add, size: 16),
-        label: const Text('สร้างใหม่'),
-        style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-        onPressed: () {
-          setState(() { _isCreating = true; _selectedRow = null; });
-          _loadOutstandingCurrencies();
-        },
+  Widget _buildLeftPanel() {
+    final isEnglish = _isEnglish;
+    return Column(children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        color: Colors.teal[50],
+        width: double.infinity,
+        child: FilledButton.icon(
+          icon: const Icon(Icons.add, size: 16),
+          label: Text(isEnglish ? 'New' : 'สร้างใหม่'),
+          style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+          onPressed: () {
+            setState(() { _isCreating = true; _selectedRow = null; });
+            _loadOutstandingCurrencies();
+          },
+        ),
       ),
-    ),
-    Expanded(
-      child: _rows.isEmpty
-          ? const Center(child: Text('ไม่มีรายการ', style: TextStyle(color: Colors.grey)))
-          : ListView.builder(
-              itemCount: _rows.length,
-              itemBuilder: (ctx, i) {
-                final r = _rows[i];
-                final selected = _selectedRow?.id == r.id;
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  color: selected ? Colors.teal[50] : null,
-                  shape: selected
-                      ? RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: BorderSide(color: Colors.teal.shade400, width: 1.5))
-                      : null,
-                  child: ListTile(
-                    dense: true,
-                    onTap: () => _selectRow(r),
-                    title: Text(_dateFmt.format(r.revalDate),
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13,
-                            color: selected ? Colors.teal[800] : null)),
-                    subtitle: Row(children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: _statusColor(r.status).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(4),
+      Expanded(
+        child: _rows.isEmpty
+            ? Center(child: Text(isEnglish ? 'No entries' : 'ไม่มีรายการ', style: const TextStyle(color: Colors.grey)))
+            : ListView.builder(
+                itemCount: _rows.length,
+                itemBuilder: (ctx, i) {
+                  final r = _rows[i];
+                  final selected = _selectedRow?.id == r.id;
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    color: selected ? Colors.teal[50] : null,
+                    shape: selected
+                        ? RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: Colors.teal.shade400, width: 1.5))
+                        : null,
+                    child: ListTile(
+                      dense: true,
+                      onTap: () => _selectRow(r),
+                      title: Text(_dateFmt.format(r.revalDate),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13,
+                              color: selected ? Colors.teal[800] : null)),
+                      subtitle: Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: _statusColor(r.status).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(r.status,
+                              style: TextStyle(fontSize: 11, color: _statusColor(r.status))),
                         ),
-                        child: Text(r.status,
-                            style: TextStyle(fontSize: 11, color: _statusColor(r.status))),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(r.method == 'reversing' ? 'Reversing' : 'Realized',
-                          style: const TextStyle(fontSize: 11)),
-                    ]),
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(
-                        (r.totalFxGainLoss >= 0 ? '+' : '') + _fmt.format(r.totalFxGainLoss),
-                        style: TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.bold,
-                          color: r.totalFxGainLoss >= 0 ? Colors.teal : Colors.red,
-                        ),
-                      ),
-                      if (r.status == 'Draft') ...[
-                        const SizedBox(width: 4),
-                        InkWell(
-                          onTap: () => _deleteDraft(r.id),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(Icons.delete_outline, size: 16, color: Colors.red[400]),
+                        const SizedBox(width: 6),
+                        Text(r.method == 'reversing' ? 'Reversing' : 'Realized',
+                            style: const TextStyle(fontSize: 11)),
+                      ]),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text(
+                          (r.totalFxGainLoss >= 0 ? '+' : '') + _fmt.format(r.totalFxGainLoss),
+                          style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold,
+                            color: r.totalFxGainLoss >= 0 ? Colors.teal : Colors.red,
                           ),
                         ),
-                      ],
-                    ]),
-                  ),
-                );
-              },
-            ),
-    ),
-  ]);
+                        if (r.status == 'Draft') ...[
+                          const SizedBox(width: 4),
+                          InkWell(
+                            onTap: () => _deleteDraft(r.id),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(Icons.delete_outline, size: 16, color: Colors.red[400]),
+                            ),
+                          ),
+                        ],
+                      ]),
+                    ),
+                  );
+                },
+              ),
+      ),
+    ]);
+  }
 
   // ── Create form ───────────────────────────────────────────────────────────
 
-  Widget _buildCreateForm() => SingleChildScrollView(
+  Widget _buildCreateForm() {
+    final isEnglish = _isEnglish;
+    return SingleChildScrollView(
     padding: const EdgeInsets.all(16),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
@@ -316,11 +339,11 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('สร้างรายการปรับมูลค่าหนี้จากอัตราแลกเปลี่ยน',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal)),
+                  Text(isEnglish ? 'Create FX Revaluation Entry' : 'สร้างรายการปรับมูลค่าหนี้จากอัตราแลกเปลี่ยน',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal)),
                   const Divider(height: 20),
                   Wrap(spacing: 32, runSpacing: 12, children: [
-                    _labelField('ปีบัญชี', SizedBox(
+                    _labelField(isEnglish ? 'Fiscal Year' : 'ปีบัญชี', SizedBox(
                       width: 100,
                       child: DropdownButtonFormField<int>(
                         value: _periodYear,
@@ -334,7 +357,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                         onChanged: (v) => setState(() => _periodYear = v ?? _periodYear),
                       ),
                     )),
-                    _labelField('วันที่ปรับมูลค่า', InkWell(
+                    _labelField(isEnglish ? 'Revaluation Date' : 'วันที่ปรับมูลค่า', InkWell(
                       onTap: () async {
                         final d = await showDatePicker(context: context,
                             initialDate: _revalDate,
@@ -357,7 +380,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                   ]),
                   const SizedBox(height: 12),
                   Wrap(spacing: 32, runSpacing: 12, children: [
-                    _labelField('วิธีปรับมูลค่า', Row(mainAxisSize: MainAxisSize.min, children: [
+                    _labelField(isEnglish ? 'Method' : 'วิธีปรับมูลค่า', Row(mainAxisSize: MainAxisSize.min, children: [
                       Radio<String>(value: 'realized', groupValue: _method,
                           onChanged: (v) => setState(() => _method = v!),
                           activeColor: Colors.teal, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
@@ -369,7 +392,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                       const Text('Reversing', style: TextStyle(fontSize: 14)),
                     ])),
                     if (_method == 'reversing')
-                      _labelField('วันกลับรายการ', InkWell(
+                      _labelField(isEnglish ? 'Reversal Date' : 'วันกลับรายการ', InkWell(
                         onTap: () async {
                           final d = await showDatePicker(context: context,
                               initialDate: _reversalDate ?? DateTime(DateTime.now().year + 1, 1, 1),
@@ -399,8 +422,8 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                 padding: const EdgeInsets.all(16),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    const Text('อัตราแลกเปลี่ยน ณ วันที่  ',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    Text(isEnglish ? 'Exchange rate as of  ' : 'อัตราแลกเปลี่ยน ณ วันที่  ',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     Text(_dateFmt.format(_revalDate),
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal[700])),
                     if (_isFetchingCurrencies) ...[
@@ -410,7 +433,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                     ],
                   ]),
                   const SizedBox(height: 4),
-                  Text('แสดงเฉพาะสกุลเงินที่มีใบแจ้งหนี้ค้างชำระ ณ วันที่ดังกล่าว',
+                  Text(isEnglish ? 'Shows only currencies with outstanding invoices as of this date' : 'แสดงเฉพาะสกุลเงินที่มีใบแจ้งหนี้ค้างชำระ ณ วันที่ดังกล่าว',
                       style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                   const Divider(height: 20),
                   if (_isFetchingCurrencies)
@@ -429,7 +452,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                       child: Row(children: [
                         Icon(Icons.info_outline, color: Colors.orange[700], size: 18),
                         const SizedBox(width: 8),
-                        Text('ไม่พบใบแจ้งหนี้สกุลเงินต่างประเทศค้างชำระ ณ วันที่นี้',
+                        Text(isEnglish ? 'No outstanding foreign currency invoices found as of this date' : 'ไม่พบใบแจ้งหนี้สกุลเงินต่างประเทศค้างชำระ ณ วันที่นี้',
                             style: TextStyle(fontSize: 14, color: Colors.orange[700])),
                       ]),
                     )
@@ -449,16 +472,16 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('หมายเหตุ',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(isEnglish ? 'Note' : 'หมายเหตุ',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: _noteCtrl,
-                    decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        hintText: 'ระบุหมายเหตุ (ถ้ามี)'),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                        hintText: isEnglish ? 'Enter a note (optional)' : 'ระบุหมายเหตุ (ถ้ามี)'),
                     style: const TextStyle(fontSize: 14),
                     maxLines: 2,
                   ),
@@ -474,7 +497,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                     ? const SizedBox(width: 14, height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.preview, size: 16),
-                label: const Text('คำนวณ Preview'),
+                label: Text(isEnglish ? 'Calculate Preview' : 'คำนวณ Preview'),
                 onPressed: (_isPreviewing || _isFetchingCurrencies || _outstandingCurrencies.isEmpty)
                     ? null : _preview,
               ),
@@ -483,7 +506,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                 style: FilledButton.styleFrom(backgroundColor: Colors.teal),
                 onPressed: (_isPreviewing || _isFetchingCurrencies || _outstandingCurrencies.isEmpty)
                     ? null : _save,
-                child: const Text('บันทึก Draft'),
+                child: Text(isEnglish ? 'Save Draft' : 'บันทึก Draft'),
               ),
             ]),
 
@@ -494,6 +517,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
       ],
     ]),
   );
+  }
 
   Widget _currencyRateField(Map<String, dynamic> c) => SizedBox(
     width: 220,
@@ -502,7 +526,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
         TextSpan(text: c['currency_code']?.toString() ?? '',
             style: const TextStyle(fontWeight: FontWeight.bold,
                 fontSize: 14, color: Colors.black87)),
-        TextSpan(text: '  ${c['currency_name_th'] ?? ''}',
+        TextSpan(text: '  ${(_isEnglish && (c['currency_name_en']?.toString() ?? '').isNotEmpty) ? c['currency_name_en'] : (c['currency_name_th'] ?? '')}',
             style: TextStyle(fontSize: 12, color: Colors.grey[600])),
       ])),
       const SizedBox(height: 4),
@@ -536,23 +560,24 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
   // Called inside SizedBox(height:420) so it always has bounded height.
 
   Widget _buildPreviewTable() {
+    final isEnglish = _isEnglish;
     final table = DataTable(
       headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
       columnSpacing: 16,
       dataRowMinHeight: 36,
       dataRowMaxHeight: 48,
-      columns: const [
-        DataColumn(label: Text('รหัสลูกหนี้')),
-        DataColumn(label: Text('ชื่อลูกหนี้')),
-        DataColumn(label: Text('ใบแจ้งหนี้')),
-        DataColumn(label: Text('อ้างอิง')),
-        DataColumn(label: Text('สกุลเงิน')),
-        DataColumn(label: Text('ยอดค้าง FC'),   numeric: true),
-        DataColumn(label: Text('Rate เดิม'),     numeric: true),
-        DataColumn(label: Text('ยอดก่อน THB'),  numeric: true),
-        DataColumn(label: Text('Rate ใหม่'),     numeric: true),
-        DataColumn(label: Text('ยอดหลัง THB'),  numeric: true),
-        DataColumn(label: Text('FX G/L'),        numeric: true),
+      columns: [
+        DataColumn(label: Text(isEnglish ? 'Customer Code' : 'รหัสลูกหนี้')),
+        DataColumn(label: Text(isEnglish ? 'Customer Name' : 'ชื่อลูกหนี้')),
+        DataColumn(label: Text(isEnglish ? 'Invoice' : 'ใบแจ้งหนี้')),
+        DataColumn(label: Text(isEnglish ? 'Reference' : 'อ้างอิง')),
+        DataColumn(label: Text(isEnglish ? 'Currency' : 'สกุลเงิน')),
+        DataColumn(label: Text(isEnglish ? 'Balance FC' : 'ยอดค้าง FC'),   numeric: true),
+        DataColumn(label: Text(isEnglish ? 'Original Rate' : 'Rate เดิม'),     numeric: true),
+        DataColumn(label: Text(isEnglish ? 'Amount Before THB' : 'ยอดก่อน THB'),  numeric: true),
+        DataColumn(label: Text(isEnglish ? 'New Rate' : 'Rate ใหม่'),     numeric: true),
+        DataColumn(label: Text(isEnglish ? 'Amount After THB' : 'ยอดหลัง THB'),  numeric: true),
+        const DataColumn(label: Text('FX G/L'),        numeric: true),
       ],
       rows: [
         ..._previewDetails.map((d) {
@@ -562,7 +587,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                 style: const TextStyle(fontSize: 12))),
             DataCell(SizedBox(
               width: 160,
-              child: Text(d['customer_name_th']?.toString() ?? '',
+              child: Text(_customerNameOf(d),
                   style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
             )),
             DataCell(Text(d['doc_no']?.toString() ?? '',
@@ -592,7 +617,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
         DataRow(
           color: WidgetStateProperty.all(Colors.teal[50]),
           cells: [
-            const DataCell(Text('รวม', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataCell(Text(isEnglish ? 'Total' : 'รวม', style: const TextStyle(fontWeight: FontWeight.bold))),
             const DataCell(SizedBox()), const DataCell(SizedBox()),
             const DataCell(SizedBox()), const DataCell(SizedBox()),
             const DataCell(SizedBox()), const DataCell(SizedBox()),
@@ -614,10 +639,10 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
           child: Row(children: [
-            const Text('ผลการคำนวณ',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(isEnglish ? 'Calculation Result' : 'ผลการคำนวณ',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(width: 12),
-            Text('${_previewDetails.length} รายการ',
+            Text(isEnglish ? '${_previewDetails.length} items' : '${_previewDetails.length} รายการ',
                 style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           ]),
         ),
@@ -658,16 +683,18 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
 
   // ── Detail view ───────────────────────────────────────────────────────────
 
-  Widget _buildDetail(ArFxRevaluationHeader row) => Column(children: [
+  Widget _buildDetail(ArFxRevaluationHeader row) {
+    final isEnglish = _isEnglish;
+    return Column(children: [
     Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: Colors.grey[50],
       child: Row(children: [
-        _infoChip('วันที่', _dateFmt.format(row.revalDate)),
+        _infoChip(isEnglish ? 'Date' : 'วันที่', _dateFmt.format(row.revalDate)),
         const SizedBox(width: 24),
-        _infoChip('ปีบัญชี', row.periodYear.toString()),
+        _infoChip(isEnglish ? 'Fiscal Year' : 'ปีบัญชี', row.periodYear.toString()),
         const SizedBox(width: 24),
-        _infoChip('วิธี', row.method == 'reversing' ? 'Reversing' : 'Realized'),
+        _infoChip(isEnglish ? 'Method' : 'วิธี', row.method == 'reversing' ? 'Reversing' : 'Realized'),
         const SizedBox(width: 24),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -738,17 +765,17 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                     child: DataTable(
                       headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
                       columnSpacing: 16,
-                      columns: const [
-                        DataColumn(label: Text('รหัสลูกหนี้')),
-                        DataColumn(label: Text('ชื่อลูกหนี้')),
-                        DataColumn(label: Text('ใบแจ้งหนี้')),
-                        DataColumn(label: Text('สกุลเงิน')),
-                        DataColumn(label: Text('ยอดค้าง FC'),    numeric: true),
-                        DataColumn(label: Text('Rate เดิม'),      numeric: true),
-                        DataColumn(label: Text('ยอดก่อน THB'),   numeric: true),
-                        DataColumn(label: Text('Rate ใหม่'),      numeric: true),
-                        DataColumn(label: Text('ยอดหลัง THB'),   numeric: true),
-                        DataColumn(label: Text('FX G/L'),         numeric: true),
+                      columns: [
+                        DataColumn(label: Text(isEnglish ? 'Customer Code' : 'รหัสลูกหนี้')),
+                        DataColumn(label: Text(isEnglish ? 'Customer Name' : 'ชื่อลูกหนี้')),
+                        DataColumn(label: Text(isEnglish ? 'Invoice' : 'ใบแจ้งหนี้')),
+                        DataColumn(label: Text(isEnglish ? 'Currency' : 'สกุลเงิน')),
+                        DataColumn(label: Text(isEnglish ? 'Balance FC' : 'ยอดค้าง FC'),    numeric: true),
+                        DataColumn(label: Text(isEnglish ? 'Original Rate' : 'Rate เดิม'),      numeric: true),
+                        DataColumn(label: Text(isEnglish ? 'Amount Before THB' : 'ยอดก่อน THB'),   numeric: true),
+                        DataColumn(label: Text(isEnglish ? 'New Rate' : 'Rate ใหม่'),      numeric: true),
+                        DataColumn(label: Text(isEnglish ? 'Amount After THB' : 'ยอดหลัง THB'),   numeric: true),
+                        const DataColumn(label: Text('FX G/L'),         numeric: true),
                       ],
                       rows: [
                         ..._details.map((d) {
@@ -758,7 +785,10 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                                 style: const TextStyle(fontSize: 12))),
                             DataCell(SizedBox(
                               width: 160,
-                              child: Text(d.customerNameTh ?? '',
+                              child: Text(
+                                  isEnglish && (d.customerNameEn ?? '').isNotEmpty
+                                      ? d.customerNameEn!
+                                      : (d.customerNameTh ?? ''),
                                   style: const TextStyle(fontSize: 12),
                                   overflow: TextOverflow.ellipsis),
                             )),
@@ -787,8 +817,8 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                         DataRow(
                           color: WidgetStateProperty.all(Colors.teal[50]),
                           cells: [
-                            const DataCell(Text('รวม',
-                                style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataCell(Text(isEnglish ? 'Total' : 'รวม',
+                                style: const TextStyle(fontWeight: FontWeight.bold))),
                             const DataCell(SizedBox()), const DataCell(SizedBox()),
                             const DataCell(SizedBox()), const DataCell(SizedBox()),
                             const DataCell(SizedBox()), const DataCell(SizedBox()),
@@ -810,6 +840,7 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
             ),
     ),
   ]);
+  }
 
   Widget _infoChip(String label, String value) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -823,6 +854,8 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -849,7 +882,9 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                     padding: EdgeInsets.zero,
                     onPressed: () => setState(
                         () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                    tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                    tooltip: _isLeftPanelExpanded
+                        ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                        : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
                   ),
                 ),
                 // Left panel (animated width)
@@ -889,10 +924,12 @@ class _ArFxRevaluationScreenState extends State<ArFxRevaluationScreen>
                       ? _buildCreateForm()
                       : _selectedRow != null
                           ? _buildDetail(_selectedRow!)
-                          : const Center(
+                          : Center(
                               child: Text(
-                                  'เลือกรายการทางซ้าย หรือกด "+ สร้างใหม่"',
-                                  style: TextStyle(color: Colors.grey))),
+                                  isEnglish
+                                      ? 'Select an entry on the left, or click "+ New"'
+                                      : 'เลือกรายการทางซ้าย หรือกด "+ สร้างใหม่"',
+                                  style: const TextStyle(color: Colors.grey))),
                 ),
               ]);
             }),

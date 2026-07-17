@@ -1,6 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/ar_year_end.dart';
 import '../services/ar_year_end_service.dart';
 
@@ -15,6 +17,8 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
     with AutomaticKeepAliveClientMixin {
   final ArYearEndService _svc = ArYearEndService();
   final _fmt    = NumberFormat('#,##0.00', 'en_US');
+
+  bool _isEnglish = false;
 
   int               _periodYear = DateTime.now().year - 1;
   ArPreCloseResult? _result;
@@ -43,6 +47,7 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
     List<Map<String, dynamic>>? docs,
     bool isWarning = false,
   }) {
+    final isEnglish = _isEnglish;
     final icon = ok
         ? const Icon(Icons.check_circle, color: Colors.teal, size: 20)
         : isWarning
@@ -70,7 +75,7 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
               backgroundColor: Colors.orange[50],
             )).toList()
               ..addAll(docs.length > 5
-                  ? [Chip(label: Text('+${docs.length - 5} รายการ', style: const TextStyle(fontSize: 11)), padding: EdgeInsets.zero, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap)]
+                  ? [Chip(label: Text(isEnglish ? '+${docs.length - 5} items' : '+${docs.length - 5} รายการ', style: const TextStyle(fontSize: 11)), padding: EdgeInsets.zero, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap)]
                   : []),
           ),
         ),
@@ -82,6 +87,8 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     final r = _result;
     return Scaffold(
       appBar: AppBar(
@@ -97,7 +104,7 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(children: [
-                const Text('ปีที่ต้องการปิด:', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(isEnglish ? 'Year to close:' : 'ปีที่ต้องการปิด:', style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(width: 16),
                 SizedBox(
                   width: 100,
@@ -114,7 +121,7 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
                   icon: _isLoading
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.search, size: 16),
-                  label: const Text('ตรวจสอบ'),
+                  label: Text(isEnglish ? 'Check' : 'ตรวจสอบ'),
                   style: FilledButton.styleFrom(backgroundColor: Colors.teal),
                   onPressed: _isLoading ? null : _check,
                 ),
@@ -128,33 +135,35 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('ผลการตรวจสอบปี $_periodYear',
+                  Text(isEnglish ? 'Check result for year $_periodYear' : 'ผลการตรวจสอบปี $_periodYear',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   const Divider(height: 24),
                   _checkItem(
                     ok: r.draftCount == 0,
-                    label: 'ธุรกรรมสถานะ Draft ค้างอยู่',
-                    value: '${r.draftCount} รายการ',
+                    label: isEnglish ? 'Outstanding Draft transactions' : 'ธุรกรรมสถานะ Draft ค้างอยู่',
+                    value: isEnglish ? '${r.draftCount} items' : '${r.draftCount} รายการ',
                     docs: r.draftDocs,
                   ),
                   _checkItem(
                     ok: r.openBcCount == 0,
                     isWarning: true,
-                    label: 'ใบวางบิลที่ยังไม่ชำระ',
-                    value: '${r.openBcCount} ใบ',
+                    label: isEnglish ? 'Unpaid billing statements' : 'ใบวางบิลที่ยังไม่ชำระ',
+                    value: isEnglish ? '${r.openBcCount} items' : '${r.openBcCount} ใบ',
                     docs: r.openBcDocs,
                   ),
                   _checkItem(
                     ok: r.openAdvanceCount == 0,
                     isWarning: true,
-                    label: 'เงินมัดจำค้างอยู่',
-                    value: '${r.openAdvanceCount} รายการ',
+                    label: isEnglish ? 'Outstanding advance receipts' : 'เงินมัดจำค้างอยู่',
+                    value: isEnglish ? '${r.openAdvanceCount} items' : '${r.openAdvanceCount} รายการ',
                     docs: r.openAdvanceDocs,
                   ),
                   _checkItem(
                     ok: r.reconcileDiff < 1,
-                    label: 'ยันยอดลูกหนี้กับบัญชีแยกประเภท',
-                    value: r.reconcileDiff < 1 ? 'ตรงกัน ✓' : 'ผลต่าง ${_fmt.format(r.reconcileDiff)}',
+                    label: isEnglish ? 'Reconcile AR balance with GL' : 'ยันยอดลูกหนี้กับบัญชีแยกประเภท',
+                    value: r.reconcileDiff < 1
+                        ? (isEnglish ? 'Matched ✓' : 'ตรงกัน ✓')
+                        : (isEnglish ? 'Difference ${_fmt.format(r.reconcileDiff)}' : 'ผลต่าง ${_fmt.format(r.reconcileDiff)}'),
                   ),
                   // Reconcile detail
                   Container(
@@ -166,10 +175,10 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
                       border: Border.all(color: Colors.grey[300]!),
                     ),
                     child: Column(children: [
-                      _reconRow('ยอดลูกหนี้คงค้าง', r.arModuleBalance),
-                      _reconRow('ยอดลูกหนี้ในบัญชีแยกประเภท', r.glArBalance),
+                      _reconRow(isEnglish ? 'Outstanding AR balance' : 'ยอดลูกหนี้คงค้าง', r.arModuleBalance),
+                      _reconRow(isEnglish ? 'AR balance in GL' : 'ยอดลูกหนี้ในบัญชีแยกประเภท', r.glArBalance),
                       const Divider(height: 12),
-                      _reconRow('ผลต่าง', r.reconcileDiff,
+                      _reconRow(isEnglish ? 'Difference' : 'ผลต่าง', r.reconcileDiff,
                           bold: true,
                           color: r.reconcileDiff < 1 ? Colors.teal : Colors.red),
                     ]),
@@ -181,11 +190,13 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
                         color: Colors.red[50],
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(children: [
-                        Icon(Icons.block, color: Colors.red, size: 18),
-                        SizedBox(width: 8),
-                        Text('กรุณาแก้ไขธุรกรรมสถานะ Draft ก่อนดำเนินการต่อ',
-                            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                      child: Row(children: [
+                        const Icon(Icons.block, color: Colors.red, size: 18),
+                        const SizedBox(width: 8),
+                        Text(isEnglish
+                            ? 'Please resolve outstanding Draft transactions before proceeding'
+                            : 'กรุณาแก้ไขธุรกรรมสถานะ Draft ก่อนดำเนินการต่อ',
+                            style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                       ]),
                     )
                   else
@@ -195,11 +206,13 @@ class _ArPreCloseCheckScreenState extends State<ArPreCloseCheckScreen>
                         color: Colors.teal[50],
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(children: [
-                        Icon(Icons.check_circle, color: Colors.teal, size: 18),
-                        SizedBox(width: 8),
-                        Text('พร้อมดำเนินการปิดปี — ไปขั้นตอน ปรับมูลค่าหนี้ตามอัตราแลกเปลี่ยน หรือ สร้างรายการค่าเผื่อหนี้สงสัยจะสูญ',
-                            style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                      child: Row(children: [
+                        const Icon(Icons.check_circle, color: Colors.teal, size: 18),
+                        const SizedBox(width: 8),
+                        Text(isEnglish
+                            ? 'Ready to close the year — proceed to FX Revaluation or create Allowance for Doubtful Accounts entries'
+                            : 'พร้อมดำเนินการปิดปี — ไปขั้นตอน ปรับมูลค่าหนี้ตามอัตราแลกเปลี่ยน หรือ สร้างรายการค่าเผื่อหนี้สงสัยจะสูญ',
+                            style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
                       ]),
                     ),
                 ]),

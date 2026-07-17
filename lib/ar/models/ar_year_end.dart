@@ -223,6 +223,7 @@ class ArFxRevaluationDetail {
   final int customerId;
   final String? customerCode;
   final String? customerNameTh;
+  final String? customerNameEn;
   final String currencyCode;
   final double balanceAmountFc;
   final double originalRate;
@@ -239,6 +240,7 @@ class ArFxRevaluationDetail {
     required this.customerId,
     this.customerCode,
     this.customerNameTh,
+    this.customerNameEn,
     required this.currencyCode,
     required this.balanceAmountFc,
     required this.originalRate,
@@ -256,6 +258,7 @@ class ArFxRevaluationDetail {
     customerId:       _toInt(j['customer_id']),
     customerCode:     j['customer_code'],
     customerNameTh:   j['customer_name_th'],
+    customerNameEn:   j['customer_name_en'],
     currencyCode:     j['currency_code'] ?? '',
     balanceAmountFc:  _toDouble(j['balance_amount_fc']),
     originalRate:     _toDouble(j['original_rate']),
@@ -312,6 +315,7 @@ class ArAllowanceRunDetail {
   final int customerId;
   final String? customerCode;
   final String? customerNameTh;
+  final String? customerNameEn;
   final String? docNo;
   final String? refDocNo;
   final DateTime? docDate;
@@ -327,6 +331,7 @@ class ArAllowanceRunDetail {
     required this.customerId,
     this.customerCode,
     this.customerNameTh,
+    this.customerNameEn,
     this.docNo,
     this.refDocNo,
     this.docDate,
@@ -343,6 +348,7 @@ class ArAllowanceRunDetail {
     customerId:       _toInt(j['customer_id']),
     customerCode:     j['customer_code'],
     customerNameTh:   j['customer_name_th'],
+    customerNameEn:   j['customer_name_en'],
     docNo:            j['doc_no'],
     refDocNo:         j['ref_doc_no'],
     docDate:          _parseDate(j['doc_date']),
