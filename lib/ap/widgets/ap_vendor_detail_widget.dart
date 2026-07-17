@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../cd/models/cd_zipcode.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
@@ -15,6 +17,7 @@ import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
 import '../models/ap_vendor.dart';
 import '../services/ap_vendor_running_service.dart';
+import '../services/ap_vendor_group_service.dart';
 import '../widgets/ap_vendor_group_list_widget.dart';
 
 // ---------------------------------------------------------------------------
@@ -97,6 +100,7 @@ class _SectionState extends State<_Section> {
 Future<ApVendorAddress?> showAddressDialog(
     BuildContext context, ApVendorAddress? existing, bool readOnly,
     {ApVendorAddress? primaryAddress}) async {
+  final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
   final addrTypeCtrl = ValueNotifier<String>(existing?.addressType ?? 'billing');
   final noCtrl = TextEditingController(text: existing?.addressNo ?? '');
   final buildingCtrl = TextEditingController(text: existing?.addressBuildingVillage ?? '');
@@ -143,10 +147,10 @@ Future<ApVendorAddress?> showAddressDialog(
 
         return AlertDialog(
           title: Text(readOnly
-              ? 'ดูที่อยู่'
+              ? (isEnglish ? 'View Address' : 'ดูที่อยู่')
               : existing == null
-                  ? 'เพิ่มที่อยู่'
-                  : 'แก้ไขที่อยู่'),
+                  ? (isEnglish ? 'Add Address' : 'เพิ่มที่อยู่')
+                  : (isEnglish ? 'Edit Address' : 'แก้ไขที่อยู่')),
           content: SingleChildScrollView(
             child: SizedBox(
               width: 460,
@@ -160,7 +164,7 @@ Future<ApVendorAddress?> showAddressDialog(
                       child: CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
-                        title: const Text('ใช้ที่อยู่เดียวกับที่อยู่หลัก'),
+                        title: Text(isEnglish ? 'Use the same address as the primary address' : 'ใช้ที่อยู่เดียวกับที่อยู่หลัก'),
                         value: useSameAddress,
                         activeColor: Colors.teal,
                         onChanged: (v) {
@@ -178,15 +182,15 @@ Future<ApVendorAddress?> showAddressDialog(
                       child: DropdownButtonFormField<String>(
                         isExpanded: true,
                         value: v,
-                        decoration: const InputDecoration(
-                            labelText: 'ประเภทที่อยู่',
-                            border: OutlineInputBorder()),
-                        items: const [
-                          DropdownMenuItem(value: 'billing', child: Text('ที่อยู่ใบแจ้งหนี้')),
-                          DropdownMenuItem(value: 'shipping', child: Text('ที่อยู่จัดส่ง')),
-                          DropdownMenuItem(value: 'billing note', child: Text('ที่อยู่วางบิล')),
-                          DropdownMenuItem(value: 'payment', child: Text('ที่อยู่ชำระเงิน')),
-                          DropdownMenuItem(value: 'other', child: Text('อื่นๆ')),
+                        decoration: InputDecoration(
+                            labelText: isEnglish ? 'Address Type' : 'ประเภทที่อยู่',
+                            border: const OutlineInputBorder()),
+                        items: [
+                          DropdownMenuItem(value: 'billing', child: Text(isEnglish ? 'Billing Address' : 'ที่อยู่ใบแจ้งหนี้')),
+                          DropdownMenuItem(value: 'shipping', child: Text(isEnglish ? 'Shipping Address' : 'ที่อยู่จัดส่ง')),
+                          DropdownMenuItem(value: 'billing note', child: Text(isEnglish ? 'Billing Note Address' : 'ที่อยู่วางบิล')),
+                          DropdownMenuItem(value: 'payment', child: Text(isEnglish ? 'Payment Address' : 'ที่อยู่ชำระเงิน')),
+                          DropdownMenuItem(value: 'other', child: Text(isEnglish ? 'Other' : 'อื่นๆ')),
                         ],
                         onChanged: readOnly
                             ? null
@@ -197,14 +201,14 @@ Future<ApVendorAddress?> showAddressDialog(
                     ),
                   ),
                   Row(children: [
-                    Expanded(child: buildField('บ้านเลขที่ / ห้อง', noCtrl)),
+                    Expanded(child: buildField(isEnglish ? 'House No. / Room' : 'บ้านเลขที่ / ห้อง', noCtrl)),
                     const SizedBox(width: 8),
-                    Expanded(child: buildField('อาคาร / หมู่บ้าน', buildingCtrl)),
+                    Expanded(child: buildField(isEnglish ? 'Building / Village' : 'อาคาร / หมู่บ้าน', buildingCtrl)),
                   ]),
                   Row(children: [
-                    Expanded(child: buildField('ซอย', alleyCtrl)),
+                    Expanded(child: buildField(isEnglish ? 'Alley' : 'ซอย', alleyCtrl)),
                     const SizedBox(width: 8),
-                    Expanded(child: buildField('ถนน', roadCtrl)),
+                    Expanded(child: buildField(isEnglish ? 'Road' : 'ถนน', roadCtrl)),
                   ]),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -212,7 +216,7 @@ Future<ApVendorAddress?> showAddressDialog(
                       if (!readOnly)
                         IconButton(
                           icon: const Icon(Icons.search, color: Colors.blue),
-                          tooltip: 'ค้นหา ตำบล/แขวง, อำเภอ/เขต, จังหวัด, รหัสไปรษณีย์',
+                          tooltip: isEnglish ? 'Search sub-district, district, province, zip code' : 'ค้นหา ตำบล/แขวง, อำเภอ/เขต, จังหวัด, รหัสไปรษณีย์',
                           onPressed: () {
                             ZipcodeListWidget.search(
                               ctx,
@@ -229,25 +233,25 @@ Future<ApVendorAddress?> showAddressDialog(
                         child: Column(
                           children: [
                             Row(children: [
-                              Expanded(child: buildField('ตำบล / แขวง', subDistCtrl)),
+                              Expanded(child: buildField(isEnglish ? 'Sub-district' : 'ตำบล / แขวง', subDistCtrl)),
                               const SizedBox(width: 8),
-                              Expanded(child: buildField('อำเภอ / เขต', distCtrl)),
+                              Expanded(child: buildField(isEnglish ? 'District' : 'อำเภอ / เขต', distCtrl)),
                             ]),
                             Row(children: [
-                              Expanded(child: buildField('จังหวัด', provCtrl)),
+                              Expanded(child: buildField(isEnglish ? 'Province' : 'จังหวัด', provCtrl)),
                               const SizedBox(width: 8),
-                              Expanded(child: buildField('รหัสไปรษณีย์', zipCtrl)),
+                              Expanded(child: buildField(isEnglish ? 'Zip Code' : 'รหัสไปรษณีย์', zipCtrl)),
                             ]),
                           ],
                         ),
                       ),
                     ],
                   ),
-                  buildField('ประเทศ', countryCtrl),
+                  buildField(isEnglish ? 'Country' : 'ประเทศ', countryCtrl),
                   ValueListenableBuilder<bool>(
                     valueListenable: isDefaultNotifier,
                     builder: (_, v, __) => SwitchListTile(
-                      title: const Text('ที่อยู่หลัก'),
+                      title: Text(isEnglish ? 'Primary Address' : 'ที่อยู่หลัก'),
                       value: v,
                       onChanged: readOnly
                           ? null
@@ -278,11 +282,11 @@ Future<ApVendorAddress?> showAddressDialog(
                     isDefault: isDefaultNotifier.value,
                   ));
                 },
-                child: const Text('บันทึก'),
+                child: Text(isEnglish ? 'Save' : 'บันทึก'),
               ),
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('ปิด'),
+              child: Text(isEnglish ? 'Close' : 'ปิด'),
             ),
           ],
         );
@@ -296,6 +300,7 @@ Future<ApVendorAddress?> showAddressDialog(
 // ---------------------------------------------------------------------------
 Future<ApVendorContact?> showContactDialog(
     BuildContext context, ApVendorContact? existing, bool readOnly) async {
+  final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
   final nameCtrl = TextEditingController(text: existing?.contactName ?? '');
   final posCtrl = TextEditingController(text: existing?.position ?? '');
   final phoneCtrl = TextEditingController(text: existing?.phone ?? '');
@@ -307,10 +312,10 @@ Future<ApVendorContact?> showContactDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(readOnly
-          ? 'ดูผู้ติดต่อ'
+          ? (isEnglish ? 'View Contact' : 'ดูผู้ติดต่อ')
           : existing == null
-              ? 'เพิ่มผู้ติดต่อ'
-              : 'แก้ไขผู้ติดต่อ'),
+              ? (isEnglish ? 'Add Contact' : 'เพิ่มผู้ติดต่อ')
+              : (isEnglish ? 'Edit Contact' : 'แก้ไขผู้ติดต่อ')),
       content: SingleChildScrollView(
         child: SizedBox(
           width: 420,
@@ -320,15 +325,15 @@ Future<ApVendorContact?> showContactDialog(
               TextField(
                 readOnly: readOnly,
                 controller: nameCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'ชื่อผู้ติดต่อ *', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Contact Name *' : 'ชื่อผู้ติดต่อ *', border: const OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               TextField(
                 readOnly: readOnly,
                 controller: posCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'ตำแหน่ง', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Position' : 'ตำแหน่ง', border: const OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               Row(
@@ -337,8 +342,8 @@ Future<ApVendorContact?> showContactDialog(
                     child: TextField(
                       readOnly: readOnly,
                       controller: phoneCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'โทรศัพท์', border: OutlineInputBorder()),
+                      decoration: InputDecoration(
+                          labelText: isEnglish ? 'Phone' : 'โทรศัพท์', border: const OutlineInputBorder()),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -346,8 +351,8 @@ Future<ApVendorContact?> showContactDialog(
                     child: TextField(
                       readOnly: readOnly,
                       controller: mobileCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'มือถือ', border: OutlineInputBorder()),
+                      decoration: InputDecoration(
+                          labelText: isEnglish ? 'Mobile' : 'มือถือ', border: const OutlineInputBorder()),
                     ),
                   ),
                 ],
@@ -356,14 +361,14 @@ Future<ApVendorContact?> showContactDialog(
               TextField(
                 readOnly: readOnly,
                 controller: emailCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'อีเมล', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Email' : 'อีเมล', border: const OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               ValueListenableBuilder<bool>(
                 valueListenable: isDefaultNotifier,
                 builder: (_, v, __) => SwitchListTile(
-                  title: const Text('ผู้ติดต่อหลัก'),
+                  title: Text(isEnglish ? 'Primary Contact' : 'ผู้ติดต่อหลัก'),
                   value: v,
                   onChanged: readOnly
                       ? null
@@ -390,11 +395,11 @@ Future<ApVendorContact?> showContactDialog(
                 isDefault: isDefaultNotifier.value,
               ));
             },
-            child: const Text('บันทึก'),
+            child: Text(isEnglish ? 'Save' : 'บันทึก'),
           ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('ปิด'),
+          child: Text(isEnglish ? 'Close' : 'ปิด'),
         ),
       ],
     ),
@@ -528,13 +533,14 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = Provider.of<LanguageProvider>(context).isEnglish;
     final readOnly = widget.readOnly;
     return AlertDialog(
       title: Text(readOnly
-          ? 'ดูบัญชีธนาคาร'
+          ? (isEnglish ? 'View Bank Account' : 'ดูบัญชีธนาคาร')
           : widget.existing == null
-              ? 'เพิ่มบัญชีธนาคาร'
-              : 'แก้ไขบัญชีธนาคาร'),
+              ? (isEnglish ? 'Add Bank Account' : 'เพิ่มบัญชีธนาคาร')
+              : (isEnglish ? 'Edit Bank Account' : 'แก้ไขบัญชีธนาคาร')),
       content: SingleChildScrollView(
         child: SizedBox(
           width: 420,
@@ -543,7 +549,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
             children: [
               InputDecorator(
                 decoration: InputDecoration(
-                  labelText: 'ธนาคาร',
+                  labelText: isEnglish ? 'Bank' : 'ธนาคาร',
                   border: const OutlineInputBorder(),
                   suffixIcon: readOnly
                       ? null
@@ -553,7 +559,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
                             if (_bankDisplay.isNotEmpty)
                               IconButton(
                                 icon: const Icon(Icons.clear, size: 18),
-                                tooltip: 'ล้าง',
+                                tooltip: isEnglish ? 'Clear' : 'ล้าง',
                                 onPressed: () => setState(() {
                                   _selectedBank = null;
                                   _bankDisplay = '';
@@ -563,7 +569,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
                               ),
                             IconButton(
                               icon: const Icon(Icons.search, size: 18),
-                              tooltip: 'เลือกธนาคาร',
+                              tooltip: isEnglish ? 'Select bank' : 'เลือกธนาคาร',
                               onPressed: () async {
                                 await BankListWidget.search(context,
                                     onSelected: (bank) {
@@ -594,7 +600,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
                 controller: _branchCtrl,
                 readOnly: readOnly,
                 decoration: InputDecoration(
-                  labelText: 'สาขา',
+                  labelText: isEnglish ? 'Branch' : 'สาขา',
                   border: const OutlineInputBorder(),
                   suffixIcon: (!readOnly && _branchCtrl.text.isNotEmpty)
                       ? IconButton(
@@ -643,25 +649,25 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
               TextField(
                 readOnly: readOnly,
                 controller: _accNumCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'เลขที่บัญชี', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Account Number' : 'เลขที่บัญชี', border: const OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               TextField(
                 readOnly: readOnly,
                 controller: _accNameCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'ชื่อบัญชี', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Account Name' : 'ชื่อบัญชี', border: const OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 isExpanded: true,
                 value: _accType,
-                decoration: const InputDecoration(
-                    labelText: 'ประเภทบัญชี', border: OutlineInputBorder()),
-                items: const [
-                  DropdownMenuItem(value: 'current', child: Text('กระแสรายวัน')),
-                  DropdownMenuItem(value: 'savings', child: Text('ออมทรัพย์')),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Account Type' : 'ประเภทบัญชี', border: const OutlineInputBorder()),
+                items: [
+                  DropdownMenuItem(value: 'current', child: Text(isEnglish ? 'Current' : 'กระแสรายวัน')),
+                  DropdownMenuItem(value: 'savings', child: Text(isEnglish ? 'Savings' : 'ออมทรัพย์')),
                 ],
                 onChanged: readOnly
                     ? null
@@ -671,7 +677,7 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
               ),
               const SizedBox(height: 10),
               SwitchListTile(
-                title: const Text('บัญชีหลัก'),
+                title: Text(isEnglish ? 'Primary Account' : 'บัญชีหลัก'),
                 value: _isDefault,
                 onChanged: readOnly ? null : (val) => setState(() => _isDefault = val),
               ),
@@ -687,11 +693,11 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
                 ? const SizedBox(
                     width: 18, height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('บันทึก'),
+                : Text(isEnglish ? 'Save' : 'บันทึก'),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('ปิด'),
+          child: Text(isEnglish ? 'Close' : 'ปิด'),
         ),
       ],
     );
@@ -725,6 +731,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isSaving = false;
+  bool _isEnglish = false;
 
   late TextEditingController _codeCtrl;
   late TextEditingController _oldCodeCtrl;
@@ -757,13 +764,16 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   int? _vendorGroupId;
   String? _vendorGroupCode;
   String? _vendorGroupName;
+  String? _vendorGroupNameEng;
   int? _businessTypeId;
   String? _businessTypeCode;
   String? _businessTypeNameThai;
+  String? _businessTypeNameEng;
   String? _vendorType;
   int? _apAccountId;
   String? _apAccountCode;
   String? _apAccountNameThai;
+  String? _apAccountNameEng;
 
   List<ApVendorAddress> _addresses = [];
   List<ApVendorContact> _contacts = [];
@@ -781,8 +791,23 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _loadDropdowns();
     _loadCurrencies();
     _loadAutoNumberingConfig();
-    if (widget.selected != null) _populate(widget.selected!);
+    if (widget.selected != null) {
+      _populate(widget.selected!);
+      _fetchVendorGroupNameEng(widget.selected!.vendorGroupId);
+    }
     if (widget.selected == null) _loadDefaultCurrency();
+  }
+
+  // The persisted vendor record only stores the Thai vendor group name —
+  // fetch the group record to get the English name for bilingual display.
+  Future<void> _fetchVendorGroupNameEng(int? groupId) async {
+    if (groupId == null) return;
+    try {
+      final group = await ApVendorGroupService().fetchRow(groupId);
+      if (mounted && _vendorGroupId == groupId) {
+        setState(() => _vendorGroupNameEng = group.groupNameEng);
+      }
+    } catch (_) {}
   }
 
   void _initControllers() {
@@ -803,6 +828,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode) {
       if (widget.selected != null) {
         _populate(widget.selected!);
+        _fetchVendorGroupNameEng(widget.selected!.vendorGroupId);
       } else {
         _clear();
         _loadDefaultCurrency();
@@ -895,14 +921,17 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _vendorGroupId         = v.vendorGroupId;
     _vendorGroupCode       = v.vendorGroupCode;
     _vendorGroupName       = v.vendorGroupName;
+    _vendorGroupNameEng    = null;
     _vendorGroupIsAutoNumber = null;
     _businessTypeId        = v.businessTypeId;
     _businessTypeCode      = v.businessTypeCode;
     _businessTypeNameThai  = v.businessTypeNameThai;
+    _businessTypeNameEng   = null;
     _vendorType            = v.vendorType;
     _apAccountId           = v.apAccountId;
     _apAccountCode         = v.apAccountCode;
     _apAccountNameThai     = v.apAccountNameThai;
+    _apAccountNameEng      = null;
     _addresses   = List.from(v.addresses);
     _contacts    = List.from(v.contacts);
     _bankAccounts = List.from(v.bankAccounts);
@@ -914,11 +943,11 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _creditMonthsCtrl.text = '0'; _creditDaysCtrl.text = '30'; _creditLimitCtrl.text = '0';
     _isActive = true;
     _selectedCurrencyCode = null; _selectedCurrencyNameThai = null;
-    _vendorGroupId = null; _vendorGroupCode = null; _vendorGroupName = null;
+    _vendorGroupId = null; _vendorGroupCode = null; _vendorGroupName = null; _vendorGroupNameEng = null;
     _vendorGroupIsAutoNumber = null; _autoCodeOverridden = false;
-    _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null;
+    _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null; _businessTypeNameEng = null;
     _vendorType = null;
-    _apAccountId = null; _apAccountCode = null; _apAccountNameThai = null;
+    _apAccountId = null; _apAccountCode = null; _apAccountNameThai = null; _apAccountNameEng = null;
     _addresses = []; _contacts = []; _bankAccounts = [];
   }
 
@@ -959,7 +988,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -973,6 +1002,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
         _vendorGroupId           = group.id;
         _vendorGroupCode         = group.groupCode;
         _vendorGroupName         = group.groupNameThai;
+        _vendorGroupNameEng      = group.groupNameEng;
         _vendorGroupIsAutoNumber = group.isAutoNumber;
         _autoCodeOverridden      = false;
         _codeCtrl.clear();
@@ -985,7 +1015,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
 
   void _clearGroup() {
     setState(() {
-      _vendorGroupId = null; _vendorGroupCode = null; _vendorGroupName = null;
+      _vendorGroupId = null; _vendorGroupCode = null; _vendorGroupName = null; _vendorGroupNameEng = null;
       _vendorGroupIsAutoNumber = null; _autoCodeOverridden = false;
       _codeCtrl.clear();
     });
@@ -993,6 +1023,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
 
   // ── Business Type ──────────────────────────────────────────────────────────
   Future<void> _pickBusinessType() async {
+    final isEnglish = _isEnglish;
     if (_businessTypes.isEmpty) await _loadDropdowns();
     if (!mounted) return;
     final searchCtrl = TextEditingController();
@@ -1006,20 +1037,23 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
               ? List.from(_businessTypes)
               : _businessTypes.where((b) =>
                   b.businessTypeCode.toLowerCase().contains(q.toLowerCase()) ||
-                  b.businessTypeNameThai.toLowerCase().contains(q.toLowerCase())).toList();
+                  b.businessTypeNameThai.toLowerCase().contains(q.toLowerCase()) ||
+                  b.businessTypeNameEng.toLowerCase().contains(q.toLowerCase())).toList();
         });
+        String btName(BusinessType b) =>
+            isEnglish && b.businessTypeNameEng.isNotEmpty ? b.businessTypeNameEng : b.businessTypeNameThai;
         return AlertDialog(
-          title: const Text('เลือกประเภทธุรกิจ'),
+          title: Text(isEnglish ? 'Select Business Type' : 'เลือกประเภทธุรกิจ'),
           content: SizedBox(
             width: 480, height: 380,
             child: Column(children: [
               TextField(
                 controller: searchCtrl, autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา รหัส / ชื่อประเภทธุรกิจ',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search code / business type name' : 'ค้นหา รหัส / ชื่อประเภทธุรกิจ',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
                 onChanged: doFilter,
               ),
@@ -1028,7 +1062,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                 child: _businessTypes.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : filtered.isEmpty
-                        ? const Center(child: Text('ไม่พบข้อมูล'))
+                        ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
                         : ListView.builder(
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
@@ -1048,13 +1082,14 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                                         style: const TextStyle(
                                             fontWeight: FontWeight.bold, color: Colors.blue)),
                                   ),
-                                  Expanded(child: Text(bt.businessTypeNameThai)),
+                                  Expanded(child: Text(btName(bt))),
                                 ]),
                                 onTap: () {
                                   setState(() {
                                     _businessTypeId       = bt.id;
                                     _businessTypeCode     = bt.businessTypeCode;
                                     _businessTypeNameThai = bt.businessTypeNameThai;
+                                    _businessTypeNameEng  = bt.businessTypeNameEng;
                                   });
                                   Navigator.of(ctx).pop();
                                 },
@@ -1064,7 +1099,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
               ),
             ]),
           ),
-          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ปิด'))],
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Close' : 'ปิด'))],
         );
       }),
     );
@@ -1073,6 +1108,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
 
   // ── Currency ───────────────────────────────────────────────────────────────
   Future<void> _pickCurrency() async {
+    final isEnglish = _isEnglish;
     if (_currencies.isEmpty) await _loadCurrencies();
     if (!mounted) return;
     final searchCtrl = TextEditingController();
@@ -1086,20 +1122,23 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
               ? List.from(_currencies)
               : _currencies.where((c) =>
                   c.currencyCode.toLowerCase().contains(q.toLowerCase()) ||
-                  c.currencyNameThai.toLowerCase().contains(q.toLowerCase())).toList();
+                  c.currencyNameThai.toLowerCase().contains(q.toLowerCase()) ||
+                  c.currencyNameEng.toLowerCase().contains(q.toLowerCase())).toList();
         });
+        String curName(Currency c) =>
+            isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai;
         return AlertDialog(
-          title: const Text('เลือกสกุลเงิน'),
+          title: Text(isEnglish ? 'Select Currency' : 'เลือกสกุลเงิน'),
           content: SizedBox(
             width: 480, height: 380,
             child: Column(children: [
               TextField(
                 controller: searchCtrl, autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา รหัส / ชื่อสกุลเงิน',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search code / currency name' : 'ค้นหา รหัส / ชื่อสกุลเงิน',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
                 onChanged: doFilter,
               ),
@@ -1108,7 +1147,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                 child: _currencies.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : filtered.isEmpty
-                        ? const Center(child: Text('ไม่พบข้อมูล'))
+                        ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
                         : ListView.builder(
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
@@ -1128,7 +1167,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                                         style: const TextStyle(
                                             fontWeight: FontWeight.bold, color: Colors.blue)),
                                   ),
-                                  Expanded(child: Text(c.currencyNameThai)),
+                                  Expanded(child: Text(curName(c))),
                                 ]),
                                 onTap: () {
                                   setState(() {
@@ -1143,7 +1182,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
               ),
             ]),
           ),
-          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ปิด'))],
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Close' : 'ปิด'))],
         );
       }),
     );
@@ -1152,6 +1191,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
 
   // ── AP Account ─────────────────────────────────────────────────────────────
   Future<void> _pickApAccount() async {
+    final isEnglish = _isEnglish;
     if (_controlAccounts.isEmpty) await _loadDropdowns();
     if (!mounted) return;
     final searchCtrl = TextEditingController();
@@ -1165,20 +1205,23 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
               ? List.from(_controlAccounts)
               : _controlAccounts.where((a) =>
                   a.accountCode.toUpperCase().contains(q.toUpperCase()) ||
-                  a.accountNameThai.toUpperCase().contains(q.toUpperCase())).toList();
+                  a.accountNameThai.toUpperCase().contains(q.toUpperCase()) ||
+                  a.accountNameEng.toUpperCase().contains(q.toUpperCase())).toList();
         });
+        String acctName(Account a) =>
+            isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
         return AlertDialog(
-          title: const Text('เลือกบัญชีเจ้าหนี้'),
+          title: Text(isEnglish ? 'Select AP Account' : 'เลือกบัญชีเจ้าหนี้'),
           content: SizedBox(
             width: 520, height: 400,
             child: Column(children: [
               TextField(
                 controller: searchCtrl, autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search account code / name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
                 onChanged: doFilter,
               ),
@@ -1187,7 +1230,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                 child: _controlAccounts.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : filtered.isEmpty
-                        ? const Center(child: Text('ไม่พบข้อมูล'))
+                        ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
                         : ListView.builder(
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
@@ -1207,13 +1250,14 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                                         style: const TextStyle(
                                             fontWeight: FontWeight.bold, color: Colors.blue)),
                                   ),
-                                  Expanded(child: Text(a.accountNameThai)),
+                                  Expanded(child: Text(acctName(a))),
                                 ]),
                                 onTap: () {
                                   setState(() {
                                     _apAccountId       = a.id;
                                     _apAccountCode     = a.accountCode;
                                     _apAccountNameThai = a.accountNameThai;
+                                    _apAccountNameEng  = a.accountNameEng;
                                   });
                                   Navigator.of(ctx).pop();
                                 },
@@ -1223,7 +1267,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
               ),
             ]),
           ),
-          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ปิด'))],
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Close' : 'ปิด'))],
         );
       }),
     );
@@ -1250,13 +1294,14 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
             border: const OutlineInputBorder(),
           ),
           validator: required
-              ? (v) => (v == null || v.trim().isEmpty) ? 'กรุณาป้อน $label' : null
+              ? (v) => (v == null || v.trim().isEmpty) ? (_isEnglish ? 'Please enter $label' : 'กรุณาป้อน $label') : null
               : null,
         ),
       );
 
   // ── รหัสเจ้าหนี้ (รองรับ auto-numbering) ──────────────────────────────────
   Widget _buildCodeField() {
+    final isEnglish = _isEnglish;
     final isAdd = widget.mode == Mode.add;
     final isLocked = _isReadOnly || widget.mode == Mode.edit;
 
@@ -1264,24 +1309,24 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: InputDecorator(
-          decoration: const InputDecoration(
-            labelText: 'รหัสเจ้าหนี้',
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: InputDecoration(
+            labelText: isEnglish ? 'Vendor Code' : 'รหัสเจ้าหนี้',
+            border: const OutlineInputBorder(),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
           child: Row(
             children: [
               const Icon(Icons.auto_awesome, color: Colors.teal, size: 16),
               const SizedBox(width: 6),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'ออกรหัสอัตโนมัติเมื่อบันทึก',
-                  style: TextStyle(color: Colors.teal, fontStyle: FontStyle.italic),
+                  isEnglish ? 'Auto-generated on save' : 'ออกรหัสอัตโนมัติเมื่อบันทึก',
+                  style: const TextStyle(color: Colors.teal, fontStyle: FontStyle.italic),
                 ),
               ),
               TextButton.icon(
                 icon: const Icon(Icons.edit, size: 14),
-                label: const Text('แก้ไขเอง', style: TextStyle(fontSize: 12)),
+                label: Text(isEnglish ? 'Edit manually' : 'แก้ไขเอง', style: const TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.grey.shade700,
                   padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -1305,18 +1350,18 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
             Expanded(
               child: TextFormField(
                 controller: _codeCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'รหัสเจ้าหนี้ *',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Vendor Code *' : 'รหัสเจ้าหนี้ *',
+                  border: const OutlineInputBorder(),
                 ),
                 textCapitalization: TextCapitalization.characters,
                 validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'กรุณาป้อนรหัสเจ้าหนี้' : null,
+                    (v == null || v.trim().isEmpty) ? (isEnglish ? 'Please enter the vendor code' : 'กรุณาป้อนรหัสเจ้าหนี้') : null,
               ),
             ),
             const SizedBox(width: 4),
             Tooltip(
-              message: 'กลับไปใช้รหัสอัตโนมัติ',
+              message: isEnglish ? 'Revert to auto-numbering' : 'กลับไปใช้รหัสอัตโนมัติ',
               child: IconButton(
                 icon: const Icon(Icons.auto_awesome, color: Colors.teal),
                 onPressed: () => setState(() {
@@ -1330,7 +1375,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
       );
     }
 
-    return _buildField('รหัสเจ้าหนี้${!isLocked ? ' *' : ''}', _codeCtrl,
+    return _buildField('${isEnglish ? 'Vendor Code' : 'รหัสเจ้าหนี้'}${!isLocked ? ' *' : ''}', _codeCtrl,
         required: !isLocked);
   }
 
@@ -1362,13 +1407,13 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                               style: const TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ])
-                    : Text('— ไม่ระบุ —',
+                    : Text(_isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
                         style: TextStyle(color: Colors.grey.shade600)),
               ),
               if (!_isReadOnly) ...[
                 IconButton(
                   icon: const Icon(Icons.search, color: Colors.blue),
-                  tooltip: 'ค้นหา$label',
+                  tooltip: _isEnglish ? 'Search $label' : 'ค้นหา$label',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: onSearch,
@@ -1376,7 +1421,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                 if (hasValue && onClear != null)
                   IconButton(
                     icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                    tooltip: 'ล้าง',
+                    tooltip: _isEnglish ? 'Clear' : 'ล้าง',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: onClear,
@@ -1389,20 +1434,24 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
 
   // ── Sections ───────────────────────────────────────────────────────────────
 
-  Widget _buildBasicSection() => _Section(
-        title: 'ข้อมูลพื้นฐาน',
+  Widget _buildBasicSection() {
+    final isEnglish = _isEnglish;
+    final businessTypeName = isEnglish && (_businessTypeNameEng ?? '').isNotEmpty ? _businessTypeNameEng : _businessTypeNameThai;
+    final vendorGroupName = isEnglish && (_vendorGroupNameEng ?? '').isNotEmpty ? _vendorGroupNameEng : _vendorGroupName;
+    return _Section(
+        title: isEnglish ? 'Basic Information' : 'ข้อมูลพื้นฐาน',
         children: [
           Row(children: [
             Expanded(child: _buildCodeField()),
             const SizedBox(width: 10),
-            Expanded(child: _buildField('เลขผู้เสียภาษี', _taxIdCtrl)),
+            Expanded(child: _buildField(isEnglish ? 'Tax ID' : 'เลขผู้เสียภาษี', _taxIdCtrl)),
             const SizedBox(width: 10),
-            Expanded(child: _buildField('รหัสเก่า', _oldCodeCtrl)),
+            Expanded(child: _buildField(isEnglish ? 'Old Code' : 'รหัสเก่า', _oldCodeCtrl)),
           ]),
           Row(children: [
-            Expanded(child: _buildField('ชื่อเจ้าหนี้ (ไทย) *', _nameTHCtrl, required: true)),
+            Expanded(child: _buildField(isEnglish ? 'Vendor Name (Thai) *' : 'ชื่อเจ้าหนี้ (ไทย) *', _nameTHCtrl, required: true)),
             const SizedBox(width: 10),
-            Expanded(child: _buildField('ชื่อเจ้าหนี้ (อังกฤษ)', _nameENCtrl)),
+            Expanded(child: _buildField(isEnglish ? 'Vendor Name (English)' : 'ชื่อเจ้าหนี้ (อังกฤษ)', _nameENCtrl)),
           ]),
           Row(children: [
             Expanded(
@@ -1410,15 +1459,15 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: DropdownButtonFormField<String?>(
                   value: _vendorType,
-                  decoration: const InputDecoration(
-                    labelText: 'ประเภทผู้ขาย',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: InputDecoration(
+                    labelText: isEnglish ? 'Vendor Type' : 'ประเภทผู้ขาย',
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: null,           child: Text('— ไม่ระบุ —')),
-                    DropdownMenuItem(value: 'individual',   child: Text('บุคคลธรรมดา')),
-                    DropdownMenuItem(value: 'juristic',     child: Text('นิติบุคคล')),
+                  items: [
+                    DropdownMenuItem(value: null,           child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
+                    DropdownMenuItem(value: 'individual',   child: Text(isEnglish ? 'Individual' : 'บุคคลธรรมดา')),
+                    DropdownMenuItem(value: 'juristic',     child: Text(isEnglish ? 'Juristic Person' : 'นิติบุคคล')),
                   ],
                   onChanged: _isReadOnly ? null : (v) => setState(() => _vendorType = v),
                 ),
@@ -1426,33 +1475,33 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
             ),
             const SizedBox(width: 10),
             Expanded(child: _buildFkField(
-              label: 'ประเภทธุรกิจ',
+              label: isEnglish ? 'Business Type' : 'ประเภทธุรกิจ',
               hasValue: _businessTypeId != null,
-              displayText: '$_businessTypeCode — $_businessTypeNameThai',
+              displayText: '$_businessTypeCode — $businessTypeName',
               onSearch: _pickBusinessType,
               onClear: () => setState(() {
-                _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null;
+                _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null; _businessTypeNameEng = null;
               }),
             )),
             const SizedBox(width: 10),
             Expanded(child: _buildFkField(
-              label: 'กลุ่มผู้ขาย',
+              label: isEnglish ? 'Vendor Group' : 'กลุ่มผู้ขาย',
               hasValue: _vendorGroupId != null,
-              displayText: '$_vendorGroupCode — $_vendorGroupName',
+              displayText: '$_vendorGroupCode — $vendorGroupName',
               onSearch: _pickVendorGroup,
               onClear: _clearGroup,
             )),
           ]),
           Row(children: [
-            Expanded(child: _buildField('เครดิต (เดือน)', _creditMonthsCtrl,
+            Expanded(child: _buildField(isEnglish ? 'Credit (months)' : 'เครดิต (เดือน)', _creditMonthsCtrl,
                 keyboard: TextInputType.number,
                 formatters: [FilteringTextInputFormatter.digitsOnly])),
             const SizedBox(width: 10),
-            Expanded(child: _buildField('เครดิต (วัน)', _creditDaysCtrl,
+            Expanded(child: _buildField(isEnglish ? 'Credit (days)' : 'เครดิต (วัน)', _creditDaysCtrl,
                 keyboard: TextInputType.number,
                 formatters: [FilteringTextInputFormatter.digitsOnly])),
             const SizedBox(width: 10),
-            Expanded(child: _buildField('วงเงินเครดิต', _creditLimitCtrl,
+            Expanded(child: _buildField(isEnglish ? 'Credit Limit' : 'วงเงินเครดิต', _creditLimitCtrl,
                 keyboard: const TextInputType.numberWithOptions(decimal: true),
                 formatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))])),
             const SizedBox(width: 10),
@@ -1460,14 +1509,14 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'สกุลเงิน',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: isEnglish ? 'Currency' : 'สกุลเงิน',
+                    border: const OutlineInputBorder(),
                   ),
                   child: Row(children: [
                     Expanded(
                       child: _selectedCurrencyCode == null
-                          ? Text('— ไม่ระบุ —',
+                          ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
                               style: TextStyle(color: Colors.grey.shade600))
                           : Row(children: [
                               const Icon(Icons.check_circle, color: Colors.green, size: 16),
@@ -1486,7 +1535,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                     if (!_isReadOnly) ...[
                       IconButton(
                         icon: const Icon(Icons.search, color: Colors.blue),
-                        tooltip: 'ค้นหาสกุลเงิน',
+                        tooltip: isEnglish ? 'Search currency' : 'ค้นหาสกุลเงิน',
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         onPressed: _pickCurrency,
@@ -1494,7 +1543,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                       if (_selectedCurrencyCode != null)
                         IconButton(
                           icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                          tooltip: 'ล้างสกุลเงิน',
+                          tooltip: isEnglish ? 'Clear currency' : 'ล้างสกุลเงิน',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                           onPressed: () => setState(() {
@@ -1508,25 +1557,27 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
               ),
             ),
           ]),
-          _buildField('หมายเหตุ', _remarkCtrl),
+          _buildField(isEnglish ? 'Remark' : 'หมายเหตุ', _remarkCtrl),
           SwitchListTile(
-            title: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
+            title: Text(isEnglish ? 'Status: ${_isActive ? 'Active' : 'Inactive'}' : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
             value: _isActive,
             onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v),
           ),
         ],
       );
+  }
 
   Widget _buildAddressSection() {
+    final isEnglish = _isEnglish;
     final readOnly = _isReadOnly;
     return _Section(
-      title: 'ที่อยู่ (${_addresses.length})',
+      title: isEnglish ? 'Address (${_addresses.length})' : 'ที่อยู่ (${_addresses.length})',
       initiallyExpanded: false,
       trailing: readOnly
           ? null
           : IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: 'เพิ่มที่อยู่',
+              tooltip: isEnglish ? 'Add address' : 'เพิ่มที่อยู่',
               onPressed: () async {
                 final primary = _addresses.cast<ApVendorAddress?>()
                     .firstWhere((a) => a!.isDefault, orElse: () => null);
@@ -1537,15 +1588,15 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
             ),
       children: [
         if (_addresses.isEmpty)
-          const Text('ยังไม่มีที่อยู่', style: TextStyle(color: Colors.grey)),
+          Text(isEnglish ? 'No addresses yet' : 'ยังไม่มีที่อยู่', style: const TextStyle(color: Colors.grey)),
         ..._addresses.asMap().entries.map((entry) {
           final i = entry.key;
           final addr = entry.value;
           final line1 = [
             addr.addressNo,
             addr.addressBuildingVillage,
-            addr.addressAlley != null ? 'ซ.${addr.addressAlley}' : null,
-            addr.addressRoad != null ? 'ถ.${addr.addressRoad}' : null,
+            addr.addressAlley != null ? '${isEnglish ? 'Alley ' : 'ซ.'}${addr.addressAlley}' : null,
+            addr.addressRoad != null ? '${isEnglish ? 'Road ' : 'ถ.'}${addr.addressRoad}' : null,
           ].where((s) => s != null && s.isNotEmpty).join(' ').trim();
           final displayLabel = line1.isNotEmpty
               ? line1
@@ -1553,15 +1604,15 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                       .where((s) => s != null && s.isNotEmpty)
                       .join(', ')
                       .isEmpty
-                  ? 'ที่อยู่ ${i + 1}'
+                  ? (isEnglish ? 'Address ${i + 1}' : 'ที่อยู่ ${i + 1}')
                   : [addr.addressSubDistrict, addr.addressProvince]
                       .where((s) => s != null && s.isNotEmpty)
                       .join(', ');
-          const addrTypeLabel = {
-            'billing': 'ที่อยู่ใบแจ้งหนี้',
-            'shipping': 'ที่อยู่จัดส่ง',
-            'billing note': 'ที่อยู่วางบิล',
-            'payment': 'ที่อยู่ชำระเงิน',
+          final addrTypeLabel = {
+            'billing': isEnglish ? 'Billing Address' : 'ที่อยู่ใบแจ้งหนี้',
+            'shipping': isEnglish ? 'Shipping Address' : 'ที่อยู่จัดส่ง',
+            'billing note': isEnglish ? 'Billing Note Address' : 'ที่อยู่วางบิล',
+            'payment': isEnglish ? 'Payment Address' : 'ที่อยู่ชำระเงิน',
           };
           final typeLabel = addrTypeLabel[addr.addressType] ?? addr.addressType;
           final subText = [
@@ -1613,15 +1664,16 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   }
 
   Widget _buildContactSection() {
+    final isEnglish = _isEnglish;
     final readOnly = _isReadOnly;
     return _Section(
-      title: 'ผู้ติดต่อ (${_contacts.length})',
+      title: isEnglish ? 'Contacts (${_contacts.length})' : 'ผู้ติดต่อ (${_contacts.length})',
       initiallyExpanded: false,
       trailing: readOnly
           ? null
           : IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: 'เพิ่มผู้ติดต่อ',
+              tooltip: isEnglish ? 'Add contact' : 'เพิ่มผู้ติดต่อ',
               onPressed: () async {
                 final result = await showContactDialog(context, null, false);
                 if (result != null) setState(() => _contacts.add(result));
@@ -1629,7 +1681,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
             ),
       children: [
         if (_contacts.isEmpty)
-          const Text('ยังไม่มีผู้ติดต่อ', style: TextStyle(color: Colors.grey)),
+          Text(isEnglish ? 'No contacts yet' : 'ยังไม่มีผู้ติดต่อ', style: const TextStyle(color: Colors.grey)),
         ..._contacts.asMap().entries.map((entry) {
           final i = entry.key;
           final c = entry.value;
@@ -1670,15 +1722,16 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   }
 
   Widget _buildBankSection() {
+    final isEnglish = _isEnglish;
     final readOnly = _isReadOnly;
     return _Section(
-      title: 'บัญชีธนาคาร (${_bankAccounts.length})',
+      title: isEnglish ? 'Bank Accounts (${_bankAccounts.length})' : 'บัญชีธนาคาร (${_bankAccounts.length})',
       initiallyExpanded: false,
       trailing: readOnly
           ? null
           : IconButton(
               icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: 'เพิ่มบัญชีธนาคาร',
+              tooltip: isEnglish ? 'Add bank account' : 'เพิ่มบัญชีธนาคาร',
               onPressed: () async {
                 final result = await showBankDialog(context, null, false);
                 if (result != null) setState(() => _bankAccounts.add(result));
@@ -1686,7 +1739,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
             ),
       children: [
         if (_bankAccounts.isEmpty)
-          const Text('ยังไม่มีบัญชีธนาคาร', style: TextStyle(color: Colors.grey)),
+          Text(isEnglish ? 'No bank accounts yet' : 'ยังไม่มีบัญชีธนาคาร', style: const TextStyle(color: Colors.grey)),
         ..._bankAccounts.asMap().entries.map((entry) {
           final i = entry.key;
           final b = entry.value;
@@ -1727,23 +1780,41 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     );
   }
 
-  Widget _buildGlAccountSection() => _Section(
-        title: 'บัญชีเจ้าหนี้ (GL)',
+  // The persisted vendor record only stores the Thai AP account name — resolve
+  // the bilingual name live against the loaded control account list when possible.
+  String _resolveApAccountName(bool isEnglish) {
+    if (_apAccountId != null) {
+      final match = _controlAccounts.where((a) => a.id == _apAccountId);
+      if (match.isNotEmpty) {
+        final a = match.first;
+        return isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
+      }
+    }
+    return isEnglish && (_apAccountNameEng ?? '').isNotEmpty ? _apAccountNameEng! : (_apAccountNameThai ?? '');
+  }
+
+  Widget _buildGlAccountSection() {
+    final isEnglish = _isEnglish;
+    final apAccountName = _resolveApAccountName(isEnglish);
+    return _Section(
+        title: isEnglish ? 'AP Account (GL)' : 'บัญชีเจ้าหนี้ (GL)',
         initiallyExpanded: false,
         children: [
           _buildFkField(
-            label: 'บัญชีเจ้าหนี้',
+            label: isEnglish ? 'AP Account' : 'บัญชีเจ้าหนี้',
             hasValue: _apAccountId != null,
-            displayText: '$_apAccountCode — $_apAccountNameThai',
+            displayText: '$_apAccountCode — $apAccountName',
             onSearch: _pickApAccount,
             onClear: () => setState(() {
-              _apAccountId = null; _apAccountCode = null; _apAccountNameThai = null;
+              _apAccountId = null; _apAccountCode = null; _apAccountNameThai = null; _apAccountNameEng = null;
             }),
           ),
           Padding(
             padding: const EdgeInsets.only(bottom: 6, left: 4),
             child: Text(
-              'หากไม่ระบุ ระบบจะใช้บัญชีจาก กลุ่มผู้ขาย และ ประเภทเอกสาร ตามลำดับ',
+              isEnglish
+                  ? 'If not specified, the system will use the account from the Vendor Group, then the Document Type, in that order'
+                  : 'หากไม่ระบุ ระบบจะใช้บัญชีจาก กลุ่มผู้ขาย และ ประเภทเอกสาร ตามลำดับ',
               style: TextStyle(
                   fontSize: 11,
                   color: Colors.blueGrey.shade400,
@@ -1752,12 +1823,15 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
           ),
         ],
       );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = Provider.of<LanguageProvider>(context).isEnglish;
+    _isEnglish = isEnglish;
     if (widget.isPlaceholder) {
-      return const Center(
-          child: Text('เลือกรายการเพื่อดูข้อมูล', style: TextStyle(color: Colors.grey)));
+      return Center(
+          child: Text(isEnglish ? 'Select an item to view its data' : 'เลือกรายการเพื่อดูข้อมูล', style: const TextStyle(color: Colors.grey)));
     }
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
@@ -1775,10 +1849,10 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                 Expanded(
                   child: Text(
                     widget.mode == Mode.add
-                        ? 'เพิ่มเจ้าหนี้ใหม่'
+                        ? (isEnglish ? 'Add New Vendor' : 'เพิ่มเจ้าหนี้ใหม่')
                         : widget.mode == Mode.edit
-                            ? 'แก้ไขเจ้าหนี้'
-                            : 'ข้อมูลเจ้าหนี้',
+                            ? (isEnglish ? 'Edit Vendor' : 'แก้ไขเจ้าหนี้')
+                            : (isEnglish ? 'Vendor Information' : 'ข้อมูลเจ้าหนี้'),
                     style: TextStyle(
                         color: Colors.blue[900],
                         fontSize: 16,
@@ -1793,7 +1867,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                             width: 16, height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.save, size: 16),
-                    label: Text(_isSaving ? 'กำลังบันทึก...' : 'บันทึก'),
+                    label: Text(_isSaving ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...') : (isEnglish ? 'Save' : 'บันทึก')),
                     style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue[800],
                         foregroundColor: Colors.white),
@@ -1802,7 +1876,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                 ],
                 TextButton(
                   onPressed: widget.onCancel,
-                  child: Text('ปิด', style: TextStyle(color: Colors.blue[900])),
+                  child: Text(isEnglish ? 'Close' : 'ปิด', style: TextStyle(color: Colors.blue[900])),
                 ),
               ],
             ),

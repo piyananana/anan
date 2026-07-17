@@ -69,20 +69,22 @@ class _ApVendorScreenState extends State<ApVendorScreen>
   }
 
   Future<void> _onDelete(ApVendor row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text(
-            'คุณแน่ใจหรือไม่ที่จะลบเจ้าหนี้ "${row.vendorCode} ${row.vendorNameTh}" ?'),
+        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(isEnglish
+            ? 'Are you sure you want to delete vendor "${row.vendorCode} ${row.vendorNameTh}" ?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบเจ้าหนี้ "${row.vendorCode} ${row.vendorNameTh}" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ยกเลิก'),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('ลบ', style: TextStyle(color: Colors.red)),
+            child: Text(isEnglish ? 'Delete' : 'ลบ', style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -95,30 +97,31 @@ class _ApVendorScreenState extends State<ApVendorScreen>
       _onCancel();
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+            .showSnackBar(SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish ? 'Error deleting: ${e.toString()}' : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')),
         );
       }
     }
   }
 
   Future<void> _onSubmit(ApVendor row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       if (_selectedData == null) {
         await _svc.addRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
         }
       } else {
         await _svc.updateRow(row);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+              .showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
         }
       }
       _listKey.currentState?.refresh();
@@ -127,7 +130,7 @@ class _ApVendorScreenState extends State<ApVendorScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาด: ${e.toString()}')),
+          SnackBar(content: Text(isEnglish ? 'Error: ${e.toString()}' : 'เกิดข้อผิดพลาด: ${e.toString()}')),
         );
       }
     }
@@ -195,7 +198,7 @@ class _ApVendorScreenState extends State<ApVendorScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: l.isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
             onPressed: () {
               _listKey.currentState?.refresh();
               _onCancel();
@@ -222,7 +225,9 @@ class _ApVendorScreenState extends State<ApVendorScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () =>
                       setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (l.isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                      : (l.isEnglish ? 'Expand list' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(

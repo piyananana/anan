@@ -54,8 +54,8 @@ class _ApVendorGroupScreenState extends State<ApVendorGroupScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text('ลบ "${row.groupCode} (${row.groupNameThai})" ?'),
+        title: Text(l.isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(l.isEnglish ? 'Delete "${row.groupCode} (${row.groupNameThai})" ?' : 'ลบ "${row.groupCode} (${row.groupNameThai})" ?'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
           TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(l.delete, style: const TextStyle(color: Colors.red))),
@@ -63,17 +63,19 @@ class _ApVendorGroupScreenState extends State<ApVendorGroupScreen>
       ),
     );
     if (confirm != true) return;
+    final isEnglish = l.isEnglish;
     try {
       await ApVendorGroupService().deleteRow(row.id!);
       _listKey.currentState?.refresh();
       _onCancel();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
     }
   }
 
   Future<void> _onSubmit(ApVendorGroup row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final svc = ApVendorGroupService();
     if (_selected == null) {
       await svc.addRow(row);
@@ -82,7 +84,7 @@ class _ApVendorGroupScreenState extends State<ApVendorGroupScreen>
     }
     _listKey.currentState?.refresh();
     _onCancel();
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
   }
 
   void _onCancel() => setState(() { _mode = Mode.none; _selected = null; });
@@ -99,7 +101,7 @@ class _ApVendorGroupScreenState extends State<ApVendorGroupScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรช',
+            tooltip: l.isEnglish ? 'Refresh' : 'รีเฟรช',
             onPressed: () { _listKey.currentState?.refresh(); _onCancel(); },
           ),
         ],
@@ -115,7 +117,9 @@ class _ApVendorGroupScreenState extends State<ApVendorGroupScreen>
               icon: Icon(_isLeftExpanded ? Icons.filter_list_off : Icons.filter_list, color: Colors.white, size: 20),
               padding: EdgeInsets.zero,
               onPressed: () => setState(() => _isLeftExpanded = !_isLeftExpanded),
-              tooltip: _isLeftExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+              tooltip: _isLeftExpanded
+                  ? (l.isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                  : (l.isEnglish ? 'Expand list' : 'ขยายรายการ'),
             ),
           ),
           // Left panel

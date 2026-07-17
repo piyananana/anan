@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/ap_vendor.dart';
 import '../services/ap_vendor_service.dart';
 
@@ -71,9 +73,13 @@ class ApVendorListWidgetState extends State<ApVendorListWidget>
 
   void refresh() => _fetchList();
 
+  String _vendorName(ApVendor item, bool isEnglish) =>
+      isEnglish && (item.vendorNameEn ?? '').isNotEmpty ? item.vendorNameEn! : item.vendorNameTh;
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final display = List<ApVendor>.from(_list);
     switch (_sortBy) {
       case 'code_asc':  display.sort((a, b) => a.vendorCode.compareTo(b.vendorCode)); break;
@@ -87,26 +93,26 @@ class ApVendorListWidgetState extends State<ApVendorListWidget>
         padding: const EdgeInsets.all(8),
         child: Row(children: [
           if (widget.enableAddButton)
-            IconButton(icon: const Icon(Icons.add), tooltip: 'เพิ่มเจ้าหนี้ใหม่', onPressed: widget.onAdd),
+            IconButton(icon: const Icon(Icons.add), tooltip: isEnglish ? 'Add new vendor' : 'เพิ่มเจ้าหนี้ใหม่', onPressed: widget.onAdd),
           PopupMenuButton<String>(
             icon: const Icon(Icons.sort),
-            tooltip: 'จัดเรียง',
+            tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
             onSelected: (v) => setState(() => _sortBy = v),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'code_asc',  child: Text('รหัส (น้อยไปมาก)')),
-              PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
-              PopupMenuItem(value: 'name_asc',  child: Text('ชื่อ (น้อยไปมาก)')),
-              PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'code_asc',  child: Text(isEnglish ? 'Code (ascending)' : 'รหัส (น้อยไปมาก)')),
+              PopupMenuItem(value: 'code_desc', child: Text(isEnglish ? 'Code (descending)' : 'รหัส (มากไปน้อย)')),
+              PopupMenuItem(value: 'name_asc',  child: Text(isEnglish ? 'Name (ascending)' : 'ชื่อ (น้อยไปมาก)')),
+              PopupMenuItem(value: 'name_desc', child: Text(isEnglish ? 'Name (descending)' : 'ชื่อ (มากไปน้อย)')),
             ],
           ),
           Expanded(
             child: TextField(
               controller: _searchCtrl,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา (รหัส / ชื่อ / เลขผู้เสียภาษี)',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: isEnglish ? 'Search (code / name / tax ID)' : 'ค้นหา (รหัส / ชื่อ / เลขผู้เสียภาษี)',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (v) { setState(() => _searchQuery = v); _fetchList(); },
             ),
@@ -119,8 +125,8 @@ class ApVendorListWidgetState extends State<ApVendorListWidget>
           alignment: Alignment.centerLeft,
           child: Text(
             _searchQuery.isEmpty
-                ? 'ทั้งหมด $_totalCount แถว'
-                : 'พบ ${_list.length} จาก $_totalCount แถว',
+                ? (isEnglish ? 'Total $_totalCount rows' : 'ทั้งหมด $_totalCount แถว')
+                : (isEnglish ? 'Found ${_list.length} of $_totalCount rows' : 'พบ ${_list.length} จาก $_totalCount แถว'),
             style: const TextStyle(fontSize: 12, color: Colors.black87),
           ),
         ),
@@ -129,7 +135,7 @@ class ApVendorListWidgetState extends State<ApVendorListWidget>
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : display.isEmpty
-                ? const Center(child: Text('ไม่พบข้อมูลเจ้าหนี้'))
+                ? Center(child: Text(isEnglish ? 'No vendor data found' : 'ไม่พบข้อมูลเจ้าหนี้'))
                 : ListView.builder(
                     itemCount: display.length,
                     itemBuilder: (context, index) {
@@ -148,7 +154,7 @@ class ApVendorListWidgetState extends State<ApVendorListWidget>
                             ),
                           ),
                           title: Text(
-                            '${item.vendorCode}  ${item.vendorNameTh}',
+                            '${item.vendorCode}  ${_vendorName(item, isEnglish)}',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: item.isActive ? null : Colors.grey,
@@ -157,8 +163,8 @@ class ApVendorListWidgetState extends State<ApVendorListWidget>
                           subtitle: Text(
                             '${item.businessTypeNameThai ?? ''}'
                             '${item.businessTypeNameThai != null ? '  •  ' : ''}'
-                            'เครดิต ${item.creditTermMonths > 0 ? '${item.creditTermMonths} เดือน ' : ''}${item.creditTermDays} วัน'
-                            '${item.taxId != null ? '\nเลขผู้เสียภาษี: ${item.taxId}' : ''}',
+                            '${isEnglish ? 'Credit ' : 'เครดิต '}${item.creditTermMonths > 0 ? (isEnglish ? '${item.creditTermMonths} months ' : '${item.creditTermMonths} เดือน ') : ''}${item.creditTermDays}${isEnglish ? ' days' : ' วัน'}'
+                            '${item.taxId != null ? (isEnglish ? '\nTax ID: ${item.taxId}' : '\nเลขผู้เสียภาษี: ${item.taxId}') : ''}',
                             maxLines: 2,
                           ),
                           isThreeLine: item.taxId != null,
@@ -168,19 +174,19 @@ class ApVendorListWidgetState extends State<ApVendorListWidget>
                               if (widget.enableViewButton)
                                 IconButton(
                                   icon: const Icon(Icons.visibility, size: 18),
-                                  tooltip: 'ดูข้อมูล',
+                                  tooltip: isEnglish ? 'View' : 'ดูข้อมูล',
                                   onPressed: () => widget.onView(item),
                                 ),
                               if (widget.enableEditButton)
                                 IconButton(
                                   icon: const Icon(Icons.edit, size: 18),
-                                  tooltip: 'แก้ไข',
+                                  tooltip: isEnglish ? 'Edit' : 'แก้ไข',
                                   onPressed: () => widget.onEdit(item),
                                 ),
                               if (widget.enableDeleteButton)
                                 IconButton(
                                   icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                                  tooltip: 'ลบ',
+                                  tooltip: isEnglish ? 'Delete' : 'ลบ',
                                   onPressed: () => widget.onDelete(item),
                                 ),
                             ],

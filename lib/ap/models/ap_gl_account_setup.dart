@@ -3,6 +3,7 @@ class ApGlAccountSetup {
   final String  docCode;
   final String? sysDocType;
   final String? docNameThai;
+  final String? docNameEng;
   final bool?   docIsActive;
 
   // PI / CN / DN
@@ -42,6 +43,7 @@ class ApGlAccountSetup {
     required this.docCode,
     this.sysDocType,
     this.docNameThai,
+    this.docNameEng,
     this.docIsActive,
     this.apAccountId,          this.apAccountCode,          this.apAccountName,
     this.expenseAccountId,     this.expenseAccountCode,     this.expenseAccountName,
@@ -64,6 +66,7 @@ class ApGlAccountSetup {
     docCode:           j['doc_code'] as String? ?? '',
     sysDocType:        j['sys_doc_type'] as String?,
     docNameThai:       j['doc_name_thai'] as String?,
+    docNameEng:        j['doc_name_eng'] as String?,
     docIsActive:       j['doc_is_active'] as bool?,
     apAccountId:          j['ap_account_id'] as int?,         apAccountCode:         j['ap_account_code'] as String?,         apAccountName:         j['ap_account_name'] as String?,
     expenseAccountId:     j['expense_account_id'] as int?,    expenseAccountCode:    j['expense_account_code'] as String?,    expenseAccountName:    j['expense_account_name'] as String?,

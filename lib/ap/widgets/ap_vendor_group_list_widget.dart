@@ -1,5 +1,7 @@
 // lib/ap/widgets/ap_vendor_group_list_widget.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/ap_vendor_group.dart';
 import '../services/ap_vendor_group_service.dart';
 
@@ -35,11 +37,12 @@ class ApVendorGroupListWidget extends StatefulWidget {
   State<ApVendorGroupListWidget> createState() => ApVendorGroupListWidgetState();
 
   static Future<void> search(BuildContext context, {required void Function(ApVendorGroup) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('ค้นหา กลุ่มผู้ขาย', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Search Vendor Group' : 'ค้นหา กลุ่มผู้ขาย', style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Container(
           width: 520,
           height: 600,
@@ -53,7 +56,7 @@ class ApVendorGroupListWidget extends StatefulWidget {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ปิด', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -110,36 +113,40 @@ class ApVendorGroupListWidgetState extends State<ApVendorGroupListWidget>
   @override
   bool get wantKeepAlive => true;
 
+  String _groupName(ApVendorGroup item, bool isEnglish) =>
+      isEnglish && item.groupNameEng.isNotEmpty ? item.groupNameEng : item.groupNameThai;
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final display = _filtered();
     return Column(children: [
       Padding(
         padding: const EdgeInsets.all(8),
         child: Row(children: [
           if (widget.enableAddButton)
-            IconButton(icon: const Icon(Icons.add), tooltip: 'เพิ่มใหม่', onPressed: widget.onAdd),
+            IconButton(icon: const Icon(Icons.add), tooltip: isEnglish ? 'Add new' : 'เพิ่มใหม่', onPressed: widget.onAdd),
           if (widget.enableSortButton)
             PopupMenuButton<String>(
               icon: const Icon(Icons.sort),
-              tooltip: 'จัดเรียง',
+              tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
               onSelected: (v) => setState(() => _sortBy = v),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'code_asc',  child: Text('รหัส (น้อยไปมาก)')),
-                PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
-                PopupMenuItem(value: 'name_asc',  child: Text('ชื่อ (ก-ฮ)')),
-                PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (ฮ-ก)')),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'code_asc',  child: Text(isEnglish ? 'Code (ascending)' : 'รหัส (น้อยไปมาก)')),
+                PopupMenuItem(value: 'code_desc', child: Text(isEnglish ? 'Code (descending)' : 'รหัส (มากไปน้อย)')),
+                PopupMenuItem(value: 'name_asc',  child: Text(isEnglish ? 'Name (A-Z)' : 'ชื่อ (ก-ฮ)')),
+                PopupMenuItem(value: 'name_desc', child: Text(isEnglish ? 'Name (Z-A)' : 'ชื่อ (ฮ-ก)')),
               ],
             ),
           Expanded(
             child: TextField(
               controller: _searchCtrl,
-              decoration: const InputDecoration(
-                hintText: 'ค้นหา (รหัส / ชื่อกลุ่มผู้ขาย)',
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: isEnglish ? 'Search (code / vendor group name)' : 'ค้นหา (รหัส / ชื่อกลุ่มผู้ขาย)',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (v) => setState(() => _searchQuery = v),
             ),
@@ -151,7 +158,9 @@ class ApVendorGroupListWidgetState extends State<ApVendorGroupListWidget>
         child: Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            _searchQuery.isEmpty ? 'ทั้งหมด ${_list.length} แถว' : 'พบ ${display.length} จาก ${_list.length} แถว',
+            _searchQuery.isEmpty
+                ? (isEnglish ? 'Total ${_list.length} rows' : 'ทั้งหมด ${_list.length} แถว')
+                : (isEnglish ? 'Found ${display.length} of ${_list.length} rows' : 'พบ ${display.length} จาก ${_list.length} แถว'),
             style: const TextStyle(fontSize: 12, color: Colors.black87),
           ),
         ),
@@ -159,30 +168,35 @@ class ApVendorGroupListWidgetState extends State<ApVendorGroupListWidget>
       Expanded(child: _isLoading
         ? const Center(child: CircularProgressIndicator())
         : display.isEmpty
-          ? const Center(child: Text('ไม่พบข้อมูลกลุ่มผู้ขาย'))
+          ? Center(child: Text(isEnglish ? 'No vendor group data found' : 'ไม่พบข้อมูลกลุ่มผู้ขาย'))
           : ListView.builder(
               itemCount: display.length,
               itemBuilder: (ctx, i) {
                 final item = display[i];
+                final primaryName = _groupName(item, isEnglish);
+                final secondaryName = isEnglish ? item.groupNameThai : item.groupNameEng;
+                final showSecondary = secondaryName.isNotEmpty && secondaryName != primaryName;
                 return Card(
                   margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: Stack(children: [
                   ListTile(
-                    title: Text('${item.groupCode} — ${item.groupNameThai}',
+                    title: Text('${item.groupCode} — $primaryName',
                       style: TextStyle(fontWeight: FontWeight.bold, color: item.isActive ? null : Colors.grey)),
                     subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      if (item.groupNameEng.isNotEmpty)
-                        Text(item.groupNameEng, style: const TextStyle(fontSize: 12)),
+                      if (showSecondary)
+                        Text(secondaryName, style: const TextStyle(fontSize: 12)),
                       Text(
-                        'เครดิต ${item.creditTermMonths > 0 ? '${item.creditTermMonths} เดือน ' : ''}${item.creditTermDays} วัน  |  ${item.currencyCode}',
+                        isEnglish
+                            ? 'Credit ${item.creditTermMonths > 0 ? '${item.creditTermMonths} months ' : ''}${item.creditTermDays} days  |  ${item.currencyCode}'
+                            : 'เครดิต ${item.creditTermMonths > 0 ? '${item.creditTermMonths} เดือน ' : ''}${item.creditTermDays} วัน  |  ${item.currencyCode}',
                         style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                       ),
                     ]),
-                    isThreeLine: item.groupNameEng.isNotEmpty,
+                    isThreeLine: showSecondary,
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       if (!item.isActive)
                         Padding(padding: const EdgeInsets.only(right: 4),
-                          child: Chip(label: const Text('หยุดใช้', style: TextStyle(fontSize: 11)), backgroundColor: Colors.grey.shade200)),
+                          child: Chip(label: Text(isEnglish ? 'Inactive' : 'หยุดใช้', style: const TextStyle(fontSize: 11)), backgroundColor: Colors.grey.shade200)),
                       if (widget.enableViewButton)
                         IconButton(icon: const Icon(Icons.visibility, color: Colors.green), onPressed: () => widget.onView(item)),
                       if (widget.enableEditButton)
