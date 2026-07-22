@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/cm_payment_method.dart';
 import '../services/cm_payment_method_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 
 class CmPaymentMethodListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -37,12 +38,13 @@ class CmPaymentMethodListWidget extends StatefulWidget {
   static Future<void> search(BuildContext context,
       {String? filterType,
       required void Function(CmPaymentMethod) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('ค้นหา ประเภทการชำระเงิน',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Search Payment Method' : 'ค้นหา ประเภทการชำระเงิน',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Container(
           width: 540,
           height: 580,
@@ -66,7 +68,7 @@ class CmPaymentMethodListWidget extends StatefulWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+            child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -98,6 +100,7 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
   }
 
   Future<void> _fetchList() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     setState(() => _isLoading = true);
     try {
       final service = Provider.of<CmPaymentMethodService>(context, listen: false);
@@ -110,7 +113,7 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('ไม่สามารถโหลดข้อมูลได้: $e')));
+            .showSnackBar(SnackBar(content: Text(isEnglish ? 'Failed to load data: $e' : 'ไม่สามารถโหลดข้อมูลได้: $e')));
       }
     }
   }
@@ -166,13 +169,17 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
     }
   }
 
+  String _methodName(CmPaymentMethod item, bool isEnglish) =>
+      isEnglish && (item.methodNameEn ?? '').isNotEmpty ? item.methodNameEn! : item.methodNameTh;
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final display = _filtered;
     final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${_list.length} แถว'
-        : 'พบ ${display.length} จาก ${_list.length} แถว';
+        ? (isEnglish ? 'Total ${_list.length} rows' : 'ทั้งหมด ${_list.length} แถว')
+        : (isEnglish ? 'Found ${display.length} of ${_list.length} rows' : 'พบ ${display.length} จาก ${_list.length} แถว');
 
     return Column(
       children: [
@@ -183,28 +190,28 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
               if (widget.enableAddButton)
                 IconButton(
                   icon: const Icon(Icons.add),
-                  tooltip: 'เพิ่มข้อมูลใหม่',
+                  tooltip: isEnglish ? 'Add new' : 'เพิ่มข้อมูลใหม่',
                   onPressed: widget.onAdd,
                 ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.sort),
-                tooltip: 'จัดเรียง',
+                tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
                 onSelected: _onSortSelected,
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
-                  PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
-                  PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
-                  PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'code_asc', child: Text(isEnglish ? 'Code (ascending)' : 'รหัส (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'code_desc', child: Text(isEnglish ? 'Code (descending)' : 'รหัส (มากไปน้อย)')),
+                  PopupMenuItem(value: 'name_asc', child: Text(isEnglish ? 'Name (ascending)' : 'ชื่อ (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'name_desc', child: Text(isEnglish ? 'Name (descending)' : 'ชื่อ (มากไปน้อย)')),
                 ],
               ),
               Expanded(
                 child: TextField(
                   controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา (รหัส / ชื่อ / ประเภท)',
-                    prefixIcon: Icon(Icons.search),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search (code / name / type)' : 'ค้นหา (รหัส / ชื่อ / ประเภท)',
+                    prefixIcon: const Icon(Icons.search),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    border: const OutlineInputBorder(),
                   ),
                   onChanged: (v) => setState(() => _searchQuery = v),
                 ),
@@ -224,7 +231,7 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : display.isEmpty
-                  ? const Center(child: Text('ไม่พบข้อมูล'))
+                  ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
                   : ListView.builder(
                       itemCount: display.length,
                       itemBuilder: (ctx, i) {
@@ -243,7 +250,7 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
                                   color: _typeColor(item.methodType), size: 20),
                             ),
                             title: Text(
-                              '${item.methodCode} — ${item.methodNameTh}',
+                              '${item.methodCode} — ${_methodName(item, isEnglish)}',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: item.isActive ? null : Colors.grey,
@@ -268,10 +275,10 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (!item.isActive)
-                                  const Chip(
-                                    label: Text('หยุดใช้',
-                                        style: TextStyle(fontSize: 11)),
-                                    backgroundColor: Color(0xFFEEEEEE),
+                                  Chip(
+                                    label: Text(isEnglish ? 'Inactive' : 'หยุดใช้',
+                                        style: const TextStyle(fontSize: 11)),
+                                    backgroundColor: const Color(0xFFEEEEEE),
                                   ),
                                 if (widget.enableViewButton)
                                   IconButton(

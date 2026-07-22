@@ -100,8 +100,6 @@ import '../../cm/screens/cm_doc_number_screen.dart';
 import '../../cm/screens/cm_bank_statement_import_screen.dart';
 import '../../cm/screens/cm_post_dated_check_screen.dart';
 import '../../cm/screens/cm_bank_charge_screen.dart';
-import '../../cm/screens/cm_remittance_advice_screen.dart';
-import '../../cm/screens/cm_bulk_payment_screen.dart';
 
 import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
@@ -124,6 +122,8 @@ import '../../ap/screens/ap_credit_limit_report_screen.dart';
 import '../../ap/screens/ap_year_end_setup_screen.dart';
 import '../../ap/screens/ap_pre_close_check_screen.dart';
 import '../../ap/screens/ap_fx_revaluation_screen.dart';
+import '../../ap/screens/ap_remittance_advice_screen.dart';
+import '../../ap/screens/ap_bulk_payment_screen.dart';
 import '../../cm/screens/cm_bank_file_format_screen.dart';
 import '../screens/sa_smtp_config_screen.dart';
 import '../screens/sa_user_audit_log_screen.dart';
@@ -282,8 +282,6 @@ class Menu {
     'CmBankStatementImportScreen':       (context) => const CmBankStatementImportScreen(),
     'CmPostDatedCheckScreen':            (context) => const CmPostDatedCheckScreen(),
     'CmBankChargeScreen':                (context) => const CmBankChargeScreen(),
-    'CmRemittanceAdviceScreen':          (context) => const CmRemittanceAdviceScreen(),
-    'CmBulkPaymentScreen':               (context) => const CmBulkPaymentScreen(),
 
     'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
     'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),
@@ -306,6 +304,8 @@ class Menu {
     'ApYearEndSetupScreen':     (context) => const ApYearEndSetupScreen(),
     'ApPreCloseCheckScreen':    (context) => const ApPreCloseCheckScreen(),
     'ApFxRevaluationScreen':    (context) => const ApFxRevaluationScreen(),
+    'ApRemittanceAdviceScreen': (context) => const ApRemittanceAdviceScreen(),
+    'ApBulkPaymentScreen':      (context) => const ApBulkPaymentScreen(),
     'CmBankFileFormatScreen': (context) => const CmBankFileFormatScreen(),
     'SaSmtpConfigScreen':        (context) => const SaSmtpConfigScreen(),
     'SaUserAuditLogScreen':      (context) => const SaUserAuditLogScreen(),

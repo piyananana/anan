@@ -44,6 +44,7 @@ class ArTransactionHeader {
   final int customerId;
   final String? customerCode;
   final String? customerNameTh;
+  final String? customerNameEn;
   final int? arAccountId;
   final int? vatAccountId;   // from ar_gl_account_setup.vat_output_account_id
   final int? glDocId;        // from ar_gl_account_setup.gl_doc_id
@@ -77,6 +78,7 @@ class ArTransactionHeader {
   // From join
   final String? docCode;
   final String? docNameThai;
+  final String? docNameEng;
   final int? sysDocType;
   final bool? isAutoNumbering;
   // GL Dimensions (configurable dim1–dim5)
@@ -89,6 +91,7 @@ class ArTransactionHeader {
   final int? branchId;
   final String? branchCode;
   final String? branchNameThai;
+  final String? branchNameEng;
   // Audit
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -107,6 +110,7 @@ class ArTransactionHeader {
     required this.customerId,
     this.customerCode,
     this.customerNameTh,
+    this.customerNameEn,
     this.arAccountId,
     this.vatAccountId,
     this.glDocId,
@@ -135,6 +139,7 @@ class ArTransactionHeader {
     this.glEntryId,
     this.docCode,
     this.docNameThai,
+    this.docNameEng,
     this.sysDocType,
     this.isAutoNumbering,
     this.createdAt,
@@ -147,6 +152,7 @@ class ArTransactionHeader {
     this.branchId,
     this.branchCode,
     this.branchNameThai,
+    this.branchNameEng,
     this.createdBy,
     this.updatedBy,
   });
@@ -164,6 +170,7 @@ class ArTransactionHeader {
       customerId: j['customer_id'] as int? ?? 0,
       customerCode: j['customer_code'],
       customerNameTh: j['customer_name_th'],
+      customerNameEn: j['customer_name_en'],
       arAccountId: j['ar_account_id'] as int?,
       vatAccountId: j['vat_account_id'] as int?,
       glDocId: j['gl_doc_id'] as int?,
@@ -192,6 +199,7 @@ class ArTransactionHeader {
       glEntryId: j['gl_entry_id'] as int?,
       docCode: j['doc_code'],
       docNameThai: j['doc_name_thai'],
+      docNameEng: j['doc_name_eng'],
       sysDocType: j['sys_doc_type'] != null ? int.tryParse(j['sys_doc_type'].toString()) : null,
       isAutoNumbering: j['is_auto_numbering'] as bool?,
       createdAt: j['created_at'] != null ? DateTime.parse(j['created_at']) : null,
@@ -206,6 +214,7 @@ class ArTransactionHeader {
       branchId: j['branch_id'] as int?,
       branchCode: j['branch_code'] as String?,
       branchNameThai: j['branch_name_thai'] as String?,
+      branchNameEng: j['branch_name_eng'] as String?,
     );
   }
 

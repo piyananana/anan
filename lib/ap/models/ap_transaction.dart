@@ -37,6 +37,7 @@ class ApTransactionHeader {
   final int vendorId;
   final String? vendorCode;
   final String? vendorNameTh;
+  final String? vendorNameEn;
   final String? vendorTaxId;
   final int? apAccountId;
   final int? currencyId;
@@ -68,6 +69,7 @@ class ApTransactionHeader {
   // From join
   final String? docCode;
   final String? docNameThai;
+  final String? docNameEng;
   final int? sysDocType;
   final bool? isAutoNumbering;
   // GL Dimensions
@@ -80,6 +82,7 @@ class ApTransactionHeader {
   final int? branchId;
   final String? branchCode;
   final String? branchNameThai;
+  final String? branchNameEng;
   // Audit
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -96,6 +99,7 @@ class ApTransactionHeader {
     required this.vendorId,
     this.vendorCode,
     this.vendorNameTh,
+    this.vendorNameEn,
     this.vendorTaxId,
     this.apAccountId,
     this.currencyId,
@@ -123,6 +127,7 @@ class ApTransactionHeader {
     this.glEntryId,
     this.docCode,
     this.docNameThai,
+    this.docNameEng,
     this.sysDocType,
     this.isAutoNumbering,
     this.dim1Id, this.dim1Name,
@@ -130,7 +135,7 @@ class ApTransactionHeader {
     this.dim3Id, this.dim3Name,
     this.dim4Id, this.dim4Name,
     this.dim5Id, this.dim5Name,
-    this.branchId, this.branchCode, this.branchNameThai,
+    this.branchId, this.branchCode, this.branchNameThai, this.branchNameEng,
     this.createdAt, this.updatedAt, this.createdBy, this.updatedBy,
   });
 
@@ -146,6 +151,7 @@ class ApTransactionHeader {
       vendorId: json['vendor_id'] ?? 0,
       vendorCode: json['vendor_code'],
       vendorNameTh: json['vendor_name_th'],
+      vendorNameEn: json['vendor_name_en'],
       vendorTaxId: json['vendor_tax_id'],
       apAccountId: json['ap_account_id'],
       currencyId: json['currency_id'],
@@ -173,6 +179,7 @@ class ApTransactionHeader {
       glEntryId: json['gl_entry_id'],
       docCode: json['doc_code'],
       docNameThai: json['doc_name_thai'],
+      docNameEng: json['doc_name_eng'],
       sysDocType: json['sys_doc_type'] != null ? int.tryParse(json['sys_doc_type'].toString()) : null,
       isAutoNumbering: json['is_auto_numbering'],
       dim1Id: json['dim1_id'], dim1Name: json['dim1_name'],
@@ -183,6 +190,7 @@ class ApTransactionHeader {
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
+      branchNameEng: json['branch_name_eng'],
       createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
       updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString()) : null,
       createdBy: json['created_by'],

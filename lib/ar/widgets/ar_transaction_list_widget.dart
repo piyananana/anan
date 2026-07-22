@@ -10,6 +10,8 @@ import '../../sa/models/sa_module_document.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
 
 class ArTransactionListWidget extends StatefulWidget {
   final VoidCallback onAddPressed;
@@ -37,6 +39,7 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
   bool get wantKeepAlive => true;
   final ArTransactionService _service = ArTransactionService();
   final GlDimensionService _dimService = GlDimensionService();
+  final BranchService _branchService = BranchService();
   final _fmt = NumberFormat('#,##0.00');
   final _dateFmt = DateFormat('dd/MM/yyyy');
   bool _isEnglish = false;
@@ -53,6 +56,7 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
   String? _selectedDocType;
   List<UserBranch> _allowedBranches = [];
   UserBranch? _selectedBranchFilter;
+  List<Branch> _allBranches = [];
   List<GlDimensionType> _dimTypes = [];
   Map<String, List<GlDimensionValue>> _dimValues = {};
   Map<int, int?> _dimSelections = {}; // slotNo → selected dimValueId
@@ -99,6 +103,7 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
       final results = await Future.wait([
         _service.fetchDocTypesByUser(),
         _dimService.fetchActiveTypes(),
+        _branchService.fetchRows(),
       ]);
       final docTypes = results[0] as List<ModuleDocument>;
       final types = results[1] as List<GlDimensionType>;
@@ -111,6 +116,7 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
         for (int i = 0; i < types.length; i++) {
           _dimValues[types[i].typeCode] = valResults[i];
         }
+        _allBranches = results[2] as List<Branch>;
       });
       await _fetchRows();
     } catch (e) {
@@ -174,6 +180,7 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
         r.dueDate != null ? _dateFmt.format(r.dueDate!) : '',
         r.customerCode ?? '',
         r.customerNameTh ?? '',
+        r.customerNameEn ?? '',
         r.refNo ?? '',
         r.status,
       ].map((f) => f.toLowerCase()).toList();
@@ -206,9 +213,23 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
     }
   }
 
+  // UserBranch (allowed branches) has no English name — resolve it from the
+  // full bilingual Branch list (loaded in _initialLoad) by branchId.
+  String _resolveBranchName(int? branchId, String fallbackThai) {
+    if (_isEnglish) {
+      final match = _allBranches.where((b) => b.id == branchId);
+      if (match.isNotEmpty && match.first.branchNameEng.isNotEmpty) {
+        return match.first.branchNameEng;
+      }
+    }
+    return fallbackThai;
+  }
+
   String _docTypeNameFromHeader(ArTransactionHeader row) {
     final code = row.docCode ?? '';
-    final name = row.docNameThai ?? '';
+    final name = _isEnglish && (row.docNameEng ?? '').isNotEmpty
+        ? row.docNameEng!
+        : (row.docNameThai ?? '');
     return code.isNotEmpty ? '$code $name' : name;
   }
 
@@ -275,7 +296,7 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
                     DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
                     ..._docTypes.map((d) => DropdownMenuItem(
                         value: d.sysDocType,
-                        child: Text('${d.docCode} ${d.docNameThai}',
+                        child: Text('${d.docCode} ${isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai}',
                             overflow: TextOverflow.ellipsis))),
                   ],
                   onChanged: (v) {
@@ -315,7 +336,7 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
                       DropdownMenuItem<UserBranch?>(value: null, child: Text(isEnglish ? 'All Branches' : 'ทุกสาขา')),
                       ..._allowedBranches.map((b) => DropdownMenuItem(
                             value: b,
-                            child: Text('${b.branchCode} ${b.branchNameThai}',
+                            child: Text('${b.branchCode} ${_resolveBranchName(b.branchId, b.branchNameThai)}',
                                 overflow: TextOverflow.ellipsis),
                           )),
                     ],
@@ -478,7 +499,8 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
                           ? _dateFmt.format(row.dueDate!)
                           : '',
                       style: const TextStyle(fontSize: 12))),
-                  DataCell(Text('${row.customerCode ?? ''} ${row.customerNameTh ?? ''}'.trim(),
+                  DataCell(Text(
+                      '${row.customerCode ?? ''} ${isEnglish && (row.customerNameEn ?? '').isNotEmpty ? row.customerNameEn! : (row.customerNameTh ?? '')}'.trim(),
                       style: const TextStyle(fontSize: 12))),
                   DataCell(Text(_fmt.format(row.totalAmountLc),
                       style: const TextStyle(fontSize: 12))),

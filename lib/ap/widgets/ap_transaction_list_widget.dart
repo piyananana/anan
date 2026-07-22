@@ -1,5 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/ap_transaction.dart';
 import '../services/ap_transaction_service.dart';
 import '../../gl/models/gl_dimension.dart';
@@ -8,6 +9,9 @@ import '../../gl/widgets/gl_dimension_picker_field.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/services/sa_language_provider.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
 
 class ApTransactionListWidget extends StatefulWidget {
   final VoidCallback onAddPressed;
@@ -36,8 +40,10 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
 
   final ApTransactionService _service = ApTransactionService();
   final GlDimensionService _dimService = GlDimensionService();
+  final BranchService _branchService = BranchService();
   final _fmt = NumberFormat('#,##0.00');
   final _dateFmt = DateFormat('dd/MM/yyyy');
+  bool _isEnglish = false;
 
   List<ApTransactionHeader> _rows = [];
   List<ApTransactionHeader> _filteredRows = [];
@@ -49,6 +55,7 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
   String? _selectedDocType;
   List<UserBranch> _allowedBranches = [];
   UserBranch? _selectedBranchFilter;
+  List<Branch> _allBranches = [];
   List<GlDimensionType> _dimTypes = [];
   Map<String, List<GlDimensionValue>> _dimValues = {};
   Map<int, int?> _dimSelections = {};
@@ -85,6 +92,7 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
   }
 
   Future<void> _initialLoad() async {
+    final isEnglish = _isEnglish;
     setState(() => _isLoading = true);
     _allowedBranches = AuthService().allowedBranches;
     if (_allowedBranches.length == 1) {
@@ -94,6 +102,7 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
       final results = await Future.wait([
         _service.fetchDocTypesByUser(),
         _dimService.fetchActiveTypes(),
+        _branchService.fetchRows(),
       ]);
       final docTypes = results[0] as List<ModuleDocument>;
       final types = results[1] as List<GlDimensionType>;
@@ -106,16 +115,19 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
         for (int i = 0; i < types.length; i++) {
           _dimValues[types[i].typeCode] = valResults[i];
         }
+        _allBranches = results[2] as List<Branch>;
       });
       await _fetchRows();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _fetchRows() async {
+    final isEnglish = _isEnglish;
     setState(() => _isLoading = true);
     try {
       final rows = await _service.fetchRows(
@@ -134,7 +146,8 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
         _applyFilter();
       });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -159,10 +172,12 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
         r.docNo,
         r.docCode ?? '',
         r.docNameThai ?? '',
+        r.docNameEng ?? '',
         _dateFmt.format(r.docDate),
         r.dueDate != null ? _dateFmt.format(r.dueDate!) : '',
         r.vendorCode ?? '',
         r.vendorNameTh ?? '',
+        r.vendorNameEn ?? '',
         r.refNo ?? '',
         r.status,
       ].map((f) => f.toLowerCase()).toList();
@@ -195,6 +210,29 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
     }
   }
 
+  // UserBranch (allowed branches) has no English name — resolve it from the
+  // full bilingual Branch list (loaded in _initialLoad) by branchId.
+  String _resolveBranchName(int? branchId, String fallbackThai) {
+    if (_isEnglish) {
+      final match = _allBranches.where((b) => b.id == branchId);
+      if (match.isNotEmpty && match.first.branchNameEng.isNotEmpty) {
+        return match.first.branchNameEng;
+      }
+    }
+    return fallbackThai;
+  }
+
+  String _docTypeName(ApTransactionHeader row) {
+    final code = row.docCode ?? '';
+    final name = _isEnglish && (row.docNameEng ?? '').isNotEmpty
+        ? row.docNameEng!
+        : (row.docNameThai ?? '');
+    return code.isNotEmpty ? '$code $name' : name;
+  }
+
+  String _vendorName(ApTransactionHeader row) =>
+      _isEnglish && (row.vendorNameEn ?? '').isNotEmpty ? row.vendorNameEn! : (row.vendorNameTh ?? '');
+
   bool get _hasActiveFilters =>
       _selectedStatus != null ||
       _selectedDocType != null ||
@@ -207,9 +245,11 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Column(
       children: [
-        _buildFilterRow(),
+        _buildFilterRow(isEnglish),
         const Divider(height: 1),
         if (!_isLoading)
           Padding(
@@ -218,8 +258,12 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
               alignment: Alignment.centerLeft,
               child: Text(
                 _hasActiveFilters
-                    ? 'พบ ${_filteredRows.length} รายการ จาก ${_rows.length} รายการ'
-                    : '${_filteredRows.length} รายการ',
+                    ? (isEnglish
+                        ? 'Found ${_filteredRows.length} of ${_rows.length} rows'
+                        : 'พบ ${_filteredRows.length} รายการ จาก ${_rows.length} รายการ')
+                    : (isEnglish
+                        ? '${_filteredRows.length} rows'
+                        : '${_filteredRows.length} รายการ'),
                 style: const TextStyle(fontSize: 12, color: Colors.black87),
               ),
             ),
@@ -227,13 +271,13 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : _buildTable(),
+              : _buildTable(isEnglish),
         ),
       ],
     );
   }
 
-  Widget _buildFilterRow() {
+  Widget _buildFilterRow(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
       child: Column(
@@ -245,13 +289,13 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                 child: DropdownButtonFormField<String?>(
                   value: _selectedDocType,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                      labelText: 'ประเภทเอกสาร', isDense: true, border: OutlineInputBorder()),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Document Type' : 'ประเภทเอกสาร', isDense: true, border: const OutlineInputBorder()),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('ทั้งหมด')),
+                    DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
                     ..._docTypes.map((d) => DropdownMenuItem(
                         value: d.sysDocType,
-                        child: Text('${d.docCode} ${d.docNameThai}',
+                        child: Text('${d.docCode} ${isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai}',
                             overflow: TextOverflow.ellipsis))),
                   ],
                   onChanged: (v) {
@@ -265,13 +309,13 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                 child: DropdownButtonFormField<String?>(
                   value: _selectedStatus,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                      labelText: 'สถานะ', isDense: true, border: OutlineInputBorder()),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('ทั้งหมด')),
-                    DropdownMenuItem(value: 'Draft', child: Text('Draft')),
-                    DropdownMenuItem(value: 'Posted', child: Text('Posted')),
-                    DropdownMenuItem(value: 'Void', child: Text('Void')),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Status' : 'สถานะ', isDense: true, border: const OutlineInputBorder()),
+                  items: [
+                    DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
+                    const DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                    const DropdownMenuItem(value: 'Posted', child: Text('Posted')),
+                    const DropdownMenuItem(value: 'Void', child: Text('Void')),
                   ],
                   onChanged: (v) => setState(() {
                     _selectedStatus = v;
@@ -285,13 +329,13 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                   child: DropdownButtonFormField<UserBranch?>(
                     value: _selectedBranchFilter,
                     isExpanded: true,
-                    decoration: const InputDecoration(
-                        labelText: 'สาขา', isDense: true, border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText: isEnglish ? 'Branch' : 'สาขา', isDense: true, border: const OutlineInputBorder()),
                     items: [
-                      const DropdownMenuItem<UserBranch?>(value: null, child: Text('ทุกสาขา')),
+                      DropdownMenuItem<UserBranch?>(value: null, child: Text(isEnglish ? 'All Branches' : 'ทุกสาขา')),
                       ..._allowedBranches.map((b) => DropdownMenuItem(
                             value: b,
-                            child: Text('${b.branchCode} ${b.branchNameThai}',
+                            child: Text('${b.branchCode} ${_resolveBranchName(b.branchId, b.branchNameThai)}',
                                 overflow: TextOverflow.ellipsis),
                           )),
                     ],
@@ -307,8 +351,8 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                 child: InkWell(
                   onTap: () => _pickDate(true),
                   child: InputDecorator(
-                    decoration: const InputDecoration(
-                        labelText: 'จากวันที่', isDense: true, border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText: isEnglish ? 'From Date' : 'จากวันที่', isDense: true, border: const OutlineInputBorder()),
                     child: Text(_dateFmt.format(_dateFrom),
                         style: const TextStyle(fontSize: 13)),
                   ),
@@ -319,8 +363,8 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                 child: InkWell(
                   onTap: () => _pickDate(false),
                   child: InputDecorator(
-                    decoration: const InputDecoration(
-                        labelText: 'ถึงวันที่', isDense: true, border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText: isEnglish ? 'To Date' : 'ถึงวันที่', isDense: true, border: const OutlineInputBorder()),
                     child: Text(_dateFmt.format(_dateTo),
                         style: const TextStyle(fontSize: 13)),
                   ),
@@ -360,11 +404,13 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
               Expanded(
                 child: TextField(
                   controller: _searchCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'ค้นหา (เลขที่เอกสาร / ผู้ขาย / เลขที่อ้างอิง)',
+                  decoration: InputDecoration(
+                    labelText: isEnglish
+                        ? 'Search (Doc No. / Vendor / Ref No.)'
+                        : 'ค้นหา (เลขที่เอกสาร / ผู้ขาย / เลขที่อ้างอิง)',
                     isDense: true,
-                    border: OutlineInputBorder(),
-                    suffixIcon: Icon(Icons.search, size: 16),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: const Icon(Icons.search, size: 16),
                   ),
                   onChanged: (_) => setState(() => _applyFilter()),
                 ),
@@ -373,7 +419,7 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
               ElevatedButton.icon(
                 onPressed: widget.onAddPressed,
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('เพิ่มเอกสาร'),
+                label: Text(isEnglish ? 'Add Document' : 'เพิ่มเอกสาร'),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
               ),
@@ -392,7 +438,7 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                     });
                     _fetchRows();
                   },
-                  child: const Text('ล้าง'),
+                  child: Text(isEnglish ? 'Clear' : 'ล้าง'),
                 ),
               ],
             ],
@@ -402,10 +448,12 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
     );
   }
 
-  Widget _buildTable() {
+  Widget _buildTable(bool isEnglish) {
     if (_filteredRows.isEmpty) {
       return Center(
-        child: Text(_rows.isEmpty ? 'ไม่พบรายการ' : 'ไม่พบรายการที่ตรงกับคำค้น'),
+        child: Text(_rows.isEmpty
+            ? (isEnglish ? 'No records found' : 'ไม่พบรายการ')
+            : (isEnglish ? 'No records match your search' : 'ไม่พบรายการที่ตรงกับคำค้น')),
       );
     }
     return LayoutBuilder(
@@ -417,17 +465,17 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
             columnSpacing: 12,
             dataRowMinHeight: 32,
             dataRowMaxHeight: 42,
-            columns: const [
-              DataColumn(label: Text('เลขที่เอกสาร', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ประเภท', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('วันที่', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ครบกำหนด', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ผู้ขาย', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ยอดรวม', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-              DataColumn(label: Text('ชำระแล้ว', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-              DataColumn(label: Text('คงเหลือ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-              DataColumn(label: Text('สถานะ', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('จัดการ', style: TextStyle(fontWeight: FontWeight.bold))),
+            columns: [
+              DataColumn(label: Text(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Type' : 'ประเภท', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Due Date' : 'ครบกำหนด', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Vendor' : 'ผู้ขาย', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Total' : 'ยอดรวม', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+              DataColumn(label: Text(isEnglish ? 'Paid' : 'ชำระแล้ว', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+              DataColumn(label: Text(isEnglish ? 'Balance' : 'คงเหลือ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+              DataColumn(label: Text(isEnglish ? 'Status' : 'สถานะ', style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text(isEnglish ? 'Actions' : 'จัดการ', style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
             rows: _filteredRows.map((row) {
               final isDraft = row.status == 'Draft';
@@ -440,9 +488,7 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                         ? widget.onEditPressed(row.id)
                         : widget.onViewPressed(row.id),
                   ),
-                  DataCell(Text(
-                      '${row.docCode ?? ''} ${row.docNameThai ?? ''}'.trim(),
-                      style: const TextStyle(fontSize: 12))),
+                  DataCell(Text(_docTypeName(row), style: const TextStyle(fontSize: 12))),
                   DataCell(Text(_dateFmt.format(row.docDate),
                       style: const TextStyle(fontSize: 12))),
                   DataCell(Text(
@@ -451,7 +497,7 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                           : '',
                       style: const TextStyle(fontSize: 12))),
                   DataCell(Text(
-                      '${row.vendorCode ?? ''} ${row.vendorNameTh ?? ''}'.trim(),
+                      '${row.vendorCode ?? ''} ${_vendorName(row)}'.trim(),
                       style: const TextStyle(fontSize: 12))),
                   DataCell(Text(_fmt.format(row.totalAmountLc),
                       style: const TextStyle(fontSize: 12))),
@@ -475,14 +521,14 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                     if (isDraft)
                       IconButton(
                         icon: const Icon(Icons.edit, size: 16),
-                        tooltip: 'แก้ไข',
+                        tooltip: isEnglish ? 'Edit' : 'แก้ไข',
                         onPressed: () => widget.onEditPressed(row.id),
                         visualDensity: VisualDensity.compact,
                       )
                     else
                       IconButton(
                         icon: const Icon(Icons.visibility, size: 16),
-                        tooltip: 'ดู',
+                        tooltip: isEnglish ? 'View' : 'ดู',
                         onPressed: () => widget.onViewPressed(row.id),
                         visualDensity: VisualDensity.compact,
                       ),

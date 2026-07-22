@@ -9,7 +9,9 @@ import 'package:printing/printing.dart';
 
 import 'package:provider/provider.dart';
 import '../models/ap_payment_run.dart';
+import '../models/ap_vendor.dart';
 import '../services/ap_payment_run_service.dart';
+import '../services/ap_vendor_service.dart';
 import '../../cm/models/cm_bank_file_format.dart';
 import '../../cm/services/cm_bank_file_format_service.dart';
 import '../../sa/services/sa_auth_service.dart';
@@ -46,13 +48,13 @@ Color _statusColor(String s) {
   }
 }
 
-Widget _statusChip(String s) => Container(
+Widget _statusChip(String s, bool isEnglish) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
           color: _statusColor(s).withOpacity(0.15),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: _statusColor(s).withOpacity(0.6))),
-      child: Text(apPaymentRunStatusLabels[s] ?? s,
+      child: Text(apPaymentRunStatusLabel(s, isEnglish),
           style: TextStyle(
               color: _statusColor(s),
               fontSize: 11,
@@ -138,14 +140,15 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), tooltip: 'รีเฟรช', onPressed: _loadList),
+          IconButton(icon: const Icon(Icons.refresh), tooltip: l.refresh, onPressed: _loadList),
         ],
       ),
       body: LayoutBuilder(builder: (context, constraints) {
@@ -164,7 +167,9 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
             ),
             padding: EdgeInsets.zero,
             onPressed: () => setState(() => _isLeftExpanded = !_isLeftExpanded),
-            tooltip: _isLeftExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+            tooltip: _isLeftExpanded
+                ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
+                : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
           ),
         ),
         // ── Left panel (animated) ────────────────────────────────────────
@@ -195,7 +200,7 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
                           icon: const Icon(Icons.add),
                           iconSize: 20,
                           color: Colors.blue[700],
-                          tooltip: 'สร้างใหม่',
+                          tooltip: isEnglish ? 'Create new' : 'สร้างใหม่',
                           onPressed: _onAdd),
                     ]),
                   ),
@@ -212,7 +217,7 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
                         ? const Center(child: CircularProgressIndicator())
                         : _runs.isEmpty
                             ? Center(
-                                child: Text('ไม่พบข้อมูล',
+                                child: Text(l.noData,
                                     style: TextStyle(color: Colors.grey[500])))
                             : ListView.builder(
                                 itemCount: _runs.length,
@@ -223,14 +228,14 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
                                     selected: sel,
                                     selectedTileColor: Colors.blueGrey.shade200,
                                     dense: true,
-                                    title: Text(r.runNumber ?? '(ใหม่)',
+                                    title: Text(r.runNumber ?? (isEnglish ? '(new)' : '(ใหม่)'),
                                         style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 13)),
                                     subtitle: Text(
                                         '${_fmtDate(r.runDate)}  ${_fmt.format(r.totalAmountLc)}',
                                         style: const TextStyle(fontSize: 12)),
-                                    trailing: _statusChip(r.status),
+                                    trailing: _statusChip(r.status, isEnglish),
                                     onTap: () => _onSelect(r),
                                   );
                                 }),
@@ -260,7 +265,10 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
         Expanded(
           child: (_selected == null && !_isAdding)
               ? Center(
-                  child: Text('เลือก Payment Run หรือกด + เพื่อสร้างใหม่',
+                  child: Text(
+                      isEnglish
+                          ? 'Select a Payment Run or press + to create new'
+                          : 'เลือก Payment Run หรือกด + เพื่อสร้างใหม่',
                       style: TextStyle(color: Colors.grey[500])))
               : _DetailPanel(
                   key: ValueKey(_selected?.id ?? 'new_$_isAdding'),
@@ -288,6 +296,7 @@ class _StatusFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Wrap(
@@ -296,7 +305,7 @@ class _StatusFilterBar extends StatelessWidget {
         children: _statuses.map((s) {
           final active = s == selected;
           return ChoiceChip(
-            label: Text(s == 'All' ? 'ทั้งหมด' : (apPaymentRunStatusLabels[s] ?? s),
+            label: Text(s == 'All' ? (isEnglish ? 'All' : 'ทั้งหมด') : apPaymentRunStatusLabel(s, isEnglish),
                 style: TextStyle(fontSize: 11, color: active ? Colors.white : null)),
             selected: active,
             selectedColor: Colors.blue[600],
@@ -342,13 +351,34 @@ class _DetailPanelState extends State<_DetailPanel> {
   late List<_LineRow> _lineRows;
   bool _saving = false;
   bool _readOnly = false;
+  bool _isEnglish = false;
   final _companySvc = CompanyService();
+  final _vendorSvc = ApVendorService();
+  List<ApVendor> _allVendors = [];
 
   @override
   void initState() {
     super.initState();
     _init();
     _loadFormats();
+    _loadVendors();
+  }
+
+  Future<void> _loadVendors() async {
+    try {
+      final vendors = await _vendorSvc.fetchRows();
+      if (mounted) setState(() => _allVendors = vendors);
+    } catch (_) {}
+  }
+
+  String _vendorLabel(int vendorId, String fallbackThai) {
+    if (_isEnglish) {
+      final match = _allVendors.where((v) => v.id == vendorId);
+      if (match.isNotEmpty && (match.first.vendorNameEn ?? '').isNotEmpty) {
+        return match.first.vendorNameEn!;
+      }
+    }
+    return fallbackThai;
   }
 
   void _init() {
@@ -381,6 +411,7 @@ class _DetailPanelState extends State<_DetailPanel> {
   bool get _isDraft => widget.run == null || widget.run!.status == 'Draft';
 
   Future<void> _save() async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final lines = _lineRows.map((r) => r.toLine()).toList();
     final run = ApPaymentRun(
       id: widget.run?.id,
@@ -397,7 +428,7 @@ class _DetailPanelState extends State<_DetailPanel> {
       if (mounted) {
         widget.onSaved(saved);
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+            .showSnackBar(SnackBar(content: Text(l.savedSuccess)));
       }
     } catch (e) {
       if (mounted) {
@@ -411,14 +442,18 @@ class _DetailPanelState extends State<_DetailPanel> {
 
   Future<void> _submit() async {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการส่งอนุมัติ'),
-        content: Text('ส่งอนุมัติ ${widget.run!.runNumber}?'),
+        title: Text(isEnglish ? 'Confirm Submit for Approval' : 'ยืนยันการส่งอนุมัติ'),
+        content: Text(
+            isEnglish ? 'Submit ${widget.run!.runNumber} for approval?' : 'ส่งอนุมัติ ${widget.run!.runNumber}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ส่งอนุมัติ')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(isEnglish ? 'Submit' : 'ส่งอนุมัติ')),
         ],
       ),
     );
@@ -427,8 +462,8 @@ class _DetailPanelState extends State<_DetailPanel> {
     try {
       await widget.svc.submitRun(widget.run!.id!);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ส่งอนุมัติสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Submitted for approval successfully' : 'ส่งอนุมัติสำเร็จ')));
         widget.onRefresh();
         final updated = await widget.svc.fetchRow(widget.run!.id!);
         if (mounted) widget.onSaved(updated);
@@ -444,16 +479,21 @@ class _DetailPanelState extends State<_DetailPanel> {
   }
 
   Future<void> _void() async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการยกเลิก'),
-        content: Text('ยกเลิกเอกสาร ${widget.run?.runNumber ?? ''}?'),
+        title: Text(l.confirmVoid),
+        content: Text(isEnglish
+            ? 'Void document ${widget.run?.runNumber ?? ''}?'
+            : 'ยกเลิกเอกสาร ${widget.run?.runNumber ?? ''}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ไม่')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.no)),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('ยกเลิกเอกสาร', style: TextStyle(color: Colors.red))),
+              child: Text(isEnglish ? 'Void Document' : 'ยกเลิกเอกสาร',
+                  style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -462,8 +502,8 @@ class _DetailPanelState extends State<_DetailPanel> {
     try {
       await widget.svc.voidRun(widget.run!.id!);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ยกเลิกเอกสารสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Document voided successfully' : 'ยกเลิกเอกสารสำเร็จ')));
         widget.onRefresh();
         final updated = await widget.svc.fetchRow(widget.run!.id!);
         if (mounted) widget.onSaved(updated);
@@ -481,9 +521,10 @@ class _DetailPanelState extends State<_DetailPanel> {
   // ── Remittance Advice PDF ──────────────────────────────────────────────────
 
   Future<Uint8List> _buildRaPdf(PdfPageFormat format) async {
+    final isEnglish = _isEnglish;
     final run = widget.run!;
     final company = await _companySvc.fetchCompany();
-    final companyName = company?.thaiName ?? '';
+    final companyName = company?.displayName(isEnglish) ?? '';
 
     final fontData     = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -531,7 +572,8 @@ class _DetailPanelState extends State<_DetailPanel> {
       final bankLine = [
         first.bankName,
         first.bankBranchName,
-      ].where((e) => e != null && e.isNotEmpty).join(' สาขา ');
+      ].where((e) => e != null && e.isNotEmpty).join(isEnglish ? ' Branch ' : ' สาขา ');
+      final vendorDisplayName = _vendorLabel(first.vendorId, first.vendorNameTh);
 
       doc.addPage(pw.Page(
         pageFormat: PdfPageFormat.a4,
@@ -550,7 +592,7 @@ class _DetailPanelState extends State<_DetailPanel> {
                           fontSize: 14, fontWeight: pw.FontWeight.bold)),
                 ),
                 pw.Text(
-                  'พิมพ์: ${dateFmt.format(DateTime.now())}',
+                  '${isEnglish ? 'Printed' : 'พิมพ์'}: ${dateFmt.format(DateTime.now())}',
                   style: const pw.TextStyle(fontSize: 9),
                 ),
               ],
@@ -573,7 +615,8 @@ class _DetailPanelState extends State<_DetailPanel> {
                     pw.Row(children: [
                       pw.SizedBox(
                           width: 90,
-                          child: pw.Text('เลขที่ Payment Run:',
+                          child: pw.Text(
+                              isEnglish ? 'Payment Run No.:' : 'เลขที่ Payment Run:',
                               style: const pw.TextStyle(fontSize: 10))),
                       pw.Text(run.runNumber ?? '-',
                           style: pw.TextStyle(
@@ -584,7 +627,7 @@ class _DetailPanelState extends State<_DetailPanel> {
                     pw.Row(children: [
                       pw.SizedBox(
                           width: 90,
-                          child: pw.Text('วันที่โอนเงิน:',
+                          child: pw.Text(isEnglish ? 'Transfer Date:' : 'วันที่โอนเงิน:',
                               style: const pw.TextStyle(fontSize: 10))),
                       pw.Text(fd(run.runDate),
                           style: const pw.TextStyle(fontSize: 10)),
@@ -595,7 +638,7 @@ class _DetailPanelState extends State<_DetailPanel> {
                       pw.Row(children: [
                         pw.SizedBox(
                             width: 90,
-                            child: pw.Text('หมายเหตุ:',
+                            child: pw.Text(isEnglish ? 'Note:' : 'หมายเหตุ:',
                                 style:
                                     const pw.TextStyle(fontSize: 10))),
                         pw.Expanded(
@@ -627,17 +670,18 @@ class _DetailPanelState extends State<_DetailPanel> {
                             color: PdfColors.grey600)),
                     pw.SizedBox(height: 2),
                     pw.Text(
-                        '${first.vendorCode}  ${first.vendorNameTh}',
+                        '${first.vendorCode}  $vendorDisplayName',
                         style: pw.TextStyle(
                             fontSize: 11,
                             fontWeight: pw.FontWeight.bold)),
                     pw.SizedBox(height: 4),
-                    pw.Text('ธนาคาร: $bankLine',
+                    pw.Text('${isEnglish ? 'Bank' : 'ธนาคาร'}: $bankLine',
                         style: const pw.TextStyle(fontSize: 10)),
-                    pw.Text('บัญชี: ${first.accountNumber ?? '-'}',
+                    pw.Text('${isEnglish ? 'Account' : 'บัญชี'}: ${first.accountNumber ?? '-'}',
                         style: const pw.TextStyle(fontSize: 10)),
                     if ((first.accountName ?? '').isNotEmpty)
-                      pw.Text('ชื่อบัญชี: ${first.accountName}',
+                      pw.Text(
+                          '${isEnglish ? 'Account Name' : 'ชื่อบัญชี'}: ${first.accountName}',
                           style: const pw.TextStyle(fontSize: 10)),
                   ],
                 ),
@@ -662,15 +706,15 @@ class _DetailPanelState extends State<_DetailPanel> {
                   decoration:
                       const pw.BoxDecoration(color: headerBg),
                   children: [
-                    col('เลขที่ใบแจ้งหนี้', 130, bold: true),
-                    col('วันที่ใบ', 72,
+                    col(isEnglish ? 'Invoice No.' : 'เลขที่ใบแจ้งหนี้', 130, bold: true),
+                    col(isEnglish ? 'Invoice Date' : 'วันที่ใบ', 72,
                         align: pw.TextAlign.center, bold: true),
-                    col('วันครบกำหนด', 72,
+                    col(isEnglish ? 'Due Date' : 'วันครบกำหนด', 72,
                         align: pw.TextAlign.center, bold: true),
-                    col('รายละเอียด', 0, bold: true),
-                    col('ยอดใบแจ้งหนี้', 82,
+                    col(isEnglish ? 'Description' : 'รายละเอียด', 0, bold: true),
+                    col(isEnglish ? 'Invoice Amount' : 'ยอดใบแจ้งหนี้', 82,
                         align: pw.TextAlign.right, bold: true),
-                    col('ยอดชำระ', 82,
+                    col(isEnglish ? 'Payment Amount' : 'ยอดชำระ', 82,
                         align: pw.TextAlign.right, bold: true),
                   ],
                 ),
@@ -693,7 +737,7 @@ class _DetailPanelState extends State<_DetailPanel> {
                   decoration:
                       const pw.BoxDecoration(color: headerBg),
                   children: [
-                    col('รวมทั้งสิ้น', 130,
+                    col(isEnglish ? 'Grand Total' : 'รวมทั้งสิ้น', 130,
                         bold: true,
                         style: pw.TextStyle(
                             fontSize: 10,
@@ -716,11 +760,11 @@ class _DetailPanelState extends State<_DetailPanel> {
             pw.SizedBox(height: 16),
             // ── Signature area ───────────────────────────────────────
             pw.Row(children: [
-              _sigBox('ผู้จัดทำ / Prepared by'),
+              _sigBox('ผู้จัดทำ / Prepared by', isEnglish),
               pw.SizedBox(width: 20),
-              _sigBox('ผู้ตรวจสอบ / Checked by'),
+              _sigBox('ผู้ตรวจสอบ / Checked by', isEnglish),
               pw.SizedBox(width: 20),
-              _sigBox('ผู้อนุมัติ / Approved by'),
+              _sigBox('ผู้อนุมัติ / Approved by', isEnglish),
             ]),
           ],
         ),
@@ -730,7 +774,7 @@ class _DetailPanelState extends State<_DetailPanel> {
     return doc.save();
   }
 
-  pw.Widget _sigBox(String label) => pw.Expanded(
+  pw.Widget _sigBox(String label, bool isEnglish) => pw.Expanded(
         child: pw.Column(children: [
           pw.Container(
             height: 50,
@@ -747,7 +791,7 @@ class _DetailPanelState extends State<_DetailPanel> {
                 style: const pw.TextStyle(fontSize: 9)),
           ),
           pw.Center(
-            child: pw.Text('วันที่: __________',
+            child: pw.Text(isEnglish ? 'Date: __________' : 'วันที่: __________',
                 style: const pw.TextStyle(fontSize: 9)),
           ),
         ]),
@@ -834,15 +878,18 @@ class _DetailPanelState extends State<_DetailPanel> {
   }
 
   Future<void> _generateBankFile() async {
+    final isEnglish = _isEnglish;
     final run = widget.run;
     if (run == null || _bankFmtId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('กรุณาเลือกรูปแบบไฟล์ธนาคารก่อนสร้างไฟล์')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish
+              ? 'Please select a bank file format before generating the file'
+              : 'กรุณาเลือกรูปแบบไฟล์ธนาคารก่อนสร้างไฟล์')));
       return;
     }
     if (run.lines.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ไม่มีรายการชำระเงิน')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'No payment lines' : 'ไม่มีรายการชำระเงิน')));
       return;
     }
 
@@ -911,14 +958,17 @@ class _DetailPanelState extends State<_DetailPanel> {
       await downloadFile(bytes, filename);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('ดาวน์โหลดไฟล์ $filename สำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'File $filename downloaded successfully'
+                : 'ดาวน์โหลดไฟล์ $filename สำเร็จ')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('สร้างไฟล์ล้มเหลว: $e'),
+                content: Text(
+                    isEnglish ? 'Failed to generate file: $e' : 'สร้างไฟล์ล้มเหลว: $e'),
                 backgroundColor: Colors.red));
       }
     } finally {
@@ -940,9 +990,12 @@ class _DetailPanelState extends State<_DetailPanel> {
               child: Row(children: [
                 const Icon(Icons.picture_as_pdf, color: Colors.white, size: 18),
                 const SizedBox(width: 8),
-                const Expanded(
-                  child: Text('ใบแจ้งรายการโอนเงิน (Remittance Advice)',
-                      style: TextStyle(
+                Expanded(
+                  child: Text(
+                      _isEnglish
+                          ? 'Remittance Advice'
+                          : 'ใบแจ้งรายการโอนเงิน (Remittance Advice)',
+                      style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 14)),
@@ -972,42 +1025,53 @@ class _DetailPanelState extends State<_DetailPanel> {
 
   Future<void> _postGl() async {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
     final run = widget.run;
     if (run == null) return;
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการบันทึก GL'),
+        title: Text(isEnglish ? 'Confirm Post GL' : 'ยืนยันการบันทึก GL'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('บันทึก GL สำหรับ Payment Run: ${run.runNumber}'),
+            Text(isEnglish
+                ? 'Post GL for Payment Run: ${run.runNumber}'
+                : 'บันทึก GL สำหรับ Payment Run: ${run.runNumber}'),
             const SizedBox(height: 8),
-            Text('จำนวนรายการ: ${run.lines.length} รายการ',
+            Text(
+                isEnglish
+                    ? 'Number of lines: ${run.lines.length}'
+                    : 'จำนวนรายการ: ${run.lines.length} รายการ',
                 style: const TextStyle(fontSize: 13)),
             Text(
-              'ยอดรวม: ${_fmt.format(run.totalAmountLc)} บาท',
+              isEnglish
+                  ? 'Total amount: ${_fmt.format(run.totalAmountLc)} THB'
+                  : 'ยอดรวม: ${_fmt.format(run.totalAmountLc)} บาท',
               style: const TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'ระบบจะสร้างรายการบัญชี GL และเปลี่ยนสถานะเป็น "สำเร็จ"\n'
-              'การดำเนินการนี้ไม่สามารถย้อนกลับได้',
-              style: TextStyle(color: Colors.red, fontSize: 12),
+            Text(
+              isEnglish
+                  ? 'The system will create GL entries and change the status to "Completed"\n'
+                      'This action cannot be undone'
+                  : 'ระบบจะสร้างรายการบัญชี GL และเปลี่ยนสถานะเป็น "สำเร็จ"\n'
+                      'การดำเนินการนี้ไม่สามารถย้อนกลับได้',
+              style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           ],
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('ยกเลิก')),
+              child: Text(l.cancel)),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
-            child: const Text('บันทึก GL',
-                style: TextStyle(color: Colors.white)),
+            child: Text(isEnglish ? 'Post GL' : 'บันทึก GL',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1029,7 +1093,7 @@ class _DetailPanelState extends State<_DetailPanel> {
               title: Row(children: [
                 Icon(Icons.check_circle, color: Colors.green[700]),
                 const SizedBox(width: 8),
-                const Text('บันทึก GL สำเร็จ'),
+                Text(isEnglish ? 'GL Posted Successfully' : 'บันทึก GL สำเร็จ'),
               ]),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1038,13 +1102,13 @@ class _DetailPanelState extends State<_DetailPanel> {
                   Text('Payment Run: ${updated.runNumber}'),
                   Text('GL Document: $glDocNo',
                       style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text('สถานะ: ${apPaymentRunStatusLabels[updated.status] ?? updated.status}'),
+                  Text('${l.status}: ${apPaymentRunStatusLabel(updated.status, isEnglish)}'),
                 ],
               ),
               actions: [
                 ElevatedButton(
                     onPressed: () => Navigator.pop(ctx),
-                    child: const Text('ตกลง')),
+                    child: Text(l.ok)),
               ],
             ),
           );
@@ -1054,7 +1118,7 @@ class _DetailPanelState extends State<_DetailPanel> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text('บันทึก GL ล้มเหลว: $e'),
+                content: Text(isEnglish ? 'Failed to post GL: $e' : 'บันทึก GL ล้มเหลว: $e'),
                 backgroundColor: Colors.red));
       }
     } finally {
@@ -1081,7 +1145,9 @@ class _DetailPanelState extends State<_DetailPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
+    final l = AppL10n(isEnglish);
     final status = widget.run?.status ?? 'Draft';
     final canVoid = widget.run != null && ['Draft', 'Submitted'].contains(status);
 
@@ -1092,26 +1158,26 @@ class _DetailPanelState extends State<_DetailPanel> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(children: [
           Text(
-            widget.run?.runNumber ?? '(ใหม่)',
+            widget.run?.runNumber ?? (isEnglish ? '(new)' : '(ใหม่)'),
             style: const TextStyle(
                 color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
           ),
           const SizedBox(width: 12),
-          if (widget.run != null) _statusChip(status),
+          if (widget.run != null) _statusChip(status, isEnglish),
           const Spacer(),
           if (_saving) const SizedBox(width: 20, height: 20,
               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
           if (!_saving && _isDraft) ...[
             TextButton.icon(
               icon: const Icon(Icons.cancel_outlined, size: 16),
-              label: const Text('ยกเลิก'),
+              label: Text(l.cancel),
               style: TextButton.styleFrom(foregroundColor: Colors.white),
               onPressed: widget.onCancel,
             ),
             const SizedBox(width: 4),
             ElevatedButton.icon(
               icon: const Icon(Icons.save, size: 16),
-              label: const Text('บันทึก'),
+              label: Text(l.save),
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.blue[700]),
@@ -1122,7 +1188,7 @@ class _DetailPanelState extends State<_DetailPanel> {
             const SizedBox(width: 8),
             ElevatedButton.icon(
               icon: const Icon(Icons.send, size: 16),
-              label: const Text('ส่งอนุมัติ'),
+              label: Text(isEnglish ? 'Submit' : 'ส่งอนุมัติ'),
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange[100],
                   foregroundColor: Colors.orange[800]),
@@ -1133,7 +1199,7 @@ class _DetailPanelState extends State<_DetailPanel> {
             const SizedBox(width: 8),
             TextButton.icon(
               icon: const Icon(Icons.block, size: 16),
-              label: const Text('ยกเลิกเอกสาร'),
+              label: Text(isEnglish ? 'Void Document' : 'ยกเลิกเอกสาร'),
               style: TextButton.styleFrom(foregroundColor: Colors.red[200]),
               onPressed: _void,
             ),
@@ -1142,7 +1208,7 @@ class _DetailPanelState extends State<_DetailPanel> {
             if (status == 'Approved' && widget.run!.lines.isNotEmpty) ...[
               ElevatedButton.icon(
                 icon: const Icon(Icons.account_balance, size: 16),
-                label: const Text('บันทึก GL'),
+                label: Text(isEnglish ? 'Post GL' : 'บันทึก GL'),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[700],
                     foregroundColor: Colors.white),
@@ -1154,7 +1220,7 @@ class _DetailPanelState extends State<_DetailPanel> {
                 widget.run!.lines.isNotEmpty) ...[
               ElevatedButton.icon(
                 icon: const Icon(Icons.picture_as_pdf, size: 16),
-                label: const Text('พิมพ์ RA'),
+                label: Text(isEnglish ? 'Print RA' : 'พิมพ์ RA'),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal[600],
                     foregroundColor: Colors.white),
@@ -1164,7 +1230,7 @@ class _DetailPanelState extends State<_DetailPanel> {
               if (_bankFmtId != null) ...[
                 ElevatedButton.icon(
                   icon: const Icon(Icons.download, size: 16),
-                  label: const Text('สร้างไฟล์ธนาคาร'),
+                  label: Text(isEnglish ? 'Generate Bank File' : 'สร้างไฟล์ธนาคาร'),
                   style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.indigo[600],
                       foregroundColor: Colors.white),
@@ -1175,7 +1241,7 @@ class _DetailPanelState extends State<_DetailPanel> {
             ],
             TextButton.icon(
               icon: const Icon(Icons.arrow_back, size: 16),
-              label: const Text('กลับ'),
+              label: Text(l.back),
               style: TextButton.styleFrom(foregroundColor: Colors.white),
               onPressed: widget.onCancel,
             ),
@@ -1201,11 +1267,11 @@ class _DetailPanelState extends State<_DetailPanel> {
                 if (d != null) setState(() => _runDate = d);
               },
               child: InputDecorator(
-                decoration: const InputDecoration(
-                    labelText: 'วันที่',
+                decoration: InputDecoration(
+                    labelText: l.date,
                     isDense: true,
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
                 child: Row(children: [
                   Expanded(child: Text(_dateFmt.format(_runDate))),
                   const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
@@ -1219,11 +1285,11 @@ class _DetailPanelState extends State<_DetailPanel> {
             child: TextField(
               controller: _descCtrl,
               readOnly: _readOnly,
-              decoration: const InputDecoration(
-                  labelText: 'คำอธิบาย',
+              decoration: InputDecoration(
+                  labelText: l.description,
                   isDense: true,
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
             ),
           ),
           // Bank file format
@@ -1231,13 +1297,13 @@ class _DetailPanelState extends State<_DetailPanel> {
             width: 240,
             child: DropdownButtonFormField<int?>(
               value: _bankFmtId,
-              decoration: const InputDecoration(
-                  labelText: 'รูปแบบไฟล์ธนาคาร',
+              decoration: InputDecoration(
+                  labelText: isEnglish ? 'Bank File Format' : 'รูปแบบไฟล์ธนาคาร',
                   isDense: true,
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
               items: [
-                const DropdownMenuItem(value: null, child: Text('(ไม่ระบุ)')),
+                DropdownMenuItem(value: null, child: Text(isEnglish ? '(Not specified)' : '(ไม่ระบุ)')),
                 ..._fmtOptions.map((f) => DropdownMenuItem(
                       value: f.id,
                       child: Text('${f.formatCode} - ${f.formatName}',
@@ -1278,14 +1344,15 @@ class _DetailPanelState extends State<_DetailPanel> {
           child: Row(children: [
             ElevatedButton.icon(
               icon: const Icon(Icons.add, size: 16),
-              label: const Text('เลือกใบแจ้งหนี้'),
+              label: Text(isEnglish ? 'Select Invoices' : 'เลือกใบแจ้งหนี้'),
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue[600],
                   foregroundColor: Colors.white),
               onPressed: _openInvoicePicker,
             ),
             const SizedBox(width: 8),
-            Text('${_lineRows.length} รายการ',
+            Text(
+                isEnglish ? '${_lineRows.length} lines' : '${_lineRows.length} รายการ',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12)),
           ]),
         ),
@@ -1314,12 +1381,12 @@ class _DetailPanelState extends State<_DetailPanel> {
                   // Table header (moves with horizontal scroll)
                   Container(
                     color: Colors.blue[100],
-                    child: _TableHeader(isDraft: _isDraft),
+                    child: _TableHeader(isDraft: _isDraft, isEnglish: isEnglish),
                   ),
                   // Data rows — vertical scroll via ListView.builder
                   Expanded(
                     child: _lineRows.isEmpty
-                        ? Center(child: Text('ยังไม่มีรายการ',
+                        ? Center(child: Text(isEnglish ? 'No lines yet' : 'ยังไม่มีรายการ',
                             style: TextStyle(color: Colors.grey[500])))
                         : ListView.builder(
                             itemCount: _lineRows.length,
@@ -1329,6 +1396,7 @@ class _DetailPanelState extends State<_DetailPanel> {
                                 key: ValueKey(row.source.apTransactionId),
                                 row: row,
                                 isDraft: _isDraft,
+                                vendorName: _vendorLabel(row.source.vendorId, row.source.vendorNameTh),
                                 onDelete: () => setState(() {
                                   _lineRows.removeAt(i).dispose();
                                 }),
@@ -1347,7 +1415,7 @@ class _DetailPanelState extends State<_DetailPanel> {
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
             child: Row(children: [
               const Spacer(),
-              Text('รวมทั้งสิ้น: ',
+              Text(isEnglish ? 'Grand Total: ' : 'รวมทั้งสิ้น: ',
                   style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[800])),
               SizedBox(
                 width: _wAmt,
@@ -1370,20 +1438,21 @@ class _DetailPanelState extends State<_DetailPanel> {
 // ── Table header row ──────────────────────────────────────────────────────────
 class _TableHeader extends StatelessWidget {
   final bool isDraft;
-  const _TableHeader({required this.isDraft});
+  final bool isEnglish;
+  const _TableHeader({required this.isDraft, required this.isEnglish});
 
   @override
   Widget build(BuildContext context) {
     return Row(children: [
-      _hCell('รหัสเจ้าหนี้',  _wVendor),
-      _hCell('ชื่อเจ้าหนี้',  _wVendorNm),
-      _hCell('ธนาคาร',        _wBank),
-      _hCell('เลขที่บัญชี',   _wAccNo),
-      _hCell('เลขที่ใบแจ้งหนี้', _wInvNo),
-      _hCell('วันที่ใบ',      _wDate),
-      _hCell('วันครบกำหนด',   _wDate),
-      _hCell('ยอดใบแจ้งหนี้', _wAmt, right: true),
-      _hCell('ยอดชำระ',       _wAmt, right: true),
+      _hCell(isEnglish ? 'Vendor Code' : 'รหัสเจ้าหนี้',  _wVendor),
+      _hCell(isEnglish ? 'Vendor Name' : 'ชื่อเจ้าหนี้',  _wVendorNm),
+      _hCell(isEnglish ? 'Bank' : 'ธนาคาร',        _wBank),
+      _hCell(isEnglish ? 'Account No.' : 'เลขที่บัญชี',   _wAccNo),
+      _hCell(isEnglish ? 'Invoice No.' : 'เลขที่ใบแจ้งหนี้', _wInvNo),
+      _hCell(isEnglish ? 'Invoice Date' : 'วันที่ใบ',      _wDate),
+      _hCell(isEnglish ? 'Due Date' : 'วันครบกำหนด',   _wDate),
+      _hCell(isEnglish ? 'Invoice Amount' : 'ยอดใบแจ้งหนี้', _wAmt, right: true),
+      _hCell(isEnglish ? 'Payment Amount' : 'ยอดชำระ',       _wAmt, right: true),
       if (isDraft) _hCell('',  _wAct),
     ]);
   }
@@ -1404,6 +1473,7 @@ class _TableHeader extends StatelessWidget {
 class _LineWidget extends StatelessWidget {
   final _LineRow row;
   final bool isDraft;
+  final String vendorName;
   final VoidCallback onDelete;
   final VoidCallback onAmtChanged;
 
@@ -1411,6 +1481,7 @@ class _LineWidget extends StatelessWidget {
     super.key,
     required this.row,
     required this.isDraft,
+    required this.vendorName,
     required this.onDelete,
     required this.onAmtChanged,
   });
@@ -1423,7 +1494,7 @@ class _LineWidget extends StatelessWidget {
           border: Border(bottom: BorderSide(color: Color(0xFFE0E0E0)))),
       child: Row(children: [
         _cell(s.vendorCode,                                    _wVendor),
-        _cell(s.vendorNameTh,                                  _wVendorNm),
+        _cell(vendorName,                                      _wVendorNm),
         _cell('${s.bankName ?? ''}\n${s.bankBranchName ?? ''}',_wBank, wrap: true),
         _cell(s.accountNumber ?? '',                           _wAccNo),
         _cell(s.invoiceNo,                                     _wInvNo),
@@ -1560,7 +1631,8 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return Dialog(
       child: SizedBox(
         width: 900,
@@ -1573,9 +1645,9 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
             child: Row(children: [
               const Icon(Icons.receipt_long, color: Colors.white, size: 18),
               const SizedBox(width: 8),
-              const Expanded(
-                child: Text('เลือกใบแจ้งหนี้',
-                    style: TextStyle(
+              Expanded(
+                child: Text(isEnglish ? 'Select Invoices' : 'เลือกใบแจ้งหนี้',
+                    style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 14)),
@@ -1594,34 +1666,37 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
                 width: 180,
                 child: TextField(
                   controller: _vendorCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'รหัสเจ้าหนี้',
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Vendor Code' : 'รหัสเจ้าหนี้',
                       isDense: true,
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
                   onSubmitted: (_) => _search(),
                 ),
               ),
               const SizedBox(width: 8),
               _DateBtn(
-                label: 'วันที่จาก',
+                label: isEnglish ? 'From Date' : 'วันที่จาก',
                 date: _dateFrom,
                 onPick: (d) => setState(() => _dateFrom = d),
               ),
               const SizedBox(width: 8),
               _DateBtn(
-                label: 'วันที่ถึง',
+                label: isEnglish ? 'To Date' : 'วันที่ถึง',
                 date: _dateTo,
                 onPick: (d) => setState(() => _dateTo = d),
               ),
               const SizedBox(width: 8),
               ElevatedButton.icon(
                 icon: const Icon(Icons.search, size: 16),
-                label: const Text('ค้นหา'),
+                label: Text(l.search),
                 onPressed: _search,
               ),
               const Spacer(),
-              Text('${_selected.length} รายการที่เลือก',
+              Text(
+                  isEnglish
+                      ? '${_selected.length} selected'
+                      : '${_selected.length} รายการที่เลือก',
                   style: TextStyle(color: Colors.grey[600], fontSize: 12)),
             ]),
           ),
@@ -1640,14 +1715,14 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
                   }
                 }),
               )),
-              _ph('รหัสเจ้าหนี้', 110),
-              _ph('ชื่อเจ้าหนี้', 160),
-              _ph('เลขที่บัญชี', 120),
-              _ph('เลขที่ใบแจ้งหนี้', 130),
-              _ph('วันที่ใบ', 90),
-              _ph('วันครบกำหนด', 90),
-              _ph('ยอดใบแจ้งหนี้', 110, right: true),
-              _ph('ยอดคงเหลือ', 110, right: true),
+              _ph(isEnglish ? 'Vendor Code' : 'รหัสเจ้าหนี้', 110),
+              _ph(isEnglish ? 'Vendor Name' : 'ชื่อเจ้าหนี้', 160),
+              _ph(isEnglish ? 'Account No.' : 'เลขที่บัญชี', 120),
+              _ph(isEnglish ? 'Invoice No.' : 'เลขที่ใบแจ้งหนี้', 130),
+              _ph(isEnglish ? 'Invoice Date' : 'วันที่ใบ', 90),
+              _ph(isEnglish ? 'Due Date' : 'วันครบกำหนด', 90),
+              _ph(isEnglish ? 'Invoice Amount' : 'ยอดใบแจ้งหนี้', 110, right: true),
+              _ph(isEnglish ? 'Balance' : 'ยอดคงเหลือ', 110, right: true),
             ]),
           ),
           // Rows
@@ -1655,7 +1730,8 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _invoices.isEmpty
-                    ? Center(child: Text('ไม่พบใบแจ้งหนี้ที่ค้างชำระ',
+                    ? Center(child: Text(
+                        isEnglish ? 'No outstanding invoices found' : 'ไม่พบใบแจ้งหนี้ที่ค้างชำระ',
                         style: TextStyle(color: Colors.grey[500])))
                     : ListView.builder(
                         itemCount: _invoices.length,
@@ -1687,7 +1763,11 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
                                               }
                                             }))),
                                 _pd(inv.vendorCode, 110),
-                                _pd(inv.vendorNameTh, 160),
+                                _pd(
+                                    isEnglish && (inv.vendorNameEn ?? '').isNotEmpty
+                                        ? inv.vendorNameEn!
+                                        : inv.vendorNameTh,
+                                    160),
                                 _pd(inv.accountNumber ?? '', 120),
                                 _pd(inv.docNo, 130),
                                 _pd(_fmtDate(inv.docDate), 90),
@@ -1707,11 +1787,13 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
             child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton(
                   onPressed: () => Navigator.of(context).pop(null),
-                  child: const Text('ยกเลิก')),
+                  child: Text(l.cancel)),
               const SizedBox(width: 8),
               ElevatedButton.icon(
                 icon: const Icon(Icons.check, size: 16),
-                label: Text('เพิ่ม ${_selected.length} รายการ'),
+                label: Text(isEnglish
+                    ? 'Add ${_selected.length} items'
+                    : 'เพิ่ม ${_selected.length} รายการ'),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue[600],
                     foregroundColor: Colors.white),
@@ -1773,16 +1855,17 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
     }
   }
 
-  String _approvalLabel(String s) {
+  String _approvalLabel(String s, bool isEnglish) {
     switch (s) {
-      case 'Approved': return 'อนุมัติแล้ว';
-      case 'Rejected': return 'ปฏิเสธ';
-      default:         return 'รออนุมัติ';
+      case 'Approved': return isEnglish ? 'Approved' : 'อนุมัติแล้ว';
+      case 'Rejected': return isEnglish ? 'Rejected' : 'ปฏิเสธ';
+      default:         return isEnglish ? 'Pending' : 'รออนุมัติ';
     }
   }
 
   Future<void> _doAction(bool isApprove) async {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
     final currentUserId =
         Provider.of<AuthService>(context, listen: false).currentUser?.id;
     final approvals = widget.run.approvals;
@@ -1797,8 +1880,10 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
     final blockedByPrev = approvals
         .any((a) => a.sequenceNo < mySeq && a.status == 'Pending');
     if (blockedByPrev) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('ยังรอการอนุมัติจากลำดับก่อนหน้า')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish
+              ? 'Still waiting for approval from a previous sequence'
+              : 'ยังรอการอนุมัติจากลำดับก่อนหน้า')));
       return;
     }
 
@@ -1807,17 +1892,19 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isApprove ? 'ยืนยันการอนุมัติ' : 'ยืนยันการปฏิเสธ'),
+        title: Text(isApprove
+            ? (isEnglish ? 'Confirm Approval' : 'ยืนยันการอนุมัติ')
+            : (isEnglish ? 'Confirm Rejection' : 'ยืนยันการปฏิเสธ')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(isApprove
-              ? 'อนุมัติ ${widget.run.runNumber}?'
-              : 'ปฏิเสธ ${widget.run.runNumber}?'),
+              ? (isEnglish ? 'Approve ${widget.run.runNumber}?' : 'อนุมัติ ${widget.run.runNumber}?')
+              : (isEnglish ? 'Reject ${widget.run.runNumber}?' : 'ปฏิเสธ ${widget.run.runNumber}?')),
           const SizedBox(height: 12),
           TextField(
             controller: remarksCtrl,
-            decoration: const InputDecoration(
-                labelText: 'หมายเหตุ (ถ้ามี)',
-                border: OutlineInputBorder(),
+            decoration: InputDecoration(
+                labelText: isEnglish ? 'Remarks (optional)' : 'หมายเหตุ (ถ้ามี)',
+                border: const OutlineInputBorder(),
                 isDense: true),
             maxLines: 2,
           ),
@@ -1825,14 +1912,14 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('ยกเลิก')),
+              child: Text(l.cancel)),
           ElevatedButton(
               style: ElevatedButton.styleFrom(
                   backgroundColor:
                       isApprove ? Colors.green[700] : Colors.red[700],
                   foregroundColor: Colors.white),
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(isApprove ? 'อนุมัติ' : 'ปฏิเสธ')),
+              child: Text(isApprove ? l.approve : (isEnglish ? 'Reject' : 'ปฏิเสธ'))),
         ],
       ),
     );
@@ -1845,14 +1932,14 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
       if (isApprove) {
         await widget.svc.approveRun(widget.run.id!, remarks: remarks);
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('อนุมัติสำเร็จ')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(isEnglish ? 'Approved successfully' : 'อนุมัติสำเร็จ')));
         }
       } else {
         await widget.svc.rejectRun(widget.run.id!, remarks: remarks);
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('ปฏิเสธสำเร็จ')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(isEnglish ? 'Rejected successfully' : 'ปฏิเสธสำเร็จ')));
         }
       }
       widget.onActionDone();
@@ -1868,6 +1955,7 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final currentUserId =
         Provider.of<AuthService>(context, listen: false).currentUser?.id;
     final approvals = widget.run.approvals;
@@ -1889,7 +1977,7 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
         Row(children: [
           Icon(Icons.approval_outlined, size: 16, color: Colors.orange[800]),
           const SizedBox(width: 6),
-          Text('ขั้นตอนการอนุมัติ',
+          Text(isEnglish ? 'Approval Steps' : 'ขั้นตอนการอนุมัติ',
               style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
@@ -1903,7 +1991,7 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
           if (!_acting && canAct) ...[
             ElevatedButton.icon(
               icon: const Icon(Icons.check_circle_outline, size: 14),
-              label: const Text('อนุมัติ', style: TextStyle(fontSize: 12)),
+              label: Text(isEnglish ? 'Approve' : 'อนุมัติ', style: const TextStyle(fontSize: 12)),
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green[600],
                   foregroundColor: Colors.white,
@@ -1915,7 +2003,7 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
             const SizedBox(width: 8),
             ElevatedButton.icon(
               icon: const Icon(Icons.cancel_outlined, size: 14),
-              label: const Text('ปฏิเสธ', style: TextStyle(fontSize: 12)),
+              label: Text(isEnglish ? 'Reject' : 'ปฏิเสธ', style: const TextStyle(fontSize: 12)),
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red[600],
                   foregroundColor: Colors.white,
@@ -1942,7 +2030,7 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                         color: _approvalColor(a.status).withOpacity(0.6))),
-                child: Text(_approvalLabel(a.status),
+                child: Text(_approvalLabel(a.status, isEnglish),
                     style: TextStyle(
                         fontSize: 10,
                         color: _approvalColor(a.status),

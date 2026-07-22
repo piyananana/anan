@@ -46,6 +46,18 @@ const Map<String, String> apPaymentRunStatusLabels = {
   'Void':      'ยกเลิก',
 };
 
+const Map<String, String> apPaymentRunStatusLabelsEn = {
+  'Draft':     'Draft',
+  'Submitted': 'Submitted',
+  'Approved':  'Approved',
+  'Rejected':  'Rejected',
+  'Completed': 'Completed',
+  'Void':      'Void',
+};
+
+String apPaymentRunStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? apPaymentRunStatusLabelsEn[s] : apPaymentRunStatusLabels[s]) ?? s;
+
 // ── Open invoice returned by open_invoices endpoint ───────────────────────────
 class ApOpenInvoice {
   final int txnId;
@@ -55,6 +67,7 @@ class ApOpenInvoice {
   final int vendorId;
   final String vendorCode;
   final String vendorNameTh;
+  final String? vendorNameEn;
   final double totalAmountLc;
   final double balanceAmountLc;
   final String currencyCode;
@@ -72,6 +85,7 @@ class ApOpenInvoice {
     required this.vendorId,
     required this.vendorCode,
     required this.vendorNameTh,
+    this.vendorNameEn,
     required this.totalAmountLc,
     required this.balanceAmountLc,
     this.currencyCode = 'THB',
@@ -90,6 +104,7 @@ class ApOpenInvoice {
         vendorId: json['vendor_id'] as int,
         vendorCode: json['vendor_code'] ?? '',
         vendorNameTh: json['vendor_name_th'] ?? '',
+        vendorNameEn: json['vendor_name_en'],
         totalAmountLc: (json['total_amount_lc'] as num).toDouble(),
         balanceAmountLc: (json['balance_amount_lc'] as num).toDouble(),
         currencyCode: json['currency_code'] ?? 'THB',
