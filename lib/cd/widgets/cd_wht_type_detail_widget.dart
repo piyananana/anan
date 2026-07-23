@@ -35,6 +35,7 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
 
   late TextEditingController _codeCtrl;
   late TextEditingController _nameCtrl;
+  late TextEditingController _nameEnCtrl;
   late TextEditingController _rateCtrl;
   late TextEditingController _descCtrl;
   String?   _incomeType;
@@ -57,6 +58,7 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
   void _initFields(CdWhtType? row) {
     _codeCtrl     = TextEditingController(text: row?.whtCode ?? '');
     _nameCtrl     = TextEditingController(text: row?.whtName ?? '');
+    _nameEnCtrl   = TextEditingController(text: row?.whtNameEn ?? '');
     _rateCtrl     = TextEditingController(text: row != null ? row.whtRate.toString() : '');
     _descCtrl     = TextEditingController(text: row?.description ?? '');
     _incomeType   = row?.incomeType;
@@ -85,6 +87,7 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
   void _disposeControllers() {
     _codeCtrl.dispose();
     _nameCtrl.dispose();
+    _nameEnCtrl.dispose();
     _rateCtrl.dispose();
     _descCtrl.dispose();
   }
@@ -207,6 +210,7 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
         id:            widget.selected?.id,
         whtCode:       _codeCtrl.text.toUpperCase().trim(),
         whtName:       _nameCtrl.text.trim(),
+        whtNameEn:     _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
         incomeType:    _incomeType,
         whtRate:       double.tryParse(_rateCtrl.text) ?? 0,
         glAccountId:   _glAccountId,
@@ -302,7 +306,7 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
             controller: _nameCtrl,
             readOnly: ro,
             decoration: InputDecoration(
-              labelText: isEnglish ? 'Name *' : 'ชื่อ *',
+              labelText: isEnglish ? 'Name (Thai) *' : 'ชื่อ *',
               border: const OutlineInputBorder(),
               hintText: isEnglish
                   ? 'e.g. Service fee 3%, Dividend 10%'
@@ -311,6 +315,19 @@ class CdWhtTypeDetailWidgetState extends State<CdWhtTypeDetailWidget> {
             validator: (v) => (v == null || v.trim().isEmpty)
                 ? (isEnglish ? 'Please enter name' : 'โปรดระบุชื่อ')
                 : null,
+          ),
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _nameEnCtrl,
+            readOnly: ro,
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Name (English)' : 'ชื่อ (อังกฤษ)',
+              border: const OutlineInputBorder(),
+              hintText: isEnglish
+                  ? 'e.g. Service fee 3%, Dividend 10%'
+                  : 'e.g. Service fee 3%, Dividend 10%',
+            ),
           ),
           const SizedBox(height: 12),
 

@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/ap_year_end.dart';
 import '../services/ap_year_end_service.dart';
 
@@ -17,6 +19,8 @@ class _ApPreCloseCheckScreenState extends State<ApPreCloseCheckScreen>
   final _fmt = NumberFormat('#,##0.00', 'en_US');
 
   static const _kIndigo = Color(0xFF3949AB);
+
+  bool _isEnglish = false;
 
   int               _periodYear = DateTime.now().year - 1;
   ApPreCloseResult? _result;
@@ -45,6 +49,7 @@ class _ApPreCloseCheckScreenState extends State<ApPreCloseCheckScreen>
     List<Map<String, dynamic>>? docs,
     bool isWarning = false,
   }) {
+    final isEnglish = _isEnglish;
     final icon = ok
         ? const Icon(Icons.check_circle, color: _kIndigo, size: 20)
         : isWarning
@@ -72,7 +77,7 @@ class _ApPreCloseCheckScreenState extends State<ApPreCloseCheckScreen>
               backgroundColor: Colors.orange[50],
             )).toList()
               ..addAll(docs.length > 5
-                  ? [Chip(label: Text('+${docs.length - 5} รายการ', style: const TextStyle(fontSize: 11)), padding: EdgeInsets.zero, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap)]
+                  ? [Chip(label: Text(isEnglish ? '+${docs.length - 5} items' : '+${docs.length - 5} รายการ', style: const TextStyle(fontSize: 11)), padding: EdgeInsets.zero, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap)]
                   : []),
           ),
         ),
@@ -84,6 +89,8 @@ class _ApPreCloseCheckScreenState extends State<ApPreCloseCheckScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     final r = _result;
     return Scaffold(
       appBar: AppBar(
@@ -99,7 +106,7 @@ class _ApPreCloseCheckScreenState extends State<ApPreCloseCheckScreen>
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(children: [
-                const Text('ปีที่ต้องการปิด:', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(isEnglish ? 'Year to close:' : 'ปีที่ต้องการปิด:', style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(width: 16),
                 SizedBox(
                   width: 100,
@@ -117,7 +124,7 @@ class _ApPreCloseCheckScreenState extends State<ApPreCloseCheckScreen>
                       ? const SizedBox(width: 16, height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.search, size: 16),
-                  label: const Text('ตรวจสอบ'),
+                  label: Text(isEnglish ? 'Check' : 'ตรวจสอบ'),
                   style: FilledButton.styleFrom(backgroundColor: _kIndigo),
                   onPressed: _isLoading ? null : _check,
                 ),
@@ -130,26 +137,28 @@ class _ApPreCloseCheckScreenState extends State<ApPreCloseCheckScreen>
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('ผลการตรวจสอบปี $_periodYear',
+                  Text(isEnglish ? 'Check result for year $_periodYear' : 'ผลการตรวจสอบปี $_periodYear',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   const Divider(height: 24),
                   _checkItem(
                     ok: r.draftCount == 0,
-                    label: 'ธุรกรรมสถานะ Draft ค้างอยู่',
-                    value: '${r.draftCount} รายการ',
+                    label: isEnglish ? 'Outstanding Draft transactions' : 'ธุรกรรมสถานะ Draft ค้างอยู่',
+                    value: isEnglish ? '${r.draftCount} items' : '${r.draftCount} รายการ',
                     docs: r.draftDocs,
                   ),
                   _checkItem(
                     ok: r.openAdvanceCount == 0,
                     isWarning: true,
-                    label: 'เงินมัดจำจ่ายค้างอยู่',
-                    value: '${r.openAdvanceCount} รายการ',
+                    label: isEnglish ? 'Outstanding advance payments' : 'เงินมัดจำจ่ายค้างอยู่',
+                    value: isEnglish ? '${r.openAdvanceCount} items' : '${r.openAdvanceCount} รายการ',
                     docs: r.openAdvanceDocs,
                   ),
                   _checkItem(
                     ok: r.reconcileDiff.abs() < 1,
-                    label: 'ยันยอดเจ้าหนี้กับบัญชีแยกประเภท',
-                    value: r.reconcileDiff.abs() < 1 ? 'ตรงกัน ✓' : 'ผลต่าง ${_fmt.format(r.reconcileDiff)}',
+                    label: isEnglish ? 'Reconcile AP balance with GL' : 'ยันยอดเจ้าหนี้กับบัญชีแยกประเภท',
+                    value: r.reconcileDiff.abs() < 1
+                        ? (isEnglish ? 'Matched ✓' : 'ตรงกัน ✓')
+                        : (isEnglish ? 'Difference ${_fmt.format(r.reconcileDiff)}' : 'ผลต่าง ${_fmt.format(r.reconcileDiff)}'),
                   ),
                   Container(
                     margin: const EdgeInsets.only(left: 28, bottom: 12),
@@ -160,10 +169,10 @@ class _ApPreCloseCheckScreenState extends State<ApPreCloseCheckScreen>
                       border: Border.all(color: Colors.grey[300]!),
                     ),
                     child: Column(children: [
-                      _reconRow('ยอดเจ้าหนี้คงค้าง (AP Subledger)', r.apModuleBalance),
-                      _reconRow('ยอดเจ้าหนี้ในบัญชีแยกประเภท (GL)', r.glApBalance),
+                      _reconRow(isEnglish ? 'Outstanding AP balance (AP Subledger)' : 'ยอดเจ้าหนี้คงค้าง (AP Subledger)', r.apModuleBalance),
+                      _reconRow(isEnglish ? 'AP balance in GL' : 'ยอดเจ้าหนี้ในบัญชีแยกประเภท (GL)', r.glApBalance),
                       const Divider(height: 12),
-                      _reconRow('ผลต่าง', r.reconcileDiff,
+                      _reconRow(isEnglish ? 'Difference' : 'ผลต่าง', r.reconcileDiff,
                           bold: true,
                           color: r.reconcileDiff.abs() < 1 ? _kIndigo : Colors.red),
                     ]),
@@ -175,11 +184,13 @@ class _ApPreCloseCheckScreenState extends State<ApPreCloseCheckScreen>
                         color: Colors.red[50],
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(children: [
-                        Icon(Icons.block, color: Colors.red, size: 18),
-                        SizedBox(width: 8),
-                        Text('กรุณาแก้ไขธุรกรรมสถานะ Draft ก่อนดำเนินการต่อ',
-                            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                      child: Row(children: [
+                        const Icon(Icons.block, color: Colors.red, size: 18),
+                        const SizedBox(width: 8),
+                        Text(isEnglish
+                            ? 'Please resolve outstanding Draft transactions before proceeding'
+                            : 'กรุณาแก้ไขธุรกรรมสถานะ Draft ก่อนดำเนินการต่อ',
+                            style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                       ]),
                     )
                   else
@@ -189,11 +200,13 @@ class _ApPreCloseCheckScreenState extends State<ApPreCloseCheckScreen>
                         color: const Color(0xFFE8EAF6),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(children: [
-                        Icon(Icons.check_circle, color: _kIndigo, size: 18),
-                        SizedBox(width: 8),
-                        Text('พร้อมดำเนินการปิดปี — ไปขั้นตอน ปรับมูลค่าเจ้าหนี้ตามอัตราแลกเปลี่ยน',
-                            style: TextStyle(color: _kIndigo, fontWeight: FontWeight.bold)),
+                      child: Row(children: [
+                        const Icon(Icons.check_circle, color: _kIndigo, size: 18),
+                        const SizedBox(width: 8),
+                        Text(isEnglish
+                            ? 'Ready to close the year — proceed to AP FX Revaluation'
+                            : 'พร้อมดำเนินการปิดปี — ไปขั้นตอน ปรับมูลค่าเจ้าหนี้ตามอัตราแลกเปลี่ยน',
+                            style: const TextStyle(color: _kIndigo, fontWeight: FontWeight.bold)),
                       ]),
                     ),
                 ]),

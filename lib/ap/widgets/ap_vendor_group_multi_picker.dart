@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/ap_vendor_group.dart';
 
 class ApVendorGroupMultiPicker extends StatelessWidget {
   final List<ApVendorGroup> groups;
   final List<int> selectedIds;
   final ValueChanged<List<int>> onChanged;
-  final String label;
+  final String? label;
 
   const ApVendorGroupMultiPicker({
     super.key,
     required this.groups,
     required this.selectedIds,
     required this.onChanged,
-    this.label = 'กลุ่มผู้ขาย',
+    this.label,
   });
 
   Future<void> _pick(BuildContext context) async {
@@ -28,10 +30,11 @@ class ApVendorGroupMultiPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final hasValue = selectedIds.isNotEmpty;
     return InputDecorator(
       decoration: InputDecoration(
-        labelText: label,
+        labelText: label ?? (isEnglish ? 'Vendor Group' : 'กลุ่มผู้ขาย'),
         border: const OutlineInputBorder(),
         isDense: true,
         suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -51,7 +54,11 @@ class ApVendorGroupMultiPicker extends StatelessWidget {
       child: InkWell(
         onTap: () => _pick(context),
         child: Text(
-          hasValue ? 'เลือก ${selectedIds.length} รายการ' : '— ทุกกลุ่ม —',
+          hasValue
+              ? (isEnglish
+                  ? 'Selected ${selectedIds.length} item(s)'
+                  : 'เลือก ${selectedIds.length} รายการ')
+              : (isEnglish ? '— All groups —' : '— ทุกกลุ่ม —'),
           style: TextStyle(
               fontSize: 13,
               color: hasValue ? Colors.black87 : Colors.black38),
@@ -88,6 +95,7 @@ class _ApVendorGroupMultiPickerDialogState
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Dialog(
       child: SizedBox(
         width: 400, height: 480,
@@ -95,17 +103,20 @@ class _ApVendorGroupMultiPickerDialogState
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.blueGrey[700],
-            child: const Text('เลือกกลุ่มผู้ขาย',
-                style: TextStyle(color: Colors.white,
+            child: Text(isEnglish ? 'Select Vendor Group' : 'เลือกกลุ่มผู้ขาย',
+                style: const TextStyle(color: Colors.white,
                     fontWeight: FontWeight.bold, fontSize: 15)),
           ),
           Expanded(
             child: ListView(
               children: widget.groups.where((g) => g.isActive).map((g) {
                 final id = g.id!;
+                final groupName = isEnglish && g.groupNameEng.isNotEmpty
+                    ? g.groupNameEng
+                    : g.groupNameThai;
                 return CheckboxListTile(
                   dense: true,
-                  title: Text('${g.groupCode}  ${g.groupNameThai}',
+                  title: Text('${g.groupCode}  $groupName',
                       style: const TextStyle(fontSize: 13)),
                   value: _selected.contains(id),
                   onChanged: (checked) {
@@ -136,19 +147,20 @@ class _ApVendorGroupMultiPickerDialogState
                   });
                 },
                 child: Text(_selected.length == widget.groups.length
-                    ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'),
+                    ? (isEnglish ? 'Deselect All' : 'ยกเลิกทั้งหมด')
+                    : (isEnglish ? 'Select All' : 'เลือกทั้งหมด')),
               ),
               Row(children: [
                 TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('ยกเลิก')),
+                    child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context, _selected),
                   style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueGrey[700],
                       foregroundColor: Colors.white),
-                  child: const Text('ตกลง'),
+                  child: Text(isEnglish ? 'OK' : 'ตกลง'),
                 ),
               ]),
             ]),

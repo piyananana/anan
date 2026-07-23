@@ -9,6 +9,7 @@ class CdWhtType {
   final int?   id;
   final String whtCode;
   final String whtName;
+  final String? whtNameEn;
   final String? incomeType;
   final double  whtRate;
   final int?    glAccountId;
@@ -27,6 +28,7 @@ class CdWhtType {
     this.id,
     required this.whtCode,
     required this.whtName,
+    this.whtNameEn,
     this.incomeType,
     this.whtRate = 0,
     this.glAccountId,
@@ -47,6 +49,7 @@ class CdWhtType {
       id:             j['id'] as int?,
       whtCode:        j['wht_code'] as String? ?? '',
       whtName:        j['wht_name'] as String? ?? '',
+      whtNameEn:      j['wht_name_en'] as String?,
       incomeType:     j['income_type'] as String?,
       whtRate:        double.tryParse(j['wht_rate']?.toString() ?? '0') ?? 0,
       glAccountId:    j['gl_account_id'] as int?,
@@ -67,6 +70,7 @@ class CdWhtType {
     'id':           id,
     'wht_code':     whtCode,
     'wht_name':     whtName,
+    'wht_name_en':  whtNameEn,
     'income_type':  incomeType,
     'wht_rate':     whtRate,
     'gl_account_id':   glAccountId,

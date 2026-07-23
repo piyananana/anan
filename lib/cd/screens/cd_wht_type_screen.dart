@@ -53,7 +53,7 @@ class _CdWhtTypeScreenState extends State<CdWhtTypeScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(l.confirmDelete),
-        content: Text('${isEnglish ? 'Delete' : 'ลบ'} "${row.whtCode} ${row.whtName}" ?'),
+        content: Text('${isEnglish ? 'Delete' : 'ลบ'} "${row.whtCode} ${isEnglish && (row.whtNameEn ?? '').isNotEmpty ? row.whtNameEn! : row.whtName}" ?'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
           TextButton(

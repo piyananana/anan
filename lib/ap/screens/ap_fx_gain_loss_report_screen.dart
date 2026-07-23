@@ -8,7 +8,6 @@ import 'package:excel/excel.dart';
 
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/file_download.dart';
 
@@ -47,6 +46,7 @@ class _ApFxGainLossReportScreenState
   double _filterPanelWidth  = 320.0;
   bool   _isDraggingDivider = false;
   int    _pdfKey            = 0;
+  bool   _isEnglish         = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -99,6 +99,7 @@ class _ApFxGainLossReportScreenState
   }
 
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     setState(() { _isLoading = true; _reportRows = []; });
     try {
       final raw = await _reportService.getFxGainLossReport(
@@ -115,13 +116,13 @@ class _ApFxGainLossReportScreenState
       _reportBaseCurrency = raw['base_currency_code'] as String? ?? _baseCurrencyCode;
       if (rows.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ไม่พบข้อมูลในช่วงวันที่ที่เลือก')));
+            SnackBar(content: Text(isEnglish ? 'No data found for the selected date range' : 'ไม่พบข้อมูลในช่วงวันที่ที่เลือก')));
       }
       setState(() { _reportRows = rows; _pdfKey++; });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -133,6 +134,7 @@ class _ApFxGainLossReportScreenState
   }
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish = _isEnglish;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -141,33 +143,36 @@ class _ApFxGainLossReportScreenState
     final fontBold   = pw.Font.ttf(fontBoldData);
     final fontItalic = pw.Font.ttf(fontItalicData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
+    final companyName  = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final dateRangeLine =
-        'วันที่ชำระ ${DateFormat('dd/MM/yyyy').format(_dateFrom)}'
+        '${isEnglish ? 'Payment date' : 'วันที่ชำระ'} ${DateFormat('dd/MM/yyyy').format(_dateFrom)}'
         ' – ${DateFormat('dd/MM/yyyy').format(_dateTo)}';
 
     final conditions = <String>[];
-    if (_selectedCurrencyCode != null) conditions.add('สกุลเงิน: $_selectedCurrencyCode');
+    if (_selectedCurrencyCode != null) {
+      conditions.add('${isEnglish ? 'Currency' : 'สกุลเงิน'}: $_selectedCurrencyCode');
+    }
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
         final g = _vendorGroups.firstWhere((g) => g.id == id,
             orElse: () => _vendorGroups.first);
-        return '${g.groupCode} ${g.groupNameThai}';
+        return '${g.groupCode} ${isEnglish && g.groupNameEng.isNotEmpty ? g.groupNameEng : g.groupNameThai}';
       }).join(', ');
-      conditions.add('กลุ่ม: $names');
+      conditions.add('${isEnglish ? 'Group' : 'กลุ่ม'}: $names');
     }
     if ((_vendorCodeFrom ?? '').isNotEmpty || (_vendorCodeTo ?? '').isNotEmpty) {
-      final f = (_vendorCodeFrom ?? '').isEmpty ? '(ทั้งหมด)' : _vendorCodeFrom!;
-      final t = (_vendorCodeTo   ?? '').isEmpty ? '(ทั้งหมด)' : _vendorCodeTo!;
-      conditions.add('รหัสผู้ขาย: $f – $t');
+      final all = isEnglish ? '(All)' : '(ทั้งหมด)';
+      final f = (_vendorCodeFrom ?? '').isEmpty ? all : _vendorCodeFrom!;
+      final t = (_vendorCodeTo   ?? '').isEmpty ? all : _vendorCodeTo!;
+      conditions.add('${isEnglish ? 'Vendor code' : 'รหัสผู้ขาย'}: $f – $t');
     }
-    if (_fxOnly) conditions.add('เฉพาะที่มีผลต่าง');
+    if (_fxOnly) conditions.add(isEnglish ? 'Only with FX difference' : 'เฉพาะที่มีผลต่าง');
     switch (_sortBy) {
-      case 'net_desc': conditions.add('เรียงกำไรสุทธิมากไปน้อย'); break;
-      case 'net_asc':  conditions.add('เรียงกำไรสุทธิน้อยไปมาก'); break;
-      default:         conditions.add('เรียงรหัสผู้ขาย');
+      case 'net_desc': conditions.add(isEnglish ? 'Sort by net gain, high to low' : 'เรียงกำไรสุทธิมากไปน้อย'); break;
+      case 'net_asc':  conditions.add(isEnglish ? 'Sort by net gain, low to high' : 'เรียงกำไรสุทธิน้อยไปมาก'); break;
+      default:         conditions.add(isEnglish ? 'Sort by vendor code' : 'เรียงรหัสผู้ขาย');
     }
     final conditionLine = conditions.join(' | ');
     final showDetail    = _showDetail;
@@ -176,11 +181,11 @@ class _ApFxGainLossReportScreenState
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 11))),
         pw.Expanded(flex: 6,
-            child: pw.Text('รายงานกำไร/ขาดทุนจากอัตราแลกเปลี่ยนเจ้าหนี้',
+            child: pw.Text(isEnglish ? 'AP FX Gain/Loss Report' : 'รายงานกำไร/ขาดทุนจากอัตราแลกเปลี่ยนเจ้าหนี้',
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold))),
         pw.Expanded(flex: 3,
-            child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+            child: pw.Text(isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -188,12 +193,12 @@ class _ApFxGainLossReportScreenState
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.SizedBox()),
         pw.Expanded(flex: 6, child: pw.Text(dateRangeLine, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10))),
-        pw.Expanded(flex: 3, child: pw.Text('พิมพ์โดย $userName', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10))),
+        pw.Expanded(flex: 3, child: pw.Text(isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10))),
       ]),
       pw.SizedBox(height: 3),
       pw.Row(children: [
-        pw.Expanded(flex: 9, child: pw.Text('* $conditionLine  [สกุลเงินหลัก: $_reportBaseCurrency]', style: const pw.TextStyle(fontSize: 9))),
-        pw.Expanded(flex: 3, child: pw.Text('พิมพ์เมื่อ $printDateStr', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10))),
+        pw.Expanded(flex: 9, child: pw.Text('* $conditionLine  [${isEnglish ? 'Base currency' : 'สกุลเงินหลัก'}: $_reportBaseCurrency]', style: const pw.TextStyle(fontSize: 9))),
+        pw.Expanded(flex: 3, child: pw.Text(isEnglish ? 'Printed: $printDateStr' : 'พิมพ์เมื่อ $printDateStr', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10))),
       ]),
       pw.SizedBox(height: 4),
     ]);
@@ -247,14 +252,14 @@ class _ApFxGainLossReportScreenState
     final headerRow = pw.TableRow(
       decoration: const pw.BoxDecoration(color: cGreen),
       children: [
-        hCell('รหัส – ชื่อผู้ขาย',   a: pw.TextAlign.left),
-        hCell('สกุลเงิน'),
-        hCell('ยอดเงินตปท.'),
-        hCell('อัตราใบสั่งซื้อ'),
-        hCell('อัตราชำระเงิน'),
-        hCell('กำไร FX'),
-        hCell('ขาดทุน FX'),
-        hCell('สุทธิ FX'),
+        hCell(isEnglish ? 'Code – Vendor Name' : 'รหัส – ชื่อผู้ขาย',   a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Currency' : 'สกุลเงิน'),
+        hCell(isEnglish ? 'FC Amount' : 'ยอดเงินตปท.'),
+        hCell(isEnglish ? 'PO Rate' : 'อัตราใบสั่งซื้อ'),
+        hCell(isEnglish ? 'Payment Rate' : 'อัตราชำระเงิน'),
+        hCell(isEnglish ? 'FX Gain' : 'กำไร FX'),
+        hCell(isEnglish ? 'FX Loss' : 'ขาดทุน FX'),
+        hCell(isEnglish ? 'FX Net' : 'สุทธิ FX'),
       ],
     );
 
@@ -265,7 +270,9 @@ class _ApFxGainLossReportScreenState
     for (final grp in _reportRows) {
       totalGroups++;
       final code    = grp['vendor_code']    as String? ?? '';
-      final name    = grp['vendor_name_th'] as String? ?? '';
+      final nameTh  = grp['vendor_name_th'] as String? ?? '';
+      final nameEn  = grp['vendor_name_en'] as String?;
+      final name    = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
       final cur     = grp['currency_code']  as String? ?? '';
       final totalFc = (grp['total_fc']            as num?)?.toDouble() ?? 0;
       final invRate = (grp['weighted_inv_rate']   as num?)?.toDouble() ?? 0;
@@ -330,7 +337,7 @@ class _ApFxGainLossReportScreenState
     tableRows.add(pw.TableRow(
       decoration: const pw.BoxDecoration(color: PdfColor(0.75, 0.85, 0.88)),
       children: [
-        dCell('รวมทั้งหมด ($totalGroups กลุ่ม)', tBold(9)),
+        dCell(isEnglish ? 'Total ($totalGroups groups)' : 'รวมทั้งหมด ($totalGroups กลุ่ม)', tBold(9)),
         dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)),
         amtCell(grandGain, tBold(9), showZero: true),
         amtCell(grandLoss, tBold(9), showZero: true),
@@ -358,10 +365,11 @@ class _ApFxGainLossReportScreenState
 
   Future<void> _exportExcel() async {
     if (_reportRows.isEmpty || _isExporting) return;
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-    final filename = 'รายงานกำไร-ขาดทุน-FX-เจ้าหนี้_$ts.xlsx';
+    final filename = '${isEnglish ? 'AP_FX_Gain_Loss_Report' : 'รายงานกำไร-ขาดทุน-FX-เจ้าหนี้'}_$ts.xlsx';
     try {
       final ex = Excel.createExcel();
       final sh = ex['FX_GainLoss_AP'];
@@ -371,12 +379,14 @@ class _ApFxGainLossReportScreenState
       final detBg = ExcelColor.fromHexString('#F2F2F2');
 
       final tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(sh, 0, 0, TextCellValue(_company?.thaiName ?? ''), bold: true);
-      _xlCell(sh, 1, 0, TextCellValue('รายงานกำไร/ขาดทุนจากอัตราแลกเปลี่ยนเจ้าหนี้  [สกุลเงินหลัก: $_reportBaseCurrency]'), bold: true);
-      _xlCell(sh, 2, 0, TextCellValue('วันที่ชำระ: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $tsLabel'));
+      _xlCell(sh, 0, 0, TextCellValue(_company?.displayName(isEnglish) ?? ''), bold: true);
+      _xlCell(sh, 1, 0, TextCellValue('${isEnglish ? 'AP FX Gain/Loss Report' : 'รายงานกำไร/ขาดทุนจากอัตราแลกเปลี่ยนเจ้าหนี้'}  [${isEnglish ? 'Base currency' : 'สกุลเงินหลัก'}: $_reportBaseCurrency]'), bold: true);
+      _xlCell(sh, 2, 0, TextCellValue('${isEnglish ? 'Payment date' : 'วันที่ชำระ'}: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $tsLabel'));
 
       int row = 3;
-      final cols = ['รหัส – ชื่อผู้ขาย', 'สกุลเงิน', 'ยอดเงินตปท.', 'อัตราใบสั่งซื้อ', 'อัตราชำระเงิน', 'กำไร FX', 'ขาดทุน FX', 'สุทธิ FX'];
+      final cols = isEnglish
+          ? ['Code – Vendor Name', 'Currency', 'FC Amount', 'PO Rate', 'Payment Rate', 'FX Gain', 'FX Loss', 'FX Net']
+          : ['รหัส – ชื่อผู้ขาย', 'สกุลเงิน', 'ยอดเงินตปท.', 'อัตราใบสั่งซื้อ', 'อัตราชำระเงิน', 'กำไร FX', 'ขาดทุน FX', 'สุทธิ FX'];
       for (var i = 0; i < cols.length; i++) {
         _xlCell(sh, row, i, TextCellValue(cols[i]),
             bold: true, bg: hdrBg,
@@ -387,7 +397,9 @@ class _ApFxGainLossReportScreenState
       double grandGain = 0, grandLoss = 0, grandNet = 0;
       for (final grp in _reportRows) {
         final code    = grp['vendor_code']    as String? ?? '';
-        final name    = grp['vendor_name_th'] as String? ?? '';
+        final nameTh  = grp['vendor_name_th'] as String? ?? '';
+        final nameEn  = grp['vendor_name_en'] as String?;
+        final name    = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
         final cur     = grp['currency_code']  as String? ?? '';
         final totalFc = (grp['total_fc']           as num?)?.toDouble() ?? 0;
         final invRate = (grp['weighted_inv_rate']  as num?)?.toDouble() ?? 0;
@@ -435,7 +447,7 @@ class _ApFxGainLossReportScreenState
         }
       }
 
-      _xlCell(sh, row, 0, TextCellValue('รวมทั้งหมด (${_reportRows.length} กลุ่ม)'), bold: true, bg: totBg);
+      _xlCell(sh, row, 0, TextCellValue(isEnglish ? 'Total (${_reportRows.length} groups)' : 'รวมทั้งหมด (${_reportRows.length} กลุ่ม)'), bold: true, bg: totBg);
       for (var i = 1; i <= 4; i++) _xlCell(sh, row, i, TextCellValue(''), bg: totBg);
       _xlCell(sh, row, 5, DoubleCellValue(grandGain), bold: true, bg: totBg, align: HorizontalAlign.Right);
       _xlCell(sh, row, 6, DoubleCellValue(grandLoss), bold: true, bg: totBg, align: HorizontalAlign.Right);
@@ -449,11 +461,11 @@ class _ApFxGainLossReportScreenState
       final savedPath = await downloadFile(bytes, filename);
       if (savedPath != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('บันทึกไฟล์แล้ว: $savedPath'), duration: const Duration(seconds: 6)));
+            SnackBar(content: Text(isEnglish ? 'File saved: $savedPath' : 'บันทึกไฟล์แล้ว: $savedPath'), duration: const Duration(seconds: 6)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export ล้มเหลว: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Export failed: $e' : 'Export ล้มเหลว: $e')));
       }
     } finally {
       if (mounted) setState(() => _isExporting = false);
@@ -482,7 +494,8 @@ class _ApFxGainLossReportScreenState
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -519,7 +532,9 @@ class _ApFxGainLossReportScreenState
                       icon: Icon(_isFilterExpanded ? Icons.filter_list_off : Icons.filter_list,
                           color: Colors.white, size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
                     ),
                   ),
@@ -541,13 +556,13 @@ class _ApFxGainLossReportScreenState
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('เงื่อนไขรายงาน',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                     const SizedBox(height: 16),
 
-                                    _buildDateField(label: 'วันที่ชำระ ตั้งแต่', date: _dateFrom, onPick: (d) => setState(() => _dateFrom = d)),
+                                    _buildDateField(label: isEnglish ? 'Payment Date From' : 'วันที่ชำระ ตั้งแต่', date: _dateFrom, onPick: (d) => setState(() => _dateFrom = d)),
                                     const SizedBox(height: 12),
-                                    _buildDateField(label: 'วันที่ชำระ ถึง', date: _dateTo, onPick: (d) => setState(() => _dateTo = d)),
+                                    _buildDateField(label: isEnglish ? 'Payment Date To' : 'วันที่ชำระ ถึง', date: _dateTo, onPick: (d) => setState(() => _dateTo = d)),
 
                                     const SizedBox(height: 16),
                                     const Divider(height: 1),
@@ -558,15 +573,17 @@ class _ApFxGainLossReportScreenState
                                       isExpanded: true,
                                       value: _selectedCurrencyCode,
                                       decoration: InputDecoration(
-                                          labelText: 'สกุลเงิน',
-                                          hintText: _baseCurrencyCode.isNotEmpty ? '(ยกเว้น $_baseCurrencyCode)' : null,
+                                          labelText: isEnglish ? 'Currency' : 'สกุลเงิน',
+                                          hintText: _baseCurrencyCode.isNotEmpty
+                                              ? (isEnglish ? '(Except $_baseCurrencyCode)' : '(ยกเว้น $_baseCurrencyCode)')
+                                              : null,
                                           border: const OutlineInputBorder(),
                                           isDense: true),
                                       items: [
-                                        const DropdownMenuItem<String?>(value: null, child: Text('— ทุกสกุลเงิน —')),
+                                        DropdownMenuItem<String?>(value: null, child: Text(isEnglish ? '— All Currencies —' : '— ทุกสกุลเงิน —')),
                                         ..._foreignCurrencies.map((c) => DropdownMenuItem<String?>(
                                               value: c.currencyCode,
-                                              child: Text('${c.currencyCode}  ${c.currencyNameThai}', overflow: TextOverflow.ellipsis),
+                                              child: Text('${c.currencyCode}  ${isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai}', overflow: TextOverflow.ellipsis),
                                             )),
                                       ],
                                       onChanged: (v) => setState(() => _selectedCurrencyCode = v),
@@ -577,20 +594,19 @@ class _ApFxGainLossReportScreenState
                                     ApVendorGroupMultiPicker(
                                       groups: _vendorGroups,
                                       selectedIds: _selectedGroupIds,
-                                      label: 'กลุ่มผู้ขาย',
                                       onChanged: (v) => setState(() => _selectedGroupIds = v),
                                     ),
                                     const SizedBox(height: 12),
 
                                     // รหัสผู้ขาย ตั้งแต่/ถึง
                                     _buildVendorCodeField(
-                                        label: 'รหัสผู้ขาย ตั้งแต่',
+                                        label: isEnglish ? 'Vendor Code From' : 'รหัสผู้ขาย ตั้งแต่',
                                         displayText: _fromLabel,
                                         onPick: () => _pickVendor(isFrom: true),
                                         onClear: () => setState(() { _vendorCodeFrom = null; _fromLabel = ''; })),
                                     const SizedBox(height: 8),
                                     _buildVendorCodeField(
-                                        label: 'รหัสผู้ขาย ถึง',
+                                        label: isEnglish ? 'Vendor Code To' : 'รหัสผู้ขาย ถึง',
                                         displayText: _toLabel,
                                         onPick: () => _pickVendor(isFrom: false),
                                         onClear: () => setState(() { _vendorCodeTo = null; _toLabel = ''; })),
@@ -602,11 +618,11 @@ class _ApFxGainLossReportScreenState
                                     // จัดเรียง
                                     DropdownButtonFormField<String>(
                                       value: _sortBy,
-                                      decoration: const InputDecoration(labelText: 'จัดเรียงข้อมูล', border: OutlineInputBorder(), isDense: true),
-                                      items: const [
-                                        DropdownMenuItem(value: 'vendor', child: Text('รหัสผู้ขาย')),
-                                        DropdownMenuItem(value: 'net_desc', child: Text('กำไรสุทธิ มากไปน้อย')),
-                                        DropdownMenuItem(value: 'net_asc', child: Text('กำไรสุทธิ น้อยไปมาก')),
+                                      decoration: InputDecoration(labelText: isEnglish ? 'Sort By' : 'จัดเรียงข้อมูล', border: const OutlineInputBorder(), isDense: true),
+                                      items: [
+                                        DropdownMenuItem(value: 'vendor', child: Text(isEnglish ? 'Vendor Code' : 'รหัสผู้ขาย')),
+                                        DropdownMenuItem(value: 'net_desc', child: Text(isEnglish ? 'Net Gain, High to Low' : 'กำไรสุทธิ มากไปน้อย')),
+                                        DropdownMenuItem(value: 'net_asc', child: Text(isEnglish ? 'Net Gain, Low to High' : 'กำไรสุทธิ น้อยไปมาก')),
                                       ],
                                       onChanged: (v) {
                                         if (v != null) { setState(() => _sortBy = v); _onSettingChanged(); }
@@ -615,7 +631,7 @@ class _ApFxGainLossReportScreenState
                                     const SizedBox(height: 8),
 
                                     Row(children: [
-                                      const Expanded(child: Text('แสดงรายละเอียด', style: TextStyle(fontSize: 13))),
+                                      Expanded(child: Text(isEnglish ? 'Show details' : 'แสดงรายละเอียด', style: const TextStyle(fontSize: 13))),
                                       Switch(
                                         value: __showDetail,
                                         activeColor: Colors.blueGrey[800],
@@ -624,7 +640,7 @@ class _ApFxGainLossReportScreenState
                                     ]),
 
                                     Row(children: [
-                                      const Expanded(child: Text('แสดงเฉพาะที่มีผลต่าง', style: TextStyle(fontSize: 13))),
+                                      Expanded(child: Text(isEnglish ? 'Show only those with FX difference' : 'แสดงเฉพาะที่มีผลต่าง', style: const TextStyle(fontSize: 13))),
                                       Switch(
                                         value: _fxOnly,
                                         activeColor: Colors.blueGrey[800],
@@ -641,7 +657,7 @@ class _ApFxGainLossReportScreenState
                                 width: double.infinity, height: 50,
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.picture_as_pdf),
-                                  label: const Text('ประมวลผลรายงาน'),
+                                  label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                   style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.blueGrey[800], foregroundColor: Colors.white),
                                   onPressed: _isLoading ? null : _generateReport,
@@ -673,7 +689,7 @@ class _ApFxGainLossReportScreenState
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : _reportRows.isEmpty
-                              ? const Center(child: Text('กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(child: Text(isEnglish ? 'Please select filter conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
@@ -703,13 +719,17 @@ class _ApFxGainLossReportScreenState
   }
 
   Future<void> _pickVendor({required bool isFrom}) async {
+    final isEnglish = _isEnglish;
     final result = await showDialog<ApVendor>(
       context: context,
       builder: (_) => _FxVendorSearchDialog(vendorService: _vendorService),
     );
     if (result != null && mounted) {
       setState(() {
-        final label = '${result.vendorCode}  ${result.vendorNameTh}';
+        final name = isEnglish && (result.vendorNameEn?.isNotEmpty ?? false)
+            ? result.vendorNameEn!
+            : result.vendorNameTh;
+        final label = '${result.vendorCode}  $name';
         if (isFrom) { _vendorCodeFrom = result.vendorCode; _fromLabel = label; }
         else        { _vendorCodeTo   = result.vendorCode; _toLabel   = label; }
       });
@@ -717,6 +737,7 @@ class _ApFxGainLossReportScreenState
   }
 
   Widget _buildVendorCodeField({required String label, required String displayText, required VoidCallback onPick, required VoidCallback onClear}) {
+    final isEnglish = _isEnglish;
     final hasValue = displayText.isNotEmpty;
     return InputDecorator(
       decoration: InputDecoration(
@@ -729,7 +750,7 @@ class _ApFxGainLossReportScreenState
       ),
       child: InkWell(
         onTap: onPick,
-        child: Text(hasValue ? displayText : '— ทั้งหมด —',
+        child: Text(hasValue ? displayText : (isEnglish ? '— All —' : '— ทั้งหมด —'),
             style: TextStyle(fontSize: 13, color: hasValue ? Colors.black87 : Colors.black38),
             overflow: TextOverflow.ellipsis),
       ),
@@ -771,7 +792,7 @@ class _FxVendorSearchDialogState extends State<_FxVendorSearchDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -779,26 +800,26 @@ class _FxVendorSearchDialogState extends State<_FxVendorSearchDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.blueGrey[800],
-            child: const Text('ค้นหาผู้ขาย',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            child: Text(isEnglish ? 'Search Vendor' : 'ค้นหาผู้ขาย',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
             child: TextField(
               controller: _ctrl, autofocus: true,
-              decoration: const InputDecoration(
-                  hintText: 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(), isDense: true),
+              decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search by vendor code or name' : 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  border: const OutlineInputBorder(), isDense: true),
               onChanged: _search,
             ),
           ),
           Container(
             color: Colors.grey[200],
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: const Row(children: [
-              SizedBox(width: 100, child: Text('รหัส', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(child: Text('ชื่อผู้ขาย', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            child: Row(children: [
+              SizedBox(width: 100, child: Text(isEnglish ? 'Code' : 'รหัส', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+              Expanded(child: Text(isEnglish ? 'Vendor Name' : 'ชื่อผู้ขาย', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
             ]),
           ),
           const Divider(height: 1),
@@ -806,7 +827,7 @@ class _FxVendorSearchDialogState extends State<_FxVendorSearchDialog> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _list.isEmpty
-                    ? const Center(child: Text('ไม่พบข้อมูล', style: TextStyle(color: Colors.grey)))
+                    ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล', style: const TextStyle(color: Colors.grey)))
                     : ListView.separated(
                         controller: _scroll,
                         itemCount: _list.length,
@@ -819,7 +840,9 @@ class _FxVendorSearchDialogState extends State<_FxVendorSearchDialog> {
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               child: Row(children: [
                                 SizedBox(width: 100, child: Text(v.vendorCode, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-                                Expanded(child: Text(v.vendorNameTh, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                Expanded(child: Text(
+                                    isEnglish && (v.vendorNameEn?.isNotEmpty ?? false) ? v.vendorNameEn! : v.vendorNameTh,
+                                    style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
                               ]),
                             ),
                           );
@@ -829,7 +852,7 @@ class _FxVendorSearchDialogState extends State<_FxVendorSearchDialog> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('ยกเลิก')),
+              TextButton(onPressed: () => Navigator.pop(context), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
             ]),
           ),
         ]),

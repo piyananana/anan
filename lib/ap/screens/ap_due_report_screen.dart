@@ -1,4 +1,4 @@
-﻿import 'package:flutter/services.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -7,13 +7,14 @@ import 'package:printing/printing.dart';
 
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
 import '../services/ap_aging_report_service.dart';
 import '../services/ap_vendor_service.dart';
 import '../services/ap_vendor_group_service.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
 import '../../sa/models/sa_company.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
@@ -35,6 +36,7 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
   final AuthService _authService = AuthService();
   final ApVendorGroupService _groupService = ApVendorGroupService();
   final ApVendorService _vendorService = ApVendorService();
+  final BranchService _branchService = BranchService();
   final TextEditingController _monthsIntervalCtrl =
       TextEditingController(text: '1');
 
@@ -44,12 +46,14 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
   bool _isDraggingDivider = false;
   int _pdfKey = 0;
   bool _isExporting = false;
+  bool _isEnglish = false;
 
   Company? _company;
   Map<String, String>? _headers;
 
   DateTime _asOfDate = DateTime.now();
   List<UserBranch> _allowedBranches = [];
+  List<Branch> _allBranches = [];
   int? _selectedBranchId;
 
   List<ApVendorGroup> _vendorGroups = [];
@@ -83,9 +87,9 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
 
   int get _totalBuckets => _columnCount + 1;
 
-  List<String> get _dynamicBucketLabels {
+  List<String> _dynamicBucketLabels(bool isEnglish) {
     final I = _columnInterval;
-    final labels = <String>['เกินกำหนดแล้ว'];
+    final labels = <String>[isEnglish ? 'Overdue' : 'เกินกำหนดแล้ว'];
     for (int i = 0; i < _columnCount - 1; i++) {
       final dt = DateTime(_asOfDate.year, _asOfDate.month + i * I, 1);
       labels.add(DateFormat('MM/yy').format(dt));
@@ -118,13 +122,28 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
     final results = await Future.wait([
       _companyService.fetchCompany(),
       _groupService.fetchActiveRows(),
+      _branchService.fetchRows(),
     ]);
     _company = results[0] as Company?;
     _vendorGroups = results[1] as List<ApVendorGroup>;
+    _allBranches = results[2] as List<Branch>;
     if (mounted) setState(() {});
   }
 
+  // UserBranch (allowed branches) has no English name — resolve it from the
+  // full bilingual Branch list by branchId.
+  String _resolveBranchName(int? branchId, String fallbackThai, bool isEnglish) {
+    if (isEnglish) {
+      final match = _allBranches.where((b) => b.id == branchId);
+      if (match.isNotEmpty && match.first.branchNameEng.isNotEmpty) {
+        return match.first.branchNameEng;
+      }
+    }
+    return fallbackThai;
+  }
+
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     setState(() {
       _isLoading = true;
       _reportData = [];
@@ -160,8 +179,10 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
       }
 
       if (filtered.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('ไม่พบข้อมูลเจ้าหนี้ ณ วันที่ที่เลือก')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'No payable data found as of the selected date'
+                : 'ไม่พบข้อมูลเจ้าหนี้ ณ วันที่ที่เลือก')));
       }
 
       setState(() {
@@ -170,8 +191,9 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -183,6 +205,7 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
   }
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -193,7 +216,7 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
       final totBg = ExcelColor.fromHexString('#BDD7EE');
       final detBg = ExcelColor.fromHexString('#F2F2F2');
 
-      final bucketLabels = _dynamicBucketLabels;
+      final bucketLabels = _dynamicBucketLabels(isEnglish);
       final totalBuckets = _totalBuckets;
       String fmtDate(String? raw) {
         if (raw == null || raw.isEmpty) return '';
@@ -204,17 +227,28 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
       }
 
       final ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานกำหนดชำระเจ้าหนี้', bold: true);
-      _xlCell(s, 2, 0, 'ณ วันที่: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  พิมพ์: $ts');
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0,
+          isEnglish ? 'AP Due Date Report' : 'รายงานกำหนดชำระเจ้าหนี้',
+          bold: true);
+      _xlCell(
+          s,
+          2,
+          0,
+          isEnglish
+              ? 'As of: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  Printed: $ts'
+              : 'ณ วันที่: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  พิมพ์: $ts');
 
       int r = 3;
-      _xlCell(s, r, 0, 'รหัสเจ้าหนี้', bg: hdrBg, bold: true);
-      _xlCell(s, r, 1, 'ชื่อเจ้าหนี้', bg: hdrBg, bold: true);
+      _xlCell(s, r, 0, isEnglish ? 'Vendor Code' : 'รหัสเจ้าหนี้',
+          bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, isEnglish ? 'Vendor Name' : 'ชื่อเจ้าหนี้',
+          bg: hdrBg, bold: true);
       for (int b = 0; b < totalBuckets; b++) {
         _xlCell(s, r, 2 + b, bucketLabels[b], bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       }
-      _xlCell(s, r, 2 + totalBuckets, 'รวม', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 2 + totalBuckets, isEnglish ? 'Total' : 'รวม',
+          bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       r++;
 
       final grandBuckets = List<double>.filled(totalBuckets, 0.0);
@@ -222,7 +256,9 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
 
       for (final vend in _reportData) {
         final code = vend['vendor_code'] as String? ?? '';
-        final name = vend['vendor_name_th'] as String? ?? '';
+        final nameTh = vend['vendor_name_th'] as String? ?? '';
+        final nameEn = vend['vendor_name_en'] as String?;
+        final name = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
         final invoices = (vend['invoices'] as List?) ?? [];
         final custBuckets = List<double>.filled(totalBuckets, 0.0);
         for (final inv in invoices) {
@@ -252,7 +288,8 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
         r++;
       }
 
-      _xlCell(s, r, 0, 'รวมทั้งสิ้น', bg: totBg, bold: true);
+      _xlCell(s, r, 0, isEnglish ? 'Grand Total' : 'รวมทั้งสิ้น',
+          bg: totBg, bold: true);
       _xlCell(s, r, 1, '', bg: totBg);
       for (int b = 0; b < totalBuckets; b++) {
         _xlCell(s, r, 2 + b, DoubleCellValue(grandBuckets[b]), bg: totBg, bold: true, align: HorizontalAlign.Right);
@@ -280,6 +317,7 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
   }
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish       = _isEnglish;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -288,12 +326,16 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
     final fontBold       = pw.Font.ttf(fontBoldData);
     final fontItalic     = pw.Font.ttf(fontItalicData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
-    final userName     = _headers?['UserName'] ?? '(ไม่ระบุชื่อ)';
+    final companyName  = _company?.displayName(isEnglish) ??
+        (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
+    final userName     = _headers?['UserName'] ??
+        (isEnglish ? '(No name)' : '(ไม่ระบุชื่อ)');
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-    final asOfLine     = 'ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_asOfDate)}';
+    final asOfLine     = isEnglish
+        ? 'As of ${DateFormat('dd/MM/yyyy').format(_asOfDate)}'
+        : 'ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_asOfDate)}';
 
-    final bucketLabels = _dynamicBucketLabels;
+    final bucketLabels = _dynamicBucketLabels(isEnglish);
     final totalBuckets = _totalBuckets;
     final showDetail   = _showDetail;
     final sortOrder    = _sortOrder;
@@ -303,28 +345,38 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
       final b = _allowedBranches.firstWhere(
           (b) => b.branchId == _selectedBranchId,
           orElse: () => _allowedBranches.first);
-      conditions.add('สาขา: ${b.branchCode} ${b.branchNameThai}');
+      conditions.add(
+          '${isEnglish ? 'Branch' : 'สาขา'}: ${b.branchCode} ${_resolveBranchName(b.branchId, b.branchNameThai, isEnglish)}');
     }
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
         final g = _vendorGroups.firstWhere((g) => g.id == id,
             orElse: () => _vendorGroups.first);
-        return '${g.groupCode} ${g.groupNameThai}';
+        final groupName = isEnglish && g.groupNameEng.isNotEmpty
+            ? g.groupNameEng
+            : g.groupNameThai;
+        return '${g.groupCode} $groupName';
       }).join(', ');
-      conditions.add('กลุ่มผู้ขาย: $names');
+      conditions.add('${isEnglish ? 'Vendor Group' : 'กลุ่มผู้ขาย'}: $names');
     }
     if ((_vendorCodeFrom ?? '').isNotEmpty || (_vendorCodeTo ?? '').isNotEmpty) {
+      final all  = isEnglish ? '(All)' : '(ทั้งหมด)';
       final from = _vendorCodeFrom ?? '';
       final to   = _vendorCodeTo ?? '';
       conditions.add(
-          'รหัสผู้ขาย: ${from.isEmpty ? '(ทั้งหมด)' : from} – ${to.isEmpty ? '(ทั้งหมด)' : to}');
+          '${isEnglish ? 'Vendor Code' : 'รหัสผู้ขาย'}: ${from.isEmpty ? all : from} – ${to.isEmpty ? all : to}');
     }
-    conditions.add('คอลัมน์: $_columnCount คอลัมน์  ทุก $_columnInterval เดือน');
+    conditions.add(isEnglish
+        ? 'Columns: $_columnCount columns  every $_columnInterval month(s)'
+        : 'คอลัมน์: $_columnCount คอลัมน์  ทุก $_columnInterval เดือน');
     if (sortOrder != 'none') {
-      conditions.add(
-          'เรียงยอด: ${sortOrder == 'desc' ? 'มากไปน้อย' : 'น้อยไปมาก'}');
+      conditions.add(isEnglish
+          ? 'Sort by amount: ${sortOrder == 'desc' ? 'Descending' : 'Ascending'}'
+          : 'เรียงยอด: ${sortOrder == 'desc' ? 'มากไปน้อย' : 'น้อยไปมาก'}');
     }
-    if (showDetail) conditions.add('แสดงรายละเอียด');
+    if (showDetail) {
+      conditions.add(isEnglish ? 'Show invoice details' : 'แสดงรายละเอียด');
+    }
     final conditionLine = '* ${conditions.join(' | ')}';
 
     final numFmt = NumberFormat('#,##0.00', 'en_US');
@@ -345,9 +397,11 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
         final bal     = (inv['balance_amount_lc'] as num?)?.toDouble() ?? 0.0;
         buckets[_bucketForDueDate(dueDate)] += bal;
       }
+      final code   = v['vendor_code'] as String? ?? '';
+      final nameEn = v['vendor_name_en'] as String?;
       return (
-        code:     v['vendor_code'] as String? ?? '',
-        name:     v['vendor_name_th'] as String? ?? '',
+        code:     code,
+        name:     isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (v['vendor_name_th'] as String? ?? ''),
         buckets:  buckets,
         total:    buckets.fold(0.0, (s, x) => s + x),
         invoices: (v['invoices'] as List? ?? []).cast<Map<String, dynamic>>(),
@@ -388,12 +442,18 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                 pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 7,
-                    child: pw.Text('รายงานกำหนดชำระเจ้าหนี้',
+                    child: pw.Text(
+                        isEnglish
+                            ? 'AP Due Date Report'
+                            : 'รายงานกำหนดชำระเจ้าหนี้',
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
                 pw.Expanded(
                     flex: 3,
-                    child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+                    child: pw.Text(
+                        isEnglish
+                            ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}'
+                            : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
                         textAlign: pw.TextAlign.right,
                         style: const pw.TextStyle(fontSize: 12))),
               ],
@@ -404,7 +464,12 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
               children: [
                 pw.Expanded(flex: 3, child: pw.Text('', style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(flex: 7, child: pw.Text(asOfLine, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 12))),
-                pw.Expanded(flex: 3, child: pw.Text('พิมพ์โดย $userName', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12))),
+                pw.Expanded(
+                    flex: 3,
+                    child: pw.Text(
+                        isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
+                        textAlign: pw.TextAlign.right,
+                        style: const pw.TextStyle(fontSize: 12))),
               ],
             ),
             pw.SizedBox(height: 4),
@@ -412,7 +477,14 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
                 pw.Expanded(flex: 10, child: pw.Text(conditionLine, textAlign: pw.TextAlign.left, style: const pw.TextStyle(fontSize: 10))),
-                pw.Expanded(flex: 3, child: pw.Text('พิมพ์เมื่อ $printDateStr', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12))),
+                pw.Expanded(
+                    flex: 3,
+                    child: pw.Text(
+                        isEnglish
+                            ? 'Printed: $printDateStr'
+                            : 'พิมพ์เมื่อ $printDateStr',
+                        textAlign: pw.TextAlign.right,
+                        style: const pw.TextStyle(fontSize: 12))),
               ],
             ),
             pw.SizedBox(height: 4),
@@ -451,8 +523,12 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
             final bal     = (inv['balance_amount_lc'] as num?)?.toDouble() ?? 0.0;
             final bucket  = _bucketForDueDate(dueStr);
             final dateParts = <String>[];
-            if (docDate.isNotEmpty) dateParts.add('วันที่:$docDate');
-            if (dueDate.isNotEmpty) dateParts.add('ครบ:$dueDate');
+            if (docDate.isNotEmpty) {
+              dateParts.add('${isEnglish ? 'Doc' : 'วันที่'}:$docDate');
+            }
+            if (dueDate.isNotEmpty) {
+              dateParts.add('${isEnglish ? 'Due' : 'ครบ'}:$dueDate');
+            }
             final bks = List<double>.filled(totalBuckets, 0);
             bks[bucket] = bal;
             return pw.TableRow(
@@ -470,10 +546,18 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: PdfColor(0.82, 0.87, 0.87)),
               children: [
-                hCell(showDetail ? 'รหัส / เลขที่เอกสาร' : 'รหัส', a: pw.TextAlign.left),
-                hCell(showDetail ? 'ชื่อผู้ขาย / วันที่,ครบกำหนด' : 'ชื่อผู้ขาย', a: pw.TextAlign.left),
+                hCell(
+                    showDetail
+                        ? (isEnglish ? 'Code / Invoice' : 'รหัส / เลขที่เอกสาร')
+                        : (isEnglish ? 'Code' : 'รหัส'),
+                    a: pw.TextAlign.left),
+                hCell(
+                    showDetail
+                        ? (isEnglish ? 'Vendor / Doc,Due Date' : 'ชื่อผู้ขาย / วันที่,ครบกำหนด')
+                        : (isEnglish ? 'Vendor' : 'ชื่อผู้ขาย'),
+                    a: pw.TextAlign.left),
                 ...bucketLabels.map((l) => hCell(l)),
-                hCell('รวม'),
+                hCell(isEnglish ? 'Total' : 'รวม'),
               ],
             ),
           ];
@@ -487,7 +571,8 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
             }
           }
 
-          tableRows.add(summaryRow('', 'รวมทั้งหมด', grand, grandTotal,
+          tableRows.add(summaryRow(
+              '', isEnglish ? 'Grand Total' : 'รวมทั้งหมด', grand, grandTotal,
               isTotal: true, bg: const PdfColor(0.82, 0.87, 0.87)));
 
           return [
@@ -505,7 +590,8 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -543,7 +629,9 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                           _isFilterExpanded ? Icons.filter_list_off : Icons.filter_list,
                           color: Colors.white, size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
                     ),
                   ),
@@ -566,8 +654,8 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Text('เงื่อนไขรายงาน',
-                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                      Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                       const SizedBox(height: 16),
 
                                       // ณ วันที่
@@ -582,11 +670,11 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                                           if (picked != null) setState(() => _asOfDate = picked);
                                         },
                                         child: InputDecorator(
-                                          decoration: const InputDecoration(
-                                            labelText: 'ณ วันที่',
-                                            border: OutlineInputBorder(),
+                                          decoration: InputDecoration(
+                                            labelText: isEnglish ? 'As of' : 'ณ วันที่',
+                                            border: const OutlineInputBorder(),
                                             isDense: true,
-                                            suffixIcon: Icon(Icons.calendar_today, size: 16),
+                                            suffixIcon: const Icon(Icons.calendar_today, size: 16),
                                           ),
                                           child: Text(DateFormat('dd/MM/yyyy').format(_asOfDate)),
                                         ),
@@ -598,15 +686,19 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                                         DropdownButtonFormField<int?>(
                                           isExpanded: true,
                                           value: _selectedBranchId,
-                                          decoration: const InputDecoration(
-                                              labelText: 'สาขา',
-                                              border: OutlineInputBorder(),
+                                          decoration: InputDecoration(
+                                              labelText: isEnglish ? 'Branch' : 'สาขา',
+                                              border: const OutlineInputBorder(),
                                               isDense: true),
                                           items: [
-                                            const DropdownMenuItem<int?>(value: null, child: Text('— ทุกสาขา —')),
+                                            DropdownMenuItem<int?>(
+                                                value: null,
+                                                child: Text(isEnglish ? '— All Branches —' : '— ทุกสาขา —')),
                                             ..._allowedBranches.map((b) => DropdownMenuItem<int?>(
                                                   value: b.branchId,
-                                                  child: Text('${b.branchCode}  ${b.branchNameThai}', overflow: TextOverflow.ellipsis),
+                                                  child: Text(
+                                                      '${b.branchCode}  ${_resolveBranchName(b.branchId, b.branchNameThai, isEnglish)}',
+                                                      overflow: TextOverflow.ellipsis),
                                                 )),
                                           ],
                                           onChanged: (v) => setState(() => _selectedBranchId = v),
@@ -624,7 +716,7 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                                       // รหัสผู้ขาย
                                       const SizedBox(height: 12),
                                       _buildVendorCodeField(
-                                        label: 'รหัสผู้ขาย ตั้งแต่',
+                                        label: isEnglish ? 'Vendor Code From' : 'รหัสผู้ขาย ตั้งแต่',
                                         displayText: _fromLabel,
                                         onPick: () => _pickVendor(isFrom: true),
                                         onClear: () => setState(() {
@@ -634,7 +726,7 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                                       ),
                                       const SizedBox(height: 8),
                                       _buildVendorCodeField(
-                                        label: 'รหัสผู้ขาย ถึง',
+                                        label: isEnglish ? 'Vendor Code To' : 'รหัสผู้ขาย ถึง',
                                         displayText: _toLabel,
                                         onPick: () => _pickVendor(isFrom: false),
                                         onClear: () => setState(() {
@@ -651,12 +743,14 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                                       DropdownButtonFormField<int>(
                                         isExpanded: true,
                                         value: _columnCount,
-                                        decoration: const InputDecoration(
-                                            labelText: 'จำนวนคอลัมน์กำหนดชำระ',
-                                            border: OutlineInputBorder(),
+                                        decoration: InputDecoration(
+                                            labelText: isEnglish ? 'Number of Due Date Columns' : 'จำนวนคอลัมน์กำหนดชำระ',
+                                            border: const OutlineInputBorder(),
                                             isDense: true),
                                         items: [2, 3, 4, 5]
-                                            .map((n) => DropdownMenuItem<int>(value: n, child: Text('$n คอลัมน์')))
+                                            .map((n) => DropdownMenuItem<int>(
+                                                value: n,
+                                                child: Text(isEnglish ? '$n columns' : '$n คอลัมน์')))
                                             .toList(),
                                         onChanged: (v) {
                                           if (v != null) {
@@ -672,11 +766,11 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                                         controller: _monthsIntervalCtrl,
                                         keyboardType: TextInputType.number,
                                         textAlign: TextAlign.right,
-                                        decoration: const InputDecoration(
-                                          labelText: 'จำนวนเดือนต่อคอลัมน์',
-                                          border: OutlineInputBorder(),
+                                        decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Months per Column' : 'จำนวนเดือนต่อคอลัมน์',
+                                          border: const OutlineInputBorder(),
                                           isDense: true,
-                                          suffixText: 'เดือน',
+                                          suffixText: isEnglish ? 'months' : 'เดือน',
                                         ),
                                         onEditingComplete: _onSettingChanged,
                                       ),
@@ -686,14 +780,20 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                                       DropdownButtonFormField<String>(
                                         isExpanded: true,
                                         value: _sortOrder,
-                                        decoration: const InputDecoration(
-                                            labelText: 'เรียงตามยอดรวม',
-                                            border: OutlineInputBorder(),
+                                        decoration: InputDecoration(
+                                            labelText: isEnglish ? 'Sort by Total' : 'เรียงตามยอดรวม',
+                                            border: const OutlineInputBorder(),
                                             isDense: true),
-                                        items: const [
-                                          DropdownMenuItem(value: 'none', child: Text('— ไม่ระบุ —')),
-                                          DropdownMenuItem(value: 'desc', child: Text('มากไปน้อย ↓')),
-                                          DropdownMenuItem(value: 'asc', child: Text('น้อยไปมาก ↑')),
+                                        items: [
+                                          DropdownMenuItem(
+                                              value: 'none',
+                                              child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
+                                          DropdownMenuItem(
+                                              value: 'desc',
+                                              child: Text(isEnglish ? 'High to Low ↓' : 'มากไปน้อย ↓')),
+                                          DropdownMenuItem(
+                                              value: 'asc',
+                                              child: Text(isEnglish ? 'Low to High ↑' : 'น้อยไปมาก ↑')),
                                         ],
                                         onChanged: (v) {
                                           if (v != null) {
@@ -709,9 +809,10 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                                       // แสดงรายละเอียด
                                       Row(
                                         children: [
-                                          const Expanded(
-                                            child: Text('แสดงรายละเอียดเอกสาร',
-                                                style: TextStyle(fontSize: 13)),
+                                          Expanded(
+                                            child: Text(
+                                                isEnglish ? 'Show invoice details' : 'แสดงรายละเอียดเอกสาร',
+                                                style: const TextStyle(fontSize: 13)),
                                           ),
                                           Switch(
                                             value: _showDetail,
@@ -734,7 +835,7 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                                   height: 50,
                                   child: ElevatedButton.icon(
                                     icon: const Icon(Icons.picture_as_pdf),
-                                    label: const Text('ประมวลผลรายงาน'),
+                                    label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                     style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.blueGrey[800],
                                         foregroundColor: Colors.white),
@@ -769,7 +870,10 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(child: Text('กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(
+                                  child: Text(isEnglish
+                                      ? 'Please select conditions and click Generate'
+                                      : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
@@ -840,7 +944,7 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
       child: InkWell(
         onTap: onPick,
         child: Text(
-          hasValue ? displayText : '— ทั้งหมด —',
+          hasValue ? displayText : (_isEnglish ? '— All —' : '— ทั้งหมด —'),
           style: TextStyle(
               fontSize: 13,
               color: hasValue ? Colors.black87 : Colors.black38),
@@ -895,7 +999,7 @@ class _DueReportVendorSearchDialogState
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -905,18 +1009,18 @@ class _DueReportVendorSearchDialogState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.blueGrey[800],
-              child: const Text('ค้นหาผู้ขาย',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+              child: Text(isEnglish ? 'Search Vendor' : 'ค้นหาผู้ขาย',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
               child: TextField(
                 controller: _searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search by vendor code or name' : 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
                 onChanged: _search,
@@ -925,10 +1029,10 @@ class _DueReportVendorSearchDialogState
             Container(
               color: Colors.grey[200],
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: const Row(
+              child: Row(
                 children: [
-                  SizedBox(width: 100, child: Text('รหัส', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                  Expanded(child: Text('ชื่อผู้ขาย', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  SizedBox(width: 100, child: Text(isEnglish ? 'Code' : 'รหัส', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  Expanded(child: Text(isEnglish ? 'Vendor Name' : 'ชื่อผู้ขาย', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                 ],
               ),
             ),
@@ -937,7 +1041,7 @@ class _DueReportVendorSearchDialogState
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _vendors.isEmpty
-                      ? const Center(child: Text('ไม่พบข้อมูล', style: TextStyle(color: Colors.grey)))
+                      ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล', style: const TextStyle(color: Colors.grey)))
                       : ListView.separated(
                           controller: _scrollCtrl,
                           itemCount: _vendors.length,
@@ -956,7 +1060,10 @@ class _DueReportVendorSearchDialogState
                                           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                                     ),
                                     Expanded(
-                                      child: Text(v.vendorNameTh,
+                                      child: Text(
+                                          isEnglish && (v.vendorNameEn ?? '').isNotEmpty
+                                              ? v.vendorNameEn!
+                                              : v.vendorNameTh,
                                           style: const TextStyle(fontSize: 13),
                                           overflow: TextOverflow.ellipsis),
                                     ),
@@ -975,7 +1082,7 @@ class _DueReportVendorSearchDialogState
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('ยกเลิก'),
+                    child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
                   ),
                 ],
               ),

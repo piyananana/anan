@@ -55,6 +55,7 @@ class _ApTransactionReportScreenState
   final _branchService  = BranchService();
   final _vendorService  = ApVendorService();
 
+  bool   _isEnglish        = false;
   bool   _isLoading        = false;
   bool   _isFilterExpanded = true;
   double _filterPanelWidth  = 320.0;
@@ -101,6 +102,7 @@ class _ApTransactionReportScreenState
   }
 
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     setState(() { _isLoading = true; _reportData = []; });
     try {
       final raw = await _reportService.getTransactionReport(
@@ -113,8 +115,10 @@ class _ApTransactionReportScreenState
         sortBy:         _sortBy,
       );
       if (raw.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('ไม่พบข้อมูลในช่วงวันที่ที่เลือก')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'No data found for the selected date range'
+                : 'ไม่พบข้อมูลในช่วงวันที่ที่เลือก')));
       }
       setState(() { _reportData = raw; _pdfKey++; });
     } catch (e) {
@@ -132,6 +136,7 @@ class _ApTransactionReportScreenState
   }
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish       = _isEnglish;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -140,35 +145,38 @@ class _ApTransactionReportScreenState
     final fontBold   = pw.Font.ttf(fontBoldData);
     final fontItalic = pw.Font.ttf(fontItalicData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
+    final companyName  = _company?.displayName(isEnglish) ??
+        (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final dateRangeLine =
-        'ช่วงวันที่ ${DateFormat('dd/MM/yyyy').format(_dateFrom)}'
+        '${isEnglish ? 'Date range' : 'ช่วงวันที่'} ${DateFormat('dd/MM/yyyy').format(_dateFrom)}'
         ' – ${DateFormat('dd/MM/yyyy').format(_dateTo)}';
 
     final conditions = <String>[];
     if (_selectedBranchId != null) {
       final b = _branches.firstWhere((b) => b.id == _selectedBranchId,
           orElse: () => _branches.first);
-      conditions.add('สาขา: ${b.branchCode} ${b.branchNameThai}');
+      conditions.add('${isEnglish ? 'Branch' : 'สาขา'}: ${b.branchCode} ${isEnglish && b.branchNameEng.isNotEmpty ? b.branchNameEng : b.branchNameThai}');
     }
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
         final g = _vendorGroups.firstWhere((g) => g.id == id,
             orElse: () => _vendorGroups.first);
-        return '${g.groupCode} ${g.groupNameThai}';
+        return '${g.groupCode} ${isEnglish && g.groupNameEng.isNotEmpty ? g.groupNameEng : g.groupNameThai}';
       }).join(', ');
-      conditions.add('กลุ่ม: $names');
+      conditions.add('${isEnglish ? 'Group' : 'กลุ่ม'}: $names');
     }
     if ((_vendorCodeFrom ?? '').isNotEmpty || (_vendorCodeTo ?? '').isNotEmpty) {
+      final allLabel = isEnglish ? '(All)' : '(ทั้งหมด)';
       conditions.add(
-          'รหัสผู้ขาย: ${_vendorCodeFrom?.isEmpty ?? true ? '(ทั้งหมด)' : _vendorCodeFrom!}'
-          ' – ${_vendorCodeTo?.isEmpty ?? true ? '(ทั้งหมด)' : _vendorCodeTo!}');
+          '${isEnglish ? 'Vendor code' : 'รหัสผู้ขาย'}: ${_vendorCodeFrom?.isEmpty ?? true ? allLabel : _vendorCodeFrom!}'
+          ' – ${_vendorCodeTo?.isEmpty ?? true ? allLabel : _vendorCodeTo!}');
     }
     conditions.add(_sortBy == 'doc_type'
-        ? 'เรียงตามประเภทเอกสาร' : 'เรียงตามรหัสผู้ขาย');
-    if (_showDetail) conditions.add('แสดงรายละเอียด');
+        ? (isEnglish ? 'Sorted by document type' : 'เรียงตามประเภทเอกสาร')
+        : (isEnglish ? 'Sorted by vendor code' : 'เรียงตามรหัสผู้ขาย'));
+    if (_showDetail) conditions.add(isEnglish ? 'Show details' : 'แสดงรายละเอียด');
 
     final conditionLine = conditions.join(' | ');
     final showDetail    = _showDetail;
@@ -176,22 +184,27 @@ class _ApTransactionReportScreenState
     pw.Widget Function(pw.Context) pageHeader() => (ctx) => pw.Column(children: [
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 11))),
-        pw.Expanded(flex: 6, child: pw.Text('รายงานธุรกรรมเจ้าหนี้',
+        pw.Expanded(flex: 6, child: pw.Text(isEnglish ? 'AP Transaction Report' : 'รายงานธุรกรรมเจ้าหนี้',
             textAlign: pw.TextAlign.center,
             style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold))),
-        pw.Expanded(flex: 3, child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+        pw.Expanded(flex: 3, child: pw.Text(
+            isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
             textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10))),
       ]),
       pw.SizedBox(height: 3),
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.SizedBox()),
         pw.Expanded(flex: 6, child: pw.Text(dateRangeLine, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10))),
-        pw.Expanded(flex: 3, child: pw.Text('พิมพ์โดย $userName', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10))),
+        pw.Expanded(flex: 3, child: pw.Text(
+            isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
+            textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10))),
       ]),
       pw.SizedBox(height: 3),
       pw.Row(children: [
         pw.Expanded(flex: 9, child: pw.Text('* $conditionLine', style: const pw.TextStyle(fontSize: 9))),
-        pw.Expanded(flex: 3, child: pw.Text('พิมพ์เมื่อ $printDateStr', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10))),
+        pw.Expanded(flex: 3, child: pw.Text(
+            isEnglish ? 'Printed $printDateStr' : 'พิมพ์เมื่อ $printDateStr',
+            textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10))),
       ]),
       pw.SizedBox(height: 4),
     ]);
@@ -236,13 +249,13 @@ class _ApTransactionReportScreenState
     final headerRow = pw.TableRow(
       decoration: const pw.BoxDecoration(color: cGreen),
       children: [
-        hCell('รหัส – ชื่อผู้ขาย', a: pw.TextAlign.left),
-        hCell('ใบสั่งซื้อ/PI'),
-        hCell('ลดหนี้/CN'),
-        hCell('เพิ่มหนี้/DN'),
-        hCell('จ่ายมัดจำ'),
-        hCell('คืนมัดจำ'),
-        hCell('ชำระ'),
+        hCell(isEnglish ? 'Code – Vendor Name' : 'รหัส – ชื่อผู้ขาย', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'PI' : 'ใบสั่งซื้อ/PI'),
+        hCell(isEnglish ? 'CN' : 'ลดหนี้/CN'),
+        hCell(isEnglish ? 'DN' : 'เพิ่มหนี้/DN'),
+        hCell(isEnglish ? 'Advance' : 'จ่ายมัดจำ'),
+        hCell(isEnglish ? 'Advance Return' : 'คืนมัดจำ'),
+        hCell(isEnglish ? 'Payment' : 'ชำระ'),
       ],
     );
 
@@ -255,7 +268,9 @@ class _ApTransactionReportScreenState
     for (final vend in _reportData) {
       totalVendors++;
       final code = vend['vendor_code']    as String? ?? '';
-      final name = vend['vendor_name_th'] as String? ?? '';
+      final nameTh = vend['vendor_name_th'] as String? ?? '';
+      final nameEn = vend['vendor_name_en'] as String?;
+      final name = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
       final amts = [
         (vend['pi_amount']  as num?)?.toDouble() ?? 0,
         (vend['cn_amount']  as num?)?.toDouble() ?? 0,
@@ -306,9 +321,15 @@ class _ApTransactionReportScreenState
       tableRows.add(pw.TableRow(
         decoration: const pw.BoxDecoration(color: cYellow),
         children: [
-          dCell('รวม $totalVendors ผู้ขาย / $totalDocs เอกสาร', tBold(9)),
+          dCell(
+              isEnglish
+                  ? 'Total $totalVendors vendors / $totalDocs documents'
+                  : 'รวม $totalVendors ผู้ขาย / $totalDocs เอกสาร',
+              tBold(9)),
           ...List.generate(6, (i) => grandCounts[i] > 0
-              ? dCell('${grandCounts[i]} ใบ', tBold(9), a: pw.TextAlign.right)
+              ? dCell(
+                  isEnglish ? '${grandCounts[i]} docs' : '${grandCounts[i]} ใบ',
+                  tBold(9), a: pw.TextAlign.right)
               : dCell('', tBold(9))),
         ],
       ));
@@ -317,7 +338,11 @@ class _ApTransactionReportScreenState
     tableRows.add(pw.TableRow(
       decoration: const pw.BoxDecoration(color: PdfColor(0.75, 0.85, 0.88)),
       children: [
-        dCell(showDetail ? 'ยอดเงินรวมทุกประเภท' : 'รวม $totalVendors ผู้ขาย', tBold(9)),
+        dCell(
+            showDetail
+                ? (isEnglish ? 'Total amount – all types' : 'ยอดเงินรวมทุกประเภท')
+                : (isEnglish ? 'Total $totalVendors vendors' : 'รวม $totalVendors ผู้ขาย'),
+            tBold(9)),
         ...List.generate(6, (i) => amtCell(grandAmts[i], tBold(9), dash: true)),
       ],
     ));
@@ -351,7 +376,8 @@ class _ApTransactionReportScreenState
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -388,7 +414,9 @@ class _ApTransactionReportScreenState
                       icon: Icon(_isFilterExpanded ? Icons.filter_list_off : Icons.filter_list,
                           color: Colors.white, size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (isEnglish ? 'Collapse Filter' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand Filter' : 'ขยายเงื่อนไข'),
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
                     ),
                   ),
@@ -409,13 +437,17 @@ class _ApTransactionReportScreenState
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('เงื่อนไขรายงาน',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                     const SizedBox(height: 16),
 
-                                    _buildDateField(label: 'วันที่เอกสาร ตั้งแต่', date: _dateFrom, onPick: (d) => setState(() => _dateFrom = d)),
+                                    _buildDateField(
+                                        label: isEnglish ? 'Document Date From' : 'วันที่เอกสาร ตั้งแต่',
+                                        date: _dateFrom, onPick: (d) => setState(() => _dateFrom = d)),
                                     const SizedBox(height: 12),
-                                    _buildDateField(label: 'วันที่เอกสาร ถึง', date: _dateTo, onPick: (d) => setState(() => _dateTo = d)),
+                                    _buildDateField(
+                                        label: isEnglish ? 'Document Date To' : 'วันที่เอกสาร ถึง',
+                                        date: _dateTo, onPick: (d) => setState(() => _dateTo = d)),
 
                                     const SizedBox(height: 16),
                                     const Divider(height: 1),
@@ -424,15 +456,19 @@ class _ApTransactionReportScreenState
                                     DropdownButtonFormField<int?>(
                                       isExpanded: true,
                                       value: _selectedBranchId,
-                                      decoration: const InputDecoration(
-                                          labelText: 'สาขา',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Branch' : 'สาขา',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
                                       items: [
-                                        const DropdownMenuItem<int?>(value: null, child: Text('— ทุกสาขา —')),
+                                        DropdownMenuItem<int?>(
+                                            value: null,
+                                            child: Text(isEnglish ? '— All Branches —' : '— ทุกสาขา —')),
                                         ..._branches.map((b) => DropdownMenuItem<int?>(
                                             value: b.id,
-                                            child: Text('${b.branchCode}  ${b.branchNameThai}', overflow: TextOverflow.ellipsis))),
+                                            child: Text(
+                                                '${b.branchCode}  ${isEnglish && b.branchNameEng.isNotEmpty ? b.branchNameEng : b.branchNameThai}',
+                                                overflow: TextOverflow.ellipsis))),
                                       ],
                                       onChanged: (v) => setState(() => _selectedBranchId = v),
                                     ),
@@ -441,19 +477,18 @@ class _ApTransactionReportScreenState
                                     ApVendorGroupMultiPicker(
                                       groups: _vendorGroups,
                                       selectedIds: _selectedGroupIds,
-                                      label: 'กลุ่มผู้ขาย',
                                       onChanged: (v) => setState(() => _selectedGroupIds = v),
                                     ),
                                     const SizedBox(height: 12),
 
                                     _buildVendorCodeField(
-                                        label: 'รหัสผู้ขาย ตั้งแต่',
+                                        label: isEnglish ? 'Vendor Code From' : 'รหัสผู้ขาย ตั้งแต่',
                                         displayText: _fromLabel,
                                         onPick: () => _pickVendor(isFrom: true),
                                         onClear: () => setState(() { _vendorCodeFrom = null; _fromLabel = ''; })),
                                     const SizedBox(height: 8),
                                     _buildVendorCodeField(
-                                        label: 'รหัสผู้ขาย ถึง',
+                                        label: isEnglish ? 'Vendor Code To' : 'รหัสผู้ขาย ถึง',
                                         displayText: _toLabel,
                                         onPick: () => _pickVendor(isFrom: false),
                                         onClear: () => setState(() { _vendorCodeTo = null; _toLabel = ''; })),
@@ -464,13 +499,13 @@ class _ApTransactionReportScreenState
 
                                     DropdownButtonFormField<String>(
                                       value: _sortBy,
-                                      decoration: const InputDecoration(
-                                          labelText: 'จัดเรียงข้อมูล',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Sort By' : 'จัดเรียงข้อมูล',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
-                                      items: const [
-                                        DropdownMenuItem(value: 'vendor', child: Text('รหัสผู้ขาย')),
-                                        DropdownMenuItem(value: 'doc_type', child: Text('ประเภทเอกสาร')),
+                                      items: [
+                                        DropdownMenuItem(value: 'vendor', child: Text(isEnglish ? 'Vendor Code' : 'รหัสผู้ขาย')),
+                                        DropdownMenuItem(value: 'doc_type', child: Text(isEnglish ? 'Document Type' : 'ประเภทเอกสาร')),
                                       ],
                                       onChanged: (v) {
                                         if (v != null) { setState(() => _sortBy = v); _onSettingChanged(); }
@@ -479,7 +514,7 @@ class _ApTransactionReportScreenState
                                     const SizedBox(height: 8),
 
                                     Row(children: [
-                                      const Expanded(child: Text('แสดงรายละเอียด', style: TextStyle(fontSize: 13))),
+                                      Expanded(child: Text(isEnglish ? 'Show Details' : 'แสดงรายละเอียด', style: const TextStyle(fontSize: 13))),
                                       Switch(
                                         value: _showDetail,
                                         activeColor: Colors.blueGrey[800],
@@ -496,7 +531,7 @@ class _ApTransactionReportScreenState
                                 width: double.infinity, height: 50,
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.picture_as_pdf),
-                                  label: const Text('ประมวลผลรายงาน'),
+                                  label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                   style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.blueGrey[800], foregroundColor: Colors.white),
                                   onPressed: _isLoading ? null : _generateReport,
@@ -528,7 +563,9 @@ class _ApTransactionReportScreenState
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(child: Text('กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(child: Text(isEnglish
+                                  ? 'Select conditions and click Generate Report'
+                                  : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
@@ -563,8 +600,12 @@ class _ApTransactionReportScreenState
       builder: (_) => _TxnRptVendorSearchDialog(vendorService: _vendorService),
     );
     if (result != null && mounted) {
+      final isEnglish = _isEnglish;
       setState(() {
-        final label = '${result.vendorCode}  ${result.vendorNameTh}';
+        final name = isEnglish && (result.vendorNameEn ?? '').isNotEmpty
+            ? result.vendorNameEn!
+            : result.vendorNameTh;
+        final label = '${result.vendorCode}  $name';
         if (isFrom) { _vendorCodeFrom = result.vendorCode; _fromLabel = label; }
         else        { _vendorCodeTo   = result.vendorCode; _toLabel   = label; }
       });
@@ -584,7 +625,7 @@ class _ApTransactionReportScreenState
       ),
       child: InkWell(
         onTap: onPick,
-        child: Text(hasValue ? displayText : '— ทั้งหมด —',
+        child: Text(hasValue ? displayText : (_isEnglish ? '— All —' : '— ทั้งหมด —'),
             style: TextStyle(fontSize: 13, color: hasValue ? Colors.black87 : Colors.black38),
             overflow: TextOverflow.ellipsis),
       ),
@@ -592,6 +633,7 @@ class _ApTransactionReportScreenState
   }
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -605,11 +647,14 @@ class _ApTransactionReportScreenState
       final detBg = ExcelColor.fromHexString('#F2F2F2');
 
       final tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานธุรกรรมเจ้าหนี้', bold: true);
-      _xlCell(s, 2, 0, 'ช่วงวันที่: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $tsLabel');
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, isEnglish ? 'AP Transaction Report' : 'รายงานธุรกรรมเจ้าหนี้', bold: true);
+      _xlCell(s, 2, 0,
+          '${isEnglish ? 'Date range' : 'ช่วงวันที่'}: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $tsLabel');
 
-      final hdrs = ['รหัส – ชื่อผู้ขาย', 'ใบสั่งซื้อ/PI', 'ลดหนี้/CN', 'เพิ่มหนี้/DN', 'จ่ายมัดจำ', 'คืนมัดจำ', 'ชำระ'];
+      final hdrs = isEnglish
+          ? ['Code – Vendor Name', 'PI', 'CN', 'DN', 'Advance', 'Advance Return', 'Payment']
+          : ['รหัส – ชื่อผู้ขาย', 'ใบสั่งซื้อ/PI', 'ลดหนี้/CN', 'เพิ่มหนี้/DN', 'จ่ายมัดจำ', 'คืนมัดจำ', 'ชำระ'];
       for (int i = 0; i < hdrs.length; i++) {
         _xlCell(s, 3, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
       }
@@ -622,7 +667,9 @@ class _ApTransactionReportScreenState
       for (final vend in _reportData) {
         totalVendors++;
         final code = vend['vendor_code']    as String? ?? '';
-        final name = vend['vendor_name_th'] as String? ?? '';
+        final nameTh = vend['vendor_name_th'] as String? ?? '';
+        final nameEn = vend['vendor_name_en'] as String?;
+        final name = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
         final amts = [
           (vend['pi_amount']  as num?)?.toDouble() ?? 0,
           (vend['cn_amount']  as num?)?.toDouble() ?? 0,
@@ -662,16 +709,25 @@ class _ApTransactionReportScreenState
 
       if (_showDetail) {
         final totalDocs = grandCounts.fold(0, (a, b) => a + b);
-        _xlCell(s, row, 0, 'รวม $totalVendors ผู้ขาย / $totalDocs เอกสาร', bg: totBg, bold: true);
+        _xlCell(s, row, 0,
+            isEnglish
+                ? 'Total $totalVendors vendors / $totalDocs documents'
+                : 'รวม $totalVendors ผู้ขาย / $totalDocs เอกสาร',
+            bg: totBg, bold: true);
         for (int i = 0; i < 6; i++) {
-          _xlCell(s, row, i + 1, grandCounts[i] > 0 ? '${grandCounts[i]} ใบ' : '',
+          _xlCell(s, row, i + 1,
+              grandCounts[i] > 0
+                  ? (isEnglish ? '${grandCounts[i]} docs' : '${grandCounts[i]} ใบ')
+                  : '',
               bg: totBg, bold: true, align: HorizontalAlign.Right);
         }
         row++;
       }
 
       _xlCell(s, row, 0,
-          _showDetail ? 'ยอดเงินรวมทุกประเภท' : 'รวม $totalVendors ผู้ขาย',
+          _showDetail
+              ? (isEnglish ? 'Total amount – all types' : 'ยอดเงินรวมทุกประเภท')
+              : (isEnglish ? 'Total $totalVendors vendors' : 'รวม $totalVendors ผู้ขาย'),
           bg: totBg, bold: true);
       for (int i = 0; i < 6; i++) {
         _xlCell(s, row, i + 1, grandAmts[i], bg: totBg, bold: true, align: HorizontalAlign.Right);
@@ -679,8 +735,9 @@ class _ApTransactionReportScreenState
 
       final bytes = ex.encode();
       if (bytes == null) return;
+      final title = isEnglish ? 'AP_Transaction_Report' : 'รายงานธุรกรรมเจ้าหนี้';
       final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      await downloadFile(bytes, 'รายงานธุรกรรมเจ้าหนี้_$ts.xlsx');
+      await downloadFile(bytes, '${title}_$ts.xlsx');
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
@@ -733,6 +790,7 @@ class _TxnRptVendorSearchDialogState extends State<_TxnRptVendorSearchDialog> {
   @override
   Widget build(BuildContext context) {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -740,26 +798,26 @@ class _TxnRptVendorSearchDialogState extends State<_TxnRptVendorSearchDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.blueGrey[800],
-            child: const Text('ค้นหาผู้ขาย',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            child: Text(isEnglish ? 'Search Vendor' : 'ค้นหาผู้ขาย',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
             child: TextField(
               controller: _ctrl, autofocus: true,
-              decoration: const InputDecoration(
-                  hintText: 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(), isDense: true),
+              decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search by vendor code or name' : 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  border: const OutlineInputBorder(), isDense: true),
               onChanged: _search,
             ),
           ),
           Container(
             color: Colors.grey[200],
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: const Row(children: [
-              SizedBox(width: 100, child: Text('รหัส', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(child: Text('ชื่อผู้ขาย', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            child: Row(children: [
+              SizedBox(width: 100, child: Text(isEnglish ? 'Code' : 'รหัส', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+              Expanded(child: Text(isEnglish ? 'Vendor Name' : 'ชื่อผู้ขาย', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
             ]),
           ),
           const Divider(height: 1),
@@ -767,20 +825,23 @@ class _TxnRptVendorSearchDialogState extends State<_TxnRptVendorSearchDialog> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _list.isEmpty
-                    ? const Center(child: Text('ไม่พบข้อมูล', style: TextStyle(color: Colors.grey)))
+                    ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล', style: const TextStyle(color: Colors.grey)))
                     : ListView.separated(
                         controller: _scroll,
                         itemCount: _list.length,
                         separatorBuilder: (_, __) => const Divider(height: 1, indent: 12),
                         itemBuilder: (ctx, i) {
                           final v = _list[i];
+                          final name = isEnglish && (v.vendorNameEn ?? '').isNotEmpty
+                              ? v.vendorNameEn!
+                              : v.vendorNameTh;
                           return InkWell(
                             onTap: () => Navigator.pop(ctx, v),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               child: Row(children: [
                                 SizedBox(width: 100, child: Text(v.vendorCode, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-                                Expanded(child: Text(v.vendorNameTh, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                Expanded(child: Text(name, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
                               ]),
                             ),
                           );

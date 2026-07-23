@@ -149,6 +149,7 @@ class ApFxRevaluationDetail {
   final int vendorId;
   final String? vendorCode;
   final String? vendorNameTh;
+  final String? vendorNameEn;
   final String currencyCode;
   final double balanceAmountFc;
   final double originalRate;
@@ -165,6 +166,7 @@ class ApFxRevaluationDetail {
     required this.vendorId,
     this.vendorCode,
     this.vendorNameTh,
+    this.vendorNameEn,
     required this.currencyCode,
     required this.balanceAmountFc,
     required this.originalRate,
@@ -182,6 +184,7 @@ class ApFxRevaluationDetail {
     vendorId:         _toInt(j['vendor_id']),
     vendorCode:       j['vendor_code'],
     vendorNameTh:     j['vendor_name_th'],
+    vendorNameEn:     j['vendor_name_en'],
     currencyCode:     j['currency_code'] ?? '',
     balanceAmountFc:  _toDouble(j['balance_amount_fc']),
     originalRate:     _toDouble(j['original_rate']),

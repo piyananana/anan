@@ -7,7 +7,6 @@ import 'package:printing/printing.dart';
 
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
@@ -41,6 +40,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
   bool _isDraggingDivider = false;
   int _pdfKey = 0;
   bool _isExporting = false;
+  bool _isEnglish = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -76,6 +76,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
   }
 
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     setState(() { _isLoading = true; _reportData = []; });
     try {
       final raw = await _reportService.getMovementReport(
@@ -86,8 +87,10 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
         vendorCodeTo:   _vendorCodeTo,
       );
       if (raw.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('ไม่พบข้อมูลการเคลื่อนไหวเจ้าหนี้ในช่วงที่เลือก')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'No AP movement data found for the selected conditions'
+                : 'ไม่พบข้อมูลการเคลื่อนไหวเจ้าหนี้ในช่วงที่เลือก')));
       }
       setState(() { _reportData = raw; _pdfKey++; });
     } catch (e) {
@@ -104,6 +107,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
   }
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -123,28 +127,30 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
       }
 
       final tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานการเคลื่อนไหวเจ้าหนี้', bold: true);
-      _xlCell(s, 2, 0, 'ช่วงวันที่: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $tsLabel');
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, isEnglish ? 'AP Movement Report' : 'รายงานการเคลื่อนไหวเจ้าหนี้', bold: true);
+      _xlCell(s, 2, 0, '${isEnglish ? 'Date range' : 'ช่วงวันที่'}: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $tsLabel');
 
       int r = 3;
-      _xlCell(s, r, 0, 'รหัส-ชื่อผู้ขาย', bg: hdrBg, bold: true);
-      _xlCell(s, r, 1, 'เลขที่เอกสาร', bg: hdrBg, bold: true);
-      _xlCell(s, r, 2, 'วันที่', bg: hdrBg, bold: true);
-      _xlCell(s, r, 3, 'ประเภทเอกสาร', bg: hdrBg, bold: true);
-      _xlCell(s, r, 4, 'อ้างอิง', bg: hdrBg, bold: true);
-      _xlCell(s, r, 5, 'เพิ่มหนี้', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 6, 'ลดหนี้', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
-      _xlCell(s, r, 7, 'คงเหลือสะสม', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 0, isEnglish ? 'Code – Vendor Name' : 'รหัส-ชื่อผู้ขาย', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, isEnglish ? 'Doc No.' : 'เลขที่เอกสาร', bg: hdrBg, bold: true);
+      _xlCell(s, r, 2, isEnglish ? 'Date' : 'วันที่', bg: hdrBg, bold: true);
+      _xlCell(s, r, 3, isEnglish ? 'Doc Type' : 'ประเภทเอกสาร', bg: hdrBg, bold: true);
+      _xlCell(s, r, 4, isEnglish ? 'Reference' : 'อ้างอิง', bg: hdrBg, bold: true);
+      _xlCell(s, r, 5, isEnglish ? 'Debit' : 'เพิ่มหนี้', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 6, isEnglish ? 'Credit' : 'ลดหนี้', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, r, 7, isEnglish ? 'Running Balance' : 'คงเหลือสะสม', bg: hdrBg, bold: true, align: HorizontalAlign.Right);
       r++;
 
       for (final vend in _reportData) {
         final code    = vend['vendor_code']    as String? ?? '';
-        final name    = vend['vendor_name_th'] as String? ?? '';
+        final nameTh  = vend['vendor_name_th'] as String? ?? '';
+        final nameEn  = vend['vendor_name_en'] as String?;
+        final name    = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
         final openBal = (vend['opening_balance'] as num?)?.toDouble() ?? 0.0;
 
         _xlCell(s, r, 0, '$code $name', bold: true);
-        _xlCell(s, r, 1, 'ยอดยกมา');
+        _xlCell(s, r, 1, isEnglish ? 'Opening Balance' : 'ยอดยกมา');
         _xlCell(s, r, 5, TextCellValue(''), align: HorizontalAlign.Right);
         _xlCell(s, r, 6, TextCellValue(''), align: HorizontalAlign.Right);
         _xlCell(s, r, 7, DoubleCellValue(openBal), align: HorizontalAlign.Right, bold: true);
@@ -169,7 +175,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
         final lastBal = txns.isNotEmpty
             ? (txns.last['running_balance'] as num?)?.toDouble() ?? openBal
             : openBal;
-        _xlCell(s, r, 0, 'ยอดคงเหลือ $code', bg: totBg, bold: true);
+        _xlCell(s, r, 0, '${isEnglish ? 'Closing Balance' : 'ยอดคงเหลือ'} $code', bg: totBg, bold: true);
         _xlCell(s, r, 7, DoubleCellValue(lastBal), bg: totBg, bold: true, align: HorizontalAlign.Right);
         r++;
       }
@@ -177,7 +183,8 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
       final bytes = ex.encode();
       if (bytes == null) return;
       final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      await downloadFile(bytes, 'รายงานการเคลื่อนไหวเจ้าหนี้_$ts.xlsx');
+      final fileTitle = isEnglish ? 'AP_Movement_Report' : 'รายงานการเคลื่อนไหวเจ้าหนี้';
+      await downloadFile(bytes, '${fileTitle}_$ts.xlsx');
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
@@ -297,6 +304,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
   }
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish = _isEnglish;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -305,11 +313,12 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
     final fontBold   = pw.Font.ttf(fontBoldData);
     final fontItalic = pw.Font.ttf(fontItalicData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
+    final companyName  = _company?.displayName(isEnglish) ??
+        (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final dateRangeLine =
-        'ช่วงวันที่ ${DateFormat('dd/MM/yyyy').format(_dateFrom)}'
+        '${isEnglish ? 'Date range' : 'ช่วงวันที่'} ${DateFormat('dd/MM/yyyy').format(_dateFrom)}'
         ' – ${DateFormat('dd/MM/yyyy').format(_dateTo)}';
 
     final conditions = <String>[];
@@ -317,19 +326,23 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
       final names = _selectedGroupIds.map((id) {
         final g = _vendorGroups.firstWhere((g) => g.id == id,
             orElse: () => _vendorGroups.first);
-        return '${g.groupCode} ${g.groupNameThai}';
+        final gName = isEnglish && g.groupNameEng.isNotEmpty ? g.groupNameEng : g.groupNameThai;
+        return '${g.groupCode} $gName';
       }).join(', ');
-      conditions.add('กลุ่มผู้ขาย: $names');
+      conditions.add('${isEnglish ? 'Vendor Group' : 'กลุ่มผู้ขาย'}: $names');
     }
     if ((_vendorCodeFrom ?? '').isNotEmpty || (_vendorCodeTo ?? '').isNotEmpty) {
       final from = _vendorCodeFrom ?? '';
       final to   = _vendorCodeTo   ?? '';
-      conditions.add('รหัสผู้ขาย: ${from.isEmpty ? '(ทั้งหมด)' : from} – ${to.isEmpty ? '(ทั้งหมด)' : to}');
+      final allLabel = isEnglish ? '(All)' : '(ทั้งหมด)';
+      conditions.add('${isEnglish ? 'Vendor Code' : 'รหัสผู้ขาย'}: ${from.isEmpty ? allLabel : from} – ${to.isEmpty ? allLabel : to}');
     }
-    if (_pageBreakPerVendor) conditions.add('ขึ้นหน้าใหม่ทุกผู้ขาย');
-    if (_matchDocuments)     conditions.add('จับคู่เอกสาร');
+    if (_pageBreakPerVendor) conditions.add(isEnglish ? 'Page break per vendor' : 'ขึ้นหน้าใหม่ทุกผู้ขาย');
+    if (_matchDocuments)     conditions.add(isEnglish ? 'Match documents' : 'จับคู่เอกสาร');
     final matchDocs = _matchDocuments;
-    final conditionLine = conditions.isEmpty ? 'ทุกผู้ขาย' : conditions.join(' | ');
+    final conditionLine = conditions.isEmpty
+        ? (isEnglish ? 'All vendors' : 'ทุกผู้ขาย')
+        : conditions.join(' | ');
 
     String fmtDate(String? raw) {
       if (raw == null || raw.isEmpty) return '';
@@ -352,22 +365,22 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
     pw.Widget Function(pw.Context) pageHeader() => (ctx) => pw.Column(children: [
           pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
             pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
-            pw.Expanded(flex: 7, child: pw.Text('รายงานการเคลื่อนไหวเจ้าหนี้',
+            pw.Expanded(flex: 7, child: pw.Text(isEnglish ? 'AP Movement Report' : 'รายงานการเคลื่อนไหวเจ้าหนี้',
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
-            pw.Expanded(flex: 3, child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+            pw.Expanded(flex: 3, child: pw.Text(isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
                 textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12))),
           ]),
           pw.SizedBox(height: 4),
           pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
             pw.Expanded(flex: 3, child: pw.Text('', style: const pw.TextStyle(fontSize: 12))),
             pw.Expanded(flex: 7, child: pw.Text(dateRangeLine, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 12))),
-            pw.Expanded(flex: 3, child: pw.Text('พิมพ์โดย $userName', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12))),
+            pw.Expanded(flex: 3, child: pw.Text(isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12))),
           ]),
           pw.SizedBox(height: 4),
           pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
             pw.Expanded(flex: 10, child: pw.Text('* $conditionLine', textAlign: pw.TextAlign.left, style: const pw.TextStyle(fontSize: 10))),
-            pw.Expanded(flex: 3, child: pw.Text('พิมพ์เมื่อ $printDateStr', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12))),
+            pw.Expanded(flex: 3, child: pw.Text(isEnglish ? 'Printed $printDateStr' : 'พิมพ์เมื่อ $printDateStr', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12))),
           ]),
           pw.SizedBox(height: 4),
         ]);
@@ -379,7 +392,9 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
         pw.TextStyle italic) {
       final openingBal = (vendor['opening_balance'] as num?)?.toDouble() ?? 0;
       final code = vendor['vendor_code']    as String? ?? '';
-      final name = vendor['vendor_name_th'] as String? ?? '';
+      final nameTh = vendor['vendor_name_th'] as String? ?? '';
+      final nameEn = vendor['vendor_name_en'] as String?;
+      final name = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
 
       final rawTxns = (vendor['transactions'] as List? ?? []).cast<Map<String, dynamic>>();
       final txns = matchDocs ? _pairTransactions(rawTxns, openingBal) : rawTxns;
@@ -401,19 +416,19 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: cGreen),
           children: [
-            _hCell('เลขที่เอกสาร', bold, a: pw.TextAlign.left),
-            _hCell('วันที่', bold),
-            _hCell('ประเภทเอกสาร', bold, a: pw.TextAlign.left),
-            _hCell('อ้างอิง', bold, a: pw.TextAlign.left),
-            _hCell('เพิ่มหนี้', bold),
-            _hCell('ลดหนี้', bold),
-            _hCell('คงเหลือสะสม', bold),
+            _hCell(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร', bold, a: pw.TextAlign.left),
+            _hCell(isEnglish ? 'Date' : 'วันที่', bold),
+            _hCell(isEnglish ? 'Doc Type' : 'ประเภทเอกสาร', bold, a: pw.TextAlign.left),
+            _hCell(isEnglish ? 'Reference' : 'อ้างอิง', bold, a: pw.TextAlign.left),
+            _hCell(isEnglish ? 'Debit' : 'เพิ่มหนี้', bold),
+            _hCell(isEnglish ? 'Credit' : 'ลดหนี้', bold),
+            _hCell(isEnglish ? 'Running Balance' : 'คงเหลือสะสม', bold),
           ],
         ),
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: cYellow),
           children: [
-            _dCell('ยอดยกมา', bold, a: pw.TextAlign.left),
+            _dCell(isEnglish ? 'Opening Balance' : 'ยอดยกมา', bold, a: pw.TextAlign.left),
             _dCell('', normal), _dCell('', normal), _dCell('', normal),
             _dCell('', normal), _dCell('', normal),
             _amtCell(openingBal, bold, color: _balColor(openingBal)),
@@ -459,7 +474,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: cYellow),
           children: [
-            _dCell('รวม', bold, a: pw.TextAlign.left),
+            _dCell(isEnglish ? 'Total' : 'รวม', bold, a: pw.TextAlign.left),
             _dCell('', bold), _dCell('', bold), _dCell('', bold),
             _amtCell(totalDr, bold, color: PdfColors.black),
             _amtCell(totalCr, bold, color: PdfColors.black),
@@ -502,7 +517,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: PdfColor(0.75, 0.85, 0.88)),
               children: [
-                _dCell('รวมทุกผู้ขาย', bold, a: pw.TextAlign.left),
+                _dCell(isEnglish ? 'Grand total (all vendors)' : 'รวมทุกผู้ขาย', bold, a: pw.TextAlign.left),
                 _dCell('', bold), _dCell('', bold), _dCell('', bold),
                 _amtCell(grandDr, bold, color: PdfColors.black),
                 _amtCell(grandCr, bold, color: PdfColors.black),
@@ -579,7 +594,8 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -615,7 +631,9 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
                       icon: Icon(_isFilterExpanded ? Icons.filter_list_off : Icons.filter_list,
                           color: Colors.white, size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (isEnglish ? 'Collapse conditions' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand conditions' : 'ขยายเงื่อนไข'),
                       onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
                     ),
                   ),
@@ -636,13 +654,13 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('เงื่อนไขรายงาน',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                     const SizedBox(height: 16),
 
-                                    _buildDateField(label: 'วันที่เอกสาร ตั้งแต่', date: _dateFrom, onPick: (d) => setState(() => _dateFrom = d)),
+                                    _buildDateField(label: isEnglish ? 'Doc Date From' : 'วันที่เอกสาร ตั้งแต่', date: _dateFrom, onPick: (d) => setState(() => _dateFrom = d)),
                                     const SizedBox(height: 12),
-                                    _buildDateField(label: 'วันที่เอกสาร ถึง', date: _dateTo, onPick: (d) => setState(() => _dateTo = d)),
+                                    _buildDateField(label: isEnglish ? 'Doc Date To' : 'วันที่เอกสาร ถึง', date: _dateTo, onPick: (d) => setState(() => _dateTo = d)),
 
                                     const SizedBox(height: 16),
                                     const Divider(height: 1),
@@ -656,14 +674,14 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
 
                                     const SizedBox(height: 12),
                                     _buildVendorCodeField(
-                                      label: 'รหัสผู้ขาย ตั้งแต่',
+                                      label: isEnglish ? 'Vendor Code From' : 'รหัสผู้ขาย ตั้งแต่',
                                       displayText: _fromLabel,
                                       onPick: () => _pickVendor(isFrom: true),
                                       onClear: () => setState(() { _vendorCodeFrom = null; _fromLabel = ''; }),
                                     ),
                                     const SizedBox(height: 8),
                                     _buildVendorCodeField(
-                                      label: 'รหัสผู้ขาย ถึง',
+                                      label: isEnglish ? 'Vendor Code To' : 'รหัสผู้ขาย ถึง',
                                       displayText: _toLabel,
                                       onPick: () => _pickVendor(isFrom: false),
                                       onClear: () => setState(() { _vendorCodeTo = null; _toLabel = ''; }),
@@ -673,7 +691,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
                                     const Divider(height: 1),
 
                                     Row(children: [
-                                      const Expanded(child: Text('จับคู่เอกสาร', style: TextStyle(fontSize: 13))),
+                                      Expanded(child: Text(isEnglish ? 'Match documents' : 'จับคู่เอกสาร', style: const TextStyle(fontSize: 13))),
                                       Switch(
                                         value: _matchDocuments,
                                         activeColor: Colors.blueGrey[800],
@@ -682,7 +700,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
                                     ]),
 
                                     Row(children: [
-                                      const Expanded(child: Text('ขึ้นหน้าใหม่ทุกผู้ขาย', style: TextStyle(fontSize: 13))),
+                                      Expanded(child: Text(isEnglish ? 'Page break per vendor' : 'ขึ้นหน้าใหม่ทุกผู้ขาย', style: const TextStyle(fontSize: 13))),
                                       Switch(
                                         value: _pageBreakPerVendor,
                                         activeColor: Colors.blueGrey[800],
@@ -699,7 +717,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
                                 width: double.infinity, height: 50,
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.picture_as_pdf),
-                                  label: const Text('ประมวลผลรายงาน'),
+                                  label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                   style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.blueGrey[800], foregroundColor: Colors.white),
                                   onPressed: _isLoading ? null : _generateReport,
@@ -731,7 +749,9 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(child: Text('กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(child: Text(isEnglish
+                                  ? 'Please select conditions and click Generate'
+                                  : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
@@ -767,7 +787,10 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
     );
     if (result != null && mounted) {
       setState(() {
-        final label = '${result.vendorCode}  ${result.vendorNameTh}';
+        final vName = _isEnglish && (result.vendorNameEn ?? '').isNotEmpty
+            ? result.vendorNameEn!
+            : result.vendorNameTh;
+        final label = '${result.vendorCode}  $vName';
         if (isFrom) { _vendorCodeFrom = result.vendorCode; _fromLabel = label; }
         else        { _vendorCodeTo   = result.vendorCode; _toLabel   = label; }
       });
@@ -787,7 +810,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
       ),
       child: InkWell(
         onTap: onPick,
-        child: Text(hasValue ? displayText : '— ทั้งหมด —',
+        child: Text(hasValue ? displayText : (_isEnglish ? '— All —' : '— ทั้งหมด —'),
             style: TextStyle(fontSize: 13, color: hasValue ? Colors.black87 : Colors.black38),
             overflow: TextOverflow.ellipsis),
       ),
@@ -829,7 +852,7 @@ class _MovRptVendorSearchDialogState extends State<_MovRptVendorSearchDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -837,26 +860,26 @@ class _MovRptVendorSearchDialogState extends State<_MovRptVendorSearchDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.blueGrey[800],
-            child: const Text('ค้นหาผู้ขาย',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            child: Text(isEnglish ? 'Search Vendor' : 'ค้นหาผู้ขาย',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
             child: TextField(
               controller: _searchCtrl, autofocus: true,
-              decoration: const InputDecoration(
-                  hintText: 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(), isDense: true),
+              decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search by vendor code or name' : 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  border: const OutlineInputBorder(), isDense: true),
               onChanged: _search,
             ),
           ),
           Container(
             color: Colors.grey[200],
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: const Row(children: [
-              SizedBox(width: 100, child: Text('รหัส', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(child: Text('ชื่อผู้ขาย', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            child: Row(children: [
+              SizedBox(width: 100, child: Text(isEnglish ? 'Code' : 'รหัส', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+              Expanded(child: Text(isEnglish ? 'Vendor Name' : 'ชื่อผู้ขาย', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
             ]),
           ),
           const Divider(height: 1),
@@ -864,7 +887,7 @@ class _MovRptVendorSearchDialogState extends State<_MovRptVendorSearchDialog> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _vendors.isEmpty
-                    ? const Center(child: Text('ไม่พบข้อมูล', style: TextStyle(color: Colors.grey)))
+                    ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล', style: const TextStyle(color: Colors.grey)))
                     : ListView.separated(
                         controller: _scrollCtrl,
                         itemCount: _vendors.length,
@@ -877,7 +900,9 @@ class _MovRptVendorSearchDialogState extends State<_MovRptVendorSearchDialog> {
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               child: Row(children: [
                                 SizedBox(width: 100, child: Text(v.vendorCode, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-                                Expanded(child: Text(v.vendorNameTh, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                Expanded(child: Text(
+                                    isEnglish && (v.vendorNameEn ?? '').isNotEmpty ? v.vendorNameEn! : v.vendorNameTh,
+                                    style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
                               ]),
                             ),
                           );
@@ -887,7 +912,7 @@ class _MovRptVendorSearchDialogState extends State<_MovRptVendorSearchDialog> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('ยกเลิก')),
+              TextButton(onPressed: () => Navigator.pop(context), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
             ]),
           ),
         ]),

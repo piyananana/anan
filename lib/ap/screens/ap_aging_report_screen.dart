@@ -14,6 +14,8 @@ import '../models/ap_vendor_group.dart';
 import '../services/ap_aging_report_service.dart';
 import '../services/ap_vendor_service.dart';
 import '../services/ap_vendor_group_service.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
 import '../../sa/models/sa_company.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
@@ -35,6 +37,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
   final AuthService           _authService    = AuthService();
   final ApVendorGroupService  _groupService   = ApVendorGroupService();
   final ApVendorService       _vendorService  = ApVendorService();
+  final BranchService         _branchService  = BranchService();
   final TextEditingController _daysIntervalCtrl =
       TextEditingController(text: '30');
 
@@ -44,12 +47,14 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
   bool   _isDraggingDivider = false;
   int    _pdfKey            = 0;
   bool   _isExporting       = false;
+  bool   _isEnglish         = false;
 
   Company? _company;
   Map<String, String>? _headers;
 
   DateTime         _asOfDate        = DateTime.now();
   List<UserBranch> _allowedBranches = [];
+  List<Branch>     _allBranches     = [];
   int?             _selectedBranchId;
 
   List<ApVendorGroup> _vendorGroups     = [];
@@ -87,11 +92,11 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
 
   List<String> get _dynamicBucketLabels {
     final I = _columnInterval;
-    final labels = <String>['ยังไม่ครบกำหนด'];
+    final labels = <String>[_isEnglish ? 'Not yet due' : 'ยังไม่ครบกำหนด'];
     for (int i = 0; i < _overdueColumnCount - 1; i++) {
       labels.add('${i * I + 1}-${(i + 1) * I}');
     }
-    labels.add('เกิน ${(_overdueColumnCount - 1) * I}');
+    labels.add('${_isEnglish ? "Over" : "เกิน"} ${(_overdueColumnCount - 1) * I}');
     return labels;
   }
 
@@ -111,13 +116,28 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
     final results = await Future.wait([
       _companyService.fetchCompany(),
       _groupService.fetchActiveRows(),
+      _branchService.fetchRows(),
     ]);
     _company      = results[0] as Company?;
     _vendorGroups = results[1] as List<ApVendorGroup>;
+    _allBranches  = results[2] as List<Branch>;
     if (mounted) setState(() {});
   }
 
+  // UserBranch (allowed branches) has no English name — resolve it from the
+  // full bilingual Branch list by branchId.
+  String _resolveBranchName(int? branchId, String fallbackThai, bool isEnglish) {
+    if (isEnglish) {
+      final match = _allBranches.where((b) => b.id == branchId);
+      if (match.isNotEmpty && match.first.branchNameEng.isNotEmpty) {
+        return match.first.branchNameEng;
+      }
+    }
+    return fallbackThai;
+  }
+
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     setState(() { _isLoading = true; _reportData = []; });
     try {
       final raw = await _reportService.getAgingReport(
@@ -152,11 +172,16 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
       }
 
       if (filtered.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('ไม่พบข้อมูลเจ้าหนี้คงค้าง ณ วันที่ที่เลือก')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'No outstanding payable data found as of the selected date'
+                : 'ไม่พบข้อมูลเจ้าหนี้คงค้าง ณ วันที่ที่เลือก')));
       }
 
-      setState(() { _reportData = filtered; _pdfKey++; });
+      setState(() {
+        _reportData = filtered;
+        _pdfKey++;
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -174,12 +199,14 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
   // ─── Excel ────────────────────────────────────────────────────────────────────
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
       final ex = Excel.createExcel();
-      ex.rename('Sheet1', 'Aging');
-      final s      = ex['Aging'];
+      final sheetName = isEnglish ? 'Aging' : 'อายุหนี้';
+      ex.rename('Sheet1', sheetName);
+      final s      = ex[sheetName];
       final hdrBg  = ExcelColor.fromHexString('#92D050');
       final totBg  = ExcelColor.fromHexString('#BDD7EE');
       final detBg  = ExcelColor.fromHexString('#F2F2F2');
@@ -188,20 +215,21 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
       final totalBuckets = _totalBuckets;
 
       final ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานเจ้าหนี้คงค้างตามอายุหนี้', bold: true);
-      _xlCell(s, 2, 0, 'ณ วันที่: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  พิมพ์: $ts');
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, isEnglish ? 'AP Aging Report' : 'รายงานเจ้าหนี้คงค้างตามอายุหนี้', bold: true);
+      _xlCell(s, 2, 0,
+          '${isEnglish ? "As of" : "ณ วันที่"}: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  ${isEnglish ? "Printed" : "พิมพ์"}: $ts');
 
       int r = 3;
-      _xlCell(s, r, 0, 'รหัสผู้ขาย', bg: hdrBg, bold: true);
-      _xlCell(s, r, 1, 'ชื่อผู้ขาย',  bg: hdrBg, bold: true);
+      _xlCell(s, r, 0, isEnglish ? 'Vendor Code' : 'รหัสผู้ขาย', bg: hdrBg, bold: true);
+      _xlCell(s, r, 1, isEnglish ? 'Vendor Name' : 'ชื่อผู้ขาย',  bg: hdrBg, bold: true);
       for (int b = 0; b < totalBuckets; b++) {
         _xlCell(s, r, 2 + b, bucketLabels[b], bg: hdrBg, bold: true,
             align: HorizontalAlign.Right);
       }
-      _xlCell(s, r, 2 + totalBuckets, 'รวม', bg: hdrBg, bold: true,
+      _xlCell(s, r, 2 + totalBuckets, isEnglish ? 'Total' : 'รวม', bg: hdrBg, bold: true,
           align: HorizontalAlign.Right);
-      _xlCell(s, r, 3 + totalBuckets, 'วงเงินเครดิต', bg: hdrBg, bold: true,
+      _xlCell(s, r, 3 + totalBuckets, isEnglish ? 'Credit Limit' : 'วงเงินเครดิต', bg: hdrBg, bold: true,
           align: HorizontalAlign.Right);
       r++;
 
@@ -210,7 +238,9 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
 
       for (final vend in _reportData) {
         final code     = vend['vendor_code']    as String? ?? '';
-        final name     = vend['vendor_name_th'] as String? ?? '';
+        final nameTh   = vend['vendor_name_th'] as String? ?? '';
+        final nameEn   = vend['vendor_name_en'] as String?;
+        final name     = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
         final invoices = (vend['invoices'] as List?) ?? [];
         final custBuckets = List<double>.filled(totalBuckets, 0.0);
         for (final inv in invoices) {
@@ -255,7 +285,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
         r++;
       }
 
-      _xlCell(s, r, 0, 'รวมทั้งสิ้น', bg: totBg, bold: true);
+      _xlCell(s, r, 0, isEnglish ? 'Grand Total' : 'รวมทั้งสิ้น', bg: totBg, bold: true);
       _xlCell(s, r, 1, '', bg: totBg);
       for (int b = 0; b < totalBuckets; b++) {
         _xlCell(s, r, 2 + b, DoubleCellValue(grandBuckets[b]),
@@ -269,7 +299,8 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
       final bytes = ex.encode();
       if (bytes == null) return;
       final fileTs = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      await downloadFile(bytes, 'รายงานเจ้าหนี้คงค้างตามอายุหนี้_$fileTs.xlsx');
+      await downloadFile(bytes,
+          isEnglish ? 'AP_Aging_Report_$fileTs.xlsx' : 'รายงานเจ้าหนี้คงค้างตามอายุหนี้_$fileTs.xlsx');
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
@@ -291,6 +322,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
   // ─── PDF ──────────────────────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish       = _isEnglish;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -299,10 +331,10 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
     final fontBold   = pw.Font.ttf(fontBoldData);
     final fontItalic = pw.Font.ttf(fontItalicData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
-    final userName     = _headers?['UserName'] ?? '(ไม่ระบุชื่อ)';
+    final companyName  = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
+    final userName     = _headers?['UserName'] ?? (isEnglish ? '(No name)' : '(ไม่ระบุชื่อ)');
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-    final asOfLine     = 'ณ วันที่ ${DateFormat('dd/MM/yyyy').format(_asOfDate)}';
+    final asOfLine     = '${isEnglish ? "As of" : "ณ วันที่"} ${DateFormat('dd/MM/yyyy').format(_asOfDate)}';
 
     final bucketLabels = _dynamicBucketLabels;
     final totalBuckets = _totalBuckets;
@@ -314,27 +346,35 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
       final b = _allowedBranches.firstWhere(
           (b) => b.branchId == _selectedBranchId,
           orElse: () => _allowedBranches.first);
-      conditions.add('สาขา: ${b.branchCode} ${b.branchNameThai}');
+      conditions.add('${isEnglish ? "Branch" : "สาขา"}: ${b.branchCode} ${_resolveBranchName(b.branchId, b.branchNameThai, isEnglish)}');
     }
     if (_selectedGroupIds.isNotEmpty) {
       final names = _selectedGroupIds.map((id) {
         final g = _vendorGroups.firstWhere((g) => g.id == id,
             orElse: () => _vendorGroups.first);
-        return '${g.groupCode} ${g.groupNameThai}';
+        final gName = isEnglish && g.groupNameEng.isNotEmpty ? g.groupNameEng : g.groupNameThai;
+        return '${g.groupCode} $gName';
       }).join(', ');
-      conditions.add('กลุ่มผู้ขาย: $names');
+      conditions.add('${isEnglish ? "Vendor Group" : "กลุ่มผู้ขาย"}: $names');
     }
     if ((_vendorCodeFrom ?? '').isNotEmpty || (_vendorCodeTo ?? '').isNotEmpty) {
+      final all = isEnglish ? '(All)' : '(ทั้งหมด)';
       final from = _vendorCodeFrom ?? '';
       final to   = _vendorCodeTo   ?? '';
       conditions.add(
-          'รหัสผู้ขาย: ${from.isEmpty ? '(ทั้งหมด)' : from} – ${to.isEmpty ? '(ทั้งหมด)' : to}');
+          '${isEnglish ? "Vendor Code" : "รหัสผู้ขาย"}: ${from.isEmpty ? all : from} – ${to.isEmpty ? all : to}');
     }
-    conditions.add('คอลัมน์ครบกำหนด: $_overdueColumnCount คอลัมน์  ทุก $_columnInterval วัน');
+    conditions.add(isEnglish
+        ? 'Overdue columns: $_overdueColumnCount column(s)  every $_columnInterval day(s)'
+        : 'คอลัมน์ครบกำหนด: $_overdueColumnCount คอลัมน์  ทุก $_columnInterval วัน');
     if (sortOrder != 'none') {
-      conditions.add('เรียงยอดหนี้: ${sortOrder == 'desc' ? 'มากไปน้อย' : 'น้อยไปมาก'}');
+      conditions.add(isEnglish
+          ? 'Sort by balance: ${sortOrder == 'desc' ? 'Descending' : 'Ascending'}'
+          : 'เรียงยอดหนี้: ${sortOrder == 'desc' ? 'มากไปน้อย' : 'น้อยไปมาก'}');
     }
-    if (showDetail) conditions.add('แสดงรายละเอียดใบแจ้งหนี้');
+    if (showDetail) {
+      conditions.add(isEnglish ? 'Show invoice details' : 'แสดงรายละเอียดใบแจ้งหนี้');
+    }
     final conditionLine = '* ${conditions.join(' | ')}';
 
     final numFmt = NumberFormat('#,##0.00', 'en_US');
@@ -356,9 +396,12 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
         final bal  = (inv['balance_amount_lc'] as num?)?.toDouble() ?? 0.0;
         buckets[_bucketDynamic(days)] += bal;
       }
+      final code   = v['vendor_code']    as String? ?? '';
+      final nameTh = v['vendor_name_th'] as String? ?? '';
+      final nameEn = v['vendor_name_en'] as String?;
       return (
-        code:        v['vendor_code']    as String? ?? '',
-        name:        v['vendor_name_th'] as String? ?? '',
+        code:        code,
+        name:        isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh,
         buckets:     buckets,
         total:       buckets.fold(0.0, (s, v) => s + v),
         creditLimit: (v['credit_limit'] as num?)?.toDouble() ?? 0.0,
@@ -397,10 +440,10 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
           children: [
             pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
               pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
-              pw.Expanded(flex: 7, child: pw.Text('รายงานเจ้าหนี้คงค้างตามอายุหนี้',
+              pw.Expanded(flex: 7, child: pw.Text(isEnglish ? 'AP Aging Report' : 'รายงานเจ้าหนี้คงค้างตามอายุหนี้',
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
-              pw.Expanded(flex: 3, child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+              pw.Expanded(flex: 3, child: pw.Text('${isEnglish ? "Page" : "หน้า"} ${ctx.pageNumber}/${ctx.pagesCount}',
                   textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12))),
             ]),
             pw.SizedBox(height: 4),
@@ -408,14 +451,14 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
               pw.Expanded(flex: 3, child: pw.Text('', style: const pw.TextStyle(fontSize: 12))),
               pw.Expanded(flex: 7, child: pw.Text(asOfLine,
                   textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 12))),
-              pw.Expanded(flex: 3, child: pw.Text('พิมพ์โดย $userName',
+              pw.Expanded(flex: 3, child: pw.Text('${isEnglish ? "Printed by" : "พิมพ์โดย"} $userName',
                   textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12))),
             ]),
             pw.SizedBox(height: 4),
             pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
               pw.Expanded(flex: 10, child: pw.Text(conditionLine,
                   textAlign: pw.TextAlign.left, style: const pw.TextStyle(fontSize: 10))),
-              pw.Expanded(flex: 3, child: pw.Text('พิมพ์เมื่อ $printDateStr',
+              pw.Expanded(flex: 3, child: pw.Text('${isEnglish ? "Printed" : "พิมพ์เมื่อ"} $printDateStr',
                   textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12))),
             ]),
             pw.SizedBox(height: 4),
@@ -471,8 +514,8 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
             final bucket  = _bucketDynamic(days);
 
             final dateParts = <String>[];
-            if (docDate.isNotEmpty) dateParts.add('วันที่:$docDate');
-            if (dueDate.isNotEmpty) dateParts.add('ครบ:$dueDate');
+            if (docDate.isNotEmpty) dateParts.add('${isEnglish ? "Doc" : "วันที่"}:$docDate');
+            if (dueDate.isNotEmpty) dateParts.add('${isEnglish ? "Due" : "ครบ"}:$dueDate');
             final dateText = dateParts.join('  ');
 
             final bks = List<double>.filled(totalBuckets, 0);
@@ -497,11 +540,19 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: cHeader),
               children: [
-                hCell(showDetail ? 'รหัส / ใบแจ้งหนี้' : 'รหัส', a: pw.TextAlign.left),
-                hCell(showDetail ? 'ชื่อผู้ขาย / วันที่เอกสาร,ครบกำหนด' : 'ชื่อผู้ขาย', a: pw.TextAlign.left),
+                hCell(
+                    showDetail
+                        ? (isEnglish ? 'Code / Invoice' : 'รหัส / ใบแจ้งหนี้')
+                        : (isEnglish ? 'Code' : 'รหัส'),
+                    a: pw.TextAlign.left),
+                hCell(
+                    showDetail
+                        ? (isEnglish ? 'Vendor Name / Doc Date, Due' : 'ชื่อผู้ขาย / วันที่เอกสาร,ครบกำหนด')
+                        : (isEnglish ? 'Vendor Name' : 'ชื่อผู้ขาย'),
+                    a: pw.TextAlign.left),
                 ...bucketLabels.map((l) => hCell(l)),
-                hCell('รวม'),
-                hCell('วงเงินเครดิต'),
+                hCell(isEnglish ? 'Total' : 'รวม'),
+                hCell(isEnglish ? 'Credit Limit' : 'วงเงินเครดิต'),
               ],
             ),
           ];
@@ -518,7 +569,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
             }
           }
 
-          tableRows.add(summaryRow('', 'รวมทั้งหมด', grand, grandTotal,
+          tableRows.add(summaryRow('', isEnglish ? 'Grand Total' : 'รวมทั้งหมด', grand, grandTotal,
               isTotal: true, bg: cTotal));
 
           return [
@@ -539,6 +590,8 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -554,7 +607,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
           else
             IconButton(
               icon: const Icon(Icons.table_chart_outlined),
-              tooltip: 'Export Excel',
+              tooltip: isEnglish ? 'Export Excel' : 'ส่งออก Excel',
               onPressed: _reportData.isEmpty ? null : _exportExcel,
             ),
         ],
@@ -576,7 +629,9 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                           _isFilterExpanded ? Icons.filter_list_off : Icons.filter_list,
                           color: Colors.white, size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
                       onPressed: () =>
                           setState(() => _isFilterExpanded = !_isFilterExpanded),
                     ),
@@ -601,8 +656,8 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('เงื่อนไขรายงาน',
-                                        style: TextStyle(
+                                    Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                        style: const TextStyle(
                                             fontWeight: FontWeight.bold, fontSize: 16)),
                                     const SizedBox(height: 16),
 
@@ -620,11 +675,11 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                         }
                                       },
                                       child: InputDecorator(
-                                        decoration: const InputDecoration(
-                                          labelText: 'ณ วันที่',
-                                          border: OutlineInputBorder(),
+                                        decoration: InputDecoration(
+                                          labelText: isEnglish ? 'As of' : 'ณ วันที่',
+                                          border: const OutlineInputBorder(),
                                           isDense: true,
-                                          suffixIcon: Icon(Icons.calendar_today, size: 16),
+                                          suffixIcon: const Icon(Icons.calendar_today, size: 16),
                                         ),
                                         child: Text(DateFormat('dd/MM/yyyy').format(_asOfDate)),
                                       ),
@@ -636,18 +691,18 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                       DropdownButtonFormField<int?>(
                                         isExpanded: true,
                                         value: _selectedBranchId,
-                                        decoration: const InputDecoration(
-                                            labelText: 'สาขา',
-                                            border: OutlineInputBorder(),
+                                        decoration: InputDecoration(
+                                            labelText: isEnglish ? 'Branch' : 'สาขา',
+                                            border: const OutlineInputBorder(),
                                             isDense: true),
                                         items: [
-                                          const DropdownMenuItem<int?>(
-                                              value: null, child: Text('— ทุกสาขา —')),
+                                          DropdownMenuItem<int?>(
+                                              value: null, child: Text(isEnglish ? '— All Branches —' : '— ทุกสาขา —')),
                                           ..._allowedBranches.map((b) =>
                                               DropdownMenuItem<int?>(
                                                 value: b.branchId,
                                                 child: Text(
-                                                    '${b.branchCode}  ${b.branchNameThai}',
+                                                    '${b.branchCode}  ${_resolveBranchName(b.branchId, b.branchNameThai, isEnglish)}',
                                                     overflow: TextOverflow.ellipsis),
                                               )),
                                         ],
@@ -660,7 +715,6 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                     ApVendorGroupMultiPicker(
                                       groups: _vendorGroups,
                                       selectedIds: _selectedGroupIds,
-                                      label: 'กลุ่มผู้ขาย',
                                       onChanged: (v) =>
                                           setState(() => _selectedGroupIds = v),
                                     ),
@@ -668,7 +722,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                     // รหัสผู้ขาย ตั้งแต่ / ถึง
                                     const SizedBox(height: 12),
                                     _buildVendorCodeField(
-                                      label: 'รหัสผู้ขาย ตั้งแต่',
+                                      label: isEnglish ? 'Vendor Code From' : 'รหัสผู้ขาย ตั้งแต่',
                                       displayText: _fromLabel,
                                       onPick: () => _pickVendor(isFrom: true),
                                       onClear: () => setState(() {
@@ -678,7 +732,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                     ),
                                     const SizedBox(height: 8),
                                     _buildVendorCodeField(
-                                      label: 'รหัสผู้ขาย ถึง',
+                                      label: isEnglish ? 'Vendor Code To' : 'รหัสผู้ขาย ถึง',
                                       displayText: _toLabel,
                                       onPick: () => _pickVendor(isFrom: false),
                                       onClear: () => setState(() {
@@ -695,13 +749,13 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                     DropdownButtonFormField<int>(
                                       isExpanded: true,
                                       value: _overdueColumnCount,
-                                      decoration: const InputDecoration(
-                                          labelText: 'จำนวนคอลัมน์ที่ครบกำหนดแล้ว',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Number of Overdue Columns' : 'จำนวนคอลัมน์ที่ครบกำหนดแล้ว',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
                                       items: [2, 3, 4, 5]
                                           .map((n) => DropdownMenuItem<int>(
-                                              value: n, child: Text('$n คอลัมน์')))
+                                              value: n, child: Text(isEnglish ? '$n columns' : '$n คอลัมน์')))
                                           .toList(),
                                       onChanged: (v) {
                                         if (v != null) {
@@ -717,11 +771,11 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                       controller: _daysIntervalCtrl,
                                       keyboardType: TextInputType.number,
                                       textAlign: TextAlign.right,
-                                      decoration: const InputDecoration(
-                                        labelText: 'จำนวนวันต่อคอลัมน์',
-                                        border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                        labelText: isEnglish ? 'Days per Column' : 'จำนวนวันต่อคอลัมน์',
+                                        border: const OutlineInputBorder(),
                                         isDense: true,
-                                        suffixText: 'วัน',
+                                        suffixText: isEnglish ? 'days' : 'วัน',
                                       ),
                                       onEditingComplete: _onColumnSettingChanged,
                                     ),
@@ -731,14 +785,14 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                     DropdownButtonFormField<String>(
                                       isExpanded: true,
                                       value: _sortOrder,
-                                      decoration: const InputDecoration(
-                                          labelText: 'เรียงตามยอดหนี้รวม',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Sort by Total Debt' : 'เรียงตามยอดหนี้รวม',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
-                                      items: const [
-                                        DropdownMenuItem(value: 'none', child: Text('— ไม่ระบุ —')),
-                                        DropdownMenuItem(value: 'desc', child: Text('มากไปน้อย ↓')),
-                                        DropdownMenuItem(value: 'asc',  child: Text('น้อยไปมาก ↑')),
+                                      items: [
+                                        DropdownMenuItem(value: 'none', child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
+                                        DropdownMenuItem(value: 'desc', child: Text(isEnglish ? 'High to Low ↓' : 'มากไปน้อย ↓')),
+                                        DropdownMenuItem(value: 'asc',  child: Text(isEnglish ? 'Low to High ↑' : 'น้อยไปมาก ↑')),
                                       ],
                                       onChanged: (v) {
                                         if (v != null) {
@@ -753,9 +807,9 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
 
                                     // แสดงรายละเอียด
                                     Row(children: [
-                                      const Expanded(
-                                        child: Text('แสดงรายละเอียดใบแจ้งหนี้',
-                                            style: TextStyle(fontSize: 13)),
+                                      Expanded(
+                                        child: Text(isEnglish ? 'Show invoice details' : 'แสดงรายละเอียดใบแจ้งหนี้',
+                                            style: const TextStyle(fontSize: 13)),
                                       ),
                                       Switch(
                                         value: _showDetail,
@@ -777,7 +831,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                 height: 50,
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.picture_as_pdf),
-                                  label: const Text('ประมวลผลรายงาน'),
+                                  label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                   style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.blueGrey[800],
                                       foregroundColor: Colors.white),
@@ -813,8 +867,10 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(
-                                  child: Text('กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(
+                                  child: Text(isEnglish
+                                      ? 'Please select conditions and click Generate'
+                                      : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
@@ -839,7 +895,10 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
     );
     if (result != null && mounted) {
       setState(() {
-        final label = '${result.vendorCode}  ${result.vendorNameTh}';
+        final vName = _isEnglish && (result.vendorNameEn ?? '').isNotEmpty
+            ? result.vendorNameEn!
+            : result.vendorNameTh;
+        final label = '${result.vendorCode}  $vName';
         if (isFrom) {
           _vendorCodeFrom = result.vendorCode;
           _fromLabel      = label;
@@ -884,7 +943,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
       child: InkWell(
         onTap: onPick,
         child: Text(
-          hasValue ? displayText : '— ทั้งหมด —',
+          hasValue ? displayText : (_isEnglish ? '— All —' : '— ทั้งหมด —'),
           style: TextStyle(
               fontSize: 13,
               color: hasValue ? Colors.black87 : Colors.black38),
@@ -933,6 +992,7 @@ class _VendorSearchDialogState extends State<_VendorSearchDialog> {
   @override
   Widget build(BuildContext context) {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -940,18 +1000,18 @@ class _VendorSearchDialogState extends State<_VendorSearchDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.blueGrey[800],
-            child: const Text('ค้นหาผู้ขาย',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            child: Text(isEnglish ? 'Search Vendor' : 'ค้นหาผู้ขาย',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
             child: TextField(
               controller: _searchCtrl,
               autofocus: true,
-              decoration: const InputDecoration(
-                  hintText: 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
-                  prefixIcon: Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search by vendor code or name' : 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  border: const OutlineInputBorder(),
                   isDense: true),
               onChanged: _search,
             ),
@@ -959,10 +1019,10 @@ class _VendorSearchDialogState extends State<_VendorSearchDialog> {
           Container(
             color: Colors.grey[200],
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: const Row(children: [
+            child: Row(children: [
               SizedBox(width: 100,
-                  child: Text('รหัส', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(child: Text('ชื่อผู้ขาย', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  child: Text(isEnglish ? 'Code' : 'รหัส', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+              Expanded(child: Text(isEnglish ? 'Vendor Name' : 'ชื่อผู้ขาย', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
             ]),
           ),
           const Divider(height: 1),
@@ -970,8 +1030,8 @@ class _VendorSearchDialogState extends State<_VendorSearchDialog> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _vendors.isEmpty
-                    ? const Center(
-                        child: Text('ไม่พบข้อมูล', style: TextStyle(color: Colors.grey)))
+                    ? Center(
+                        child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล', style: const TextStyle(color: Colors.grey)))
                     : ListView.separated(
                         controller: _scrollCtrl,
                         itemCount: _vendors.length,
@@ -986,7 +1046,10 @@ class _VendorSearchDialogState extends State<_VendorSearchDialog> {
                                 SizedBox(width: 100,
                                     child: Text(v.vendorCode,
                                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-                                Expanded(child: Text(v.vendorNameTh,
+                                Expanded(child: Text(
+                                    isEnglish && (v.vendorNameEn ?? '').isNotEmpty
+                                        ? v.vendorNameEn!
+                                        : v.vendorNameTh,
                                     style: const TextStyle(fontSize: 13),
                                     overflow: TextOverflow.ellipsis)),
                               ]),
@@ -1000,7 +1063,7 @@ class _VendorSearchDialogState extends State<_VendorSearchDialog> {
             child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('ยกเลิก')),
+                  child: Text(l.cancel)),
             ]),
           ),
         ]),

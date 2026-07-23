@@ -1603,7 +1603,9 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                       DropdownMenuItem(value: null, child: Text(isEnglish ? '— Select type —' : '— เลือกประเภท —')),
                       ..._whtTypes.map((t) => DropdownMenuItem(
                         value: t,
-                        child: Text('${t.whtCode} — ${t.whtName}', overflow: TextOverflow.ellipsis),
+                        child: Text(
+                            '${t.whtCode} — ${isEnglish && (t.whtNameEn ?? '').isNotEmpty ? t.whtNameEn! : t.whtName}',
+                            overflow: TextOverflow.ellipsis),
                       )),
                     ],
                     onChanged: _isReadOnly ? null : (t) {

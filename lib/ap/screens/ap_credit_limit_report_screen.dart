@@ -7,7 +7,6 @@ import 'package:printing/printing.dart';
 
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
@@ -42,6 +41,7 @@ class _ApCreditLimitReportScreenState
   bool   _isDraggingDivider = false;
   int    _pdfKey           = 0;
   bool   _isExporting      = false;
+  bool   _isEnglish        = false;
 
   Company? _company;
   Map<String, String>? _headers;
@@ -52,8 +52,10 @@ class _ApCreditLimitReportScreenState
   List<int> _selectedGroupIds = [];
   String? _vendorCodeFrom;
   String? _vendorCodeTo;
-  String  _fromLabel    = '';
-  String  _toLabel      = '';
+  String  _fromNameTh   = '';
+  String  _fromNameEn   = '';
+  String  _toNameTh     = '';
+  String  _toNameEn     = '';
   String  _creditStatus = '';             // '' | 'over' | 'remaining' | 'full' | 'no_limit'
   String  _sortBy       = 'vendor';      // 'vendor' | 'remaining_asc' | 'remaining_desc'
 
@@ -77,6 +79,7 @@ class _ApCreditLimitReportScreenState
   }
 
   Future<void> _generateReport() async {
+    final isEnglish = _isEnglish;
     setState(() { _isLoading = true; _reportData = []; });
     try {
       final raw = await _reportService.getCreditLimitReport(
@@ -88,13 +91,15 @@ class _ApCreditLimitReportScreenState
       );
       if (raw.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ไม่พบข้อมูลตามเงื่อนไขที่เลือก')));
+            SnackBar(content: Text(isEnglish
+                ? 'No data found for the selected conditions'
+                : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')));
       }
       setState(() { _reportData = raw; _pdfKey++; });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -108,13 +113,15 @@ class _ApCreditLimitReportScreenState
   // ─── PDF ──────────────────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
+    final isEnglish    = _isEnglish;
     final doc          = pw.Document();
     final fontData     = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
     final font     = pw.Font.ttf(fontData);
     final fontBold = pw.Font.ttf(fontBoldData);
 
-    final companyName  = _company?.thaiName ?? '(ไม่ระบุชื่อบริษัท)';
+    final companyName  = _company?.displayName(isEnglish) ??
+        (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
@@ -124,22 +131,30 @@ class _ApCreditLimitReportScreenState
       final names = _selectedGroupIds.map((id) {
         final g = _vendorGroups.firstWhere((g) => g.id == id,
             orElse: () => _vendorGroups.first);
-        return '${g.groupCode} ${g.groupNameThai}';
+        final gName = isEnglish && g.groupNameEng.isNotEmpty
+            ? g.groupNameEng : g.groupNameThai;
+        return '${g.groupCode} $gName';
       }).join(', ');
-      conditions.add('กลุ่ม: $names');
+      conditions.add('${isEnglish ? 'Group' : 'กลุ่ม'}: $names');
     }
     if ((_vendorCodeFrom ?? '').isNotEmpty || (_vendorCodeTo ?? '').isNotEmpty) {
-      final f = (_vendorCodeFrom ?? '').isEmpty ? '(ทั้งหมด)' : _vendorCodeFrom!;
-      final t = (_vendorCodeTo   ?? '').isEmpty ? '(ทั้งหมด)' : _vendorCodeTo!;
-      conditions.add('รหัสผู้ขาย: $f – $t');
+      final all = isEnglish ? '(All)' : '(ทั้งหมด)';
+      final f = (_vendorCodeFrom ?? '').isEmpty ? all : _vendorCodeFrom!;
+      final t = (_vendorCodeTo   ?? '').isEmpty ? all : _vendorCodeTo!;
+      conditions.add('${isEnglish ? 'Vendor code' : 'รหัสผู้ขาย'}: $f – $t');
     }
     if (_creditStatus.isNotEmpty) {
-      conditions.add('สถานะ: ${_statusLabel(_creditStatus)}');
+      conditions.add('${isEnglish ? 'Status' : 'สถานะ'}: ${_statusLabel(_creditStatus, isEnglish)}');
     }
     switch (_sortBy) {
-      case 'remaining_asc':  conditions.add('เรียงวงเงินคงเหลือน้อยไปมาก'); break;
-      case 'remaining_desc': conditions.add('เรียงวงเงินคงเหลือมากไปน้อย'); break;
-      default:               conditions.add('เรียงรหัสผู้ขาย');
+      case 'remaining_asc':
+        conditions.add(isEnglish ? 'Sort by remaining limit, low to high' : 'เรียงวงเงินคงเหลือน้อยไปมาก');
+        break;
+      case 'remaining_desc':
+        conditions.add(isEnglish ? 'Sort by remaining limit, high to low' : 'เรียงวงเงินคงเหลือมากไปน้อย');
+        break;
+      default:
+        conditions.add(isEnglish ? 'Sort by vendor code' : 'เรียงรหัสผู้ขาย');
     }
     final conditionLine = conditions.join(' | ');
 
@@ -150,12 +165,12 @@ class _ApCreditLimitReportScreenState
             child: pw.Text(companyName,
                 style: const pw.TextStyle(fontSize: 11))),
         pw.Expanded(flex: 6,
-            child: pw.Text('รายงานวงเงินคงเหลือผู้ขาย',
+            child: pw.Text(isEnglish ? 'AP Credit Limit Report' : 'รายงานวงเงินคงเหลือผู้ขาย',
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 15,
                     fontWeight: pw.FontWeight.bold))),
         pw.Expanded(flex: 3,
-            child: pw.Text('หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+            child: pw.Text(isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -163,11 +178,12 @@ class _ApCreditLimitReportScreenState
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.SizedBox()),
         pw.Expanded(flex: 6,
-            child: pw.Text('ณ วันที่ ${DateFormat('dd/MM/yyyy').format(DateTime.now())}',
+            child: pw.Text(
+                '${isEnglish ? 'As of' : 'ณ วันที่'} ${DateFormat('dd/MM/yyyy').format(DateTime.now())}',
                 textAlign: pw.TextAlign.center,
                 style: const pw.TextStyle(fontSize: 10))),
         pw.Expanded(flex: 3,
-            child: pw.Text('พิมพ์โดย $userName',
+            child: pw.Text(isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -177,7 +193,7 @@ class _ApCreditLimitReportScreenState
             child: pw.Text('* $conditionLine',
                 style: const pw.TextStyle(fontSize: 9))),
         pw.Expanded(flex: 3,
-            child: pw.Text('พิมพ์เมื่อ $printDateStr',
+            child: pw.Text(isEnglish ? 'Printed $printDateStr' : 'พิมพ์เมื่อ $printDateStr',
                 textAlign: pw.TextAlign.right,
                 style: const pw.TextStyle(fontSize: 10))),
       ]),
@@ -233,11 +249,11 @@ class _ApCreditLimitReportScreenState
     final headerRow = pw.TableRow(
       decoration: const pw.BoxDecoration(color: cHeader),
       children: [
-        hCell('รหัส – ชื่อผู้ขาย', a: pw.TextAlign.left),
-        hCell('วงเงินรวม'),
-        hCell('หนี้คงค้าง'),
-        hCell('วงเงินคงเหลือ'),
-        hCell('สถานะวงเงิน'),
+        hCell(isEnglish ? 'Code – Vendor Name' : 'รหัส – ชื่อผู้ขาย', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Credit Limit' : 'วงเงินรวม'),
+        hCell(isEnglish ? 'Outstanding' : 'หนี้คงค้าง'),
+        hCell(isEnglish ? 'Remaining Limit' : 'วงเงินคงเหลือ'),
+        hCell(isEnglish ? 'Status' : 'สถานะวงเงิน'),
       ],
     );
 
@@ -252,7 +268,9 @@ class _ApCreditLimitReportScreenState
     for (final row in _reportData) {
       totalVendors++;
       final code        = row['vendor_code']    as String? ?? '';
-      final name        = row['vendor_name_th'] as String? ?? '';
+      final nameTh      = row['vendor_name_th'] as String? ?? '';
+      final nameEn      = row['vendor_name_en'] as String?;
+      final name        = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
       final limit       = (row['credit_limit']  as num?)?.toDouble() ?? 0;
       final outstanding = (row['outstanding']   as num?)?.toDouble() ?? 0;
       final remaining   = (row['remaining']     as num?)?.toDouble() ?? 0;
@@ -283,7 +301,7 @@ class _ApCreditLimitReportScreenState
             remaining < 0 ? tBold(9) : tNormal(9),
             a: pw.TextAlign.right,
           ),
-          dCell(_statusLabel(status), statusStyle, a: pw.TextAlign.center),
+          dCell(_statusLabel(status, isEnglish), statusStyle, a: pw.TextAlign.center),
         ],
       ));
     }
@@ -292,8 +310,10 @@ class _ApCreditLimitReportScreenState
     tableRows.add(pw.TableRow(
       decoration: const pw.BoxDecoration(color: cTotal),
       children: [
-        dCell('รวม $totalVendors ผู้ขาย'
-            '${overCount > 0 ? ' (เกินวงเงิน $overCount ราย)' : ''}',
+        dCell(isEnglish
+            ? 'Total $totalVendors vendors${overCount > 0 ? ' (over limit: $overCount)' : ''}'
+            : 'รวม $totalVendors ผู้ขาย'
+                '${overCount > 0 ? ' (เกินวงเงิน $overCount ราย)' : ''}',
             tBold(9)),
         amtCellDash(grandLimit,       tBold(9)),
         amtCellDash(grandOutstanding, tBold(9)),
@@ -321,7 +341,16 @@ class _ApCreditLimitReportScreenState
     return doc.save();
   }
 
-  static String _statusLabel(String status) {
+  static String _statusLabel(String status, bool isEnglish) {
+    if (isEnglish) {
+      switch (status) {
+        case 'over':      return 'Over Limit';
+        case 'remaining': return 'Within Limit';
+        case 'full':      return 'Full Limit Remaining';
+        case 'no_limit':  return 'No Limit Specified';
+        default:          return status;
+      }
+    }
     switch (status) {
       case 'over':      return 'เกินวงเงิน';
       case 'remaining': return 'ยังเหลือวงเงิน';
@@ -335,7 +364,8 @@ class _ApCreditLimitReportScreenState
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -376,7 +406,9 @@ class _ApCreditLimitReportScreenState
                               : Icons.filter_list,
                           color: Colors.white, size: 20),
                       padding: EdgeInsets.zero,
-                      tooltip: _isFilterExpanded ? 'ย่อเงื่อนไข' : 'ขยายเงื่อนไข',
+                      tooltip: _isFilterExpanded
+                          ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                          : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
                       onPressed: () => setState(
                           () => _isFilterExpanded = !_isFilterExpanded),
                     ),
@@ -401,8 +433,8 @@ class _ApCreditLimitReportScreenState
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('เงื่อนไขรายงาน',
-                                        style: TextStyle(
+                                    Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
+                                        style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 16)),
                                     const SizedBox(height: 16),
@@ -411,7 +443,6 @@ class _ApCreditLimitReportScreenState
                                     ApVendorGroupMultiPicker(
                                       groups: _vendorGroups,
                                       selectedIds: _selectedGroupIds,
-                                      label: 'กลุ่มผู้ขาย',
                                       onChanged: (v) =>
                                           setState(() => _selectedGroupIds = v),
                                     ),
@@ -419,21 +450,23 @@ class _ApCreditLimitReportScreenState
 
                                     // รหัสผู้ขาย ตั้งแต่ / ถึง
                                     _buildVendorCodeField(
-                                        label: 'รหัสผู้ขาย ตั้งแต่',
-                                        displayText: _fromLabel,
+                                        label: isEnglish ? 'Vendor Code From' : 'รหัสผู้ขาย ตั้งแต่',
+                                        displayText: _fromLabelText(isEnglish),
                                         onPick: () => _pickVendor(isFrom: true),
                                         onClear: () => setState(() {
                                           _vendorCodeFrom = null;
-                                          _fromLabel      = '';
+                                          _fromNameTh     = '';
+                                          _fromNameEn     = '';
                                         })),
                                     const SizedBox(height: 8),
                                     _buildVendorCodeField(
-                                        label: 'รหัสผู้ขาย ถึง',
-                                        displayText: _toLabel,
+                                        label: isEnglish ? 'Vendor Code To' : 'รหัสผู้ขาย ถึง',
+                                        displayText: _toLabelText(isEnglish),
                                         onPick: () => _pickVendor(isFrom: false),
                                         onClear: () => setState(() {
                                           _vendorCodeTo = null;
-                                          _toLabel      = '';
+                                          _toNameTh     = '';
+                                          _toNameEn     = '';
                                         })),
 
                                     const SizedBox(height: 12),
@@ -443,26 +476,26 @@ class _ApCreditLimitReportScreenState
                                     // สถานะวงเงิน
                                     DropdownButtonFormField<String>(
                                       value: _creditStatus,
-                                      decoration: const InputDecoration(
-                                          labelText: 'สถานะวงเงิน',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Credit Status' : 'สถานะวงเงิน',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
-                                      items: const [
+                                      items: [
                                         DropdownMenuItem(
                                             value: '',
-                                            child: Text('— ทั้งหมด —')),
+                                            child: Text(isEnglish ? '— All —' : '— ทั้งหมด —')),
                                         DropdownMenuItem(
                                             value: 'over',
-                                            child: Text('เกินวงเงิน')),
+                                            child: Text(isEnglish ? 'Over Limit' : 'เกินวงเงิน')),
                                         DropdownMenuItem(
                                             value: 'remaining',
-                                            child: Text('ยังเหลือวงเงิน')),
+                                            child: Text(isEnglish ? 'Within Limit' : 'ยังเหลือวงเงิน')),
                                         DropdownMenuItem(
                                             value: 'full',
-                                            child: Text('เหลือเต็มวงเงิน')),
+                                            child: Text(isEnglish ? 'Full Limit Remaining' : 'เหลือเต็มวงเงิน')),
                                         DropdownMenuItem(
                                             value: 'no_limit',
-                                            child: Text('ไม่ระบุวงเงิน')),
+                                            child: Text(isEnglish ? 'No Limit Specified' : 'ไม่ระบุวงเงิน')),
                                       ],
                                       onChanged: (v) {
                                         if (v != null) {
@@ -475,20 +508,20 @@ class _ApCreditLimitReportScreenState
                                     // จัดเรียงข้อมูล
                                     DropdownButtonFormField<String>(
                                       value: _sortBy,
-                                      decoration: const InputDecoration(
-                                          labelText: 'จัดเรียงข้อมูล',
-                                          border: OutlineInputBorder(),
+                                      decoration: InputDecoration(
+                                          labelText: isEnglish ? 'Sort By' : 'จัดเรียงข้อมูล',
+                                          border: const OutlineInputBorder(),
                                           isDense: true),
-                                      items: const [
+                                      items: [
                                         DropdownMenuItem(
                                             value: 'vendor',
-                                            child: Text('รหัสผู้ขาย')),
+                                            child: Text(isEnglish ? 'Vendor Code' : 'รหัสผู้ขาย')),
                                         DropdownMenuItem(
                                             value: 'remaining_asc',
-                                            child: Text('วงเงินคงเหลือ น้อยไปมาก')),
+                                            child: Text(isEnglish ? 'Remaining Limit, Low to High' : 'วงเงินคงเหลือ น้อยไปมาก')),
                                         DropdownMenuItem(
                                             value: 'remaining_desc',
-                                            child: Text('วงเงินคงเหลือ มากไปน้อย')),
+                                            child: Text(isEnglish ? 'Remaining Limit, High to Low' : 'วงเงินคงเหลือ มากไปน้อย')),
                                       ],
                                       onChanged: (v) {
                                         if (v != null) {
@@ -508,7 +541,7 @@ class _ApCreditLimitReportScreenState
                                 height: 50,
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.picture_as_pdf),
-                                  label: const Text('ประมวลผลรายงาน'),
+                                  label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
                                   style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.blueGrey[800],
                                       foregroundColor: Colors.white),
@@ -545,8 +578,10 @@ class _ApCreditLimitReportScreenState
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
                           : _reportData.isEmpty
-                              ? const Center(
-                                  child: Text('กรุณาเลือกเงื่อนไขและกดประมวลผล'))
+                              ? Center(
+                                  child: Text(isEnglish
+                                      ? 'Please select conditions and click Generate Report'
+                                      : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
                               : PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
@@ -571,21 +606,36 @@ class _ApCreditLimitReportScreenState
     );
     if (result != null && mounted) {
       setState(() {
-        final label = '${result.vendorCode}  ${result.vendorNameTh}';
         if (isFrom) {
           _vendorCodeFrom = result.vendorCode;
-          _fromLabel      = label;
+          _fromNameTh     = result.vendorNameTh;
+          _fromNameEn     = result.vendorNameEn ?? '';
         } else {
           _vendorCodeTo = result.vendorCode;
-          _toLabel      = label;
+          _toNameTh     = result.vendorNameTh;
+          _toNameEn     = result.vendorNameEn ?? '';
         }
       });
     }
   }
 
+  // แสดงชื่อผู้ขายตามภาษาที่เลือกปัจจุบัน (ไม่ใช้ label ที่ถูกแช่แข็งไว้ตอนเลือก)
+  String _fromLabelText(bool isEnglish) {
+    if ((_vendorCodeFrom ?? '').isEmpty) return '';
+    final name = isEnglish && _fromNameEn.isNotEmpty ? _fromNameEn : _fromNameTh;
+    return '$_vendorCodeFrom  $name';
+  }
+
+  String _toLabelText(bool isEnglish) {
+    if ((_vendorCodeTo ?? '').isEmpty) return '';
+    final name = isEnglish && _toNameEn.isNotEmpty ? _toNameEn : _toNameTh;
+    return '$_vendorCodeTo  $name';
+  }
+
   // ─── Excel Export ─────────────────────────────────────────────────────────
 
   Future<void> _exportExcel() async {
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -598,11 +648,13 @@ class _ApCreditLimitReportScreenState
       final totBg = ExcelColor.fromHexString('#BDD7EE');
 
       final tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานวงเงินคงเหลือผู้ขาย', bold: true);
-      _xlCell(s, 2, 0, 'พิมพ์วันที่: $tsLabel');
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
+      _xlCell(s, 1, 0, isEnglish ? 'AP Credit Limit Report' : 'รายงานวงเงินคงเหลือผู้ขาย', bold: true);
+      _xlCell(s, 2, 0, '${isEnglish ? 'Printed: ' : 'พิมพ์วันที่: '}$tsLabel');
 
-      final hdrs = ['รหัส – ชื่อผู้ขาย', 'วงเงินรวม', 'หนี้คงค้าง', 'วงเงินคงเหลือ', 'สถานะวงเงิน'];
+      final hdrs = isEnglish
+          ? ['Code – Vendor Name', 'Credit Limit', 'Outstanding', 'Remaining Limit', 'Status']
+          : ['รหัส – ชื่อผู้ขาย', 'วงเงินรวม', 'หนี้คงค้าง', 'วงเงินคงเหลือ', 'สถานะวงเงิน'];
       for (int i = 0; i < hdrs.length; i++) {
         _xlCell(s, 3, i, hdrs[i],
             bg: hdrBg, bold: true, align: HorizontalAlign.Center);
@@ -618,7 +670,9 @@ class _ApCreditLimitReportScreenState
       for (final r in _reportData) {
         totalVendors++;
         final code        = r['vendor_code']    as String? ?? '';
-        final name        = r['vendor_name_th'] as String? ?? '';
+        final nameTh      = r['vendor_name_th'] as String? ?? '';
+        final nameEn      = r['vendor_name_en'] as String?;
+        final name        = isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : nameTh;
         final limit       = (r['credit_limit']  as num?)?.toDouble() ?? 0;
         final outstanding = (r['outstanding']   as num?)?.toDouble() ?? 0;
         final remaining   = (r['remaining']     as num?)?.toDouble() ?? 0;
@@ -634,12 +688,14 @@ class _ApCreditLimitReportScreenState
         _xlCell(s, row, 2, outstanding, align: HorizontalAlign.Right);
         _xlCell(s, row, 3, limit <= 0 ? '-' : remaining,
             align: HorizontalAlign.Right);
-        _xlCell(s, row, 4, _statusLabel(status), align: HorizontalAlign.Center);
+        _xlCell(s, row, 4, _statusLabel(status, isEnglish), align: HorizontalAlign.Center);
         row++;
       }
 
-      final totalLabel = 'รวม $totalVendors ผู้ขาย'
-          '${overCount > 0 ? ' (เกินวงเงิน $overCount ราย)' : ''}';
+      final totalLabel = isEnglish
+          ? 'Total $totalVendors vendors${overCount > 0 ? ' (over limit: $overCount)' : ''}'
+          : 'รวม $totalVendors ผู้ขาย'
+              '${overCount > 0 ? ' (เกินวงเงิน $overCount ราย)' : ''}';
       _xlCell(s, row, 0, totalLabel,        bg: totBg, bold: true);
       _xlCell(s, row, 1, grandLimit,        bg: totBg, bold: true,
           align: HorizontalAlign.Right);
@@ -651,7 +707,7 @@ class _ApCreditLimitReportScreenState
 
       final bytes = ex.encode();
       if (bytes == null) return;
-      const title = 'รายงานวงเงินคงเหลือผู้ขาย';
+      final title = isEnglish ? 'AP_Credit_Limit_Report' : 'รายงานวงเงินคงเหลือผู้ขาย';
       final ts    = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       await downloadFile(bytes, '${title}_$ts.xlsx');
     } finally {
@@ -702,7 +758,7 @@ class _ApCreditLimitReportScreenState
       child: InkWell(
         onTap: onPick,
         child: Text(
-          hasValue ? displayText : '— ทั้งหมด —',
+          hasValue ? displayText : (_isEnglish ? '— All —' : '— ทั้งหมด —'),
           style: TextStyle(
               fontSize: 13,
               color: hasValue ? Colors.black87 : Colors.black38),
@@ -759,7 +815,7 @@ class _CreditLimitVendorSearchDialogState
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Dialog(
       child: SizedBox(
         width: 520, height: 480,
@@ -769,8 +825,8 @@ class _CreditLimitVendorSearchDialogState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.blueGrey[800],
-              child: const Text('ค้นหาผู้ขาย',
-                  style: TextStyle(
+              child: Text(isEnglish ? 'Search Vendor' : 'ค้นหาผู้ขาย',
+                  style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 15)),
@@ -780,10 +836,10 @@ class _CreditLimitVendorSearchDialogState
               child: TextField(
                 controller: _ctrl,
                 autofocus: true,
-                decoration: const InputDecoration(
-                    hintText: 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
-                    prefixIcon: Icon(Icons.search, size: 18),
-                    border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search by vendor code or name' : 'ค้นหาจากรหัสหรือชื่อผู้ขาย',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    border: const OutlineInputBorder(),
                     isDense: true),
                 onChanged: _search,
               ),
@@ -791,13 +847,13 @@ class _CreditLimitVendorSearchDialogState
             Container(
               color: Colors.grey[200],
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: const Row(children: [
+              child: Row(children: [
                 SizedBox(width: 100,
-                    child: Text('รหัส',
-                        style: TextStyle(
+                    child: Text(isEnglish ? 'Code' : 'รหัส',
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 12))),
-                Expanded(child: Text('ชื่อผู้ขาย',
-                    style: TextStyle(
+                Expanded(child: Text(isEnglish ? 'Vendor Name' : 'ชื่อผู้ขาย',
+                    style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 12))),
               ]),
             ),
@@ -806,9 +862,9 @@ class _CreditLimitVendorSearchDialogState
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _list.isEmpty
-                      ? const Center(
-                          child: Text('ไม่พบข้อมูล',
-                              style: TextStyle(color: Colors.grey)))
+                      ? Center(
+                          child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล',
+                              style: const TextStyle(color: Colors.grey)))
                       : ListView.separated(
                           controller: _scroll,
                           itemCount: _list.length,
@@ -828,7 +884,10 @@ class _CreditLimitVendorSearchDialogState
                                               fontSize: 13,
                                               fontWeight: FontWeight.w500))),
                                   Expanded(
-                                      child: Text(v.vendorNameTh,
+                                      child: Text(
+                                          isEnglish && (v.vendorNameEn ?? '').isNotEmpty
+                                              ? v.vendorNameEn!
+                                              : v.vendorNameTh,
                                           style: const TextStyle(fontSize: 13),
                                           overflow: TextOverflow.ellipsis)),
                                 ]),
@@ -844,7 +903,7 @@ class _CreditLimitVendorSearchDialogState
                 children: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('ยกเลิก')),
+                      child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
                 ],
               ),
             ),

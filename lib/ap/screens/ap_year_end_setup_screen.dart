@@ -1,7 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
@@ -27,6 +26,8 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
 
   List<Account>        _accounts = [];
   List<ModuleDocument> _glDocs   = [];
+
+  bool _isEnglish = false;
 
   int? _fxGainId, _fxLossId, _ufxGainId, _ufxLossId;
   int? _fxRevalDocId;
@@ -82,7 +83,14 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
       ? null
       : _glDocs.cast<ModuleDocument?>().firstWhere((d) => d?.id == id, orElse: () => null);
 
+  String _accountLabel(Account a) =>
+      _isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
+
+  String _docLabel(ModuleDocument d) =>
+      _isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai;
+
   Future<Account?> _pickAccount(String title) async {
+    final isEnglish = _isEnglish;
     final searchCtrl = TextEditingController();
     List<Account> filtered = List.from(_accounts);
     Account? picked;
@@ -97,7 +105,8 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
                 ? List.from(_accounts)
                 : _accounts.where((a) =>
                     a.accountCode.toLowerCase().contains(lq) ||
-                    a.accountNameThai.toLowerCase().contains(lq)).toList();
+                    a.accountNameThai.toLowerCase().contains(lq) ||
+                    a.accountNameEng.toLowerCase().contains(lq)).toList();
           });
         }
         return AlertDialog(
@@ -107,11 +116,11 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
             child: Column(children: [
               TextField(
                 controller: searchCtrl, autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา รหัส / ชื่อบัญชี',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search account code / name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   isDense: true,
                 ),
                 onChanged: doFilter,
@@ -125,7 +134,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
                     final a = filtered[i];
                     return ListTile(
                       dense: true,
-                      title: Text('${a.accountCode}  ${a.accountNameThai}',
+                      title: Text('${a.accountCode}  ${_accountLabel(a)}',
                           style: const TextStyle(fontSize: 13)),
                       onTap: () { picked = a; Navigator.of(ctx).pop(); },
                     );
@@ -135,7 +144,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ],
         );
       }),
@@ -145,6 +154,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
   }
 
   Future<ModuleDocument?> _pickGlDoc() async {
+    final isEnglish = _isEnglish;
     final searchCtrl = TextEditingController();
     List<ModuleDocument> filtered = List.from(_glDocs);
     ModuleDocument? picked;
@@ -153,17 +163,17 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
         return AlertDialog(
-          title: const Text('เลือกประเภทเอกสาร GL'),
+          title: Text(isEnglish ? 'Select GL Document Type' : 'เลือกประเภทเอกสาร GL'),
           content: SizedBox(
             width: 480, height: 380,
             child: Column(children: [
               TextField(
                 controller: searchCtrl, autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'ค้นหา',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search' : 'ค้นหา',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   isDense: true,
                 ),
                 onChanged: (q) {
@@ -173,7 +183,8 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
                         ? List.from(_glDocs)
                         : _glDocs.where((d) =>
                             d.docCode.toLowerCase().contains(lq) ||
-                            d.docNameThai.toLowerCase().contains(lq)).toList();
+                            d.docNameThai.toLowerCase().contains(lq) ||
+                            d.docNameEng.toLowerCase().contains(lq)).toList();
                   });
                 },
               ),
@@ -186,7 +197,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
                     final d = filtered[i];
                     return ListTile(
                       dense: true,
-                      title: Text('${d.docCode}  ${d.docNameThai}',
+                      title: Text('${d.docCode}  ${_docLabel(d)}',
                           style: const TextStyle(fontSize: 13)),
                       onTap: () { picked = d; Navigator.of(ctx).pop(); },
                     );
@@ -196,7 +207,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ],
         );
       }),
@@ -206,6 +217,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
   }
 
   Future<void> _save() async {
+    final isEnglish = _isEnglish;
     setState(() => _isSaving = true);
     try {
       final s = ApYearEndSetup(
@@ -217,7 +229,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
       );
       await _svc.saveSetup(s);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('บันทึกสำเร็จ'), backgroundColor: Colors.indigo));
+          SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ'), backgroundColor: Colors.indigo));
     } catch (e) {
       if (mounted) _showError(e.toString());
     } finally {
@@ -232,6 +244,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
     required String dialogTitle,
     required void Function(int?) onChanged,
   }) {
+    final isEnglish = _isEnglish;
     final acc = _findAccount(selectedId);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -253,7 +266,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
               child: Row(children: [
                 Expanded(
                   child: Text(
-                    acc != null ? '${acc.accountCode}  ${acc.accountNameThai}' : '-- ไม่ได้ตั้งค่า --',
+                    acc != null ? '${acc.accountCode}  ${_accountLabel(acc)}' : (isEnglish ? '-- Not configured --' : '-- ไม่ได้ตั้งค่า --'),
                     style: TextStyle(fontSize: 14,
                         color: acc != null ? Colors.black87 : Colors.grey[500]),
                     overflow: TextOverflow.ellipsis,
@@ -275,6 +288,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
   }
 
   Widget _docPickerField(String label, int? selectedId, void Function(int?) onChanged) {
+    final isEnglish = _isEnglish;
     final doc = _findDoc(selectedId);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -296,7 +310,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
               child: Row(children: [
                 Expanded(
                   child: Text(
-                    doc != null ? '${doc.docCode}  ${doc.docNameThai}' : '-- ไม่ได้ตั้งค่า --',
+                    doc != null ? '${doc.docCode}  ${_docLabel(doc)}' : (isEnglish ? '-- Not configured --' : '-- ไม่ได้ตั้งค่า --'),
                     style: TextStyle(fontSize: 14,
                         color: doc != null ? Colors.black87 : Colors.grey[500]),
                     overflow: TextOverflow.ellipsis,
@@ -329,7 +343,8 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -342,37 +357,39 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
               padding: const EdgeInsets.all(24),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 _sectionHeader(
-                  'ปรับมูลค่าหนี้จากอัตราแลกเปลี่ยนแบบ Realized',
-                  'บัญชีกำไร/ขาดทุนจากอัตราแลกเปลี่ยนที่ปรับจริง',
+                  isEnglish ? 'Realized FX Revaluation' : 'ปรับมูลค่าหนี้จากอัตราแลกเปลี่ยนแบบ Realized',
+                  isEnglish ? 'Realized FX gain/loss accounts' : 'บัญชีกำไร/ขาดทุนจากอัตราแลกเปลี่ยนที่ปรับจริง',
                 ),
-                _accountPickerField('บัญชีกำไรอัตราแลกเปลี่ยน', _fxGainId,
-                    dialogTitle: 'บัญชีกำไรอัตราแลกเปลี่ยน',
+                _accountPickerField(isEnglish ? 'FX Gain Account' : 'บัญชีกำไรอัตราแลกเปลี่ยน', _fxGainId,
+                    dialogTitle: isEnglish ? 'FX Gain Account' : 'บัญชีกำไรอัตราแลกเปลี่ยน',
                     onChanged: (v) => setState(() => _fxGainId = v)),
-                _accountPickerField('บัญชีขาดทุนอัตราแลกเปลี่ยน', _fxLossId,
-                    dialogTitle: 'บัญชีขาดทุนอัตราแลกเปลี่ยน',
+                _accountPickerField(isEnglish ? 'FX Loss Account' : 'บัญชีขาดทุนอัตราแลกเปลี่ยน', _fxLossId,
+                    dialogTitle: isEnglish ? 'FX Loss Account' : 'บัญชีขาดทุนอัตราแลกเปลี่ยน',
                     onChanged: (v) => setState(() => _fxLossId = v)),
                 const SizedBox(height: 8),
                 _sectionHeader(
-                  'ปรับมูลค่าหนี้จากอัตราแลกเปลี่ยนแบบ Reversing',
-                  'บัญชีกำไร/ขาดทุนจากอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง (กลับรายการต้นงวดใหม่)',
+                  isEnglish ? 'Reversing FX Revaluation' : 'ปรับมูลค่าหนี้จากอัตราแลกเปลี่ยนแบบ Reversing',
+                  isEnglish
+                      ? 'Unrealized FX gain/loss accounts (reversed at the start of the new period)'
+                      : 'บัญชีกำไร/ขาดทุนจากอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง (กลับรายการต้นงวดใหม่)',
                 ),
                 _accountPickerField(
-                  'บัญชีกำไรอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง', _ufxGainId,
-                  dialogTitle: 'บัญชีกำไรอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง',
+                  isEnglish ? 'Unrealized FX Gain Account' : 'บัญชีกำไรอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง', _ufxGainId,
+                  dialogTitle: isEnglish ? 'Unrealized FX Gain Account' : 'บัญชีกำไรอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง',
                   onChanged: (v) => setState(() => _ufxGainId = v),
                 ),
                 _accountPickerField(
-                  'บัญชีขาดทุนอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง', _ufxLossId,
-                  dialogTitle: 'บัญชีขาดทุนอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง',
+                  isEnglish ? 'Unrealized FX Loss Account' : 'บัญชีขาดทุนอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง', _ufxLossId,
+                  dialogTitle: isEnglish ? 'Unrealized FX Loss Account' : 'บัญชีขาดทุนอัตราแลกเปลี่ยนที่ยังไม่ได้ปรับจริง',
                   onChanged: (v) => setState(() => _ufxLossId = v),
                 ),
                 const SizedBox(height: 8),
                 _sectionHeader(
-                  'ประเภทเอกสารบัญชีแยกประเภท',
-                  'ประเภทเอกสาร GL ที่ใช้สร้างรายการปรับปรุงในบัญชีแยกประเภท',
+                  isEnglish ? 'GL Document Types' : 'ประเภทเอกสารบัญชีแยกประเภท',
+                  isEnglish ? 'GL document types used to create adjustment entries' : 'ประเภทเอกสาร GL ที่ใช้สร้างรายการปรับปรุงในบัญชีแยกประเภท',
                 ),
                 _docPickerField(
-                  'ประเภทเอกสารปรับมูลค่าหนี้จากอัตราแลกเปลี่ยน',
+                  isEnglish ? 'FX Revaluation Document Type' : 'ประเภทเอกสารปรับมูลค่าหนี้จากอัตราแลกเปลี่ยน',
                   _fxRevalDocId,
                   (v) => setState(() => _fxRevalDocId = v),
                 ),
@@ -385,7 +402,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
                     child: _isSaving
                         ? const SizedBox(width: 16, height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('บันทึก'),
+                        : Text(isEnglish ? 'Save' : 'บันทึก'),
                   ),
                 ),
               ]),

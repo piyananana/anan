@@ -134,6 +134,7 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
       items = items.where((r) =>
         r.whtCode.toLowerCase().contains(q) ||
         r.whtName.toLowerCase().contains(q) ||
+        (r.whtNameEn?.toLowerCase().contains(q) ?? false) ||
         (r.incomeType?.toLowerCase().contains(q) ?? false)
       ).toList();
     }
@@ -228,8 +229,11 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
                         final incomeLabel = row.incomeType != null
                             ? (isEnglish ? 'Section ${row.incomeType}' : 'มาตรา ${row.incomeType}')
                             : null;
+                        final displayName = isEnglish && (row.whtNameEn ?? '').isNotEmpty
+                            ? row.whtNameEn!
+                            : row.whtName;
                         final subtitleParts = [
-                          row.whtName,
+                          displayName,
                           rateLabel2,
                           if (incomeLabel != null) incomeLabel,
                           if (dateRange != null) dateRange,
