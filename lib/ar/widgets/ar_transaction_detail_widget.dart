@@ -3967,7 +3967,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         lines.add(_GlLine(notSetupArLabel, arLabel, arLabel, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       } else if (sysType == arDocTypeAdvanceReceipt) {
         lines.add(_GlLine(notSetupCashLabel, cashBankLabel, advanceReceivedDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
-        lines.add(_GlLine(notSetupAdvanceLabel, advanceReceivedLabel, advanceReceivedLabel, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+        lines.add(_GlLine(notSetupAdvanceLabel, advanceReceivedLabel, advanceReceivedLabel, 0, _beforeVatFc * lc, 0, isFcDoc ? _beforeVatFc : 0));
+        if (_vatAmountFc > 0) {
+          lines.add(_GlLine(notSetupVatLabel, 'VAT Output', vatDesc, 0, _vatAmountFc * lc, 0, isFcDoc ? _vatAmountFc : 0));
+        }
       } else if (sysType == arDocTypeAdvanceRefund) {
         lines.add(_GlLine(notSetupAdvanceLabel, advanceReceivedLabel, advanceRefundDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
         lines.add(_GlLine(notSetupCashLabel, cashBankLabel, payAdvanceRefundDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
@@ -4198,7 +4201,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           ));
         }
       }
-      lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceFallback), advanceReceivedLabel2, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceFallback), advanceReceivedLabel2, 0, _beforeVatFc * lc, 0, isFcDoc ? _beforeVatFc : 0));
+      if (_vatAmountFc > 0) {
+        final vatOutputFallback2 = isEnglish ? 'VAT Output' : 'ภาษีขาย';
+        final vatCode = setup.vatOutputAccountCode ?? notSetupVatLabel2;
+        final vatName = acctName(setup.vatOutputAccountId, setup.vatOutputAccountName ?? vatOutputFallback2);
+        lines.add(_GlLine(vatCode, vatName.isEmpty ? vatOutputFallback2 : vatName, vatDesc2, 0, _vatAmountFc * lc, 0, isFcDoc ? _vatAmountFc : 0));
+      }
     }
     // ── Advance Refund (65) ──────────────────────────────────────────────
     else if (sysType == arDocTypeAdvanceRefund) {
