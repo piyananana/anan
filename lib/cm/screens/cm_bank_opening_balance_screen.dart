@@ -10,6 +10,7 @@ import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/models/cm_bank_account.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -110,9 +111,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
       final ob = match.first;
       setState(() {
         _currentOB = ob;
-        try {
-          _asOfDate = DateTime.parse(ob['as_of_date'].toString());
-        } catch (_) {}
+        _asOfDate = parseLocalDate(ob['as_of_date']);
         _balCtrl.text   = _fmt.format(double.tryParse(ob['opening_balance']?.toString() ?? '0') ?? 0);
         _notesCtrl.text = ob['notes'] ?? '';
       });
@@ -140,7 +139,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
         headers: headers,
         body: json.encode({
           'bank_account_id': _selAccount!.id,
-          'as_of_date':      DateFormat('yyyy-MM-dd').format(_asOfDate),
+          'as_of_date':      formatLocalDate(_asOfDate),
           'opening_balance': balance,
           'notes':           _notesCtrl.text.trim(),
         }),
@@ -403,8 +402,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
                     ],
                     rows: _allOBs.map((o) {
                       final bal = double.tryParse(o['opening_balance']?.toString() ?? '0') ?? 0;
-                      DateTime? dt;
-                      try { dt = DateTime.parse(o['as_of_date'].toString()); } catch (_) {}
+                      final dt = parseLocalDateNullable(o['as_of_date']);
                       return DataRow(cells: [
                         DataCell(Text(o['bank_account_code'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
                         DataCell(Text(o['bank_account_name'] ?? '', style: const TextStyle(fontSize: 12))),

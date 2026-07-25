@@ -5,6 +5,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../services/cm_bank_account_service.dart';
 import '../services/cm_report_service.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -72,8 +73,8 @@ class _State extends State<CmBankTransactionReportScreen>
     if (_dateFrom == null || _dateTo == null) { _showError('กรุณาระบุช่วงวันที่'); return; }
     setState(() { _loading = true; _txs = []; });
     try {
-      final df = DateFormat('yyyy-MM-dd').format(_dateFrom!);
-      final dt = DateFormat('yyyy-MM-dd').format(_dateTo!);
+      final df = formatLocalDate(_dateFrom!);
+      final dt = formatLocalDate(_dateTo!);
       final data = await _rptSvc.getBankTransactions(
         bankAccountId: _selectedAccount!.id!,
         dateFrom: df, dateTo: dt,
@@ -322,11 +323,10 @@ class _State extends State<CmBankTransactionReportScreen>
           rows: _txs.map((tx) {
             final isReceipt = tx['record_type'] == 'RECEIPT';
             final balance   = _parseD(tx['running_balance']);
+            final recordDate = parseLocalDateNullable(tx['record_date']);
             return DataRow(cells: [
               DataCell(Text(
-                tx['record_date'] != null
-                    ? _dateFmt.format(DateTime.parse(tx['record_date'].toString()))
-                    : '',
+                recordDate != null ? _dateFmt.format(recordDate) : '',
                 style: cellStyle,
               )),
               DataCell(Text(tx['doc_no'] ?? '', style: cellStyle)),

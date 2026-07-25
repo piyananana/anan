@@ -12,6 +12,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/models/cm_bank_account.dart';
 import '../../utils/thai_amount_words.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt      = NumberFormat('#,##0.00', 'en_US');
@@ -112,8 +113,8 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
       final headers = await AuthService().getAuthHeader();
       final uri = Uri.parse('${AppConfig.apiCm}/cm_check_print/checks').replace(queryParameters: {
         'bank_account_id': _selectedAccount!.id!.toString(),
-        'date_from': DateFormat('yyyy-MM-dd').format(_dateFrom),
-        'date_to':   DateFormat('yyyy-MM-dd').format(_dateTo),
+        'date_from': formatLocalDate(_dateFrom),
+        'date_to':   formatLocalDate(_dateTo),
         if (_statusFilter != 'All') 'status': _statusFilter,
       });
       final resp = await http.get(uri, headers: headers);
@@ -385,14 +386,14 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
                 )),
                 DataCell(Text(
                   c['payment_date'] != null
-                      ? _dateFmt.format(DateTime.parse(c['payment_date'].toString()))
+                      ? _dateFmt.format(parseLocalDate(c['payment_date']))
                       : '—',
                   style: const TextStyle(fontSize: 12),
                 )),
                 DataCell(Text(c['check_no'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
                 DataCell(Text(
                   c['check_date'] != null
-                      ? _dateFmt.format(DateTime.parse(c['check_date'].toString()))
+                      ? _dateFmt.format(parseLocalDate(c['check_date']))
                       : '—',
                   style: const TextStyle(fontSize: 12),
                 )),
@@ -462,8 +463,8 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
       String dateStr = '';
       try {
         final checkDate = c['check_date'] != null
-            ? DateTime.parse(c['check_date'].toString())
-            : (c['payment_date'] != null ? DateTime.parse(c['payment_date'].toString()) : DateTime.now());
+            ? parseLocalDate(c['check_date'])
+            : (c['payment_date'] != null ? parseLocalDate(c['payment_date']) : DateTime.now());
         dateStr = DateFormat(dateFmtStr).format(checkDate);
       } catch (_) {
         dateStr = c['check_date']?.toString() ?? '';

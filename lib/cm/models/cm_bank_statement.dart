@@ -1,5 +1,7 @@
 // lib/cm/models/cm_bank_statement.dart
 
+import '../../utils/date_utils.dart';
+
 class CmBankStatement {
   final int id;
   final int? bankAccountId;
@@ -48,8 +50,8 @@ class CmBankStatement {
     bankAccountName:     j['bank_account_name'] as String?,
     bankName:            j['bank_name'] as String?,
     bankShortName:       j['bank_short_name'] as String?,
-    statementDateFrom:   DateTime.parse(j['statement_date_from'].toString().substring(0, 10)),
-    statementDateTo:     DateTime.parse(j['statement_date_to'].toString().substring(0, 10)),
+    statementDateFrom:   parseLocalDate(j['statement_date_from']),
+    statementDateTo:     parseLocalDate(j['statement_date_to']),
     openingBalance:      double.tryParse(j['opening_balance']?.toString() ?? '0') ?? 0,
     closingBalance:      double.tryParse(j['closing_balance']?.toString() ?? '0') ?? 0,
     currencyCode:        j['currency_code'] as String? ?? 'THB',
@@ -101,16 +103,14 @@ class CmBankStatementLine {
   factory CmBankStatementLine.fromJson(Map<String, dynamic> j) => CmBankStatementLine(
     id:               j['id'] as int,
     statementId:      j['statement_id'] as int,
-    lineDate:         DateTime.parse(j['line_date'].toString().substring(0, 10)),
+    lineDate:         parseLocalDate(j['line_date']),
     description:      j['description'] as String?,
     withdrawalAmount: double.tryParse(j['withdrawal_amount']?.toString() ?? '0') ?? 0,
     depositAmount:    double.tryParse(j['deposit_amount']?.toString() ?? '0') ?? 0,
     balance:          double.tryParse(j['balance']?.toString() ?? '0') ?? 0,
     reference:        j['reference'] as String?,
     isReconciled:     j['is_reconciled'] == true || j['is_reconciled'] == 'true',
-    reconcileDate:    j['reconcile_date'] != null
-        ? DateTime.tryParse(j['reconcile_date'].toString().substring(0, 10))
-        : null,
+    reconcileDate:    parseLocalDateNullable(j['reconcile_date']),
     cmRecordType: j['cm_record_type'] as String?,
     cmRecordId:   j['cm_record_id'] as int?,
   );
@@ -146,14 +146,12 @@ class CmReconcileRecord {
   factory CmReconcileRecord.fromJson(Map<String, dynamic> j) => CmReconcileRecord(
     id:              j['id'] as int,
     recordType:      j['record_type'] as String,
-    recordDate:      DateTime.parse(j['record_date'].toString().substring(0, 10)),
+    recordDate:      parseLocalDate(j['record_date']),
     docNo:           j['doc_no'] as String?,
     description:     j['description'] as String?,
     amount:          double.tryParse(j['amount']?.toString() ?? '0') ?? 0,
     isReconciled:    j['is_reconciled'] == true || j['is_reconciled'] == 'true',
-    reconcileDate:   j['reconcile_date'] != null
-        ? DateTime.tryParse(j['reconcile_date'].toString().substring(0, 10))
-        : null,
+    reconcileDate:   parseLocalDateNullable(j['reconcile_date']),
     statementLineId: j['statement_line_id'] as int?,
     status:          j['status'] as String?,
   );

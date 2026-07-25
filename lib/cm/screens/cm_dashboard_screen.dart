@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -299,7 +300,7 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
           }
           return DataRow(cells: [
             DataCell(Text(
-              r['tx_date'] != null ? _dateFmt.format(DateTime.parse(r['tx_date'].toString())) : '',
+              r['tx_date'] != null ? _dateFmt.format(parseLocalDate(r['tx_date'])) : '',
               style: const TextStyle(fontSize: 12))),
             DataCell(Text(r['doc_no'] ?? '', style: const TextStyle(fontSize: 12))),
             DataCell(Container(

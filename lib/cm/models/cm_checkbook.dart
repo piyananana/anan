@@ -1,5 +1,7 @@
 // lib/cm/models/cm_checkbook.dart
 
+import '../../utils/date_utils.dart';
+
 class CmCheckbook {
   final int? id;
   final int bankAccountId;
@@ -42,8 +44,7 @@ class CmCheckbook {
     startCheckNo:    j['start_check_no'] ?? '',
     endCheckNo:      j['end_check_no'] ?? '',
     nextCheckNo:     j['next_check_no'],
-    receivedDate:    j['received_date'] != null
-        ? DateTime.tryParse(j['received_date'].toString().substring(0, 10)) : null,
+    receivedDate:    parseLocalDateNullable(j['received_date']),
     status:    j['status'] ?? 'Active',
     note:      j['note'],
     createdBy: j['created_by'],
@@ -57,7 +58,7 @@ class CmCheckbook {
     'start_check_no':  startCheckNo,
     'end_check_no':    endCheckNo,
     'next_check_no':   nextCheckNo,
-    'received_date':   receivedDate?.toIso8601String().substring(0, 10),
+    'received_date':   receivedDate != null ? formatLocalDate(receivedDate!) : null,
     'status':          status,
     'note':            note,
   };

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -387,7 +388,7 @@ class _State extends State<CmYearEndScreen> with AutomaticKeepAliveClientMixin {
                             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
                         DataCell(Text(
                           r['close_date'] != null
-                              ? _dateFmt.format(DateTime.parse(r['close_date'].toString()))
+                              ? _dateFmt.format(parseLocalDate(r['close_date']))
                               : '—',
                           style: const TextStyle(fontSize: 12),
                         )),

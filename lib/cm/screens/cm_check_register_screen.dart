@@ -5,6 +5,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../services/cm_bank_account_service.dart';
 import '../services/cm_report_service.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -71,8 +72,8 @@ class _State extends State<CmCheckRegisterScreen>
     if (_dateFrom == null || _dateTo == null) { _showError('กรุณาระบุช่วงวันที่'); return; }
     setState(() { _loading = true; _checks = []; });
     try {
-      final df = DateFormat('yyyy-MM-dd').format(_dateFrom!);
-      final dt = DateFormat('yyyy-MM-dd').format(_dateTo!);
+      final df = formatLocalDate(_dateFrom!);
+      final dt = formatLocalDate(_dateTo!);
       final data = await _rptSvc.getCheckRegister(
         bankAccountId: _selectedAccount?.id,
         dateFrom: df, dateTo: dt,
@@ -287,6 +288,8 @@ class _State extends State<CmCheckRegisterScreen>
             final isReceived = c['check_type'] == 'RECEIVED';
             final amount = _parseD(c['amount_lc']);
             final status = c['status']?.toString() ?? '';
+            final recordDate = parseLocalDateNullable(c['record_date']);
+            final checkDate  = parseLocalDateNullable(c['check_date']);
             return DataRow(cells: [
               // Type chip
               DataCell(Container(
@@ -303,13 +306,13 @@ class _State extends State<CmCheckRegisterScreen>
               )),
               // Record date
               DataCell(Text(
-                c['record_date'] != null ? _dateFmt.format(DateTime.parse(c['record_date'].toString())) : '',
+                recordDate != null ? _dateFmt.format(recordDate) : '',
                 style: cellStyle,
               )),
               DataCell(Text(c['check_no'] ?? '', style: cellStyle.copyWith(fontWeight: FontWeight.w600))),
               // Check date
               DataCell(Text(
-                c['check_date'] != null ? _dateFmt.format(DateTime.parse(c['check_date'].toString())) : '—',
+                checkDate != null ? _dateFmt.format(checkDate) : '—',
                 style: cellStyle,
               )),
               DataCell(Text(c['bank_account_code'] ?? '', style: cellStyle)),

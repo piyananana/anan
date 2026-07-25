@@ -7,6 +7,7 @@ import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/models/cm_bank_account.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -64,8 +65,8 @@ class _State extends State<CmFxGainLossReportScreen> with AutomaticKeepAliveClie
     try {
       final headers = await AuthService().getAuthHeader();
       final params = {
-        'date_from': DateFormat('yyyy-MM-dd').format(_dateFrom),
-        'date_to':   DateFormat('yyyy-MM-dd').format(_dateTo),
+        'date_from': formatLocalDate(_dateFrom),
+        'date_to':   formatLocalDate(_dateTo),
         if (_selAccount != null) 'bank_account_id': _selAccount!.id!.toString(),
       };
       final uri = Uri.parse('${AppConfig.apiCm}/cm_fx_gain_loss_report')
@@ -269,8 +270,7 @@ class _State extends State<CmFxGainLossReportScreen> with AutomaticKeepAliveClie
             } else {
               glColor = Colors.black87;
             }
-            DateTime? dt;
-            try { dt = DateTime.parse(r['revaluation_date'].toString()); } catch (_) {}
+            final dt = parseLocalDateNullable(r['revaluation_date']);
             return DataRow(cells: [
               DataCell(Text(dt != null ? _dateFmt.format(dt) : '', style: const TextStyle(fontSize: 12))),
               DataCell(Text(r['gl_doc_no'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),

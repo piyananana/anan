@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -132,7 +133,7 @@ class _State extends State<CmDocNumberScreen> with AutomaticKeepAliveClientMixin
       final headers = await AuthService().getAuthHeader();
       final params = {
         'cm_doc_type': row['cm_doc_type'] as String,
-        'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
+        'date': formatLocalDate(DateTime.now()),
         if (row['branch_id'] != null) 'branch_id': row['branch_id'].toString(),
       };
       final resp = await http.get(

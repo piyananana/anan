@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -43,7 +44,7 @@ class _State extends State<CmBankGlReconcileReportScreen>
     setState(() { _loading = true; _rows = []; });
     try {
       final headers = await AuthService().getAuthHeader();
-      final d = DateFormat('yyyy-MM-dd').format(_asOfDate!);
+      final d = formatLocalDate(_asOfDate!);
       final uri = Uri.parse('${AppConfig.apiCm}/cm_bank_gl_reconcile')
           .replace(queryParameters: {'as_of_date': d});
       final resp = await http.get(uri, headers: headers);

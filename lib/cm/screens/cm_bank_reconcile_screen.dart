@@ -6,6 +6,7 @@ import '../models/cm_bank_account.dart';
 import '../models/cm_bank_statement.dart';
 import '../services/cm_bank_account_service.dart';
 import '../services/cm_bank_statement_service.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt = NumberFormat('#,##0.00', 'en_US');
@@ -69,14 +70,14 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
     try {
       final data = await _svc.fetchReconcileItems(
         bankAccountId: _selectedAccount!.id!,
-        dateFrom: DateFormat('yyyy-MM-dd').format(_dateFrom!),
-        dateTo:   DateFormat('yyyy-MM-dd').format(_dateTo!),
+        dateFrom: formatLocalDate(_dateFrom!),
+        dateTo:   formatLocalDate(_dateTo!),
         unreconciledOnly: _unreconciledOnly,
       );
       final summary = await _svc.getReconcileSummary(
         bankAccountId: _selectedAccount!.id!,
-        dateFrom: DateFormat('yyyy-MM-dd').format(_dateFrom!),
-        dateTo:   DateFormat('yyyy-MM-dd').format(_dateTo!),
+        dateFrom: formatLocalDate(_dateFrom!),
+        dateTo:   formatLocalDate(_dateTo!),
       );
       if (!mounted) return;
       final lines = (data['statement_lines'] as List)
@@ -105,7 +106,7 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
         statementLineId: _selLine!.id,
         cmRecordType:    _selRecord!.recordType,
         cmRecordId:      _selRecord!.id,
-        reconcileDate:   DateFormat('yyyy-MM-dd').format(DateTime.now()),
+        reconcileDate:   formatLocalDate(DateTime.now()),
       );
       _showSuccess('จับคู่สำเร็จ');
       await _loadItems();

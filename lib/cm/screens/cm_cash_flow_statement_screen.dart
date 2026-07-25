@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -38,8 +39,8 @@ class _State extends State<CmCashFlowStatementScreen> with AutomaticKeepAliveCli
     try {
       final headers = await AuthService().getAuthHeader();
       final uri = Uri.parse('${AppConfig.apiCm}/cm_cash_flow_statement').replace(queryParameters: {
-        'date_from': DateFormat('yyyy-MM-dd').format(_dateFrom),
-        'date_to':   DateFormat('yyyy-MM-dd').format(_dateTo),
+        'date_from': formatLocalDate(_dateFrom),
+        'date_to':   formatLocalDate(_dateTo),
       });
       final resp = await http.get(uri, headers: headers);
       if (!mounted) return;

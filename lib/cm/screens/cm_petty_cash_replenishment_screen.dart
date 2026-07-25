@@ -8,6 +8,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/models/cm_bank_account.dart';
 import '../services/cm_period_service.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -186,7 +187,7 @@ class _State extends State<CmPettyCashReplenishmentScreen> with AutomaticKeepAli
     setState(() {
       _selRpl = rpl;
       _isNew  = false;
-      try { _rplDate = DateTime.parse(rpl['replenishment_date'].toString()); } catch (_) {}
+      _rplDate = parseLocalDate(rpl['replenishment_date']);
       _selPettyCashAccount = _pettyCashAccounts.where((a) => a.id == rpl['petty_cash_account_id']).firstOrNull;
       _selSourceAccount    = _bankAccounts.where((a) => a.id == rpl['source_bank_account_id']).firstOrNull;
       _selGlDocId   = rpl['gl_doc_id'] as int?;
@@ -206,7 +207,7 @@ class _State extends State<CmPettyCashReplenishmentScreen> with AutomaticKeepAli
     try {
       final headers = {...await AuthService().getAuthHeader(), 'Content-Type': 'application/json'};
       final body = json.encode({
-        'replenishment_date':     DateFormat('yyyy-MM-dd').format(_rplDate),
+        'replenishment_date':     formatLocalDate(_rplDate),
         'petty_cash_account_id':  _selPettyCashAccount!.id,
         'source_bank_account_id': _selSourceAccount?.id,
         'gl_doc_id':              _selGlDocId,
@@ -474,8 +475,7 @@ class _State extends State<CmPettyCashReplenishmentScreen> with AutomaticKeepAli
                     itemBuilder: (_, i) {
                       final r = _list[i];
                       final sel = (_selRpl?['id']) == r['id'];
-                      DateTime? dt;
-                      try { dt = DateTime.parse(r['replenishment_date'].toString()); } catch (_) {}
+                      final dt = parseLocalDateNullable(r['replenishment_date']);
                       return InkWell(
                         onTap: () => _selectRpl(r),
                         child: Container(
@@ -649,8 +649,7 @@ class _State extends State<CmPettyCashReplenishmentScreen> with AutomaticKeepAli
             DataColumn(label: Text('จำนวนเงิน'), numeric: true),
           ],
           rows: vouchers.map((v) {
-            DateTime? dt;
-            try { dt = DateTime.parse(v['voucher_date'].toString()); } catch (_) {}
+            final dt = parseLocalDateNullable(v['voucher_date']);
             return DataRow(cells: [
               DataCell(Text(v['voucher_no'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
               DataCell(Text(dt != null ? _dateFmt.format(dt) : '', style: const TextStyle(fontSize: 12))),

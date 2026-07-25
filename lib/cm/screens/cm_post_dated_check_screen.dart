@@ -7,6 +7,7 @@ import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../services/cm_period_service.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme   = Color(0xFF1565C0);
 final _fmt      = NumberFormat('#,##0.00', 'en_US');
@@ -155,7 +156,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
       _selected = row;
       _isNew    = false;
       _fDir       = row['direction'] ?? 'RECEIVED';
-      try { _fCheckDate = DateTime.parse(row['check_date'].toString()); } catch (_) {}
+      _fCheckDate = parseLocalDate(row['check_date']);
       _fBankId    = row['bank_id'] as int?;
       _fOurBankId = row['our_bank_account_id'] as int?;
       _checkNoCtrl.text    = row['check_no'] ?? '';
@@ -169,7 +170,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
     if (_checkNoCtrl.text.trim().isEmpty) { _showErr('กรุณากรอกเลขที่เช็ค'); return; }
     if (_fOurBankId == null) { _showErr('กรุณาเลือกบัญชีธนาคารของเรา'); return; }
 
-    final checkDate = DateFormat('yyyy-MM-dd').format(_fCheckDate);
+    final checkDate = formatLocalDate(_fCheckDate);
     if (!await CmPeriodService.canPost(context, _fCheckDate)) return;
 
     setState(() => _saving = true);
@@ -407,8 +408,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
                                   itemBuilder: (_, i) {
                                     final row = _list[i];
                                     final sel = _selected?['id'] == row['id'];
-                                    DateTime? chkDate;
-                                    try { chkDate = DateTime.parse(row['check_date'].toString()); } catch (_) {}
+                                    final chkDate = parseLocalDateNullable(row['check_date']);
                                     final status = row['status'] as String? ?? '';
                                     return InkWell(
                                       onTap: () => _selectItem(row),
@@ -543,8 +543,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
 
   Widget _buildDetail(Map<String, dynamic> row) {
     final status = row['status'] as String? ?? '';
-    DateTime? chkDate;
-    try { chkDate = DateTime.parse(row['check_date'].toString()); } catch (_) {}
+    final chkDate = parseLocalDateNullable(row['check_date']);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../services/cm_pre_close_check_service.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -37,7 +38,7 @@ class _State extends State<CmPreCloseCheckScreen>
     if (_periodDate == null) return;
     setState(() { _loading = true; _hasRun = false; });
     try {
-      final result = await _svc.runChecks(DateFormat('yyyy-MM-dd').format(_periodDate!));
+      final result = await _svc.runChecks(formatLocalDate(_periodDate!));
       if (!mounted) return;
       setState(() {
         _issues    = List<Map<String, dynamic>>.from(result['issues'] as List);

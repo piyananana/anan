@@ -1,5 +1,7 @@
 // lib/cm/models/cm_receipt.dart
 
+import '../../utils/date_utils.dart';
+
 class CmReceipt {
   final int?     id;
   final DateTime receiptDate;
@@ -70,7 +72,7 @@ class CmReceipt {
 
   factory CmReceipt.fromJson(Map<String, dynamic> j) => CmReceipt(
     id:                  j['id'],
-    receiptDate:         DateTime.parse(j['receipt_date'].toString().substring(0, 10)),
+    receiptDate:         parseLocalDate(j['receipt_date']),
     bankAccountId:       j['bank_account_id'],
     bankAccountCode:     j['bank_account_code'],
     bankAccountName:     j['bank_account_name'],
@@ -89,12 +91,10 @@ class CmReceipt {
     currencyCode:        j['currency_code'] ?? 'THB',
     exchangeRate:        double.tryParse(j['exchange_rate']?.toString() ?? '1') ?? 1,
     checkNo:             j['check_no'],
-    checkDate:           j['check_date'] != null
-        ? DateTime.tryParse(j['check_date'].toString().substring(0, 10)) : null,
+    checkDate:           parseLocalDateNullable(j['check_date']),
     drawerBank:          j['drawer_bank'],
     status:              j['status'] ?? 'Pending',
-    clearingDate:        j['clearing_date'] != null
-        ? DateTime.tryParse(j['clearing_date'].toString().substring(0, 10)) : null,
+    clearingDate:        parseLocalDateNullable(j['clearing_date']),
     clearingNote:        j['clearing_note'],
     glEntryId:           j['gl_entry_id'],
     createdAt:           j['created_at'] != null ? DateTime.tryParse(j['created_at']) : null,

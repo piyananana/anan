@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../utils/date_utils.dart';
 
 class CmPeriodService {
   static final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -14,7 +15,7 @@ class CmPeriodService {
   static Future<Map<String, dynamic>?> getPeriodStatus(DateTime date) async {
     try {
       final headers = await AuthService().getAuthHeader();
-      final dateStr = DateFormat('yyyy-MM-dd').format(date);
+      final dateStr = formatLocalDate(date);
       final resp = await http.get(
         Uri.parse('${AppConfig.apiGl}/gl_posting_period/cm_check')
             .replace(queryParameters: {'date': dateStr}),

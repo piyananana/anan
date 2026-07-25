@@ -1,5 +1,7 @@
 // lib/cm/models/cm_bank_fx_revaluation.dart
 
+import '../../utils/date_utils.dart';
+
 class CmBankFxRevaluationLine {
   final int id;
   final int revaluationId;
@@ -149,7 +151,7 @@ class CmBankFxRevaluation {
     final rawLines = j['lines'] as List?;
     return CmBankFxRevaluation(
       id:                  j['id'] as int,
-      revaluationDate:     DateTime.parse(j['revaluation_date'].toString().substring(0, 10)),
+      revaluationDate:     parseLocalDate(j['revaluation_date']),
       description:         j['description'] as String?,
       glDocId:             j['gl_doc_id'] as int?,
       glDocCode:           j['gl_doc_code'] as String?,

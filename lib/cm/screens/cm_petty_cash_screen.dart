@@ -11,6 +11,7 @@ import '../models/cm_petty_cash.dart';
 import '../services/cm_bank_account_service.dart';
 import '../services/cm_petty_cash_service.dart';
 import '../services/cm_period_service.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt = DateFormat('dd/MM/yyyy');
@@ -294,10 +295,10 @@ class _VoucherTabState extends State<_VoucherTab> {
         pettyCashAccountId: widget.account.id,
         status: _statusFilter == 'All' ? null : _statusFilter,
         dateFrom: _dateFrom != null
-            ? DateFormat('yyyy-MM-dd').format(_dateFrom!)
+            ? formatLocalDate(_dateFrom!)
             : null,
         dateTo: _dateTo != null
-            ? DateFormat('yyyy-MM-dd').format(_dateTo!)
+            ? formatLocalDate(_dateTo!)
             : null,
       );
       setState(() {
@@ -359,7 +360,7 @@ class _VoucherTabState extends State<_VoucherTab> {
     if (amount == null || amount <= 0) { _err('กรุณาระบุจำนวนเงินที่ถูกต้อง'); return; }
 
     final body = {
-      'voucher_date':          DateFormat('yyyy-MM-dd').format(_formDate!),
+      'voucher_date':          formatLocalDate(_formDate!),
       'petty_cash_account_id': widget.account.id,
       'payee_name':            _payeeCtrl.text.trim().isEmpty ? null : _payeeCtrl.text.trim(),
       'description':           _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
@@ -917,8 +918,8 @@ class _ReplenishmentTabState extends State<_ReplenishmentTab> {
       final list = await _svc.fetchReplenishments(
         pettyCashAccountId: widget.account.id,
         status: _statusFilter == 'All' ? null : _statusFilter,
-        dateFrom: _dateFrom != null ? DateFormat('yyyy-MM-dd').format(_dateFrom!) : null,
-        dateTo:   _dateTo != null   ? DateFormat('yyyy-MM-dd').format(_dateTo!)   : null,
+        dateFrom: _dateFrom != null ? formatLocalDate(_dateFrom!) : null,
+        dateTo:   _dateTo != null   ? formatLocalDate(_dateTo!)   : null,
       );
       setState(() {
         _replenishments = list;
@@ -1005,7 +1006,7 @@ class _ReplenishmentTabState extends State<_ReplenishmentTab> {
 
     final total = _detailVouchers.fold(0.0, (s, v) => s + v.amount);
     final body = {
-      'replenishment_date':     DateFormat('yyyy-MM-dd').format(_formDate!),
+      'replenishment_date':     formatLocalDate(_formDate!),
       'petty_cash_account_id':  widget.account.id,
       'source_bank_account_id': _srcBankId,
       'total_amount':            total,

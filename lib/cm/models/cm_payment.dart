@@ -1,5 +1,7 @@
 // lib/cm/models/cm_payment.dart
 
+import '../../utils/date_utils.dart';
+
 class CmPayment {
   final int?     id;
   final DateTime paymentDate;
@@ -75,7 +77,7 @@ class CmPayment {
   bool get isFcy       => currencyCode != 'THB';
 
   Map<String, dynamic> toJson() => {
-    'payment_date':       paymentDate.toIso8601String().substring(0, 10),
+    'payment_date':       formatLocalDate(paymentDate),
     'bank_account_id':    bankAccountId,
     'payment_method_id':  paymentMethodId,
     'payment_method_type': paymentMethodType,
@@ -88,14 +90,14 @@ class CmPayment {
     'currency_code':      currencyCode,
     'exchange_rate':      exchangeRate,
     'check_no':           checkNo,
-    'check_date':         checkDate?.toIso8601String().substring(0, 10),
+    'check_date':         checkDate != null ? formatLocalDate(checkDate!) : null,
     'checkbook_id':       checkbookId,
     'remark':             remark,
   };
 
   factory CmPayment.fromJson(Map<String, dynamic> j) => CmPayment(
     id:                j['id'],
-    paymentDate:       DateTime.parse(j['payment_date'].toString().substring(0, 10)),
+    paymentDate:       parseLocalDate(j['payment_date']),
     bankAccountId:     j['bank_account_id'],
     bankAccountCode:   j['bank_account_code'],
     bankAccountName:   j['bank_account_name'],
@@ -115,13 +117,11 @@ class CmPayment {
     currencyCode:      j['currency_code'] ?? 'THB',
     exchangeRate:      double.tryParse(j['exchange_rate']?.toString() ?? '1') ?? 1,
     checkNo:           j['check_no'],
-    checkDate:         j['check_date'] != null
-        ? DateTime.tryParse(j['check_date'].toString().substring(0, 10)) : null,
+    checkDate:         parseLocalDateNullable(j['check_date']),
     checkbookId:       j['checkbook_id'],
     checkbookCode:     j['checkbook_code'],
     status:            j['status'] ?? 'Pending',
-    clearingDate:      j['clearing_date'] != null
-        ? DateTime.tryParse(j['clearing_date'].toString().substring(0, 10)) : null,
+    clearingDate:      parseLocalDateNullable(j['clearing_date']),
     clearingNote:      j['clearing_note'],
     glEntryId:         j['gl_entry_id'],
     remark:            j['remark'],

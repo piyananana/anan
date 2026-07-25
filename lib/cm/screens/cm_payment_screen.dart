@@ -12,6 +12,7 @@ import '../services/cm_bank_account_service.dart';
 import '../services/cm_checkbook_service.dart';
 import '../services/cm_payment_service.dart';
 import '../services/cm_period_service.dart';
+import '../../utils/date_utils.dart';
 
 class CmPaymentScreen extends StatefulWidget {
   const CmPaymentScreen({super.key});
@@ -163,7 +164,7 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: _kColor),
               onPressed: () => Navigator.pop(ctx, {
-                'date': clearDate.toIso8601String().substring(0, 10),
+                'date': formatLocalDate(clearDate),
                 'note': noteCtrl.text.trim(),
               }),
               child: const Text('ยืนยัน'),
@@ -392,9 +393,9 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
     InkWell(
       onTap: () async {
         final d = await showDatePicker(context: context,
-            initialDate: value != null ? DateTime.parse(value) : DateTime.now(),
+            initialDate: value != null ? parseLocalDate(value) : DateTime.now(),
             firstDate: DateTime(2000), lastDate: DateTime(2100));
-        onChanged(d?.toIso8601String().substring(0, 10));
+        onChanged(d != null ? formatLocalDate(d) : null);
       },
       child: InputDecorator(
         decoration: InputDecoration(
@@ -405,7 +406,7 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
                   onPressed: () => onChanged(null), padding: EdgeInsets.zero)
               : null,
         ),
-        child: Text(value != null ? _dateFmt.format(DateTime.parse(value)) : '—',
+        child: Text(value != null ? _dateFmt.format(parseLocalDate(value)) : '—',
             style: const TextStyle(fontSize: 13)),
       ),
     );

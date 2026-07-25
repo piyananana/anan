@@ -12,6 +12,7 @@ import '../../sa/services/sa_module_document_service.dart';
 import '../models/cm_bank_fx_revaluation.dart';
 import '../services/cm_bank_fx_revaluation_service.dart';
 import '../services/cm_period_service.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00',   'en_US');
@@ -203,7 +204,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
     setState(() { _saving = true; _previewed = false; });
     try {
       final lines = await _svc.previewLines(
-        revaluationDate: DateFormat('yyyy-MM-dd').format(_formDate!),
+        revaluationDate: formatLocalDate(_formDate!),
         rates: rates,
       );
       if (!mounted) return;
@@ -229,7 +230,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
     setState(() => _saving = true);
     try {
       final body = {
-        'revaluation_date':   DateFormat('yyyy-MM-dd').format(_formDate!),
+        'revaluation_date':   formatLocalDate(_formDate!),
         'description':        _formDescCtrl.text.isEmpty ? null : _formDescCtrl.text,
         'gl_doc_id':          _formGlDocId,
         'fx_gain_account_id': _formGainAcctId,

@@ -9,6 +9,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 import '../services/cm_period_service.dart';
 
 const _kTheme  = Color(0xFF1565C0);
@@ -143,7 +144,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
       _fGlAccId     = row['gl_account_id'] as int?;
       _amountCtrl.text = (row['amount'] as num?)?.toStringAsFixed(2) ?? '';
       _descCtrl.text   = row['description'] ?? '';
-      try { _fChargeDate = DateTime.parse(row['charge_date'].toString()); } catch (_) {}
+      _fChargeDate = parseLocalDate(row['charge_date']);
     });
   }
 
@@ -155,7 +156,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
       final h = await _headers();
       final body = json.encode({
         'bank_account_id': _fBankAccId,
-        'charge_date':     DateFormat('yyyy-MM-dd').format(_fChargeDate),
+        'charge_date':     formatLocalDate(_fChargeDate),
         'charge_type':     _fChargeType,
         'amount':          double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
         'gl_account_id':   _fGlAccId,
@@ -176,8 +177,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
 
   Future<void> _post(Map<String, dynamic> row) async {
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
-    DateTime chargeDate = DateTime.now();
-    try { chargeDate = DateTime.parse(row['charge_date'].toString()); } catch (_) {}
+    DateTime chargeDate = parseLocalDate(row['charge_date']);
     if (!await CmPeriodService.canPost(context, chargeDate)) return;
     final confirm = await showDialog<bool>(
       context: context,
@@ -377,8 +377,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
                                     final row = _list[i];
                                     final sel = _selected?['id'] == row['id'];
                                     final status = row['status'] as String? ?? '';
-                                    DateTime? dt;
-                                    try { dt = DateTime.parse(row['charge_date'].toString()); } catch (_) {}
+                                    final dt = parseLocalDateNullable(row['charge_date']);
                                     return InkWell(
                                       onTap: () => _selectItem(row),
                                       child: Container(
@@ -525,8 +524,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
   Widget _buildDetail(Map<String, dynamic> row) {
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final status = row['status'] as String? ?? '';
-    DateTime? dt;
-    try { dt = DateTime.parse(row['charge_date'].toString()); } catch (_) {}
+    final dt = parseLocalDateNullable(row['charge_date']);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),

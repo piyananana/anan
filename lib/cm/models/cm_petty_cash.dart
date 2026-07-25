@@ -1,5 +1,7 @@
 // lib/cm/models/cm_petty_cash.dart
 
+import '../../utils/date_utils.dart';
+
 class CmPettyCashVoucher {
   final int id;
   final String voucherNo;
@@ -45,7 +47,7 @@ class CmPettyCashVoucher {
   factory CmPettyCashVoucher.fromJson(Map<String, dynamic> j) => CmPettyCashVoucher(
     id:                    j['id'] as int,
     voucherNo:             j['voucher_no'] as String,
-    voucherDate:           DateTime.parse(j['voucher_date'].toString().substring(0, 10)),
+    voucherDate:           parseLocalDate(j['voucher_date']),
     pettyCashAccountId:    j['petty_cash_account_id'] as int?,
     pettyCashAccountCode:  j['petty_cash_account_code'] as String?,
     pettyCashAccountName:  j['petty_cash_account_name'] as String?,
@@ -117,7 +119,7 @@ class CmPettyCashReplenishment {
   bool get isVoided => status == 'Voided';
 
   Map<String, dynamic> toCreateJson() => {
-    'replenishment_date':     replenishmentDate.toIso8601String().substring(0, 10),
+    'replenishment_date':     formatLocalDate(replenishmentDate),
     'petty_cash_account_id':  pettyCashAccountId,
     'source_bank_account_id': sourceBankAccountId,
     'total_amount':            totalAmount,
@@ -126,7 +128,7 @@ class CmPettyCashReplenishment {
   };
 
   Map<String, dynamic> toUpdateJson() => {
-    'replenishment_date':     replenishmentDate.toIso8601String().substring(0, 10),
+    'replenishment_date':     formatLocalDate(replenishmentDate),
     'source_bank_account_id': sourceBankAccountId,
     'total_amount':            totalAmount,
     'description':             description,
@@ -137,7 +139,7 @@ class CmPettyCashReplenishment {
       CmPettyCashReplenishment(
     id:                   j['id'] as int,
     replenishmentNo:      j['replenishment_no'] as String,
-    replenishmentDate:    DateTime.parse(j['replenishment_date'].toString().substring(0, 10)),
+    replenishmentDate:    parseLocalDate(j['replenishment_date']),
     pettyCashAccountId:   j['petty_cash_account_id'] as int?,
     pettyCashAccountCode: j['petty_cash_account_code'] as String?,
     pettyCashAccountName: j['petty_cash_account_name'] as String?,

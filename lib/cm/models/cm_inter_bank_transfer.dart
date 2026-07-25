@@ -1,5 +1,7 @@
 // lib/cm/models/cm_inter_bank_transfer.dart
 
+import '../../utils/date_utils.dart';
+
 class CmInterBankTransfer {
   final int? id;
   final String? transferNo;
@@ -65,7 +67,7 @@ class CmInterBankTransfer {
       CmInterBankTransfer(
         id:                j['id'],
         transferNo:        j['transfer_no'],
-        transferDate:      DateTime.parse(j['transfer_date'].toString()),
+        transferDate:      parseLocalDate(j['transfer_date']),
         fromBankAccountId: j['from_bank_account_id'],
         fromAccountCode:   j['from_account_code'],
         fromAccountName:   j['from_account_name'],

@@ -6,6 +6,7 @@ import '../models/cm_receipt.dart';
 import '../services/cm_bank_account_service.dart';
 import '../services/cm_period_service.dart';
 import '../services/cm_receipt_service.dart';
+import '../../utils/date_utils.dart';
 
 class CmReceiptScreen extends StatefulWidget {
   const CmReceiptScreen({super.key});
@@ -98,7 +99,7 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
   Future<void> _clear(CmReceipt r) async {
     final result = await _showClearDialog(r);
     if (result == null) return;
-    final dt = DateTime.parse(result['date']!);
+    final dt = parseLocalDate(result['date']);
     if (!await CmPeriodService.canPost(context, dt)) return;
     try {
       await _svc.clearReceipt(r.id!, clearingDate: result['date'], clearingNote: result['note']);
@@ -170,7 +171,7 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: _kColor),
               onPressed: () => Navigator.pop(ctx, {
-                'date': clearDate.toIso8601String().substring(0, 10),
+                'date': formatLocalDate(clearDate),
                 'note': noteCtrl.text.trim(),
               }),
               child: const Text('ยืนยัน'),
@@ -355,9 +356,9 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
     InkWell(
       onTap: () async {
         final d = await showDatePicker(context: context,
-            initialDate: value != null ? DateTime.parse(value) : DateTime.now(),
+            initialDate: value != null ? parseLocalDate(value) : DateTime.now(),
             firstDate: DateTime(2000), lastDate: DateTime(2100));
-        onChanged(d?.toIso8601String().substring(0, 10));
+        onChanged(d != null ? formatLocalDate(d) : null);
       },
       child: InputDecorator(
         decoration: InputDecoration(
@@ -368,7 +369,7 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
                   onPressed: () => onChanged(null), padding: EdgeInsets.zero)
               : null,
         ),
-        child: Text(value != null ? _dateFmt.format(DateTime.parse(value)) : '—',
+        child: Text(value != null ? _dateFmt.format(parseLocalDate(value)) : '—',
             style: const TextStyle(fontSize: 13)),
       ),
     );

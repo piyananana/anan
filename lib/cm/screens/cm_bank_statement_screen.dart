@@ -11,6 +11,7 @@ import '../models/cm_bank_account.dart';
 import '../models/cm_bank_statement.dart';
 import '../services/cm_bank_account_service.dart';
 import '../services/cm_bank_statement_service.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt = NumberFormat('#,##0.00', 'en_US');
@@ -71,8 +72,8 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
       final list = await _stmtSvc.fetchStatements(
         bankAccountId: _selectedAccount!.id,
         status:   _statusFilter == 'All' ? null : _statusFilter,
-        dateFrom: _filterFrom != null ? DateFormat('yyyy-MM-dd').format(_filterFrom!) : null,
-        dateTo:   _filterTo   != null ? DateFormat('yyyy-MM-dd').format(_filterTo!)   : null,
+        dateFrom: _filterFrom != null ? formatLocalDate(_filterFrom!) : null,
+        dateTo:   _filterTo   != null ? formatLocalDate(_filterTo!)   : null,
       );
       if (!mounted) return;
       setState(() { _statements = list; _loadingStmts = false; });
@@ -695,8 +696,8 @@ class _StatementFormDialogState extends State<_StatementFormDialog> {
     try {
       final body = {
         'bank_account_id':      widget.accountId,
-        'statement_date_from':  DateFormat('yyyy-MM-dd').format(_dateFrom!),
-        'statement_date_to':    DateFormat('yyyy-MM-dd').format(_dateTo!),
+        'statement_date_from':  formatLocalDate(_dateFrom!),
+        'statement_date_to':    formatLocalDate(_dateTo!),
         'opening_balance':      double.tryParse(_openCtrl.text) ?? 0,
         'closing_balance':      double.tryParse(_closeCtrl.text) ?? 0,
         'notes':                _notesCtrl.text.isEmpty ? null : _notesCtrl.text,
@@ -828,7 +829,7 @@ class _LineFormDialogState extends State<_LineFormDialog> {
     setState(() => _saving = true);
     try {
       final body = {
-        'line_date':         DateFormat('yyyy-MM-dd').format(_date!),
+        'line_date':         formatLocalDate(_date!),
         'description':       _descCtrl.text.isEmpty ? null : _descCtrl.text,
         'withdrawal_amount': double.tryParse(_wdCtrl.text)  ?? 0,
         'deposit_amount':    double.tryParse(_depCtrl.text) ?? 0,

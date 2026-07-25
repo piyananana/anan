@@ -10,6 +10,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_bank_file_format.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -85,8 +86,8 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
       final headers = await AuthService().getAuthHeader();
       final params = {
         'bank_account_id': _selAccount!.id!.toString(),
-        'date_from': DateFormat('yyyy-MM-dd').format(_dateFrom),
-        'date_to':   DateFormat('yyyy-MM-dd').format(_dateTo),
+        'date_from': formatLocalDate(_dateFrom),
+        'date_to':   formatLocalDate(_dateTo),
         if (_statusFilter != 'All') 'status': _statusFilter,
       };
       final resp = await http.get(
@@ -384,8 +385,7 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
               rows: _payments.map((p) {
                 final id   = p['id'] as int;
                 final isSel = _selected.contains(id);
-                DateTime? dt;
-                try { dt = DateTime.parse(p['payment_date'].toString()); } catch (_) {}
+                final dt = parseLocalDateNullable(p['payment_date']);
                 return DataRow(
                   selected: isSel,
                   onSelectChanged: (v) => _toggleOne(id, v),

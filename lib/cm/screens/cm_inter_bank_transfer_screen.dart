@@ -12,6 +12,7 @@ import '../models/cm_inter_bank_transfer.dart';
 import '../services/cm_bank_account_service.dart';
 import '../services/cm_inter_bank_transfer_service.dart';
 import '../services/cm_period_service.dart';
+import '../../utils/date_utils.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -103,8 +104,8 @@ class _State extends State<CmInterBankTransferScreen>
   Future<void> _loadList() async {
     setState(() => _loadingList = true);
     try {
-      final df = _filterFrom != null ? DateFormat('yyyy-MM-dd').format(_filterFrom!) : null;
-      final dt = _filterTo   != null ? DateFormat('yyyy-MM-dd').format(_filterTo!)   : null;
+      final df = _filterFrom != null ? formatLocalDate(_filterFrom!) : null;
+      final dt = _filterTo   != null ? formatLocalDate(_filterTo!)   : null;
       final list = await _txSvc.fetchRows(dateFrom: df, dateTo: dt);
       if (!mounted) return;
       setState(() { _txList = list; _loadingList = false; });
@@ -166,7 +167,7 @@ class _State extends State<CmInterBankTransferScreen>
     setState(() => _saving = true);
     try {
       final body = {
-        'transfer_date':        DateFormat('yyyy-MM-dd').format(_fDate),
+        'transfer_date':        formatLocalDate(_fDate),
         'from_bank_account_id': _fFromAcc!.id,
         'to_bank_account_id':   _fToAcc!.id,
         'amount':               amt,
