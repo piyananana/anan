@@ -13,6 +13,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
 final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -73,8 +74,8 @@ class _ApRemittanceAdviceScreenState extends State<ApRemittanceAdviceScreen>
     try {
       final h = await _headers();
       final params = <String, String>{'status': _fStatus};
-      if (_fDateFrom != null) params['date_from'] = DateFormat('yyyy-MM-dd').format(_fDateFrom!);
-      if (_fDateTo   != null) params['date_to']   = DateFormat('yyyy-MM-dd').format(_fDateTo!);
+      if (_fDateFrom != null) params['date_from'] = formatLocalDate(_fDateFrom!);
+      if (_fDateTo   != null) params['date_to']   = formatLocalDate(_fDateTo!);
       final uri = Uri.parse('${AppConfig.apiCm}/cm_payment')
           .replace(queryParameters: params);
       final r = await http.get(uri, headers: h);
@@ -170,8 +171,7 @@ class _ApRemittanceAdviceScreenState extends State<ApRemittanceAdviceScreen>
         ? payment['payment_method_name_en']
         : (payment['payment_method_name_th'] ?? payment['payment_method_type'] ?? '');
 
-    DateTime? payDate;
-    try { payDate = DateTime.parse(payment['payment_date'].toString()); } catch (_) {}
+    final payDate = parseLocalDateNullable(payment['payment_date']);
 
     doc.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -271,10 +271,8 @@ class _ApRemittanceAdviceScreenState extends State<ApRemittanceAdviceScreen>
                       .toList(),
                 ),
                 ...invoices.map((inv) {
-                  DateTime? invDate;
-                  try { invDate = DateTime.parse(inv['invoice_date'].toString()); } catch (_) {}
-                  DateTime? dueDate;
-                  try { dueDate = DateTime.parse(inv['due_date'].toString()); } catch (_) {}
+                  final invDate = parseLocalDateNullable(inv['invoice_date']);
+                  final dueDate = parseLocalDateNullable(inv['due_date']);
                   return pw.TableRow(children: [
                     inv['doc_no'] ?? '',
                     invDate != null ? _dateFmt.format(invDate) : '',
@@ -487,8 +485,7 @@ class _ApRemittanceAdviceScreenState extends State<ApRemittanceAdviceScreen>
                               final p = _payments[i];
                               final id = p['id'] as int;
                               final sel = _selected.contains(id);
-                              DateTime? dt;
-                              try { dt = DateTime.parse(p['payment_date'].toString()); } catch (_) {}
+                              final dt = parseLocalDateNullable(p['payment_date']);
                               return Container(
                                 color: sel ? Colors.blue.withOpacity(0.07) : (i.isEven ? Colors.grey.shade50 : Colors.white),
                                 child: Row(children: [

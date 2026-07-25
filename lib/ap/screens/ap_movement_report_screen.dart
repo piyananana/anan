@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
 import '../services/ap_movement_report_service.dart';
@@ -80,8 +81,8 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
     setState(() { _isLoading = true; _reportData = []; });
     try {
       final raw = await _reportService.getMovementReport(
-        dateFrom:       DateFormat('yyyy-MM-dd').format(_dateFrom),
-        dateTo:         DateFormat('yyyy-MM-dd').format(_dateTo),
+        dateFrom:       formatLocalDate(_dateFrom),
+        dateTo:         formatLocalDate(_dateTo),
         vendorGroupIds: _selectedGroupIds,
         vendorCodeFrom: _vendorCodeFrom,
         vendorCodeTo:   _vendorCodeTo,

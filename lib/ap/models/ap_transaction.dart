@@ -1,4 +1,5 @@
 // lib/ap/models/ap_transaction.dart
+import '../../utils/date_utils.dart';
 
 // AP document types (sys_doc_type in sa_module_document, sys_module=12)
 const int apDocTypePurchaseInvoice    = 10;
@@ -145,8 +146,8 @@ class ApTransactionHeader {
       id: json['id'] ?? 0,
       docId: json['doc_id'] ?? 0,
       docNo: json['doc_no'] ?? 'AUTO',
-      docDate: DateTime.tryParse(json['doc_date']?.toString() ?? '') ?? DateTime.now(),
-      dueDate: json['due_date'] != null ? DateTime.tryParse(json['due_date'].toString()) : null,
+      docDate: parseLocalDate(json['doc_date']),
+      dueDate: parseLocalDateNullable(json['due_date']),
       periodId: json['period_id'] ?? 0,
       vendorId: json['vendor_id'] ?? 0,
       vendorCode: json['vendor_code'],
@@ -201,8 +202,8 @@ class ApTransactionHeader {
   Map<String, dynamic> toJson() => {
         'doc_id': docId,
         'doc_no': docNo,
-        'doc_date': docDate.toIso8601String().substring(0, 10),
-        if (dueDate != null) 'due_date': dueDate!.toIso8601String().substring(0, 10),
+        'doc_date': formatLocalDate(docDate),
+        if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
         'vendor_id': vendorId,
         'vendor_code': vendorCode,
         'vendor_name_th': vendorNameTh,
@@ -386,8 +387,7 @@ class ApTransactionApply {
       id: json['id'], transactionId: json['transaction_id'],
       appliedToId: json['applied_to_id'] ?? 0,
       appliedToDocNo: json['applied_to_doc_no'],
-      appliedToDocDate: json['applied_to_doc_date'] != null
-          ? DateTime.tryParse(json['applied_to_doc_date'].toString()) : null,
+      appliedToDocDate: parseLocalDateNullable(json['applied_to_doc_date']),
       appliedAmountLc: toDouble(json['applied_amount_lc']),
       appliedAmountFc: toDouble(json['applied_amount_fc']),
       applyType: json['apply_type'] ?? 'invoice',
@@ -448,7 +448,7 @@ class ApTransactionPayment {
       amountLc: toDouble(json['amount_lc']),
       amountFc: toDouble(json['amount_fc']),
       refNo: json['ref_no'],
-      paymentDate: json['payment_date'] != null ? DateTime.tryParse(json['payment_date'].toString()) : null,
+      paymentDate: parseLocalDateNullable(json['payment_date']),
       remark: json['remark'],
       drawerBankName: json['drawer_bank_name'],
       drawerBankBranch: json['drawer_bank_branch'],
@@ -468,7 +468,7 @@ class ApTransactionPayment {
         'amount_lc': amountLc,
         'amount_fc': amountFc,
         'ref_no': refNo,
-        if (paymentDate != null) 'payment_date': paymentDate!.toIso8601String().substring(0, 10),
+        if (paymentDate != null) 'payment_date': formatLocalDate(paymentDate!),
         'remark': remark,
         'drawer_bank_name': drawerBankName,
         'drawer_bank_branch': drawerBankBranch,
@@ -573,6 +573,9 @@ class ApOpenInvoice {
   final DateTime? dueDate;
   final double totalAmountLc;
   final double balanceAmountLc;
+  final double totalAmountFc;
+  final double vatAmountFc;
+  final double vatAmountLc;
   final String currencyCode;
   final double exchangeRate;
   final String? docCode;
@@ -582,6 +585,7 @@ class ApOpenInvoice {
     required this.id, required this.docNo,
     this.docDate, this.dueDate,
     this.totalAmountLc = 0, this.balanceAmountLc = 0,
+    this.totalAmountFc = 0, this.vatAmountFc = 0, this.vatAmountLc = 0,
     this.currencyCode = 'THB', this.exchangeRate = 1,
     this.docCode, this.sysDocType,
   });
@@ -591,10 +595,13 @@ class ApOpenInvoice {
     return ApOpenInvoice(
       id: json['id'] ?? 0,
       docNo: json['doc_no'] ?? '',
-      docDate: json['doc_date'] != null ? DateTime.tryParse(json['doc_date'].toString()) : null,
-      dueDate: json['due_date'] != null ? DateTime.tryParse(json['due_date'].toString()) : null,
+      docDate: parseLocalDateNullable(json['doc_date']),
+      dueDate: parseLocalDateNullable(json['due_date']),
       totalAmountLc: toDouble(json['total_amount_lc']),
       balanceAmountLc: toDouble(json['balance_amount_lc']),
+      totalAmountFc: toDouble(json['total_amount_fc']),
+      vatAmountFc: toDouble(json['vat_amount_fc']),
+      vatAmountLc: toDouble(json['vat_amount_lc']),
       currencyCode: json['currency_code'] ?? 'THB',
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       docCode: json['doc_code'],

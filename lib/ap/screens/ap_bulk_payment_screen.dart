@@ -10,6 +10,7 @@ import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/services/cm_period_service.dart';
+import '../../utils/date_utils.dart';
 
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
 final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -94,7 +95,7 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
       final h = await _headers();
       final params = <String, String>{};
       if (_fVendorSearch.isNotEmpty) params['vendor_search'] = _fVendorSearch;
-      if (_fDueDateTo != null) params['due_date_to'] = DateFormat('yyyy-MM-dd').format(_fDueDateTo!);
+      if (_fDueDateTo != null) params['due_date_to'] = formatLocalDate(_fDueDateTo!);
       final uri = Uri.parse('${AppConfig.apiAp}/ap_bulk_payment/eligible')
           .replace(queryParameters: params.isNotEmpty ? params : null);
       final r = await http.get(uri, headers: h);
@@ -166,7 +167,7 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
           .toList();
       final body = json.encode({
         'bank_account_id': _fBankAccId,
-        'payment_date':    DateFormat('yyyy-MM-dd').format(_fPaymentDate),
+        'payment_date':    formatLocalDate(_fPaymentDate),
         'payment_method':  _fPayMethod,
         'items':           items,
       });
@@ -412,8 +413,7 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
                               final inv = _invoices[i];
                               final id  = inv['id'] as int;
                               final sel = _selected.contains(id);
-                              DateTime? dueDate;
-                              try { dueDate = DateTime.parse(inv['due_date'].toString()); } catch (_) {}
+                              final dueDate = parseLocalDateNullable(inv['due_date']);
                               return Container(
                                 color: sel ? Colors.blue.withOpacity(0.07) : (i.isEven ? Colors.grey.shade50 : Colors.white),
                                 child: Row(children: [

@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/file_download.dart';
+import '../../utils/date_utils.dart';
 
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
@@ -103,8 +104,8 @@ class _ApFxGainLossReportScreenState
     setState(() { _isLoading = true; _reportRows = []; });
     try {
       final raw = await _reportService.getFxGainLossReport(
-        dateFrom:       DateFormat('yyyy-MM-dd').format(_dateFrom),
-        dateTo:         DateFormat('yyyy-MM-dd').format(_dateTo),
+        dateFrom:       formatLocalDate(_dateFrom),
+        dateTo:         formatLocalDate(_dateTo),
         currencyCode:   _selectedCurrencyCode,
         vendorGroupIds: _selectedGroupIds,
         vendorCodeFrom: _vendorCodeFrom,

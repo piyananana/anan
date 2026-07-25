@@ -1,9 +1,6 @@
-import 'package:intl/intl.dart';
+import '../../utils/date_utils.dart';
 
-DateTime? _parseDate(dynamic v) {
-  if (v == null) return null;
-  try { return DateFormat('yyyy-MM-dd').parse(v.toString().substring(0, 10)); } catch (_) { return null; }
-}
+DateTime? _parseDate(dynamic v) => parseLocalDateNullable(v);
 double _toDouble(dynamic v) => v == null ? 0.0 : double.tryParse(v.toString()) ?? 0.0;
 int    _toInt(dynamic v)    => v == null ? 0   : int.tryParse(v.toString())    ?? 0;
 

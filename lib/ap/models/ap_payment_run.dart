@@ -1,4 +1,5 @@
 // lib/ap/models/ap_payment_run.dart
+import '../../utils/date_utils.dart';
 
 // ── Approval record ───────────────────────────────────────────────────────────
 class ApPaymentRunApproval {
@@ -99,8 +100,8 @@ class ApOpenInvoice {
   factory ApOpenInvoice.fromJson(Map<String, dynamic> json) => ApOpenInvoice(
         txnId: json['txn_id'] as int,
         docNo: json['doc_no'] ?? '',
-        docDate: DateTime.parse(json['doc_date']),
-        dueDate: json['due_date'] != null ? DateTime.parse(json['due_date']) : null,
+        docDate: parseLocalDate(json['doc_date']),
+        dueDate: parseLocalDateNullable(json['due_date']),
         vendorId: json['vendor_id'] as int,
         vendorCode: json['vendor_code'] ?? '',
         vendorNameTh: json['vendor_name_th'] ?? '',
@@ -170,8 +171,8 @@ class ApPaymentRunLine {
         accountNumber: json['account_number'],
         accountName: json['account_name'],
         invoiceNo: json['invoice_no'] ?? '',
-        invoiceDate: json['invoice_date'] != null ? DateTime.parse(json['invoice_date']) : null,
-        dueDate: json['due_date'] != null ? DateTime.parse(json['due_date']) : null,
+        invoiceDate: parseLocalDateNullable(json['invoice_date']),
+        dueDate: parseLocalDateNullable(json['due_date']),
         invoiceAmountLc: (json['invoice_amount_lc'] as num).toDouble(),
         paymentAmountLc: (json['payment_amount_lc'] as num).toDouble(),
         currencyCode: json['currency_code'] ?? 'THB',
@@ -191,8 +192,8 @@ class ApPaymentRunLine {
         'account_number': accountNumber,
         'account_name': accountName,
         'invoice_no': invoiceNo,
-        'invoice_date': invoiceDate?.toIso8601String().substring(0, 10),
-        'due_date': dueDate?.toIso8601String().substring(0, 10),
+        'invoice_date': invoiceDate != null ? formatLocalDate(invoiceDate!) : null,
+        'due_date': dueDate != null ? formatLocalDate(dueDate!) : null,
         'invoice_amount_lc': invoiceAmountLc,
         'payment_amount_lc': paymentAmountLc,
         'currency_code': currencyCode,
@@ -261,7 +262,7 @@ class ApPaymentRun {
   factory ApPaymentRun.fromJson(Map<String, dynamic> json) => ApPaymentRun(
         id: json['id'],
         runNumber: json['run_number'],
-        runDate: DateTime.parse(json['run_date']),
+        runDate: parseLocalDate(json['run_date']),
         description: json['description'],
         bankFileFormatId: json['bank_file_format_id'],
         bankFileFormatCode: json['bank_file_format_code'],
@@ -282,7 +283,7 @@ class ApPaymentRun {
 
   Map<String, dynamic> toJson() => {
         if (id != null) 'id': id,
-        'run_date': runDate.toIso8601String().substring(0, 10),
+        'run_date': formatLocalDate(runDate),
         'description': description,
         'bank_file_format_id': bankFileFormatId,
         'lines': lines.map((l) => l.toJson()).toList(),

@@ -5,6 +5,7 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/ap_year_end.dart';
 import '../services/ap_year_end_service.dart';
+import '../../utils/date_utils.dart';
 
 class ApFxRevaluationScreen extends StatefulWidget {
   const ApFxRevaluationScreen({super.key});
@@ -95,7 +96,7 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
     setState(() { _isFetchingCurrencies = true; _outstandingCurrencies = []; _previewDetails = []; });
     try {
       final list = await _svc.fetchOutstandingCurrencies(
-          _revalDate.toIso8601String().substring(0, 10));
+          formatLocalDate(_revalDate));
       final newIds = list.map((c) => c['currency_id'] as int).toSet();
       _rateCtrl.removeWhere((id, ctrl) {
         if (!newIds.contains(id)) { ctrl.dispose(); return true; }
@@ -141,7 +142,7 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
     setState(() => _isPreviewing = true);
     try {
       final data = await _svc.previewReval(
-        revalDate: _revalDate.toIso8601String().substring(0, 10),
+        revalDate: formatLocalDate(_revalDate),
         yearEndRates: rates,
       );
       setState(() {
@@ -159,11 +160,11 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
     setState(() => _isPreviewing = true);
     try {
       final id = await _svc.createReval(
-        revalDate:    _revalDate.toIso8601String().substring(0, 10),
+        revalDate:    formatLocalDate(_revalDate),
         periodYear:   _periodYear,
         method:       _method,
-        reversalDate: _method == 'reversing'
-            ? _reversalDate?.toIso8601String().substring(0, 10) : null,
+        reversalDate: _method == 'reversing' && _reversalDate != null
+            ? formatLocalDate(_reversalDate!) : null,
         note:         _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         yearEndRates: rates,
       );

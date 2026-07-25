@@ -12,6 +12,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../cd/models/cd_branch.dart';
 import '../../cd/services/cd_branch_service.dart';
+import '../../utils/date_utils.dart';
 
 class ApTransactionListWidget extends StatefulWidget {
   final VoidCallback onAddPressed;
@@ -132,8 +133,8 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
     try {
       final rows = await _service.fetchRows(
         docType: _selectedDocType,
-        dateFrom: DateFormat('yyyy-MM-dd').format(_dateFrom),
-        dateTo: DateFormat('yyyy-MM-dd').format(_dateTo),
+        dateFrom: formatLocalDate(_dateFrom),
+        dateTo: formatLocalDate(_dateTo),
         branchId: _selectedBranchFilter?.branchId,
         dim1Id: _dimSelections[1],
         dim2Id: _dimSelections[2],

@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
+import '../../utils/date_utils.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
@@ -141,7 +142,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
     setState(() { _isLoading = true; _reportData = []; });
     try {
       final raw = await _reportService.getAgingReport(
-        asOfDate:       DateFormat('yyyy-MM-dd').format(_asOfDate),
+        asOfDate:       formatLocalDate(_asOfDate),
         branchId:       _selectedBranchId,
         vendorCodeFrom: _vendorCodeFrom,
         vendorCodeTo:   _vendorCodeTo,

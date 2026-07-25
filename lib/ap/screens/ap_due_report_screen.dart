@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
 import '../services/ap_aging_report_service.dart';
@@ -150,7 +151,7 @@ class _ApDueReportScreenState extends State<ApDueReportScreen> {
     });
     try {
       final raw = await _reportService.getAgingReport(
-        asOfDate: DateFormat('yyyy-MM-dd').format(_asOfDate),
+        asOfDate: formatLocalDate(_asOfDate),
         branchId: _selectedBranchId,
         vendorCodeFrom: _vendorCodeFrom,
         vendorCodeTo: _vendorCodeTo,

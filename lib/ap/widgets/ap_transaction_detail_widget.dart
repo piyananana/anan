@@ -156,7 +156,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   bool get _isRA              => _selectedDocType?.sysDocType == apDocTypeRemittanceAdvice.toString();
   bool get _isPayment         => _selectedDocType?.sysDocType == apDocTypePayment.toString();
 
-  bool get _hasDetailRows     => _isPurchaseInvoice || _isCreditNote || _isDebitNote;
+  bool get _hasDetailRows     => _isPurchaseInvoice || _isCreditNote || _isDebitNote || _isAdvancePayment;
   bool get _hasApplySection   => _isPayment || _isRA;
   bool get _hasAdvanceRefund  => _isAdvanceRefund;
   bool get _hasWhtSection     => _isPayment || _isAdvancePayment;
@@ -416,8 +416,6 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       subFc = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
     } else if (_isAdvanceRefund) {
       subFc = _advanceRefundRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
-    } else if (_isAdvancePayment) {
-      subFc = _paymentRows.fold(0.0, (s, r) => s + (double.tryParse(r.amountCtrl.text) ?? 0));
     } else {
       for (final r in _detailRows) {
         final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
@@ -2155,6 +2153,20 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   }
 
   // ── Client-side GL preview for Draft ──────────────────────────────────────
+
+  // VAT ที่ต้อง reverse จากมัดจำเดิม ตามสัดส่วนของยอดที่คืนต่อยอดมัดจำเต็มใบ
+  ({double vatLc, double vatFc}) _advanceRefundVatTotals() {
+    double vatLc = 0, vatFc = 0;
+    for (final row in _advanceRefundRows) {
+      final adv = _openAdvancesForRefund.where((a) => a.id == row.appliedToId).firstOrNull;
+      if (adv == null || adv.totalAmountFc == 0) continue;
+      final ratio = row.appliedAmountLc / adv.totalAmountFc;
+      vatFc += adv.vatAmountFc * ratio;
+      vatLc += adv.vatAmountLc * ratio;
+    }
+    return (vatLc: vatLc, vatFc: vatFc);
+  }
+
   List<_GlLine> _computeGlPreview() {
     final isEnglish = _isEnglish;
     final lines = <_GlLine>[];
@@ -2214,11 +2226,19 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           }
         }
       } else if (sysType == apDocTypeAdvancePayment) {
-        lines.add(_GlLine(notSetupAdvanceLabel, advanceLabel, payAdvanceDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        lines.add(_GlLine(notSetupAdvanceLabel, advanceLabel, payAdvanceDesc, _beforeVatFc * lc, 0, isFcDoc ? _beforeVatFc : 0, 0));
+        if (_vatAmountFc > 0) {
+          lines.add(_GlLine(notSetupVatLabel, 'VAT Input', vatDesc, _vatAmountFc * lc, 0, isFcDoc ? _vatAmountFc : 0, 0));
+        }
         lines.add(_GlLine(notSetupCashLabel, cashBankLabel, payDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       } else if (sysType == apDocTypeAdvanceRefund) {
+        final refundVat = _advanceRefundVatTotals();
+        final advanceNetFc = _totalAmountFc - refundVat.vatFc;
         lines.add(_GlLine(notSetupCashLabel, cashBankLabel, receiveAdvanceRefundDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
-        lines.add(_GlLine(notSetupAdvanceLabel, advanceLabel, refundAdvanceDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+        lines.add(_GlLine(notSetupAdvanceLabel, advanceLabel, refundAdvanceDesc, 0, advanceNetFc * lc, 0, isFcDoc ? advanceNetFc : 0));
+        if (refundVat.vatFc > 0) {
+          lines.add(_GlLine(notSetupVatLabel, 'VAT Input', vatDesc, 0, refundVat.vatFc * lc, 0, isFcDoc ? refundVat.vatFc : 0));
+        }
       } else if (sysType == apDocTypePayment) {
         for (final a in _applyRows) {
           lines.add(_GlLine(notSetupApLabel, apDesc, '$payDesc ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
@@ -2372,7 +2392,12 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     }
     // ── Advance Payment (60) ─────────────────────────────────────────────
     else if (sysType == apDocTypeAdvancePayment) {
-      lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), payAdvanceDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), payAdvanceDesc, _beforeVatFc * lc, 0, isFcDoc ? _beforeVatFc : 0, 0));
+      if (_vatAmountFc > 0) {
+        final vatCode = setup.vatInputAccountCode ?? notSetupVatLabel;
+        final vatName = acctName(setup.vatInputAccountId, setup.vatInputAccountName ?? 'VAT Input');
+        lines.add(_GlLine(vatCode, vatName.isEmpty ? 'VAT Input' : vatName, vatDesc, _vatAmountFc * lc, 0, isFcDoc ? _vatAmountFc : 0, 0));
+      }
       if (_paymentRows.isEmpty) {
         lines.add(_GlLine(setup.cashAccountCode ?? '—', acctName(setup.cashAccountId, setup.cashAccountName ?? cashFallback), payDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       } else {
@@ -2385,8 +2410,15 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     }
     // ── Advance Refund (65) ──────────────────────────────────────────────
     else if (sysType == apDocTypeAdvanceRefund) {
+      final refundVat = _advanceRefundVatTotals();
+      final advanceNetFc = _totalAmountFc - refundVat.vatFc;
       lines.add(_GlLine(setup.cashAccountCode ?? '—', acctName(setup.cashAccountId, setup.cashAccountName ?? cashFallback), receiveAdvanceRefundDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
-      lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), refundAdvanceDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), refundAdvanceDesc, 0, advanceNetFc * lc, 0, isFcDoc ? advanceNetFc : 0));
+      if (refundVat.vatFc > 0) {
+        final vatCode = setup.vatInputAccountCode ?? notSetupVatLabel;
+        final vatName = acctName(setup.vatInputAccountId, setup.vatInputAccountName ?? 'VAT Input');
+        lines.add(_GlLine(vatCode, vatName.isEmpty ? 'VAT Input' : vatName, vatDesc, 0, refundVat.vatFc * lc, 0, isFcDoc ? refundVat.vatFc : 0));
+      }
     }
     // ── Payment (80) ─────────────────────────────────────────────────────
     else if (sysType == apDocTypePayment) {

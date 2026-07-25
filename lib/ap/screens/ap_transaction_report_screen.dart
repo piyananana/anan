@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 import '../models/ap_vendor.dart';
 import '../models/ap_vendor_group.dart';
 import '../services/ap_transaction_report_service.dart';
@@ -106,8 +107,8 @@ class _ApTransactionReportScreenState
     setState(() { _isLoading = true; _reportData = []; });
     try {
       final raw = await _reportService.getTransactionReport(
-        dateFrom:       DateFormat('yyyy-MM-dd').format(_dateFrom),
-        dateTo:         DateFormat('yyyy-MM-dd').format(_dateTo),
+        dateFrom:       formatLocalDate(_dateFrom),
+        dateTo:         formatLocalDate(_dateTo),
         branchId:       _selectedBranchId,
         vendorGroupIds: _selectedGroupIds,
         vendorCodeFrom: _vendorCodeFrom,

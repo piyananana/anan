@@ -14,6 +14,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 
 // ---------------------------------------------------------------------------
 // Data model (lightweight, only what the screen needs)
@@ -68,7 +69,7 @@ class _WhtRow {
 
     return _WhtRow(
       paymentDocNo: j['payment_doc_no'] ?? '',
-      paymentDate:  DateTime.tryParse(j['payment_date']?.toString() ?? '') ?? DateTime.now(),
+      paymentDate:  parseLocalDate(j['payment_date']),
       vendorCode:   j['vendor_code']   ?? '',
       vendorNameTh: j['vendor_name_th'] ?? '',
       vendorNameEn: j['vendor_name_en'],

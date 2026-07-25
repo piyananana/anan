@@ -19,6 +19,7 @@ import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../utils/date_utils.dart';
 import '../../utils/file_download.dart';
 
 // ── Column widths ────────────────────────────────────────────────────────────
@@ -1591,8 +1592,8 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
     try {
       final rows = await widget.svc.fetchOpenInvoices(
         vendorCode: _vendorCtrl.text.trim().isEmpty ? null : _vendorCtrl.text.trim(),
-        dateFrom: _dateFrom == null ? null : DateFormat('yyyy-MM-dd').format(_dateFrom!),
-        dateTo:   _dateTo   == null ? null : DateFormat('yyyy-MM-dd').format(_dateTo!),
+        dateFrom: _dateFrom == null ? null : formatLocalDate(_dateFrom!),
+        dateTo:   _dateTo   == null ? null : formatLocalDate(_dateTo!),
       );
       if (mounted) {
         setState(() {
