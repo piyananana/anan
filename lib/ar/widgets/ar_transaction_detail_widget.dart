@@ -3658,20 +3658,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Failed to load GL: $e' : 'โหลด GL ล้มเหลว: $e')));
       }
     } else {
-      // Draft preview: fetch deferred VAT proportions first (only for Receipt)
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
-      double deferredVatLc = 0;
-      if (_isReceipt && _applyRows.isNotEmpty) {
-        try {
-          deferredVatLc = await _fetchDeferredVatForPreview();
-        } catch (_) { /* ถ้าดึงไม่ได้ ให้ใช้ 0 */ }
-      }
-      if (!mounted) return;
-      Navigator.of(context).pop();
+      // Draft preview: same computation used by the always-visible inline GL section (_rebuildGlRows),
+      // so both stay in sync — no separate async fetch needed anymore.
       _showGlDialog(
         title: isEnglish ? 'GL Entry Preview (Draft)' : 'ตัวอย่าง GL Entry (Draft)',
         statusLabel: 'Draft Preview',
@@ -3680,28 +3668,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         refDocNo: _docNo,
         docDate: _docDate,
         description: _descCtrl.text,
-        lines: _computeGlPreview(deferredVatLc: deferredVatLc),
+        lines: _computeGlPreview(),
         currencyCode: _selectedCurrency?.currencyCode ?? '',
       );
     }
-  }
-
-  /// คำนวณ VAT รอตัดบัญชี ตามสัดส่วนที่ชำระ (เหมือน backend insertDeferredVtRecordsForReceipt)
-  Future<double> _fetchDeferredVatForPreview() async {
-    double total = 0;
-    for (final a in _applyRows) {
-      if (a.appliedToId == 0 || a.appliedAmountLc <= 0 || (a.appliedToTotal ?? 0) <= 0) continue;
-      final ratio = a.appliedAmountLc / (a.appliedToTotal ?? 1);
-      try {
-        final inv = await _service.fetchRow(a.appliedToId);
-        for (final d in inv.details) {
-          if (d.isDeferredVat && d.vatType != 'NOVAT') {
-            total += d.vatAmountLc * ratio;
-          }
-        }
-      } catch (_) { continue; }
-    }
-    return total;
   }
 
   void _showGlDialog({
@@ -3908,7 +3878,32 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
   // ── Client-side GL preview for Draft ──────────────────────────────────────
 
-  List<_GlLine> _computeGlPreview({double deferredVatLc = 0}) {
+  // VAT ที่ต้อง reverse จากมัดจำเดิม ตามสัดส่วนของยอดที่คืนต่อยอดมัดจำเต็มใบ
+  ({double vatLc, double vatFc}) _advanceRefundVatTotals() {
+    double vatLc = 0, vatFc = 0;
+    for (final row in _advanceRefundRows) {
+      final adv = _openAdvancesForRefund.where((a) => a.id == row.appliedToId).firstOrNull;
+      if (adv == null || adv.totalAmountFc == 0) continue;
+      final ratio = row.appliedAmountLc / adv.totalAmountFc;
+      vatFc += adv.vatAmountFc * ratio;
+      vatLc += adv.vatAmountLc * ratio;
+    }
+    return (vatLc: vatLc, vatFc: vatFc);
+  }
+
+  // VAT รอตัดบัญชีที่ต้องรับรู้ ตามสัดส่วนที่ชำระจริงของแต่ละใบที่ apply (เหมือน backend postGlEntry)
+  double _receiptDeferredVatLc() {
+    double total = 0;
+    for (final a in _applyRows) {
+      final inv = _openInvoices.where((x) => x.id == a.appliedToId).firstOrNull;
+      if (inv == null || inv.totalAmountFc == 0 || inv.deferredVatAmountLc == 0) continue;
+      final ratio = a.appliedAmountLc / inv.totalAmountFc;
+      total += inv.deferredVatAmountLc * ratio;
+    }
+    return total;
+  }
+
+  List<_GlLine> _computeGlPreview() {
     final isEnglish = _isEnglish;
     final lines = <_GlLine>[];
     final lc = _exchangeRate;
@@ -3972,7 +3967,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           lines.add(_GlLine(notSetupVatLabel, 'VAT Output', vatDesc, 0, _vatAmountFc * lc, 0, isFcDoc ? _vatAmountFc : 0));
         }
       } else if (sysType == arDocTypeAdvanceRefund) {
-        lines.add(_GlLine(notSetupAdvanceLabel, advanceReceivedLabel, advanceRefundDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        final refundVat = _advanceRefundVatTotals();
+        final advanceNetFc = _totalAmountFc - refundVat.vatFc;
+        lines.add(_GlLine(notSetupAdvanceLabel, advanceReceivedLabel, advanceRefundDesc, advanceNetFc * lc, 0, isFcDoc ? advanceNetFc : 0, 0));
+        if (refundVat.vatFc > 0) {
+          lines.add(_GlLine(notSetupVatLabel, 'VAT Output', vatDesc, refundVat.vatFc * lc, 0, isFcDoc ? refundVat.vatFc : 0, 0));
+        }
         lines.add(_GlLine(notSetupCashLabel, cashBankLabel, payAdvanceRefundDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       } else if (sysType == arDocTypeReceipt) {
         for (final a in _applyRows) {
@@ -4211,7 +4211,15 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     }
     // ── Advance Refund (65) ──────────────────────────────────────────────
     else if (sysType == arDocTypeAdvanceRefund) {
-      lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceFallback), advanceRefundDesc2, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+      final refundVat = _advanceRefundVatTotals();
+      final advanceNetFc = _totalAmountFc - refundVat.vatFc;
+      lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceFallback), advanceRefundDesc2, advanceNetFc * lc, 0, isFcDoc ? advanceNetFc : 0, 0));
+      if (refundVat.vatFc > 0) {
+        final vatOutputFallback3 = isEnglish ? 'VAT Output' : 'ภาษีขาย';
+        final vatCode = setup.vatOutputAccountCode ?? notSetupVatLabel2;
+        final vatName = acctName(setup.vatOutputAccountId, setup.vatOutputAccountName ?? vatOutputFallback3);
+        lines.add(_GlLine(vatCode, vatName.isEmpty ? vatOutputFallback3 : vatName, vatDesc2, refundVat.vatFc * lc, 0, isFcDoc ? refundVat.vatFc : 0, 0));
+      }
       lines.add(_GlLine(setup.cashAccountCode ?? '—', acctName(setup.cashAccountId, setup.cashAccountName ?? cashFallback), payAdvanceRefundDesc2, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
     }
     // ── Receipt (80) ────────────────────────────────────────────────────
@@ -4298,6 +4306,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       }
 
       // DR: ภาษีขายรอตัดบัญชี / CR: ภาษีขาย (รับรู้ VAT รอตัดบัญชีตามสัดส่วนที่ชำระ)
+      final deferredVatLc = _receiptDeferredVatLc();
       if (deferredVatLc > 0.005 && setup.vatPendingOutputAccountId != null && setup.vatOutputAccountId != null) {
         lines.add(_GlLine(
           setup.vatPendingOutputAccountCode ?? acctCode(setup.vatPendingOutputAccountId, '—'),

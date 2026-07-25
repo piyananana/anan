@@ -68,6 +68,9 @@ class ArTransactionHeader {
   // WHT + Advance summary
   final double whtAmountLc;
   final double advanceAmountLc;
+  // Deferred VAT still pending recognition (sum of detail lines with is_deferred_vat=true)
+  final double deferredVatAmountLc;
+  final double deferredVatAmountFc;
   // References
   final String? refNo;
   final int? refDocId;
@@ -131,6 +134,8 @@ class ArTransactionHeader {
     this.balanceAmountLc = 0,
     this.whtAmountLc = 0,
     this.advanceAmountLc = 0,
+    this.deferredVatAmountLc = 0,
+    this.deferredVatAmountFc = 0,
     this.refNo,
     this.refDocId,
     this.refDocNo,
@@ -191,6 +196,8 @@ class ArTransactionHeader {
       balanceAmountLc: _toDouble(j['balance_amount_lc']) ?? 0,
       whtAmountLc: _toDouble(j['wht_amount_lc']) ?? 0,
       advanceAmountLc: _toDouble(j['advance_amount_lc']) ?? 0,
+      deferredVatAmountLc: _toDouble(j['deferred_vat_amount_lc']) ?? 0,
+      deferredVatAmountFc: _toDouble(j['deferred_vat_amount_fc']) ?? 0,
       refNo: j['ref_no'],
       refDocId: j['ref_doc_id'] as int?,
       refDocNo: j['ref_doc_no'],
