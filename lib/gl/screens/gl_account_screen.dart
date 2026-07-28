@@ -317,6 +317,10 @@ class _AccountScreenState extends State<AccountScreen>
     super.build(context); // This is crucial for AutomaticKeepAliveClientMixin
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
 
     return Scaffold(
       appBar: AppBar(
@@ -375,11 +379,11 @@ class _AccountScreenState extends State<AccountScreen>
                           Expanded(
                             child: AccountListTreeWidget(
                               key: _listWidgetKey,
-                              enableAddRootButton: true,
-                              enableAddChildButton: true,
-                              enableEditButton: true,
+                              enableAddRootButton: canCreate,
+                              enableAddChildButton: canCreate,
+                              enableEditButton: canEdit,
                               enableViewButton: true,
-                              enableDeleteButton: true,
+                              enableDeleteButton: canDelete,
                               enableCardSelect: false,
                               showInactive: true,
                               onAddRoot: _onAddRoot,

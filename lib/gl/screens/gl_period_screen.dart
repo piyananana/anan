@@ -290,6 +290,10 @@ class _PeriodScreenState extends State<PeriodScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
 
     return Scaffold(
       appBar: AppBar(
@@ -346,10 +350,10 @@ class _PeriodScreenState extends State<PeriodScreen>
                           Expanded(
                             child: PeriodListWidget(
                               key: _listWidgetKey,
-                              enableAddButton: true,
-                              enableEditButton: true,
+                              enableAddButton: canCreate,
+                              enableEditButton: canEdit,
                               enableViewButton: true,
-                              enableDeleteButton: true,
+                              enableDeleteButton: canDelete,
                               enableSortButton: true,
                               enableCardSelect: false,
                               onAdd: _onAdd,
@@ -391,6 +395,9 @@ class _PeriodScreenState extends State<PeriodScreen>
   }
 
   Widget _buildRightPanel() {
+    final perm = MenuScope.of(context);
+    final canEdit = perm?.canEdit ?? true;
+    final canApprove = perm?.canApprove ?? true;
     switch (_mode) {
       case Mode.none:
         return PeriodDetailWidget(
@@ -401,28 +408,31 @@ class _PeriodScreenState extends State<PeriodScreen>
           onSubmitHead: _onSubmitHead,
           onCancel: _onCancel,
           isPlaceholder: true,
+          canApprove: canApprove,
           // onMessage: _showSnackbar,
           onDetailChange: _reloadDetail,
         );
       case Mode.add:
         return PeriodDetailWidget(
           key: _detailWidgetKey,
-          mode: Mode.add,
+          mode: canEdit ? Mode.add : Mode.view,
           selectedHead: null,
           selectedDetail: const [],
           onSubmitHead: _onSubmitHead,
           onCancel: _onCancel,
+          canApprove: canApprove,
           // onMessage: _showSnackbar,
           onDetailChange: _reloadDetail,
         );
       case Mode.edit:
         return PeriodDetailWidget(
           key: _detailWidgetKey,
-          mode: Mode.edit,
+          mode: canEdit ? Mode.edit : Mode.view,
           selectedHead: _selectedData,
           selectedDetail: _selectedDetail,
           onSubmitHead: _onSubmitHead,
           onCancel: _onCancel,
+          canApprove: canApprove,
           // onMessage: _showSnackbar,
           onDetailChange: _reloadDetail,
         );
@@ -434,6 +444,7 @@ class _PeriodScreenState extends State<PeriodScreen>
           selectedDetail: _selectedDetail,
           onSubmitHead: (FiscalYear row) {},
           onCancel: _onCancel,
+          canApprove: canApprove,
           // onMessage: _showSnackbar,
           onDetailChange: (){},
         );

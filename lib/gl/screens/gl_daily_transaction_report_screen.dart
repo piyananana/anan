@@ -796,6 +796,9 @@ class _DailyTransactionReportScreenState
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
+    final perm = MenuScope.of(context);
+    final canExport = perm?.canExport ?? true;
+    final canPrint = perm?.canPrint ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -812,7 +815,7 @@ class _DailyTransactionReportScreenState
             IconButton(
               icon: const Icon(Icons.table_chart_outlined),
               tooltip: 'Export Excel',
-              onPressed: _reportGenerated ? _exportExcel : null,
+              onPressed: (_reportGenerated && canExport) ? _exportExcel : null,
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -1109,6 +1112,8 @@ class _DailyTransactionReportScreenState
                       initialPageFormat: PdfPageFormat.a4.landscape,
                       canChangeOrientation: false,
                       canDebug: false,
+                      allowPrinting: canPrint,
+                      allowSharing: canPrint,
                     ),
             ),
           ),

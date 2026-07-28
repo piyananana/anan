@@ -17,6 +17,7 @@ class PeriodDetailWidget extends StatefulWidget {
   final VoidCallback onCancel;
   final bool isPlaceholder;
   final Function() onDetailChange; // Callback เมื่อมีการสร้าง/ลบ period
+  final bool canApprove; // สิทธิ์ "อนุมัติ" — คุมปุ่มอนุมัติ/ปฏิเสธคำขอปิดงวด GL
 
   const PeriodDetailWidget({
     super.key,
@@ -27,6 +28,7 @@ class PeriodDetailWidget extends StatefulWidget {
     required this.onCancel,
     this.isPlaceholder = false,
     required this.onDetailChange,
+    this.canApprove = true,
   });
 
   @override
@@ -836,7 +838,8 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     if (widget.mode != Mode.view) {
       if (module == 'GL' && status == 'PENDING_CLOSE') {
         // งวด GL ที่รออนุมัติ — แสดงปุ่มตามบทบาทของผู้ใช้ปัจจุบัน
-        final isApprover = period.closeApproverUserId != null &&
+        final isApprover = widget.canApprove &&
+            period.closeApproverUserId != null &&
             currentUserId == period.closeApproverUserId;
         final isRequester = period.closeRequestedBy != null &&
             currentUserId == period.closeRequestedBy;

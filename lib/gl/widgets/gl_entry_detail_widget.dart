@@ -25,6 +25,7 @@ class GlEntryDetailWidget extends StatefulWidget {
   final int resetKey;
   final VoidCallback onSaveSuccess;
   final VoidCallback onCancel;
+  final bool canDelete;
 
   const GlEntryDetailWidget({
     super.key,
@@ -33,6 +34,7 @@ class GlEntryDetailWidget extends StatefulWidget {
     this.resetKey = 0,
     required this.onSaveSuccess,
     required this.onCancel,
+    this.canDelete = true,
   });
 
   @override
@@ -1281,7 +1283,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                 label: Text(isEnglish ? 'Reverse' : 'ถอย', style: const TextStyle(color: Colors.white)),
               ),
             )
-          else
+          else if (widget.canDelete)
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               onPressed: _reverse,

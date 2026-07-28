@@ -71,7 +71,9 @@ class _GlResetScreenState extends State<GlResetScreen> {
   bool get _canExecute {
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final keyword = isEnglish ? 'CONFIRM' : 'ยืนยัน';
-    return _confirmCtrl.text.trim() == keyword &&
+    final canDelete = MenuScope.of(context)?.canDelete ?? true;
+    return canDelete &&
+      _confirmCtrl.text.trim() == keyword &&
       (_deleteEntries ||
           _resetDocNumbers ||
           _resetFinancialReports ||

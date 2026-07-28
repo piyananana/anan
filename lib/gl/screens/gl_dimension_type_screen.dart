@@ -129,6 +129,7 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     final l = AppL10n(isEnglish);
     final isActive = _active[slotNo] ?? false;
+    final canEdit = MenuScope.of(context)?.canEdit ?? true;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       color: isActive ? null : Colors.grey[50],
@@ -149,10 +150,12 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
             const Spacer(),
             Switch(
               value: isActive,
-              onChanged: (v) async {
-                setState(() => _active[slotNo] = v);
-                await _save(slotNo);
-              },
+              onChanged: !canEdit
+                  ? null
+                  : (v) async {
+                      setState(() => _active[slotNo] = v);
+                      await _save(slotNo);
+                    },
             ),
             Text(isEnglish ? 'Enabled' : 'เปิดใช้งาน'),
           ]),
@@ -161,24 +164,28 @@ class _GlDimensionTypeScreenState extends State<GlDimensionTypeScreen> {
             Row(children: [
               SizedBox(width: 160, child: TextFormField(
                 controller: _codeCtrl[slotNo],
+                enabled: canEdit,
                 decoration: InputDecoration(labelText: isEnglish ? 'Code (type_code)' : 'รหัส (type_code)', isDense: true, border: const OutlineInputBorder()),
               )),
               const SizedBox(width: 12),
               Expanded(child: TextFormField(
                 controller: _nameCtrl[slotNo],
+                enabled: canEdit,
                 decoration: InputDecoration(labelText: isEnglish ? 'Thai Name *' : 'ชื่อภาษาไทย *', isDense: true, border: const OutlineInputBorder()),
               )),
               const SizedBox(width: 12),
               Expanded(child: TextFormField(
                 controller: _nameEngCtrl[slotNo],
+                enabled: canEdit,
                 decoration: InputDecoration(labelText: isEnglish ? 'English Name' : 'ชื่อภาษาอังกฤษ', isDense: true, border: const OutlineInputBorder()),
               )),
               const SizedBox(width: 12),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.save, size: 16),
-                label: Text(l.save),
-                onPressed: () => _save(slotNo),
-              ),
+              if (canEdit)
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.save, size: 16),
+                  label: Text(l.save),
+                  onPressed: () => _save(slotNo),
+                ),
             ]),
           ],
         ]),

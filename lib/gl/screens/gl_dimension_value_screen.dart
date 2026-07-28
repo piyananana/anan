@@ -156,6 +156,10 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
     final l = AppL10n(isEnglish);
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
 
     return Scaffold(
       appBar: AppBar(
@@ -217,6 +221,9 @@ class _GlDimensionValueScreenState extends State<GlDimensionValueScreen>
                       color: Colors.blueGrey.shade100,
                       child: GlDimensionValueListWidget(
                         key: _listKey,
+                        enableAddButton: canCreate,
+                        enableEditButton: canEdit,
+                        enableDeleteButton: canDelete,
                         onAddRoot: _onAddRoot,
                         onAddChild: _onAddChild,
                         onEdit: _onEdit,

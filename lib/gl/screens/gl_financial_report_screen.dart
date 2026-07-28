@@ -43,6 +43,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   double _filterPanelWidth = 350.0;
   bool _isDraggingDivider = false;
   bool _isEnglish = false;
+  bool _canPrint = true;
   Company? _company;
   Map<String, String>? _headers;
 
@@ -470,6 +471,9 @@ String _replaceVars(String text, pw.Context? context) {
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
+    final perm = MenuScope.of(context);
+    final canExport = perm?.canExport ?? true;
+    _canPrint = perm?.canPrint ?? true;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -488,7 +492,7 @@ String _replaceVars(String text, pw.Context? context) {
               IconButton(
                 icon: const Icon(Icons.table_chart_outlined),
                 tooltip: 'Export Excel',
-                onPressed: _reportData == null ? null : _exportExcel,
+                onPressed: (_reportData == null || !canExport) ? null : _exportExcel,
               ),
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -904,6 +908,8 @@ Widget _buildTableTab() {
         initialPageFormat: PdfPageFormat.a4,
         canChangeOrientation: false,
         canDebug: false,
+        allowPrinting: _canPrint,
+        allowSharing: _canPrint,
       ),
     );
   }

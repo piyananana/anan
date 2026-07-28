@@ -144,6 +144,10 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
   }
 
   Future<void> _runStep(Future<void> Function() action) async {
+    if (!(MenuScope.of(context)?.canApprove ?? true)) {
+      setState(() => _errorMsg = 'คุณไม่มีสิทธิ์ดำเนินการปิดสิ้นปี (ต้องมีสิทธิ์ "อนุมัติ")');
+      return;
+    }
     setState(() { _isProcessing = true; _errorMsg = null; });
     try {
       await action();

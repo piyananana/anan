@@ -11,6 +11,9 @@ class GlDimensionValueListWidget extends StatefulWidget {
   final Function(GlDimensionType type, GlDimensionValue row) onAddChild;
   final Function(GlDimensionType type) onAddRoot;
   final Function(GlDimensionType? type, List<GlDimensionValue> values) onTypeChanged;
+  final bool enableAddButton;
+  final bool enableEditButton;
+  final bool enableDeleteButton;
 
   const GlDimensionValueListWidget({
     super.key,
@@ -20,6 +23,9 @@ class GlDimensionValueListWidget extends StatefulWidget {
     required this.onAddChild,
     required this.onAddRoot,
     required this.onTypeChanged,
+    this.enableAddButton = true,
+    this.enableEditButton = true,
+    this.enableDeleteButton = true,
   });
 
   @override
@@ -126,7 +132,7 @@ class GlDimensionValueListWidgetState
       Padding(
         padding: const EdgeInsets.all(8),
         child: Row(children: [
-          if (_selectedType != null)
+          if (_selectedType != null && widget.enableAddButton)
             IconButton(
               icon: const Icon(Icons.add_circle_outline, color: Colors.teal),
               tooltip: isEnglish
@@ -286,36 +292,39 @@ class GlDimensionValueListWidgetState
                                   onPressed: () =>
                                       widget.onView(_selectedType!, v),
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.edit,
-                                      size: 16, color: Colors.blue),
-                                  tooltip: isEnglish ? 'Edit' : 'แก้ไข',
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                      minWidth: 28, minHeight: 28),
-                                  onPressed: () =>
-                                      widget.onEdit(_selectedType!, v),
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.add_circle_outline,
-                                      size: 16, color: Colors.teal[400]),
-                                  tooltip: isEnglish ? 'Add child' : 'เพิ่มรายการย่อย',
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                      minWidth: 28, minHeight: 28),
-                                  onPressed: () =>
-                                      widget.onAddChild(_selectedType!, v),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline,
-                                      size: 16, color: Colors.red),
-                                  tooltip: isEnglish ? 'Delete' : 'ลบ',
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                      minWidth: 28, minHeight: 28),
-                                  onPressed: () =>
-                                      widget.onDelete(_selectedType!, v),
-                                ),
+                                if (widget.enableEditButton)
+                                  IconButton(
+                                    icon: const Icon(Icons.edit,
+                                        size: 16, color: Colors.blue),
+                                    tooltip: isEnglish ? 'Edit' : 'แก้ไข',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                        minWidth: 28, minHeight: 28),
+                                    onPressed: () =>
+                                        widget.onEdit(_selectedType!, v),
+                                  ),
+                                if (widget.enableAddButton)
+                                  IconButton(
+                                    icon: Icon(Icons.add_circle_outline,
+                                        size: 16, color: Colors.teal[400]),
+                                    tooltip: isEnglish ? 'Add child' : 'เพิ่มรายการย่อย',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                        minWidth: 28, minHeight: 28),
+                                    onPressed: () =>
+                                        widget.onAddChild(_selectedType!, v),
+                                  ),
+                                if (widget.enableDeleteButton)
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline,
+                                        size: 16, color: Colors.red),
+                                    tooltip: isEnglish ? 'Delete' : 'ลบ',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                        minWidth: 28, minHeight: 28),
+                                    onPressed: () =>
+                                        widget.onDelete(_selectedType!, v),
+                                  ),
                               ],
                             ),
                           ),

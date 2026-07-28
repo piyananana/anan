@@ -35,6 +35,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   double _leftPanelWidth = 400.0;
   bool _isDraggingDivider = false;
   bool _isEnglish = false;
+  bool _canCreate = true;
+  bool _canEdit = true;
+  bool _canDelete = true;
 
   @override
   void initState() {
@@ -719,6 +722,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
     final l = AppL10n(isEnglish);
+    _canCreate = MenuScope.of(context)?.canCreate ?? true;
+    _canEdit = MenuScope.of(context)?.canEdit ?? true;
+    _canDelete = MenuScope.of(context)?.canDelete ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -809,12 +815,13 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             children: [
               Text(isEnglish ? 'Financial Reports' : 'รายการงบการเงิน', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
               const Spacer(),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: Text(l.add),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.deepOrange[900]),
-                onPressed: () => _showReportDialog(),
-              ),
+              if (_canCreate)
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(l.add),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.deepOrange[900]),
+                  onPressed: () => _showReportDialog(),
+                ),
             ],
           ),
         ),
@@ -843,11 +850,12 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit, size: 18),
-                                tooltip: l.edit,
-                                onPressed: () => _showReportDialog(r),
-                              ),
+                              if (_canEdit)
+                                IconButton(
+                                  icon: const Icon(Icons.edit, size: 18),
+                                  tooltip: l.edit,
+                                  onPressed: () => _showReportDialog(r),
+                                ),
                               IconButton(
                                 icon: Icon(Icons.design_services, size: 18, color: Colors.deepOrange[900]),
                                 tooltip: isEnglish ? 'Design' : 'ออกแบบ',
@@ -895,12 +903,13 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: Text(isEnglish ? 'Add Row' : 'เพิ่มบรรทัด'),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.deepOrange[900]),
-                onPressed: () => _showRowDialog(),
-              ),
+              if (_canCreate)
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(isEnglish ? 'Add Row' : 'เพิ่มบรรทัด'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.deepOrange[900]),
+                  onPressed: () => _showRowDialog(),
+                ),
             ],
           ),
         ),
@@ -947,7 +956,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
         child: Row(
           children: [
             // ปุ่มลบบรรทัด
-            IconButton(
+            if (_canDelete)
+              IconButton(
               icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
               tooltip: isEnglish ? 'Delete row' : 'ลบบรรทัด',
               padding: EdgeInsets.zero,

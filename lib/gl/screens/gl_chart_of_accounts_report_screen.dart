@@ -690,6 +690,9 @@ class _ChartOfAccountsReportScreenState
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
+    final perm = MenuScope.of(context);
+    final canExport = perm?.canExport ?? true;
+    final canPrint = perm?.canPrint ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -709,7 +712,7 @@ class _ChartOfAccountsReportScreenState
             IconButton(
               icon: const Icon(Icons.table_chart_outlined),
               tooltip: 'Export Excel',
-              onPressed: _reportData.isEmpty ? null : _exportExcel,
+              onPressed: (_reportData.isEmpty || !canExport) ? null : _exportExcel,
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -918,6 +921,8 @@ class _ChartOfAccountsReportScreenState
                           initialPageFormat: PdfPageFormat.a4.landscape,
                           canChangeOrientation: false,
                           canDebug: false,
+                          allowPrinting: canPrint,
+                          allowSharing: canPrint,
                         ),
                 ),
               ),

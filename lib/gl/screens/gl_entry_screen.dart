@@ -67,6 +67,10 @@ class _GlEntryScreenState extends State<GlEntryScreen>
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -118,16 +122,20 @@ class _GlEntryScreenState extends State<GlEntryScreen>
                   shouldRefresh: _shouldRefreshList,
                   onRefreshComplete: () =>
                       setState(() => _shouldRefreshList = false),
+                  enableAddButton: canCreate,
+                  enableEditButton: canEdit,
+                  enableDeleteButton: canDelete,
                 ),
                 GlEntryDetailWidget(
                   entryId: _selectedEntryId,
-                  viewOnly: _isViewOnly,
+                  viewOnly: _isViewOnly || !canEdit,
                   resetKey: _detailResetKey,
                   onSaveSuccess: _onSaveSuccess,
                   onCancel: () {
                     setState(() => _currentTabIndex = 0);
                     _tabController.animateTo(0);
                   },
+                  canDelete: canDelete,
                 ),
               ],
             ),

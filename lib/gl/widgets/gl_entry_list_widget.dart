@@ -20,6 +20,9 @@ class GlEntryListWidget extends StatefulWidget {
   final Function(int) onViewPressed;
   final bool shouldRefresh;
   final VoidCallback onRefreshComplete;
+  final bool enableAddButton;
+  final bool enableEditButton;
+  final bool enableDeleteButton;
 
   const GlEntryListWidget({
     super.key,
@@ -28,6 +31,9 @@ class GlEntryListWidget extends StatefulWidget {
     required this.onViewPressed,
     required this.shouldRefresh,
     required this.onRefreshComplete,
+    this.enableAddButton = true,
+    this.enableEditButton = true,
+    this.enableDeleteButton = true,
   });
 
   @override
@@ -470,13 +476,14 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed: widget.onAddPressed,
-                icon: const Icon(Icons.add, size: 16),
-                label: Text(isEnglish ? 'Add Entry' : 'เพิ่มรายการ'),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
-              ),
+              if (widget.enableAddButton)
+                ElevatedButton.icon(
+                  onPressed: widget.onAddPressed,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: Text(isEnglish ? 'Add Entry' : 'เพิ่มรายการ'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
+                ),
               if (_hasActiveFilters) ...[
                 const SizedBox(width: 4),
                 TextButton(
@@ -565,7 +572,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                             fontWeight: FontWeight.w600)),
                   )),
                   DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
-                    if (isDraft)
+                    if (isDraft && widget.enableEditButton)
                       IconButton(
                         icon: const Icon(Icons.edit, size: 16),
                         tooltip: isEnglish ? 'Edit' : 'แก้ไข',
@@ -579,7 +586,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                         onPressed: () => widget.onViewPressed(item.id),
                         visualDensity: VisualDensity.compact,
                       ),
-                    if (isDraft)
+                    if (isDraft && widget.enableDeleteButton)
                       IconButton(
                         icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
                         tooltip: isEnglish ? 'Delete' : 'ลบ',
