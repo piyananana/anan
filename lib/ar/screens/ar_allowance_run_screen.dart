@@ -128,6 +128,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
 
   Future<void> _deleteDraft(int id) async {
     final isEnglish = _isEnglish;
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final ok = await _confirm(isEnglish ? 'Delete this Draft?' : 'ลบ Draft รายการนี้?');
     if (!ok) return;
     try {
@@ -139,6 +140,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
 
   Future<void> _post(int id) async {
     final isEnglish = _isEnglish;
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     if (!await _confirm(isEnglish ? 'Post this entry and create a GL entry?' : 'Post รายการนี้และสร้าง GL entry?')) return;
     try {
       await _svc.postAllowanceRun(id);
@@ -149,6 +151,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
 
   Future<void> _void(int id) async {
     final isEnglish = _isEnglish;
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     if (!await _confirm(isEnglish ? 'Void this entry? The GL entry will be reversed' : 'ยกเลิกรายการนี้? GL entry จะถูก reverse')) return;
     try {
       await _svc.voidAllowanceRun(id);

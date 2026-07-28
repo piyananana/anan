@@ -417,7 +417,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton(
-            onPressed: _isSaving ? null : _saveSetup,
+            onPressed: (_isSaving || !(MenuScope.of(context)?.canEdit ?? true)) ? null : _saveSetup,
             style: FilledButton.styleFrom(backgroundColor: Colors.teal),
             child: _isSaving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : Text(isEnglish ? 'Save' : 'บันทึก'),
@@ -487,7 +487,7 @@ class _ArYearEndSetupScreenState extends State<ArYearEndSetupScreen>
           ),
           const Spacer(),
           FilledButton(
-            onPressed: _isSaving ? null : _saveRules,
+            onPressed: (_isSaving || !(MenuScope.of(context)?.canEdit ?? true)) ? null : _saveRules,
             style: FilledButton.styleFrom(backgroundColor: Colors.teal),
             child: Text(isEnglish ? 'Save' : 'บันทึก'),
           ),

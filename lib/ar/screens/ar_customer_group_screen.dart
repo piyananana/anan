@@ -170,6 +170,10 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
   Widget build(BuildContext context) {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     super.build(context);
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
 
     return Scaffold(
       appBar: AppBar(
@@ -233,10 +237,10 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
                           Expanded(
                             child: ArCustomerGroupListWidget(
                               key: _listWidgetKey,
-                              enableAddButton: true,
-                              enableEditButton: true,
+                              enableAddButton: canCreate,
+                              enableEditButton: canEdit,
                               enableViewButton: true,
-                              enableDeleteButton: true,
+                              enableDeleteButton: canDelete,
                               enableSortButton: true,
                               enableCardSelect: false,
                               onAdd: _onAdd,

@@ -197,6 +197,10 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -251,10 +255,10 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
                       color: Colors.blueGrey.shade100,
                       child: ArCustomerListWidget(
                         key: _listKey,
-                        enableAddButton: true,
-                        enableEditButton: true,
+                        enableAddButton: canCreate,
+                        enableEditButton: canEdit,
                         enableViewButton: true,
-                        enableDeleteButton: true,
+                        enableDeleteButton: canDelete,
                         enableCardSelect: false,
                         onAdd: _onAdd,
                         onEdit: _onEdit,

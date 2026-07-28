@@ -144,6 +144,10 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
   Widget build(BuildContext context) {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     super.build(context);
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -202,10 +206,10 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
                       color: Colors.blueGrey.shade100,
                       child: ArCollectorListWidget(
                         key: _listKey,
-                        enableAddButton: true,
-                        enableEditButton: true,
+                        enableAddButton: canCreate,
+                        enableEditButton: canEdit,
                         enableViewButton: true,
-                        enableDeleteButton: true,
+                        enableDeleteButton: canDelete,
                         enableCardSelect: false,
                         onAdd: _onAdd,
                         onEdit: _onEdit,

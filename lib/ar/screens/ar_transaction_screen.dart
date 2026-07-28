@@ -67,6 +67,10 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -115,16 +119,19 @@ class _ArTransactionScreenState extends State<ArTransactionScreen>
                   onViewPressed: (id) => _openDetailTab(id: id, viewOnly: true),
                   shouldRefresh: _shouldRefreshList,
                   onRefreshComplete: () => setState(() => _shouldRefreshList = false),
+                  enableAddButton: canCreate,
+                  enableEditButton: canEdit,
                 ),
                 ArTransactionDetailWidget(
                   transactionId: _selectedTransactionId,
-                  viewOnly: _isViewOnly,
+                  viewOnly: _isViewOnly || !canEdit,
                   resetKey: _detailResetKey,
                   onSaveSuccess: _onSaveSuccess,
                   onCancel: () {
                     setState(() => _currentTabIndex = 0);
                     _tabController.animateTo(0);
                   },
+                  canDelete: canDelete,
                 ),
               ],
             ),

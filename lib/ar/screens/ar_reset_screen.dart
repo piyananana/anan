@@ -68,6 +68,7 @@ class _ArResetScreenState extends State<ArResetScreen> {
   }
 
   bool get _canExecute =>
+      (MenuScope.of(context)?.canDelete ?? true) &&
       _confirmCtrl.text.trim() == 'ยืนยัน' &&
       (_deleteTransactions ||
           _resetDocNumbers ||

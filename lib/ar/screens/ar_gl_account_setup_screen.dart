@@ -857,7 +857,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
         Row(children: [
           Expanded(
             child: ElevatedButton.icon(
-              onPressed: _isSaving ? null : _submit,
+              onPressed: (_isSaving || !(MenuScope.of(context)?.canEdit ?? true)) ? null : _submit,
               icon: _isSaving
                   ? const SizedBox(height: 20, width: 20,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))

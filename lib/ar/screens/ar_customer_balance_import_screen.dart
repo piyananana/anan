@@ -281,7 +281,7 @@ class _ArCustomerBalanceImportScreenState extends State<ArCustomerBalanceImportS
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: ElevatedButton.icon(
-                  onPressed: _isImporting ? null : _confirmImport,
+                  onPressed: (_isImporting || !(MenuScope.of(context)?.canCreate ?? true)) ? null : _confirmImport,
                   icon: _isImporting
                       ? const SizedBox(
                           width: 18,

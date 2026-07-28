@@ -589,6 +589,9 @@ class _ArFxGainLossReportScreenState
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
+    final perm = MenuScope.of(context);
+    final canExport = perm?.canExport ?? true;
+    final canPrint = perm?.canPrint ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -607,7 +610,7 @@ class _ArFxGainLossReportScreenState
             IconButton(
               icon: const Icon(Icons.table_chart_outlined),
               tooltip: 'Export Excel',
-              onPressed: (_reportRows.isEmpty || _isExporting) ? null : _exportExcel,
+              onPressed: (_reportRows.isEmpty || _isExporting || !canExport) ? null : _exportExcel,
             ),
         ],
       ),
@@ -881,6 +884,8 @@ class _ArFxGainLossReportScreenState
                                   initialPageFormat: PdfPageFormat.a4.landscape,
                                   canChangeOrientation: false,
                                   canDebug: false,
+                                  allowPrinting: canPrint,
+                                  allowSharing: canPrint,
                                 ),
                     ),
                   ),

@@ -941,7 +941,8 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                         : Colors.teal[800],
                 foregroundColor: Colors.white),
             onPressed:
-                (_isCreating || hasError || noDocType || custCount == 0)
+                (_isCreating || hasError || noDocType || custCount == 0 ||
+                        !(MenuScope.of(context)?.canCreate ?? true))
                     ? null
                     : _createBulkBilling,
           ),
