@@ -297,6 +297,10 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
 
     return Scaffold(
       appBar: AppBar(
@@ -378,10 +382,10 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
                           Expanded(
                             child: ZipcodeListWidget(
                               key: _listWidgetKey,
-                              enableAddButton: true,
-                              enableEditButton: true,
+                              enableAddButton: canCreate,
+                              enableEditButton: canEdit,
                               enableViewButton: true,
-                              enableDeleteButton: true,
+                              enableDeleteButton: canDelete,
                               enableSortButton: true,
                               enableCardSelect: false,
                               onAdd: _onAdd,

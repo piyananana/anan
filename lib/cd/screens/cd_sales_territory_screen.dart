@@ -152,6 +152,10 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
     final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
@@ -210,11 +214,11 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
                       color: Colors.blueGrey.shade100,
                       child: SalesTerritoryListWidget(
                         key: _listKey,
-                        enableAddButton: true,
-                        enableAddChildButton: true,
-                        enableEditButton: true,
+                        enableAddButton: canCreate,
+                        enableAddChildButton: canCreate,
+                        enableEditButton: canEdit,
                         enableViewButton: true,
-                        enableDeleteButton: true,
+                        enableDeleteButton: canDelete,
                         enableCardSelect: false,
                         onAdd: _onAdd,
                         onAddChild: _onAddChild,

@@ -294,6 +294,10 @@ class _BranchScreenState extends State<BranchScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
     final l = AppL10n(isEnglish);
 
     return Scaffold(
@@ -351,10 +355,10 @@ class _BranchScreenState extends State<BranchScreen>
                           Expanded(
                             child: BranchListWidget(
                               key: _listWidgetKey,
-                              enableAddButton: true,
-                              enableEditButton: true,
+                              enableAddButton: canCreate,
+                              enableEditButton: canEdit,
                               enableViewButton: true,
-                              enableDeleteButton: true,
+                              enableDeleteButton: canDelete,
                               enableSortButton: true,
                               enableCardSelect: false,
                               onAdd: _onAdd,

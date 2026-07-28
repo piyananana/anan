@@ -150,6 +150,10 @@ class _BankScreenState extends State<BankScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
     final l = AppL10n(isEnglish);
     return Scaffold(
       appBar: AppBar(
@@ -207,10 +211,10 @@ class _BankScreenState extends State<BankScreen>
                       color: Colors.blueGrey.shade100,
                       child: BankListWidget(
                         key: _listKey,
-                        enableAddButton: true,
-                        enableEditButton: true,
+                        enableAddButton: canCreate,
+                        enableEditButton: canEdit,
                         enableViewButton: true,
-                        enableDeleteButton: true,
+                        enableDeleteButton: canDelete,
                         enableSortButton: true,
                         enableCardSelect: false,
                         onAdd: _onAdd,
