@@ -82,6 +82,12 @@ class PostingPeriod {
   final String arStatus;
   final String imStatus;
   final String cmStatus;
+  // ข้อมูลคำขอปิดงวด GL ที่ยังรออนุมัติ (Pending) — null หากไม่มีคำขอค้างอยู่
+  final int? closeRequestId;
+  final int? closeRequestedBy;
+  final String? closeRequestedByName;
+  final int? closeApproverUserId;
+  final String? closeApproverUserName;
 
   PostingPeriod({
     required this.id,
@@ -95,6 +101,11 @@ class PostingPeriod {
     required this.arStatus,
     required this.imStatus,
     this.cmStatus = 'OPEN',
+    this.closeRequestId,
+    this.closeRequestedBy,
+    this.closeRequestedByName,
+    this.closeApproverUserId,
+    this.closeApproverUserName,
   });
 
   factory PostingPeriod.fromJson(Map<String, dynamic> json) {
@@ -112,6 +123,14 @@ class PostingPeriod {
       arStatus: json['ar_status'] ?? 'OPEN',
       imStatus: json['im_status'] ?? 'OPEN',
       cmStatus: json['cm_status'] as String? ?? 'OPEN',
+      closeRequestId: json['close_request_id'] == null
+          ? null : int.tryParse(json['close_request_id'].toString()),
+      closeRequestedBy: json['close_requested_by'] == null
+          ? null : int.tryParse(json['close_requested_by'].toString()),
+      closeRequestedByName: json['close_requested_by_name'] as String?,
+      closeApproverUserId: json['close_approver_user_id'] == null
+          ? null : int.tryParse(json['close_approver_user_id'].toString()),
+      closeApproverUserName: json['close_approver_user_name'] as String?,
     );
   }
 

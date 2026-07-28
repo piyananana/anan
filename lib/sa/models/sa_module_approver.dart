@@ -35,12 +35,15 @@ class SaModuleApprover {
   }
 
   String get moduleName {
-    const map = {'AP': 'บัญชีเจ้าหนี้ (AP)', 'AR': 'บัญชีลูกหนี้ (AR)', 'GL': 'บัญชีแยกประเภท (GL)'};
+    const map = {'01': 'บัญชีแยกประเภท (GL)', '21': 'บัญชีเจ้าหนี้ (AP)', '11': 'บัญชีลูกหนี้ (AR)'};
     return map[moduleCode] ?? moduleCode;
   }
 
   String get docCategoryName {
-    const map = {'payment_run': 'Payment Run (ชำระเงิน)'};
+    const map = {
+      'payment_run': 'Payment Run (ชำระเงิน)',
+      'period_close': 'ปิดงวดบัญชี (Period Close)',
+    };
     return map[docCategory] ?? docCategory;
   }
 

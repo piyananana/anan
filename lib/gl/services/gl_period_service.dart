@@ -224,6 +224,60 @@ class PeriodService {
     }
   }
 
+  // ── GL Period Close Approval Workflow ──────────────────────────────────
+
+  Future<Map<String, dynamic>> requestClose(int periodId) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.post(
+      Uri.parse('$baseUrl/gl_posting_period/$periodId/request_close'),
+      headers: headers,
+    );
+    final body = json.decode(response.body) as Map<String, dynamic>;
+    if (response.statusCode == 200) {
+      return body;
+    } else {
+      throw Exception(body['message'] ?? 'ไม่สามารถส่งคำขอปิดงวดได้');
+    }
+  }
+
+  Future<void> approveCloseRequest(int requestId, {String? remarks}) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.post(
+      Uri.parse('$baseUrl/gl_period_close_request/$requestId/approve'),
+      headers: headers,
+      body: json.encode({'remarks': remarks}),
+    );
+    if (response.statusCode != 200) {
+      final body = json.decode(response.body);
+      throw Exception(body['message'] ?? 'ไม่สามารถอนุมัติได้');
+    }
+  }
+
+  Future<void> rejectCloseRequest(int requestId, String remarks) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.post(
+      Uri.parse('$baseUrl/gl_period_close_request/$requestId/reject'),
+      headers: headers,
+      body: json.encode({'remarks': remarks}),
+    );
+    if (response.statusCode != 200) {
+      final body = json.decode(response.body);
+      throw Exception(body['message'] ?? 'ไม่สามารถปฏิเสธได้');
+    }
+  }
+
+  Future<void> cancelCloseRequest(int requestId) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.post(
+      Uri.parse('$baseUrl/gl_period_close_request/$requestId/cancel'),
+      headers: headers,
+    );
+    if (response.statusCode != 200) {
+      final body = json.decode(response.body);
+      throw Exception(body['message'] ?? 'ไม่สามารถยกเลิกคำขอได้');
+    }
+  }
+
   Future<PostingPeriod> updateStatusDetailRow(int rowId, String module, String newStatus) async {
     final body = {
       // ใช้ dynamic key เพื่อส่งสถานะที่ต้องการเปลี่ยนเท่านั้น

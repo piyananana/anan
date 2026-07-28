@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/services/sa_auth_service.dart';
 import '../models/gl_period.dart';
 import '../services/gl_period_service.dart';
 
@@ -817,6 +818,9 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
       case 'LOCKED':
         chipColor = Colors.orange;
         break;
+      case 'PENDING_CLOSE':
+        chipColor = Colors.purple;
+        break;
       case 'CLOSED':
         chipColor = Colors.red;
         break;
@@ -825,10 +829,42 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     }
     if (widget.mode == Mode.view) chipColor = Colors.grey;
 
+    final currentUserId = AuthService().currentUser?.id;
+
     // Icons ใต้ chip (เฉพาะ edit mode)
     List<Widget> actionIcons = [];
     if (widget.mode != Mode.view) {
-      if (status == 'OPEN') {
+      if (module == 'GL' && status == 'PENDING_CLOSE') {
+        // งวด GL ที่รออนุมัติ — แสดงปุ่มตามบทบาทของผู้ใช้ปัจจุบัน
+        final isApprover = period.closeApproverUserId != null &&
+            currentUserId == period.closeApproverUserId;
+        final isRequester = period.closeRequestedBy != null &&
+            currentUserId == period.closeRequestedBy;
+        if (isApprover) {
+          actionIcons.add(Tooltip(
+            message: isEnglish ? 'Approve Close' : 'อนุมัติปิดงวด',
+            child: InkWell(
+              onTap: () => _approveGlClose(period),
+              child: const Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
+            ),
+          ));
+          actionIcons.add(Tooltip(
+            message: isEnglish ? 'Reject' : 'ปฏิเสธ',
+            child: InkWell(
+              onTap: () => _rejectGlClose(period),
+              child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
+            ),
+          ));
+        } else if (isRequester) {
+          actionIcons.add(Tooltip(
+            message: isEnglish ? 'Cancel Request' : 'ยกเลิกคำขอ',
+            child: InkWell(
+              onTap: () => _cancelGlCloseRequest(period),
+              child: const Icon(Icons.undo, color: Colors.blueGrey, size: 20),
+            ),
+          ));
+        }
+      } else if (status == 'OPEN') {
         // icon ล็อคสีส้ม → LOCKED
         actionIcons.add(Tooltip(
           message: isEnglish ? 'Lock (LOCKED)' : 'ล็อค (LOCKED)',
@@ -837,11 +873,15 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
             child: const Icon(Icons.lock_outline, color: Colors.orange, size: 20),
           ),
         ));
-        // icon ปิดสีแดง → CLOSED (2-step approval)
+        // icon ปิดสีแดง → CLOSED (GL ต้องขออนุมัติก่อน, โมดูลอื่น 2-step credential)
         actionIcons.add(Tooltip(
-          message: isEnglish ? 'Close Period (CLOSED)' : 'ปิดงวด (CLOSED)',
+          message: module == 'GL'
+              ? (isEnglish ? 'Request Close Period' : 'ขอปิดงวด')
+              : (isEnglish ? 'Close Period (CLOSED)' : 'ปิดงวด (CLOSED)'),
           child: InkWell(
-            onTap: () => _confirmClose(period, module, 'OPEN'),
+            onTap: () => module == 'GL'
+                ? _confirmRequestGlClose(period)
+                : _confirmClose(period, module, 'OPEN'),
             child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
           ),
         ));
@@ -854,11 +894,15 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
             child: const Icon(Icons.lock_open_outlined, color: Colors.green, size: 20),
           ),
         ));
-        // icon ปิดสีแดง → CLOSED (2-step approval)
+        // icon ปิดสีแดง → CLOSED (GL ต้องขออนุมัติก่อน, โมดูลอื่น 2-step credential)
         actionIcons.add(Tooltip(
-          message: isEnglish ? 'Close Period (CLOSED)' : 'ปิดงวด (CLOSED)',
+          message: module == 'GL'
+              ? (isEnglish ? 'Request Close Period' : 'ขอปิดงวด')
+              : (isEnglish ? 'Close Period (CLOSED)' : 'ปิดงวด (CLOSED)'),
           child: InkWell(
-            onTap: () => _confirmClose(period, module, 'LOCKED'),
+            onTap: () => module == 'GL'
+                ? _confirmRequestGlClose(period)
+                : _confirmClose(period, module, 'LOCKED'),
             child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
           ),
         ));
@@ -866,25 +910,43 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
       // CLOSED → ไม่มี icon
     }
 
+    String chipLabel = status.replaceAll('_', ' ');
+    if (status == 'PENDING_CLOSE') {
+      chipLabel = isEnglish ? 'PENDING' : 'รออนุมัติ';
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Chip(
           label: Text(
-            status.replaceAll('_', ' '),
+            chipLabel,
             style: const TextStyle(color: Colors.white, fontSize: 10),
           ),
           backgroundColor: chipColor,
           padding: const EdgeInsets.all(2),
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
+        if (module == 'GL' && status == 'PENDING_CLOSE' && period.closeApproverUserName != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              isEnglish
+                  ? 'Approver: ${period.closeApproverUserName}'
+                  : 'ผู้อนุมัติ: ${period.closeApproverUserName}',
+              style: const TextStyle(fontSize: 9, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ),
         if (actionIcons.isNotEmpty)
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               actionIcons[0],
-              const SizedBox(width: 4),
-              actionIcons[1],
+              if (actionIcons.length > 1) ...[
+                const SizedBox(width: 4),
+                actionIcons[1],
+              ],
             ],
           ),
       ],
@@ -1216,6 +1278,226 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  // ── GL Period Close Approval Workflow ──────────────────────────────────
+
+  // ขอปิดงวดบัญชี GL — แทนที่ flow รหัสผ่านเดิม ด้วยการส่งคำขอไปยังผู้อนุมัติที่ตั้งค่าไว้
+  Future<void> _confirmRequestGlClose(PostingPeriod period) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 26),
+          const SizedBox(width: 8),
+          Text(isEnglish ? 'Request to Close Period' : 'ขออนุมัติปิดงวดบัญชี'),
+        ]),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  border: Border.all(color: Colors.red.shade200),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${isEnglish ? 'Period' : 'งวดเดือนบัญชี'}: ${period.periodName}',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    Text(
+                      isEnglish
+                          ? 'Closing a GL period is irreversible once approved'
+                          : 'การปิดงวดบัญชี GL ไม่สามารถย้อนกลับได้เมื่อได้รับการอนุมัติแล้ว',
+                      style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              _warningRow(Icons.playlist_add_check, isEnglish
+                  ? 'AP, AR, CM and IM periods must all be CLOSED first'
+                  : 'งวดบัญชีของ AP, AR, CM และ IM ต้องถูกปิด (CLOSED) ให้ครบก่อน'),
+              _warningRow(Icons.fact_check_outlined, isEnglish
+                  ? 'There must be no Draft GL entries remaining in this period'
+                  : 'ต้องไม่มีรายการบัญชี GL ที่ยังอยู่ในสถานะ Draft ค้างอยู่'),
+              _warningRow(Icons.how_to_reg, isEnglish
+                  ? 'This request will be sent to the configured approver for confirmation'
+                  : 'คำขอนี้จะถูกส่งไปยังผู้อนุมัติที่ตั้งค่าไว้เพื่อยืนยันการปิดงวด'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.send, size: 16),
+            label: Text(isEnglish ? 'Send Request' : 'ส่งคำขอ'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final result = await _detailService.requestClose(period.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result['message']?.toString() ??
+            (isEnglish ? 'Close request sent successfully' : 'ส่งคำขอปิดงวดสำเร็จ')),
+        backgroundColor: Colors.green,
+      ));
+      widget.onDetailChange();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+  Future<void> _approveGlClose(PostingPeriod period) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
+    if (period.closeRequestId == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Approve Period Close' : 'อนุมัติปิดงวดบัญชี'),
+        content: Text(isEnglish
+            ? 'Approve closing period "${period.periodName}"? This action cannot be undone.'
+            : 'ยืนยันอนุมัติปิดงวดบัญชี "${period.periodName}" ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: Text(isEnglish ? 'Approve' : 'อนุมัติ'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await _detailService.approveCloseRequest(period.closeRequestId!);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(isEnglish ? 'Period closed successfully' : 'อนุมัติปิดงวดบัญชีสำเร็จ'),
+        backgroundColor: Colors.green,
+      ));
+      widget.onDetailChange();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+  Future<void> _rejectGlClose(PostingPeriod period) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
+    if (period.closeRequestId == null) return;
+    final remarksCtrl = TextEditingController();
+    String? errorText;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDs) => AlertDialog(
+        title: Text(isEnglish ? 'Reject Close Request' : 'ปฏิเสธคำขอปิดงวด'),
+        content: TextField(
+          controller: remarksCtrl,
+          autofocus: true,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: isEnglish ? 'Reason (required)' : 'เหตุผล (จำเป็น)',
+            border: const OutlineInputBorder(),
+            isDense: true,
+            errorText: errorText,
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
+          ElevatedButton(
+            onPressed: () {
+              if (remarksCtrl.text.trim().isEmpty) {
+                setDs(() => errorText = isEnglish ? 'Required' : 'กรุณาระบุ');
+                return;
+              }
+              Navigator.of(ctx).pop(true);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(isEnglish ? 'Reject' : 'ปฏิเสธ'),
+          ),
+        ],
+      )),
+    );
+    final remarks = remarksCtrl.text.trim();
+    remarksCtrl.dispose();
+    if (confirm != true) return;
+    try {
+      await _detailService.rejectCloseRequest(period.closeRequestId!, remarks);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(isEnglish ? 'Request rejected' : 'ปฏิเสธคำขอสำเร็จ'),
+        backgroundColor: Colors.green,
+      ));
+      widget.onDetailChange();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+  Future<void> _cancelGlCloseRequest(PostingPeriod period) async {
+    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = l.isEnglish;
+    if (period.closeRequestId == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Cancel Close Request' : 'ยกเลิกคำขอปิดงวด'),
+        content: Text(isEnglish
+            ? 'Cancel the pending close request for "${period.periodName}"?'
+            : 'ยกเลิกคำขอปิดงวดบัญชี "${period.periodName}" ที่รออนุมัติอยู่ใช่หรือไม่?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l.confirm),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await _detailService.cancelCloseRequest(period.closeRequestId!);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(isEnglish ? 'Request cancelled' : 'ยกเลิกคำขอสำเร็จ'),
+        backgroundColor: Colors.green,
+      ));
+      widget.onDetailChange();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: Colors.red,
+      ));
     }
   }
 }

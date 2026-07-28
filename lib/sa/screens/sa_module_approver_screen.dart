@@ -15,11 +15,13 @@ import '../services/sa_language_provider.dart';
 
 // ── constants ─────────────────────────────────────────────────────────────────
 const _modules = [
-  _Option('AP', 'บัญชีเจ้าหนี้ (AP)'),
-  _Option('AR', 'บัญชีลูกหนี้ (AR)'),
+  _Option('01', 'บัญชีแยกประเภท (GL)'),
+  _Option('21', 'บัญชีเจ้าหนี้ (AP)'),
+  _Option('11', 'บัญชีลูกหนี้ (AR)'),
 ];
 const _categories = [
   _Option('payment_run', 'Payment Run'),
+  _Option('period_close', 'ปิดงวดบัญชี (Period Close)'),
 ];
 
 class _Option {
@@ -44,7 +46,7 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
   List<User>             _users = [];
   bool _loading = true;
 
-  String _filterModule   = 'AP';
+  String _filterModule   = '21';
   String _filterCategory = 'payment_run';
 
   SaModuleApprover? _selected;
