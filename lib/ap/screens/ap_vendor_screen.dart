@@ -190,6 +190,10 @@ class _ApVendorScreenState extends State<ApVendorScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -244,10 +248,10 @@ class _ApVendorScreenState extends State<ApVendorScreen>
                       color: Colors.blueGrey.shade100,
                       child: ApVendorListWidget(
                         key: _listKey,
-                        enableAddButton: true,
-                        enableEditButton: true,
+                        enableAddButton: canCreate,
+                        enableEditButton: canEdit,
                         enableViewButton: true,
-                        enableDeleteButton: true,
+                        enableDeleteButton: canDelete,
                         onAdd: _onAdd,
                         onEdit: _onEdit,
                         onView: _onView,

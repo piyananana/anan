@@ -94,6 +94,7 @@ class _ApRemittanceAdviceScreenState extends State<ApRemittanceAdviceScreen>
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final id = payment['id'] as int?;
     if (id == null) return;
+    if (!(MenuScope.of(context)?.canPrint ?? true)) return;
     setState(() => _generating = true);
     try {
       final h = await _headers();

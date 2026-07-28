@@ -143,6 +143,8 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final l = AppL10n(isEnglish);
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -197,12 +199,13 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
                                 fontWeight: FontWeight.bold,
                                 color: Colors.blue[800])),
                       ),
-                      IconButton(
-                          icon: const Icon(Icons.add),
-                          iconSize: 20,
-                          color: Colors.blue[700],
-                          tooltip: isEnglish ? 'Create new' : 'สร้างใหม่',
-                          onPressed: _onAdd),
+                      if (canCreate)
+                        IconButton(
+                            icon: const Icon(Icons.add),
+                            iconSize: 20,
+                            color: Colors.blue[700],
+                            tooltip: isEnglish ? 'Create new' : 'สร้างใหม่',
+                            onPressed: _onAdd),
                     ]),
                   ),
                   _StatusFilterBar(
@@ -444,6 +447,7 @@ class _DetailPanelState extends State<_DetailPanel> {
   Future<void> _submit() async {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final isEnglish = l.isEnglish;
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -482,6 +486,7 @@ class _DetailPanelState extends State<_DetailPanel> {
   Future<void> _void() async {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final isEnglish = l.isEnglish;
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1867,6 +1872,7 @@ class _ApprovalPanelState extends State<_ApprovalPanel> {
   Future<void> _doAction(bool isApprove) async {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final isEnglish = l.isEnglish;
+    if (!(MenuScope.of(context)?.canApprove ?? true)) return;
     final currentUserId =
         Provider.of<AuthService>(context, listen: false).currentUser?.id;
     final approvals = widget.run.approvals;

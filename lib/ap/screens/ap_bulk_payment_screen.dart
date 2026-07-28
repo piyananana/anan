@@ -123,6 +123,7 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
       return;
     }
     if (!await CmPeriodService.canPost(context, _fPaymentDate)) return;
+    if (!(MenuScope.of(context)?.canCreate ?? true)) return;
 
     final confirm = await showDialog<bool>(
       context: context,

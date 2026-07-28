@@ -37,6 +37,7 @@ class ApTransactionDetailWidget extends StatefulWidget {
   final int resetKey;
   final VoidCallback onSaveSuccess;
   final VoidCallback onCancel;
+  final bool canDelete;
 
   const ApTransactionDetailWidget({
     super.key,
@@ -45,6 +46,7 @@ class ApTransactionDetailWidget extends StatefulWidget {
     this.resetKey = 0,
     required this.onSaveSuccess,
     required this.onCancel,
+    this.canDelete = true,
   });
 
   @override
@@ -967,7 +969,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
           ),
           const SizedBox(width: 8),
-          if (_transactionId != 0)
+          if (_transactionId != 0 && widget.canDelete)
             OutlinedButton.icon(
               onPressed: () async {
                 final confirm = await showDialog<bool>(
@@ -992,7 +994,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
             ),
         ],
-        if (isPosted)
+        if (isPosted && widget.canDelete)
           ElevatedButton.icon(
             onPressed: _void,
             icon: const Icon(Icons.cancel_outlined, size: 16),

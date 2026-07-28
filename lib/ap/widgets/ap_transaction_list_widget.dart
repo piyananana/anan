@@ -20,6 +20,8 @@ class ApTransactionListWidget extends StatefulWidget {
   final Function(int) onViewPressed;
   final bool shouldRefresh;
   final VoidCallback onRefreshComplete;
+  final bool enableAddButton;
+  final bool enableEditButton;
 
   const ApTransactionListWidget({
     super.key,
@@ -28,6 +30,8 @@ class ApTransactionListWidget extends StatefulWidget {
     required this.onViewPressed,
     required this.shouldRefresh,
     required this.onRefreshComplete,
+    this.enableAddButton = true,
+    this.enableEditButton = true,
   });
 
   @override
@@ -417,13 +421,14 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed: widget.onAddPressed,
-                icon: const Icon(Icons.add, size: 16),
-                label: Text(isEnglish ? 'Add Document' : 'เพิ่มเอกสาร'),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
-              ),
+              if (widget.enableAddButton)
+                ElevatedButton.icon(
+                  onPressed: widget.onAddPressed,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: Text(isEnglish ? 'Add Document' : 'เพิ่มเอกสาร'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
+                ),
               if (_hasActiveFilters) ...[
                 const SizedBox(width: 4),
                 TextButton(
@@ -519,7 +524,7 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget>
                             fontWeight: FontWeight.w600)),
                   )),
                   DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
-                    if (isDraft)
+                    if (isDraft && widget.enableEditButton)
                       IconButton(
                         icon: const Icon(Icons.edit, size: 16),
                         tooltip: isEnglish ? 'Edit' : 'แก้ไข',

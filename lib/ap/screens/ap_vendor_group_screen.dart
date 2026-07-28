@@ -93,6 +93,10 @@ class _ApVendorGroupScreenState extends State<ApVendorGroupScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final perm = MenuScope.of(context);
+    final canCreate = perm?.canCreate ?? true;
+    final canEdit = perm?.canEdit ?? true;
+    final canDelete = perm?.canDelete ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -132,8 +136,8 @@ class _ApVendorGroupScreenState extends State<ApVendorGroupScreen>
                 color: Colors.blueGrey.shade100,
                 child: ApVendorGroupListWidget(
                   key: _listKey,
-                  enableAddButton: true, enableEditButton: true,
-                  enableViewButton: true, enableDeleteButton: true,
+                  enableAddButton: canCreate, enableEditButton: canEdit,
+                  enableViewButton: true, enableDeleteButton: canDelete,
                   enableSortButton: true, enableCardSelect: false,
                   onAdd: _onAdd, onEdit: _onEdit, onView: _onView, onDelete: _onDelete,
                   onCallback: (row) => setState(() { _mode = Mode.none; _selected = row; }),

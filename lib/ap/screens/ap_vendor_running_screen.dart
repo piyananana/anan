@@ -412,7 +412,9 @@ class _ApVendorRunningScreenState extends State<ApVendorRunningScreen> {
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton.icon(
-                          onPressed: _isSaving ? null : _save,
+                          onPressed: (_isSaving || !(MenuScope.of(context)?.canEdit ?? true))
+                              ? null
+                              : _save,
                           icon: _isSaving
                               ? const SizedBox(
                                   width: 18,

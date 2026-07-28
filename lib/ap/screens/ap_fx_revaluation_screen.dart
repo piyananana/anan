@@ -179,6 +179,7 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
 
   Future<void> _deleteDraft(int id) async {
     final isEnglish = _isEnglish;
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final ok = await _confirm(isEnglish ? 'Delete this Draft?' : 'ลบ Draft รายการนี้?');
     if (!ok) return;
     try {
@@ -190,6 +191,7 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
 
   Future<void> _post(int id) async {
     final isEnglish = _isEnglish;
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     final ok = await _confirm(isEnglish ? 'Post this entry and create a GL entry?' : 'Post รายการนี้และสร้าง GL entry?');
     if (!ok) return;
     try {
@@ -202,6 +204,7 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
 
   Future<void> _void(int id) async {
     final isEnglish = _isEnglish;
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final ok = await _confirm(isEnglish ? 'Void this entry? The GL entry will be reversed' : 'ยกเลิกรายการนี้? GL entry จะถูก reverse');
     if (!ok) return;
     try {

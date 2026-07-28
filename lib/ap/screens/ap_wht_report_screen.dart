@@ -367,6 +367,8 @@ class _ApWhtReportScreenState extends State<ApWhtReportScreen> {
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
+    final perm = MenuScope.of(context);
+    final canPrint = perm?.canPrint ?? true;
     final currentYear = DateTime.now().year;
     final years = List.generate(6, (i) => currentYear - 3 + i); // -3 to +2
 
@@ -510,6 +512,8 @@ class _ApWhtReportScreenState extends State<ApWhtReportScreen> {
                       initialPageFormat: PdfPageFormat.a4.landscape,
                       canChangeOrientation: false,
                       canDebug: false,
+                      allowPrinting: canPrint,
+                      allowSharing: canPrint,
                     ),
             ),
           ),

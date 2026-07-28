@@ -593,6 +593,9 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
     final isEnglish = l.isEnglish;
     _isEnglish = isEnglish;
+    final perm = MenuScope.of(context);
+    final canExport = perm?.canExport ?? true;
+    final canPrint = perm?.canPrint ?? true;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -609,7 +612,7 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
             IconButton(
               icon: const Icon(Icons.table_chart_outlined),
               tooltip: isEnglish ? 'Export Excel' : 'ส่งออก Excel',
-              onPressed: _reportData.isEmpty ? null : _exportExcel,
+              onPressed: (_reportData.isEmpty || !canExport) ? null : _exportExcel,
             ),
         ],
       ),
@@ -878,6 +881,8 @@ class _ApAgingReportScreenState extends State<ApAgingReportScreen> {
                                   initialPageFormat: PdfPageFormat.a4.landscape,
                                   canChangeOrientation: false,
                                   canDebug: false,
+                                  allowPrinting: canPrint,
+                                  allowSharing: canPrint,
                                 ),
                     ),
                   ),

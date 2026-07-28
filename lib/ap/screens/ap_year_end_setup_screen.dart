@@ -397,7 +397,7 @@ class _ApYearEndSetupScreenState extends State<ApYearEndSetupScreen>
                 Align(
                   alignment: Alignment.centerRight,
                   child: FilledButton(
-                    onPressed: _isSaving ? null : _save,
+                    onPressed: (_isSaving || !(MenuScope.of(context)?.canEdit ?? true)) ? null : _save,
                     style: FilledButton.styleFrom(backgroundColor: _kIndigo),
                     child: _isSaving
                         ? const SizedBox(width: 16, height: 16,
