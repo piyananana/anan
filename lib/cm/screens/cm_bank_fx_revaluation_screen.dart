@@ -218,6 +218,8 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
   }
 
   Future<void> _save({bool post = false}) async {
+    final perm = MenuScope.of(context);
+    if (!(post ? (perm?.canEdit ?? true) : (perm?.canCreate ?? true))) return;
     if (_formDate == null) { _showError('กรุณาระบุวันที่'); return; }
     if (post && (_formGainAcctId == null || _formLossAcctId == null)) {
       _showError('กรุณาระบุบัญชี FX Gain และ FX Loss ก่อน Post GL');
@@ -304,6 +306,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
   }
 
   Future<void> _voidSelected() async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selected == null) return;
     final ok = await showDialog<bool>(
@@ -337,6 +340,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
   }
 
   Future<void> _deleteSelected() async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selected == null) return;
     final ok = await showDialog<bool>(

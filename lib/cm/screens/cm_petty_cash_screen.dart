@@ -355,6 +355,8 @@ class _VoucherTabState extends State<_VoucherTab> {
   });
 
   Future<void> _save() async {
+    final perm = MenuScope.of(context);
+    if (!(_isCreating ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     if (_formDate == null) { _err('กรุณาระบุวันที่'); return; }
     final amount = double.tryParse(_amountCtrl.text.replaceAll(',', ''));
     if (amount == null || amount <= 0) { _err('กรุณาระบุจำนวนเงินที่ถูกต้อง'); return; }
@@ -384,6 +386,7 @@ class _VoucherTabState extends State<_VoucherTab> {
   }
 
   Future<void> _approve(CmPettyCashVoucher v) async {
+    if (!(MenuScope.of(context)?.canApprove ?? true)) return;
     if (!await CmPeriodService.canPost(context, v.voucherDate)) return;
     try {
       await _svc.approveVoucher(v.id);
@@ -393,6 +396,7 @@ class _VoucherTabState extends State<_VoucherTab> {
   }
 
   Future<void> _void(CmPettyCashVoucher v) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -417,6 +421,7 @@ class _VoucherTabState extends State<_VoucherTab> {
   }
 
   Future<void> _delete(CmPettyCashVoucher v) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -520,7 +525,7 @@ class _VoucherTabState extends State<_VoucherTab> {
                   ),
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('สร้างใบสำคัญ'),
-                  onPressed: _startCreate,
+                  onPressed: (MenuScope.of(context)?.canCreate ?? true) ? _startCreate : null,
                 ),
               ),
             ],
@@ -1000,6 +1005,7 @@ class _ReplenishmentTabState extends State<_ReplenishmentTab> {
   });
 
   Future<void> _save() async {
+    if (!(MenuScope.of(context)?.canCreate ?? true)) return;
     if (_formDate == null) { _err('กรุณาระบุวันที่'); return; }
     if (_srcBankId == null) { _err('กรุณาเลือกบัญชีธนาคารต้นทาง'); return; }
     if (_detailVouchers.isEmpty) { _err('ไม่พบใบสำคัญ Approved ที่รอการเบิกจ่าย'); return; }
@@ -1022,6 +1028,7 @@ class _ReplenishmentTabState extends State<_ReplenishmentTab> {
   }
 
   Future<void> _postGl(CmPettyCashReplenishment r) async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -1047,6 +1054,7 @@ class _ReplenishmentTabState extends State<_ReplenishmentTab> {
   }
 
   Future<void> _void(CmPettyCashReplenishment r) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -1127,7 +1135,7 @@ class _ReplenishmentTabState extends State<_ReplenishmentTab> {
                   ),
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('สร้างรายการเบิกจ่าย'),
-                  onPressed: _startCreate,
+                  onPressed: (MenuScope.of(context)?.canCreate ?? true) ? _startCreate : null,
                 ),
               ),
             ],

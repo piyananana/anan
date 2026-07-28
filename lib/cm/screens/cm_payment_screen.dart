@@ -114,6 +114,7 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
   }
 
   Future<void> _void(CmPayment p) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -380,12 +381,13 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
       const Spacer(),
       Text('${_payments.length} รายการ', style: const TextStyle(color: Colors.grey, fontSize: 12)),
       const SizedBox(width: 12),
-      FilledButton.icon(
-        icon: const Icon(Icons.add, size: 16),
-        label: const Text('สร้างรายการจ่าย'),
-        style: FilledButton.styleFrom(backgroundColor: _kColor),
-        onPressed: () => setState(() { _showCreateForm = true; _selected = null; }),
-      ),
+      if (MenuScope.of(context)?.canCreate ?? true)
+        FilledButton.icon(
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('สร้างรายการจ่าย'),
+          style: FilledButton.styleFrom(backgroundColor: _kColor),
+          onPressed: () => setState(() { _showCreateForm = true; _selected = null; }),
+        ),
     ]),
   );
 

@@ -420,6 +420,7 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
   }
 
   Future<void> _printSelected() async {
+    if (!(MenuScope.of(context)?.canPrint ?? true)) return;
     if (_selConfig == null || _selected.isEmpty) return;
     final toprint = _checks.where((c) => _selected.contains(c['id'] as int)).toList();
     try {

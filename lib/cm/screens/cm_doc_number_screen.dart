@@ -98,6 +98,7 @@ class _State extends State<CmDocNumberScreen> with AutomaticKeepAliveClientMixin
   }
 
   Future<void> _delete(Map<String, dynamic> row) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -158,12 +159,13 @@ class _State extends State<CmDocNumberScreen> with AutomaticKeepAliveClientMixin
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
         actions: [
-          TextButton.icon(
-            style: TextButton.styleFrom(foregroundColor: Colors.white),
-            onPressed: () => _openDialog(),
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('เพิ่ม Config', style: TextStyle(fontSize: 13)),
-          ),
+          if (MenuScope.of(context)?.canCreate ?? true)
+            TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+              onPressed: () => _openDialog(),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('เพิ่ม Config', style: TextStyle(fontSize: 13)),
+            ),
           const SizedBox(width: 8),
         ],
       ),
@@ -190,12 +192,13 @@ class _State extends State<CmDocNumberScreen> with AutomaticKeepAliveClientMixin
                         const SizedBox(height: 8),
                         Text('ยังไม่มี config เลขที่เอกสาร', style: TextStyle(color: Colors.grey.shade400)),
                         const SizedBox(height: 12),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
-                          onPressed: () => _openDialog(),
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text('เพิ่ม Config'),
-                        ),
+                        if (MenuScope.of(context)?.canCreate ?? true)
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
+                            onPressed: () => _openDialog(),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('เพิ่ม Config'),
+                          ),
                       ]))
                     : SingleChildScrollView(
                         child: SingleChildScrollView(
@@ -254,7 +257,9 @@ class _State extends State<CmDocNumberScreen> with AutomaticKeepAliveClientMixin
                                 icon: const Icon(Icons.edit_outlined, size: 16),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(minWidth: 28),
-                                onPressed: () => _openDialog(row: row),
+                                onPressed: (MenuScope.of(context)?.canEdit ?? true)
+                                    ? () => _openDialog(row: row)
+                                    : null,
                               )),
                               DataCell(IconButton(
                                 icon: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade400),

@@ -215,6 +215,7 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
 
   Future<void> _import() async {
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    if (!(MenuScope.of(context)?.canCreate ?? true)) return;
     if (_selAccount == null) { _showError('กรุณาเลือกบัญชีธนาคาร'); return; }
     if (_previewRows.isEmpty) { _showError('ไม่มีข้อมูลที่จะนำเข้า'); return; }
 

@@ -159,6 +159,8 @@ class _State extends State<CmInterBankTransferScreen>
   bool get _isFcy => (_fFromAcc?.currencyCode ?? 'THB') != 'THB';
 
   Future<void> _save() async {
+    final perm = MenuScope.of(context);
+    if (!(_isCreating ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     if (_fFromAcc == null || _fToAcc == null) { _showError('กรุณาเลือกบัญชีต้นทางและปลายทาง'); return; }
     if (_fFromAcc!.id == _fToAcc!.id) { _showError('บัญชีต้นทางและปลายทางต้องไม่ใช่บัญชีเดียวกัน'); return; }
     final amt = double.tryParse(_fAmountCtrl.text) ?? 0;
@@ -201,6 +203,7 @@ class _State extends State<CmInterBankTransferScreen>
   }
 
   Future<void> _post() async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     if (_selected == null) return;
     if (_fGlDoc == null && _selected!.glDocId == null) {
       _showError('กรุณาเลือก GL Doc Type ก่อน Post');
@@ -244,6 +247,7 @@ class _State extends State<CmInterBankTransferScreen>
   }
 
   Future<void> _void() async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     if (_selected == null) return;
     final confirm = await showDialog<bool>(
       context: context,
@@ -275,6 +279,7 @@ class _State extends State<CmInterBankTransferScreen>
   }
 
   Future<void> _delete() async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     if (_selected == null) return;
     final confirm = await showDialog<bool>(
       context: context,
@@ -366,7 +371,7 @@ class _State extends State<CmInterBankTransferScreen>
                 padding: EdgeInsets.zero, iconSize: 18,
                 icon: const Icon(Icons.add_circle_outline),
                 tooltip: 'สร้างใหม่',
-                onPressed: _startCreate,
+                onPressed: (MenuScope.of(context)?.canCreate ?? true) ? _startCreate : null,
               ),
             ]),
           ),

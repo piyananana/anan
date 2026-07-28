@@ -202,6 +202,8 @@ class _State extends State<CmPettyCashReplenishmentScreen> with AutomaticKeepAli
   }
 
   Future<void> _save() async {
+    final perm = MenuScope.of(context);
+    if (!(_isNew ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     if (_selPettyCashAccount == null) { _showError('กรุณาเลือกกองทุนเงินสดย่อย'); return; }
     setState(() => _saving = true);
     try {
@@ -244,6 +246,7 @@ class _State extends State<CmPettyCashReplenishmentScreen> with AutomaticKeepAli
   }
 
   Future<void> _post() async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     if (_selRpl == null) return;
     if (_pendingVouchers.isEmpty) {
       _showError('ไม่มีวาวเชอร์ที่ Approved รอการเบิกชดเชย');
@@ -296,6 +299,7 @@ class _State extends State<CmPettyCashReplenishmentScreen> with AutomaticKeepAli
   }
 
   Future<void> _void() async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     if (_selRpl == null) return;
     final confirm = await showDialog<bool>(
       context: context,
@@ -421,7 +425,8 @@ class _State extends State<CmPettyCashReplenishmentScreen> with AutomaticKeepAli
             child: Row(children: [
               const Expanded(child: Text('ใบเบิกชดเชย', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
               IconButton(
-                icon: const Icon(Icons.add, size: 18), onPressed: _startNew,
+                icon: const Icon(Icons.add, size: 18),
+                onPressed: (MenuScope.of(context)?.canCreate ?? true) ? _startNew : null,
                 padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 28),
                 tooltip: 'สร้างใหม่',
               ),

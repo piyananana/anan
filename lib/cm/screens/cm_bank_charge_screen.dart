@@ -149,6 +149,8 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
   }
 
   Future<void> _save() async {
+    final perm = MenuScope.of(context);
+    if (!(_isNew ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     if (_fBankAccId == null) { _showErr('กรุณาเลือกบัญชีธนาคาร'); return; }
     if (!await CmPeriodService.canPost(context, _fChargeDate)) return;
     setState(() => _saving = true);
@@ -176,6 +178,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
   }
 
   Future<void> _post(Map<String, dynamic> row) async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     DateTime chargeDate = parseLocalDate(row['charge_date']);
     if (!await CmPeriodService.canPost(context, chargeDate)) return;
@@ -206,6 +209,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
   }
 
   Future<void> _void(Map<String, dynamic> row) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
@@ -233,6 +237,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
   }
 
   Future<void> _delete(Map<String, dynamic> row) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final confirm = await showDialog<bool>(
       context: context,
@@ -351,7 +356,7 @@ class _CmBankChargeScreenState extends State<CmBankChargeScreen>
                               style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.white, foregroundColor: _kTheme,
                                   padding: const EdgeInsets.symmetric(vertical: 6), minimumSize: Size.zero),
-                              onPressed: _startNew,
+                              onPressed: (MenuScope.of(context)?.canCreate ?? true) ? _startNew : null,
                               icon: const Icon(Icons.add, size: 14),
                               label: const Text('เพิ่มใหม่', style: TextStyle(fontSize: 12)),
                             )),

@@ -110,6 +110,7 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
   }
 
   Future<void> _generateFile() async {
+    if (!(MenuScope.of(context)?.canExport ?? true)) return;
     if (_selFormat == null) { _showError('กรุณาเลือก Format ไฟล์'); return; }
     if (_selected.isEmpty) { _showError('กรุณาเลือกรายการจ่ายเงินอย่างน้อย 1 รายการ'); return; }
     setState(() => _generating = true);

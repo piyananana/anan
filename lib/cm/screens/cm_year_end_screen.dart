@@ -94,6 +94,7 @@ class _State extends State<CmYearEndScreen> with AutomaticKeepAliveClientMixin {
   }
 
   Future<void> _closeYear() async {
+    if (!(MenuScope.of(context)?.canApprove ?? true)) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(

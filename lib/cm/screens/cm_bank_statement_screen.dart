@@ -127,6 +127,8 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
 
   // ── Create / Edit statement header ─────────────────────────────────────────
   Future<void> _openStatementForm({CmBankStatement? existing}) async {
+    final perm = MenuScope.of(context);
+    if (!(existing == null ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => _StatementFormDialog(
@@ -146,6 +148,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   }
 
   Future<void> _confirmStatement() async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     if (_selectedStatement == null) return;
     try {
       final updated = await _stmtSvc.confirmStatement(_selectedStatement!.id);
@@ -156,6 +159,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   }
 
   Future<void> _voidStatement() async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedStatement == null) return;
     final ok = await showDialog<bool>(
@@ -179,6 +183,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   }
 
   Future<void> _deleteStatement() async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selectedStatement == null) return;
     final ok = await showDialog<bool>(
@@ -204,6 +209,8 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   // ── Line operations ────────────────────────────────────────────────────────
   Future<void> _openLineForm({CmBankStatementLine? existing}) async {
     if (_selectedStatement == null) return;
+    final perm = MenuScope.of(context);
+    if (!(existing == null ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => _LineFormDialog(
@@ -216,6 +223,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   }
 
   Future<void> _deleteLine(CmBankStatementLine line) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     try {
       await _stmtSvc.deleteLine(line.id);
       await _loadLines();
@@ -224,6 +232,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
 
   Future<void> _importCsv() async {
     if (_selectedStatement == null) return;
+    if (!(MenuScope.of(context)?.canCreate ?? true)) return;
     final result = await showDialog<List<Map<String, dynamic>>>(
       context: context,
       barrierDismissible: false,

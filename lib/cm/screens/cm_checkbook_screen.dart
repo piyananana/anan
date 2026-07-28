@@ -111,6 +111,8 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
   // ── Checkbook CRUD ────────────────────────────────────────────────────────
 
   Future<void> _saveCb(CmCheckbook cb) async {
+    final perm = MenuScope.of(context);
+    if (!(cb.id == null ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     try {
       if (cb.id == null) {
         await _svc.addCheckbook(cb);
@@ -125,6 +127,7 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
   }
 
   Future<void> _deleteCb(CmCheckbook cb) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final ok = await _confirm('ลบสมุดเช็ค "${cb.checkbookCode}" ?');
     if (!ok) return;
     try {
@@ -137,6 +140,8 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
   // ── Print Config CRUD ─────────────────────────────────────────────────────
 
   Future<void> _saveCfg(CmCheckPrintConfig cfg) async {
+    final perm = MenuScope.of(context);
+    if (!(cfg.id == null ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     try {
       if (cfg.id == null) {
         await _svc.addPrintConfig(cfg);
@@ -151,6 +156,7 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
   }
 
   Future<void> _deleteCfg(CmCheckPrintConfig cfg) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final ok = await _confirm('ลบรูปแบบพิมพ์ "${cfg.configName}" ?');
     if (!ok) return;
     try {
@@ -311,6 +317,7 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
         Text('สมุดเช็ค — ${_selectedBank!.accountCode} ${_selectedBank!.accountNameTh}',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         const Spacer(),
+        if (MenuScope.of(context)?.canCreate ?? true)
         FilledButton.icon(
           icon: const Icon(Icons.add, size: 16),
           label: const Text('เพิ่มสมุดเช็ค'),
@@ -360,6 +367,7 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
         Text('ตำแหน่งพิมพ์เช็ค — ${_selectedBank!.accountCode}',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         const Spacer(),
+        if (MenuScope.of(context)?.canCreate ?? true)
         FilledButton.icon(
           icon: const Icon(Icons.add, size: 16),
           label: const Text('เพิ่มรูปแบบ'),

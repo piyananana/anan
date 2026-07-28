@@ -165,6 +165,8 @@ class _State extends State<CmCheckPrintConfigScreen> with AutomaticKeepAliveClie
   }
 
   Future<void> _save() async {
+    final perm = MenuScope.of(context);
+    if (!(_isNew ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     if (_selAccount == null) return;
     if (_configNameCtrl.text.trim().isEmpty) {
       _showError('กรุณาระบุชื่อ config');
@@ -218,6 +220,7 @@ class _State extends State<CmCheckPrintConfigScreen> with AutomaticKeepAliveClie
   }
 
   Future<void> _delete(Map<String, dynamic> cfg) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final confirm = await showDialog<bool>(
       context: context,

@@ -73,6 +73,7 @@ class _State extends State<CmGlAccountSetupScreen>
   }
 
   Future<void> _editRow(Map<String, dynamic> row) async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     final isAccount = row['setup_type'] == 'GL_ACCOUNT';
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -98,6 +99,7 @@ class _State extends State<CmGlAccountSetupScreen>
   }
 
   Future<void> _clearRow(Map<String, dynamic> row) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     try {
       await _svc.upsertRow(row['setup_key']);
       await _loadAll();

@@ -100,6 +100,7 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
   }
 
   Future<void> _reconcilePair() async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     if (_selLine == null || _selRecord == null) return;
     try {
       await _svc.reconcilePair(
@@ -114,6 +115,7 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
   }
 
   Future<void> _unreconcileLine(CmBankStatementLine line) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     try {
       await _svc.unreconcileStatementLine(line.id);
       _showSuccess('ยกเลิกการจับคู่สำเร็จ');

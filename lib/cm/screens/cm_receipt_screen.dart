@@ -121,6 +121,7 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
   }
 
   Future<void> _void(CmReceipt r) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

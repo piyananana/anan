@@ -101,6 +101,7 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
   }
 
   Future<void> _onDelete(CmBankFileFormat row) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final ok = await showDialog<bool>(
       context: context,
@@ -133,6 +134,8 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
   }
 
   Future<void> _onSave(CmBankFileFormat row) async {
+    final perm = MenuScope.of(context);
+    if (!(row.id == null ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     try {
       final saved = row.id == null
           ? await _svc.addRow(row)
@@ -203,7 +206,7 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
                     IconButton(
                       icon: Icon(Icons.add_circle, color: Colors.teal[700]),
                       tooltip: 'เพิ่มรูปแบบใหม่',
-                      onPressed: _onAdd,
+                      onPressed: (MenuScope.of(context)?.canCreate ?? true) ? _onAdd : null,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),

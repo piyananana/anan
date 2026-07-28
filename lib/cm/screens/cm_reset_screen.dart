@@ -40,6 +40,7 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
   }
 
   Future<void> _reset() async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     if (_confirmCtrl.text != 'RESET CM') {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: const Text('พิมพ์ "RESET CM" เพื่อยืนยัน'), backgroundColor: Colors.red.shade700));

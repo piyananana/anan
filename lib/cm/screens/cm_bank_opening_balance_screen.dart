@@ -125,6 +125,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
   }
 
   Future<void> _save() async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     if (_selAccount == null) return;
     final balance = double.tryParse(_balCtrl.text.replaceAll(',', ''));
     if (balance == null) {
@@ -162,6 +163,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
   }
 
   Future<void> _delete() async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     if (_selAccount == null || _currentOB == null) return;
     final confirm = await showDialog<bool>(

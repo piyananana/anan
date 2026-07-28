@@ -167,6 +167,8 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
   }
 
   Future<void> _save() async {
+    final perm = MenuScope.of(context);
+    if (!(_isNew ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
     if (_checkNoCtrl.text.trim().isEmpty) { _showErr('กรุณากรอกเลขที่เช็ค'); return; }
     if (_fOurBankId == null) { _showErr('กรุณาเลือกบัญชีธนาคารของเรา'); return; }
 
@@ -201,6 +203,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
   }
 
   Future<void> _action(String action, Map<String, dynamic> row) async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     final label = switch (action) {
       'present' => 'นำฝาก',
       'clear'   => 'เคลียร์',
@@ -236,6 +239,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
   }
 
   Future<void> _delete(Map<String, dynamic> row) async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -374,7 +378,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
                               style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.white, foregroundColor: _kTheme,
                                   padding: const EdgeInsets.symmetric(vertical: 6), minimumSize: Size.zero),
-                              onPressed: _startNew,
+                              onPressed: (MenuScope.of(context)?.canCreate ?? true) ? _startNew : null,
                               icon: const Icon(Icons.add, size: 14),
                               label: const Text('เพิ่มใหม่', style: TextStyle(fontSize: 12)),
                             )),
