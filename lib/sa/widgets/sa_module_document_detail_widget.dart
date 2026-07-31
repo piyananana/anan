@@ -1,40 +1,10 @@
 ﻿// lib/sa/widgets/sa_module_document_detail_widget.dart
 
-import 'dart:convert';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../models/sa_module_document.dart';
-import '../models/sa_module_approver.dart';
-import '../models/sa_user.dart';
 import '../services/sa_language_provider.dart';
-import '../services/sa_module_approver_service.dart';
-import '../services/sa_user_service.dart';
-
-// ── Local helper ──────────────────────────────────────────────────────────────
-
-class _ApproverRow {
-  int? id;
-  TextEditingController levelCtrl;
-  int userId;
-  String userDisplayName;
-  bool isActive;
-  String? signatureImage;
-
-  _ApproverRow({
-    this.id,
-    required String level,
-    this.userId = 0,
-    this.userDisplayName = '',
-    this.isActive = true,
-    this.signatureImage,
-  }) : levelCtrl = TextEditingController(text: level);
-
-  void dispose() => levelCtrl.dispose();
-}
 
 // ── Widget ────────────────────────────────────────────────────────────────────
 
@@ -81,16 +51,6 @@ class ModuleDocumentDetailWidgetState
   bool _isSaving = false;
   late TextEditingController _sampleDocNoController;
 
-  // Approver state
-  final _approverSvc = SaModuleApproverService();
-  final _userSvc = UserService();
-  List<_ApproverRow> _approverRows = [];
-  Set<int> _originalApproverIds = {};
-  List<User> _users = [];
-  bool _approverSectionExpanded = false;
-  bool _approversLoading = false;
-  String _approverLoadedKey = '';
-
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   @override
@@ -99,8 +59,6 @@ class ModuleDocumentDetailWidgetState
     _selected = widget.selected;
     _syncStateFromSelected();
     _initControllers();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _maybeLoadApprovers());
   }
 
   @override
@@ -112,8 +70,6 @@ class ModuleDocumentDetailWidgetState
       _syncStateFromSelected();
       _initControllers();
       setState(() {});
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _maybeLoadApprovers());
     } else if (widget.mode == Mode.addRoot && oldWidget.mode != Mode.addRoot) {
       _disposeControllers();
       _selected = null;
@@ -201,73 +157,6 @@ class ModuleDocumentDetailWidgetState
     _formatSeparatorController.dispose();
     _nextRunningNumberController.dispose();
     _sampleDocNoController.dispose();
-    _disposeApproverRows();
-  }
-
-  void _disposeApproverRows() {
-    for (final r in _approverRows) {
-      r.dispose();
-    }
-    _approverRows = [];
-    _originalApproverIds = {};
-    _approverLoadedKey = '';
-  }
-
-  // ── Approver load ─────────────────────────────────────────────────────────
-
-  void _maybeLoadApprovers() {
-    if (!mounted) return;
-    final canLoad = _isDocType &&
-        _sysModule.isNotEmpty &&
-        _sysDocType.isNotEmpty &&
-        (widget.mode == Mode.edit || widget.mode == Mode.view);
-    if (!canLoad) return;
-    final key = '${_sysModule}_${_sysDocType}_${_selected?.id ?? 0}';
-    if (key == _approverLoadedKey) return;
-    _loadApprovers(key);
-  }
-
-  Future<void> _loadApprovers(String key) async {
-    if (!mounted) return;
-    setState(() => _approversLoading = true);
-    try {
-      final approvers = await _approverSvc.fetchRows(
-          moduleCode: _sysModule, docCategory: _sysDocType);
-      if (!mounted) return;
-      final newRows = approvers
-          .map((a) => _ApproverRow(
-                id: a.id,
-                level: a.approvalLevel.toString(),
-                userId: a.approverUserId,
-                userDisplayName: _buildUserDisplay(
-                    a.approverUsername, a.approverFirstName, a.approverLastName),
-                isActive: a.isActive,
-                signatureImage: a.signatureImage,
-              ))
-          .toList();
-      final newOriginalIds =
-          approvers.where((a) => a.id != null).map((a) => a.id!).toSet();
-      setState(() {
-        for (final r in _approverRows) {
-          r.dispose();
-        }
-        _approverRows = newRows;
-        _originalApproverIds = newOriginalIds;
-        _approverLoadedKey = key;
-        _approversLoading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _approversLoading = false);
-    }
-  }
-
-  String _buildUserDisplay(
-      String? username, String? firstName, String? lastName) {
-    final name = '${firstName ?? ''} ${lastName ?? ''}'.trim();
-    if (username == null && name.isEmpty) return '';
-    if (name.isEmpty) return username ?? '';
-    if (username == null) return name;
-    return '$username - $name';
   }
 
   // ── Form logic ────────────────────────────────────────────────────────────
@@ -319,25 +208,6 @@ class ModuleDocumentDetailWidgetState
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
-    // Snapshot approver data synchronously BEFORE any await to avoid
-    // race condition where didUpdateWidget clears state mid-save
-    final shouldSaveApprovers = _isDocType &&
-        _sysModule.isNotEmpty &&
-        _sysDocType.isNotEmpty &&
-        widget.mode == Mode.edit;
-    final approverModule = _sysModule;
-    final approverDocType = _sysDocType;
-    final approverOriginalIds = Set<int>.from(_originalApproverIds);
-    final approverSnapshots = _approverRows
-        .map((r) => {
-              'id': r.id,
-              'approval_level': int.tryParse(r.levelCtrl.text) ?? 1,
-              'approver_user_id': r.userId,
-              'signature_image': r.signatureImage,
-              'is_active': r.isActive,
-            })
-        .toList();
-
     final isEnglish = mounted
         ? Provider.of<LanguageProvider>(context, listen: false).isEnglish
         : false;
@@ -366,11 +236,6 @@ class ModuleDocumentDetailWidgetState
         sysDocType: _isDocType ? _sysDocType : '',
       );
       await widget.onSubmit(newDetail);
-
-      if (shouldSaveApprovers) {
-        await _saveApproversFromSnapshot(
-            approverModule, approverDocType, approverOriginalIds, approverSnapshots);
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -382,95 +247,6 @@ class ModuleDocumentDetailWidgetState
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
-  }
-
-  Future<void> _saveApproversFromSnapshot(
-    String moduleCode,
-    String docCategory,
-    Set<int> originalIds,
-    List<Map<String, dynamic>> snapshots,
-  ) async {
-    final currentIds = snapshots
-        .where((s) => s['id'] != null)
-        .map<int>((s) => s['id'] as int)
-        .toSet();
-    for (final id in originalIds) {
-      if (!currentIds.contains(id)) await _approverSvc.deleteRow(id);
-    }
-    for (final s in snapshots) {
-      final approver = SaModuleApprover(
-        id: s['id'] as int?,
-        moduleCode: moduleCode,
-        docCategory: docCategory,
-        approvalLevel: s['approval_level'] as int,
-        approverUserId: s['approver_user_id'] as int,
-        signatureImage: s['signature_image'] as String?,
-        isActive: s['is_active'] as bool,
-      );
-      if (approver.id != null) {
-        await _approverSvc.updateRow(approver);
-      } else {
-        await _approverSvc.addRow(approver);
-      }
-    }
-  }
-
-  // ── Approver row actions ──────────────────────────────────────────────────
-
-  void _addApproverRow() {
-    final nextLevel = _approverRows.isEmpty
-        ? 1
-        : (_approverRows
-                .map((r) => int.tryParse(r.levelCtrl.text) ?? 0)
-                .reduce((a, b) => a > b ? a : b) +
-            1);
-    setState(
-        () => _approverRows.add(_ApproverRow(level: nextLevel.toString())));
-  }
-
-  void _removeApproverRow(int index) {
-    setState(() {
-      _approverRows[index].dispose();
-      _approverRows.removeAt(index);
-    });
-  }
-
-  Future<void> _pickUser(_ApproverRow row) async {
-    if (_users.isEmpty) {
-      try {
-        final users = await _userSvc.fetchUsers();
-        if (mounted) setState(() => _users = users);
-      } catch (_) {}
-    }
-    if (!mounted) return;
-    final user = await showDialog<User>(
-      context: context,
-      builder: (ctx) => _UserPickerDialog(users: _users),
-    );
-    if (user != null && mounted) {
-      setState(() {
-        row.userId = user.id;
-        row.userDisplayName =
-            _buildUserDisplay(user.userName, user.firstName, user.lastName);
-      });
-    }
-  }
-
-  void _uploadSignature(_ApproverRow row) {
-    if (!kIsWeb) return;
-    final input = html.FileUploadInputElement()..accept = 'image/*';
-    input.click();
-    input.onChange.listen((e) {
-      final file = input.files?.first;
-      if (file == null) return;
-      final reader = html.FileReader();
-      reader.readAsDataUrl(file);
-      reader.onLoad.listen((_) {
-        if (mounted) {
-          setState(() => row.signatureImage = reader.result as String);
-        }
-      });
-    });
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -498,11 +274,6 @@ class ModuleDocumentDetailWidgetState
                     ? 'Add Sub-item: ${_selected?.docCode} ${_selected?.docNameEng ?? _selected?.docNameThai}'
                     : 'เพิ่มข้อมูลย่อย: ${_selected?.docCode} ${_selected?.docNameThai}')
                 : (isEnglish ? 'Add Main Module' : 'เพิ่มข้อมูลโมดูลหลัก');
-
-    final bool showApprovers = _isDocType &&
-        _sysModule.isNotEmpty &&
-        _sysDocType.isNotEmpty &&
-        (widget.mode == Mode.edit || widget.mode == Mode.view);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -746,7 +517,6 @@ class ModuleDocumentDetailWidgetState
                                       _sysModule = value;
                                       _sysDocTypes = getSysDocType(_sysModule);
                                       _sysDocType = '';
-                                      _disposeApproverRows();
                                     });
                                   }
                                 },
@@ -792,11 +562,7 @@ class ModuleDocumentDetailWidgetState
                                     if (value != null) {
                                       setState(() {
                                         _sysDocType = value;
-                                        _disposeApproverRows();
                                       });
-                                      WidgetsBinding.instance
-                                          .addPostFrameCallback(
-                                              (_) => _maybeLoadApprovers());
                                     }
                                   },
                           ),
@@ -991,355 +757,12 @@ class ModuleDocumentDetailWidgetState
                       const SizedBox(height: 16),
                     ],
                   ],
-
-                  // ── Approver section ─────────────────────────────────────
-                  if (showApprovers) ...[
-                    const SizedBox(height: 8),
-                    _buildApproverSection(),
-                  ],
                 ],
               ),
             ),
           ),
         ),
       ],
-    );
-  }
-
-  // ── Approver section ──────────────────────────────────────────────────────
-
-  Widget _buildApproverSection() {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: () => setState(
-              () => _approverSectionExpanded = !_approverSectionExpanded),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.deepOrange.shade50,
-              border: Border.all(color: Colors.deepOrange.shade200),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-            ),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                Icon(
-                  _approverSectionExpanded
-                      ? Icons.expand_less
-                      : Icons.expand_more,
-                  color: Colors.deepOrange[700],
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  isEnglish ? 'Approvers' : 'ผู้อนุมัติ',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepOrange[800]),
-                ),
-                if (_approversLoading) ...[
-                  const SizedBox(width: 12),
-                  const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2)),
-                ],
-                const Spacer(),
-                if (widget.mode == Mode.edit)
-                  IconButton(
-                    icon: Icon(Icons.add_circle_outline,
-                        color: Colors.deepOrange[700], size: 22),
-                    tooltip: isEnglish ? 'Add Approver' : 'เพิ่มผู้อนุมัติ',
-                    onPressed: _addApproverRow,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        if (_approverSectionExpanded)
-          Container(
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(color: Colors.deepOrange.shade200),
-                right: BorderSide(color: Colors.deepOrange.shade200),
-                bottom: BorderSide(color: Colors.deepOrange.shade200),
-              ),
-              borderRadius:
-                  const BorderRadius.vertical(bottom: Radius.circular(4)),
-            ),
-            child: _approverRows.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      isEnglish ? 'No approvers yet' : 'ยังไม่มีผู้อนุมัติ',
-                      style: const TextStyle(color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : Column(
-                    children: [
-                      for (int i = 0; i < _approverRows.length; i++)
-                        _buildApproverRow(_approverRows[i], i, isEnglish),
-                    ],
-                  ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildApproverRow(_ApproverRow row, int index, bool isEnglish) {
-    final readOnly = widget.mode == Mode.view;
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.grey.shade200),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Line 1: level | user | status | delete
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Level
-              Flexible(
-                flex: 1,
-                child: TextFormField(
-                  controller: row.levelCtrl,
-                  readOnly: readOnly,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  decoration: InputDecoration(
-                    labelText: isEnglish ? 'Level' : 'ลำดับ',
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // User picker
-              Flexible(
-                flex: 5,
-                child: InkWell(
-                  onTap: readOnly ? null : () => _pickUser(row),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                          color: readOnly
-                              ? Colors.grey.shade400
-                              : Colors.grey.shade700),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            row.userDisplayName.isEmpty
-                                ? (isEnglish ? '- Select Approver -' : '- เลือกผู้อนุมัติ -')
-                                : row.userDisplayName,
-                            style: TextStyle(
-                                color: row.userDisplayName.isEmpty
-                                    ? Colors.grey
-                                    : null,
-                                fontSize: 14),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (!readOnly)
-                          const Icon(Icons.search,
-                              size: 18, color: Colors.grey),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Status switch
-              Flexible(
-                flex: 4,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        isEnglish
-                            ? (row.isActive ? 'Active' : 'Inactive')
-                            : (row.isActive ? 'ใช้งาน' : 'หยุดใช้'),
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                    ),
-                    Switch(
-                      value: row.isActive,
-                      onChanged: readOnly
-                          ? null
-                          : (v) => setState(() => row.isActive = v),
-                    ),
-                  ],
-                ),
-              ),
-              // Delete
-              if (!readOnly)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline,
-                      color: Colors.red, size: 20),
-                  tooltip: isEnglish ? 'Remove Approver' : 'ลบผู้อนุมัติ',
-                  onPressed: () => _removeApproverRow(index),
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                ),
-            ],
-          ),
-          // Line 2: signature
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (row.signatureImage != null)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: _buildSignatureImage(row.signatureImage!),
-                ),
-              if (!readOnly)
-                TextButton.icon(
-                  icon: const Icon(Icons.upload, size: 16),
-                  label: Text(
-                    row.signatureImage == null
-                        ? (isEnglish ? 'Upload Signature' : 'อัปโหลดลายเซ็น')
-                        : (isEnglish ? 'Change Signature' : 'เปลี่ยนลายเซ็น'),
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  onPressed: () => _uploadSignature(row),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSignatureImage(String dataUrl) {
-    try {
-      final data =
-          dataUrl.contains(',') ? dataUrl.split(',').last : dataUrl;
-      return Image.memory(base64Decode(data),
-          height: 60, fit: BoxFit.contain);
-    } catch (_) {
-      final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-      return Text(isEnglish ? 'Unable to display image' : 'ไม่สามารถแสดงรูปได้',
-          style: const TextStyle(color: Colors.red, fontSize: 11));
-    }
-  }
-}
-
-// ── User picker dialog ────────────────────────────────────────────────────────
-
-class _UserPickerDialog extends StatefulWidget {
-  final List<User> users;
-  const _UserPickerDialog({required this.users});
-
-  @override
-  State<_UserPickerDialog> createState() => _UserPickerDialogState();
-}
-
-class _UserPickerDialogState extends State<_UserPickerDialog> {
-  String _search = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    final filtered = widget.users.where((u) {
-      if (_search.isEmpty) return true;
-      final q = _search.toLowerCase();
-      return u.userName.toLowerCase().contains(q) ||
-          (u.firstName?.toLowerCase().contains(q) ?? false) ||
-          (u.lastName?.toLowerCase().contains(q) ?? false);
-    }).toList();
-
-    return Dialog(
-      child: ConstrainedBox(
-        constraints:
-            const BoxConstraints(maxWidth: 480, maxHeight: 520),
-        child: Column(
-          children: [
-            Container(
-              color: Colors.blueGrey[700],
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  const Icon(Icons.person_search,
-                      color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      isEnglish ? 'Select Approver' : 'เลือกผู้อนุมัติ',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close,
-                        color: Colors.white, size: 20),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: TextField(
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: isEnglish ? 'Search' : 'ค้นหา',
-                  prefixIcon: const Icon(Icons.search),
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onChanged: (v) => setState(() => _search = v),
-              ),
-            ),
-            Expanded(
-              child: filtered.isEmpty
-                  ? Center(
-                      child: Text(
-                        isEnglish ? 'No users found' : 'ไม่พบผู้ใช้',
-                        style: const TextStyle(color: Colors.grey),
-                      ))
-                  : ListView.builder(
-                      itemCount: filtered.length,
-                      itemBuilder: (_, i) {
-                        final u = filtered[i];
-                        final name =
-                            '${u.firstName ?? ''} ${u.lastName ?? ''}'
-                                .trim();
-                        return ListTile(
-                          dense: true,
-                          title: Text(u.userName),
-                          subtitle:
-                              name.isNotEmpty ? Text(name) : null,
-                          onTap: () => Navigator.of(context).pop(u),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -1,30 +1,28 @@
 // lib/sa/models/sa_module_approver.dart
 
+// คิวผู้อนุมัติผูกกับ menu_id (+ doc_type ถ้าเมนูนั้น uses_doc_type) — ดูรายละเอียดที่
+// sa_module_approver_screen.dart / saModuleApproverController.js
 class SaModuleApprover {
   final int? id;
-  final String moduleCode;
-  final String docCategory;
   final int approvalLevel;
   final int approverUserId;
   final String? approverUsername;
   final String? approverFirstName;
   final String? approverLastName;
   final String? approverEmail;
-  final String? signatureImage; // base64 data URL
   final bool isActive;
+  final String? docType; // null = คิวระดับเมนู
 
   SaModuleApprover({
     this.id,
-    required this.moduleCode,
-    required this.docCategory,
     required this.approvalLevel,
     required this.approverUserId,
     this.approverUsername,
     this.approverFirstName,
     this.approverLastName,
     this.approverEmail,
-    this.signatureImage,
     this.isActive = true,
+    this.docType,
   });
 
   String get approverFullName {
@@ -34,59 +32,32 @@ class SaModuleApprover {
     return full.isNotEmpty ? full : (approverUsername ?? '');
   }
 
-  String get moduleName {
-    const map = {'01': 'บัญชีแยกประเภท (GL)', '21': 'บัญชีเจ้าหนี้ (AP)', '11': 'บัญชีลูกหนี้ (AR)'};
-    return map[moduleCode] ?? moduleCode;
-  }
-
-  String get docCategoryName {
-    const map = {
-      'payment_run': 'Payment Run (ชำระเงิน)',
-      'period_close': 'ปิดงวดบัญชี (Period Close)',
-    };
-    return map[docCategory] ?? docCategory;
-  }
-
   factory SaModuleApprover.fromJson(Map<String, dynamic> json) => SaModuleApprover(
         id: json['id'],
-        moduleCode: json['module_code'] ?? '',
-        docCategory: json['doc_category'] ?? '',
         approvalLevel: json['approval_level'] ?? 1,
         approverUserId: json['approver_user_id'] ?? 0,
         approverUsername: json['approver_username'],
         approverFirstName: json['approver_first_name'],
         approverLastName: json['approver_last_name'],
         approverEmail: json['approver_email'],
-        signatureImage: json['signature_image'],
         isActive: json['is_active'] ?? true,
+        docType: json['doc_type'] as String?,
       );
 
-  Map<String, dynamic> toJson() => {
-        if (id != null) 'id': id,
-        'module_code': moduleCode,
-        'doc_category': docCategory,
-        'approval_level': approvalLevel,
-        'approver_user_id': approverUserId,
-        'signature_image': signatureImage,
-        'is_active': isActive,
-      };
-
   SaModuleApprover copyWith({
-    int? id, String? moduleCode, String? docCategory, int? approvalLevel,
+    int? id, int? approvalLevel,
     int? approverUserId, String? approverUsername,
     String? approverFirstName, String? approverLastName, String? approverEmail,
-    String? signatureImage, bool? isActive,
+    bool? isActive, String? docType,
   }) => SaModuleApprover(
         id: id ?? this.id,
-        moduleCode: moduleCode ?? this.moduleCode,
-        docCategory: docCategory ?? this.docCategory,
         approvalLevel: approvalLevel ?? this.approvalLevel,
         approverUserId: approverUserId ?? this.approverUserId,
         approverUsername: approverUsername ?? this.approverUsername,
         approverFirstName: approverFirstName ?? this.approverFirstName,
         approverLastName: approverLastName ?? this.approverLastName,
         approverEmail: approverEmail ?? this.approverEmail,
-        signatureImage: signatureImage ?? this.signatureImage,
         isActive: isActive ?? this.isActive,
+        docType: docType ?? this.docType,
       );
 }

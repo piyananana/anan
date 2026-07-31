@@ -53,6 +53,7 @@ class _MenuScreenState extends State<MenuScreen>
   final TextEditingController _contentDataController = TextEditingController();
   bool _isActive = true;
   bool _isSystem = false;
+  bool _requiresApproval = false;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
@@ -140,6 +141,7 @@ class _MenuScreenState extends State<MenuScreen>
       _contentType = 'widget';
       _isActive = true;
       _isSystem = false;
+      _requiresApproval = false;
       _selectedNode = null;
       _nodeMode = NodeMode.none;
       _parentIdForNewNode = null;
@@ -197,6 +199,7 @@ class _MenuScreenState extends State<MenuScreen>
       _loadContentForEdit(menu.id);
       _isActive = true;
       _isSystem = menu.isSystem;
+      _requiresApproval = menu.requiresApproval;
     });
   }
 
@@ -236,6 +239,7 @@ class _MenuScreenState extends State<MenuScreen>
           isSystem: _isSystem,
           contentType: _contentType,
           contentData: _contentDataController.text.isEmpty ? null : _contentDataController.text,
+          requiresApproval: _requiresApproval,
         );
         message = isEnglish ? 'Menu "${newMenu.localName(isEnglish)}" added successfully' : 'เพิ่มเมนู "${newMenu.menuName}" สำเร็จ';
       } else if (_nodeMode == NodeMode.edit && _selectedNode != null) {
@@ -250,6 +254,7 @@ class _MenuScreenState extends State<MenuScreen>
           isSystem: _isSystem,
           contentType: _contentType,
           contentData: _contentDataController.text.isEmpty ? null : _contentDataController.text,
+          requiresApproval: _requiresApproval,
         );
         message = isEnglish ? 'Menu "${updatedMenu.localName(isEnglish)}" updated successfully' : 'แก้ไขเมนู "${updatedMenu.menuName}" สำเร็จ';
       }
@@ -699,6 +704,34 @@ class _MenuScreenState extends State<MenuScreen>
                 ),
               ],
             ),
+            if (_menuType != 'folder') ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Text(l.isEnglish ? 'Approval: ' : 'การอนุมัติ: '),
+                  Switch(
+                    value: _requiresApproval,
+                    activeColor: Colors.deepOrange,
+                    onChanged: (v) => setState(() => _requiresApproval = v),
+                  ),
+                  Text(
+                    _requiresApproval
+                        ? (l.isEnglish ? 'Can have an approver' : 'มีผู้อนุมัติได้')
+                        : (l.isEnglish ? 'No approver needed (default)' : 'ไม่ต้องใช้ผู้อนุมัติ (default)'),
+                  ),
+                ],
+              ),
+              if (_requiresApproval)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    l.isEnglish
+                        ? 'Approval mode, description, and document type settings are configured by admin at "Approver Setup" (sa_module_approver_screen).'
+                        : 'รูปแบบการอนุมัติ ข้อความอธิบาย และการใช้ประเภทเอกสาร ให้ admin ไปตั้งค่าที่หน้าจอ "ตั้งค่าผู้อนุมัติ"',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+                  ),
+                ),
+            ],
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,

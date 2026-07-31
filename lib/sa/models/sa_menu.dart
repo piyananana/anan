@@ -148,6 +148,12 @@ class Menu {
   final bool canApprove;
   final bool canPrint;
   final bool canExport;
+  final bool requiresApproval;
+  final String? approvalDescription; // ข้อความอธิบายการอนุมัติ (ไทย) — ตั้งค่าที่ sa_module_approver_screen
+  final String? approvalDescriptionEn; // ข้อความอธิบายการอนุมัติ (อังกฤษ)
+  final String approvalMode; // 'ALL' = ต้องอนุมัติครบทุกคนตามลำดับ, 'ANY' = คนใดคนหนึ่งอนุมัติก็พอ
+  final bool usesDocType; // true = เมนูนี้ครอบคลุมหลายประเภทเอกสาร ต้องตั้งผู้อนุมัติแยกต่อประเภทได้
+  final String? docTypeModule; // sys_module ของประเภทเอกสารที่ใช้ (เช่น '11'=AR, '21'=AP, '01'=GL)
 
   List<Menu> children = [];
   static final Map<String, Widget Function(BuildContext context)>
@@ -319,6 +325,11 @@ class Menu {
   String localName(bool isEnglish) =>
       isEnglish && menuNameEn.isNotEmpty ? menuNameEn : menuName;
 
+  String? localApprovalDescription(bool isEnglish) =>
+      isEnglish && (approvalDescriptionEn ?? '').isNotEmpty
+          ? approvalDescriptionEn
+          : approvalDescription;
+
   Menu({
     required this.id,
     this.parentId,
@@ -337,6 +348,12 @@ class Menu {
     this.canApprove = false,
     this.canPrint = false,
     this.canExport = false,
+    this.requiresApproval = false,
+    this.approvalDescription,
+    this.approvalDescriptionEn,
+    this.approvalMode = 'ALL',
+    this.usesDocType = false,
+    this.docTypeModule,
   });
 
   factory Menu.fromJson(Map<String, dynamic> json) {
@@ -362,7 +379,13 @@ class Menu {
         canDelete: json['can_delete'] ?? false,
         canApprove: json['can_approve'] ?? false,
         canPrint: json['can_print'] ?? false,
-        canExport: json['can_export'] ?? false);
+        canExport: json['can_export'] ?? false,
+        requiresApproval: json['requires_approval'] ?? false,
+        approvalDescription: json['approval_description'] as String?,
+        approvalDescriptionEn: json['approval_description_en'] as String?,
+        approvalMode: json['approval_mode'] as String? ?? 'ALL',
+        usesDocType: json['uses_doc_type'] ?? false,
+        docTypeModule: json['doc_type_module'] as String?);
   }
 }
 

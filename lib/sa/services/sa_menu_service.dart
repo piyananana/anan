@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart'; // Import FilePicker for Platform
 import 'dart:html' as html;
 
 import '../models/sa_menu.dart';
+import '../models/sa_menu_doc_type.dart';
 import 'sa_auth_service.dart';
 
 class MenuService {
@@ -109,6 +110,7 @@ class MenuService {
     bool isSystem = false,
     String? contentType,
     String? contentData,
+    bool requiresApproval = false,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(
@@ -124,6 +126,7 @@ class MenuService {
         'is_system': isSystem,
         'content_type': contentType,
         'content_data': contentData,
+        'requires_approval': requiresApproval,
       }),
     );
 
@@ -149,6 +152,7 @@ class MenuService {
     bool isSystem = false,
     String? contentType,
     String? contentData,
+    bool requiresApproval = false,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -164,6 +168,7 @@ class MenuService {
         'is_system': isSystem,
         'content_type': contentType,
         'content_data': contentData,
+        'requires_approval': requiresApproval,
       }),
     );
 
@@ -331,6 +336,80 @@ class MenuService {
     } else {
       throw Exception(
           'Failed to fetch menu details for edit: ${menuResponse.body}');
+    }
+  }
+
+  // ── ตั้งค่ารูปแบบ/คำอธิบายการอนุมัติของเมนู — ใช้จากหน้าจอ sa_module_approver_screen ──
+  Future<Menu> updateApprovalConfig(
+    int id, {
+    required String approvalMode,
+    String? approvalDescription,
+    String? approvalDescriptionEn,
+    required bool usesDocType,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/sa_menu/$id/approval_config'),
+      headers: headers,
+      body: jsonEncode(<String, dynamic>{
+        'approval_mode': approvalMode,
+        'approval_description': approvalDescription,
+        'approval_description_en': approvalDescriptionEn,
+        'uses_doc_type': usesDocType,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return Menu.fromJson(json.decode(response.body));
+    }
+    throw Exception('Failed to update approval config: ${response.body}');
+  }
+
+  // ── การ์ดประเภทเอกสารของเมนู (เมื่อ uses_doc_type = true) ──────────────────────
+  Future<List<SaMenuDocType>> fetchDocTypesForMenu(int menuId) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(
+      Uri.parse('$baseUrl/sa_menu/$menuId/doc_types'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      final List jsonResponse = json.decode(response.body);
+      return jsonResponse.map((e) => SaMenuDocType.fromJson(e)).toList();
+    }
+    throw Exception('Failed to fetch doc types: ${response.body}');
+  }
+
+  Future<SaMenuDocType> addDocTypeToMenu(
+    int menuId, {
+    required String docType,
+    String? docNameThai,
+    String? docNameEng,
+    String? sysModule,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.post(
+      Uri.parse('$baseUrl/sa_menu/$menuId/doc_types'),
+      headers: headers,
+      body: jsonEncode(<String, dynamic>{
+        'doc_type': docType,
+        'doc_name_thai': docNameThai,
+        'doc_name_eng': docNameEng,
+        'sys_module': sysModule,
+      }),
+    );
+    if (response.statusCode == 201) {
+      return SaMenuDocType.fromJson(json.decode(response.body));
+    }
+    throw Exception('Failed to add doc type: ${response.body}');
+  }
+
+  Future<void> removeDocTypeFromMenu(int menuId, String docType) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/sa_menu/$menuId/doc_types/$docType'),
+      headers: headers,
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Failed to remove doc type: ${response.body}');
     }
   }
 }

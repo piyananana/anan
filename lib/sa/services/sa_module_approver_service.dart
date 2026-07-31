@@ -9,59 +9,36 @@ class SaModuleApproverService {
   final String _base = AppConfig.apiSa;
   final AuthService _auth = AuthService();
 
-  Future<List<SaModuleApprover>> fetchRows({String? moduleCode, String? docCategory}) async {
+  // ── ผูกกับ menu_id — ใช้โดยหน้าจอตั้งค่าผู้อนุมัติ (เลือกเมนู → ดู/แก้ลำดับผู้อนุมัติ) ──
+  // คิวผู้อนุมัติ sync มาจากสิทธิ์ "อนุมัติ" (can_approve) ที่ให้ไว้ในหน้าจอสิทธิ์เมนูผู้ใช้โดยอัตโนมัติ
+  // docType ไม่ระบุ = คิวระดับเมนู; ระบุ = คิวเฉพาะประเภทเอกสารนั้น (สำหรับเมนูที่ uses_doc_type)
+  Future<List<SaModuleApprover>> fetchByMenu(int menuId, {String? docType}) async {
     final headers = await _auth.getAuthHeader();
-    final params = <String, String>{};
-    if (moduleCode != null)   params['module_code']   = moduleCode;
-    if (docCategory != null)  params['doc_category']  = docCategory;
-    final uri = Uri.parse('$_base/sa_module_approver').replace(queryParameters: params.isEmpty ? null : params);
+    final uri = Uri.parse('$_base/sa_module_approver/by_menu/$menuId')
+        .replace(queryParameters: docType != null ? {'doc_type': docType} : null);
     final resp = await http.get(uri, headers: headers);
     if (resp.statusCode == 200) {
       return (jsonDecode(resp.body) as List).map((e) => SaModuleApprover.fromJson(e)).toList();
     }
-    throw Exception('โหลดข้อมูลผู้อนุมัติล้มเหลว: ${resp.statusCode}');
+    throw Exception('โหลดรายชื่อผู้อนุมัติล้มเหลว: ${resp.statusCode}');
   }
 
-  Future<List<SaModuleApprover>> fetchByModuleCategory(String moduleCode, String docCategory) async {
-    final headers = await _auth.getAuthHeader();
-    final uri = Uri.parse('$_base/sa_module_approver/by_module/$moduleCode/$docCategory');
-    final resp = await http.get(uri, headers: headers);
-    if (resp.statusCode == 200) {
-      return (jsonDecode(resp.body) as List).map((e) => SaModuleApprover.fromJson(e)).toList();
-    }
-    throw Exception('โหลดข้อมูลผู้อนุมัติล้มเหลว: ${resp.statusCode}');
-  }
-
-  Future<SaModuleApprover> addRow(SaModuleApprover row) async {
-    final headers = await _auth.getAuthHeader();
-    final resp = await http.post(
-      Uri.parse('$_base/sa_module_approver'),
-      headers: headers,
-      body: jsonEncode(row.toJson()),
-    );
-    if (resp.statusCode == 201) return SaModuleApprover.fromJson(jsonDecode(resp.body));
-    final msg = _extractMessage(resp.body);
-    throw Exception(msg);
-  }
-
-  Future<SaModuleApprover> updateRow(SaModuleApprover row) async {
+  // items เรียงตามลำดับอนุมัติใหม่ (index 0 = ลำดับที่ 1); isActive ใช้ "งดอนุมัติ" คนนั้นชั่วคราว
+  Future<void> reorder(int menuId, List<({int approverUserId, bool isActive})> items, {String? docType}) async {
     final headers = await _auth.getAuthHeader();
     final resp = await http.put(
-      Uri.parse('$_base/sa_module_approver/${row.id}'),
+      Uri.parse('$_base/sa_module_approver/reorder'),
       headers: headers,
-      body: jsonEncode(row.toJson()),
+      body: jsonEncode({
+        'menu_id': menuId,
+        'doc_type': docType,
+        'items': items
+            .map((e) => {'approver_user_id': e.approverUserId, 'is_active': e.isActive})
+            .toList(),
+      }),
     );
-    if (resp.statusCode == 200) return SaModuleApprover.fromJson(jsonDecode(resp.body));
-    final msg = _extractMessage(resp.body);
-    throw Exception(msg);
-  }
-
-  Future<void> deleteRow(int id) async {
-    final headers = await _auth.getAuthHeader();
-    final resp = await http.delete(Uri.parse('$_base/sa_module_approver/$id'), headers: headers);
-    if (resp.statusCode != 204) {
-      final msg = _extractMessage(resp.body);
-      throw Exception(msg);
+    if (resp.statusCode != 200) {
+      throw Exception(_extractMessage(resp.body));
     }
   }
 

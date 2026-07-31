@@ -1,57 +1,64 @@
-﻿// lib/sa/screens/sa_module_approver_screen.dart
-import 'dart:convert';
-import '../utils/sa_menu_scope.dart';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-import 'package:flutter/foundation.dart';
+// lib/sa/screens/sa_module_approver_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../models/sa_anan_module.dart' show sysModules;
+import '../models/sa_menu.dart';
+import '../models/sa_menu_doc_type.dart';
 import '../models/sa_module_approver.dart';
-import '../models/sa_user.dart';
+import '../models/sa_module_document.dart';
+import '../services/sa_menu_service.dart';
 import '../services/sa_module_approver_service.dart';
-import '../services/sa_user_service.dart';
+import '../services/sa_module_document_service.dart';
 import '../services/sa_language_provider.dart';
+import '../utils/sa_menu_scope.dart';
 
-// ── constants ─────────────────────────────────────────────────────────────────
-const _modules = [
-  _Option('01', 'บัญชีแยกประเภท (GL)'),
-  _Option('21', 'บัญชีเจ้าหนี้ (AP)'),
-  _Option('11', 'บัญชีลูกหนี้ (AR)'),
-];
-const _categories = [
-  _Option('payment_run', 'Payment Run'),
-  _Option('period_close', 'ปิดงวดบัญชี (Period Close)'),
-];
-
-class _Option {
-  final String value;
-  final String label;
-  const _Option(this.value, this.label);
-}
-
-// ── Screen ────────────────────────────────────────────────────────────────────
+// หน้าจอนี้เป็นจุดตั้งค่าการอนุมัติทั้งหมดในระดับ admin/user (ไม่ใช่ developer):
+// - เลือกเมนูที่เปิดใช้การอนุมัติไว้ (requires_approval, ตั้งค่าที่ sa_menu_screen) จาก panel ซ้าย
+// - panel ขวา: รูปแบบการอนุมัติ (ALL/ANY), ข้อความอธิบายการอนุมัติ ไทย/อังกฤษ, ลำดับผู้อนุมัติ,
+//   และสวิตช์ "ใช้ประเภทเอกสาร" — ถ้าเปิด จะแสดงการ์ดประเภทเอกสารที่เพิ่มได้ผ่าน dialog ค้นหาจาก
+//   ตาราง sa_module_document โดยแต่ละการ์ดมีคิวผู้อนุมัติเป็นของตัวเอง
+// ผู้มีสิทธิ์อนุมัติแต่ละคนมาจากสิทธิ์ "อนุมัติ" (can_approve) ที่ให้ไว้แล้วในหน้าจอสิทธิ์เมนูผู้ใช้
+// โดยอัตโนมัติ ไม่มีการเพิ่ม/ลบคนที่นี่ — ปรับได้แค่ลำดับและงด/ใช้งาน
 class SaModuleApproverScreen extends StatefulWidget {
   const SaModuleApproverScreen({super.key});
+
   @override
   State<SaModuleApproverScreen> createState() => _SaModuleApproverScreenState();
 }
 
 class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
     with AutomaticKeepAliveClientMixin {
-  final _svc     = SaModuleApproverService();
-  final _userSvc = UserService();
+  final _menuSvc = MenuService();
+  final _approverSvc = SaModuleApproverService();
+  final _docSvc = ModuleDocumentService();
 
-  List<SaModuleApprover> _rows  = [];
-  List<User>             _users = [];
-  bool _loading = true;
+  List<Menu> _allMenus = [];
+  bool _loadingMenus = true;
 
-  String _filterModule   = '21';
-  String _filterCategory = 'payment_run';
+  Menu? _selectedMenu;
 
-  SaModuleApprover? _selected;
-  bool _isAdding = false;
-  double _leftWidth = 420;
+  // ── Settings buffer (mode / description TH-EN / uses_doc_type) ──
+  String _approvalMode = 'ALL';
+  final _descThCtrl = TextEditingController();
+  final _descEnCtrl = TextEditingController();
+  bool _usesDocType = false;
+  bool _settingsDirty = false;
+  bool _savingSettings = false;
+
+  // ── Doc-type cards (when _usesDocType == true) ──
+  List<SaMenuDocType> _docTypeCards = [];
+  bool _loadingDocTypes = false;
+  String? _selectedDocTypeCard; // doc_type ของการ์ดที่เลือกดูคิวผู้อนุมัติ
+
+  // ── Approver queue ──
+  List<SaModuleApprover> _approvers = [];
+  bool _loadingApprovers = false;
+  bool _savingOrder = false;
+  bool _orderDirty = false;
+
+  bool _isLeftPanelExpanded = true;
+  double _leftPanelWidth = 380.0;
+  bool _isDraggingDivider = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -59,97 +66,258 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadMenus();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    _descThCtrl.dispose();
+    _descEnCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMenus() async {
+    setState(() => _loadingMenus = true);
     try {
-      final results = await Future.wait([
-        _svc.fetchRows(moduleCode: _filterModule, docCategory: _filterCategory),
-        _userSvc.fetchUsers(),
-      ]);
-      if (mounted) {
-        setState(() {
-          _rows    = results[0] as List<SaModuleApprover>;
-          _users   = results[1] as List<User>;
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      final menus = await _menuSvc.fetchMenus();
+      if (!mounted) return;
+      setState(() {
+        _allMenus = menus;
+        _loadingMenus = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingMenus = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
     }
   }
 
-  Future<void> _onFilterChange() async {
-    setState(() { _selected = null; _isAdding = false; });
-    await _load();
+  // เมนูที่ "ไม่มีลูก" (leaf) และเปิดใช้การอนุมัติไว้ (ตั้งค่าจากหน้าจอจัดการเมนู)
+  List<Menu> get _approvableMenus {
+    final parentIds = _allMenus.map((m) => m.parentId).whereType<int>().toSet();
+    final list = _allMenus
+        .where((m) => m.requiresApproval && !parentIds.contains(m.id))
+        .toList();
+    list.sort((a, b) => a.menuName.compareTo(b.menuName));
+    return list;
   }
 
-  void _onAdd()                    => setState(() { _selected = null; _isAdding = true; });
-  void _onSelect(SaModuleApprover row) => setState(() { _selected = row; _isAdding = false; });
+  Future<void> _selectMenu(Menu menu) async {
+    setState(() {
+      _selectedMenu = menu;
+      _approvalMode = menu.approvalMode;
+      _descThCtrl.text = menu.approvalDescription ?? '';
+      _descEnCtrl.text = menu.approvalDescriptionEn ?? '';
+      _usesDocType = menu.usesDocType;
+      _settingsDirty = false;
+      _selectedDocTypeCard = null;
+      _docTypeCards = [];
+      _approvers = [];
+      _orderDirty = false;
+    });
+    if (_usesDocType) {
+      await _loadDocTypeCards();
+    } else {
+      await _loadApprovers();
+    }
+  }
 
-  Future<void> _onDelete(SaModuleApprover row) async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    final ok = await showDialog<bool>(
+  Future<void> _loadDocTypeCards() async {
+    if (_selectedMenu == null) return;
+    setState(() => _loadingDocTypes = true);
+    try {
+      final rows = await _menuSvc.fetchDocTypesForMenu(_selectedMenu!.id);
+      if (!mounted) return;
+      setState(() {
+        _docTypeCards = rows;
+        _loadingDocTypes = false;
+      });
+      // เลือกการ์ดแรกให้อัตโนมัติ เพื่อไม่ให้ section ผู้อนุมัติว่างเปล่าโดยไม่จำเป็น
+      if (_selectedDocTypeCard == null && rows.isNotEmpty) {
+        await _selectDocTypeCard(rows.first.docType);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingDocTypes = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _selectDocTypeCard(String docType) async {
+    setState(() {
+      _selectedDocTypeCard = docType;
+      _approvers = [];
+      _orderDirty = false;
+    });
+    await _loadApprovers();
+  }
+
+  Future<void> _loadApprovers() async {
+    if (_selectedMenu == null) return;
+    setState(() => _loadingApprovers = true);
+    try {
+      final rows = await _approverSvc.fetchByMenu(_selectedMenu!.id, docType: _selectedDocTypeCard);
+      if (!mounted) return;
+      setState(() {
+        _approvers = rows;
+        _loadingApprovers = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingApprovers = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _saveSettings() async {
+    if (_selectedMenu == null) return;
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    setState(() => _savingSettings = true);
+    try {
+      final updated = await _menuSvc.updateApprovalConfig(
+        _selectedMenu!.id,
+        approvalMode: _approvalMode,
+        approvalDescription: _descThCtrl.text.trim().isEmpty ? null : _descThCtrl.text.trim(),
+        approvalDescriptionEn: _descEnCtrl.text.trim().isEmpty ? null : _descEnCtrl.text.trim(),
+        usesDocType: _usesDocType,
+      );
+      if (!mounted) return;
+      setState(() {
+        // อัปเดต snapshot ใน list เมนูซ้าย ให้ตรงกับค่าที่เพิ่งบันทึก
+        final idx = _allMenus.indexWhere((m) => m.id == updated.id);
+        if (idx != -1) _allMenus[idx] = updated;
+        _selectedMenu = updated;
+        _settingsDirty = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'Approval settings saved' : 'บันทึกการตั้งค่าการอนุมัติสำเร็จ')));
+      if (_usesDocType) {
+        await _loadDocTypeCards();
+      } else {
+        _selectedDocTypeCard = null;
+        await _loadApprovers();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _savingSettings = false);
+    }
+  }
+
+  Future<void> _addDocTypeCard() async {
+    if (_selectedMenu == null) return;
+    final picked = await showDialog<ModuleDocument>(
+      context: context,
+      builder: (ctx) => _DocTypeSearchDialog(docSvc: _docSvc),
+    );
+    if (picked == null || !mounted) return;
+    try {
+      await _menuSvc.addDocTypeToMenu(
+        _selectedMenu!.id,
+        docType: picked.docCode,
+        docNameThai: picked.docNameThai,
+        docNameEng: picked.docNameEng,
+        sysModule: picked.sysModule,
+      );
+      await _loadDocTypeCards();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _removeDocTypeCard(SaMenuDocType card) async {
+    if (_selectedMenu == null) return;
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        title: Text(isEnglish ? 'Remove document type' : 'ลบประเภทเอกสาร'),
         content: Text(isEnglish
-            ? 'Delete approver "${row.approverFullName}" at level ${row.approvalLevel}?'
-            : 'ลบผู้อนุมัติ "${row.approverFullName}" ลำดับที่ ${row.approvalLevel}?'),
+            ? 'Remove "${card.localName(true)}" and its approval queue from this menu?'
+            : 'ลบประเภทเอกสาร "${card.localName(false)}" และคิวผู้อนุมัติของประเภทนี้ออกจากเมนู?'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(isEnglish ? 'Delete' : 'ลบ',
-                  style: const TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(isEnglish ? 'Remove' : 'ลบ', style: const TextStyle(color: Colors.white)),
+          ),
         ],
       ),
     );
-    if (ok != true) return;
+    if (confirmed != true) return;
     try {
-      await _svc.deleteRow(row.id!);
-      if (_selected?.id == row.id) setState(() { _selected = null; _isAdding = false; });
-      _load();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
+      await _menuSvc.removeDocTypeFromMenu(_selectedMenu!.id, card.docType);
+      if (!mounted) return;
+      if (_selectedDocTypeCard == card.docType) {
+        setState(() {
+          _selectedDocTypeCard = null;
+          _approvers = [];
+        });
       }
+      await _loadDocTypeCards();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'),
-            backgroundColor: Colors.red));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
     }
   }
 
-  Future<void> _onSave(SaModuleApprover row) async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    try {
-      if (row.id == null) {
-        await _svc.addRow(row);
-      } else {
-        await _svc.updateRow(row);
-      }
-      setState(() { _selected = null; _isAdding = false; });
-      _load();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('$e'), backgroundColor: Colors.red));
-      }
-    }
+  void _toggleActive(int index, bool value) {
+    setState(() {
+      _approvers[index] = _approvers[index].copyWith(isActive: value);
+      _orderDirty = true;
+    });
   }
 
-  void _onCancel() => setState(() { _selected = null; _isAdding = false; });
+  void _moveUp(int index) {
+    if (index <= 0) return;
+    setState(() {
+      final item = _approvers.removeAt(index);
+      _approvers.insert(index - 1, item);
+      _orderDirty = true;
+    });
+  }
+
+  void _moveDown(int index) {
+    if (index >= _approvers.length - 1) return;
+    setState(() {
+      final item = _approvers.removeAt(index);
+      _approvers.insert(index + 1, item);
+      _orderDirty = true;
+    });
+  }
+
+  Future<void> _saveOrder() async {
+    if (_selectedMenu == null) return;
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    setState(() => _savingOrder = true);
+    try {
+      await _approverSvc.reorder(
+          _selectedMenu!.id,
+          _approvers
+              .map((a) => (approverUserId: a.approverUserId, isActive: a.isActive))
+              .toList(),
+          docType: _selectedDocTypeCard);
+      if (!mounted) return;
+      setState(() => _orderDirty = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'Approval order saved' : 'บันทึกลำดับผู้อนุมัติสำเร็จ')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _savingOrder = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -162,565 +330,514 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: isEnglish ? 'Refresh' : 'รีเฟรช',
-              onPressed: _load),
+            icon: const Icon(Icons.refresh),
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรช',
+            onPressed: _loadMenus,
+          ),
         ],
       ),
-      body: LayoutBuilder(builder: (ctx, constraints) {
-        final maxLeft = (constraints.maxWidth - 36 - 5 - 300).clamp(200.0, double.infinity);
-        return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          // ── Left panel ──────────────────────────────────────────────────────
-          SizedBox(
-            width: _leftWidth,
-            child: Column(children: [
-              // Filter bar
-              Container(
-                color: Colors.blueGrey.shade50,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(children: [
-                  Expanded(child: DropdownButtonFormField<String>(
-                    value: _filterModule,
-                    decoration: InputDecoration(
-                        labelText: isEnglish ? 'Module' : 'โมดูล',
-                        isDense: true,
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-                    items: _modules.map((m) => DropdownMenuItem(
-                        value: m.value,
-                        child: Text(m.label, style: const TextStyle(fontSize: 13)))).toList(),
-                    onChanged: (v) { if (v != null) { _filterModule = v; _onFilterChange(); } },
-                  )),
-                  const SizedBox(width: 8),
-                  Expanded(child: DropdownButtonFormField<String>(
-                    value: _filterCategory,
-                    decoration: InputDecoration(
-                        labelText: isEnglish ? 'Work Type' : 'ประเภทงาน',
-                        isDense: true,
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-                    items: _categories.map((c) => DropdownMenuItem(
-                        value: c.value,
-                        child: Text(c.label, style: const TextStyle(fontSize: 13)))).toList(),
-                    onChanged: (v) { if (v != null) { _filterCategory = v; _onFilterChange(); } },
-                  )),
-                ]),
-              ),
-              // Add button
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: Row(children: [
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.add, size: 16),
-                    label: Text(isEnglish ? 'Add Approver' : 'เพิ่มผู้อนุมัติ'),
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueGrey[700], foregroundColor: Colors.white),
-                    onPressed: _onAdd,
+      body: _loadingMenus
+          ? const Center(child: CircularProgressIndicator())
+          : LayoutBuilder(builder: (context, constraints) {
+              final maxLeft =
+                  (constraints.maxWidth - 36 - 5 - 300).clamp(200.0, double.infinity);
+              return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(
+                  width: 36,
+                  color: Colors.blueGrey[700],
+                  child: IconButton(
+                    icon: Icon(
+                        _isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list,
+                        color: Colors.white,
+                        size: 20),
+                    padding: EdgeInsets.zero,
+                    onPressed: () =>
+                        setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
+                    tooltip: _isLeftPanelExpanded
+                        ? (isEnglish ? 'Collapse' : 'ย่อรายการ')
+                        : (isEnglish ? 'Expand' : 'ขยายรายการ'),
                   ),
-                ]),
-              ),
-              // List
-              Expanded(child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _rows.isEmpty
-                  ? Center(child: Text(
-                      isEnglish ? 'No approvers yet' : 'ยังไม่มีผู้อนุมัติ',
-                      style: const TextStyle(color: Colors.grey)))
-                  : ListView.builder(
-                      itemCount: _rows.length,
-                      itemBuilder: (_, i) => _ApproverTile(
-                        row: _rows[i],
-                        isSelected: _selected?.id == _rows[i].id,
-                        onTap: () => _onSelect(_rows[i]),
-                        onDelete: () => _onDelete(_rows[i]),
+                ),
+                AnimatedContainer(
+                  duration:
+                      _isDraggingDivider ? Duration.zero : const Duration(milliseconds: 200),
+                  width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
+                  child: ClipRect(
+                    child: OverflowBox(
+                      maxWidth: _leftPanelWidth,
+                      minWidth: _leftPanelWidth,
+                      alignment: Alignment.topLeft,
+                      child: Container(
+                        color: Colors.blueGrey.shade50,
+                        child: _approvableMenus.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Text(
+                                    isEnglish
+                                        ? 'No menu currently has approval enabled.\nGo to Menu Management and turn on "Can have an approver".'
+                                        : 'ยังไม่มีเมนูใดเปิดใช้การอนุมัติ\nไปที่จัดการเมนู แล้วเปิดสวิตช์ "มีผู้อนุมัติได้"',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(color: Colors.grey),
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.all(8),
+                                itemCount: _approvableMenus.length,
+                                itemBuilder: (ctx, i) {
+                                  final m = _approvableMenus[i];
+                                  final selected = _selectedMenu?.id == m.id;
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    color: selected ? Colors.blueGrey.shade100 : Colors.white,
+                                    child: ListTile(
+                                      dense: true,
+                                      selected: selected,
+                                      title: Text(m.localName(isEnglish),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600, fontSize: 13)),
+                                      subtitle: (m.localApprovalDescription(isEnglish) ?? '').isNotEmpty
+                                          ? Text(m.localApprovalDescription(isEnglish)!,
+                                              style: const TextStyle(fontSize: 11),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis)
+                                          : null,
+                                      onTap: () => _selectMenu(m),
+                                    ),
+                                  );
+                                },
+                              ),
                       ),
-                    )),
-            ]),
-          ),
-          // ── Resizable divider ────────────────────────────────────────────────
-          MouseRegion(
-            cursor: SystemMouseCursors.resizeColumn,
-            child: GestureDetector(
-              onHorizontalDragUpdate: (d) => setState(() =>
-                  _leftWidth = (_leftWidth + d.delta.dx).clamp(280.0, maxLeft)),
-              child: Container(width: 5, color: Colors.grey[300]),
-            ),
-          ),
-          // ── Right panel ──────────────────────────────────────────────────────
-          Expanded(child: _isAdding
-            ? _ApproverForm(
-                key: const ValueKey('add'),
-                initial: SaModuleApprover(
-                  moduleCode: _filterModule, docCategory: _filterCategory,
-                  approvalLevel: _rows.isEmpty ? 1 : _rows.last.approvalLevel + 1,
-                  approverUserId: 0,
-                ),
-                users: _users,
-                onSave: _onSave,
-                onCancel: _onCancel,
-              )
-            : _selected != null
-              ? _ApproverForm(
-                  key: ValueKey(_selected!.id),
-                  initial: _selected!,
-                  users: _users,
-                  onSave: _onSave,
-                  onCancel: _onCancel,
-                )
-              : Center(child: Text(
-                  isEnglish
-                      ? 'Select an item or click "Add Approver"'
-                      : 'เลือกรายการหรือกด "เพิ่มผู้อนุมัติ"',
-                  style: const TextStyle(color: Colors.grey)))),
-        ]);
-      }),
-    );
-  }
-}
-
-// ── List tile ─────────────────────────────────────────────────────────────────
-class _ApproverTile extends StatelessWidget {
-  final SaModuleApprover row;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
-  const _ApproverTile(
-      {required this.row, required this.isSelected, required this.onTap, required this.onDelete});
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.blueGrey.shade100 : Colors.white,
-        border: Border.all(
-            color: isSelected ? Colors.blueGrey.shade400 : Colors.grey.shade200),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: ListTile(
-        dense: true,
-        onTap: onTap,
-        leading: CircleAvatar(
-          radius: 16,
-          backgroundColor: Colors.blueGrey.shade600,
-          child: Text('${row.approvalLevel}',
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-        ),
-        title: Text(row.approverFullName,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-        subtitle: Text('${row.moduleName} › ${row.docCategoryName}',
-            style: const TextStyle(fontSize: 11)),
-        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-          if (!row.isActive)
-            Container(
-              margin: const EdgeInsets.only(right: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(10)),
-              child: Text(isEnglish ? 'Inactive' : 'หยุดใช้',
-                  style: const TextStyle(fontSize: 10, color: Colors.grey)),
-            ),
-          if (row.signatureImage != null)
-            const Icon(Icons.draw, size: 14, color: Colors.blueGrey),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-            onPressed: onDelete,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-// ── Form (add / edit) ─────────────────────────────────────────────────────────
-class _ApproverForm extends StatefulWidget {
-  final SaModuleApprover initial;
-  final List<User> users;
-  final Future<void> Function(SaModuleApprover) onSave;
-  final VoidCallback onCancel;
-  const _ApproverForm(
-      {super.key,
-      required this.initial,
-      required this.users,
-      required this.onSave,
-      required this.onCancel});
-  @override
-  State<_ApproverForm> createState() => _ApproverFormState();
-}
-
-class _ApproverFormState extends State<_ApproverForm> {
-  final _formKey = GlobalKey<FormState>();
-  bool _saving = false;
-
-  late String _moduleCode;
-  late String _docCategory;
-  late int    _approvalLevel;
-  int?        _approverUserId;
-  String?     _signatureImage;
-  late bool   _isActive;
-
-  final _levelCtrl = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    final r = widget.initial;
-    _moduleCode     = r.moduleCode;
-    _docCategory    = r.docCategory;
-    _approvalLevel  = r.approvalLevel;
-    _approverUserId = r.approverUserId == 0 ? null : r.approverUserId;
-    _signatureImage = r.signatureImage;
-    _isActive       = r.isActive;
-    _levelCtrl.text = '${r.approvalLevel}';
-  }
-
-  @override
-  void dispose() { _levelCtrl.dispose(); super.dispose(); }
-
-  User? get _selectedUser => _approverUserId == null
-      ? null
-      : widget.users.where((u) => u.id == _approverUserId).firstOrNull;
-
-  Future<void> _pickSignature() async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    if (!kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(isEnglish
-              ? 'Signature upload is supported on Web only'
-              : 'การอัพโหลดลายเซ็นรองรับเฉพาะ Web')));
-      return;
-    }
-    final upload = html.FileUploadInputElement()..accept = 'image/*';
-    upload.click();
-    upload.onChange.listen((e) {
-      final file = upload.files?.first;
-      if (file == null) return;
-      final reader = html.FileReader();
-      reader.readAsDataUrl(file);
-      reader.onLoad.listen((_) {
-        if (mounted) setState(() => _signatureImage = reader.result as String);
-      });
-    });
-  }
-
-  Future<void> _pickUser() async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    final picked = await showDialog<User>(
-      context: context,
-      builder: (ctx) => _UserPickerDialog(users: widget.users, isEnglish: isEnglish),
-    );
-    if (picked != null) setState(() => _approverUserId = picked.id);
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
-    try {
-      final row = SaModuleApprover(
-        id:                widget.initial.id,
-        moduleCode:        _moduleCode,
-        docCategory:       _docCategory,
-        approvalLevel:     int.tryParse(_levelCtrl.text) ?? _approvalLevel,
-        approverUserId:    _approverUserId!,
-        approverUsername:  _selectedUser?.userName,
-        approverFirstName: _selectedUser?.firstName,
-        approverLastName:  _selectedUser?.lastName,
-        approverEmail:     _selectedUser?.email,
-        signatureImage:    _signatureImage,
-        isActive:          _isActive,
-      );
-      await widget.onSave(row);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    final isNew = widget.initial.id == null;
-    return Form(
-      key: _formKey,
-      child: Column(children: [
-        // Header bar
-        Container(
-          color: Colors.blueGrey[300],
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(children: [
-            Icon(Icons.approval, color: Colors.blueGrey[900], size: 20),
-            const SizedBox(width: 8),
-            Expanded(child: Text(
-              isNew
-                  ? (isEnglish ? 'Add Approver' : 'เพิ่มผู้อนุมัติ')
-                  : (isEnglish ? 'Edit Approver' : 'แก้ไขผู้อนุมัติ'),
-              style: TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey[900]),
-            )),
-            ElevatedButton.icon(
-              onPressed: _saving ? null : _save,
-              icon: _saving
-                  ? const SizedBox(
-                      width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.save, size: 16),
-              label: Text(_saving
-                  ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
-                  : (isEnglish ? 'Save' : 'บันทึก')),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueGrey[700], foregroundColor: Colors.white),
-            ),
-            const SizedBox(width: 8),
-            TextButton(
-              onPressed: widget.onCancel,
-              child: Text(isEnglish ? 'Close' : 'ปิด',
-                  style: TextStyle(color: Colors.blueGrey[900])),
-            ),
-          ]),
-        ),
-        // Form body
-        Expanded(child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // Module + Category
-            Row(children: [
-              Expanded(child: _buildDropdown<String>(
-                label: isEnglish ? 'Module *' : 'โมดูล *',
-                value: _moduleCode,
-                items: _modules.map((m) =>
-                    DropdownMenuItem(value: m.value, child: Text(m.label))).toList(),
-                onChanged: (v) => setState(() => _moduleCode = v!),
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: _buildDropdown<String>(
-                label: isEnglish ? 'Work Type *' : 'ประเภทงาน *',
-                value: _docCategory,
-                items: _categories.map((c) =>
-                    DropdownMenuItem(value: c.value, child: Text(c.label))).toList(),
-                onChanged: (v) => setState(() => _docCategory = v!),
-              )),
-            ]),
-            const SizedBox(height: 12),
-            // Level
-            SizedBox(
-              width: 120,
-              child: TextFormField(
-                controller: _levelCtrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                style: const TextStyle(fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: isEnglish ? 'Level *' : 'ลำดับที่ *',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                ),
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? (isEnglish ? 'Required' : 'กรุณาระบุ')
-                    : null,
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Approver user picker
-            InputDecorator(
-              decoration: InputDecoration(
-                labelText: isEnglish ? 'Approver *' : 'ผู้อนุมัติ *',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                errorText: _approverUserId == null && _saving
-                    ? (isEnglish ? 'Please select an approver' : 'กรุณาเลือกผู้อนุมัติ')
-                    : null,
-              ),
-              child: Row(children: [
-                Expanded(child: _approverUserId == null
-                  ? Text(isEnglish ? '— Not selected —' : '— ยังไม่ได้เลือก —',
-                      style: const TextStyle(color: Colors.grey, fontSize: 13))
-                  : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(
-                          _selectedUser?.firstName != null
-                              ? '${_selectedUser!.firstName} ${_selectedUser!.lastName ?? ''}'.trim()
-                              : _selectedUser?.userName ?? '',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                      if (_selectedUser?.email != null)
-                        Text(_selectedUser!.email!,
-                            style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                    ])),
-                IconButton(
-                  icon: const Icon(Icons.person_search, color: Colors.blueGrey, size: 18),
-                  tooltip: isEnglish ? 'Select user' : 'เลือกผู้ใช้',
-                  onPressed: _pickUser,
-                  padding: EdgeInsets.zero, constraints: const BoxConstraints(),
-                ),
-                if (_approverUserId != null)
-                  IconButton(
-                    icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                    onPressed: () => setState(() => _approverUserId = null),
-                    padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                    ),
                   ),
-              ]),
-            ),
-            const SizedBox(height: 12),
-            // Status
-            SwitchListTile(
+                ),
+                if (_isLeftPanelExpanded)
+                  MouseRegion(
+                    cursor: SystemMouseCursors.resizeColumn,
+                    child: GestureDetector(
+                      onHorizontalDragStart: (_) => setState(() => _isDraggingDivider = true),
+                      onHorizontalDragUpdate: (d) => setState(() => _leftPanelWidth =
+                          (_leftPanelWidth + d.delta.dx).clamp(280.0, maxLeft)),
+                      onHorizontalDragEnd: (_) => setState(() => _isDraggingDivider = false),
+                      child: Container(width: 5, color: Colors.grey[300]),
+                    ),
+                  ),
+                Expanded(child: _buildRightPanel(isEnglish)),
+              ]);
+            }),
+    );
+  }
+
+  // ── Right panel ──────────────────────────────────────────────────────────
+
+  Widget _buildRightPanel(bool isEnglish) {
+    if (_selectedMenu == null) {
+      return Center(
+        child: Text(
+          isEnglish ? 'Select a menu from the left panel' : 'เลือกเมนูจาก panel ด้านซ้าย',
+          style: const TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+    final menu = _selectedMenu!;
+    return SingleChildScrollView(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Container(
+          color: Colors.blueGrey.shade100,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Text(menu.localName(isEnglish),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // 1) รูปแบบการอนุมัติ
+            Text(isEnglish ? 'Approval mode' : 'รูปแบบการอนุมัติ',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            RadioListTile<String>(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: Text(
-                '${isEnglish ? "Status" : "สถานะ"}: ${_isActive ? (isEnglish ? "Active" : "ใช้งาน") : (isEnglish ? "Inactive" : "หยุดใช้")}',
-                style: const TextStyle(fontSize: 13),
-              ),
-              value: _isActive,
-              activeColor: Colors.blueGrey[700],
-              onChanged: (v) => setState(() => _isActive = v),
+              title: Text(isEnglish ? 'All approvers must approve, in order' : 'ต้องอนุมัติครบทุกคนตามลำดับ'),
+              value: 'ALL',
+              groupValue: _approvalMode,
+              onChanged: (v) => setState(() {
+                _approvalMode = v!;
+                _settingsDirty = true;
+              }),
             ),
-            const Divider(height: 24),
-            // Signature section
-            _buildSectionHeader(
-                isEnglish ? 'Approver Signature' : 'ลายเซ็นผู้อนุมัติ'),
-            const SizedBox(height: 8),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Preview
-              Container(
-                width: 220, height: 110,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(6),
-                  color: Colors.grey.shade50,
-                ),
-                child: _signatureImage != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(5),
-                      child: Image.memory(
-                        base64Decode(_signatureImage!.contains(',')
-                            ? _signatureImage!.split(',').last
-                            : _signatureImage!),
-                        fit: BoxFit.contain,
-                      ))
-                  : Center(child: Text(
-                      isEnglish ? 'No signature' : 'ยังไม่มีลายเซ็น',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12))),
+            RadioListTile<String>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(isEnglish ? 'Any one approver is enough' : 'คนใดคนหนึ่งอนุมัติก็พอ'),
+              value: 'ANY',
+              groupValue: _approvalMode,
+              onChanged: (v) => setState(() {
+                _approvalMode = v!;
+                _settingsDirty = true;
+              }),
+            ),
+            const SizedBox(height: 12),
+            // 2) ข้อความอธิบายการอนุมัติ ไทย/อังกฤษ
+            Text(isEnglish ? 'Approval description' : 'ข้อความอธิบายการอนุมัติ',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _descThCtrl,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Description (Thai)' : 'ข้อความอธิบาย (ไทย)',
+                hintText: 'เช่น "ขั้นตอนนี้ต้องการผู้อนุมัติ 2 ท่าน คือ"',
+                border: const OutlineInputBorder(),
+                isDense: true,
               ),
-              const SizedBox(width: 12),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.upload, size: 15),
-                  label: Text(isEnglish ? 'Upload Signature' : 'อัพโหลดลายเซ็น',
-                      style: const TextStyle(fontSize: 13)),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueGrey[600],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10)),
-                  onPressed: _pickSignature,
-                ),
-                const SizedBox(height: 6),
-                if (_signatureImage != null)
-                  TextButton.icon(
-                    icon: const Icon(Icons.delete_outline, size: 15, color: Colors.red),
-                    label: Text(isEnglish ? 'Remove Signature' : 'ลบลายเซ็น',
-                        style: const TextStyle(fontSize: 12, color: Colors.red)),
-                    onPressed: () => setState(() => _signatureImage = null),
-                  ),
-                const SizedBox(height: 8),
-                Text(isEnglish ? 'Supports PNG, JPG' : 'รองรับไฟล์ PNG, JPG',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                Text(isEnglish ? 'Transparent background (PNG) recommended' : 'แนะนำพื้นหลังโปร่งใส (PNG)',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-              ]),
+              onChanged: (_) => setState(() => _settingsDirty = true),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _descEnCtrl,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Description (English)' : 'ข้อความอธิบาย (อังกฤษ)',
+                hintText: 'e.g. "This step requires 2 approvers:"',
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (_) => setState(() => _settingsDirty = true),
+            ),
+            const SizedBox(height: 12),
+            // 4) ใช้ประเภทเอกสาร
+            Row(children: [
+              Text(isEnglish ? 'Uses document type: ' : 'ใช้ประเภทเอกสาร: ',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              Switch(
+                value: _usesDocType,
+                onChanged: (v) {
+                  setState(() {
+                    _usesDocType = v;
+                    _settingsDirty = true;
+                    _selectedDocTypeCard = null;
+                    _approvers = [];
+                  });
+                  if (v) {
+                    _loadDocTypeCards();
+                  } else {
+                    _loadApprovers();
+                  }
+                },
+              ),
+              Text(_usesDocType
+                  ? (isEnglish ? 'Yes — can add multiple document types below' : 'ใช้ — เพิ่มประเภทเอกสารได้ด้านล่าง')
+                  : (isEnglish ? 'No — one approval queue for this menu' : 'ไม่ใช้ — คิวผู้อนุมัติเดียวสำหรับเมนูนี้')),
             ]),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: (_settingsDirty && !_savingSettings) ? _saveSettings : null,
+                icon: _savingSettings
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.save),
+                label: Text(isEnglish ? 'Save approval settings' : 'บันทึกการตั้งค่าการอนุมัติ'),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepOrange[700], foregroundColor: Colors.white),
+              ),
+            ),
           ]),
-        )),
+        ),
+        const Divider(height: 1),
+        if (_usesDocType) _buildDocTypeCardSection(isEnglish),
+        const Divider(height: 1),
+        _buildApproverQueueSection(isEnglish),
       ]),
     );
   }
 
-  Widget _buildDropdown<T>({
-    required String label, required T value,
-    required List<DropdownMenuItem<T>> items,
-    required void Function(T?) onChanged,
-  }) => DropdownButtonFormField<T>(
-    value: value,
-    isExpanded: true,
-    decoration: InputDecoration(
-      labelText: label, border: const OutlineInputBorder(),
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-    ),
-    items: items,
-    onChanged: onChanged,
-    style: const TextStyle(fontSize: 13, color: Colors.black87),
-  );
+  Widget _buildDocTypeCardSection(bool isEnglish) {
+    return Container(
+      color: Colors.blueGrey.shade50,
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Text(isEnglish ? 'Document types' : 'ประเภทเอกสาร',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          ),
+          TextButton.icon(
+            onPressed: _addDocTypeCard,
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(isEnglish ? 'Add document type' : 'เพิ่มประเภทเอกสาร'),
+          ),
+        ]),
+        if (_loadingDocTypes)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_docTypeCards.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              isEnglish
+                  ? 'No document type added yet. Press "Add document type" to search from the document type table.'
+                  : 'ยังไม่มีประเภทเอกสารที่เพิ่มไว้ กดปุ่ม "เพิ่มประเภทเอกสาร" เพื่อค้นหาจากตารางประเภทเอกสาร',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _docTypeCards.map((card) {
+              final selected = _selectedDocTypeCard == card.docType;
+              return InkWell(
+                onTap: () => _selectDocTypeCard(card.docType),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected ? Colors.deepOrange.shade100 : Colors.white,
+                    border: Border.all(
+                        color: selected ? Colors.deepOrange : Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.description_outlined,
+                        size: 16, color: selected ? Colors.deepOrange : Colors.grey.shade700),
+                    const SizedBox(width: 6),
+                    Text(card.localName(isEnglish), style: const TextStyle(fontSize: 12)),
+                    const SizedBox(width: 4),
+                    InkWell(
+                      onTap: () => _removeDocTypeCard(card),
+                      child: const Icon(Icons.close, size: 14, color: Colors.grey),
+                    ),
+                  ]),
+                ),
+              );
+            }).toList(),
+          ),
+      ]),
+    );
+  }
 
-  Widget _buildSectionHeader(String title) => Row(children: [
-    Container(width: 3, height: 16, color: Colors.blueGrey[700], margin: const EdgeInsets.only(right: 8)),
-    Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey[700])),
-  ]);
+  Widget _buildApproverQueueSection(bool isEnglish) {
+    if (_usesDocType && _selectedDocTypeCard == null) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Text(
+            isEnglish
+                ? 'Select a document type card above to view/edit its approval queue'
+                : 'เลือกการ์ดประเภทเอกสารด้านบนเพื่อดู/แก้ไขคิวผู้อนุมัติ',
+            style: const TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+    if (_loadingApprovers) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Text(isEnglish ? 'Approval queue' : 'ลำดับผู้อนุมัติ',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+      ),
+      _approvers.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                isEnglish
+                    ? 'No user has been granted "Approve" permission for this menu yet.\nGo to User Menu Rights and grant it there.'
+                    : 'ยังไม่มีผู้ใช้คนใดได้รับสิทธิ์ "อนุมัติ" สำหรับเมนูนี้\nไปที่สิทธิ์เมนูผู้ใช้ แล้วให้สิทธิ์ก่อน',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.grey),
+              ),
+            )
+          : ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(12),
+              itemCount: _approvers.length,
+              itemBuilder: (ctx, i) {
+                final a = _approvers[i];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  color: a.isActive ? null : Colors.grey.shade100,
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: a.isActive ? Colors.blueGrey.shade600 : Colors.grey.shade400,
+                      child: Text('${i + 1}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                    title: Text(a.approverFullName,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: a.isActive ? null : Colors.grey,
+                            decoration: a.isActive ? null : TextDecoration.lineThrough)),
+                    subtitle: a.approverEmail != null
+                        ? Text(a.approverEmail!, style: const TextStyle(fontSize: 11))
+                        : null,
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Tooltip(
+                        message: a.isActive
+                            ? (isEnglish ? 'Suspend (skip in approval queue)' : 'งดอนุมัติ')
+                            : (isEnglish ? 'Reinstate' : 'กลับมาใช้งาน'),
+                        child: Switch(value: a.isActive, onChanged: (v) => _toggleActive(i, v)),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_upward, size: 18),
+                        tooltip: isEnglish ? 'Move up' : 'เลื่อนขึ้น',
+                        onPressed: i == 0 ? null : () => _moveUp(i),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_downward, size: 18),
+                        tooltip: isEnglish ? 'Move down' : 'เลื่อนลง',
+                        onPressed: i == _approvers.length - 1 ? null : () => _moveDown(i),
+                      ),
+                    ]),
+                  ),
+                );
+              },
+            ),
+      Padding(
+        padding: const EdgeInsets.all(12),
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: (_orderDirty && !_savingOrder) ? _saveOrder : null,
+            icon: _savingOrder
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.save),
+            label: Text(isEnglish ? 'Save Order' : 'บันทึกลำดับ'),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueGrey[700], foregroundColor: Colors.white),
+          ),
+        ),
+      ),
+    ]);
+  }
 }
 
-// ── User Picker Dialog ────────────────────────────────────────────────────────
-class _UserPickerDialog extends StatefulWidget {
-  final List<User> users;
-  final bool isEnglish;
-  const _UserPickerDialog({required this.users, required this.isEnglish});
+// ── Document type search dialog (ค้นหาจากตาราง sa_module_document) ──────────
+
+class _DocTypeSearchDialog extends StatefulWidget {
+  final ModuleDocumentService docSvc;
+  const _DocTypeSearchDialog({required this.docSvc});
+
   @override
-  State<_UserPickerDialog> createState() => _UserPickerDialogState();
+  State<_DocTypeSearchDialog> createState() => _DocTypeSearchDialogState();
 }
 
-class _UserPickerDialogState extends State<_UserPickerDialog> {
+class _DocTypeSearchDialogState extends State<_DocTypeSearchDialog> {
+  List<ModuleDocument> _allDocs = [];
+  bool _loading = true;
   String _search = '';
 
   @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final rows = await widget.docSvc.fetchRows();
+      if (!mounted) return;
+      setState(() {
+        _allDocs = rows.where((d) => d.isDocType).toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isEnglish = widget.isEnglish;
-    final filtered = widget.users.where((u) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final filtered = _allDocs.where((d) {
+      if (_search.isEmpty) return true;
       final q = _search.toLowerCase();
-      return q.isEmpty ||
-          (u.userName).toLowerCase().contains(q) ||
-          ('${u.firstName ?? ''} ${u.lastName ?? ''}').toLowerCase().contains(q) ||
-          (u.email ?? '').toLowerCase().contains(q);
+      return d.docCode.toLowerCase().contains(q) ||
+          d.docNameThai.toLowerCase().contains(q) ||
+          d.docNameEng.toLowerCase().contains(q);
     }).toList();
 
-    return AlertDialog(
-      title: Text(isEnglish ? 'Select Approver' : 'เลือกผู้อนุมัติ'),
-      content: SizedBox(width: 420, height: 380, child: Column(children: [
-        TextField(
-          autofocus: true,
-          decoration: InputDecoration(
-            hintText: isEnglish ? 'Search name / username / email' : 'ค้นหา ชื่อ / username / email',
-            prefixIcon: const Icon(Icons.search),
-            border: const OutlineInputBorder(),
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          ),
-          onChanged: (v) => setState(() => _search = v),
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 520),
+        child: Column(
+          children: [
+            Container(
+              color: Colors.blueGrey[700],
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(children: [
+                const Icon(Icons.search, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isEnglish ? 'Search document type' : 'ค้นหาประเภทเอกสาร',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: TextField(
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Search by code or name' : 'ค้นหาด้วยรหัสหรือชื่อ',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (v) => setState(() => _search = v),
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : filtered.isEmpty
+                      ? Center(
+                          child: Text(isEnglish ? 'No document type found' : 'ไม่พบประเภทเอกสาร',
+                              style: const TextStyle(color: Colors.grey)),
+                        )
+                      : ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final d = filtered[i];
+                            return ListTile(
+                              dense: true,
+                              title: Text(isEnglish
+                                  ? (d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai)
+                                  : d.docNameThai),
+                              subtitle: Text(
+                                  '${d.docCode}${d.sysModule.isNotEmpty ? ' · ${sysModules[d.sysModule] ?? d.sysModule}' : ''}'),
+                              onTap: () => Navigator.of(context).pop(d),
+                            );
+                          },
+                        ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Expanded(child: filtered.isEmpty
-          ? Center(child: Text(isEnglish ? 'No users found' : 'ไม่พบผู้ใช้'))
-          : ListView.builder(
-              itemCount: filtered.length,
-              itemBuilder: (_, i) {
-                final u = filtered[i];
-                final name = '${u.firstName ?? ''} ${u.lastName ?? ''}'.trim();
-                return ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.person, size: 20, color: Colors.blueGrey),
-                  title: Text(name.isNotEmpty ? name : u.userName,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                  subtitle: Text(u.email ?? u.userName,
-                      style: const TextStyle(fontSize: 11)),
-                  onTap: () => Navigator.of(context).pop(u),
-                );
-              })),
-      ])),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-      ],
+      ),
     );
   }
 }
