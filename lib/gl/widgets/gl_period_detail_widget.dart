@@ -6,6 +6,7 @@ import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../models/gl_period.dart';
 import '../services/gl_period_service.dart';
 
@@ -837,13 +838,18 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     List<Widget> actionIcons = [];
     if (widget.mode != Mode.view) {
       if (module == 'GL' && status == 'PENDING_CLOSE') {
-        // งวด GL ที่รออนุมัติ — แสดงปุ่มตามบทบาทของผู้ใช้ปัจจุบัน
-        final isApprover = widget.canApprove &&
-            period.closeApproverUserId != null &&
-            currentUserId == period.closeApproverUserId;
+        // งวด GL ที่รออนุมัติ — ผู้อนุมัติหลายคนแบบมีลำดับ (เหมือน AP Payment Run)
+        final myPending = period.closeApprovals
+            .where((a) => a.approverUserId == currentUserId && a.status == 'Pending')
+            .toList();
+        final blockedByPrev = myPending.isNotEmpty &&
+            period.closeApprovals.any((a) =>
+                a.sequenceNo < myPending.first.sequenceNo && a.status == 'Pending');
+        final canReject = widget.canApprove && myPending.isNotEmpty;
+        final canAcceptNow = canReject && !blockedByPrev;
         final isRequester = period.closeRequestedBy != null &&
             currentUserId == period.closeRequestedBy;
-        if (isApprover) {
+        if (canAcceptNow) {
           actionIcons.add(Tooltip(
             message: isEnglish ? 'Approve Close' : 'อนุมัติปิดงวด',
             child: InkWell(
@@ -851,6 +857,8 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
               child: const Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
             ),
           ));
+        }
+        if (canReject) {
           actionIcons.add(Tooltip(
             message: isEnglish ? 'Reject' : 'ปฏิเสธ',
             child: InkWell(
@@ -858,7 +866,8 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
               child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
             ),
           ));
-        } else if (isRequester) {
+        }
+        if (!canReject && isRequester) {
           actionIcons.add(Tooltip(
             message: isEnglish ? 'Cancel Request' : 'ยกเลิกคำขอ',
             child: InkWell(
@@ -930,13 +939,15 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
           padding: const EdgeInsets.all(2),
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
-        if (module == 'GL' && status == 'PENDING_CLOSE' && period.closeApproverUserName != null)
+        if (module == 'GL' && status == 'PENDING_CLOSE' && period.closeApprovals.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Text(
-              isEnglish
-                  ? 'Approver: ${period.closeApproverUserName}'
-                  : 'ผู้อนุมัติ: ${period.closeApproverUserName}',
+              (isEnglish ? 'Pending: ' : 'รออนุมัติ: ') +
+                  period.closeApprovals
+                      .where((a) => a.status == 'Pending')
+                      .map((a) => '${a.approverUserName} (${a.sequenceNo})')
+                      .join(' → '),
               style: const TextStyle(fontSize: 9, color: Colors.grey),
               textAlign: TextAlign.center,
             ),
@@ -1352,8 +1363,16 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
       ),
     );
     if (confirmed != true) return;
+    final menuId = MenuScope.of(context)?.id;
+    if (menuId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(isEnglish ? 'Cannot determine current menu' : 'ไม่สามารถระบุเมนูปัจจุบันได้'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
     try {
-      final result = await _detailService.requestClose(period.id);
+      final result = await _detailService.requestClose(period.id, menuId: menuId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(result['message']?.toString() ??
@@ -1361,6 +1380,42 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
         backgroundColor: Colors.green,
       ));
       widget.onDetailChange();
+    } on NoActiveApproverException catch (e) {
+      if (!mounted) return;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(isEnglish ? 'No Active Approver' : 'ไม่มีผู้อนุมัติที่ใช้งานอยู่'),
+          content: Text(e.message),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+              child: Text(isEnglish ? 'Proceed Anyway' : 'ยืนยันดำเนินการต่อ'),
+            ),
+          ],
+        ),
+      );
+      if (proceed == true && mounted) {
+        try {
+          final result =
+              await _detailService.requestClose(period.id, menuId: menuId, force: true);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(result['message']?.toString() ??
+                (isEnglish ? 'Closed successfully' : 'ดำเนินการสำเร็จ')),
+            backgroundColor: Colors.green,
+          ));
+          widget.onDetailChange();
+        } catch (e2) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e2.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ));
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

@@ -70,6 +70,28 @@ class FiscalYear {
   }
 }
 
+// ผู้อนุมัติแต่ละคนในคิวปิดงวด GL (เรียงตาม sequenceNo)
+class GlCloseApproval {
+  final int approverUserId;
+  final String approverUserName;
+  final int sequenceNo;
+  final String status; // Pending / Approved / Rejected
+
+  GlCloseApproval({
+    required this.approverUserId,
+    required this.approverUserName,
+    required this.sequenceNo,
+    required this.status,
+  });
+
+  factory GlCloseApproval.fromJson(Map<String, dynamic> json) => GlCloseApproval(
+        approverUserId: int.tryParse(json['approver_user_id'].toString()) ?? 0,
+        approverUserName: json['approver_user_name'] as String? ?? '',
+        sequenceNo: int.tryParse(json['sequence_no'].toString()) ?? 0,
+        status: json['status'] as String? ?? 'Pending',
+      );
+}
+
 class PostingPeriod {
   final int id;
   final int fiscalYearId;
@@ -82,12 +104,11 @@ class PostingPeriod {
   final String arStatus;
   final String imStatus;
   final String cmStatus;
-  // ข้อมูลคำขอปิดงวด GL ที่ยังรออนุมัติ (Pending) — null หากไม่มีคำขอค้างอยู่
+  // ข้อมูลคำขอปิดงวด GL ที่ยังรออนุมัติ (Pending) — null/ว่าง หากไม่มีคำขอค้างอยู่
   final int? closeRequestId;
   final int? closeRequestedBy;
   final String? closeRequestedByName;
-  final int? closeApproverUserId;
-  final String? closeApproverUserName;
+  final List<GlCloseApproval> closeApprovals;
 
   PostingPeriod({
     required this.id,
@@ -104,8 +125,7 @@ class PostingPeriod {
     this.closeRequestId,
     this.closeRequestedBy,
     this.closeRequestedByName,
-    this.closeApproverUserId,
-    this.closeApproverUserName,
+    this.closeApprovals = const [],
   });
 
   factory PostingPeriod.fromJson(Map<String, dynamic> json) {
@@ -128,9 +148,11 @@ class PostingPeriod {
       closeRequestedBy: json['close_requested_by'] == null
           ? null : int.tryParse(json['close_requested_by'].toString()),
       closeRequestedByName: json['close_requested_by_name'] as String?,
-      closeApproverUserId: json['close_approver_user_id'] == null
-          ? null : int.tryParse(json['close_approver_user_id'].toString()),
-      closeApproverUserName: json['close_approver_user_name'] as String?,
+      closeApprovals: json['close_approvals'] == null
+          ? const []
+          : (json['close_approvals'] as List)
+              .map((e) => GlCloseApproval.fromJson(e as Map<String, dynamic>))
+              .toList(),
     );
   }
 

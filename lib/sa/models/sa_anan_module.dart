@@ -56,21 +56,27 @@ const Map<String, String> apSysDocType = {
 };
 // '31': 'สินค้าคงคลัง'
 const Map<String, String> imSysDocType = {
-  '10': 'Good Receive Note', // buy (stock+ ap+)
-  '15': 'Return to Supplier', // return (stock- ap-)
-  '20': 'Credit Note from Supplier', // cn (stock- ap-)
-  '25': 'Debit Note from Supplier', // dn (stock+ ap+)
-  '30': 'Sale', // sale (stock- ar+)
-  '35': 'Return from Customer', // return (stock+ ar-)
-  '40': 'Credit Note to Customer', // cn (stock+ ar-)
-  '45': 'Debit Note to Customer', // dn (stock- ar+)
-  '60': 'Issue Stock', // issue (stock-) for project, ...
-  '70': 'Transfer in-out', // transfer between location (stock=)
-  '80': 'Adjust quantity', // adjust (stock+-) for Phys.Count, ...
+  '10': 'รับสินค้า - Good Receive Note', // buy (stock+ ap+)
+  '15': 'คืนสินค้า - Return to Supplier', // return (stock- ap-)
+  '20': 'ลดหนี้เจ้าหนี้ -Credit Note from Supplier', // cn (stock- ap-)
+  '25': 'เพิ่มหนี้เจ้าหนี้ - Debit Note from Supplier', // dn (stock+ ap+)
+  '30': 'ขาย - Sale', // sale (stock- ar+)
+  '35': 'รับคืนสินค้า - Return from Customer', // return (stock+ ar-)
+  '40': 'ลดหนี้ลูกหนี้ - Credit Note to Customer', // cn (stock+ ar-)
+  '45': 'เพิ่มหนี้ลูกหนี้ - Debit Note to Customer', // dn (stock- ar+)
+  '60': 'เบิกสินค้า - Issue Stock', // issue (stock-) for project, ...
+  '70': 'โอนสินค้า - Transfer in-out', // transfer between location (stock=)
+  '80': 'ปรับยอดสินค้า - Adjust quantity', // adjust (stock+-) for Phys.Count, ...
 };
-// '81': 'เงินสดและเช็ค / Cash Management (CM)'
+// '81': 'เงินสดและเช็ค / Cash & Cheque Management (CM)'
 const Map<String, String> cmSysDocType = {
-  '': 'ไม่ระบุ',
+  '10': 'รายรับ - Receipts',
+  '20': 'รายจ่าย - Payments',
+  '30': 'เติมเงินสดย่อย - Petty Cash Replenishment',
+  '40': 'เบิกเงินสดย่อย - Petty Cash Reimbursement',
+  '50': 'โอนเงินระหว่างบัญชี - Inter Bank Transfers',
+  '70': 'ค่าธรรมเนียมธนาคาร - Bank Charges',
+  '90': 'ดอกเบี้ย - Interest',
 };
 // '86': 'เงินมัดจำ'
 const Map<String, String> dsSysDocType = {

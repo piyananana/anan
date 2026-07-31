@@ -463,15 +463,56 @@ class _DetailPanelState extends State<_DetailPanel> {
       ),
     );
     if (ok != true || !mounted) return;
+    final menuId = MenuScope.of(context)?.id;
+    if (menuId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'Cannot determine current menu' : 'ไม่สามารถระบุเมนูปัจจุบันได้'),
+          backgroundColor: Colors.red));
+      return;
+    }
     setState(() => _saving = true);
     try {
-      await widget.svc.submitRun(widget.run!.id!);
+      await widget.svc.submitRun(widget.run!.id!, menuId: menuId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(isEnglish ? 'Submitted for approval successfully' : 'ส่งอนุมัติสำเร็จ')));
         widget.onRefresh();
         final updated = await widget.svc.fetchRow(widget.run!.id!);
         if (mounted) widget.onSaved(updated);
+      }
+    } on NoActiveApproverException catch (e) {
+      if (!mounted) return;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(isEnglish ? 'No Active Approver' : 'ไม่มีผู้อนุมัติที่ใช้งานอยู่'),
+          content: Text(e.message),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+              child: Text(isEnglish ? 'Submit Anyway' : 'ยืนยันส่งอนุมัติ'),
+            ),
+          ],
+        ),
+      );
+      if (proceed == true && mounted) {
+        try {
+          await widget.svc.submitRun(widget.run!.id!, menuId: menuId, force: true);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(isEnglish ? 'Submitted successfully' : 'ส่งอนุมัติสำเร็จ')));
+            widget.onRefresh();
+            final updated = await widget.svc.fetchRow(widget.run!.id!);
+            if (mounted) widget.onSaved(updated);
+          }
+        } catch (e2) {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text('$e2'), backgroundColor: Colors.red));
+          }
+        }
       }
     } catch (e) {
       if (mounted) {

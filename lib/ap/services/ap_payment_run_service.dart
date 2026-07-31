@@ -5,6 +5,14 @@ import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/ap_payment_run.dart';
 
+// ไม่มีผู้อนุมัติที่ active อยู่สำหรับเมนูนี้ในขณะนี้ — ให้ผู้ใช้เลือกว่าจะ submit ต่อ (ข้ามขั้นตอนอนุมัติ) หรือยกเลิก
+class NoActiveApproverException implements Exception {
+  final String message;
+  NoActiveApproverException(this.message);
+  @override
+  String toString() => message;
+}
+
 class ApPaymentRunService {
   final String _base = AppConfig.apiAp;
   final AuthService _auth = AuthService();
@@ -54,9 +62,19 @@ class ApPaymentRunService {
     throw Exception(_msg(resp.body));
   }
 
-  Future<void> submitRun(int id) async {
+  Future<void> submitRun(int id, {required int menuId, bool force = false}) async {
     final headers = await _auth.getAuthHeader();
-    final resp = await http.put(Uri.parse('$_base/ap_payment_run/$id/submit'), headers: headers);
+    final resp = await http.put(
+      Uri.parse('$_base/ap_payment_run/$id/submit'),
+      headers: headers,
+      body: jsonEncode({'menu_id': menuId, 'force': force}),
+    );
+    if (resp.statusCode == 409) {
+      final body = jsonDecode(resp.body);
+      if (body['code'] == 'NO_ACTIVE_APPROVER') {
+        throw NoActiveApproverException(body['message'] ?? _msg(resp.body));
+      }
+    }
     if (resp.statusCode != 200) throw Exception(_msg(resp.body));
   }
 
