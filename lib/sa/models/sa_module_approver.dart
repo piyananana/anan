@@ -12,6 +12,8 @@ class SaModuleApprover {
   final String? approverEmail;
   final bool isActive;
   final String? docType; // null = คิวระดับเมนู
+  final String? signatureImage; // ลายเซ็น base64 data URL, null = ยังไม่มี
+  final double approvalLimit; // วงเงินอนุมัติ — 0 = ไม่ต้องเช็ควงเงิน
 
   SaModuleApprover({
     this.id,
@@ -23,6 +25,8 @@ class SaModuleApprover {
     this.approverEmail,
     this.isActive = true,
     this.docType,
+    this.signatureImage,
+    this.approvalLimit = 0,
   });
 
   String get approverFullName {
@@ -30,6 +34,12 @@ class SaModuleApprover {
     final last  = approverLastName  ?? '';
     final full  = '$first $last'.trim();
     return full.isNotEmpty ? full : (approverUsername ?? '');
+  }
+
+  static double _parseLimit(dynamic v) {
+    if (v == null) return 0;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? 0;
   }
 
   factory SaModuleApprover.fromJson(Map<String, dynamic> json) => SaModuleApprover(
@@ -42,6 +52,8 @@ class SaModuleApprover {
         approverEmail: json['approver_email'],
         isActive: json['is_active'] ?? true,
         docType: json['doc_type'] as String?,
+        signatureImage: json['signature_image'] as String?,
+        approvalLimit: _parseLimit(json['approval_limit']),
       );
 
   SaModuleApprover copyWith({
@@ -49,6 +61,7 @@ class SaModuleApprover {
     int? approverUserId, String? approverUsername,
     String? approverFirstName, String? approverLastName, String? approverEmail,
     bool? isActive, String? docType,
+    String? signatureImage, double? approvalLimit,
   }) => SaModuleApprover(
         id: id ?? this.id,
         approvalLevel: approvalLevel ?? this.approvalLevel,
@@ -59,5 +72,7 @@ class SaModuleApprover {
         approverEmail: approverEmail ?? this.approverEmail,
         isActive: isActive ?? this.isActive,
         docType: docType ?? this.docType,
+        signatureImage: signatureImage ?? this.signatureImage,
+        approvalLimit: approvalLimit ?? this.approvalLimit,
       );
 }

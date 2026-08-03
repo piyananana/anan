@@ -1,4 +1,9 @@
 // lib/sa/screens/sa_module_approver_screen.dart
+import 'dart:convert';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
+import 'dart:typed_data' show Uint8List;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/sa_anan_module.dart' show sysModules;
@@ -295,17 +300,44 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
     });
   }
 
+  void _setApprovalLimit(int index, double value) {
+    setState(() {
+      _approvers[index] = _approvers[index].copyWith(approvalLimit: value);
+      _orderDirty = true;
+    });
+  }
+
+  Future<void> _pickSignature(int index) async {
+    if (!kIsWeb) return;
+    final input = html.FileUploadInputElement()..accept = 'image/*';
+    input.click();
+    input.onChange.listen((e) {
+      final file = input.files?.first;
+      if (file == null) return;
+      final reader = html.FileReader();
+      reader.readAsDataUrl(file);
+      reader.onLoad.listen((_) {
+        if (!mounted) return;
+        setState(() {
+          _approvers[index] =
+              _approvers[index].copyWith(signatureImage: reader.result as String);
+          _orderDirty = true;
+        });
+      });
+    });
+  }
+
+  Uint8List _decodeSignature(String dataUrl) {
+    final data = dataUrl.contains(',') ? dataUrl.split(',').last : dataUrl;
+    return base64Decode(data);
+  }
+
   Future<void> _saveOrder() async {
     if (_selectedMenu == null) return;
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     setState(() => _savingOrder = true);
     try {
-      await _approverSvc.reorder(
-          _selectedMenu!.id,
-          _approvers
-              .map((a) => (approverUserId: a.approverUserId, isActive: a.isActive))
-              .toList(),
-          docType: _selectedDocTypeCard);
+      await _approverSvc.reorder(_selectedMenu!.id, _approvers, docType: _selectedDocTypeCard);
       if (!mounted) return;
       setState(() => _orderDirty = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -668,40 +700,109 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
               itemBuilder: (ctx, i) {
                 final a = _approvers[i];
                 return Card(
+                  key: ValueKey(a.id ?? 'row_$i'),
                   margin: const EdgeInsets.only(bottom: 6),
                   color: a.isActive ? null : Colors.grey.shade100,
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: a.isActive ? Colors.blueGrey.shade600 : Colors.grey.shade400,
-                      child: Text('${i + 1}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: a.isActive ? Colors.blueGrey.shade600 : Colors.grey.shade400,
+                          child: Text('${i + 1}',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(a.approverFullName,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: a.isActive ? null : Colors.grey,
+                                      decoration: a.isActive ? null : TextDecoration.lineThrough)),
+                              if (a.approverEmail != null)
+                                Text(a.approverEmail!, style: const TextStyle(fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // ปุ่มลายเซ็น — คลิกเพื่ออัปโหลด, ถ้ายังไม่มีให้แสดงไอคอนแทน
+                        Tooltip(
+                          message: isEnglish ? 'Upload signature' : 'อัปโหลดลายเซ็น',
+                          child: InkWell(
+                            onTap: () => _pickSignature(i),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              width: 52,
+                              height: 38,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade400),
+                                borderRadius: BorderRadius.circular(4),
+                                color: Colors.white,
+                              ),
+                              child: (a.signatureImage ?? '').isNotEmpty
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(3),
+                                      child: Image.memory(
+                                        _decodeSignature(a.signatureImage!),
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (_, __, ___) => const Icon(
+                                            Icons.broken_image_outlined,
+                                            size: 18,
+                                            color: Colors.grey),
+                                      ),
+                                    )
+                                  : Icon(Icons.draw_outlined, size: 18, color: Colors.grey.shade500),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // วงเงินอนุมัติ (0 = ไม่ต้องเช็ควงเงิน) — แสดงด้านขวาของรูปลายเซ็น
+                        SizedBox(
+                          width: 96,
+                          child: TextFormField(
+                            key: ValueKey('limit_${a.id ?? i}'),
+                            initialValue:
+                                a.approvalLimit == 0 ? '' : a.approvalLimit.toStringAsFixed(0),
+                            textAlign: TextAlign.right,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                            style: const TextStyle(fontSize: 12),
+                            decoration: InputDecoration(
+                              labelText: isEnglish ? 'Limit' : 'วงเงิน',
+                              hintText: '0',
+                              helperText: isEnglish ? '0 = no check' : '0=ไม่เช็ค',
+                              helperStyle: const TextStyle(fontSize: 10),
+                              isDense: true,
+                              border: const OutlineInputBorder(),
+                              contentPadding:
+                                  const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            ),
+                            onChanged: (v) => _setApprovalLimit(i, double.tryParse(v) ?? 0),
+                          ),
+                        ),
+                        Tooltip(
+                          message: a.isActive
+                              ? (isEnglish ? 'Suspend (skip in approval queue)' : 'งดอนุมัติ')
+                              : (isEnglish ? 'Reinstate' : 'กลับมาใช้งาน'),
+                          child: Switch(value: a.isActive, onChanged: (v) => _toggleActive(i, v)),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.arrow_upward, size: 18),
+                          tooltip: isEnglish ? 'Move up' : 'เลื่อนขึ้น',
+                          onPressed: i == 0 ? null : () => _moveUp(i),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.arrow_downward, size: 18),
+                          tooltip: isEnglish ? 'Move down' : 'เลื่อนลง',
+                          onPressed: i == _approvers.length - 1 ? null : () => _moveDown(i),
+                        ),
+                      ],
                     ),
-                    title: Text(a.approverFullName,
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: a.isActive ? null : Colors.grey,
-                            decoration: a.isActive ? null : TextDecoration.lineThrough)),
-                    subtitle: a.approverEmail != null
-                        ? Text(a.approverEmail!, style: const TextStyle(fontSize: 11))
-                        : null,
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Tooltip(
-                        message: a.isActive
-                            ? (isEnglish ? 'Suspend (skip in approval queue)' : 'งดอนุมัติ')
-                            : (isEnglish ? 'Reinstate' : 'กลับมาใช้งาน'),
-                        child: Switch(value: a.isActive, onChanged: (v) => _toggleActive(i, v)),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.arrow_upward, size: 18),
-                        tooltip: isEnglish ? 'Move up' : 'เลื่อนขึ้น',
-                        onPressed: i == 0 ? null : () => _moveUp(i),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.arrow_downward, size: 18),
-                        tooltip: isEnglish ? 'Move down' : 'เลื่อนลง',
-                        onPressed: i == _approvers.length - 1 ? null : () => _moveDown(i),
-                      ),
-                    ]),
                   ),
                 );
               },

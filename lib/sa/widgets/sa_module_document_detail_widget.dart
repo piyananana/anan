@@ -193,12 +193,12 @@ class ModuleDocumentDetailWidgetState
         return imSysDocType;
       case '81':
         return cmSysDocType;
-      case '86':
-        return dsSysDocType;
-      case '91':
-        return vpSysDocType;
-      case '96':
-        return vsSysDocType;
+      // case '86':
+      //   return dsSysDocType;
+      // case '91':
+      //   return vpSysDocType;
+      // case '96':
+      //   return vsSysDocType;
       default:
         return {};
     }

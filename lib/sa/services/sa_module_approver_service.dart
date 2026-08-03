@@ -23,8 +23,9 @@ class SaModuleApproverService {
     throw Exception('โหลดรายชื่อผู้อนุมัติล้มเหลว: ${resp.statusCode}');
   }
 
-  // items เรียงตามลำดับอนุมัติใหม่ (index 0 = ลำดับที่ 1); isActive ใช้ "งดอนุมัติ" คนนั้นชั่วคราว
-  Future<void> reorder(int menuId, List<({int approverUserId, bool isActive})> items, {String? docType}) async {
+  // approvers เรียงตามลำดับอนุมัติใหม่ (index 0 = ลำดับที่ 1); isActive ใช้ "งดอนุมัติ" คนนั้นชั่วคราว
+  // ส่ง signatureImage/approvalLimit ของแต่ละคนไปบันทึกพร้อมกันด้วย
+  Future<void> reorder(int menuId, List<SaModuleApprover> approvers, {String? docType}) async {
     final headers = await _auth.getAuthHeader();
     final resp = await http.put(
       Uri.parse('$_base/sa_module_approver/reorder'),
@@ -32,8 +33,13 @@ class SaModuleApproverService {
       body: jsonEncode({
         'menu_id': menuId,
         'doc_type': docType,
-        'items': items
-            .map((e) => {'approver_user_id': e.approverUserId, 'is_active': e.isActive})
+        'items': approvers
+            .map((a) => {
+                  'approver_user_id': a.approverUserId,
+                  'is_active': a.isActive,
+                  'signature_image': a.signatureImage,
+                  'approval_limit': a.approvalLimit,
+                })
             .toList(),
       }),
     );
