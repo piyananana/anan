@@ -1380,42 +1380,6 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
         backgroundColor: Colors.green,
       ));
       widget.onDetailChange();
-    } on NoActiveApproverException catch (e) {
-      if (!mounted) return;
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(isEnglish ? 'No Active Approver' : 'ไม่มีผู้อนุมัติที่ใช้งานอยู่'),
-          content: Text(e.message),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-              child: Text(isEnglish ? 'Proceed Anyway' : 'ยืนยันดำเนินการต่อ'),
-            ),
-          ],
-        ),
-      );
-      if (proceed == true && mounted) {
-        try {
-          final result =
-              await _detailService.requestClose(period.id, menuId: menuId, force: true);
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(result['message']?.toString() ??
-                (isEnglish ? 'Closed successfully' : 'ดำเนินการสำเร็จ')),
-            backgroundColor: Colors.green,
-          ));
-          widget.onDetailChange();
-        } catch (e2) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(e2.toString().replaceFirst('Exception: ', '')),
-            backgroundColor: Colors.red,
-          ));
-        }
-      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

@@ -5,14 +5,6 @@ import 'package:http/http.dart' as http;
 import '../../sa/services/sa_auth_service.dart';
 import '../models/gl_period.dart';
 
-// ไม่มีผู้อนุมัติที่ active อยู่สำหรับเมนูนี้ในขณะนี้ — ให้ผู้ใช้เลือกว่าจะดำเนินการต่อ (ข้ามขั้นตอนอนุมัติ) หรือยกเลิก
-class NoActiveApproverException implements Exception {
-  final String message;
-  NoActiveApproverException(this.message);
-  @override
-  String toString() => message;
-}
-
 class PeriodService {
   final String baseUrl = AppConfig.apiGl;
   final AuthService authService = AuthService();
@@ -234,18 +226,18 @@ class PeriodService {
 
   // ── GL Period Close Approval Workflow ──────────────────────────────────
 
-  Future<Map<String, dynamic>> requestClose(int periodId, {required int menuId, bool force = false}) async {
+  // ถ้าเมนูนี้ไม่มีผู้มีสิทธิ์อนุมัติเลย หรือถูกงดอนุมัติหมดทุกคน backend จะข้ามขั้นตอนอนุมัติให้อัตโนมัติ
+  // (ปิดงวดตรงทันที) โดยไม่ต้องแจ้งเตือนใดๆ เพราะถือว่า admin ไม่ต้องการอนุมัติสำหรับเมนูนี้
+  Future<Map<String, dynamic>> requestClose(int periodId, {required int menuId}) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(
       Uri.parse('$baseUrl/gl_posting_period/$periodId/request_close'),
       headers: headers,
-      body: json.encode({'menu_id': menuId, 'force': force}),
+      body: json.encode({'menu_id': menuId}),
     );
     final body = json.decode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200) {
       return body;
-    } else if (response.statusCode == 409 && body['code'] == 'NO_ACTIVE_APPROVER') {
-      throw NoActiveApproverException(body['message'] ?? 'ไม่มีผู้อนุมัติที่ใช้งานอยู่');
     } else {
       throw Exception(body['message'] ?? 'ไม่สามารถส่งคำขอปิดงวดได้');
     }
