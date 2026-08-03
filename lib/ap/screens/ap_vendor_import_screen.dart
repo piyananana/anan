@@ -699,6 +699,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
   Widget _buildApAccountTab(Map<String, dynamic> row) {
     final items = <List<String>>[
       ['รหัสบัญชีเจ้าหนี้', _fmt(row['ap_account_code'])],
+      ['ประเภทการชำระหลัก', _fmt(row['payment_method_code'])],
     ];
     return _buildKeyValueTable(items);
   }

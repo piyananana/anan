@@ -37,7 +37,7 @@ extension _CatLabel on _Category {
       case _Category.address:     return isEnglish ? 'Address' : 'ที่อยู่';
       case _Category.contact:     return isEnglish ? 'Contact' : 'ผู้ติดต่อ';
       case _Category.bankAccount: return isEnglish ? 'Bank Account' : 'บัญชีธนาคาร';
-      case _Category.apAccount:   return isEnglish ? 'AP Account Code' : 'รหัสบัญชีเจ้าหนี้';
+      case _Category.apAccount:   return isEnglish ? 'AP Account / Payment Method' : 'บัญชีเจ้าหนี้/ประเภทการชำระ';
     }
   }
 }
@@ -225,10 +225,21 @@ class _ApVendorReportScreenState extends State<ApVendorReportScreen> {
             : v.bankAccounts.map((b) => _bankStr(b, isEnglish)).toList();
 
       case _Category.apAccount:
+        final p = <String>[];
         if ((v.apAccountCode ?? '').isNotEmpty) {
-          return ['${isEnglish ? 'AP Account: ' : 'บัญชีเจ้าหนี้: '}${v.apAccountCode} ${v.apAccountNameThai ?? ""}'];
+          p.add('${isEnglish ? 'AP Account: ' : 'บัญชีเจ้าหนี้: '}${v.apAccountCode} ${v.apAccountNameThai ?? ""}');
+        } else {
+          p.add(isEnglish ? '(AP account not specified)' : '(ไม่ระบุรหัสบัญชีเจ้าหนี้)');
         }
-        return [isEnglish ? '(AP account not specified)' : '(ไม่ระบุรหัสบัญชีเจ้าหนี้)'];
+        if ((v.paymentMethodCode ?? '').isNotEmpty) {
+          final pmName = isEnglish && (v.paymentMethodNameEng ?? '').isNotEmpty
+              ? v.paymentMethodNameEng
+              : v.paymentMethodNameThai;
+          p.add('${isEnglish ? 'Payment Method: ' : 'ประเภทการชำระ: '}${v.paymentMethodCode} ${pmName ?? ""}');
+        } else {
+          p.add(isEnglish ? '(Payment method not specified)' : '(ไม่ระบุประเภทการชำระ)');
+        }
+        return p;
     }
   }
 
