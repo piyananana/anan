@@ -6,6 +6,11 @@ import '../../sa/models/sa_module_document.dart';
 import '../models/ap_transaction.dart';
 import '../models/ap_gl_account_setup.dart';
 
+class RaAlreadyPaidException implements Exception {
+  final String paymentDocNo;
+  const RaAlreadyPaidException(this.paymentDocNo);
+}
+
 class ApTransactionService {
   final String baseUrl = AppConfig.apiAp;
   final AuthService authService = AuthService();
@@ -144,6 +149,32 @@ class ApTransactionService {
       throw Exception('Unauthorized.');
     } else {
       throw Exception('โหลด RA invoices ล้มเหลว: ${response.statusCode}');
+    }
+  }
+
+  // ดึงเอกสารใบแจ้งชำระ (RA) จากเลขที่เอกสาร (สำหรับ auto-fill apply rows ของ Payment)
+  // throws RaAlreadyPaidException (409) ถ้า RA ถูกจ่ายชำระไปแล้ว
+  // viewOnly=true: ข้ามการตรวจสอบสถานะจ่ายแล้ว ใช้สำหรับแสดงข้อมูลใน view mode
+  Future<ApTransaction?> fetchRemittanceAdviceByDocNo(String docNo, {bool viewOnly = false}) async {
+    final headers = await authService.getAuthHeader();
+    final params = {'doc_no': docNo, if (viewOnly) 'view': 'true'};
+    final uri = Uri.parse('$baseUrl/ap_transaction/remittance_advice_by_doc_no')
+        .replace(queryParameters: params);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      if (body == null) return null;
+      return ApTransaction.fromJson(body as Map<String, dynamic>);
+    } else if (response.statusCode == 404) {
+      return null;
+    } else if (response.statusCode == 409) {
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      throw RaAlreadyPaidException(body['payment_doc_no'] as String? ?? '');
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      throw Exception('ดึงข้อมูลใบแจ้งชำระล้มเหลว: ${response.statusCode}');
     }
   }
 

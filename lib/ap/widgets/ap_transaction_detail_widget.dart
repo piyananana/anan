@@ -568,6 +568,100 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     }
   }
 
+  // ดึงข้อมูลจากใบแจ้งชำระ (RA) มา pre-fill apply rows ของ Payment — คล้ายกับ AR ที่ Receipt ดึงจากใบวางบิล
+  Future<void> _lookupRemittanceAdviceFromRefNo() async {
+    final isEnglish = _isEnglish;
+    final docNo = _refNoCtrl.text.trim();
+    if (docNo.isEmpty) return;
+    setState(() => _isLoading = true);
+    try {
+      final ra = await _service.fetchRemittanceAdviceByDocNo(docNo);
+      if (ra == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(isEnglish ? 'Remittance advice not found: $docNo' : 'ไม่พบใบแจ้งชำระ: $docNo'),
+              backgroundColor: Colors.orange));
+        }
+        return;
+      }
+      final h = ra.header;
+      if (_selectedVendor?.id != null && h.vendorId != _selectedVendor!.id) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(isEnglish
+                  ? 'The remittance advice does not match the selected vendor'
+                  : 'ใบแจ้งชำระไม่ตรงกับเจ้าหนี้ที่เลือก'),
+              backgroundColor: Colors.red));
+        }
+        return;
+      }
+      // ถ้ายังไม่ได้เลือกเจ้าหนี้ ให้ set จาก RA แล้วโหลด open invoices ของเจ้าหนี้นั้น
+      final vendorWasEmpty = _selectedVendor == null;
+      if (vendorWasEmpty && _vendors.isNotEmpty) {
+        try { _selectedVendor = _vendors.firstWhere((v) => v.id == h.vendorId); } catch (_) {}
+      }
+      // ─── ดึงสกุลเงินและอัตราแลกเปลี่ยนจากใบแจ้งชำระ ───
+      final matchedCcy = _currencies.cast<Currency?>().firstWhere(
+          (c) => c!.id == h.currencyId || c!.currencyCode == h.currencyCode,
+          orElse: () => null);
+      setState(() {
+        if (matchedCcy != null) {
+          _selectedCurrency = matchedCcy;
+          _exchangeRate = h.exchangeRate > 0 ? h.exchangeRate : (matchedCcy.baseRate > 0 ? matchedCcy.baseRate : 1.0);
+        }
+        _applyRows = ra.applies
+            .where((a) => a.applyType == 'invoice')
+            .map((a) => _ApplyRow(
+                  appliedToId: a.appliedToId,
+                  appliedToDocNo: a.appliedToDocNo ?? '',
+                  appliedToDocDate: a.appliedToDocDate,
+                  appliedToTotal: a.appliedAmountLc,
+                  appliedAmountLc: a.appliedAmountLc,
+                ))
+            .toList();
+      });
+      for (final a in _applyRows) {
+        _applyCtrlMap.putIfAbsent(a.appliedToId, () => TextEditingController())
+            .text = a.appliedAmountLc.toStringAsFixed(2);
+      }
+      if (_selectedVendor?.id != null) {
+        await _loadOpenInvoicesKeepApplied(_selectedVendor!.id!);
+      }
+      _recalcTotals();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish
+                ? 'Fetched remittance advice ${h.docNo} successfully'
+                : 'ดึงข้อมูลใบแจ้งชำระ ${h.docNo} เรียบร้อย')));
+      }
+    } on RaAlreadyPaidException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            icon: const Icon(Icons.error_outline, color: Colors.red, size: 40),
+            title: Text(isEnglish ? 'Remittance Advice Already Paid' : 'ใบแจ้งชำระถูกจ่ายแล้ว'),
+            content: Text(isEnglish
+                ? 'Remittance advice "$docNo" has already been paid.\nPayment No.: ${e.paymentDocNo}'
+                : 'ใบแจ้งชำระ "$docNo" ถูกนำไปจ่ายชำระเรียบร้อยแล้ว\nโดยเลขที่ใบจ่ายชำระ: ${e.paymentDocNo}'),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Close' : 'ปิด')),
+            ],
+          ),
+        );
+      }
+      return;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   // UserBranch (allowed branches) has no English name — resolve it from the
   // full bilingual Branch list (loaded in _initMasterData) by branchId.
   String _resolveBranchName(int? branchId, String fallbackThai) {
@@ -1069,7 +1163,16 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           const SizedBox(width: 8),
           Expanded(flex: 1, child: TextFormField(
             controller: _refNoCtrl,
-            decoration: _fieldDeco(isEnglish ? 'Reference No.' : 'เลขที่อ้างอิง'),
+            decoration: _fieldDeco(isEnglish ? 'Reference No.' : 'เลขที่อ้างอิง').copyWith(
+              suffixIcon: (_isPayment && !_isReadOnly)
+                  ? IconButton(
+                      icon: const Icon(Icons.search, size: 16),
+                      tooltip: isEnglish ? 'Fetch from remittance advice' : 'ดึงข้อมูลจากใบแจ้งชำระ',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _lookupRemittanceAdviceFromRefNo,
+                    )
+                  : null,
+            ),
             readOnly: _isReadOnly,
           )),
           if (_status != 'Draft') ...[
