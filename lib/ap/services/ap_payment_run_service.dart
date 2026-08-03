@@ -5,14 +5,6 @@ import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/ap_payment_run.dart';
 
-// ไม่มีผู้อนุมัติที่ active อยู่สำหรับเมนูนี้ในขณะนี้ — ให้ผู้ใช้เลือกว่าจะ submit ต่อ (ข้ามขั้นตอนอนุมัติ) หรือยกเลิก
-class NoActiveApproverException implements Exception {
-  final String message;
-  NoActiveApproverException(this.message);
-  @override
-  String toString() => message;
-}
-
 class ApPaymentRunService {
   final String _base = AppConfig.apiAp;
   final AuthService _auth = AuthService();
@@ -62,19 +54,15 @@ class ApPaymentRunService {
     throw Exception(_msg(resp.body));
   }
 
-  Future<void> submitRun(int id, {required int menuId, bool force = false}) async {
+  // ถ้าเมนูนี้ไม่มีผู้มีสิทธิ์อนุมัติเลย หรือถูกงดอนุมัติหมดทุกคน backend จะข้ามขั้นตอนอนุมัติให้อัตโนมัติ
+  // (ผ่านตรงไป Approved) โดยไม่ต้องแจ้งเตือนใดๆ เพราะถือว่า admin ไม่ต้องการอนุมัติสำหรับเมนูนี้
+  Future<void> submitRun(int id, {required int menuId}) async {
     final headers = await _auth.getAuthHeader();
     final resp = await http.put(
       Uri.parse('$_base/ap_payment_run/$id/submit'),
       headers: headers,
-      body: jsonEncode({'menu_id': menuId, 'force': force}),
+      body: jsonEncode({'menu_id': menuId}),
     );
-    if (resp.statusCode == 409) {
-      final body = jsonDecode(resp.body);
-      if (body['code'] == 'NO_ACTIVE_APPROVER') {
-        throw NoActiveApproverException(body['message'] ?? _msg(resp.body));
-      }
-    }
     if (resp.statusCode != 200) throw Exception(_msg(resp.body));
   }
 
@@ -84,11 +72,15 @@ class ApPaymentRunService {
     if (resp.statusCode != 200) throw Exception(_msg(resp.body));
   }
 
-  Future<Map<String, dynamic>> postGl(int id) async {
+  // ส่งชำระ — สร้างธุรกรรมจ่ายชำระ (ap_transaction) จริง 1 ใบต่อ 1 เจ้าหนี้ที่มีอยู่ในใบอนุมัติจ่าย
+  // docId = ประเภทเอกสารที่เลือกจาก dialog ค้นหา (sa_module_document, sys_module=21, sys_doc_type=80)
+  // post = true บันทึกและ Post GL ทันที, false บันทึกเป็น Draft
+  Future<Map<String, dynamic>> finalizeRun(int id, {required int docId, required bool post}) async {
     final headers = await _auth.getAuthHeader();
     final resp = await http.put(
-      Uri.parse('$_base/ap_payment_run/$id/post_gl'),
+      Uri.parse('$_base/ap_payment_run/$id/finalize'),
       headers: headers,
+      body: jsonEncode({'doc_id': docId, 'post': post}),
     );
     if (resp.statusCode == 200) return jsonDecode(resp.body) as Map<String, dynamic>;
     throw Exception(_msg(resp.body));
@@ -130,12 +122,16 @@ class ApPaymentRunService {
     String? vendorCode,
     String? dateFrom,
     String? dateTo,
+    int? paymentMethodId,
+    String? dueDateMax,
   }) async {
     final headers = await _auth.getAuthHeader();
     final params = <String, String>{};
     if (vendorCode != null && vendorCode.isNotEmpty) params['vendor_code'] = vendorCode;
     if (dateFrom != null) params['date_from'] = dateFrom;
     if (dateTo != null) params['date_to'] = dateTo;
+    if (paymentMethodId != null) params['payment_method_id'] = paymentMethodId.toString();
+    if (dueDateMax != null) params['due_date_max'] = dueDateMax;
     final uri = Uri.parse('$_base/ap_payment_run/open_invoices').replace(queryParameters: params);
     final resp = await http.get(uri, headers: headers);
     if (resp.statusCode == 200) {

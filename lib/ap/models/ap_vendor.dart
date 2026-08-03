@@ -190,6 +190,10 @@ class ApVendor {
   final int? apAccountId;
   final String? apAccountCode;
   final String? apAccountNameThai;
+  final int? paymentMethodId;
+  final String? paymentMethodCode;
+  final String? paymentMethodNameThai;
+  final String? paymentMethodNameEng;
   final String? vendorType;
   final List<ApVendorAddress> addresses;
   final List<ApVendorContact> contacts;
@@ -217,6 +221,10 @@ class ApVendor {
     this.apAccountId,
     this.apAccountCode,
     this.apAccountNameThai,
+    this.paymentMethodId,
+    this.paymentMethodCode,
+    this.paymentMethodNameThai,
+    this.paymentMethodNameEng,
     this.vendorType,
     this.addresses = const [],
     this.contacts = const [],
@@ -245,6 +253,10 @@ class ApVendor {
         apAccountId: json['ap_account_id'],
         apAccountCode: json['ap_account_code'],
         apAccountNameThai: json['ap_account_name_thai'],
+        paymentMethodId: json['payment_method_id'],
+        paymentMethodCode: json['payment_method_code'],
+        paymentMethodNameThai: json['payment_method_name_thai'],
+        paymentMethodNameEng: json['payment_method_name_eng'],
         vendorType: json['vendor_type'],
         addresses: (json['addresses'] as List<dynamic>? ?? [])
             .map((e) => ApVendorAddress.fromJson(e)).toList(),
@@ -270,6 +282,7 @@ class ApVendor {
         'is_active': isActive,
         'remark': remark,
         'ap_account_id': apAccountId,
+        'payment_method_id': paymentMethodId,
         'vendor_type': vendorType,
         'addresses': addresses.map((e) => e.toJson()).toList(),
         'contacts': contacts.map((e) => e.toJson()).toList(),
@@ -285,6 +298,8 @@ class ApVendor {
     double? creditLimit,
     String? currencyCode, bool? isActive, String? remark,
     int? apAccountId, String? apAccountCode, String? apAccountNameThai,
+    int? paymentMethodId, String? paymentMethodCode,
+    String? paymentMethodNameThai, String? paymentMethodNameEng,
     String? vendorType,
     List<ApVendorAddress>? addresses,
     List<ApVendorContact>? contacts,
@@ -311,6 +326,10 @@ class ApVendor {
         apAccountId: apAccountId ?? this.apAccountId,
         apAccountCode: apAccountCode ?? this.apAccountCode,
         apAccountNameThai: apAccountNameThai ?? this.apAccountNameThai,
+        paymentMethodId: paymentMethodId ?? this.paymentMethodId,
+        paymentMethodCode: paymentMethodCode ?? this.paymentMethodCode,
+        paymentMethodNameThai: paymentMethodNameThai ?? this.paymentMethodNameThai,
+        paymentMethodNameEng: paymentMethodNameEng ?? this.paymentMethodNameEng,
         vendorType: vendorType ?? this.vendorType,
         addresses: addresses ?? this.addresses,
         contacts: contacts ?? this.contacts,

@@ -40,20 +40,20 @@ class ApPaymentRunApproval {
 
 const Map<String, String> apPaymentRunStatusLabels = {
   'Draft':     'ร่าง',
-  'Submitted': 'ส่งอนุมัติ',
+  'Submitted': 'รออนุมัติ',
   'Approved':  'อนุมัติแล้ว',
   'Rejected':  'ปฏิเสธ',
-  'Completed': 'สำเร็จ',
+  'Completed': 'จ่ายแล้ว',
   'Void':      'ยกเลิก',
 };
 
 const Map<String, String> apPaymentRunStatusLabelsEn = {
   'Draft':     'Draft',
-  'Submitted': 'Submitted',
+  'Submitted': 'On Approve',
   'Approved':  'Approved',
   'Rejected':  'Rejected',
-  'Completed': 'Completed',
-  'Void':      'Void',
+  'Completed': 'Paid',
+  'Void':      'Cancel',
 };
 
 String apPaymentRunStatusLabel(String s, bool isEnglish) =>
@@ -232,6 +232,11 @@ class ApPaymentRun {
   final int? bankFileFormatId;
   final String? bankFileFormatCode;
   final String? bankFileFormatName;
+  final DateTime? paymentDate;
+  final int? paymentMethodId;
+  final String? paymentMethodCode;
+  final String? paymentMethodName;
+  final DateTime? dueDateFilter;
   final double totalAmountLc;
   final String status;
   final List<ApPaymentRunLine> lines;
@@ -249,6 +254,11 @@ class ApPaymentRun {
     this.bankFileFormatId,
     this.bankFileFormatCode,
     this.bankFileFormatName,
+    this.paymentDate,
+    this.paymentMethodId,
+    this.paymentMethodCode,
+    this.paymentMethodName,
+    this.dueDateFilter,
     this.totalAmountLc = 0,
     this.status = 'Draft',
     this.lines = const [],
@@ -267,6 +277,11 @@ class ApPaymentRun {
         bankFileFormatId: json['bank_file_format_id'],
         bankFileFormatCode: json['bank_file_format_code'],
         bankFileFormatName: json['bank_file_format_name'],
+        paymentDate: parseLocalDateNullable(json['payment_date']),
+        paymentMethodId: json['payment_method_id'],
+        paymentMethodCode: json['payment_method_code'],
+        paymentMethodName: json['payment_method_name'],
+        dueDateFilter: parseLocalDateNullable(json['due_date_filter']),
         totalAmountLc: (json['total_amount_lc'] as num?)?.toDouble() ?? 0,
         status: json['status'] ?? 'Draft',
         lines: (json['lines'] as List<dynamic>? ?? [])
@@ -286,6 +301,9 @@ class ApPaymentRun {
         'run_date': formatLocalDate(runDate),
         'description': description,
         'bank_file_format_id': bankFileFormatId,
+        'payment_date': paymentDate != null ? formatLocalDate(paymentDate!) : null,
+        'payment_method_id': paymentMethodId,
+        'due_date_filter': dueDateFilter != null ? formatLocalDate(dueDateFilter!) : null,
         'lines': lines.map((l) => l.toJson()).toList(),
       };
 }

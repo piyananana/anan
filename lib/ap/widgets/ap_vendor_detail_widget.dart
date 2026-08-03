@@ -15,6 +15,8 @@ import '../../cd/models/cd_business_type.dart';
 import '../../cd/services/cd_business_type_service.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
+import '../../cm/models/cm_payment_method.dart';
+import '../../cm/widgets/cm_payment_method_list_widget.dart';
 import '../models/ap_vendor.dart';
 import '../services/ap_vendor_running_service.dart';
 import '../services/ap_vendor_group_service.dart';
@@ -774,6 +776,10 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   String? _apAccountCode;
   String? _apAccountNameThai;
   String? _apAccountNameEng;
+  int? _paymentMethodId;
+  String? _paymentMethodCode;
+  String? _paymentMethodNameThai;
+  String? _paymentMethodNameEng;
 
   List<ApVendorAddress> _addresses = [];
   List<ApVendorContact> _contacts = [];
@@ -932,6 +938,10 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _apAccountCode         = v.apAccountCode;
     _apAccountNameThai     = v.apAccountNameThai;
     _apAccountNameEng      = null;
+    _paymentMethodId       = v.paymentMethodId;
+    _paymentMethodCode     = v.paymentMethodCode;
+    _paymentMethodNameThai = v.paymentMethodNameThai;
+    _paymentMethodNameEng  = v.paymentMethodNameEng;
     _addresses   = List.from(v.addresses);
     _contacts    = List.from(v.contacts);
     _bankAccounts = List.from(v.bankAccounts);
@@ -948,6 +958,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null; _businessTypeNameEng = null;
     _vendorType = null;
     _apAccountId = null; _apAccountCode = null; _apAccountNameThai = null; _apAccountNameEng = null;
+    _paymentMethodId = null; _paymentMethodCode = null; _paymentMethodNameThai = null; _paymentMethodNameEng = null;
     _addresses = []; _contacts = []; _bankAccounts = [];
   }
 
@@ -980,6 +991,10 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
         apAccountId: _apAccountId,
         apAccountCode: _apAccountCode,
         apAccountNameThai: _apAccountNameThai,
+        paymentMethodId: _paymentMethodId,
+        paymentMethodCode: _paymentMethodCode,
+        paymentMethodNameThai: _paymentMethodNameThai,
+        paymentMethodNameEng: _paymentMethodNameEng,
         addresses: _addresses,
         contacts: _contacts,
         bankAccounts: _bankAccounts,
@@ -1272,6 +1287,38 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
       }),
     );
     searchCtrl.dispose();
+  }
+
+  Future<void> _pickPaymentMethod() async {
+    final isEnglish = _isEnglish;
+    final method = await showDialog<CmPaymentMethod>(
+      context: context,
+      builder: (ctx) => Dialog(child: SizedBox(
+        width: 500, height: 400,
+        child: Column(children: [
+          AppBar(
+            title: Text(isEnglish ? 'Select Payment Method' : 'เลือกช่องทางการชำระเงิน'),
+            backgroundColor: Colors.blue[700], foregroundColor: Colors.white,
+            automaticallyImplyLeading: false,
+            actions: [IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx))],
+          ),
+          Expanded(child: CmPaymentMethodListWidget(
+            enableAddButton: false, enableEditButton: false, enableViewButton: false, enableDeleteButton: false,
+            enableCardSelect: false,
+            onAdd: () {}, onEdit: (_) {}, onView: (_) {}, onDelete: (_) {},
+            onCallback: (m) => Navigator.pop(ctx, m),
+          )),
+        ]),
+      )),
+    );
+    if (method != null) {
+      setState(() {
+        _paymentMethodId = method.id;
+        _paymentMethodCode = method.methodCode;
+        _paymentMethodNameThai = method.methodNameTh;
+        _paymentMethodNameEng = method.methodNameEn;
+      });
+    }
   }
 
   // ── Field helper ───────────────────────────────────────────────────────────
@@ -1820,6 +1867,15 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                   color: Colors.blueGrey.shade400,
                   fontStyle: FontStyle.italic),
             ),
+          ),
+          _buildFkField(
+            label: isEnglish ? 'Main Payment Method' : 'ประเภทการชำระหลัก',
+            hasValue: _paymentMethodId != null,
+            displayText: '$_paymentMethodCode — ${isEnglish && (_paymentMethodNameEng ?? '').isNotEmpty ? _paymentMethodNameEng : _paymentMethodNameThai}',
+            onSearch: _pickPaymentMethod,
+            onClear: () => setState(() {
+              _paymentMethodId = null; _paymentMethodCode = null; _paymentMethodNameThai = null; _paymentMethodNameEng = null;
+            }),
           ),
         ],
       );

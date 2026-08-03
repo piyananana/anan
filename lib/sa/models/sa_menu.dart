@@ -106,6 +106,7 @@ import '../../ap/screens/ap_vendor_group_screen.dart';
 import '../../ap/screens/ap_vendor_import_screen.dart';
 import '../../ap/screens/ap_vendor_balance_import_screen.dart';
 import '../../ap/screens/ap_vendor_running_screen.dart';
+import '../../ap/screens/ap_payment_run_running_screen.dart';
 import '../../ap/screens/ap_reset_screen.dart';
 import '../../ap/screens/ap_vendor_report_screen.dart';
 import '../../ap/screens/ap_wht_report_screen.dart';
@@ -295,6 +296,7 @@ class Menu {
     'ApVendorBalanceImportScreen': (context) => ApVendorBalanceImportScreen(onFieldsChanged: () {}),
     'ApResetScreen': (context) => const ApResetScreen(),
     'ApVendorRunningScreen': (context) => const ApVendorRunningScreen(),
+    'ApPaymentRunRunningScreen': (context) => const ApPaymentRunRunningScreen(),
     'ApVendorReportScreen': (context) => const ApVendorReportScreen(),
     'ApWhtReportScreen':   (context) => const ApWhtReportScreen(),
     'ApTransactionScreen': (context) => const ApTransactionScreen(),

@@ -14,6 +14,10 @@ import '../services/ap_payment_run_service.dart';
 import '../services/ap_vendor_service.dart';
 import '../../cm/models/cm_bank_file_format.dart';
 import '../../cm/services/cm_bank_file_format_service.dart';
+import '../../cm/models/cm_payment_method.dart';
+import '../../cm/services/cm_payment_method_service.dart';
+import '../../sa/models/sa_module_document.dart';
+import '../../sa/services/sa_module_document_service.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_language_provider.dart';
@@ -349,8 +353,17 @@ class _DetailPanel extends StatefulWidget {
 class _DetailPanelState extends State<_DetailPanel> {
   final _descCtrl = TextEditingController();
   DateTime _runDate = DateTime.now();
+  DateTime? _paymentDate;
   int? _bankFmtId;
+  int? _paymentMethodId;
+  DateTime? _dueDateFilter;
   List<CmBankFileFormat> _fmtOptions = [];
+  List<CmPaymentMethod> _paymentMethodOptions = [];
+
+  // ค่า paymentMethodId/dueDateFilter ที่ใช้ครั้งล่าสุดตอนเลือกใบแจ้งหนี้/บันทึก —
+  // ถ้าเปลี่ยนไปจากนี้ ต้องเปิดปุ่มเลือกใบแจ้งหนี้/บันทึกใหม่อีกครั้ง
+  int? _lastAppliedPaymentMethodId;
+  DateTime? _lastAppliedDueDateFilter;
 
   late List<_LineRow> _lineRows;
   bool _saving = false;
@@ -358,6 +371,7 @@ class _DetailPanelState extends State<_DetailPanel> {
   bool _isEnglish = false;
   final _companySvc = CompanyService();
   final _vendorSvc = ApVendorService();
+  final _paymentMethodSvc = CmPaymentMethodService();
   List<ApVendor> _allVendors = [];
 
   @override
@@ -366,7 +380,22 @@ class _DetailPanelState extends State<_DetailPanel> {
     _init();
     _loadFormats();
     _loadVendors();
+    _loadPaymentMethods();
   }
+
+  Future<void> _loadPaymentMethods() async {
+    try {
+      final rows = await _paymentMethodSvc.fetchRows();
+      if (mounted) setState(() => _paymentMethodOptions = rows.where((m) => m.isActive).toList());
+    } catch (_) {}
+  }
+
+  // เปลี่ยนประเภทการชำระหรือวันที่ครบกำหนดชำระ → ต้องเลือกใบแจ้งหนี้/บันทึกใหม่อีกครั้ง
+  bool get _filtersChanged =>
+      _paymentMethodId != _lastAppliedPaymentMethodId ||
+      _dueDateFilter != _lastAppliedDueDateFilter;
+
+  bool get _canPickOrSave => _isDraft && _filtersChanged;
 
   Future<void> _loadVendors() async {
     try {
@@ -391,6 +420,13 @@ class _DetailPanelState extends State<_DetailPanel> {
     _runDate = r?.runDate ?? DateTime.now();
     _descCtrl.text = r?.description ?? '';
     _bankFmtId = r?.bankFileFormatId;
+    _paymentDate = r?.paymentDate;
+    _paymentMethodId = r?.paymentMethodId;
+    _dueDateFilter = r?.dueDateFilter;
+    // ค่าตัวกรองที่ถูกใช้ไปแล้วตอนโหลดเอกสาร (หรือ null ทั้งคู่สำหรับเอกสารใหม่) —
+    // ต้องเปลี่ยนไปจากนี้ก่อน ปุ่มเลือกใบแจ้งหนี้/บันทึกจึงจะ enable
+    _lastAppliedPaymentMethodId = r?.paymentMethodId;
+    _lastAppliedDueDateFilter = r?.dueDateFilter;
     _lineRows = (r?.lines ?? []).map(_LineRow.new).toList();
   }
 
@@ -422,6 +458,9 @@ class _DetailPanelState extends State<_DetailPanel> {
       runDate: _runDate,
       description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       bankFileFormatId: _bankFmtId,
+      paymentDate: _paymentDate,
+      paymentMethodId: _paymentMethodId,
+      dueDateFilter: _dueDateFilter,
       lines: lines,
     );
     setState(() => _saving = true);
@@ -430,6 +469,8 @@ class _DetailPanelState extends State<_DetailPanel> {
           ? await widget.svc.createRun(run)
           : await widget.svc.updateRun(run);
       if (mounted) {
+        _lastAppliedPaymentMethodId = _paymentMethodId;
+        _lastAppliedDueDateFilter = _dueDateFilter;
         widget.onSaved(saved);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(l.savedSuccess)));
@@ -479,40 +520,6 @@ class _DetailPanelState extends State<_DetailPanel> {
         widget.onRefresh();
         final updated = await widget.svc.fetchRow(widget.run!.id!);
         if (mounted) widget.onSaved(updated);
-      }
-    } on NoActiveApproverException catch (e) {
-      if (!mounted) return;
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(isEnglish ? 'No Active Approver' : 'ไม่มีผู้อนุมัติที่ใช้งานอยู่'),
-          content: Text(e.message),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-              child: Text(isEnglish ? 'Submit Anyway' : 'ยืนยันส่งอนุมัติ'),
-            ),
-          ],
-        ),
-      );
-      if (proceed == true && mounted) {
-        try {
-          await widget.svc.submitRun(widget.run!.id!, menuId: menuId, force: true);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(isEnglish ? 'Submitted successfully' : 'ส่งอนุมัติสำเร็จ')));
-            widget.onRefresh();
-            final updated = await widget.svc.fetchRow(widget.run!.id!);
-            if (mounted) widget.onSaved(updated);
-          }
-        } catch (e2) {
-          if (mounted) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text('$e2'), backgroundColor: Colors.red));
-          }
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -1070,28 +1077,36 @@ class _DetailPanelState extends State<_DetailPanel> {
 
   // ── Post GL ───────────────────────────────────────────────────────────────
 
-  Future<void> _postGl() async {
+  // ส่งชำระ — เลือกประเภทเอกสาร (AP, doc type 80) แล้วสร้างธุรกรรมจ่ายชำระจริง 1 ใบต่อ 1 เจ้าหนี้
+  Future<void> _sendForPayment() async {
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final isEnglish = l.isEnglish;
     final run = widget.run;
     if (run == null) return;
 
-    final ok = await showDialog<bool>(
+    final picked = await showDialog<ModuleDocument>(
+      context: context,
+      builder: (ctx) => const _PaymentDocTypeSearchDialog(),
+    );
+    if (picked == null || !mounted) return;
+
+    final vendorCount = run.lines.map((l) => l.vendorId).toSet().length;
+    final action = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Post GL' : 'ยืนยันการบันทึก GL'),
+        title: Text(isEnglish ? 'Send for Payment' : 'ส่งชำระ'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(isEnglish
-                ? 'Post GL for Payment Run: ${run.runNumber}'
-                : 'บันทึก GL สำหรับ Payment Run: ${run.runNumber}'),
+                ? 'Document type: ${picked.docNameEng.isNotEmpty ? picked.docNameEng : picked.docNameThai}'
+                : 'ประเภทเอกสาร: ${picked.docNameThai}'),
             const SizedBox(height: 8),
             Text(
                 isEnglish
-                    ? 'Number of lines: ${run.lines.length}'
-                    : 'จำนวนรายการ: ${run.lines.length} รายการ',
+                    ? 'This will create $vendorCount payment transaction(s), one per vendor'
+                    : 'ระบบจะสร้างธุรกรรมจ่ายชำระ $vendorCount ใบ (1 ใบต่อ 1 เจ้าหนี้)',
                 style: const TextStyle(fontSize: 13)),
             Text(
               isEnglish
@@ -1099,36 +1114,32 @@ class _DetailPanelState extends State<_DetailPanel> {
                   : 'ยอดรวม: ${_fmt.format(run.totalAmountLc)} บาท',
               style: const TextStyle(fontSize: 13),
             ),
-            const SizedBox(height: 8),
-            Text(
-              isEnglish
-                  ? 'The system will create GL entries and change the status to "Completed"\n'
-                      'This action cannot be undone'
-                  : 'ระบบจะสร้างรายการบัญชี GL และเปลี่ยนสถานะเป็น "สำเร็จ"\n'
-                      'การดำเนินการนี้ไม่สามารถย้อนกลับได้',
-              style: const TextStyle(color: Colors.red, fontSize: 12),
-            ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(l.cancel)),
+              onPressed: () => Navigator.pop(ctx, null),
+              child: Text(l.back)),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx, 'draft'),
+            child: Text(isEnglish ? 'Save as Draft' : 'บันทึกร่าง'),
+          ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, 'post'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
-            child: Text(isEnglish ? 'Post GL' : 'บันทึก GL',
+            child: Text(isEnglish ? 'Save & Post' : 'บันทึกและ Post',
                 style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
-    if (ok != true || !mounted) return;
+    if (action == null || !mounted) return;
 
     setState(() => _saving = true);
     try {
-      final result = await widget.svc.postGl(run.id!);
-      final glDocNo = result['gl_doc_no'] ?? '';
+      final result = await widget.svc.finalizeRun(run.id!, docId: picked.id, post: action == 'post');
+      final created = (result['created'] as List?) ?? [];
+      final errors = (result['errors'] as List?) ?? [];
       if (mounted) {
         widget.onRefresh();
         final updated = await widget.svc.fetchRow(run.id!);
@@ -1138,17 +1149,25 @@ class _DetailPanelState extends State<_DetailPanel> {
             context: context,
             builder: (ctx) => AlertDialog(
               title: Row(children: [
-                Icon(Icons.check_circle, color: Colors.green[700]),
+                Icon(errors.isEmpty ? Icons.check_circle : Icons.warning_amber_rounded,
+                    color: errors.isEmpty ? Colors.green[700] : Colors.orange[700]),
                 const SizedBox(width: 8),
-                Text(isEnglish ? 'GL Posted Successfully' : 'บันทึก GL สำเร็จ'),
+                Text(isEnglish ? 'Send for Payment Result' : 'ผลการส่งชำระ'),
               ]),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Payment Run: ${updated.runNumber}'),
-                  Text('GL Document: $glDocNo',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(isEnglish
+                      ? 'Created: ${created.length} transaction(s)'
+                      : 'สร้างสำเร็จ: ${created.length} ใบ'),
+                  if (errors.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(isEnglish ? 'Failed:' : 'ล้มเหลว:',
+                        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                    ...errors.map((e) => Text('- ${e['message']}', style: const TextStyle(color: Colors.red, fontSize: 12))),
+                  ],
+                  const SizedBox(height: 8),
                   Text('${l.status}: ${apPaymentRunStatusLabel(updated.status, isEnglish)}'),
                 ],
               ),
@@ -1165,7 +1184,7 @@ class _DetailPanelState extends State<_DetailPanel> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text(isEnglish ? 'Failed to post GL: $e' : 'บันทึก GL ล้มเหลว: $e'),
+                content: Text(isEnglish ? 'Failed to send for payment: $e' : 'ส่งชำระล้มเหลว: $e'),
                 backgroundColor: Colors.red));
       }
     } finally {
@@ -1180,6 +1199,8 @@ class _DetailPanelState extends State<_DetailPanel> {
       builder: (ctx) => _InvoicePickerDialog(
         svc: widget.svc,
         existingTxnIds: existingTxnIds,
+        paymentMethodId: _paymentMethodId,
+        dueDateMax: _dueDateFilter,
       ),
     );
     if (added == null || added.isEmpty || !mounted) return;
@@ -1188,6 +1209,164 @@ class _DetailPanelState extends State<_DetailPanel> {
         _lineRows.add(_LineRow(line));
       }
     });
+  }
+
+  ApVendor? _vendorById(int vendorId) {
+    try {
+      return _allVendors.firstWhere((v) => v.id == vendorId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  CmPaymentMethod? get _selectedPaymentMethod {
+    if (_paymentMethodId == null) return null;
+    try {
+      return _paymentMethodOptions.firstWhere((m) => m.id == _paymentMethodId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // รายการบัญชี GL — ตรวจ/แก้ไขจำนวนเงินชำระของแต่ละใบแจ้งหนี้ก่อนบันทึก/ส่งอนุมัติ
+  // DR = บัญชีเจ้าหนี้ (AP account) ของแต่ละเจ้าหนี้, CR = บัญชีเงินสด/ธนาคารตามประเภทการชำระที่เลือก
+  Future<void> _showGlEntriesDialog() async {
+    final isEnglish = _isEnglish;
+    final crAccount = _selectedPaymentMethod;
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) {
+          final total = _totalPayment;
+          return Dialog(
+            child: SizedBox(
+              width: 820,
+              height: 560,
+              child: Column(children: [
+                Container(
+                  color: Colors.blue[700],
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(children: [
+                    const Icon(Icons.receipt_long, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(isEnglish ? 'GL Entries' : 'รายการบัญชี GL',
+                          style: const TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                    ),
+                    IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                        onPressed: () => Navigator.of(ctx).pop()),
+                  ]),
+                ),
+                Container(
+                  width: double.infinity,
+                  color: Colors.blue.shade50,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(
+                    isEnglish
+                        ? 'DR = vendor\'s AP account, CR = cash/bank account from the selected payment method'
+                        : 'DR = บัญชีเจ้าหนี้ของแต่ละเจ้าหนี้, CR = บัญชีเงินสด/ธนาคารตามประเภทการชำระที่เลือก',
+                    style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+                  ),
+                ),
+                Expanded(
+                  child: _lineRows.isEmpty
+                      ? Center(child: Text(isEnglish ? 'No invoices selected yet' : 'ยังไม่ได้เลือกใบแจ้งหนี้'))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _lineRows.length,
+                          itemBuilder: (_, i) {
+                            final row = _lineRows[i];
+                            final vendor = _vendorById(row.source.vendorId);
+                            final apAccountLabel = vendor?.apAccountId != null
+                                ? '${vendor!.apAccountCode} — ${vendor.apAccountNameThai ?? ''}'
+                                : (isEnglish ? '(no AP account set on vendor)' : '(ยังไม่ได้ตั้งบัญชีเจ้าหนี้ให้เจ้าหนี้รายนี้)');
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                child: Row(children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text('${row.source.vendorCode} — ${row.source.vendorNameTh}',
+                                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                      Text(row.source.invoiceNo, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    ]),
+                                  ),
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text(isEnglish ? 'DR' : 'เดบิต',
+                                          style: TextStyle(fontSize: 10, color: Colors.red[700], fontWeight: FontWeight.bold)),
+                                      Text(apAccountLabel,
+                                          style: TextStyle(fontSize: 12, color: vendor?.apAccountId != null ? null : Colors.orange[800]),
+                                          overflow: TextOverflow.ellipsis),
+                                    ]),
+                                  ),
+                                  SizedBox(
+                                    width: 130,
+                                    child: TextFormField(
+                                      controller: row.amtCtrl,
+                                      textAlign: TextAlign.right,
+                                      keyboardType: TextInputType.number,
+                                      readOnly: _readOnly,
+                                      decoration: const InputDecoration(
+                                          isDense: true, border: OutlineInputBorder(),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                                      onChanged: (_) => setDlg(() {}),
+                                    ),
+                                  ),
+                                ]),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                Container(
+                  width: double.infinity,
+                  color: Colors.blue.shade50,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(
+                        isEnglish ? 'CR' : 'เครดิต',
+                        style: TextStyle(fontSize: 10, color: Colors.green[700], fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        crAccount != null
+                            ? '${crAccount.glAccountCode ?? ''} — ${crAccount.glAccountName ?? crAccount.displayName}'
+                            : (isEnglish ? '(no payment method selected)' : '(ยังไม่ได้เลือกประเภทการชำระ)'),
+                        style: TextStyle(fontSize: 12, color: crAccount != null ? null : Colors.orange[800]),
+                      ),
+                    ),
+                    Text('${_fmt.format(total)} ${isEnglish ? 'THB' : 'บาท'}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ]),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        setState(() {}); // sync amount edits back into the main line table
+                        Navigator.of(ctx).pop();
+                      },
+                      child: Text(isEnglish ? 'Close' : 'ปิด'),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -1228,7 +1407,7 @@ class _DetailPanelState extends State<_DetailPanel> {
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.blue[700]),
-              onPressed: _save,
+              onPressed: _canPickOrSave ? _save : null,
             ),
           ],
           if (!_saving && widget.run != null && status == 'Draft') ...[
@@ -1254,12 +1433,12 @@ class _DetailPanelState extends State<_DetailPanel> {
           if (!_saving && !_isDraft && !canVoid) ...[
             if (status == 'Approved' && widget.run!.lines.isNotEmpty) ...[
               ElevatedButton.icon(
-                icon: const Icon(Icons.account_balance, size: 16),
-                label: Text(isEnglish ? 'Post GL' : 'บันทึก GL'),
+                icon: const Icon(Icons.send_and_archive, size: 16),
+                label: Text(isEnglish ? 'Send for Payment' : 'ส่งชำระ'),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[700],
                     foregroundColor: Colors.white),
-                onPressed: _postGl,
+                onPressed: _sendForPayment,
               ),
               const SizedBox(width: 8),
             ],
@@ -1362,6 +1541,86 @@ class _DetailPanelState extends State<_DetailPanel> {
                   : (v) => setState(() => _bankFmtId = v),
             ),
           ),
+          // Payment date
+          SizedBox(
+            width: 180,
+            child: InkWell(
+              onTap: _readOnly ? null : () async {
+                final d = await showDatePicker(
+                  context: context,
+                  initialDate: _paymentDate ?? _runDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2099),
+                );
+                if (d != null) setState(() => _paymentDate = d);
+              },
+              child: InputDecorator(
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Payment Date' : 'วันที่จ่าย',
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                child: Row(children: [
+                  Expanded(child: Text(_paymentDate != null ? _dateFmt.format(_paymentDate!) : '-')),
+                  const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                ]),
+              ),
+            ),
+          ),
+          // Payment method — optional, ใช้กรองเจ้าหนี้ตอนเลือกใบแจ้งหนี้
+          SizedBox(
+            width: 240,
+            child: DropdownButtonFormField<int?>(
+              value: _paymentMethodId,
+              decoration: InputDecoration(
+                  labelText: isEnglish ? 'Payment Method' : 'ประเภทการชำระ',
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+              items: [
+                DropdownMenuItem(value: null, child: Text(isEnglish ? '(Not specified)' : '(ไม่ระบุ)')),
+                ..._paymentMethodOptions.map((m) => DropdownMenuItem(
+                      value: m.id,
+                      child: Text(m.displayName, overflow: TextOverflow.ellipsis),
+                    )),
+              ],
+              onChanged: _readOnly
+                  ? null
+                  : (v) => setState(() => _paymentMethodId = v),
+            ),
+          ),
+          // Due date filter — ใช้กรองใบแจ้งหนี้ที่ครบกำหนดชำระแล้วไม่เกินวันที่ระบุ
+          SizedBox(
+            width: 200,
+            child: InkWell(
+              onTap: _readOnly ? null : () async {
+                final d = await showDatePicker(
+                  context: context,
+                  initialDate: _dueDateFilter ?? DateTime.now(),
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2099),
+                );
+                if (d != null) setState(() => _dueDateFilter = d);
+              },
+              child: InputDecorator(
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Due On/Before' : 'ครบกำหนดชำระไม่เกิน',
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    suffixIcon: _dueDateFilter != null && !_readOnly
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () => setState(() => _dueDateFilter = null),
+                          )
+                        : null),
+                child: Row(children: [
+                  Expanded(child: Text(_dueDateFilter != null ? _dateFmt.format(_dueDateFilter!) : '-')),
+                  if (_dueDateFilter == null) const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                ]),
+              ),
+            ),
+          ),
           // GL reference — shown after posting
           if (widget.run?.glDocNo != null)
             Container(
@@ -1395,8 +1654,15 @@ class _DetailPanelState extends State<_DetailPanel> {
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue[600],
                   foregroundColor: Colors.white),
-              onPressed: _openInvoicePicker,
+              onPressed: _canPickOrSave ? _openInvoicePicker : null,
             ),
+            const SizedBox(width: 8),
+            if (_lineRows.isNotEmpty)
+              OutlinedButton.icon(
+                icon: const Icon(Icons.receipt_long, size: 16),
+                label: Text(isEnglish ? 'GL Entries' : 'รายการบัญชี GL'),
+                onPressed: _showGlEntriesDialog,
+              ),
             const SizedBox(width: 8),
             Text(
                 isEnglish ? '${_lineRows.length} lines' : '${_lineRows.length} รายการ',
@@ -1602,10 +1868,14 @@ class _LineWidget extends StatelessWidget {
 class _InvoicePickerDialog extends StatefulWidget {
   final ApPaymentRunService svc;
   final Set<int> existingTxnIds;
+  final int? paymentMethodId;
+  final DateTime? dueDateMax;
 
   const _InvoicePickerDialog({
     required this.svc,
     required this.existingTxnIds,
+    this.paymentMethodId,
+    this.dueDateMax,
   });
 
   @override
@@ -1640,6 +1910,8 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
         vendorCode: _vendorCtrl.text.trim().isEmpty ? null : _vendorCtrl.text.trim(),
         dateFrom: _dateFrom == null ? null : formatLocalDate(_dateFrom!),
         dateTo:   _dateTo   == null ? null : formatLocalDate(_dateTo!),
+        paymentMethodId: widget.paymentMethodId,
+        dueDateMax: widget.dueDateMax == null ? null : formatLocalDate(widget.dueDateMax!),
       );
       if (mounted) {
         setState(() {
@@ -1704,6 +1976,24 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
                   onPressed: () => Navigator.of(context).pop(null)),
             ]),
           ),
+          if (widget.paymentMethodId != null || widget.dueDateMax != null)
+            Container(
+              width: double.infinity,
+              color: Colors.amber.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                isEnglish
+                    ? 'Scoped by the payment approval note\'s filters: '
+                        '${widget.paymentMethodId != null ? 'payment method' : ''}'
+                        '${widget.paymentMethodId != null && widget.dueDateMax != null ? ', ' : ''}'
+                        '${widget.dueDateMax != null ? 'due date on/before ${formatLocalDate(widget.dueDateMax!)}' : ''}'
+                    : 'กรองตามใบอนุมัติจ่าย: '
+                        '${widget.paymentMethodId != null ? 'ประเภทการชำระ' : ''}'
+                        '${widget.paymentMethodId != null && widget.dueDateMax != null ? ', ' : ''}'
+                        '${widget.dueDateMax != null ? 'ครบกำหนดชำระไม่เกิน ${formatLocalDate(widget.dueDateMax!)}' : ''}',
+                style: TextStyle(fontSize: 11, color: Colors.amber.shade900),
+              ),
+            ),
           // Filter row
           Container(
             color: Colors.blue.shade50,
@@ -2137,6 +2427,122 @@ class _DateBtn extends StatelessWidget {
           width: 90,
           child: Text(date == null ? '' : DateFormat('dd/MM/yyyy').format(date!),
               style: const TextStyle(fontSize: 12)),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Document type search dialog (ค้นหาจากตาราง sa_module_document — เฉพาะโมดูล AP ประเภทเอกสาร 80) ──
+class _PaymentDocTypeSearchDialog extends StatefulWidget {
+  const _PaymentDocTypeSearchDialog();
+
+  @override
+  State<_PaymentDocTypeSearchDialog> createState() => _PaymentDocTypeSearchDialogState();
+}
+
+class _PaymentDocTypeSearchDialogState extends State<_PaymentDocTypeSearchDialog> {
+  final _docSvc = ModuleDocumentService();
+  List<ModuleDocument> _allDocs = [];
+  bool _loading = true;
+  String _search = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final rows = await _docSvc.fetchRows();
+      if (!mounted) return;
+      setState(() {
+        _allDocs = rows.where((d) => d.isDocType && d.sysModule == '21' && d.sysDocType == '80').toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final filtered = _allDocs.where((d) {
+      if (_search.isEmpty) return true;
+      final q = _search.toLowerCase();
+      return d.docCode.toLowerCase().contains(q) ||
+          d.docNameThai.toLowerCase().contains(q) ||
+          d.docNameEng.toLowerCase().contains(q);
+    }).toList();
+
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 520),
+        child: Column(
+          children: [
+            Container(
+              color: Colors.green[700],
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(children: [
+                const Icon(Icons.search, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isEnglish ? 'Select payment document type' : 'เลือกประเภทเอกสารการจ่ายชำระ',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: TextField(
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Search by code or name' : 'ค้นหาด้วยรหัสหรือชื่อ',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (v) => setState(() => _search = v),
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : filtered.isEmpty
+                      ? Center(
+                          child: Text(
+                              isEnglish
+                                  ? 'No payment document type found.\nPlease set one up in Document Type Setup (AP, doc type 80).'
+                                  : 'ไม่พบประเภทเอกสารการจ่ายชำระ\nกรุณาตั้งค่าที่หน้าจอตั้งค่าประเภทเอกสาร (AP, ประเภทเอกสาร 80)',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.grey)),
+                        )
+                      : ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final d = filtered[i];
+                            return ListTile(
+                              dense: true,
+                              title: Text(isEnglish
+                                  ? (d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai)
+                                  : d.docNameThai),
+                              subtitle: Text(d.docCode),
+                              onTap: () => Navigator.of(context).pop(d),
+                            );
+                          },
+                        ),
+            ),
+          ],
         ),
       ),
     );
