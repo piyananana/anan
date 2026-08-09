@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/date_utils.dart';
 
@@ -23,6 +25,7 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
   bool get wantKeepAlive => true;
 
   bool _loading = false;
+  bool _isEnglish = false;
   Map<String, dynamic>? _data;
 
   @override
@@ -55,17 +58,18 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
         title: const MenuTitle(),
-        titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, size: 18),
-            tooltip: 'รีเฟรช',
+            tooltip: isEnglish ? 'Refresh' : 'รีเฟรช',
             onPressed: _loading ? null : _load,
           ),
         ],
@@ -79,7 +83,7 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
                   TextButton.icon(
                     onPressed: _load,
                     icon: const Icon(Icons.refresh),
-                    label: const Text('โหลดข้อมูล'),
+                    label: Text(isEnglish ? 'Load Data' : 'โหลดข้อมูล'),
                   ),
                 ]))
               : _buildDashboard(),
@@ -87,6 +91,7 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
   }
 
   Widget _buildDashboard() {
+    final isEnglish = _isEnglish;
     final bankBalances       = List<Map<String, dynamic>>.from(_data!['bank_balances'] as List);
     final pettyCash          = List<Map<String, dynamic>>.from(_data!['petty_cash_balances'] as List);
     final alerts             = List<Map<String, dynamic>>.from(_data!['alerts'] as List);
@@ -102,56 +107,58 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
         children: [
           // ── Summary cards ─────────────────────────────────────────────────
           Wrap(spacing: 16, runSpacing: 16, children: [
-            _summaryCard('ยอดเงินคงเหลือ (THB)',
+            _summaryCard(isEnglish ? 'Cash Balance (THB)' : 'ยอดเงินคงเหลือ (THB)',
                 _fmt.format(totalBankBalance),
                 Icons.account_balance, Colors.blue.shade700,
-                subtitle: '${bankBalances.length} บัญชี'),
-            _summaryCard('เช็คค้าง — รับ',
-                '${checksReceived['count']} ฉบับ',
+                subtitle: isEnglish ? '${bankBalances.length} accounts' : '${bankBalances.length} บัญชี'),
+            _summaryCard(isEnglish ? 'Pending Checks — Received' : 'เช็คค้าง — รับ',
+                isEnglish ? '${checksReceived['count']} checks' : '${checksReceived['count']} ฉบับ',
                 Icons.receipt_long, Colors.orange.shade700,
                 subtitle: '${_fmt.format(_parseD(checksReceived['amount']))} THB'),
-            _summaryCard('เช็คค้าง — จ่าย',
-                '${checksIssued['count']} ฉบับ',
+            _summaryCard(isEnglish ? 'Pending Checks — Issued' : 'เช็คค้าง — จ่าย',
+                isEnglish ? '${checksIssued['count']} checks' : '${checksIssued['count']} ฉบับ',
                 Icons.payment, Colors.deepOrange.shade700,
                 subtitle: '${_fmt.format(_parseD(checksIssued['amount']))} THB'),
-            _summaryCard('แจ้งเตือน',
-                '${alerts.length} รายการ',
+            _summaryCard(isEnglish ? 'Alerts' : 'แจ้งเตือน',
+                isEnglish ? '${alerts.length} items' : '${alerts.length} รายการ',
                 alerts.isEmpty ? Icons.check_circle : Icons.warning_amber_rounded,
                 alerts.isEmpty ? Colors.green.shade700 : Colors.red.shade700,
-                subtitle: alerts.isEmpty ? 'ไม่มีปัญหา' : 'ต้องดำเนินการ'),
+                subtitle: alerts.isEmpty
+                    ? (isEnglish ? 'No issues' : 'ไม่มีปัญหา')
+                    : (isEnglish ? 'Action required' : 'ต้องดำเนินการ')),
           ]),
           const SizedBox(height: 24),
 
           // ── Alerts ────────────────────────────────────────────────────────
           if (alerts.isNotEmpty) ...[
-            _sectionTitle('แจ้งเตือน', Icons.notifications_active),
+            _sectionTitle(isEnglish ? 'Alerts' : 'แจ้งเตือน', Icons.notifications_active),
             const SizedBox(height: 8),
             ...alerts.map(_buildAlertCard),
             const SizedBox(height: 24),
           ],
 
           // ── Bank balances ─────────────────────────────────────────────────
-          _sectionTitle('ยอดเงินคงเหลือในบัญชีธนาคาร', Icons.account_balance),
+          _sectionTitle(isEnglish ? 'Bank Account Balances' : 'ยอดเงินคงเหลือในบัญชีธนาคาร', Icons.account_balance),
           const SizedBox(height: 8),
           if (bankBalances.isEmpty)
-            _emptyState('ไม่มีบัญชีธนาคาร')
+            _emptyState(isEnglish ? 'No bank accounts' : 'ไม่มีบัญชีธนาคาร')
           else
             _buildBankTable(bankBalances),
           const SizedBox(height: 24),
 
           // ── Petty cash ────────────────────────────────────────────────────
           if (pettyCash.isNotEmpty) ...[
-            _sectionTitle('เงินสดย่อย', Icons.savings),
+            _sectionTitle(isEnglish ? 'Petty Cash' : 'เงินสดย่อย', Icons.savings),
             const SizedBox(height: 8),
             _buildPettyCashTable(pettyCash),
             const SizedBox(height: 24),
           ],
 
           // ── Recent transactions ───────────────────────────────────────────
-          _sectionTitle('ธุรกรรมล่าสุด', Icons.history),
+          _sectionTitle(isEnglish ? 'Recent Transactions' : 'ธุรกรรมล่าสุด', Icons.history),
           const SizedBox(height: 8),
           if (recentTx.isEmpty)
-            _emptyState('ไม่มีธุรกรรม')
+            _emptyState(isEnglish ? 'No transactions' : 'ไม่มีธุรกรรม')
           else
             _buildRecentTxTable(recentTx),
         ],
@@ -217,6 +224,7 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
   }
 
   Widget _buildBankTable(List<Map<String, dynamic>> rows) {
+    final isEnglish = _isEnglish;
     return Card(
       margin: EdgeInsets.zero,
       child: DataTable(
@@ -224,12 +232,12 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
         columnSpacing: 20,
         headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
         headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        columns: const [
-          DataColumn(label: Text('รหัสบัญชี')),
-          DataColumn(label: Text('ชื่อบัญชี')),
-          DataColumn(label: Text('ธนาคาร')),
-          DataColumn(label: Text('สกุลเงิน')),
-          DataColumn(label: Text('ยอดคงเหลือ'), numeric: true),
+        columns: [
+          DataColumn(label: Text(isEnglish ? 'Account Code' : 'รหัสบัญชี')),
+          DataColumn(label: Text(isEnglish ? 'Account Name' : 'ชื่อบัญชี')),
+          DataColumn(label: Text(isEnglish ? 'Bank' : 'ธนาคาร')),
+          DataColumn(label: Text(isEnglish ? 'Currency' : 'สกุลเงิน')),
+          DataColumn(label: Text(isEnglish ? 'Balance' : 'ยอดคงเหลือ'), numeric: true),
         ],
         rows: rows.map((r) {
           final bal = _parseD(r['balance']);
@@ -247,6 +255,7 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
   }
 
   Widget _buildPettyCashTable(List<Map<String, dynamic>> rows) {
+    final isEnglish = _isEnglish;
     return Card(
       margin: EdgeInsets.zero,
       child: DataTable(
@@ -254,11 +263,11 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
         columnSpacing: 20,
         headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
         headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        columns: const [
-          DataColumn(label: Text('กองทุน')),
-          DataColumn(label: Text('วงเงิน'), numeric: true),
-          DataColumn(label: Text('เบิกแล้ว'), numeric: true),
-          DataColumn(label: Text('คงเหลือ'),  numeric: true),
+        columns: [
+          DataColumn(label: Text(isEnglish ? 'Fund' : 'กองทุน')),
+          DataColumn(label: Text(isEnglish ? 'Limit' : 'วงเงิน'), numeric: true),
+          DataColumn(label: Text(isEnglish ? 'Used' : 'เบิกแล้ว'), numeric: true),
+          DataColumn(label: Text(isEnglish ? 'Available' : 'คงเหลือ'),  numeric: true),
         ],
         rows: rows.map((r) {
           final avail = _parseD(r['available']);
@@ -275,6 +284,7 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
   }
 
   Widget _buildRecentTxTable(List<Map<String, dynamic>> rows) {
+    final isEnglish = _isEnglish;
     return Card(
       margin: EdgeInsets.zero,
       child: DataTable(
@@ -282,21 +292,21 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
         columnSpacing: 16,
         headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
         headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        columns: const [
-          DataColumn(label: Text('วันที่')),
-          DataColumn(label: Text('เลขที่')),
-          DataColumn(label: Text('ประเภท')),
-          DataColumn(label: Text('คำอธิบาย')),
-          DataColumn(label: Text('จำนวนเงิน'), numeric: true),
+        columns: [
+          DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่')),
+          DataColumn(label: Text(isEnglish ? 'Doc No.' : 'เลขที่')),
+          DataColumn(label: Text(isEnglish ? 'Type' : 'ประเภท')),
+          DataColumn(label: Text(isEnglish ? 'Description' : 'คำอธิบาย')),
+          DataColumn(label: Text(isEnglish ? 'Amount' : 'จำนวนเงิน'), numeric: true),
         ],
         rows: rows.map((r) {
           final txType = r['tx_type'] as String? ?? '';
           Color typeColor;
           String typeLabel;
           switch (txType) {
-            case 'RECEIPT':  typeColor = Colors.green.shade700;  typeLabel = 'รับเงิน';
-            case 'PAYMENT':  typeColor = Colors.red.shade700;    typeLabel = 'จ่ายเงิน';
-            default:         typeColor = Colors.blue.shade700;   typeLabel = 'โอนเงิน';
+            case 'RECEIPT':  typeColor = Colors.green.shade700;  typeLabel = isEnglish ? 'Receipt' : 'รับเงิน';
+            case 'PAYMENT':  typeColor = Colors.red.shade700;    typeLabel = isEnglish ? 'Payment' : 'จ่ายเงิน';
+            default:         typeColor = Colors.blue.shade700;   typeLabel = isEnglish ? 'Transfer' : 'โอนเงิน';
           }
           return DataRow(cells: [
             DataCell(Text(

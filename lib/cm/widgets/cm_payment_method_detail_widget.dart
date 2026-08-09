@@ -9,6 +9,7 @@ import '../models/cm_payment_method.dart';
 import '../services/cm_bank_account_service.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 
 class CmPaymentMethodDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -109,13 +110,14 @@ class CmPaymentMethodDetailWidgetState
   }
 
   Future<void> _pickGlAccount() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     List<Account> accounts;
     try {
       accounts = await Provider.of<AccountService>(context, listen: false).fetchRows();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('โหลดข้อมูลบัญชีล้มเหลว: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${isEnglish ? 'Failed to load accounts' : 'โหลดข้อมูลบัญชีล้มเหลว'}: $e')));
       }
       return;
     }
@@ -137,12 +139,13 @@ class CmPaymentMethodDetailWidgetState
                   ? List.from(leaf)
                   : leaf.where((a) =>
                       a.accountCode.toLowerCase().contains(lq) ||
-                      a.accountNameThai.toLowerCase().contains(lq)).toList();
+                      a.accountNameThai.toLowerCase().contains(lq) ||
+                      a.accountNameEng.toLowerCase().contains(lq)).toList();
             });
           }
 
           return AlertDialog(
-            title: const Text('เลือกบัญชี GL'),
+            title: Text(isEnglish ? 'Select GL Account' : 'เลือกบัญชี GL'),
             content: SizedBox(
               width: 520,
               height: 420,
@@ -151,29 +154,30 @@ class CmPaymentMethodDetailWidgetState
                   TextField(
                     controller: searchCtrl,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'ค้นหา (รหัส / ชื่อ)',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                    decoration: InputDecoration(
+                      hintText: isEnglish ? 'Search (code / name)' : 'ค้นหา (รหัส / ชื่อ)',
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                     ),
                     onChanged: doFilter,
                   ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: filtered.isEmpty
-                        ? const Center(child: Text('ไม่พบบัญชี'))
+                        ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี'))
                         : ListView.builder(
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
                               final a = filtered[i];
+                              final name = isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
                               return ListTile(
-                                title: Text('${a.accountCode} — ${a.accountNameThai}'),
+                                title: Text('${a.accountCode} — $name'),
                                 onTap: () {
                                   setState(() {
                                     _glAccountId = a.id;
                                     _glAccountCode = a.accountCode;
-                                    _glAccountName = a.accountNameThai;
+                                    _glAccountName = name;
                                   });
                                   Navigator.of(ctx).pop();
                                 },
@@ -187,7 +191,7 @@ class CmPaymentMethodDetailWidgetState
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('ยกเลิก', style: TextStyle(color: Colors.red)),
+                child: Text(isEnglish ? 'Cancel' : 'ยกเลิก', style: const TextStyle(color: Colors.red)),
               ),
             ],
           );
@@ -197,14 +201,15 @@ class CmPaymentMethodDetailWidgetState
   }
 
   Future<void> _pickBankAccount() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     List<CmBankAccount> bankAccounts;
     try {
       bankAccounts = await Provider.of<CmBankAccountService>(context, listen: false)
           .fetchRows();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('โหลดข้อมูลบัญชีธนาคารล้มเหลว: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${isEnglish ? 'Failed to load bank accounts' : 'โหลดข้อมูลบัญชีธนาคารล้มเหลว'}: $e')));
       }
       return;
     }
@@ -216,19 +221,20 @@ class CmPaymentMethodDetailWidgetState
       context: context,
       builder: (ctx) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('เลือกบัญชีธนาคาร',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Select Bank Account' : 'เลือกบัญชีธนาคาร',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: 520,
           height: 480,
           child: active.isEmpty
-              ? const Center(child: Text('ไม่พบข้อมูลบัญชีธนาคาร'))
+              ? Center(child: Text(isEnglish ? 'No bank accounts found' : 'ไม่พบข้อมูลบัญชีธนาคาร'))
               : ListView.builder(
                   itemCount: active.length,
                   itemBuilder: (_, i) {
                     final b = active[i];
+                    final name = isEnglish && (b.accountNameEn ?? '').isNotEmpty ? b.accountNameEn! : b.accountNameTh;
                     return ListTile(
-                      title: Text('${b.accountCode} — ${b.accountNameTh}'),
+                      title: Text('${b.accountCode} — $name'),
                       subtitle: Text([
                         if (b.bankDisplay.isNotEmpty) b.bankDisplay,
                         if ((b.accountNumber ?? '').isNotEmpty)
@@ -253,7 +259,7 @@ class CmPaymentMethodDetailWidgetState
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ยกเลิก', style: TextStyle(color: Colors.red)),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก', style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -261,6 +267,7 @@ class CmPaymentMethodDetailWidgetState
   }
 
   Widget _buildTypeHelperText() {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final Map<String, String> hints = {
       'CASH':            'ข้อมูลที่ระบุเมื่อรับชำระ: จำนวนเงิน',
       'CHECK':           'ข้อมูลที่ระบุเมื่อรับชำระ: เลขที่เช็ค, วันที่เช็ค, ธนาคาร, สาขา, เลขที่บัญชี',
@@ -272,7 +279,18 @@ class CmPaymentMethodDetailWidgetState
       'BILL_OF_EXCHANGE':'ข้อมูลที่ระบุเมื่อรับชำระ: เลขที่ตั๋ว, วันครบกำหนด, ธนาคาร',
       'OTHER':           'ข้อมูลที่ระบุเมื่อรับชำระ: เลขที่อ้างอิง, วันที่, หมายเหตุ',
     };
-    final hint = hints[_methodType];
+    final Map<String, String> hintsEng = {
+      'CASH':            'Fields captured on receipt: Amount',
+      'CHECK':           'Fields captured on receipt: Check No., Check Date, Bank, Branch, Account No.',
+      'TRANSFER':        'Fields captured on receipt: Transfer Ref No., Source Bank, Branch, Transfer Date',
+      'CREDIT_CARD':     'Fields captured on receipt: Card Type, Last 4 Digits, Approval Code, EDC No., Batch No.',
+      'DEBIT_CARD':      'Fields captured on receipt: Card Type, Last 4 Digits, Approval Code, EDC No., Batch No.',
+      'QR_CODE':         'Fields captured on receipt: Ref No., Payment Date/Time',
+      'MOBILE_BANKING':  'Fields captured on receipt: Ref No., Source Bank, Transfer Date',
+      'BILL_OF_EXCHANGE':'Fields captured on receipt: Bill No., Due Date, Bank',
+      'OTHER':           'Fields captured on receipt: Ref No., Date, Note',
+    };
+    final hint = isEnglish ? hintsEng[_methodType] : hints[_methodType];
     if (hint == null) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -295,6 +313,7 @@ class CmPaymentMethodDetailWidgetState
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     setState(() => _isSaving = true);
     try {
       final row = CmPaymentMethod(
@@ -312,7 +331,7 @@ class CmPaymentMethodDetailWidgetState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text('${isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'}: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -321,10 +340,12 @@ class CmPaymentMethodDetailWidgetState
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     if (widget.isPlaceholder) {
-      return const Center(
-          child: Text('เลือกประเภทการชำระเงินเพื่อแก้ไข หรือกดปุ่ม + เพื่อเพิ่มใหม่'));
+      return Center(child: Text(isEnglish
+          ? 'Select a payment method to edit, or press + to add a new one'
+          : 'เลือกประเภทการชำระเงินเพื่อแก้ไข หรือกดปุ่ม + เพื่อเพิ่มใหม่'));
     }
 
     final bool ro = widget.mode == Mode.view;
@@ -338,10 +359,10 @@ class CmPaymentMethodDetailWidgetState
           children: [
             Text(
               widget.mode == Mode.view
-                  ? 'ดูข้อมูลประเภทการชำระเงิน'
+                  ? (isEnglish ? 'View Payment Method' : 'ดูข้อมูลประเภทการชำระเงิน')
                   : widget.mode == Mode.edit
-                      ? 'แก้ไขประเภทการชำระเงิน'
-                      : 'เพิ่มประเภทการชำระเงิน',
+                      ? (isEnglish ? 'Edit Payment Method' : 'แก้ไขประเภทการชำระเงิน')
+                      : (isEnglish ? 'Add Payment Method' : 'เพิ่มประเภทการชำระเงิน'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
@@ -351,12 +372,12 @@ class CmPaymentMethodDetailWidgetState
               controller: _codeCtrl,
               readOnly: widget.mode != Mode.add,
               style: const TextStyle(fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                labelText: 'รหัสประเภทการชำระ *',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Payment Method Code *' : 'รหัสประเภทการชำระ *',
+                border: const OutlineInputBorder(),
               ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'โปรดระบุรหัส' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? (isEnglish ? 'Please enter a code' : 'โปรดระบุรหัส') : null,
             ),
             const SizedBox(height: 12),
 
@@ -367,12 +388,12 @@ class CmPaymentMethodDetailWidgetState
                   child: TextFormField(
                     controller: _nameTh,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'ชื่อ (ไทย) *',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Name (Thai) *' : 'ชื่อ (ไทย) *',
+                      border: const OutlineInputBorder(),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'โปรดระบุชื่อ' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? (isEnglish ? 'Please enter a name' : 'โปรดระบุชื่อ') : null,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -380,9 +401,9 @@ class CmPaymentMethodDetailWidgetState
                   child: TextFormField(
                     controller: _nameEn,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'ชื่อ (อังกฤษ)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Name (English)' : 'ชื่อ (อังกฤษ)',
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -394,14 +415,14 @@ class CmPaymentMethodDetailWidgetState
             DropdownButtonFormField<String>(
               isExpanded: true,
               value: _methodType,
-              decoration: const InputDecoration(
-                labelText: 'ประเภทการชำระ *',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Payment Type *' : 'ประเภทการชำระ *',
+                border: const OutlineInputBorder(),
               ),
-              items: cmMethodTypeOptions.entries
-                  .map((e) => DropdownMenuItem(
-                        value: e.key,
-                        child: Text(e.value, overflow: TextOverflow.ellipsis),
+              items: cmMethodTypeOptions.keys
+                  .map((k) => DropdownMenuItem(
+                        value: k,
+                        child: Text(cmMethodTypeLabel(k, isEnglish), overflow: TextOverflow.ellipsis),
                       ))
                   .toList(),
               onChanged: ro ? null : (v) => setState(() => _methodType = v!),
@@ -416,8 +437,10 @@ class CmPaymentMethodDetailWidgetState
               onTap: ro ? null : _pickGlAccount,
               child: InputDecorator(
                 decoration: InputDecoration(
-                  labelText: 'บัญชี GL (ลงบัญชีการชำระ)',
-                  helperText: 'ถ้าไม่ระบุ จะใช้จากตั้งค่าเอกสาร หรือ บัญชีธนาคาร',
+                  labelText: isEnglish ? 'GL Account (Payment Posting)' : 'บัญชี GL (ลงบัญชีการชำระ)',
+                  helperText: isEnglish
+                      ? 'If not specified, uses the document setup or bank account'
+                      : 'ถ้าไม่ระบุ จะใช้จากตั้งค่าเอกสาร หรือ บัญชีธนาคาร',
                   border: const OutlineInputBorder(),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -437,7 +460,7 @@ class CmPaymentMethodDetailWidgetState
                 ),
                 child: Text(
                   _glAccountId == null
-                      ? '— ไม่ระบุ —'
+                      ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
                       : '${_glAccountCode ?? ''} ${_glAccountName ?? ''}',
                 ),
               ),
@@ -449,10 +472,10 @@ class CmPaymentMethodDetailWidgetState
               onTap: ro ? null : _pickBankAccount,
               child: InputDecorator(
                 decoration: InputDecoration(
-                  labelText: 'บัญชีธนาคาร (ถ้ามี)',
+                  labelText: isEnglish ? 'Bank Account (optional)' : 'บัญชีธนาคาร (ถ้ามี)',
                   helperText: ['CREDIT_CARD', 'DEBIT_CARD'].contains(_methodType)
-                      ? 'บัญชีที่รับยอดจากบัตร (Merchant Account)'
-                      : 'บัญชีที่รับเงิน (สำหรับเช็ค / โอน / ตั๋วแลกเงิน)',
+                      ? (isEnglish ? 'Account receiving card settlements (Merchant Account)' : 'บัญชีที่รับยอดจากบัตร (Merchant Account)')
+                      : (isEnglish ? 'Account receiving funds (for check / transfer / bill of exchange)' : 'บัญชีที่รับเงิน (สำหรับเช็ค / โอน / ตั๋วแลกเงิน)'),
                   border: const OutlineInputBorder(),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -471,7 +494,7 @@ class CmPaymentMethodDetailWidgetState
                 ),
                 child: Text(
                   _bankAccountId == null
-                      ? '— ไม่ระบุ —'
+                      ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
                       : _bankAccountDisplay ?? '',
                 ),
               ),
@@ -483,9 +506,9 @@ class CmPaymentMethodDetailWidgetState
               controller: _remarkCtrl,
               readOnly: ro,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'หมายเหตุ',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Note' : 'หมายเหตุ',
+                border: const OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
             ),
@@ -494,7 +517,9 @@ class CmPaymentMethodDetailWidgetState
             // สถานะ
             Row(
               children: [
-                Expanded(child: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
+                Expanded(child: Text(isEnglish
+                    ? 'Status: ${_isActive ? 'Active' : 'Inactive'}'
+                    : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
                 Switch(
                   value: _isActive,
                   onChanged: ro ? null : (v) => setState(() => _isActive = v),
@@ -509,7 +534,12 @@ class CmPaymentMethodDetailWidgetState
                 if (widget.mode != Mode.view)
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _submit,
+                      onPressed: (_isSaving ||
+                              !(widget.mode == Mode.add
+                                  ? (MenuScope.of(context)?.canCreate ?? true)
+                                  : (MenuScope.of(context)?.canEdit ?? true)))
+                          ? null
+                          : _submit,
                       icon: _isSaving
                           ? const SizedBox(
                               width: 20,
@@ -518,10 +548,12 @@ class CmPaymentMethodDetailWidgetState
                                   strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.save),
                       label: Text(_isSaving
-                          ? 'กำลังบันทึก...'
-                          : widget.mode == Mode.edit ? 'บันทึก' : 'เพิ่ม'),
+                          ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
+                          : widget.mode == Mode.edit
+                              ? (isEnglish ? 'Save' : 'บันทึก')
+                              : (isEnglish ? 'Add' : 'เพิ่ม')),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple.shade700,
+                        backgroundColor: Colors.blue.shade700,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),

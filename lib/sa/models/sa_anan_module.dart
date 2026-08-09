@@ -71,7 +71,9 @@ const Map<String, String> imSysDocType = {
 // '81': 'เงินสดและเช็ค / Cash & Cheque Management (CM)'
 const Map<String, String> cmSysDocType = {
   '10': 'รายรับ - Receipts',
+  '15': 'รายรับจาก AR - Receipt from AR', // mirrors cm_receipt (created by AR posting) — read-only
   '20': 'รายจ่าย - Payments',
+  '25': 'รายจ่ายจาก AP - Payment from AP', // mirrors cm_payment (created by AP posting) — read-only
   '30': 'เติมเงินสดย่อย - Petty Cash Replenishment',
   '40': 'เบิกเงินสดย่อย - Petty Cash Reimbursement',
   '50': 'โอนเงินระหว่างบัญชี - Inter Bank Transfers',

@@ -16,6 +16,8 @@ import '../../cm/models/cm_bank_file_format.dart';
 import '../../cm/services/cm_bank_file_format_service.dart';
 import '../../cm/models/cm_payment_method.dart';
 import '../../cm/services/cm_payment_method_service.dart';
+import '../../cm/models/cm_checkbook.dart';
+import '../../cm/services/cm_checkbook_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_module_document_service.dart';
 import '../../sa/services/sa_auth_service.dart';
@@ -355,9 +357,11 @@ class _DetailPanelState extends State<_DetailPanel> {
   DateTime _runDate = DateTime.now();
   DateTime? _paymentDate;
   int? _bankFmtId;
+  int? _checkPrintConfigId;
   int? _paymentMethodId;
   DateTime? _dueDateFilter;
   List<CmBankFileFormat> _fmtOptions = [];
+  List<CmCheckPrintConfig> _checkPrintConfigOptions = [];
   List<CmPaymentMethod> _paymentMethodOptions = [];
 
   // ค่า paymentMethodId/dueDateFilter ที่ใช้ครั้งล่าสุดตอนเลือกใบแจ้งหนี้/บันทึก —
@@ -372,6 +376,7 @@ class _DetailPanelState extends State<_DetailPanel> {
   final _companySvc = CompanyService();
   final _vendorSvc = ApVendorService();
   final _paymentMethodSvc = CmPaymentMethodService();
+  final _checkbookSvc = CmCheckbookService();
   List<ApVendor> _allVendors = [];
 
   @override
@@ -379,8 +384,16 @@ class _DetailPanelState extends State<_DetailPanel> {
     super.initState();
     _init();
     _loadFormats();
+    _loadCheckPrintConfigs();
     _loadVendors();
     _loadPaymentMethods();
+  }
+
+  Future<void> _loadCheckPrintConfigs() async {
+    try {
+      final rows = await _checkbookSvc.fetchPrintConfigs();
+      if (mounted) setState(() => _checkPrintConfigOptions = rows);
+    } catch (_) {}
   }
 
   Future<void> _loadPaymentMethods() async {
@@ -420,6 +433,7 @@ class _DetailPanelState extends State<_DetailPanel> {
     _runDate = r?.runDate ?? DateTime.now();
     _descCtrl.text = r?.description ?? '';
     _bankFmtId = r?.bankFileFormatId;
+    _checkPrintConfigId = r?.checkPrintConfigId;
     _paymentDate = r?.paymentDate;
     _paymentMethodId = r?.paymentMethodId;
     _dueDateFilter = r?.dueDateFilter;
@@ -458,6 +472,7 @@ class _DetailPanelState extends State<_DetailPanel> {
       runDate: _runDate,
       description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       bankFileFormatId: _bankFmtId,
+      checkPrintConfigId: _checkPrintConfigId,
       paymentDate: _paymentDate,
       paymentMethodId: _paymentMethodId,
       dueDateFilter: _dueDateFilter,
@@ -1478,11 +1493,23 @@ class _DetailPanelState extends State<_DetailPanel> {
       Container(
         color: Colors.blue.shade50,
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-        child: Wrap(spacing: 16, runSpacing: 8, children: [
-          // Run date
-          SizedBox(
-            width: 180,
-            child: InkWell(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Row 1: เลขที่อนุมัติจ่าย / วันที่ทำจ่าย / วันที่จ่าย
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // เลขที่อนุมัติจ่าย — auto-generated, read-only
+            Expanded(flex: 1, child: InputDecorator(
+              decoration: InputDecoration(
+                  labelText: isEnglish ? 'Approval No.' : 'เลขที่อนุมัติจ่าย',
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+              child: Text(widget.run?.runNumber ?? (isEnglish ? '(new)' : '(ใหม่)')),
+            )),
+            const SizedBox(width: 16),
+            // วันที่ทำจ่าย (เดิม "วันที่")
+            Expanded(flex: 1, child: InkWell(
               onTap: _readOnly ? null : () async {
                 final d = await showDatePicker(
                   context: context,
@@ -1494,7 +1521,7 @@ class _DetailPanelState extends State<_DetailPanel> {
               },
               child: InputDecorator(
                 decoration: InputDecoration(
-                    labelText: l.date,
+                    labelText: isEnglish ? 'Process Date' : 'วันที่ทำจ่าย',
                     isDense: true,
                     border: const OutlineInputBorder(),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
@@ -1503,48 +1530,10 @@ class _DetailPanelState extends State<_DetailPanel> {
                   const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
                 ]),
               ),
-            ),
-          ),
-          // Description
-          SizedBox(
-            width: 280,
-            child: TextField(
-              controller: _descCtrl,
-              readOnly: _readOnly,
-              decoration: InputDecoration(
-                  labelText: l.description,
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-            ),
-          ),
-          // Bank file format
-          SizedBox(
-            width: 240,
-            child: DropdownButtonFormField<int?>(
-              value: _bankFmtId,
-              decoration: InputDecoration(
-                  labelText: isEnglish ? 'Bank File Format' : 'รูปแบบไฟล์ธนาคาร',
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-              items: [
-                DropdownMenuItem(value: null, child: Text(isEnglish ? '(Not specified)' : '(ไม่ระบุ)')),
-                ..._fmtOptions.map((f) => DropdownMenuItem(
-                      value: f.id,
-                      child: Text('${f.formatCode} - ${f.formatName}',
-                          overflow: TextOverflow.ellipsis),
-                    )),
-              ],
-              onChanged: _readOnly
-                  ? null
-                  : (v) => setState(() => _bankFmtId = v),
-            ),
-          ),
-          // Payment date
-          SizedBox(
-            width: 180,
-            child: InkWell(
+            )),
+            const SizedBox(width: 16),
+            // วันที่จ่าย
+            Expanded(flex: 1, child: InkWell(
               onTap: _readOnly ? null : () async {
                 final d = await showDatePicker(
                   context: context,
@@ -1565,34 +1554,24 @@ class _DetailPanelState extends State<_DetailPanel> {
                   const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
                 ]),
               ),
-            ),
+            )),
+          ]),
+          const SizedBox(height: 8),
+          // Row 2: คำอธิบาย — เต็มบรรทัด
+          TextField(
+            controller: _descCtrl,
+            readOnly: _readOnly,
+            decoration: InputDecoration(
+                labelText: l.description,
+                isDense: true,
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
           ),
-          // Payment method — optional, ใช้กรองเจ้าหนี้ตอนเลือกใบแจ้งหนี้
-          SizedBox(
-            width: 240,
-            child: DropdownButtonFormField<int?>(
-              value: _paymentMethodId,
-              decoration: InputDecoration(
-                  labelText: isEnglish ? 'Payment Method' : 'ประเภทการชำระ',
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-              items: [
-                DropdownMenuItem(value: null, child: Text(isEnglish ? '(Not specified)' : '(ไม่ระบุ)')),
-                ..._paymentMethodOptions.map((m) => DropdownMenuItem(
-                      value: m.id,
-                      child: Text(m.displayName, overflow: TextOverflow.ellipsis),
-                    )),
-              ],
-              onChanged: _readOnly
-                  ? null
-                  : (v) => setState(() => _paymentMethodId = v),
-            ),
-          ),
-          // Due date filter — ใช้กรองใบแจ้งหนี้ที่ครบกำหนดชำระแล้วไม่เกินวันที่ระบุ
-          SizedBox(
-            width: 200,
-            child: InkWell(
+          const SizedBox(height: 8),
+          // Row 3: วันที่ครบกำหนดไม่เกิน / ประเภทการชำระ / รูปแบบไฟล์ธนาคาร (TRANSFER) / รูปแบบเช็ค (CHECK)
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // วันที่ครบกำหนดไม่เกิน — ใช้กรองใบแจ้งหนี้ที่ครบกำหนดชำระแล้วไม่เกินวันที่ระบุ
+            Expanded(flex: 1, child: InkWell(
               onTap: _readOnly ? null : () async {
                 final d = await showDatePicker(
                   context: context,
@@ -1619,10 +1598,80 @@ class _DetailPanelState extends State<_DetailPanel> {
                   if (_dueDateFilter == null) const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
                 ]),
               ),
-            ),
-          ),
+            )),
+            const SizedBox(width: 16),
+            // ประเภทการชำระ — เปลี่ยนแล้วต้อง reset รูปแบบไฟล์ธนาคาร/รูปแบบเช็ค ถ้าไม่ตรงประเภทอีกต่อไป
+            Expanded(flex: 1, child: DropdownButtonFormField<int?>(
+              value: _paymentMethodId,
+              isExpanded: true,
+              decoration: InputDecoration(
+                  labelText: isEnglish ? 'Payment Method' : 'ประเภทการชำระ',
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+              items: [
+                DropdownMenuItem(value: null, child: Text(isEnglish ? '(Not specified)' : '(ไม่ระบุ)')),
+                ..._paymentMethodOptions.map((m) => DropdownMenuItem(
+                      value: m.id,
+                      child: Text(m.displayName, overflow: TextOverflow.ellipsis),
+                    )),
+              ],
+              onChanged: _readOnly
+                  ? null
+                  : (v) => setState(() {
+                        _paymentMethodId = v;
+                        final newType = _selectedPaymentMethod?.methodType;
+                        if (newType != 'TRANSFER') _bankFmtId = null;
+                        if (newType != 'CHECK') _checkPrintConfigId = null;
+                      }),
+            )),
+            const SizedBox(width: 16),
+            // รูปแบบไฟล์ธนาคาร — enable เฉพาะเมื่อประเภทการชำระเป็น TRANSFER
+            Expanded(flex: 1, child: DropdownButtonFormField<int?>(
+              value: _bankFmtId,
+              isExpanded: true,
+              decoration: InputDecoration(
+                  labelText: isEnglish ? 'Bank File Format' : 'รูปแบบไฟล์ธนาคาร',
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+              items: [
+                DropdownMenuItem(value: null, child: Text(isEnglish ? '(Not specified)' : '(ไม่ระบุ)')),
+                ..._fmtOptions.map((f) => DropdownMenuItem(
+                      value: f.id,
+                      child: Text('${f.formatCode} - ${f.formatName}',
+                          overflow: TextOverflow.ellipsis),
+                    )),
+              ],
+              onChanged: (_readOnly || _selectedPaymentMethod?.methodType != 'TRANSFER')
+                  ? null
+                  : (v) => setState(() => _bankFmtId = v),
+            )),
+            const SizedBox(width: 16),
+            // รูปแบบเช็ค — enable เฉพาะเมื่อประเภทการชำระเป็น CHECK
+            Expanded(flex: 1, child: DropdownButtonFormField<int?>(
+              value: _checkPrintConfigId,
+              isExpanded: true,
+              decoration: InputDecoration(
+                  labelText: isEnglish ? 'Check Format' : 'รูปแบบเช็ค',
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+              items: [
+                DropdownMenuItem(value: null, child: Text(isEnglish ? '(Not specified)' : '(ไม่ระบุ)')),
+                ..._checkPrintConfigOptions.map((c) => DropdownMenuItem(
+                      value: c.id,
+                      child: Text(c.configName, overflow: TextOverflow.ellipsis),
+                    )),
+              ],
+              onChanged: (_readOnly || _selectedPaymentMethod?.methodType != 'CHECK')
+                  ? null
+                  : (v) => setState(() => _checkPrintConfigId = v),
+            )),
+          ]),
           // GL reference — shown after posting
-          if (widget.run?.glDocNo != null)
+          if (widget.run?.glDocNo != null) ...[
+            const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -1640,6 +1689,7 @@ class _DetailPanelState extends State<_DetailPanel> {
                         fontSize: 13)),
               ]),
             ),
+          ],
         ]),
       ),
       // ── Lines toolbar ─────────────────────────────────────────────────

@@ -180,3 +180,12 @@ const Map<String, String> cmFxRevalStatusOptions = {
   'Posted': 'บันทึก GL แล้ว',
   'Voided': 'ยกเลิก',
 };
+
+const Map<String, String> cmFxRevalStatusOptionsEng = {
+  'Draft':  'Draft',
+  'Posted': 'Posted to GL',
+  'Voided': 'Voided',
+};
+
+String cmFxRevalStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? cmFxRevalStatusOptionsEng[s] : cmFxRevalStatusOptions[s]) ?? s;

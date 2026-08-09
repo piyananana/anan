@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../services/cm_period_service.dart';
 import '../../utils/date_utils.dart';
@@ -17,6 +19,10 @@ const Map<String, String> _dirLabels = {
   'RECEIVED': 'รับ (Received)',
   'ISSUED':   'จ่าย (Issued)',
 };
+const Map<String, String> _dirLabelsEng = {
+  'RECEIVED': 'Received',
+  'ISSUED':   'Issued',
+};
 const Map<String, String> _statusLabels = {
   'Holding':   'ถือไว้',
   'Deposited': 'นำฝากแล้ว',
@@ -24,12 +30,25 @@ const Map<String, String> _statusLabels = {
   'Returned':  'คืนแล้ว',
   'Cancelled': 'ยกเลิก',
 };
+const Map<String, String> _statusLabelsEng = {
+  'Holding':   'Holding',
+  'Deposited': 'Deposited',
+  'Cleared':   'Cleared',
+  'Returned':  'Returned',
+  'Cancelled': 'Cancelled',
+};
 const Map<String, Color> _statusColors = {
   'Holding':   Colors.blue,
   'Deposited': Colors.orange,
   'Cleared':   Colors.green,
   'Returned':  Colors.purple,
   'Cancelled': Colors.grey,
+};
+const Map<String, String> _actionLabelsEng = {
+  'present': 'Deposit',
+  'clear':   'Clear',
+  'return':  'Return',
+  'cancel':  'Cancel',
 };
 
 class CmPostDatedCheckScreen extends StatefulWidget {
@@ -43,11 +62,15 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
   @override
   bool get wantKeepAlive => true;
 
+  bool _isEnglish = false;
   bool _panelOpen = true;
+  double _leftWidth = 300.0;
+  bool _isDragging  = false;
 
   // list filters
   String _filterDir    = '';
   String _filterStatus = 'Holding';
+  String _searchQuery  = '';
 
   List<Map<String, dynamic>> _list = [];
   Map<String, dynamic>? _selected;
@@ -136,6 +159,16 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
     } catch (_) {}
   }
 
+  List<Map<String, dynamic>> get _filteredList {
+    if (_searchQuery.isEmpty) return _list;
+    final q = _searchQuery.toLowerCase();
+    return _list.where((row) {
+      final checkNo = (row['check_no'] ?? '').toString().toLowerCase();
+      final payee   = (row['payee_payer_name'] ?? '').toString().toLowerCase();
+      return checkNo.contains(q) || payee.contains(q);
+    }).toList();
+  }
+
   void _startNew() {
     setState(() {
       _selected   = null;
@@ -169,8 +202,14 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
   Future<void> _save() async {
     final perm = MenuScope.of(context);
     if (!(_isNew ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
-    if (_checkNoCtrl.text.trim().isEmpty) { _showErr('กรุณากรอกเลขที่เช็ค'); return; }
-    if (_fOurBankId == null) { _showErr('กรุณาเลือกบัญชีธนาคารของเรา'); return; }
+    if (_checkNoCtrl.text.trim().isEmpty) {
+      _showErr(_isEnglish ? 'Please enter a check number' : 'กรุณากรอกเลขที่เช็ค');
+      return;
+    }
+    if (_fOurBankId == null) {
+      _showErr(_isEnglish ? 'Please select our bank account' : 'กรุณาเลือกบัญชีธนาคารของเรา');
+      return;
+    }
 
     final checkDate = formatLocalDate(_fCheckDate);
     if (!await CmPeriodService.canPost(context, _fCheckDate)) return;
@@ -194,7 +233,9 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
         await http.put(Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/${_selected!['id']}'),
             headers: h, body: body);
       }
-      _showOk(_isNew ? 'เพิ่มเช็คสำเร็จ' : 'แก้ไขเช็คสำเร็จ');
+      _showOk(_isNew
+          ? (_isEnglish ? 'Check added successfully' : 'เพิ่มเช็คสำเร็จ')
+          : (_isEnglish ? 'Check updated successfully' : 'แก้ไขเช็คสำเร็จ'));
       await _loadList();
       await _loadSummary();
       setState(() { _selected = null; _isNew = false; });
@@ -204,20 +245,25 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
 
   Future<void> _action(String action, Map<String, dynamic> row) async {
     if (!(MenuScope.of(context)?.canEdit ?? true)) return;
-    final label = switch (action) {
-      'present' => 'นำฝาก',
-      'clear'   => 'เคลียร์',
-      'return'  => 'คืน',
-      'cancel'  => 'ยกเลิก',
-      _         => action,
-    };
+    final isEnglish = _isEnglish;
+    final label = isEnglish
+        ? (_actionLabelsEng[action] ?? action)
+        : switch (action) {
+            'present' => 'นำฝาก',
+            'clear'   => 'เคลียร์',
+            'return'  => 'คืน',
+            'cancel'  => 'ยกเลิก',
+            _         => action,
+          };
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('ยืนยัน$label'),
-        content: Text('ต้องการ$labelเช็คเลขที่ ${row['check_no']} ใช่หรือไม่?'),
+        title: Text(isEnglish ? 'Confirm $label' : 'ยืนยัน$label'),
+        content: Text(isEnglish
+            ? 'Do you want to $label check ${row['check_no']}?'
+            : 'ต้องการ$labelเช็คเลขที่ ${row['check_no']} ใช่หรือไม่?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
@@ -231,7 +277,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
       final h = await _headers();
       await http.put(
           Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/${row['id']}/$action'), headers: h);
-      _showOk('$label สำเร็จ');
+      _showOk(isEnglish ? '$label successful' : '$label สำเร็จ');
       await _loadList();
       await _loadSummary();
       if (_selected?['id'] == row['id']) setState(() => _selected = null);
@@ -240,17 +286,18 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
 
   Future<void> _delete(Map<String, dynamic> row) async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
+    final isEnglish = _isEnglish;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('ยืนยันลบ'),
-        content: Text('ต้องการลบเช็คเลขที่ ${row['check_no']}?'),
+        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันลบ'),
+        content: Text(isEnglish ? 'Delete check ${row['check_no']}?' : 'ต้องการลบเช็คเลขที่ ${row['check_no']}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('ลบ'),
+            child: Text(isEnglish ? 'Delete' : 'ลบ'),
           ),
         ],
       ),
@@ -260,7 +307,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
       final h = await _headers();
       await http.delete(
           Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/${row['id']}'), headers: h);
-      _showOk('ลบสำเร็จ');
+      _showOk(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ');
       await _loadList();
       await _loadSummary();
       if (_selected?['id'] == row['id']) setState(() => _selected = null);
@@ -282,6 +329,8 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
@@ -294,180 +343,218 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
               style: TextButton.styleFrom(foregroundColor: Colors.white),
               onPressed: _saving ? null : _save,
               icon: const Icon(Icons.save, size: 16),
-              label: const Text('บันทึก', style: TextStyle(fontSize: 13)),
+              label: Text(isEnglish ? 'Save' : 'บันทึก', style: const TextStyle(fontSize: 13)),
             ),
           TextButton.icon(
             style: TextButton.styleFrom(foregroundColor: Colors.white),
             onPressed: () => setState(() { _selected = null; _isNew = false; }),
             icon: const Icon(Icons.close, size: 16),
-            label: const Text('ยกเลิก', style: TextStyle(fontSize: 13)),
+            label: Text(isEnglish ? 'Cancel' : 'ยกเลิก', style: const TextStyle(fontSize: 13)),
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Toggle strip
-          Container(
-            width: 36,
-            color: _kTheme,
-            child: Column(children: [
-              IconButton(
+      body: LayoutBuilder(builder: (_, constraints) {
+        final maxLeft = (constraints.maxWidth - 36 - 320).clamp(100.0, double.infinity);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Toggle strip
+            Container(
+              width: 36,
+              color: _kTheme,
+              child: IconButton(
                 padding: EdgeInsets.zero,
                 iconSize: 20,
                 color: Colors.white,
                 icon: Icon(_panelOpen ? Icons.chevron_left : Icons.chevron_right),
                 onPressed: () => setState(() => _panelOpen = !_panelOpen),
               ),
-            ]),
-          ),
-          // Left panel
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: _panelOpen ? 300 : 0,
-            child: ClipRect(
-              child: OverflowBox(
-                alignment: Alignment.topLeft,
-                maxWidth: 300,
-                child: SizedBox(
-                  width: 300,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        color: Colors.blueGrey.shade200,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        child: Column(children: [
-                          Row(children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: _filterDir,
-                                decoration: const InputDecoration(
-                                    labelText: 'ทิศทาง', isDense: true,
-                                    filled: true, fillColor: Colors.white,
-                                    border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-                                items: const [
-                                  DropdownMenuItem(value: '', child: Text('ทั้งหมด', style: TextStyle(fontSize: 12))),
-                                  DropdownMenuItem(value: 'RECEIVED', child: Text('รับ', style: TextStyle(fontSize: 12))),
-                                  DropdownMenuItem(value: 'ISSUED', child: Text('จ่าย', style: TextStyle(fontSize: 12))),
-                                ],
-                                onChanged: (v) { setState(() => _filterDir = v ?? ''); _loadList(); },
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: _filterStatus,
-                                decoration: const InputDecoration(
-                                    labelText: 'สถานะ', isDense: true,
-                                    filled: true, fillColor: Colors.white,
-                                    border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-                                items: [
-                                  const DropdownMenuItem(value: '', child: Text('ทั้งหมด', style: TextStyle(fontSize: 12))),
-                                  ..._statusLabels.entries.map((e) =>
-                                      DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 12)))),
-                                ],
-                                onChanged: (v) { setState(() => _filterStatus = v ?? ''); _loadList(); },
-                              ),
-                            ),
-                          ]),
-                          const SizedBox(height: 4),
-                          Row(children: [
-                            Expanded(child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white, foregroundColor: _kTheme,
-                                  padding: const EdgeInsets.symmetric(vertical: 6), minimumSize: Size.zero),
-                              onPressed: (MenuScope.of(context)?.canCreate ?? true) ? _startNew : null,
-                              icon: const Icon(Icons.add, size: 14),
-                              label: const Text('เพิ่มใหม่', style: TextStyle(fontSize: 12)),
-                            )),
-                            const SizedBox(width: 6),
-                            Expanded(child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 6), minimumSize: Size.zero),
-                              onPressed: _loadList,
-                              icon: const Icon(Icons.refresh, size: 14),
-                              label: const Text('รีเฟรช', style: TextStyle(fontSize: 12)),
-                            )),
-                          ]),
-                        ]),
-                      ),
-                      // Summary bar
-                      Container(
-                        color: Colors.blueGrey.shade50,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        child: Text(
-                          'ถือไว้: $_sumCount รายการ | ${_fmt.format(_sumAmount)} บาท',
-                          style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade700),
-                        ),
-                      ),
-                      Expanded(
-                        child: Container(
+            ),
+            // Left panel
+            AnimatedContainer(
+              duration: _isDragging ? Duration.zero : const Duration(milliseconds: 200),
+              width: _panelOpen ? _leftWidth : 0,
+              child: ClipRect(
+                child: OverflowBox(
+                  alignment: Alignment.topLeft,
+                  maxWidth: _leftWidth, minWidth: _leftWidth,
+                  child: SizedBox(
+                    width: _leftWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
                           color: Colors.blueGrey.shade100,
-                          child: _loading
-                              ? const Center(child: CircularProgressIndicator())
-                              : ListView.builder(
-                                  itemCount: _list.length,
-                                  itemBuilder: (_, i) {
-                                    final row = _list[i];
-                                    final sel = _selected?['id'] == row['id'];
-                                    final chkDate = parseLocalDateNullable(row['check_date']);
-                                    final status = row['status'] as String? ?? '';
-                                    return InkWell(
-                                      onTap: () => _selectItem(row),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                                        color: sel ? _kTheme.withOpacity(0.12) : null,
-                                        child: Row(children: [
-                                          Expanded(child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(row['check_no'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                              Text(row['payee_payer_name'] ?? '', style: TextStyle(fontSize: 11, color: Colors.grey.shade700), overflow: TextOverflow.ellipsis),
-                                              Text(
-                                                chkDate != null ? _dateFmt.format(chkDate) : '',
-                                                style: const TextStyle(fontSize: 10, color: Colors.black45),
-                                              ),
-                                            ],
-                                          )),
-                                          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                            Text(_fmt.format((row['amount'] as num?)?.toDouble() ?? 0),
-                                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                              decoration: BoxDecoration(
-                                                color: (_statusColors[status] ?? Colors.grey).withOpacity(0.15),
-                                                borderRadius: BorderRadius.circular(8),
-                                                border: Border.all(color: _statusColors[status] ?? Colors.grey),
-                                              ),
-                                              child: Text(_statusLabels[status] ?? status,
-                                                  style: TextStyle(fontSize: 9, color: _statusColors[status] ?? Colors.grey)),
-                                            ),
-                                            Text(row['direction'] == 'RECEIVED' ? 'รับ' : 'จ่าย',
-                                                style: TextStyle(fontSize: 9, color: Colors.grey.shade500)),
-                                          ]),
-                                        ]),
-                                      ),
-                                    );
-                                  },
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          child: Column(children: [
+                            Row(children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  value: _filterDir,
+                                  isExpanded: true,
+                                  decoration: InputDecoration(
+                                      labelText: isEnglish ? 'Direction' : 'ทิศทาง',
+                                      border: const OutlineInputBorder()),
+                                  items: [
+                                    DropdownMenuItem(value: '', child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
+                                    DropdownMenuItem(value: 'RECEIVED', child: Text(isEnglish ? 'Received' : 'รับ')),
+                                    DropdownMenuItem(value: 'ISSUED', child: Text(isEnglish ? 'Issued' : 'จ่าย')),
+                                  ],
+                                  onChanged: (v) { setState(() => _filterDir = v ?? ''); _loadList(); },
                                 ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  value: _filterStatus,
+                                  isExpanded: true,
+                                  decoration: InputDecoration(
+                                      labelText: isEnglish ? 'Status' : 'สถานะ',
+                                      border: const OutlineInputBorder()),
+                                  items: [
+                                    DropdownMenuItem(value: '', child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
+                                    ...(isEnglish ? _statusLabelsEng : _statusLabels).entries.map((e) =>
+                                        DropdownMenuItem(value: e.key, child: Text(e.value))),
+                                  ],
+                                  onChanged: (v) { setState(() => _filterStatus = v ?? ''); _loadList(); },
+                                ),
+                              ),
+                            ]),
+                            const SizedBox(height: 8),
+                            TextField(
+                              decoration: InputDecoration(
+                                hintText: isEnglish ? 'Search (check no. / name)' : 'ค้นหา (เลขที่เช็ค / ชื่อ)',
+                                prefixIcon: const Icon(Icons.search),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                                border: const OutlineInputBorder(),
+                              ),
+                              onChanged: (v) => setState(() => _searchQuery = v),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(children: [
+                              Expanded(child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 12)),
+                                onPressed: (MenuScope.of(context)?.canCreate ?? true) ? _startNew : null,
+                                icon: const Icon(Icons.add),
+                                label: Text(isEnglish ? 'Add New' : 'เพิ่มใหม่'),
+                              )),
+                              const SizedBox(width: 8),
+                              Expanded(child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 12)),
+                                onPressed: _loadList,
+                                icon: const Icon(Icons.refresh),
+                                label: Text(isEnglish ? 'Refresh' : 'รีเฟรช'),
+                              )),
+                            ]),
+                          ]),
                         ),
-                      ),
-                    ],
+                        // Summary bar
+                        Container(
+                          color: Colors.blueGrey.shade100,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          child: Text(
+                            isEnglish
+                                ? 'Holding: $_sumCount items | ${_fmt.format(_sumAmount)} THB'
+                                : 'ถือไว้: $_sumCount รายการ | ${_fmt.format(_sumAmount)} บาท',
+                            style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade700, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Expanded(
+                          child: Container(
+                            color: Colors.blueGrey.shade100,
+                            child: _loading
+                                ? const Center(child: CircularProgressIndicator())
+                                : _filteredList.isEmpty
+                                    ? Center(child: Text(isEnglish ? 'No items' : 'ไม่มีรายการ',
+                                        style: const TextStyle(color: Colors.grey)))
+                                    : ListView.builder(
+                                        padding: const EdgeInsets.symmetric(vertical: 6),
+                                        itemCount: _filteredList.length,
+                                        itemBuilder: (_, i) {
+                                          final row = _filteredList[i];
+                                          final sel = _selected?['id'] == row['id'];
+                                          final chkDate = parseLocalDateNullable(row['check_date']);
+                                          final status = row['status'] as String? ?? '';
+                                          final statusColor = _statusColors[status] ?? Colors.grey;
+                                          return Card(
+                                            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            child: ListTile(
+                                              selected: sel,
+                                              selectedTileColor: _kTheme.withOpacity(0.12),
+                                              leading: CircleAvatar(
+                                                backgroundColor: statusColor.withOpacity(0.15),
+                                                child: Icon(
+                                                  row['direction'] == 'RECEIVED' ? Icons.call_received : Icons.call_made,
+                                                  color: statusColor, size: 18),
+                                              ),
+                                              title: Text(row['check_no'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                              subtitle: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(row['payee_payer_name'] ?? '',
+                                                      style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                                      overflow: TextOverflow.ellipsis),
+                                                  Text(
+                                                    chkDate != null ? _dateFmt.format(chkDate) : '',
+                                                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                                  ),
+                                                ],
+                                              ),
+                                              trailing: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                crossAxisAlignment: CrossAxisAlignment.end,
+                                                children: [
+                                                  Text(_fmt.format((row['amount'] as num?)?.toDouble() ?? 0),
+                                                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                  const SizedBox(height: 3),
+                                                  Chip(
+                                                    label: Text((isEnglish ? _statusLabelsEng[status] : _statusLabels[status]) ?? status,
+                                                        style: TextStyle(fontSize: 11, color: statusColor)),
+                                                    backgroundColor: statusColor.withOpacity(0.12),
+                                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                    visualDensity: VisualDensity.compact,
+                                                  ),
+                                                ],
+                                              ),
+                                              onTap: () => _selectItem(row),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          // Right panel
-          Expanded(child: _buildRight()),
-        ],
-      ),
+            if (_panelOpen)
+              MouseRegion(
+                cursor: SystemMouseCursors.resizeColumn,
+                child: GestureDetector(
+                  onHorizontalDragStart: (_) => setState(() => _isDragging = true),
+                  onHorizontalDragUpdate: (d) => setState(() {
+                    _leftWidth = (_leftWidth + d.delta.dx).clamp(220.0, maxLeft);
+                  }),
+                  onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+                  child: Container(width: 5, color: Colors.grey[400]),
+                ),
+              ),
+            // Right panel
+            Expanded(child: _buildRight()),
+          ],
+        );
+      }),
     );
   }
 
   Widget _buildRight() {
+    final isEnglish = _isEnglish;
     if (_isNew || (_selected != null && _selected!['status'] == 'Holding')) {
       return _buildForm();
     }
@@ -478,74 +565,92 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.receipt_long, size: 64, color: Colors.blueGrey.shade200),
         const SizedBox(height: 12),
-        Text('เลือกรายการจากแผงซ้าย หรือกด "เพิ่มใหม่"',
+        Text(isEnglish ? 'Select an item from the left, or press "Add New"' : 'เลือกรายการจากแผงซ้าย หรือกด "เพิ่มใหม่"',
             style: TextStyle(color: Colors.blueGrey.shade400)),
       ]),
     );
   }
 
   Widget _buildForm() {
+    final isEnglish = _isEnglish;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(_isNew ? 'เพิ่มเช็คล่วงหน้าใหม่' : 'แก้ไขเช็คล่วงหน้า',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 16),
-        Wrap(spacing: 12, runSpacing: 12, children: [
-          _field('ทิศทาง *', SizedBox(
-            width: 200,
-            child: DropdownButtonFormField<String>(
-              value: _fDir,
-              isDense: true,
-              decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-              items: _dirLabels.entries.map((e) =>
-                  DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 13)))).toList(),
-              onChanged: (v) => setState(() => _fDir = v ?? 'RECEIVED'),
-            ),
+        Text(_isNew ? (isEnglish ? 'Add New Post-Dated Check' : 'เพิ่มเช็คล่วงหน้าใหม่') : (isEnglish ? 'Edit Post-Dated Check' : 'แก้ไขเช็คล่วงหน้า'),
+            style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 20),
+        // Row 1: Direction / Check No. / Check Date
+        Row(children: [
+          Expanded(child: DropdownButtonFormField<String>(
+            value: _fDir,
+            isExpanded: true,
+            decoration: InputDecoration(
+                labelText: isEnglish ? 'Direction *' : 'ทิศทาง *',
+                border: const OutlineInputBorder()),
+            items: (isEnglish ? _dirLabelsEng : _dirLabels).entries.map((e) =>
+                DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+            onChanged: (v) => setState(() => _fDir = v ?? 'RECEIVED'),
           )),
-          _field('เลขที่เช็ค *', SizedBox(
-            width: 200,
-            child: TextField(controller: _checkNoCtrl, decoration: const InputDecoration(
-                isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8))),
+          const SizedBox(width: 8),
+          Expanded(child: TextFormField(
+            controller: _checkNoCtrl,
+            decoration: InputDecoration(
+                labelText: isEnglish ? 'Check No. *' : 'เลขที่เช็ค *',
+                border: const OutlineInputBorder()),
           )),
-          _field('วันที่บนเช็ค *', _datePicker(_fCheckDate, (d) => setState(() => _fCheckDate = d))),
-          _field('ชื่อผู้รับ/จ่าย', SizedBox(
-            width: 260,
-            child: TextField(controller: _payerPayeeCtrl, decoration: const InputDecoration(
-                isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8))),
+          const SizedBox(width: 8),
+          Expanded(child: _datePicker(isEnglish ? 'Check Date *' : 'วันที่บนเช็ค *',
+              _fCheckDate, (d) => setState(() => _fCheckDate = d))),
+        ]),
+        const SizedBox(height: 12),
+        // Row 2: Payee/Payer Name (full width)
+        TextFormField(
+          controller: _payerPayeeCtrl,
+          decoration: InputDecoration(
+              labelText: isEnglish ? 'Payee/Payer Name' : 'ชื่อผู้รับ/จ่าย',
+              border: const OutlineInputBorder()),
+        ),
+        const SizedBox(height: 12),
+        // Row 3: Amount / Our Bank Account
+        Row(children: [
+          Expanded(child: TextFormField(
+            controller: _amountCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+                labelText: isEnglish ? 'Amount (THB)' : 'จำนวนเงิน (บาท)',
+                border: const OutlineInputBorder()),
           )),
-          _field('จำนวนเงิน (บาท)', SizedBox(
-            width: 160,
-            child: TextField(controller: _amountCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8))),
-          )),
-          _field('บัญชีธนาคารของเรา *', SizedBox(
-            width: 260,
-            child: DropdownButtonFormField<int?>(
-              value: _fOurBankId,
-              isDense: true,
-              decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-              hint: const Text('เลือกบัญชี', style: TextStyle(fontSize: 12)),
-              items: _banks.map((b) => DropdownMenuItem<int?>(
-                  value: b['id'] as int?,
-                  child: Text('${b['account_code'] ?? ''} - ${b['account_name'] ?? ''}',
-                      style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: (v) => setState(() => _fOurBankId = v),
-            ),
-          )),
-          _field('หมายเหตุ', SizedBox(
-            width: 300,
-            child: TextField(controller: _remarkCtrl, maxLines: 2,
-                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8))),
+          const SizedBox(width: 8),
+          Expanded(flex: 2, child: DropdownButtonFormField<int?>(
+            value: _fOurBankId,
+            isExpanded: true,
+            decoration: InputDecoration(
+                labelText: isEnglish ? 'Our Bank Account *' : 'บัญชีธนาคารของเรา *',
+                border: const OutlineInputBorder()),
+            hint: Text(isEnglish ? 'Select an account' : 'เลือกบัญชี'),
+            items: _banks.map((b) => DropdownMenuItem<int?>(
+                value: b['id'] as int?,
+                child: Text('${b['account_code'] ?? ''} - ${b['account_name'] ?? ''}',
+                    overflow: TextOverflow.ellipsis))).toList(),
+            onChanged: (v) => setState(() => _fOurBankId = v),
           )),
         ]),
+        const SizedBox(height: 12),
+        // Row 4: Note (full width)
+        TextFormField(
+          controller: _remarkCtrl,
+          maxLines: 2,
+          decoration: InputDecoration(
+              labelText: isEnglish ? 'Note' : 'หมายเหตุ',
+              border: const OutlineInputBorder(),
+              alignLabelWithHint: true),
+        ),
       ]),
     );
   }
 
   Widget _buildDetail(Map<String, dynamic> row) {
+    final isEnglish = _isEnglish;
     final status = row['status'] as String? ?? '';
     final chkDate = parseLocalDateNullable(row['check_date']);
 
@@ -553,30 +658,38 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text('เช็คเลขที่ ${row['check_no'] ?? ''}',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text('${isEnglish ? 'Check No.' : 'เช็คเลขที่'} ${row['check_no'] ?? ''}',
+              style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            decoration: BoxDecoration(
-              color: (_statusColors[status] ?? Colors.grey).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _statusColors[status] ?? Colors.grey),
-            ),
-            child: Text(_statusLabels[status] ?? status,
-                style: TextStyle(fontSize: 12, color: _statusColors[status] ?? Colors.grey)),
+          Chip(
+            label: Text((isEnglish ? _statusLabelsEng[status] : _statusLabels[status]) ?? status,
+                style: TextStyle(color: _statusColors[status] ?? Colors.grey)),
+            backgroundColor: (_statusColors[status] ?? Colors.grey).withOpacity(0.12),
           ),
         ]),
-        const SizedBox(height: 16),
-        Wrap(spacing: 24, runSpacing: 8, children: [
-          _infoRow('ทิศทาง', _dirLabels[row['direction']] ?? row['direction'] ?? ''),
-          _infoRow('วันที่บนเช็ค', chkDate != null ? _dateFmt.format(chkDate) : ''),
-          _infoRow('ชื่อผู้รับ/จ่าย', row['payee_payer_name'] ?? ''),
-          _infoRow('จำนวนเงิน', '${_fmt.format((row['amount'] as num?)?.toDouble() ?? 0)} บาท'),
-          _infoRow('บัญชีธนาคารของเรา', '${row['our_account_code'] ?? ''} ${row['our_account_name'] ?? ''}'.trim()),
-          if (row['remark'] != null && (row['remark'] as String).isNotEmpty)
-            _infoRow('หมายเหตุ', row['remark'] as String),
+        const SizedBox(height: 20),
+        // Row 1: Direction / Check Date / Amount
+        Row(children: [
+          Expanded(child: _infoBlock(isEnglish ? 'Direction' : 'ทิศทาง',
+              (isEnglish ? _dirLabelsEng[row['direction']] : _dirLabels[row['direction']]) ?? row['direction'] ?? '')),
+          const SizedBox(width: 8),
+          Expanded(child: _infoBlock(isEnglish ? 'Check Date' : 'วันที่บนเช็ค',
+              chkDate != null ? _dateFmt.format(chkDate) : '')),
+          const SizedBox(width: 8),
+          Expanded(child: _infoBlock(isEnglish ? 'Amount' : 'จำนวนเงิน',
+              '${_fmt.format((row['amount'] as num?)?.toDouble() ?? 0)} THB')),
         ]),
+        const SizedBox(height: 12),
+        // Row 2: Payee/Payer Name (full width)
+        _infoBlock(isEnglish ? 'Payee/Payer Name' : 'ชื่อผู้รับ/จ่าย', row['payee_payer_name'] ?? ''),
+        const SizedBox(height: 12),
+        // Row 3: Our Bank Account (full width)
+        _infoBlock(isEnglish ? 'Our Bank Account' : 'บัญชีธนาคารของเรา',
+            '${row['our_account_code'] ?? ''} ${row['our_account_name'] ?? ''}'.trim()),
+        if (row['remark'] != null && (row['remark'] as String).isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _infoBlock(isEnglish ? 'Note' : 'หมายเหตุ', row['remark'] as String),
+        ],
         const SizedBox(height: 20),
         const Divider(),
         const SizedBox(height: 12),
@@ -586,19 +699,19 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
               style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
               onPressed: () => _action('present', row),
-              child: const Text('นำฝาก'),
+              child: Text(isEnglish ? 'Deposit' : 'นำฝาก'),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
               onPressed: () => _action('cancel', row),
-              child: const Text('ยกเลิก'),
+              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
             ),
             OutlinedButton(
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
               onPressed: () => _delete(row),
-              child: const Text('ลบ'),
+              child: Text(isEnglish ? 'Delete' : 'ลบ'),
             ),
           ],
           if (status == 'Deposited') ...[
@@ -606,13 +719,13 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
               onPressed: () => _action('clear', row),
-              child: const Text('เคลียร์'),
+              child: Text(isEnglish ? 'Clear' : 'เคลียร์'),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
               onPressed: () => _action('return', row),
-              child: const Text('คืน'),
+              child: Text(isEnglish ? 'Return' : 'คืน'),
             ),
           ],
         ]),
@@ -620,42 +733,24 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
     );
   }
 
-  Widget _field(String label, Widget child) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54)),
-      const SizedBox(height: 3),
-      child,
-    ],
+  Widget _infoBlock(String label, String value) => InputDecorator(
+    decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+    child: Text(value.isEmpty ? '—' : value),
   );
 
-  Widget _infoRow(String label, String value) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Text('$label: ', style: const TextStyle(fontSize: 12, color: Colors.black54)),
-      Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-    ],
-  );
-
-  Widget _datePicker(DateTime value, void Function(DateTime) onPick) =>
+  Widget _datePicker(String label, DateTime value, void Function(DateTime) onPick) =>
       InkWell(
         onTap: () async {
           final d = await showDatePicker(context: context, initialDate: value,
               firstDate: DateTime(2000), lastDate: DateTime(2100));
           if (d != null) onPick(d);
         },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: Colors.grey.shade400),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(_dateFmt.format(value), style: const TextStyle(fontSize: 13)),
-            const SizedBox(width: 8),
-            Icon(Icons.calendar_today, size: 14, color: Colors.grey.shade500),
-          ]),
+        child: InputDecorator(
+          decoration: InputDecoration(
+              labelText: label,
+              border: const OutlineInputBorder(),
+              suffixIcon: const Icon(Icons.calendar_today, size: 18)),
+          child: Text(_dateFmt.format(value)),
         ),
       );
 }

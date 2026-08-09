@@ -26,7 +26,10 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
   @override
   bool get wantKeepAlive => true;
 
+  bool _isEnglish = false;
   bool _leftExpanded = true;
+  double _leftWidth  = 240.0;
+  bool _isDragging   = false;
 
   List<CmBankAccount> _accounts    = [];
   CmBankAccount?      _selAccount;
@@ -127,9 +130,10 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
   Future<void> _save() async {
     if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     if (_selAccount == null) return;
+    final isEnglish = _isEnglish;
     final balance = double.tryParse(_balCtrl.text.replaceAll(',', ''));
     if (balance == null) {
-      _showError('ยอดเงินต้องเป็นตัวเลข');
+      _showError(isEnglish ? 'The balance must be a number' : 'ยอดเงินต้องเป็นตัวเลข');
       return;
     }
     setState(() => _saving = true);
@@ -148,7 +152,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
       if (!mounted) return;
       if (resp.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: const Text('บันทึกยอดยกมาแล้ว'), backgroundColor: Colors.green.shade700));
+            SnackBar(content: Text(isEnglish ? 'Opening balance saved' : 'บันทึกยอดยกมาแล้ว'), backgroundColor: Colors.green.shade700));
         await _loadAll();
         _fillFormFromOBs(_selAccount!.id!);
       } else {
@@ -164,13 +168,16 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
 
   Future<void> _delete() async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     if (_selAccount == null || _currentOB == null) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('ยืนยันลบยอดยกมา'),
-        content: Text('ลบยอดยกมาของ ${_selAccount!.accountCode} ใช่หรือไม่?'),
+        title: Text(isEnglish ? 'Confirm Delete Opening Balance' : 'ยืนยันลบยอดยกมา'),
+        content: Text(isEnglish
+            ? 'Delete the opening balance for ${_selAccount!.accountCode}?'
+            : 'ลบยอดยกมาของ ${_selAccount!.accountCode} ใช่หรือไม่?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(
@@ -189,7 +196,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
       if (!mounted) return;
       if (resp.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: const Text('ลบแล้ว'), backgroundColor: Colors.green.shade700));
+            SnackBar(content: Text(isEnglish ? 'Deleted' : 'ลบแล้ว'), backgroundColor: Colors.green.shade700));
         await _loadAll();
         _fillFormFromOBs(_selAccount!.id!);
       } else {
@@ -209,7 +216,8 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
@@ -218,40 +226,55 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            width: 36, color: _kTheme,
-            child: IconButton(
-              padding: EdgeInsets.zero, iconSize: 20, color: Colors.white,
-              icon: Icon(_leftExpanded ? Icons.chevron_left : Icons.chevron_right),
-              onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
+      body: LayoutBuilder(builder: (_, constraints) {
+        final maxLeft = (constraints.maxWidth - 36 - 5 - 320).clamp(100.0, double.infinity);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 36, color: _kTheme,
+              child: IconButton(
+                padding: EdgeInsets.zero, iconSize: 20, color: Colors.white,
+                icon: Icon(_leftExpanded ? Icons.chevron_left : Icons.chevron_right),
+                onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
+              ),
             ),
-          ),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: _leftExpanded ? 240 : 0,
-            child: ClipRect(child: OverflowBox(
-              alignment: Alignment.centerLeft, maxWidth: 240,
-              child: _buildLeftPanel(),
-            )),
-          ),
-          if (_leftExpanded) const VerticalDivider(width: 1, thickness: 1),
-          Expanded(child: _buildRightPanel()),
-        ],
-      ),
+            AnimatedContainer(
+              duration: _isDragging ? Duration.zero : const Duration(milliseconds: 200),
+              width: _leftExpanded ? _leftWidth : 0,
+              child: ClipRect(child: OverflowBox(
+                alignment: Alignment.centerLeft, maxWidth: _leftWidth, minWidth: _leftWidth,
+                child: _buildLeftPanel(),
+              )),
+            ),
+            if (_leftExpanded)
+              MouseRegion(
+                cursor: SystemMouseCursors.resizeColumn,
+                child: GestureDetector(
+                  onHorizontalDragStart: (_) => setState(() => _isDragging = true),
+                  onHorizontalDragUpdate: (d) => setState(() {
+                    _leftWidth = (_leftWidth + d.delta.dx).clamp(200.0, maxLeft);
+                  }),
+                  onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+                  child: Container(width: 5, color: Colors.grey[400]),
+                ),
+              ),
+            Expanded(child: _buildRightPanel()),
+          ],
+        );
+      }),
     );
   }
 
   Widget _buildLeftPanel() {
+    final isEnglish = _isEnglish;
     return Container(
       color: Colors.blueGrey.shade100,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Container(height: 36, color: Colors.blueGrey.shade200,
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: const Text('บัญชีธนาคาร', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+            child: Text(isEnglish ? 'Bank Accounts' : 'บัญชีธนาคาร', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
         Expanded(child: _loadingAccounts
             ? const Center(child: CircularProgressIndicator())
             : ListView.builder(
@@ -260,6 +283,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
                   final a = _accounts[i];
                   final sel = _selAccount?.id == a.id;
                   final hasOB = _allOBs.any((o) => o['bank_account_id'] == a.id);
+                  final name = isEnglish && (a.accountNameEn ?? '').isNotEmpty ? a.accountNameEn! : a.accountNameTh;
                   return InkWell(
                     onTap: () {
                       setState(() => _selAccount = a);
@@ -272,7 +296,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(a.accountCode, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
                               color: sel ? _kTheme : Colors.black87)),
-                          Text('${a.accountNameTh} (${a.bankShortName})',
+                          Text('$name (${a.bankShortName})',
                               style: const TextStyle(fontSize: 11, color: Colors.black54)),
                         ])),
                         if (hasOB)
@@ -287,6 +311,10 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
   }
 
   Widget _buildRightPanel() {
+    final isEnglish = _isEnglish;
+    final selName = _selAccount == null
+        ? ''
+        : (isEnglish && (_selAccount!.accountNameEn ?? '').isNotEmpty ? _selAccount!.accountNameEn! : _selAccount!.accountNameTh);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       // Form panel
       if (_selAccount != null)
@@ -295,20 +323,20 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
           color: Colors.grey.shade50,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Text('ยอดยกมา: ${_selAccount!.accountCode} ${_selAccount!.accountNameTh}',
+              Text('${isEnglish ? 'Opening Balance' : 'ยอดยกมา'}: ${_selAccount!.accountCode} $selName',
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
               const Spacer(),
               if (_currentOB != null)
                 TextButton.icon(
                   icon: Icon(Icons.delete_outline, size: 14, color: Colors.red.shade400),
-                  label: Text('ลบ', style: TextStyle(fontSize: 12, color: Colors.red.shade400)),
+                  label: Text(isEnglish ? 'Delete' : 'ลบ', style: TextStyle(fontSize: 12, color: Colors.red.shade400)),
                   onPressed: _delete,
                 ),
             ]),
             const SizedBox(height: 12),
             Wrap(spacing: 16, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.end, children: [
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('ยอดยกมา ณ วันที่:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(isEnglish ? 'Opening Balance as of:' : 'ยอดยกมา ณ วันที่:', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 InkWell(
                   onTap: () async {
@@ -331,7 +359,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
                 ),
               ]),
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('ยอดเงิน (${_selAccount!.currencyCode}):', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                Text('${isEnglish ? 'Amount' : 'ยอดเงิน'} (${_selAccount!.currencyCode}):', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 SizedBox(
                   width: 160,
@@ -348,7 +376,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
                 ),
               ]),
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('หมายเหตุ:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(isEnglish ? 'Note:' : 'หมายเหตุ:', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 SizedBox(
                   width: 220,
@@ -368,7 +396,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
                 icon: _saving
                     ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.save, size: 16),
-                label: const Text('บันทึก', style: TextStyle(fontSize: 12)),
+                label: Text(isEnglish ? 'Save' : 'บันทึก', style: const TextStyle(fontSize: 12)),
               ),
             ]),
           ]),
@@ -378,15 +406,15 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(children: [
-          const Text('รายการยอดยกมาทั้งหมด', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+          Text(isEnglish ? 'All Opening Balances' : 'รายการยอดยกมาทั้งหมด', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
           const Spacer(),
-          IconButton(icon: const Icon(Icons.refresh, size: 16), onPressed: _loadAll, tooltip: 'รีเฟรช'),
+          IconButton(icon: const Icon(Icons.refresh, size: 16), onPressed: _loadAll, tooltip: isEnglish ? 'Refresh' : 'รีเฟรช'),
         ]),
       ),
       Expanded(child: _loadingAll
           ? const Center(child: CircularProgressIndicator())
           : _allOBs.isEmpty
-              ? Center(child: Text('ยังไม่มียอดยกมา',
+              ? Center(child: Text(isEnglish ? 'No opening balances yet' : 'ยังไม่มียอดยกมา',
                   style: TextStyle(color: Colors.grey.shade400, fontSize: 13)))
               : SingleChildScrollView(
                   child: DataTable(
@@ -394,13 +422,13 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
                     columnSpacing: 20,
                     headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
                     headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                    columns: const [
-                      DataColumn(label: Text('รหัสบัญชี')),
-                      DataColumn(label: Text('ชื่อบัญชี')),
-                      DataColumn(label: Text('ธนาคาร')),
-                      DataColumn(label: Text('ยอดยกมา ณ วันที่')),
-                      DataColumn(label: Text('ยอดเงิน'), numeric: true),
-                      DataColumn(label: Text('หมายเหตุ')),
+                    columns: [
+                      DataColumn(label: Text(isEnglish ? 'Account Code' : 'รหัสบัญชี')),
+                      DataColumn(label: Text(isEnglish ? 'Account Name' : 'ชื่อบัญชี')),
+                      DataColumn(label: Text(isEnglish ? 'Bank' : 'ธนาคาร')),
+                      DataColumn(label: Text(isEnglish ? 'Opening Balance as of' : 'ยอดยกมา ณ วันที่')),
+                      DataColumn(label: Text(isEnglish ? 'Amount' : 'ยอดเงิน'), numeric: true),
+                      DataColumn(label: Text(isEnglish ? 'Note' : 'หมายเหตุ')),
                     ],
                     rows: _allOBs.map((o) {
                       final bal = double.tryParse(o['opening_balance']?.toString() ?? '0') ?? 0;

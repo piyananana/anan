@@ -1,5 +1,7 @@
 ﻿// lib/cm/screens/cm_reset_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../services/cm_reset_service.dart';
 
@@ -19,6 +21,7 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
   final _confirmCtrl = TextEditingController();
   bool _resetting    = false;
   bool _done         = false;
+  bool _isEnglish    = false;
   List<Map<String, dynamic>> _result = [];
 
   static const _tablesToDelete = [
@@ -41,9 +44,11 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
 
   Future<void> _reset() async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
+    final isEnglish = _isEnglish;
     if (_confirmCtrl.text != 'RESET CM') {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: const Text('พิมพ์ "RESET CM" เพื่อยืนยัน'), backgroundColor: Colors.red.shade700));
+          SnackBar(content: Text(isEnglish ? 'Type "RESET CM" to confirm' : 'พิมพ์ "RESET CM" เพื่อยืนยัน'),
+              backgroundColor: Colors.red.shade700));
       return;
     }
     final ok = await showDialog<bool>(
@@ -53,19 +58,23 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
         title: Row(children: [
           Icon(Icons.warning_amber_rounded, color: Colors.red.shade700),
           const SizedBox(width: 8),
-          const Text('ยืนยัน Reset CM'),
+          Text(isEnglish ? 'Confirm CM Reset' : 'ยืนยัน Reset CM'),
         ]),
-        content: const Text(
-            'การดำเนินการนี้จะ**ลบข้อมูลธุรกรรม CM ทั้งหมด**อย่างถาวร\n\n'
-            'รวมถึง: ใบรับเงิน, ใบจ่ายเงิน, เงินสดย่อย, Bank Statement, '
-            'FX Revaluation และ Inter-bank Transfer\n\n'
-            'ข้อมูลที่ลบแล้ว**ไม่สามารถกู้คืนได้** — ดำเนินการต่อใช่หรือไม่?'),
+        content: Text(isEnglish
+            ? 'This action will permanently delete ALL CM transaction data.\n\n'
+              'Including: receipts, payments, petty cash, bank statements, '
+              'FX revaluation and inter-bank transfers\n\n'
+              'Deleted data CANNOT be recovered — continue?'
+            : 'การดำเนินการนี้จะ**ลบข้อมูลธุรกรรม CM ทั้งหมด**อย่างถาวร\n\n'
+              'รวมถึง: ใบรับเงิน, ใบจ่ายเงิน, เงินสดย่อย, Bank Statement, '
+              'FX Revaluation และ Inter-bank Transfer\n\n'
+              'ข้อมูลที่ลบแล้ว**ไม่สามารถกู้คืนได้** — ดำเนินการต่อใช่หรือไม่?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('ยืนยัน Reset'),
+            child: Text(isEnglish ? 'Confirm Reset' : 'ยืนยัน Reset'),
           ),
         ],
       ),
@@ -83,7 +92,7 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
         _confirmCtrl.clear();
       });
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Reset CM เสร็จสิ้น'), backgroundColor: Colors.green));
+          SnackBar(content: Text(isEnglish ? 'CM Reset complete' : 'Reset CM เสร็จสิ้น'), backgroundColor: Colors.green));
     } catch (e) {
       if (!mounted) return;
       setState(() => _resetting = false);
@@ -95,6 +104,8 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
@@ -122,11 +133,12 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
                   Row(children: [
                     Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 22),
                     const SizedBox(width: 8),
-                    Text('คำเตือน: การดำเนินการนี้ไม่สามารถยกเลิกได้',
+                    Text(isEnglish ? 'Warning: this action cannot be undone' : 'คำเตือน: การดำเนินการนี้ไม่สามารถยกเลิกได้',
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
                   ]),
                   const SizedBox(height: 12),
-                  const Text('รายการที่จะถูกลบทั้งหมด:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  Text(isEnglish ? 'Items that will be deleted:' : 'รายการที่จะถูกลบทั้งหมด:',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   ..._tablesToDelete.map((t) => Padding(
                     padding: const EdgeInsets.only(left: 12, bottom: 2),
@@ -137,16 +149,18 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
                     ]),
                   )),
                   const SizedBox(height: 12),
-                  const Text('ข้อมูล Master (บัญชีธนาคาร, วิธีการชำระเงิน, สมุดเช็ค ฯลฯ) จะ**ไม่ถูกลบ**',
-                      style: TextStyle(fontSize: 13, color: Colors.green)),
+                  Text(isEnglish
+                      ? 'Master data (bank accounts, payment methods, checkbooks, etc.) will NOT be deleted'
+                      : 'ข้อมูล Master (บัญชีธนาคาร, วิธีการชำระเงิน, สมุดเช็ค ฯลฯ) จะ**ไม่ถูกลบ**',
+                      style: const TextStyle(fontSize: 13, color: Colors.green)),
                 ],
               ),
             ),
             const SizedBox(height: 24),
 
             // Confirmation input
-            const Text('พิมพ์ "RESET CM" เพื่อยืนยัน:',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            Text(isEnglish ? 'Type "RESET CM" to confirm:' : 'พิมพ์ "RESET CM" เพื่อยืนยัน:',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             SizedBox(
               width: 240,
@@ -175,7 +189,7 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
               icon: _resetting
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.delete_forever, size: 18),
-              label: const Text('Reset ข้อมูล CM ทั้งหมด', style: TextStyle(fontSize: 13)),
+              label: Text(isEnglish ? 'Reset All CM Data' : 'Reset ข้อมูล CM ทั้งหมด', style: const TextStyle(fontSize: 13)),
             ),
 
             // Result
@@ -183,7 +197,7 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
               const SizedBox(height: 24),
               const Divider(),
               const SizedBox(height: 12),
-              const Text('ผลการ Reset:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              Text(isEnglish ? 'Reset Result:' : 'ผลการ Reset:', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               ..._result.map((r) => Padding(
                 padding: const EdgeInsets.only(bottom: 4),
@@ -192,7 +206,7 @@ class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
                   const SizedBox(width: 8),
                   Text('${r['table']}', style: const TextStyle(fontSize: 13, fontFamily: 'monospace')),
                   const SizedBox(width: 8),
-                  Text('ลบ ${r['deleted']} แถว',
+                  Text(isEnglish ? 'Deleted ${r['deleted']} rows' : 'ลบ ${r['deleted']} แถว',
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 ]),
               )),

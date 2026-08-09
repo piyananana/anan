@@ -13,32 +13,34 @@ import '../services/cm_bank_file_format_service.dart';
 class _FieldDef {
   final String code;
   final String label;
+  final String labelEng;
   final String type; // 'text' | 'date' | 'decimal' | 'integer' | 'constant'
-  const _FieldDef(this.code, this.label, this.type);
+  const _FieldDef(this.code, this.label, this.labelEng, this.type);
+  String labelFor(bool isEnglish) => isEnglish ? labelEng : label;
 }
 
 const _availableFields = [
-  _FieldDef('payment_date',     'วันที่ชำระ',                    'date'),
-  _FieldDef('amount',           'จำนวนเงิน',                      'decimal'),
-  _FieldDef('currency',         'สกุลเงิน',                       'text'),
-  _FieldDef('vendor_code',      'รหัสเจ้าหนี้',                   'text'),
-  _FieldDef('vendor_name',      'ชื่อเจ้าหนี้',                   'text'),
-  _FieldDef('vendor_tax_id',    'เลขประจำตัวผู้เสียภาษี',         'text'),
-  _FieldDef('bank_code',        'รหัสธนาคาร',                     'text'),
-  _FieldDef('bank_branch_code', 'รหัสสาขาธนาคาร',                'text'),
-  _FieldDef('account_number',   'เลขที่บัญชี',                    'text'),
-  _FieldDef('account_name',     'ชื่อบัญชี',                      'text'),
-  _FieldDef('reference',        'อ้างอิง',                        'text'),
-  _FieldDef('doc_number',       'เลขที่เอกสาร',                   'text'),
-  _FieldDef('sequence',         'ลำดับที่',                        'integer'),
-  _FieldDef('company_code',     'รหัสบริษัท',                     'text'),
-  _FieldDef('branch_code',      'รหัสสาขา',                       'text'),
-  _FieldDef('constant',         'ค่าคงที่',                        'constant'),
+  _FieldDef('payment_date',     'วันที่ชำระ',                    'Payment Date',        'date'),
+  _FieldDef('amount',           'จำนวนเงิน',                      'Amount',              'decimal'),
+  _FieldDef('currency',         'สกุลเงิน',                       'Currency',            'text'),
+  _FieldDef('vendor_code',      'รหัสเจ้าหนี้',                   'Vendor Code',         'text'),
+  _FieldDef('vendor_name',      'ชื่อเจ้าหนี้',                   'Vendor Name',         'text'),
+  _FieldDef('vendor_tax_id',    'เลขประจำตัวผู้เสียภาษี',         'Vendor Tax ID',       'text'),
+  _FieldDef('bank_code',        'รหัสธนาคาร',                     'Bank Code',           'text'),
+  _FieldDef('bank_branch_code', 'รหัสสาขาธนาคาร',                'Bank Branch Code',    'text'),
+  _FieldDef('account_number',   'เลขที่บัญชี',                    'Account Number',      'text'),
+  _FieldDef('account_name',     'ชื่อบัญชี',                      'Account Name',        'text'),
+  _FieldDef('reference',        'อ้างอิง',                        'Reference',           'text'),
+  _FieldDef('doc_number',       'เลขที่เอกสาร',                   'Document No.',        'text'),
+  _FieldDef('sequence',         'ลำดับที่',                        'Sequence',            'integer'),
+  _FieldDef('company_code',     'รหัสบริษัท',                     'Company Code',        'text'),
+  _FieldDef('branch_code',      'รหัสสาขา',                       'Branch Code',         'text'),
+  _FieldDef('constant',         'ค่าคงที่',                        'Constant',            'constant'),
 ];
 
 _FieldDef _fieldDefOf(String code) =>
     _availableFields.firstWhere((f) => f.code == code,
-        orElse: () => _FieldDef(code, code, 'text'));
+        orElse: () => _FieldDef(code, code, code, 'text'));
 
 Color _fieldColor(String type) {
   switch (type) {
@@ -70,6 +72,7 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
   bool _isAdding = false;
   bool _isLeftExpanded = true;
   double _leftWidth = 300;
+  bool _isEnglish = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -102,12 +105,13 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
 
   Future<void> _onDelete(CmBankFileFormat row) async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text('ลบรูปแบบไฟล์ "${row.formatName}"?'),
+        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(isEnglish ? 'Delete file format "${row.formatName}"?' : 'ลบรูปแบบไฟล์ "${row.formatName}"?'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
           TextButton(
@@ -122,8 +126,8 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
       if (mounted) {
         setState(() { _selected = null; _isAdding = false; });
         _load();
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
       }
     } catch (e) {
       if (mounted) {
@@ -136,6 +140,7 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
   Future<void> _onSave(CmBankFileFormat row) async {
     final perm = MenuScope.of(context);
     if (!(row.id == null ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
+    final isEnglish = _isEnglish;
     try {
       final saved = row.id == null
           ? await _svc.addRow(row)
@@ -143,8 +148,8 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
       if (mounted) {
         setState(() { _selected = saved; _isAdding = false; });
         _load();
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
       }
     } catch (e) {
       if (mounted) {
@@ -159,15 +164,16 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
-        backgroundColor: Colors.teal[700],
+        backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-              icon: const Icon(Icons.refresh), tooltip: 'รีเฟรช', onPressed: _load),
+              icon: const Icon(Icons.refresh), tooltip: isEnglish ? 'Refresh' : 'รีเฟรช', onPressed: _load),
         ],
       ),
       body: LayoutBuilder(builder: (ctx, constraints) {
@@ -179,7 +185,7 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
             onTap: () => setState(() => _isLeftExpanded = !_isLeftExpanded),
             child: Container(
               width: 36,
-              color: Colors.teal[700],
+              color: Colors.blue[700],
               child: Center(
                 child: Icon(
                   _isLeftExpanded ? Icons.chevron_left : Icons.chevron_right,
@@ -198,14 +204,14 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   child: Row(children: [
                     Expanded(
-                      child: Text('รูปแบบไฟล์ (${_rows.length})',
+                      child: Text(isEnglish ? 'File Formats (${_rows.length})' : 'รูปแบบไฟล์ (${_rows.length})',
                           style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: Colors.teal[800])),
                     ),
                     IconButton(
                       icon: Icon(Icons.add_circle, color: Colors.teal[700]),
-                      tooltip: 'เพิ่มรูปแบบใหม่',
+                      tooltip: isEnglish ? 'Add New Format' : 'เพิ่มรูปแบบใหม่',
                       onPressed: (MenuScope.of(context)?.canCreate ?? true) ? _onAdd : null,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -216,9 +222,9 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
                       : _rows.isEmpty
-                          ? const Center(
-                              child: Text('ยังไม่มีรูปแบบไฟล์',
-                                  style: TextStyle(color: Colors.grey)))
+                          ? Center(
+                              child: Text(isEnglish ? 'No file formats yet' : 'ยังไม่มีรูปแบบไฟล์',
+                                  style: const TextStyle(color: Colors.grey)))
                           : ListView.builder(
                               itemCount: _rows.length,
                               itemBuilder: (_, i) {
@@ -268,7 +274,7 @@ class _CmBankFileFormatScreenState extends State<CmBankFileFormatScreen>
                   )
                 : Center(
                     child: Text(
-                      'เลือกรูปแบบหรือกด + เพื่อเพิ่มใหม่',
+                      isEnglish ? 'Select a format or press + to add a new one' : 'เลือกรูปแบบหรือกด + เพื่อเพิ่มใหม่',
                       style: TextStyle(color: Colors.grey[500]),
                     ),
                   ),
@@ -402,6 +408,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final bool isNew = widget.initial?.id == null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -414,8 +421,8 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
             Expanded(
               child: Text(
                 isNew
-                    ? 'เพิ่มรูปแบบไฟล์ใหม่'
-                    : 'แก้ไข: ${widget.initial?.formatCode}',
+                    ? (isEnglish ? 'Add New File Format' : 'เพิ่มรูปแบบไฟล์ใหม่')
+                    : '${isEnglish ? 'Edit' : 'แก้ไข'}: ${widget.initial?.formatCode}',
                 style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -433,7 +440,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                           strokeWidth: 2, color: Colors.teal))
                   : const Icon(Icons.save, size: 16),
               label: Text(
-                  _isSaving ? 'กำลังบันทึก...' : isNew ? 'เพิ่ม' : 'บันทึก',
+                  _isSaving ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...') : isNew ? (isEnglish ? 'Add' : 'เพิ่ม') : (isEnglish ? 'Save' : 'บันทึก'),
                   style: const TextStyle(fontSize: 13)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
@@ -447,7 +454,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
             ElevatedButton.icon(
               onPressed: widget.onCancel,
               icon: const Icon(Icons.cancel, size: 16),
-              label: const Text('ยกเลิก', style: TextStyle(fontSize: 13)),
+              label: Text(isEnglish ? 'Cancel' : 'ยกเลิก', style: const TextStyle(fontSize: 13)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white54,
                 foregroundColor: Colors.teal[900],
@@ -475,9 +482,9 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                         flex: 2,
                         child: TextFormField(
                           controller: _codeCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'รหัสรูปแบบ *',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Format Code *' : 'รหัสรูปแบบ *',
+                            border: const OutlineInputBorder(),
                             isDense: true,
                           ),
                           inputFormatters: [
@@ -485,7 +492,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                                 RegExp(r'[A-Za-z0-9_\-]'))
                           ],
                           validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'กรุณาป้อนรหัส' : null,
+                              (v == null || v.trim().isEmpty) ? (isEnglish ? 'Please enter a code' : 'กรุณาป้อนรหัส') : null,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -493,13 +500,13 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                         flex: 4,
                         child: TextFormField(
                           controller: _nameCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'ชื่อรูปแบบ *',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Format Name *' : 'ชื่อรูปแบบ *',
+                            border: const OutlineInputBorder(),
                             isDense: true,
                           ),
                           validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'กรุณาป้อนชื่อ' : null,
+                              (v == null || v.trim().isEmpty) ? (isEnglish ? 'Please enter a name' : 'กรุณาป้อนชื่อ') : null,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -507,9 +514,9 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                         flex: 2,
                         child: TextFormField(
                           controller: _bankCodeCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'รหัสธนาคาร',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Bank Code' : 'รหัสธนาคาร',
+                            border: const OutlineInputBorder(),
                             isDense: true,
                           ),
                         ),
@@ -521,10 +528,10 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                         flex: 2,
                         child: TextFormField(
                           controller: _extCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'นามสกุลไฟล์',
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'File Extension' : 'นามสกุลไฟล์',
                             hintText: 'txt',
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
                             isDense: true,
                           ),
                         ),
@@ -534,10 +541,10 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                         flex: 3,
                         child: TextFormField(
                           controller: _delimiterCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'ตัวคั่น (เว้นว่าง = Fixed-Width)',
-                            hintText: ', หรือ | หรือ \\t',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Delimiter (blank = Fixed-Width)' : 'ตัวคั่น (เว้นว่าง = Fixed-Width)',
+                            hintText: isEnglish ? ', or | or \\t' : ', หรือ | หรือ \\t',
+                            border: const OutlineInputBorder(),
                             isDense: true,
                           ),
                         ),
@@ -557,7 +564,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                       const SizedBox(width: 8),
                       Flexible(
                         flex: 2,
-                        child: _miniSwitch('ใช้งาน', _isActive,
+                        child: _miniSwitch(isEnglish ? 'Active' : 'ใช้งาน', _isActive,
                             (v) => setState(() => _isActive = v)),
                       ),
                     ]),
@@ -585,8 +592,8 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                               color: Colors.grey.shade200,
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 6),
-                              child: const Text('ฟีลด์ที่มีอยู่',
-                                  style: TextStyle(
+                              child: Text(isEnglish ? 'Available Fields' : 'ฟีลด์ที่มีอยู่',
+                                  style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 12)),
                             ),
@@ -600,7 +607,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                                     return ActionChip(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 4, vertical: 0),
-                                      label: Text(f.label,
+                                      label: Text(f.labelFor(isEnglish),
                                           style: const TextStyle(
                                               fontSize: 11,
                                               color: Colors.white)),
@@ -634,21 +641,21 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                                 const SizedBox(width: 6),
                                 SizedBox(
                                     width: 100,
-                                    child: Text('ฟีลด์', style: _headerStyle())),
+                                    child: Text(isEnglish ? 'Field' : 'ฟีลด์', style: _headerStyle())),
                                 const SizedBox(width: 6),
                                 Expanded(
-                                    child: Text('ชื่อคอลัมน์',
+                                    child: Text(isEnglish ? 'Column Name' : 'ชื่อคอลัมน์',
                                         style: _headerStyle())),
                                 const SizedBox(width: 6),
                                 SizedBox(
                                     width: 60,
-                                    child: Text('ความยาว',
+                                    child: Text(isEnglish ? 'Length' : 'ความยาว',
                                         style: _headerStyle())),
                                 const SizedBox(width: 6),
                                 SizedBox(
                                     width: 60,
                                     child:
-                                        Text('จัดชิด', style: _headerStyle())),
+                                        Text(isEnglish ? 'Align' : 'จัดชิด', style: _headerStyle())),
                                 SizedBox(
                                     width: 60,
                                     child: Text('', style: _headerStyle())),
@@ -662,7 +669,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                               child: _cols.isEmpty
                                   ? Center(
                                       child: Text(
-                                        'คลิกฟีลด์ทางซ้ายเพื่อเพิ่มคอลัมน์',
+                                        isEnglish ? 'Click a field on the left to add a column' : 'คลิกฟีลด์ทางซ้ายเพื่อเพิ่มคอลัมน์',
                                         style: TextStyle(
                                             color: Colors.grey[400],
                                             fontSize: 13),
@@ -679,7 +686,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                                         });
                                       },
                                       itemBuilder: (ctx, i) =>
-                                          _buildColRow(_cols[i], i),
+                                          _buildColRow(_cols[i], i, isEnglish),
                                     ),
                             ),
                           ],
@@ -721,7 +728,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
     );
   }
 
-  Widget _buildColRow(_ColRow col, int i) {
+  Widget _buildColRow(_ColRow col, int i, bool isEnglish) {
     final def = _fieldDefOf(col.fieldCode);
     final chipColor = _fieldColor(def.type);
     return Container(
@@ -750,7 +757,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
               border: Border.all(color: chipColor.withOpacity(0.4)),
             ),
             child: Text(
-              def.label,
+              def.labelFor(isEnglish),
               style: TextStyle(
                   fontSize: 11,
                   color: chipColor,
@@ -807,7 +814,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
               constraints:
                   const BoxConstraints(minWidth: 28, minHeight: 32),
               textStyle: const TextStyle(fontSize: 11),
-              children: const [Text('ซ้าย'), Text('ขวา')],
+              children: [Text(isEnglish ? 'Left' : 'ซ้าย'), Text(isEnglish ? 'Right' : 'ขวา')],
             ),
           ),
           // Settings icon
@@ -815,7 +822,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
             width: 60,
             child: IconButton(
               icon: const Icon(Icons.tune, size: 18, color: Colors.blueGrey),
-              tooltip: 'ตั้งค่าเพิ่มเติม',
+              tooltip: isEnglish ? 'More Settings' : 'ตั้งค่าเพิ่มเติม',
               onPressed: () => _openColSettings(col),
               padding: EdgeInsets.zero,
               constraints:
@@ -880,11 +887,12 @@ class _ColSettingsDialogState extends State<_ColSettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final col = widget.col;
     final def = widget.fieldDef;
     return AlertDialog(
-      title: Text('ตั้งค่า: ${def.label}'),
+      title: Text('${isEnglish ? 'Settings' : 'ตั้งค่า'}: ${def.labelFor(isEnglish)}'),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -893,10 +901,10 @@ class _ColSettingsDialogState extends State<_ColSettingsDialog> {
             TextField(
               controller: _padCtrl,
               maxLength: 1,
-              decoration: const InputDecoration(
-                labelText: 'อักษรเติม (Pad)',
-                hintText: 'เว้นว่าง = space, 0 = ศูนย์',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Pad Character' : 'อักษรเติม (Pad)',
+                hintText: isEnglish ? 'blank = space, 0 = zero' : 'เว้นว่าง = space, 0 = ศูนย์',
+                border: const OutlineInputBorder(),
                 counterText: '',
               ),
               onChanged: (v) => col.padChar = v,
@@ -905,8 +913,8 @@ class _ColSettingsDialogState extends State<_ColSettingsDialog> {
             if (def.type == 'date') ...[
               DropdownButtonFormField<String>(
                 value: col.dateFormat,
-                decoration: const InputDecoration(
-                    labelText: 'รูปแบบวันที่', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Date Format' : 'รูปแบบวันที่', border: const OutlineInputBorder()),
                 items: [
                   'YYYYMMDD',
                   'DDMMYYYY',
@@ -924,11 +932,11 @@ class _ColSettingsDialogState extends State<_ColSettingsDialog> {
             if (def.type == 'decimal') ...[
               DropdownButtonFormField<int>(
                 value: col.decimalPlaces,
-                decoration: const InputDecoration(
-                    labelText: 'ทศนิยม', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Decimal Places' : 'ทศนิยม', border: const OutlineInputBorder()),
                 items: [0, 1, 2, 3, 4]
                     .map((d) =>
-                        DropdownMenuItem(value: d, child: Text('$d ตำแหน่ง')))
+                        DropdownMenuItem(value: d, child: Text(isEnglish ? '$d places' : '$d ตำแหน่ง')))
                     .toList(),
                 onChanged: (v) {
                   if (v != null) setState(() => col.decimalPlaces = v);
@@ -939,8 +947,8 @@ class _ColSettingsDialogState extends State<_ColSettingsDialog> {
             if (def.type == 'constant') ...[
               TextField(
                 controller: _constCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'ค่าคงที่', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Constant Value' : 'ค่าคงที่', border: const OutlineInputBorder()),
                 onChanged: (v) => col.constantValue = v,
               ),
               const SizedBox(height: 12),

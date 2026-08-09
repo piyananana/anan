@@ -69,6 +69,15 @@ const Map<String, String> cmStmtStatusOptions = {
   'Voided':    'ยกเลิก',
 };
 
+const Map<String, String> cmStmtStatusOptionsEng = {
+  'Draft':     'Draft',
+  'Confirmed': 'Confirmed',
+  'Voided':    'Voided',
+};
+
+String cmStmtStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? cmStmtStatusOptionsEng[s] : cmStmtStatusOptions[s]) ?? s;
+
 // ---------------------------------------------------------------------------
 
 class CmBankStatementLine {

@@ -107,8 +107,25 @@ const Map<String, String> cmCmTypeOptions = {
   'PETTY_CASH': 'เงินสดย่อย (Petty Cash)',
 };
 
+const Map<String, String> cmCmTypeOptionsEng = {
+  'BANK':       'Bank Account',
+  'PETTY_CASH': 'Petty Cash',
+};
+
+String cmCmTypeLabel(String t, bool isEnglish) =>
+    (isEnglish ? cmCmTypeOptionsEng[t] : cmCmTypeOptions[t]) ?? t;
+
 const Map<String, String> cmAccountTypeOptions = {
   'SAVING':  'ออมทรัพย์ (Saving)',
   'CURRENT': 'กระแสรายวัน (Current)',
   'FIXED':   'ฝากประจำ (Fixed)',
 };
+
+const Map<String, String> cmAccountTypeOptionsEng = {
+  'SAVING':  'Saving',
+  'CURRENT': 'Current',
+  'FIXED':   'Fixed',
+};
+
+String cmAccountTypeLabel(String t, bool isEnglish) =>
+    (isEnglish ? cmAccountTypeOptionsEng[t] : cmAccountTypeOptions[t]) ?? t;

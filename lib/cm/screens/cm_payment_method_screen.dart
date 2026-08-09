@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_payment_method.dart';
 import '../services/cm_payment_method_service.dart';
@@ -52,20 +53,23 @@ class _CmPaymentMethodScreenState extends State<CmPaymentMethodScreen>
       });
 
   Future<void> _onDelete(CmPaymentMethod row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final service = Provider.of<CmPaymentMethodService>(context, listen: false);
+    final name = isEnglish && (row.methodNameEn ?? '').isNotEmpty ? row.methodNameEn! : row.methodNameTh;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content:
-            Text('ลบประเภทการชำระ "${row.methodCode} — ${row.methodNameTh}" ?'),
+        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(isEnglish
+            ? 'Delete payment method "${row.methodCode} — $name"?'
+            : 'ลบประเภทการชำระ "${row.methodCode} — $name" ?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('ยกเลิก')),
+              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('ลบ', style: TextStyle(color: Colors.red))),
+              child: Text(isEnglish ? 'Delete' : 'ลบ', style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -75,18 +79,19 @@ class _CmPaymentMethodScreenState extends State<CmPaymentMethodScreen>
       _listKey.currentState?.refresh();
       _onCancel();
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('ลบล้มเหลว: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text('${isEnglish ? 'Delete failed' : 'ลบล้มเหลว'}: $e'), backgroundColor: Colors.red));
       }
     }
   }
 
   Future<void> _onSubmit(CmPaymentMethod row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final service = Provider.of<CmPaymentMethodService>(context, listen: false);
     if (_mode == Mode.add) {
       final created = await service.addRow(row);
@@ -96,16 +101,16 @@ class _CmPaymentMethodScreenState extends State<CmPaymentMethodScreen>
         _selectedData = created;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
       }
     } else {
       await service.updateRow(row);
       _listKey.currentState?.refresh();
       setState(() => _selectedData = row);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
       }
     }
     widget.onFieldsChanged();
@@ -124,6 +129,7 @@ class _CmPaymentMethodScreenState extends State<CmPaymentMethodScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final perm = MenuScope.of(context);
     final canCreate = perm?.canCreate ?? true;
     final canEdit = perm?.canEdit ?? true;
@@ -131,12 +137,12 @@ class _CmPaymentMethodScreenState extends State<CmPaymentMethodScreen>
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
-        backgroundColor: Colors.deepPurple[700],
+        backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh List' : 'รีเฟรชรายการ',
             onPressed: () {
               _listKey.currentState?.refresh();
               _onCancel();
@@ -153,7 +159,7 @@ class _CmPaymentMethodScreenState extends State<CmPaymentMethodScreen>
             children: [
               Container(
                 width: 36,
-                color: Colors.deepPurple[700],
+                color: Colors.blue[700],
                 child: IconButton(
                   icon: Icon(
                     _isLeftPanelExpanded
@@ -165,7 +171,9 @@ class _CmPaymentMethodScreenState extends State<CmPaymentMethodScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () => setState(
                       () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (isEnglish ? 'Collapse List' : 'ย่อรายการ')
+                      : (isEnglish ? 'Expand List' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(

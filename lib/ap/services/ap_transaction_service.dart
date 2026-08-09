@@ -260,6 +260,75 @@ class ApTransactionService {
     }
   }
 
+  // ส่งอนุมัติ — รองรับเฉพาะ RA(70) หรือ Payment(80) ที่ไม่มีเลขที่อ้างอิง (ยังไม่ได้ผ่านการอนุมัติมาจาก RA/Payment Run)
+  // ถ้าเมนูนี้ไม่มีผู้มีสิทธิ์อนุมัติสำหรับประเภทเอกสารนี้ backend จะข้ามขั้นตอนอนุมัติให้อัตโนมัติ (ผ่านตรงไป Approved)
+  Future<void> submitTransaction(int id, {required int menuId}) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/ap_transaction/$id/submit'),
+      headers: headers,
+      body: jsonEncode({'menu_id': menuId}),
+    );
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else if (response.statusCode != 200) {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'ส่งอนุมัติล้มเหลว');
+    }
+  }
+
+  Future<void> approveTransaction(int id, {String? remarks}) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/ap_transaction/$id/approve'),
+      headers: headers,
+      body: jsonEncode({'remarks': remarks}),
+    );
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else if (response.statusCode != 200) {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'อนุมัติล้มเหลว');
+    }
+  }
+
+  // ปฏิเสธ — เอกสารจะย้อนกลับไปเป็น Draft ให้ผู้ส่งแก้ไขหรือลบทิ้งเองได้
+  Future<void> rejectTransaction(int id, {String? remarks}) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/ap_transaction/$id/reject'),
+      headers: headers,
+      body: jsonEncode({'remarks': remarks}),
+    );
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else if (response.statusCode != 200) {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'ปฏิเสธล้มเหลว');
+    }
+  }
+
+  // Post เอกสาร Draft/Approved ที่บันทึกไว้แล้ว (มี id) — ใช้หลังผ่านอนุมัติ หรือเปิด Draft เดิมมา Post
+  Future<ApTransaction> postTransaction(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/ap_transaction/$id/post'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      return ApTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'Post ล้มเหลว');
+    }
+  }
+
   Future<ApGlAccountSetup?> fetchSetupByDocCode(String docCode) async {
     final headers = await authService.getAuthHeader();
     final res = await http.get(

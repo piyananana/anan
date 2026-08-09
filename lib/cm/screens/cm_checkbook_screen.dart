@@ -21,6 +21,8 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
 
   static const _kColor = Color(0xFF1565C0); // indigo[800]
 
+  bool _isEnglish = false;
+
   final CmBankAccountService _acctSvc = CmBankAccountService();
   final CmCheckbookService   _svc     = CmCheckbookService();
   final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -113,13 +115,14 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
   Future<void> _saveCb(CmCheckbook cb) async {
     final perm = MenuScope.of(context);
     if (!(cb.id == null ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
+    final isEnglish = _isEnglish;
     try {
       if (cb.id == null) {
         await _svc.addCheckbook(cb);
-        _showOk('เพิ่มสมุดเช็คสำเร็จ');
+        _showOk(isEnglish ? 'Checkbook added successfully' : 'เพิ่มสมุดเช็คสำเร็จ');
       } else {
         await _svc.updateCheckbook(cb);
-        _showOk('บันทึกสำเร็จ');
+        _showOk(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ');
       }
       setState(() => _editingCb = null);
       await _loadCheckbooks();
@@ -128,11 +131,12 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
 
   Future<void> _deleteCb(CmCheckbook cb) async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final ok = await _confirm('ลบสมุดเช็ค "${cb.checkbookCode}" ?');
+    final isEnglish = _isEnglish;
+    final ok = await _confirm(isEnglish ? 'Delete checkbook "${cb.checkbookCode}"?' : 'ลบสมุดเช็ค "${cb.checkbookCode}" ?');
     if (!ok) return;
     try {
       await _svc.deleteCheckbook(cb.id!);
-      _showOk('ลบสำเร็จ');
+      _showOk(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ');
       await _loadCheckbooks();
     } catch (e) { _showErr(e.toString()); }
   }
@@ -142,13 +146,14 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
   Future<void> _saveCfg(CmCheckPrintConfig cfg) async {
     final perm = MenuScope.of(context);
     if (!(cfg.id == null ? (perm?.canCreate ?? true) : (perm?.canEdit ?? true))) return;
+    final isEnglish = _isEnglish;
     try {
       if (cfg.id == null) {
         await _svc.addPrintConfig(cfg);
-        _showOk('เพิ่มรูปแบบพิมพ์สำเร็จ');
+        _showOk(isEnglish ? 'Print format added successfully' : 'เพิ่มรูปแบบพิมพ์สำเร็จ');
       } else {
         await _svc.updatePrintConfig(cfg);
-        _showOk('บันทึกสำเร็จ');
+        _showOk(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ');
       }
       setState(() => _editingCfg = null);
       await _loadPrintConfigs();
@@ -157,21 +162,23 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
 
   Future<void> _deleteCfg(CmCheckPrintConfig cfg) async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final ok = await _confirm('ลบรูปแบบพิมพ์ "${cfg.configName}" ?');
+    final isEnglish = _isEnglish;
+    final ok = await _confirm(isEnglish ? 'Delete print format "${cfg.configName}"?' : 'ลบรูปแบบพิมพ์ "${cfg.configName}" ?');
     if (!ok) return;
     try {
       await _svc.deletePrintConfig(cfg.id!);
-      _showOk('ลบสำเร็จ');
+      _showOk(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ');
       await _loadPrintConfigs();
     } catch (e) { _showErr(e.toString()); }
   }
 
   Future<bool> _confirm(String msg) async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยัน'),
+        title: Text(isEnglish ? 'Confirm' : 'ยืนยัน'),
         content: Text(msg),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
@@ -187,7 +194,8 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -198,9 +206,9 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
-          tabs: const [
-            Tab(icon: Icon(Icons.book, size: 18), text: 'สมุดเช็ค'),
-            Tab(icon: Icon(Icons.print, size: 18), text: 'ตำแหน่งพิมพ์'),
+          tabs: [
+            Tab(icon: const Icon(Icons.book, size: 18), text: isEnglish ? 'Checkbooks' : 'สมุดเช็ค'),
+            Tab(icon: const Icon(Icons.print, size: 18), text: isEnglish ? 'Print Positions' : 'ตำแหน่งพิมพ์'),
           ],
         ),
       ),
@@ -215,7 +223,7 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
                   color: Colors.white, size: 20),
               padding: EdgeInsets.zero,
               onPressed: () => setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-              tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+              tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse List' : 'ย่อรายการ') : (isEnglish ? 'Expand List' : 'ขยายรายการ'),
             ),
           ),
           // Left panel — bank account list
@@ -248,8 +256,8 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
           // Right panel — tabs
           Expanded(
             child: _selectedBank == null
-                ? const Center(child: Text('เลือกบัญชีธนาคารที่รองรับเช็คทางซ้าย',
-                    style: TextStyle(color: Colors.grey)))
+                ? Center(child: Text(isEnglish ? 'Select a check-enabled bank account on the left' : 'เลือกบัญชีธนาคารที่รองรับเช็คทางซ้าย',
+                    style: const TextStyle(color: Colors.grey)))
                 : TabBarView(
                     controller: _tabCtrl,
                     children: [
@@ -265,62 +273,70 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
 
   // ── Left panel ────────────────────────────────────────────────────────────
 
-  Widget _buildBankList() => Column(children: [
-    Container(
-      padding: const EdgeInsets.all(8),
-      color: Colors.blueGrey.shade200,
-      child: const Row(children: [
-        Icon(Icons.savings, size: 16, color: Colors.black54),
-        SizedBox(width: 6),
-        Text('บัญชีที่รองรับเช็ค', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-      ]),
-    ),
-    Expanded(
-      child: _bankAccounts.isEmpty
-          ? const Center(child: Text('ไม่พบบัญชีที่รองรับเช็ค\n(ตั้งค่าใน "ตั้งค่าบัญชีธนาคาร")',
-              textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 12)))
-          : ListView.builder(
-              itemCount: _bankAccounts.length,
-              itemBuilder: (_, i) {
-                final b = _bankAccounts[i];
-                final selected = _selectedBank?.id == b.id;
-                return ListTile(
-                  dense: true,
-                  selected: selected,
-                  selectedTileColor: const Color(0xFFE3F2FD),
-                  leading: CircleAvatar(
-                    radius: 16,
-                    backgroundColor: selected ? _kColor : Colors.blueGrey.shade300,
-                    child: Text(b.currencyCode.isNotEmpty ? b.currencyCode.substring(0, 1) : '?',
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                  ),
-                  title: Text(b.accountCode,
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13,
-                          color: selected ? _kColor : null)),
-                  subtitle: Text(b.accountNameTh,
-                      style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis),
-                  onTap: () => _selectBank(b),
-                );
-              },
-            ),
-    ),
-  ]);
+  Widget _buildBankList() {
+    final isEnglish = _isEnglish;
+    return Column(children: [
+      Container(
+        padding: const EdgeInsets.all(8),
+        color: Colors.blueGrey.shade200,
+        child: Row(children: [
+          const Icon(Icons.savings, size: 16, color: Colors.black54),
+          const SizedBox(width: 6),
+          Text(isEnglish ? 'Check-Enabled Accounts' : 'บัญชีที่รองรับเช็ค', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+        ]),
+      ),
+      Expanded(
+        child: _bankAccounts.isEmpty
+            ? Center(child: Text(
+                isEnglish ? 'No check-enabled accounts found\n(configure in "Bank Account Settings")' : 'ไม่พบบัญชีที่รองรับเช็ค\n(ตั้งค่าใน "ตั้งค่าบัญชีธนาคาร")',
+                textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 12)))
+            : ListView.builder(
+                itemCount: _bankAccounts.length,
+                itemBuilder: (_, i) {
+                  final b = _bankAccounts[i];
+                  final selected = _selectedBank?.id == b.id;
+                  final name = isEnglish && (b.accountNameEn ?? '').isNotEmpty ? b.accountNameEn! : b.accountNameTh;
+                  return ListTile(
+                    dense: true,
+                    selected: selected,
+                    selectedTileColor: const Color(0xFFE3F2FD),
+                    leading: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: selected ? _kColor : Colors.blueGrey.shade300,
+                      child: Text(b.currencyCode.isNotEmpty ? b.currencyCode.substring(0, 1) : '?',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+                    title: Text(b.accountCode,
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13,
+                            color: selected ? _kColor : null)),
+                    subtitle: Text(name,
+                        style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis),
+                    onTap: () => _selectBank(b),
+                  );
+                },
+              ),
+      ),
+    ]);
+  }
 
   // ── Checkbook Tab ─────────────────────────────────────────────────────────
 
-  Widget _buildCheckbookTab() => Column(children: [
+  Widget _buildCheckbookTab() {
+    final isEnglish = _isEnglish;
+    final bankName = isEnglish && (_selectedBank!.accountNameEn ?? '').isNotEmpty ? _selectedBank!.accountNameEn! : _selectedBank!.accountNameTh;
+    return Column(children: [
     // Header bar
     Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       color: Colors.grey.shade50,
       child: Row(children: [
-        Text('สมุดเช็ค — ${_selectedBank!.accountCode} ${_selectedBank!.accountNameTh}',
+        Text('${isEnglish ? 'Checkbooks' : 'สมุดเช็ค'} — ${_selectedBank!.accountCode} $bankName',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         const Spacer(),
         if (MenuScope.of(context)?.canCreate ?? true)
         FilledButton.icon(
           icon: const Icon(Icons.add, size: 16),
-          label: const Text('เพิ่มสมุดเช็ค'),
+          label: Text(isEnglish ? 'Add Checkbook' : 'เพิ่มสมุดเช็ค'),
           style: FilledButton.styleFrom(backgroundColor: _kColor),
           onPressed: () => setState(() => _editingCb = CmCheckbook(
             bankAccountId: _selectedBank!.id!, checkbookCode: '', startCheckNo: '', endCheckNo: '')),
@@ -344,33 +360,37 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
       child: _cbLoading
           ? const Center(child: CircularProgressIndicator())
           : _checkbooks.isEmpty
-              ? const Center(child: Text('ไม่มีสมุดเช็ค', style: TextStyle(color: Colors.grey)))
+              ? Center(child: Text(isEnglish ? 'No checkbooks' : 'ไม่มีสมุดเช็ค', style: const TextStyle(color: Colors.grey)))
               : ListView.builder(
                   itemCount: _checkbooks.length,
                   itemBuilder: (_, i) => _CheckbookCard(
                     item: _checkbooks[i],
                     dateFmt: _dateFmt,
+                    isEnglish: isEnglish,
                     onEdit: (cb) => setState(() => _editingCb = cb),
                     onDelete: _deleteCb,
                   ),
                 ),
     ),
   ]);
+  }
 
   // ── Print Config Tab ──────────────────────────────────────────────────────
 
-  Widget _buildPrintConfigTab() => Column(children: [
+  Widget _buildPrintConfigTab() {
+    final isEnglish = _isEnglish;
+    return Column(children: [
     Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       color: Colors.grey.shade50,
       child: Row(children: [
-        Text('ตำแหน่งพิมพ์เช็ค — ${_selectedBank!.accountCode}',
+        Text('${isEnglish ? 'Check Print Positions' : 'ตำแหน่งพิมพ์เช็ค'} — ${_selectedBank!.accountCode}',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         const Spacer(),
         if (MenuScope.of(context)?.canCreate ?? true)
         FilledButton.icon(
           icon: const Icon(Icons.add, size: 16),
-          label: const Text('เพิ่มรูปแบบ'),
+          label: Text(isEnglish ? 'Add Format' : 'เพิ่มรูปแบบ'),
           style: FilledButton.styleFrom(backgroundColor: _kColor),
           onPressed: () => setState(() => _editingCfg = CmCheckPrintConfig(
             bankAccountId: _selectedBank!.id!, configName: '')),
@@ -386,7 +406,7 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
           child: _cfgLoading
               ? const Center(child: CircularProgressIndicator())
               : _configs.isEmpty
-                  ? const Center(child: Text('ไม่มีรูปแบบ', style: TextStyle(color: Colors.grey)))
+                  ? Center(child: Text(isEnglish ? 'No formats' : 'ไม่มีรูปแบบ', style: const TextStyle(color: Colors.grey)))
                   : ListView.builder(
                       itemCount: _configs.length,
                       itemBuilder: (_, i) {
@@ -435,7 +455,7 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
         // Config form + preview
         Expanded(
           child: _editingCfg == null
-              ? const Center(child: Text('เลือกหรือเพิ่มรูปแบบพิมพ์', style: TextStyle(color: Colors.grey)))
+              ? Center(child: Text(isEnglish ? 'Select or add a print format' : 'เลือกหรือเพิ่มรูปแบบพิมพ์', style: const TextStyle(color: Colors.grey)))
               : _PrintConfigForm(
                   key: ValueKey(_editingCfg.hashCode),
                   initial: _editingCfg!,
@@ -448,6 +468,7 @@ class _CmCheckbookScreenState extends State<CmCheckbookScreen>
       ]),
     ),
   ]);
+  }
 }
 
 // ── Checkbook Form ────────────────────────────────────────────────────────────
@@ -511,7 +532,8 @@ class _CheckbookFormState extends State<_CheckbookForm> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return Container(
       color: Colors.blue.shade50,
       padding: const EdgeInsets.all(12),
@@ -521,8 +543,8 @@ class _CheckbookFormState extends State<_CheckbookForm> {
           Row(children: [
             Expanded(child: TextFormField(
               controller: _codeCtrl,
-              decoration: const InputDecoration(labelText: 'รหัสสมุดเช็ค *', border: OutlineInputBorder(), isDense: true),
-              validator: (v) => (v?.trim().isEmpty ?? true) ? 'กรุณาระบุ' : null,
+              decoration: InputDecoration(labelText: isEnglish ? 'Checkbook Code *' : 'รหัสสมุดเช็ค *', border: const OutlineInputBorder(), isDense: true),
+              validator: (v) => (v?.trim().isEmpty ?? true) ? (isEnglish ? 'Required' : 'กรุณาระบุ') : null,
             )),
             const SizedBox(width: 8),
             Expanded(child: InkWell(
@@ -532,7 +554,7 @@ class _CheckbookFormState extends State<_CheckbookForm> {
                 if (d != null) setState(() => _receivedDate = d);
               },
               child: InputDecorator(
-                decoration: const InputDecoration(labelText: 'วันที่รับสมุดเช็ค', border: OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(labelText: isEnglish ? 'Received Date' : 'วันที่รับสมุดเช็ค', border: const OutlineInputBorder(), isDense: true),
                 child: Text(_receivedDate != null ? _dateFmt.format(_receivedDate!) : '—',
                     style: const TextStyle(fontSize: 14)),
               ),
@@ -542,27 +564,27 @@ class _CheckbookFormState extends State<_CheckbookForm> {
           Row(children: [
             Expanded(child: TextFormField(
               controller: _startCtrl,
-              decoration: const InputDecoration(labelText: 'เลขเช็คแรก *', border: OutlineInputBorder(), isDense: true),
-              validator: (v) => (v?.trim().isEmpty ?? true) ? 'กรุณาระบุ' : null,
+              decoration: InputDecoration(labelText: isEnglish ? 'First Check No. *' : 'เลขเช็คแรก *', border: const OutlineInputBorder(), isDense: true),
+              validator: (v) => (v?.trim().isEmpty ?? true) ? (isEnglish ? 'Required' : 'กรุณาระบุ') : null,
             )),
             const SizedBox(width: 8),
             Expanded(child: TextFormField(
               controller: _endCtrl,
-              decoration: const InputDecoration(labelText: 'เลขเช็คสุดท้าย *', border: OutlineInputBorder(), isDense: true),
-              validator: (v) => (v?.trim().isEmpty ?? true) ? 'กรุณาระบุ' : null,
+              decoration: InputDecoration(labelText: isEnglish ? 'Last Check No. *' : 'เลขเช็คสุดท้าย *', border: const OutlineInputBorder(), isDense: true),
+              validator: (v) => (v?.trim().isEmpty ?? true) ? (isEnglish ? 'Required' : 'กรุณาระบุ') : null,
             )),
             const SizedBox(width: 8),
             Expanded(child: TextFormField(
               controller: _nextCtrl,
-              decoration: const InputDecoration(labelText: 'เลขถัดไป', border: OutlineInputBorder(), isDense: true),
+              decoration: InputDecoration(labelText: isEnglish ? 'Next Number' : 'เลขถัดไป', border: const OutlineInputBorder(), isDense: true),
             )),
             if (widget.initial.id != null) ...[
               const SizedBox(width: 8),
               Expanded(child: DropdownButtonFormField<String>(
                 value: _status,
-                decoration: const InputDecoration(labelText: 'สถานะ', border: OutlineInputBorder(), isDense: true),
-                items: cmCheckbookStatusOptions.entries.map((e) =>
-                    DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+                decoration: InputDecoration(labelText: isEnglish ? 'Status' : 'สถานะ', border: const OutlineInputBorder(), isDense: true),
+                items: cmCheckbookStatusOptions.keys.map((k) =>
+                    DropdownMenuItem(value: k, child: Text(cmCheckbookStatusLabel(k, isEnglish)))).toList(),
                 onChanged: (v) => setState(() => _status = v!),
               )),
             ],
@@ -570,7 +592,7 @@ class _CheckbookFormState extends State<_CheckbookForm> {
           const SizedBox(height: 8),
           TextFormField(
             controller: _noteCtrl,
-            decoration: const InputDecoration(labelText: 'หมายเหตุ', border: OutlineInputBorder(), isDense: true),
+            decoration: InputDecoration(labelText: isEnglish ? 'Note' : 'หมายเหตุ', border: const OutlineInputBorder(), isDense: true),
             maxLines: 1,
           ),
           const SizedBox(height: 10),
@@ -596,9 +618,10 @@ class _CheckbookFormState extends State<_CheckbookForm> {
 class _CheckbookCard extends StatelessWidget {
   final CmCheckbook item;
   final DateFormat dateFmt;
+  final bool isEnglish;
   final void Function(CmCheckbook) onEdit;
   final Future<void> Function(CmCheckbook) onDelete;
-  const _CheckbookCard({required this.item, required this.dateFmt, required this.onEdit, required this.onDelete});
+  const _CheckbookCard({required this.item, required this.dateFmt, required this.isEnglish, required this.onEdit, required this.onDelete});
 
   Color _statusColor(String s) =>
       s == 'Active' ? Colors.green : s == 'Used' ? Colors.grey : Colors.red;
@@ -622,14 +645,18 @@ class _CheckbookCard extends StatelessWidget {
               color: _statusColor(item.status).withOpacity(0.1),
               borderRadius: BorderRadius.circular(4),
             ),
-            child: Text(cmCheckbookStatusOptions[item.status] ?? item.status,
+            child: Text(cmCheckbookStatusLabel(item.status, isEnglish),
                 style: TextStyle(fontSize: 11, color: _statusColor(item.status))),
           ),
         ]),
         subtitle: Text(
-          'เช็ค ${item.startCheckNo}–${item.endCheckNo}'
-          '${item.nextCheckNo != null ? '  |  ถัดไป: ${item.nextCheckNo}' : ''}'
-          '${item.receivedDate != null ? '  |  รับ: ${dateFmt.format(item.receivedDate!)}' : ''}',
+          isEnglish
+              ? 'Check ${item.startCheckNo}–${item.endCheckNo}'
+                '${item.nextCheckNo != null ? '  |  Next: ${item.nextCheckNo}' : ''}'
+                '${item.receivedDate != null ? '  |  Received: ${dateFmt.format(item.receivedDate!)}' : ''}'
+              : 'เช็ค ${item.startCheckNo}–${item.endCheckNo}'
+                '${item.nextCheckNo != null ? '  |  ถัดไป: ${item.nextCheckNo}' : ''}'
+                '${item.receivedDate != null ? '  |  รับ: ${dateFmt.format(item.receivedDate!)}' : ''}',
           style: const TextStyle(fontSize: 11),
         ),
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -752,7 +779,8 @@ class _PrintConfigFormState extends State<_PrintConfigForm> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final pw = _n(_wCtrl);
     final ph = _n(_hCtrl);
 
@@ -765,53 +793,53 @@ class _PrintConfigFormState extends State<_PrintConfigForm> {
           Row(children: [
             Expanded(child: TextFormField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'ชื่อรูปแบบ *', border: OutlineInputBorder(), isDense: true),
-              validator: (v) => (v?.trim().isEmpty ?? true) ? 'กรุณาระบุ' : null,
+              decoration: InputDecoration(labelText: isEnglish ? 'Format Name *' : 'ชื่อรูปแบบ *', border: const OutlineInputBorder(), isDense: true),
+              validator: (v) => (v?.trim().isEmpty ?? true) ? (isEnglish ? 'Required' : 'กรุณาระบุ') : null,
             )),
             const SizedBox(width: 8),
-            _numField('กว้าง', _wCtrl, w: 100),
+            _numField(isEnglish ? 'Width' : 'กว้าง', _wCtrl, w: 100),
             const SizedBox(width: 6),
             const Text('×', style: TextStyle(fontSize: 16)),
             const SizedBox(width: 6),
-            _numField('สูง', _hCtrl, w: 100),
+            _numField(isEnglish ? 'Height' : 'สูง', _hCtrl, w: 100),
           ]),
           const SizedBox(height: 12),
 
           // Field positions
-          const Text('ตำแหน่งฟิลด์ (mm จากมุมบนซ้าย)',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(isEnglish ? 'Field Positions (mm from top-left)' : 'ตำแหน่งฟิลด์ (mm จากมุมบนซ้าย)',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           const Divider(height: 16),
-          _row('วันที่เช็ค', _dateXCtrl, _dateYCtrl),
+          _row(isEnglish ? 'Check Date' : 'วันที่เช็ค', _dateXCtrl, _dateYCtrl),
           Padding(
             padding: const EdgeInsets.only(bottom: 8, left: 130),
             child: SizedBox(
               width: 200,
               child: TextFormField(
                 controller: _dateFmtCtrl,
-                decoration: const InputDecoration(labelText: 'รูปแบบวันที่', border: OutlineInputBorder(),
+                decoration: InputDecoration(labelText: isEnglish ? 'Date Format' : 'รูปแบบวันที่', border: const OutlineInputBorder(),
                     isDense: true, hintText: 'dd/MM/yyyy',
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
                 style: const TextStyle(fontSize: 13),
               ),
             ),
           ),
-          _row('ชื่อผู้รับเงิน', _payeeXCtrl, _payeeYCtrl),
-          _row('จำนวนเงิน (ตัวเลข)', _amtNumXCtrl, _amtNumYCtrl),
-          _row('จำนวนเงิน (ตัวอักษร)', _amtTxtXCtrl, _amtTxtYCtrl),
+          _row(isEnglish ? 'Payee Name' : 'ชื่อผู้รับเงิน', _payeeXCtrl, _payeeYCtrl),
+          _row(isEnglish ? 'Amount (Numeric)' : 'จำนวนเงิน (ตัวเลข)', _amtNumXCtrl, _amtNumYCtrl),
+          _row(isEnglish ? 'Amount (Words)' : 'จำนวนเงิน (ตัวอักษร)', _amtTxtXCtrl, _amtTxtYCtrl),
           const SizedBox(height: 8),
 
           // Stub
           Row(children: [
             Checkbox(value: _hasStub, onChanged: (v) => setState(() => _hasStub = v!)),
-            const Text('มีสเตาบ์ (Stub)'),
-            if (_hasStub) ...[const SizedBox(width: 12), _numField('ความกว้าง Stub', _stubWCtrl, w: 130)],
+            Text(isEnglish ? 'Has Stub' : 'มีสเตาบ์ (Stub)'),
+            if (_hasStub) ...[const SizedBox(width: 12), _numField(isEnglish ? 'Stub Width' : 'ความกว้าง Stub', _stubWCtrl, w: 130)],
           ]),
           const SizedBox(height: 4),
 
           // Default
           Row(children: [
             Checkbox(value: _isDefault, onChanged: (v) => setState(() => _isDefault = v!)),
-            const Text('ใช้เป็น Default'),
+            Text(isEnglish ? 'Use as Default' : 'ใช้เป็น Default'),
           ]),
           const SizedBox(height: 16),
 
@@ -824,15 +852,15 @@ class _PrintConfigFormState extends State<_PrintConfigForm> {
               onPressed: _saving ? null : _submit,
               child: _saving
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text(widget.initial.id == null ? 'เพิ่ม' : 'บันทึก'),
+                  : Text(widget.initial.id == null ? (isEnglish ? 'Add' : 'เพิ่ม') : (isEnglish ? 'Save' : 'บันทึก')),
             ),
           ]),
           const SizedBox(height: 20),
 
           // Preview
           if (pw > 0 && ph > 0) ...[
-            const Text('Preview ตำแหน่ง (มาตราส่วน 1:2)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            Text(isEnglish ? 'Position Preview (scale 1:2)' : 'Preview ตำแหน่ง (มาตราส่วน 1:2)',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 8),
             _CheckPreview(
               widthMm: pw, heightMm: ph,
@@ -841,6 +869,7 @@ class _PrintConfigFormState extends State<_PrintConfigForm> {
               amountNumX: _n(_amtNumXCtrl), amountNumY: _n(_amtNumYCtrl),
               amountTextX: _n(_amtTxtXCtrl), amountTextY: _n(_amtTxtYCtrl),
               hasStub: _hasStub, stubWidth: _hasStub ? _n(_stubWCtrl) : 0,
+              isEnglish: isEnglish,
             ),
           ],
         ]),
@@ -857,6 +886,7 @@ class _CheckPreview extends StatelessWidget {
   final double amountNumX, amountNumY, amountTextX, amountTextY;
   final bool hasStub;
   final double stubWidth;
+  final bool isEnglish;
 
   const _CheckPreview({
     required this.widthMm, required this.heightMm,
@@ -865,6 +895,7 @@ class _CheckPreview extends StatelessWidget {
     required this.amountNumX, required this.amountNumY,
     required this.amountTextX, required this.amountTextY,
     required this.hasStub, required this.stubWidth,
+    required this.isEnglish,
   });
 
   @override
@@ -885,6 +916,7 @@ class _CheckPreview extends StatelessWidget {
           amountNumX: amountNumX, amountNumY: amountNumY,
           amountTextX: amountTextX, amountTextY: amountTextY,
           hasStub: hasStub, stubWidth: stubWidth,
+          isEnglish: isEnglish,
         ),
       ),
     );
@@ -897,6 +929,7 @@ class _CheckPainter extends CustomPainter {
   final double amountNumX, amountNumY, amountTextX, amountTextY;
   final bool hasStub;
   final double stubWidth;
+  final bool isEnglish;
 
   const _CheckPainter({
     required this.widthMm, required this.heightMm, required this.scale,
@@ -905,6 +938,7 @@ class _CheckPainter extends CustomPainter {
     required this.amountNumX, required this.amountNumY,
     required this.amountTextX, required this.amountTextY,
     required this.hasStub, required this.stubWidth,
+    required this.isEnglish,
   });
 
   void _label(Canvas c, String text, double xMm, double yMm, {Color color = const Color(0xFF1565C0)}) {
@@ -938,10 +972,10 @@ class _CheckPainter extends CustomPainter {
       tp.paint(canvas, Offset(4, size.height / 2 - 6));
     }
 
-    _label(canvas, 'วันที่', dateX, dateY);
-    _label(canvas, 'ชื่อผู้รับ', payeeX, payeeY, color: const Color(0xFF2E7D32));
-    _label(canvas, 'จำนวน (ตัวเลข)', amountNumX, amountNumY, color: const Color(0xFF6A1B9A));
-    _label(canvas, 'จำนวน (ตัวอักษร)', amountTextX, amountTextY, color: const Color(0xFFE65100));
+    _label(canvas, isEnglish ? 'Date' : 'วันที่', dateX, dateY);
+    _label(canvas, isEnglish ? 'Payee' : 'ชื่อผู้รับ', payeeX, payeeY, color: const Color(0xFF2E7D32));
+    _label(canvas, isEnglish ? 'Amount (Numeric)' : 'จำนวน (ตัวเลข)', amountNumX, amountNumY, color: const Color(0xFF6A1B9A));
+    _label(canvas, isEnglish ? 'Amount (Words)' : 'จำนวน (ตัวอักษร)', amountTextX, amountTextY, color: const Color(0xFFE65100));
   }
 
   @override

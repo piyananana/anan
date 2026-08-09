@@ -94,6 +94,21 @@ const Map<String, String> cmMethodTypeOptions = {
   'OTHER':           'อื่นๆ (Other)',
 };
 
+const Map<String, String> cmMethodTypeOptionsEng = {
+  'CASH':            'Cash',
+  'CHECK':           'Check',
+  'TRANSFER':        'Transfer',
+  'CREDIT_CARD':     'Credit Card',
+  'DEBIT_CARD':      'Debit Card',
+  'QR_CODE':         'QR Code / PromptPay',
+  'MOBILE_BANKING':  'Mobile Banking / Internet Banking',
+  'BILL_OF_EXCHANGE':'Bill of Exchange',
+  'OTHER':           'Other',
+};
+
+String cmMethodTypeLabel(String t, bool isEnglish) =>
+    (isEnglish ? cmMethodTypeOptionsEng[t] : cmMethodTypeOptions[t]) ?? t;
+
 // ประเภทที่ต้องการข้อมูล bank account (สำหรับ filter dropdown)
 const Set<String> cmMethodTypesNeedBankAccount = {
   'CHECK', 'TRANSFER', 'BILL_OF_EXCHANGE',

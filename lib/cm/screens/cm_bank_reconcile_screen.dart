@@ -1,6 +1,8 @@
 ﻿// lib/cm/screens/cm_bank_reconcile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_bank_statement.dart';
@@ -26,9 +28,23 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
   final _accSvc  = CmBankAccountService();
   final _svc     = CmBankStatementService();
 
+  bool _isEnglish = false;
+
   bool _leftExpanded = true;
+  double _leftWidth  = 420.0;
+  bool _isDragging   = false;
   List<CmBankAccount> _accounts = [];
   CmBankAccount? _selectedAccount;
+  String _acctSearch = '';
+
+  List<CmBankAccount> get _filteredAccounts {
+    if (_acctSearch.isEmpty) return _accounts;
+    final q = _acctSearch.toLowerCase();
+    return _accounts.where((a) =>
+        a.accountCode.toLowerCase().contains(q) ||
+        (a.bankShortName ?? '').toLowerCase().contains(q) ||
+        (a.accountNumber ?? '').toLowerCase().contains(q)).toList();
+  }
 
   DateTime? _dateFrom;
   DateTime? _dateTo;
@@ -109,7 +125,7 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
         cmRecordId:      _selRecord!.id,
         reconcileDate:   formatLocalDate(DateTime.now()),
       );
-      _showSuccess('จับคู่สำเร็จ');
+      _showSuccess(_isEnglish ? 'Matched successfully' : 'จับคู่สำเร็จ');
       await _loadItems();
     } catch (e) { _showError(e.toString()); }
   }
@@ -118,7 +134,7 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     try {
       await _svc.unreconcileStatementLine(line.id);
-      _showSuccess('ยกเลิกการจับคู่สำเร็จ');
+      _showSuccess(_isEnglish ? 'Unmatched successfully' : 'ยกเลิกการจับคู่สำเร็จ');
       await _loadItems();
     } catch (e) { _showError(e.toString()); }
   }
@@ -139,52 +155,70 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
         title: const MenuTitle(),
-        titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),
       body: LayoutBuilder(
-        builder: (_, __) => Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Toggle strip
-            Container(
-              width: 36,
-              color: _kTheme,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                iconSize: 20,
-                color: Colors.white,
-                icon: Icon(_leftExpanded ? Icons.filter_list_off : Icons.filter_list),
-                onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
-              ),
-            ),
-            // Left panel
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: _leftExpanded ? 220 : 0,
-              child: ClipRect(
-                child: OverflowBox(
-                  alignment: Alignment.centerLeft,
-                  maxWidth: 220,
-                  child: _buildAccountPanel(),
+        builder: (_, constraints) {
+          final maxLeft = (constraints.maxWidth - 36 - 5 - 320).clamp(100.0, double.infinity);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Toggle strip
+              Container(
+                width: 36,
+                color: _kTheme,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 20,
+                  color: Colors.white,
+                  icon: Icon(_leftExpanded ? Icons.filter_list_off : Icons.filter_list),
+                  onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
                 ),
               ),
-            ),
-            if (_leftExpanded) const VerticalDivider(width: 1, thickness: 1),
-            // Right panel
-            Expanded(child: _buildRightPanel()),
-          ],
-        ),
+              // Left panel
+              AnimatedContainer(
+                duration: _isDragging ? Duration.zero : const Duration(milliseconds: 200),
+                width: _leftExpanded ? _leftWidth : 0,
+                child: ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.centerLeft,
+                    maxWidth: _leftWidth,
+                    minWidth: _leftWidth,
+                    child: _buildAccountPanel(),
+                  ),
+                ),
+              ),
+              if (_leftExpanded)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) => setState(() => _isDragging = true),
+                    onHorizontalDragUpdate: (d) => setState(() {
+                      _leftWidth = (_leftWidth + d.delta.dx).clamp(180.0, maxLeft);
+                    }),
+                    onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+                    child: Container(width: 5, color: Colors.grey[400]),
+                  ),
+                ),
+              // Right panel
+              Expanded(child: _buildRightPanel()),
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildAccountPanel() {
+    final isEnglish = _isEnglish;
+    final list = _filteredAccounts;
     return Container(
       color: Colors.blueGrey.shade100,
       child: Column(
@@ -195,36 +229,78 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
             color: Colors.blueGrey.shade200,
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: const Text('บัญชีธนาคาร', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            child: Text(isEnglish ? 'Bank Accounts' : 'บัญชีธนาคาร',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: isEnglish ? 'Search account...' : 'ค้นหาบัญชี...',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (v) => setState(() => _acctSearch = v),
+            ),
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: _accounts.length,
-              itemBuilder: (_, i) {
-                final acc = _accounts[i];
-                final selected = acc.id == _selectedAccount?.id;
-                return ListTile(
-                  dense: true,
-                  selected: selected,
-                  selectedTileColor: _kTheme.withOpacity(0.15),
-                  title: Text(acc.accountCode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  subtitle: Text(
-                    '${acc.bankShortName ?? ''} ${acc.accountNumber ?? ''}',
-                    style: const TextStyle(fontSize: 11),
+            child: list.isEmpty
+                ? Center(child: Text(isEnglish ? 'No accounts' : 'ไม่มีบัญชี', style: TextStyle(color: Colors.grey.shade400)))
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    itemCount: list.length,
+                    itemBuilder: (_, i) {
+                      final acc = list[i];
+                      final selected = acc.id == _selectedAccount?.id;
+                      final name = isEnglish && (acc.accountNameEn ?? '').isNotEmpty ? acc.accountNameEn! : acc.accountNameTh;
+                      return Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: ListTile(
+                          selected: selected,
+                          selectedTileColor: _kTheme.withOpacity(0.12),
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.indigo.shade100,
+                            child: const Icon(Icons.savings, size: 18),
+                          ),
+                          title: Text(acc.accountCode,
+                              style: TextStyle(fontWeight: FontWeight.bold, color: acc.isActive ? null : Colors.grey)),
+                          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(name,
+                                style: TextStyle(fontSize: 13, color: acc.isActive ? Colors.black87 : Colors.grey),
+                                overflow: TextOverflow.ellipsis),
+                            Text(
+                              [
+                                cmCmTypeLabel(acc.cmType, isEnglish),
+                                if (acc.bankDisplay.isNotEmpty) acc.bankDisplay,
+                                if ((acc.accountNumber ?? '').isNotEmpty) acc.accountNumber!,
+                                if (!acc.isPettyCash) cmAccountTypeLabel(acc.accountType, isEnglish),
+                                if (acc.isFcy) acc.currencyCode,
+                                if (acc.isCheckAccount) (isEnglish ? 'Check' : 'เช็ค'),
+                              ].join(' · '),
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                          ]),
+                          trailing: !acc.isActive
+                              ? Chip(
+                                  label: Text(isEnglish ? 'Inactive' : 'หยุดใช้', style: const TextStyle(fontSize: 11)),
+                                  backgroundColor: const Color(0xFFEEEEEE),
+                                )
+                              : null,
+                          onTap: () {
+                            setState(() {
+                              _selectedAccount = acc;
+                              _stmtLines = [];
+                              _cmRecords = [];
+                              _summary   = null;
+                              _selLine   = null;
+                              _selRecord = null;
+                            });
+                          },
+                        ),
+                      );
+                    },
                   ),
-                  onTap: () {
-                    setState(() {
-                      _selectedAccount = acc;
-                      _stmtLines = [];
-                      _cmRecords = [];
-                      _summary   = null;
-                      _selLine   = null;
-                      _selRecord = null;
-                    });
-                  },
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -232,8 +308,10 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
   }
 
   Widget _buildRightPanel() {
+    final isEnglish = _isEnglish;
     if (_selectedAccount == null) {
-      return const Center(child: Text('เลือกบัญชีธนาคาร', style: TextStyle(color: Colors.grey)));
+      return Center(child: Text(isEnglish ? 'Select a bank account' : 'เลือกบัญชีธนาคาร',
+          style: const TextStyle(color: Colors.grey)));
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -249,7 +327,9 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : (_stmtLines.isEmpty && _cmRecords.isEmpty)
-                  ? const Center(child: Text('ไม่มีข้อมูล กด "โหลดข้อมูล" เพื่อดูรายการ', style: TextStyle(color: Colors.grey)))
+                  ? Center(child: Text(
+                      isEnglish ? 'No data. Press "Load Data" to view items.' : 'ไม่มีข้อมูล กด "โหลดข้อมูล" เพื่อดูรายการ',
+                      style: const TextStyle(color: Colors.grey)))
                   : _buildReconcileView(),
         ),
       ],
@@ -257,14 +337,16 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
   }
 
   Widget _buildFilterBar() {
+    final isEnglish = _isEnglish;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.grey.shade100,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          _datePicker('ตั้งแต่', _dateFrom, (d) => setState(() => _dateFrom = d)),
-          const SizedBox(width: 12),
-          _datePicker('ถึง', _dateTo, (d) => setState(() => _dateTo = d)),
+          Expanded(flex: 2, child: _datePicker(isEnglish ? 'From' : 'ตั้งแต่', _dateFrom, (d) => setState(() => _dateFrom = d))),
+          const SizedBox(width: 10),
+          Expanded(flex: 2, child: _datePicker(isEnglish ? 'To' : 'ถึง', _dateTo, (d) => setState(() => _dateTo = d))),
           const SizedBox(width: 16),
           Row(children: [
             Checkbox(
@@ -272,19 +354,18 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
               onChanged: (v) => setState(() => _unreconciledOnly = v ?? true),
               visualDensity: VisualDensity.compact,
             ),
-            const Text('เฉพาะที่ยังไม่จับคู่', style: TextStyle(fontSize: 12)),
+            Text(isEnglish ? 'Unmatched only' : 'เฉพาะที่ยังไม่จับคู่', style: const TextStyle(fontSize: 12)),
           ]),
           const SizedBox(width: 16),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: _kTheme,
+              backgroundColor: Colors.blue.shade700,
               foregroundColor: Colors.white,
-              minimumSize: const Size(0, 32),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             onPressed: _loadItems,
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('โหลดข้อมูล', style: TextStyle(fontSize: 12)),
+            icon: const Icon(Icons.refresh),
+            label: Text(isEnglish ? 'Load Data' : 'โหลดข้อมูล'),
           ),
         ],
       ),
@@ -302,25 +383,18 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
         );
         if (p != null) onPick(p);
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade400),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          children: [
-            Text('$label: ', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-            Text(value != null ? _dateFmt.format(value) : '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-            const SizedBox(width: 4),
-            Icon(Icons.calendar_today, size: 14, color: Colors.grey.shade500),
-          ],
-        ),
+      child: InputDecorator(
+        decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
+            suffixIcon: const Icon(Icons.calendar_today, size: 18)),
+        child: Text(value != null ? _dateFmt.format(value) : '—'),
       ),
     );
   }
 
   Widget _buildSummaryBar() {
+    final isEnglish = _isEnglish;
     final s = _summary!;
     final stmtDep  = double.tryParse(s['statement']?['total_deposit']?.toString()    ?? '0') ?? 0;
     final stmtWd   = double.tryParse(s['statement']?['total_withdrawal']?.toString() ?? '0') ?? 0;
@@ -337,17 +411,17 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
       color: Colors.blue.shade50,
       child: Row(
         children: [
-          _summaryItem('รับเข้าตาม Statement', _fmt.format(stmtDep), Colors.green.shade700),
+          _summaryItem(isEnglish ? 'Deposits per Statement' : 'รับเข้าตาม Statement', _fmt.format(stmtDep), Colors.green.shade700),
           const SizedBox(width: 24),
-          _summaryItem('จ่ายออกตาม Statement', _fmt.format(stmtWd), Colors.red.shade700),
+          _summaryItem(isEnglish ? 'Withdrawals per Statement' : 'จ่ายออกตาม Statement', _fmt.format(stmtWd), Colors.red.shade700),
           const SizedBox(width: 24),
-          _summaryItem('ยอดรับตามระบบ CM', _fmt.format(recAmt), Colors.green.shade600),
+          _summaryItem(isEnglish ? 'Receipts per CM' : 'ยอดรับตามระบบ CM', _fmt.format(recAmt), Colors.green.shade600),
           const SizedBox(width: 24),
-          _summaryItem('ยอดจ่ายตามระบบ CM', _fmt.format(payAmt), Colors.red.shade600),
+          _summaryItem(isEnglish ? 'Payments per CM' : 'ยอดจ่ายตามระบบ CM', _fmt.format(payAmt), Colors.red.shade600),
           const Spacer(),
-          _summaryItem('Statement (จับคู่/ยังไม่จับ)', '$stmtRec / $stmtUnr', Colors.blue.shade700),
+          _summaryItem(isEnglish ? 'Statement (matched/unmatched)' : 'Statement (จับคู่/ยังไม่จับ)', '$stmtRec / $stmtUnr', Colors.blue.shade700),
           const SizedBox(width: 16),
-          _summaryItem('CM Record (จับคู่/ยังไม่จับ)', '$cmRec / $cmUnr', Colors.blue.shade700),
+          _summaryItem(isEnglish ? 'CM Record (matched/unmatched)' : 'CM Record (จับคู่/ยังไม่จับ)', '$cmRec / $cmUnr', Colors.blue.shade700),
         ],
       ),
     );
@@ -357,12 +431,13 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
     children: [
-      Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
       Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
     ],
   );
 
   Widget _buildActionBar() {
+    final isEnglish = _isEnglish;
     final canMatch = _selLine != null && _selRecord != null
         && !_selLine!.isReconciled && !_selRecord!.isReconciled;
     return Container(
@@ -374,14 +449,14 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
           const SizedBox(width: 6),
           Text(
             _selLine == null && _selRecord == null
-                ? 'เลือก Statement Line และ CM Record เพื่อจับคู่'
+                ? (isEnglish ? 'Select a Statement Line and a CM Record to match' : 'เลือก Statement Line และ CM Record เพื่อจับคู่')
                 : _selLine == null
-                    ? 'เลือก Statement Line'
+                    ? (isEnglish ? 'Select a Statement Line' : 'เลือก Statement Line')
                     : _selRecord == null
-                        ? 'เลือก CM Record'
+                        ? (isEnglish ? 'Select a CM Record' : 'เลือก CM Record')
                         : canMatch
-                            ? 'พร้อมจับคู่: ${_dateFmt.format(_selLine!.lineDate)} ↔ ${_selRecord!.docNo ?? ''}'
-                            : 'รายการที่เลือกถูกจับคู่แล้ว',
+                            ? '${isEnglish ? 'Ready to match' : 'พร้อมจับคู่'}: ${_dateFmt.format(_selLine!.lineDate)} ↔ ${_selRecord!.docNo ?? ''}'
+                            : (isEnglish ? 'Selected items are already matched' : 'รายการที่เลือกถูกจับคู่แล้ว'),
             style: const TextStyle(fontSize: 12),
           ),
           const Spacer(),
@@ -390,7 +465,7 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red,
                   minimumSize: const Size(0, 28), padding: const EdgeInsets.symmetric(horizontal: 10)),
               onPressed: () => _unreconcileLine(_selLine!),
-              child: const Text('ยกเลิกจับคู่ Statement Line', style: TextStyle(fontSize: 12)),
+              child: Text(isEnglish ? 'Unmatch Statement Line' : 'ยกเลิกจับคู่ Statement Line', style: const TextStyle(fontSize: 12)),
             ),
           if (canMatch) ...[
             const SizedBox(width: 8),
@@ -399,7 +474,7 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
                   minimumSize: const Size(0, 28), padding: const EdgeInsets.symmetric(horizontal: 12)),
               onPressed: _reconcilePair,
               icon: const Icon(Icons.link, size: 16),
-              label: const Text('จับคู่', style: TextStyle(fontSize: 12)),
+              label: Text(isEnglish ? 'Match' : 'จับคู่', style: const TextStyle(fontSize: 12)),
             ),
           ],
         ],
@@ -408,6 +483,7 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
   }
 
   Widget _buildReconcileView() {
+    final isEnglish = _isEnglish;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -425,7 +501,8 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
               ),
               Expanded(
                 child: _stmtLines.isEmpty
-                    ? const Center(child: Text('ไม่มีรายการ Statement', style: TextStyle(color: Colors.grey)))
+                    ? Center(child: Text(isEnglish ? 'No Statement items' : 'ไม่มีรายการ Statement',
+                        style: const TextStyle(color: Colors.grey)))
                     : ListView.builder(
                         itemCount: _stmtLines.length,
                         itemBuilder: (_, i) => _buildStmtLineCard(_stmtLines[i]),
@@ -449,7 +526,8 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
               ),
               Expanded(
                 child: _cmRecords.isEmpty
-                    ? const Center(child: Text('ไม่มี CM Record', style: TextStyle(color: Colors.grey)))
+                    ? Center(child: Text(isEnglish ? 'No CM Records' : 'ไม่มี CM Record',
+                        style: const TextStyle(color: Colors.grey)))
                     : ListView.builder(
                         itemCount: _cmRecords.length,
                         itemBuilder: (_, i) => _buildCmRecordCard(_cmRecords[i]),
@@ -553,8 +631,8 @@ class _CmBankReconcileScreenState extends State<CmBankReconcileScreen>
                 color: (isReceipt ? Colors.green.shade100 : Colors.red.shade100),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Text(isReceipt ? 'รับ' : 'จ่าย',
-                  style: TextStyle(fontSize: 10, color: isReceipt ? Colors.green.shade800 : Colors.red.shade800)),
+              child: Text(isReceipt ? (_isEnglish ? 'Receipt' : 'รับ') : (_isEnglish ? 'Payment' : 'จ่าย'),
+                  style: TextStyle(fontSize: 11, color: isReceipt ? Colors.green.shade800 : Colors.red.shade800)),
             ),
             const SizedBox(width: 8),
             Expanded(

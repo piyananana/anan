@@ -40,6 +40,17 @@ class CmBankFxRevaluationService {
     throw Exception(json.decode(resp.body)['error'] ?? resp.body);
   }
 
+  Future<List<Map<String, dynamic>>> fetchOutstandingCurrencies(String asOfDate) async {
+    final headers = await _auth.getAuthHeader();
+    final uri = Uri.parse('$_base/cm_bank_fx_revaluation/outstanding_currencies')
+        .replace(queryParameters: {'as_of_date': asOfDate});
+    final resp = await http.get(uri, headers: headers);
+    if (resp.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(json.decode(resp.body) as List);
+    }
+    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+  }
+
   Future<List<CmFxPreviewLine>> previewLines({
     required String revaluationDate,
     required Map<String, double> rates,

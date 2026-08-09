@@ -1,6 +1,7 @@
 // lib/cm/widgets/cm_bank_account_list_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../models/cm_bank_account.dart'; // includes cmAccountTypeOptions
 import '../services/cm_bank_account_service.dart';
 
@@ -35,12 +36,13 @@ class CmBankAccountListWidget extends StatefulWidget {
 
   static Future<void> search(BuildContext context,
       {required void Function(CmBankAccount) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('ค้นหา บัญชีธนาคาร',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Search Bank Account' : 'ค้นหา บัญชีธนาคาร',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Container(
           width: 560,
           height: 580,
@@ -64,7 +66,7 @@ class CmBankAccountListWidget extends StatefulWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('ปิด', style: TextStyle(color: Colors.red)),
+            child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -107,8 +109,9 @@ class CmBankAccountListWidgetState extends State<CmBankAccountListWidget>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('ไม่สามารถโหลดข้อมูลได้: $e')));
+        final isEnglish = context.read<LanguageProvider>().isEnglish;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${isEnglish ? 'Failed to load data' : 'ไม่สามารถโหลดข้อมูลได้'}: $e')));
       }
     }
   }
@@ -142,10 +145,15 @@ class CmBankAccountListWidgetState extends State<CmBankAccountListWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final display = _filtered;
-    final countText = _searchQuery.isEmpty
-        ? 'ทั้งหมด ${_list.length} แถว'
-        : 'พบ ${display.length} จาก ${_list.length} แถว';
+    final countText = isEnglish
+        ? (_searchQuery.isEmpty
+            ? 'All ${_list.length} rows'
+            : 'Found ${display.length} of ${_list.length} rows')
+        : (_searchQuery.isEmpty
+            ? 'ทั้งหมด ${_list.length} แถว'
+            : 'พบ ${display.length} จาก ${_list.length} แถว');
 
     return Column(
       children: [
@@ -156,28 +164,28 @@ class CmBankAccountListWidgetState extends State<CmBankAccountListWidget>
               if (widget.enableAddButton)
                 IconButton(
                   icon: const Icon(Icons.add),
-                  tooltip: 'เพิ่มข้อมูลใหม่',
+                  tooltip: isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่',
                   onPressed: widget.onAdd,
                 ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.sort),
-                tooltip: 'จัดเรียง',
+                tooltip: isEnglish ? 'Sort' : 'จัดเรียง',
                 onSelected: _onSortSelected,
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'code_asc', child: Text('รหัส (น้อยไปมาก)')),
-                  PopupMenuItem(value: 'code_desc', child: Text('รหัส (มากไปน้อย)')),
-                  PopupMenuItem(value: 'name_asc', child: Text('ชื่อ (น้อยไปมาก)')),
-                  PopupMenuItem(value: 'name_desc', child: Text('ชื่อ (มากไปน้อย)')),
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'code_asc', child: Text(isEnglish ? 'Code (A-Z)' : 'รหัส (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'code_desc', child: Text(isEnglish ? 'Code (Z-A)' : 'รหัส (มากไปน้อย)')),
+                  PopupMenuItem(value: 'name_asc', child: Text(isEnglish ? 'Name (A-Z)' : 'ชื่อ (น้อยไปมาก)')),
+                  PopupMenuItem(value: 'name_desc', child: Text(isEnglish ? 'Name (Z-A)' : 'ชื่อ (มากไปน้อย)')),
                 ],
               ),
               Expanded(
                 child: TextField(
                   controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: 'ค้นหา (รหัส / ชื่อ / เลขบัญชี / ธนาคาร)',
-                    prefixIcon: Icon(Icons.search),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search (code / name / account no. / bank)' : 'ค้นหา (รหัส / ชื่อ / เลขบัญชี / ธนาคาร)',
+                    prefixIcon: const Icon(Icons.search),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    border: const OutlineInputBorder(),
                   ),
                   onChanged: (v) => setState(() => _searchQuery = v),
                 ),
@@ -197,7 +205,7 @@ class CmBankAccountListWidgetState extends State<CmBankAccountListWidget>
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : display.isEmpty
-                  ? const Center(child: Text('ไม่พบข้อมูล'))
+                  ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
                   : ListView.builder(
                       itemCount: display.length,
                       itemBuilder: (ctx, i) {
@@ -222,7 +230,8 @@ class CmBankAccountListWidgetState extends State<CmBankAccountListWidget>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  item.accountNameTh,
+                                  isEnglish && (item.accountNameEn ?? '').isNotEmpty
+                                      ? item.accountNameEn! : item.accountNameTh,
                                   style: TextStyle(
                                     fontSize: 13,
                                     color: item.isActive ? Colors.black87 : Colors.grey,
@@ -230,12 +239,12 @@ class CmBankAccountListWidgetState extends State<CmBankAccountListWidget>
                                 ),
                                 Text(
                                   [
-                                    item.cmTypeLabel,
+                                    cmCmTypeLabel(item.cmType, isEnglish),
                                     if (item.bankDisplay.isNotEmpty) item.bankDisplay,
                                     if ((item.accountNumber ?? '').isNotEmpty) item.accountNumber!,
-                                    if (!item.isPettyCash) cmAccountTypeOptions[item.accountType] ?? item.accountType,
+                                    if (!item.isPettyCash) cmAccountTypeLabel(item.accountType, isEnglish),
                                     if (item.isFcy) item.currencyCode,
-                                    if (item.isCheckAccount) 'เช็ค',
+                                    if (item.isCheckAccount) (isEnglish ? 'Check' : 'เช็ค'),
                                   ].join(' · '),
                                   style: const TextStyle(fontSize: 11, color: Colors.grey),
                                 ),
@@ -245,10 +254,10 @@ class CmBankAccountListWidgetState extends State<CmBankAccountListWidget>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (!item.isActive)
-                                  const Chip(
-                                    label: Text('หยุดใช้',
-                                        style: TextStyle(fontSize: 11)),
-                                    backgroundColor: Color(0xFFEEEEEE),
+                                  Chip(
+                                    label: Text(isEnglish ? 'Inactive' : 'หยุดใช้',
+                                        style: const TextStyle(fontSize: 11)),
+                                    backgroundColor: const Color(0xFFEEEEEE),
                                   ),
                                 if (widget.enableViewButton)
                                   IconButton(

@@ -7,8 +7,10 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/models/cm_bank_account.dart';
 import '../../utils/thai_amount_words.dart';
@@ -30,12 +32,16 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
   @override
   bool get wantKeepAlive => true;
 
+  bool _isEnglish = false;
   bool _leftExpanded = true;
+  double _leftWidth  = 420.0;
+  bool _isDragging   = false;
 
   // Left panel
   List<CmBankAccount> _accounts = [];
   CmBankAccount? _selectedAccount;
   bool _loadingAccounts = false;
+  String _acctSearch = '';
 
   // Right panel state
   List<Map<String, dynamic>> _configs  = [];
@@ -142,12 +148,13 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
         title: const MenuTitle(),
-        titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
         actions: [
           if (_selected.isNotEmpty && _selConfig != null)
@@ -158,78 +165,143 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
                     backgroundColor: Colors.white, foregroundColor: _kTheme, padding: const EdgeInsets.symmetric(horizontal: 12)),
                 onPressed: _printSelected,
                 icon: const Icon(Icons.print, size: 16),
-                label: Text('พิมพ์ ${_selected.length} ฉบับ', style: const TextStyle(fontSize: 12)),
+                label: Text(isEnglish ? 'Print ${_selected.length} checks' : 'พิมพ์ ${_selected.length} ฉบับ', style: const TextStyle(fontSize: 12)),
               ),
             ),
         ],
       ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            width: 36, color: _kTheme,
-            child: IconButton(
-              padding: EdgeInsets.zero, iconSize: 20, color: Colors.white,
-              icon: Icon(_leftExpanded ? Icons.chevron_left : Icons.chevron_right),
-              onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
+      body: LayoutBuilder(builder: (_, constraints) {
+        final maxLeft = (constraints.maxWidth - 36 - 5 - 320).clamp(100.0, double.infinity);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 36, color: _kTheme,
+              child: IconButton(
+                padding: EdgeInsets.zero, iconSize: 20, color: Colors.white,
+                icon: Icon(_leftExpanded ? Icons.chevron_left : Icons.chevron_right),
+                onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
+              ),
             ),
-          ),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: _leftExpanded ? 240 : 0,
-            child: ClipRect(child: OverflowBox(
-              alignment: Alignment.centerLeft, maxWidth: 240,
-              child: _buildLeftPanel(),
-            )),
-          ),
-          if (_leftExpanded) const VerticalDivider(width: 1, thickness: 1),
-          Expanded(child: _buildRightPanel()),
-        ],
-      ),
+            AnimatedContainer(
+              duration: _isDragging ? Duration.zero : const Duration(milliseconds: 200),
+              width: _leftExpanded ? _leftWidth : 0,
+              child: ClipRect(child: OverflowBox(
+                alignment: Alignment.centerLeft, maxWidth: _leftWidth, minWidth: _leftWidth,
+                child: _buildLeftPanel(),
+              )),
+            ),
+            if (_leftExpanded)
+              MouseRegion(
+                cursor: SystemMouseCursors.resizeColumn,
+                child: GestureDetector(
+                  onHorizontalDragStart: (_) => setState(() => _isDragging = true),
+                  onHorizontalDragUpdate: (d) => setState(() {
+                    _leftWidth = (_leftWidth + d.delta.dx).clamp(200.0, maxLeft);
+                  }),
+                  onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+                  child: Container(width: 5, color: Colors.grey[400]),
+                ),
+              ),
+            Expanded(child: _buildRightPanel()),
+          ],
+        );
+      }),
     );
   }
 
+  List<CmBankAccount> get _filteredAccounts {
+    if (_acctSearch.isEmpty) return _accounts;
+    final q = _acctSearch.toLowerCase();
+    return _accounts.where((a) {
+      final name = _isEnglish && (a.accountNameEn ?? '').isNotEmpty ? a.accountNameEn! : a.accountNameTh;
+      return a.accountCode.toLowerCase().contains(q) ||
+          name.toLowerCase().contains(q) ||
+          (a.bankShortName ?? '').toLowerCase().contains(q);
+    }).toList();
+  }
+
   Widget _buildLeftPanel() {
+    final isEnglish = _isEnglish;
     return Container(
       color: Colors.blueGrey.shade100,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Container(height: 36, color: Colors.blueGrey.shade200,
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: const Text('บัญชีธนาคาร', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+            child: Text(isEnglish ? 'Bank Accounts' : 'บัญชีธนาคาร', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: TextField(
+            decoration: InputDecoration(
+              hintText: isEnglish ? 'Search accounts...' : 'ค้นหาบัญชี...',
+              prefixIcon: const Icon(Icons.search),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+              border: const OutlineInputBorder(),
+            ),
+            onChanged: (v) => setState(() => _acctSearch = v),
+          ),
+        ),
         Expanded(child: _loadingAccounts
             ? const Center(child: CircularProgressIndicator())
-            : ListView.builder(
-                itemCount: _accounts.length,
-                itemBuilder: (_, i) {
-                  final a = _accounts[i];
-                  final sel = _selectedAccount?.id == a.id;
-                  return InkWell(
-                    onTap: () async {
-                      setState(() { _selectedAccount = a; _checks = []; _selected.clear(); });
-                      await _loadConfigs(a.id!);
+            : _filteredAccounts.isEmpty
+                ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี', style: const TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: _filteredAccounts.length,
+                    itemBuilder: (_, i) {
+                      final a = _filteredAccounts[i];
+                      final sel = _selectedAccount?.id == a.id;
+                      final name = isEnglish && (a.accountNameEn ?? '').isNotEmpty ? a.accountNameEn! : a.accountNameTh;
+                      return Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: ListTile(
+                          selected: sel,
+                          selectedTileColor: _kTheme.withOpacity(0.12),
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.indigo.shade100,
+                            child: const Icon(Icons.savings, size: 18),
+                          ),
+                          title: Text(a.accountCode,
+                              style: TextStyle(fontWeight: FontWeight.bold, color: a.isActive ? null : Colors.grey)),
+                          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(name,
+                                style: TextStyle(fontSize: 13, color: a.isActive ? Colors.black87 : Colors.grey),
+                                overflow: TextOverflow.ellipsis),
+                            Text(
+                              [
+                                cmCmTypeLabel(a.cmType, isEnglish),
+                                if (a.bankDisplay.isNotEmpty) a.bankDisplay,
+                                if ((a.accountNumber ?? '').isNotEmpty) a.accountNumber!,
+                                if (!a.isPettyCash) cmAccountTypeLabel(a.accountType, isEnglish),
+                                if (a.isFcy) a.currencyCode,
+                                if (a.isCheckAccount) (isEnglish ? 'Check' : 'เช็ค'),
+                              ].join(' · '),
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                          ]),
+                          trailing: !a.isActive
+                              ? Chip(
+                                  label: Text(isEnglish ? 'Inactive' : 'หยุดใช้', style: const TextStyle(fontSize: 11)),
+                                  backgroundColor: const Color(0xFFEEEEEE),
+                                )
+                              : null,
+                          onTap: () async {
+                            setState(() { _selectedAccount = a; _checks = []; _selected.clear(); });
+                            await _loadConfigs(a.id!);
+                          },
+                        ),
+                      );
                     },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      color: sel ? _kTheme.withOpacity(0.12) : null,
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(a.accountCode, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
-                            color: sel ? _kTheme : Colors.black87)),
-                        Text('${a.accountNameTh} (${a.bankShortName})',
-                            style: const TextStyle(fontSize: 11, color: Colors.black54)),
-                        Text(a.currencyCode, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
-                      ]),
-                    ),
-                  );
-                },
-              )),
+                  )),
       ]),
     );
   }
 
   Widget _buildRightPanel() {
+    final isEnglish = _isEnglish;
     if (_selectedAccount == null) {
-      return const Center(child: Text('เลือกบัญชีธนาคาร', style: TextStyle(color: Colors.grey)));
+      return Center(child: Text(isEnglish ? 'Select a bank account' : 'เลือกบัญชีธนาคาร', style: const TextStyle(color: Colors.grey)));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _buildFilterBar(),
@@ -240,109 +312,114 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
               ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.receipt_long, size: 48, color: Colors.grey.shade300),
                   const SizedBox(height: 8),
-                  Text('กด "โหลดเช็ค" เพื่อแสดงรายการ', style: TextStyle(color: Colors.grey.shade400)),
+                  Text(isEnglish ? 'Press "Load Checks" to show items' : 'กด "โหลดเช็ค" เพื่อแสดงรายการ', style: TextStyle(color: Colors.grey.shade400)),
                 ]))
               : _buildCheckTable()),
     ]);
   }
 
   Widget _buildFilterBar() {
+    final isEnglish = _isEnglish;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       color: Colors.grey.shade50,
-      child: Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        // Config selector
-        if (_loadingConfigs)
-          const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-        else if (_configs.isNotEmpty)
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Config:', style: TextStyle(fontSize: 12)),
-            const SizedBox(width: 6),
-            DropdownButton<Map<String, dynamic>>(
-              value: _selConfig,
-              isDense: true,
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
-              items: _configs.map((c) => DropdownMenuItem(
-                value: c,
-                child: Text('${c['config_name']}${c['is_default'] == true ? ' ★' : ''}'),
-              )).toList(),
-              onChanged: (v) => setState(() => _selConfig = v),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            flex: 2,
+            child: _loadingConfigs
+                ? const SizedBox(height: 56, child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))))
+                : _configs.isNotEmpty
+                    ? DropdownButtonFormField<Map<String, dynamic>>(
+                        value: _selConfig,
+                        isExpanded: true,
+                        decoration: InputDecoration(labelText: isEnglish ? 'Config' : 'แบบพิมพ์เช็ค', border: const OutlineInputBorder()),
+                        items: _configs.map((c) => DropdownMenuItem(
+                          value: c,
+                          child: Text('${c['config_name']}${c['is_default'] == true ? ' ★' : ''}', overflow: TextOverflow.ellipsis),
+                        )).toList(),
+                        onChanged: (v) => setState(() => _selConfig = v),
+                      )
+                    : Container(
+                        height: 56, alignment: Alignment.centerLeft,
+                        child: Text(isEnglish ? 'No check print config found' : 'ไม่พบ config พิมพ์เช็ค',
+                            style: TextStyle(color: Colors.orange.shade700)),
+                      ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: _datePicker(isEnglish ? 'From' : 'จาก', _dateFrom, (d) => setState(() => _dateFrom = d))),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: _datePicker(isEnglish ? 'To' : 'ถึง', _dateTo, (d) => setState(() => _dateTo = d))),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 1,
+            child: DropdownButtonFormField<String>(
+              value: _statusFilter,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: isEnglish ? 'Status' : 'สถานะ', border: const OutlineInputBorder()),
+              items: [
+                DropdownMenuItem(value: 'All',     child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
+                const DropdownMenuItem(value: 'Pending', child: Text('Pending')),
+                const DropdownMenuItem(value: 'Cleared', child: Text('Cleared')),
+                const DropdownMenuItem(value: 'Bounced', child: Text('Bounced')),
+                const DropdownMenuItem(value: 'Voided',  child: Text('Voided')),
+              ],
+              onChanged: (v) => setState(() => _statusFilter = v ?? 'All'),
             ),
-          ])
-        else
-          Text('ไม่พบ config พิมพ์เช็ค', style: TextStyle(fontSize: 12, color: Colors.orange.shade700)),
-
-        _datePicker('จาก:', _dateFrom, (d) => setState(() => _dateFrom = d)),
-        _datePicker('ถึง:', _dateTo, (d) => setState(() => _dateTo = d)),
-
-        // Status filter
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          const Text('สถานะ:', style: TextStyle(fontSize: 12)),
-          const SizedBox(width: 6),
-          DropdownButton<String>(
-            value: _statusFilter,
-            isDense: true,
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-            items: const [
-              DropdownMenuItem(value: 'All',     child: Text('ทั้งหมด')),
-              DropdownMenuItem(value: 'Pending', child: Text('Pending')),
-              DropdownMenuItem(value: 'Cleared', child: Text('Cleared')),
-              DropdownMenuItem(value: 'Bounced', child: Text('Bounced')),
-              DropdownMenuItem(value: 'Voided',  child: Text('Voided')),
-            ],
-            onChanged: (v) => setState(() => _statusFilter = v ?? 'All'),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 1,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16)),
+              onPressed: _loadChecks,
+              icon: const Icon(Icons.search, size: 18),
+              label: Text(isEnglish ? 'Load Checks' : 'โหลดเช็ค'),
+            ),
           ),
         ]),
-
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
-          onPressed: _loadChecks,
-          icon: const Icon(Icons.search, size: 14),
-          label: const Text('โหลดเช็ค', style: TextStyle(fontSize: 12)),
-        ),
-
-        if (_checks.isNotEmpty)
-          TextButton.icon(
-            icon: Icon(_selected.length == _checks.length ? Icons.check_box : Icons.check_box_outline_blank, size: 14),
-            label: Text(_selected.length == _checks.length ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด',
-                style: const TextStyle(fontSize: 12)),
-            onPressed: () => setState(() {
-              if (_selected.length == _checks.length) {
-                _selected.clear();
-              } else {
-                _selected.clear();
-                for (final c in _checks) { _selected.add(c['id'] as int); }
-              }
-            }),
-          ),
+        if (_checks.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            TextButton.icon(
+              icon: Icon(_selected.length == _checks.length ? Icons.check_box : Icons.check_box_outline_blank, size: 16),
+              label: Text(_selected.length == _checks.length ? (isEnglish ? 'Deselect All' : 'ยกเลิกทั้งหมด') : (isEnglish ? 'Select All' : 'เลือกทั้งหมด'),
+                  style: const TextStyle(fontSize: 13)),
+              onPressed: () => setState(() {
+                if (_selected.length == _checks.length) {
+                  _selected.clear();
+                } else {
+                  _selected.clear();
+                  for (final c in _checks) { _selected.add(c['id'] as int); }
+                }
+              }),
+            ),
+          ]),
+        ],
       ]),
     );
   }
 
   Widget _datePicker(String label, DateTime value, void Function(DateTime) onPick) {
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Text(label, style: const TextStyle(fontSize: 12)),
-      const SizedBox(width: 4),
-      InkWell(
-        onTap: () async {
-          final p = await showDatePicker(context: context, initialDate: value,
-              firstDate: DateTime(2000), lastDate: DateTime(2100));
-          if (p != null) onPick(p);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.white, border: Border.all(color: Colors.grey.shade400),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(_dateFmt.format(value), style: const TextStyle(fontSize: 12)),
-        ),
+    return InkWell(
+      onTap: () async {
+        final p = await showDatePicker(context: context, initialDate: value,
+            firstDate: DateTime(2000), lastDate: DateTime(2100));
+        if (p != null) onPick(p);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
+            suffixIcon: const Icon(Icons.calendar_today, size: 18)),
+        child: Text(_dateFmt.format(value)),
       ),
-    ]);
+    );
   }
 
   Widget _buildCheckTable() {
+    final isEnglish = _isEnglish;
     return SingleChildScrollView(
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -351,14 +428,14 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
           columnSpacing: 16,
           headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
           headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-          columns: const [
-            DataColumn(label: Text('')),
-            DataColumn(label: Text('วันที่จ่าย')),
-            DataColumn(label: Text('เลขที่เช็ค')),
-            DataColumn(label: Text('วันที่เช็ค')),
-            DataColumn(label: Text('ผู้รับเงิน')),
-            DataColumn(label: Text('จำนวนเงิน'), numeric: true),
-            DataColumn(label: Text('สถานะ')),
+          columns: [
+            const DataColumn(label: Text('')),
+            DataColumn(label: Text(isEnglish ? 'Payment Date' : 'วันที่จ่าย')),
+            DataColumn(label: Text(isEnglish ? 'Check No.' : 'เลขที่เช็ค')),
+            DataColumn(label: Text(isEnglish ? 'Check Date' : 'วันที่เช็ค')),
+            DataColumn(label: Text(isEnglish ? 'Payee' : 'ผู้รับเงิน')),
+            DataColumn(label: Text(isEnglish ? 'Amount' : 'จำนวนเงิน'), numeric: true),
+            DataColumn(label: Text(isEnglish ? 'Status' : 'สถานะ')),
           ],
           rows: _checks.map((c) {
             final id = c['id'] as int;
@@ -368,7 +445,7 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
             switch (status) {
               case 'Cleared': statusColor = Colors.green.shade700;
               case 'Bounced': statusColor = Colors.red.shade700;
-              case 'Voided':  statusColor = Colors.grey.shade600;
+              case 'Voided':  statusColor = Colors.red.shade600;
               default:        statusColor = Colors.blue.shade700;
             }
             return DataRow(
@@ -398,7 +475,7 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
                   style: const TextStyle(fontSize: 12),
                 )),
                 DataCell(SizedBox(width: 160, child: Text(
-                    c['payee_name_th'] ?? c['payee_name_en'] ?? '',
+                    c['payee_name_th'] ?? '',
                     style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis))),
                 DataCell(Text(_fmt.format(double.tryParse(c['amount_lc']?.toString() ?? '0') ?? 0),
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
@@ -458,7 +535,7 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
     final doc = pw.Document(theme: theme);
 
     for (final c in checks) {
-      final payee  = c['payee_name_th'] as String? ?? c['payee_name_en'] as String? ?? '';
+      final payee  = c['payee_name_th'] as String? ?? '';
       final amount = double.tryParse(c['amount_lc']?.toString() ?? '0') ?? 0;
       final amtTxt = thaiAmountToWords(amount);
       String dateStr = '';

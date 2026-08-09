@@ -72,6 +72,15 @@ const Map<String, String> cmCheckbookStatusOptions = {
   'Cancelled': 'ยกเลิก',
 };
 
+const Map<String, String> cmCheckbookStatusOptionsEng = {
+  'Active':    'Active',
+  'Used':      'Used',
+  'Cancelled': 'Cancelled',
+};
+
+String cmCheckbookStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? cmCheckbookStatusOptionsEng[s] : cmCheckbookStatusOptions[s]) ?? s;
+
 // ── Print Config ──────────────────────────────────────────────────────────────
 
 class CmCheckPrintConfig {

@@ -54,13 +54,17 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
       });
 
   Future<void> _onDelete(CmBankAccount row) async {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     final service = Provider.of<CmBankAccountService>(context, listen: false);
+    final name = isEnglish && (row.accountNameEn ?? '').isNotEmpty ? row.accountNameEn! : row.accountNameTh;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: Text('ลบบัญชีธนาคาร "${row.accountCode} — ${row.accountNameTh}" ?'),
+        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(isEnglish
+            ? 'Delete bank account "${row.accountCode} — $name"?'
+            : 'ลบบัญชีธนาคาร "${row.accountCode} — $name" ?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -77,18 +81,19 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
       _listKey.currentState?.refresh();
       _onCancel();
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('ลบล้มเหลว: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text('${isEnglish ? 'Delete failed' : 'ลบล้มเหลว'}: $e'), backgroundColor: Colors.red));
       }
     }
   }
 
   Future<void> _onSubmit(CmBankAccount row) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final service = Provider.of<CmBankAccountService>(context, listen: false);
     if (_mode == Mode.add) {
       final created = await service.addRow(row);
@@ -98,16 +103,16 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
         _selectedData = created;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('เพิ่มสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
       }
     } else {
       await service.updateRow(row);
       _listKey.currentState?.refresh();
       setState(() => _selectedData = row);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('บันทึกสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
       }
     }
     widget.onFieldsChanged();
@@ -126,7 +131,7 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final perm = MenuScope.of(context);
     final canCreate = perm?.canCreate ?? true;
     final canEdit = perm?.canEdit ?? true;
@@ -134,12 +139,12 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
-        backgroundColor: Colors.indigo[700],
+        backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรชรายการ',
+            tooltip: isEnglish ? 'Refresh List' : 'รีเฟรชรายการ',
             onPressed: () {
               _listKey.currentState?.refresh();
               _onCancel();
@@ -156,7 +161,7 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
             children: [
               Container(
                 width: 36,
-                color: Colors.indigo[700],
+                color: Colors.blue[700],
                 child: IconButton(
                   icon: Icon(
                     _isLeftPanelExpanded
@@ -168,7 +173,9 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
                   padding: EdgeInsets.zero,
                   onPressed: () => setState(
                       () => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? 'ย่อรายการ' : 'ขยายรายการ',
+                  tooltip: _isLeftPanelExpanded
+                      ? (isEnglish ? 'Collapse List' : 'ย่อรายการ')
+                      : (isEnglish ? 'Expand List' : 'ขยายรายการ'),
                 ),
               ),
               AnimatedContainer(

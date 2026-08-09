@@ -232,6 +232,8 @@ class ApPaymentRun {
   final int? bankFileFormatId;
   final String? bankFileFormatCode;
   final String? bankFileFormatName;
+  final int? checkPrintConfigId;
+  final String? checkPrintConfigName;
   final DateTime? paymentDate;
   final int? paymentMethodId;
   final String? paymentMethodCode;
@@ -254,6 +256,8 @@ class ApPaymentRun {
     this.bankFileFormatId,
     this.bankFileFormatCode,
     this.bankFileFormatName,
+    this.checkPrintConfigId,
+    this.checkPrintConfigName,
     this.paymentDate,
     this.paymentMethodId,
     this.paymentMethodCode,
@@ -277,6 +281,8 @@ class ApPaymentRun {
         bankFileFormatId: json['bank_file_format_id'],
         bankFileFormatCode: json['bank_file_format_code'],
         bankFileFormatName: json['bank_file_format_name'],
+        checkPrintConfigId: json['check_print_config_id'],
+        checkPrintConfigName: json['check_print_config_name'],
         paymentDate: parseLocalDateNullable(json['payment_date']),
         paymentMethodId: json['payment_method_id'],
         paymentMethodCode: json['payment_method_code'],
@@ -301,6 +307,7 @@ class ApPaymentRun {
         'run_date': formatLocalDate(runDate),
         'description': description,
         'bank_file_format_id': bankFileFormatId,
+        'check_print_config_id': checkPrintConfigId,
         'payment_date': paymentDate != null ? formatLocalDate(paymentDate!) : null,
         'payment_method_id': paymentMethodId,
         'due_date_filter': dueDateFilter != null ? formatLocalDate(dueDateFilter!) : null,

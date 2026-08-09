@@ -1,5 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -25,6 +27,8 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
     with AutomaticKeepAliveClientMixin {
 
   static const _kColor = Color(0xFF1565C0);
+
+  bool _isEnglish = false;
 
   final CmBankAccountService _acctSvc    = CmBankAccountService();
   final CmCheckbookService   _cbSvc      = CmCheckbookService();
@@ -103,25 +107,29 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
   // ── Actions ───────────────────────────────────────────────────────────────
 
   Future<void> _clear(CmPayment p) async {
+    final isEnglish = _isEnglish;
     final result = await _showClearDialog();
     if (result == null) return;
     try {
       await _svc.clearPayment(p.id!, clearingDate: result['date'], clearingNote: result['note']);
-      _showOk('เคลียร์สำเร็จ');
+      _showOk(isEnglish ? 'Cleared successfully' : 'เคลียร์สำเร็จ');
       await _loadPayments();
       setState(() => _selected = null);
     } catch (e) { _showErr(e.toString()); }
   }
 
   Future<void> _void(CmPayment p) async {
+    final isEnglish = _isEnglish;
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยัน Void'),
-        content: Text('ยืนยันการ Void รายการจ่ายเงิน ${p.apDocNo ?? p.id} ?'),
+        title: Text(isEnglish ? 'Confirm Void' : 'ยืนยัน Void'),
+        content: Text(isEnglish
+            ? 'Confirm void of payment ${p.apDocNo ?? p.id}?'
+            : 'ยืนยันการ Void รายการจ่ายเงิน ${p.apDocNo ?? p.id} ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           TextButton(onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Void', style: TextStyle(color: Colors.red))),
         ],
@@ -130,20 +138,21 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
     if (!ok) return;
     try {
       await _svc.voidPayment(p.id!);
-      _showOk('Void สำเร็จ');
+      _showOk(isEnglish ? 'Voided successfully' : 'Void สำเร็จ');
       await _loadPayments();
       setState(() => _selected = null);
     } catch (e) { _showErr(e.toString()); }
   }
 
   Future<Map<String, String>?> _showClearDialog() async {
+    final isEnglish = _isEnglish;
     final noteCtrl = TextEditingController();
     DateTime clearDate = DateTime.now();
     return showDialog<Map<String, String>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
-          title: const Text('เคลียร์รายการจ่ายเงิน'),
+          title: Text(isEnglish ? 'Clear Payment' : 'เคลียร์รายการจ่ายเงิน'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             InkWell(
               onTap: () async {
@@ -152,23 +161,27 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
                 if (d != null) setDlg(() => clearDate = d);
               },
               child: InputDecorator(
-                decoration: const InputDecoration(labelText: 'วันที่เคลียร์', border: OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Clearing Date' : 'วันที่เคลียร์',
+                    border: const OutlineInputBorder(), isDense: true),
                 child: Text(_dateFmt.format(clearDate)),
               ),
             ),
             const SizedBox(height: 8),
             TextField(controller: noteCtrl,
-                decoration: const InputDecoration(labelText: 'หมายเหตุ', border: OutlineInputBorder(), isDense: true)),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Note' : 'หมายเหตุ',
+                    border: const OutlineInputBorder(), isDense: true)),
           ]),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: _kColor),
               onPressed: () => Navigator.pop(ctx, {
                 'date': formatLocalDate(clearDate),
                 'note': noteCtrl.text.trim(),
               }),
-              child: const Text('ยืนยัน'),
+              child: Text(isEnglish ? 'Confirm' : 'ยืนยัน'),
             ),
           ],
         ),
@@ -244,6 +257,8 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -251,7 +266,8 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
         foregroundColor: Colors.white,
         actions: [
           if (_selectedBank != null)
-            IconButton(icon: const Icon(Icons.refresh), onPressed: _loadPayments, tooltip: 'โหลดใหม่'),
+            IconButton(icon: const Icon(Icons.refresh), onPressed: _loadPayments,
+                tooltip: isEnglish ? 'Reload' : 'โหลดใหม่'),
         ],
       ),
       body: LayoutBuilder(builder: (ctx, constraints) {
@@ -289,107 +305,125 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
               ),
             ),
           Expanded(child: _selectedBank == null
-              ? const Center(child: Text('เลือกบัญชีธนาคารทางซ้าย', style: TextStyle(color: Colors.grey)))
+              ? Center(child: Text(
+                  isEnglish ? 'Select a bank account on the left' : 'เลือกบัญชีธนาคารทางซ้าย',
+                  style: const TextStyle(color: Colors.grey)))
               : _buildMainPanel()),
         ]);
       }),
     );
   }
 
-  Widget _buildBankList() => Column(children: [
-    Container(
-      padding: const EdgeInsets.all(8), color: Colors.blueGrey.shade200,
-      child: const Row(children: [
-        Icon(Icons.account_balance, size: 16, color: Colors.black54), SizedBox(width: 6),
-        Text('บัญชีธนาคาร', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-      ]),
-    ),
-    Expanded(
-      child: _bankAccounts.isEmpty
-          ? const Center(child: Text('ไม่พบบัญชี', style: TextStyle(color: Colors.grey, fontSize: 12)))
-          : ListView.builder(
-              itemCount: _bankAccounts.length,
-              itemBuilder: (_, i) {
-                final b = _bankAccounts[i];
-                final sel = _selectedBank?.id == b.id;
-                return ListTile(
-                  dense: true, selected: sel,
-                  selectedTileColor: const Color(0xFFE3F2FD),
-                  leading: CircleAvatar(radius: 14,
-                    backgroundColor: sel ? _kColor : Colors.blueGrey.shade300,
-                    child: Text(b.accountCode.substring(0, 1),
-                        style: const TextStyle(color: Colors.white, fontSize: 11))),
-                  title: Text(b.accountCode,
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: sel ? _kColor : null)),
-                  subtitle: Text(b.accountNameTh, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis),
-                  onTap: () => _selectBank(b),
-                );
-              },
-            ),
-    ),
-  ]);
-
-  Widget _buildMainPanel() => Column(children: [
-    _buildFilterBar(),
-    const Divider(height: 1),
-    Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Expanded(child: _buildList()),
-      if (_showCreateForm || _selected != null) ...[
-        const VerticalDivider(width: 1),
-        SizedBox(width: 400,
-          child: _showCreateForm
-              ? _CreatePaymentForm(
-                  bankAccount: _selectedBank!,
-                  checkbookSvc: _cbSvc,
-                  kColor: _kColor,
-                  onSave: (p) async {
-                    try {
-                      await _svc.createPayment(p);
-                      _showOk('บันทึกสำเร็จ');
-                      setState(() => _showCreateForm = false);
-                      await _loadPayments();
-                    } catch (e) { _showErr(e.toString()); }
-                  },
-                  onCancel: () => setState(() => _showCreateForm = false),
-                )
-              : _buildDetail(_selected!),
-        ),
-      ],
-    ])),
-  ]);
-
-  Widget _buildFilterBar() => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    color: Colors.grey.shade50,
-    child: Row(children: [
-      SizedBox(width: 140,
-        child: DropdownButtonFormField<String>(
-          value: _statusFilter,
-          decoration: const InputDecoration(labelText: 'สถานะ', border: OutlineInputBorder(), isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
-          items: [
-            const DropdownMenuItem(value: 'All', child: Text('ทั้งหมด')),
-            ...cmPaymentStatusOptions.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))),
-          ],
-          onChanged: (v) => setState(() { _statusFilter = v!; _loadPayments(); }),
-        ),
+  Widget _buildBankList() {
+    final isEnglish = _isEnglish;
+    return Column(children: [
+      Container(
+        padding: const EdgeInsets.all(8), color: Colors.blueGrey.shade200,
+        child: Row(children: [
+          const Icon(Icons.account_balance, size: 16, color: Colors.black54), const SizedBox(width: 6),
+          Text(isEnglish ? 'Bank Accounts' : 'บัญชีธนาคาร',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+        ]),
       ),
-      const SizedBox(width: 8),
-      _dateField('จากวันที่', _dateFrom, (d) => setState(() { _dateFrom = d; _loadPayments(); })),
-      const SizedBox(width: 8),
-      _dateField('ถึงวันที่', _dateTo, (d) => setState(() { _dateTo = d; _loadPayments(); })),
-      const Spacer(),
-      Text('${_payments.length} รายการ', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-      const SizedBox(width: 12),
-      if (MenuScope.of(context)?.canCreate ?? true)
-        FilledButton.icon(
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('สร้างรายการจ่าย'),
-          style: FilledButton.styleFrom(backgroundColor: _kColor),
-          onPressed: () => setState(() { _showCreateForm = true; _selected = null; }),
+      Expanded(
+        child: _bankAccounts.isEmpty
+            ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี',
+                style: const TextStyle(color: Colors.grey, fontSize: 12)))
+            : ListView.builder(
+                itemCount: _bankAccounts.length,
+                itemBuilder: (_, i) {
+                  final b = _bankAccounts[i];
+                  final sel = _selectedBank?.id == b.id;
+                  final name = isEnglish && (b.accountNameEn ?? '').isNotEmpty
+                      ? b.accountNameEn! : b.accountNameTh;
+                  return ListTile(
+                    dense: true, selected: sel,
+                    selectedTileColor: const Color(0xFFE3F2FD),
+                    leading: CircleAvatar(radius: 14,
+                      backgroundColor: sel ? _kColor : Colors.blueGrey.shade300,
+                      child: Text(b.accountCode.substring(0, 1),
+                          style: const TextStyle(color: Colors.white, fontSize: 11))),
+                    title: Text(b.accountCode,
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: sel ? _kColor : null)),
+                    subtitle: Text(name, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis),
+                    onTap: () => _selectBank(b),
+                  );
+                },
+              ),
+      ),
+    ]);
+  }
+
+  Widget _buildMainPanel() {
+    final isEnglish = _isEnglish;
+    return Column(children: [
+      _buildFilterBar(),
+      const Divider(height: 1),
+      Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: _buildList()),
+        if (_showCreateForm || _selected != null) ...[
+          const VerticalDivider(width: 1),
+          SizedBox(width: 400,
+            child: _showCreateForm
+                ? _CreatePaymentForm(
+                    bankAccount: _selectedBank!,
+                    checkbookSvc: _cbSvc,
+                    kColor: _kColor,
+                    onSave: (p) async {
+                      try {
+                        await _svc.createPayment(p);
+                        _showOk(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ');
+                        setState(() => _showCreateForm = false);
+                        await _loadPayments();
+                      } catch (e) { _showErr(e.toString()); }
+                    },
+                    onCancel: () => setState(() => _showCreateForm = false),
+                  )
+                : _buildDetail(_selected!),
+          ),
+        ],
+      ])),
+    ]);
+  }
+
+  Widget _buildFilterBar() {
+    final isEnglish = _isEnglish;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: Colors.grey.shade50,
+      child: Row(children: [
+        SizedBox(width: 140,
+          child: DropdownButtonFormField<String>(
+            value: _statusFilter,
+            decoration: InputDecoration(
+                labelText: isEnglish ? 'Status' : 'สถานะ', border: const OutlineInputBorder(), isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+            items: [
+              DropdownMenuItem(value: 'All', child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
+              ...cmPaymentStatusOptions.keys.map((k) => DropdownMenuItem(
+                  value: k, child: Text(cmPaymentStatusLabel(k, isEnglish)))),
+            ],
+            onChanged: (v) => setState(() { _statusFilter = v!; _loadPayments(); }),
+          ),
         ),
-    ]),
-  );
+        const SizedBox(width: 8),
+        _dateField(isEnglish ? 'From Date' : 'จากวันที่', _dateFrom, (d) => setState(() { _dateFrom = d; _loadPayments(); })),
+        const SizedBox(width: 8),
+        _dateField(isEnglish ? 'To Date' : 'ถึงวันที่', _dateTo, (d) => setState(() { _dateTo = d; _loadPayments(); })),
+        const Spacer(),
+        Text(isEnglish ? '${_payments.length} items' : '${_payments.length} รายการ',
+            style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        const SizedBox(width: 12),
+        if (MenuScope.of(context)?.canCreate ?? true)
+          FilledButton.icon(
+            icon: const Icon(Icons.add, size: 16),
+            label: Text(isEnglish ? 'Create Payment' : 'สร้างรายการจ่าย'),
+            style: FilledButton.styleFrom(backgroundColor: _kColor),
+            onPressed: () => setState(() { _showCreateForm = true; _selected = null; }),
+          ),
+      ]),
+    );
+  }
 
   Widget _dateField(String label, String? value, void Function(String?) onChanged) =>
     InkWell(
@@ -414,8 +448,10 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
     );
 
   Widget _buildList() {
+    final isEnglish = _isEnglish;
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_payments.isEmpty) return const Center(child: Text('ไม่มีรายการ', style: TextStyle(color: Colors.grey)));
+    if (_payments.isEmpty) return Center(child: Text(isEnglish ? 'No items' : 'ไม่มีรายการ',
+        style: const TextStyle(color: Colors.grey)));
     return ListView.builder(
       itemCount: _payments.length,
       itemBuilder: (_, i) {
@@ -434,7 +470,7 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
               child: Icon(p.isCheck ? Icons.description : Icons.swap_horiz,
                   color: _statusColor(p.status), size: 18)),
             title: Row(children: [
-              Expanded(child: Text(p.apDocNo ?? (p.isFromAp ? 'AP' : 'Manual'),
+              Expanded(child: Text(p.apDocNo ?? (p.isFromAp ? 'AP' : (isEnglish ? 'Manual' : 'บันทึกเอง')),
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
               _statusChip(p.status),
             ]),
@@ -442,10 +478,11 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
               Text('${_dateFmt.format(p.paymentDate)}  |  ${p.payeeCode ?? ''}  ${p.payeeNameTh ?? ''}',
                   style: const TextStyle(fontSize: 11)),
               Row(children: [
-                Text(cmPaymentMethodTypeLabels[p.paymentMethodType] ?? p.paymentMethodType,
+                Text(cmPaymentMethodTypeLabel(p.paymentMethodType, isEnglish),
                     style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 if (p.checkNo != null)
-                  Text('  เช็ค ${p.checkNo}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text('  ${isEnglish ? 'Check' : 'เช็ค'} ${p.checkNo}',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 const Spacer(),
                 Text(_amtFmt.format(p.amountLc),
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _kColor)),
@@ -458,68 +495,71 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
     );
   }
 
-  Widget _buildDetail(CmPayment p) => Column(children: [
-    Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: _kColor.withOpacity(0.08),
-      child: Row(children: [
-        const Text('รายละเอียด', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        const Spacer(),
-        IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() => _selected = null)),
-      ]),
-    ),
-    const Divider(height: 1),
-    Expanded(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (p.isFromAp) _detailRow('เอกสาร AP', p.apDocNo ?? '—'),
-          _detailRow('วันที่', _dateFmt.format(p.paymentDate)),
-          _detailRow('ผู้รับเงิน', '${p.payeeCode ?? ''}  ${p.payeeNameTh ?? ''}'),
-          _detailRow('บัญชีธนาคาร', '${p.bankAccountCode ?? ''}  ${p.bankAccountName ?? ''}'),
-          _detailRow('วิธีจ่าย', cmPaymentMethodTypeLabels[p.paymentMethodType] ?? p.paymentMethodType),
-          if (p.isCheck) ...[
-            _detailRow('สมุดเช็ค', p.checkbookCode ?? '—'),
-            _detailRow('เลขที่เช็ค', p.checkNo ?? '—'),
-            _detailRow('วันที่เช็ค', p.checkDate != null ? _dateFmt.format(p.checkDate!) : '—'),
-          ],
-          _detailRow('จำนวนเงิน (THB)', _amtFmt.format(p.amountLc)),
-          if (p.isFcy) _detailRow('จำนวนเงิน (FC)', '${_amtFmt.format(p.amountFc)} ${p.currencyCode}'),
-          if (p.remark != null && p.remark!.isNotEmpty) _detailRow('หมายเหตุ', p.remark!),
-          const Divider(),
-          _detailRow('สถานะ', cmPaymentStatusOptions[p.status] ?? p.status),
-          if (p.clearingDate != null) _detailRow('วันที่เคลียร์', _dateFmt.format(p.clearingDate!)),
-          if (p.clearingNote != null && p.clearingNote!.isNotEmpty) _detailRow('หมายเหตุ', p.clearingNote!),
-          const SizedBox(height: 20),
-          // Check print button
-          if (p.isCheck)
-            FilledButton.icon(
-              icon: const Icon(Icons.print, size: 16),
-              label: const Text('พิมพ์เช็ค'),
-              style: FilledButton.styleFrom(backgroundColor: Colors.indigo, minimumSize: const Size.fromHeight(36)),
-              onPressed: () => _printCheck(p),
-            ),
-          if (p.isCheck) const SizedBox(height: 8),
-          if (p.isPending) ...[
-            FilledButton.icon(
-              icon: const Icon(Icons.check_circle, size: 16),
-              label: const Text('เคลียร์รายการ'),
-              style: FilledButton.styleFrom(backgroundColor: Colors.green, minimumSize: const Size.fromHeight(36)),
-              onPressed: () => _clear(p),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.block, size: 16, color: Colors.red),
-              label: const Text('Void', style: TextStyle(color: Colors.red)),
-              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red),
-                  minimumSize: const Size.fromHeight(36)),
-              onPressed: () => _void(p),
-            ),
-          ],
+  Widget _buildDetail(CmPayment p) {
+    final isEnglish = _isEnglish;
+    return Column(children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        color: _kColor.withOpacity(0.08),
+        child: Row(children: [
+          Text(isEnglish ? 'Details' : 'รายละเอียด', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          const Spacer(),
+          IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() => _selected = null)),
         ]),
       ),
-    ),
-  ]);
+      const Divider(height: 1),
+      Expanded(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (p.isFromAp) _detailRow(isEnglish ? 'AP Document' : 'เอกสาร AP', p.apDocNo ?? '—'),
+            _detailRow(isEnglish ? 'Date' : 'วันที่', _dateFmt.format(p.paymentDate)),
+            _detailRow(isEnglish ? 'Payee' : 'ผู้รับเงิน', '${p.payeeCode ?? ''}  ${p.payeeNameTh ?? ''}'),
+            _detailRow(isEnglish ? 'Bank Account' : 'บัญชีธนาคาร', '${p.bankAccountCode ?? ''}  ${p.bankAccountName ?? ''}'),
+            _detailRow(isEnglish ? 'Payment Method' : 'วิธีจ่าย', cmPaymentMethodTypeLabel(p.paymentMethodType, isEnglish)),
+            if (p.isCheck) ...[
+              _detailRow(isEnglish ? 'Checkbook' : 'สมุดเช็ค', p.checkbookCode ?? '—'),
+              _detailRow(isEnglish ? 'Check No.' : 'เลขที่เช็ค', p.checkNo ?? '—'),
+              _detailRow(isEnglish ? 'Check Date' : 'วันที่เช็ค', p.checkDate != null ? _dateFmt.format(p.checkDate!) : '—'),
+            ],
+            _detailRow(isEnglish ? 'Amount (THB)' : 'จำนวนเงิน (THB)', _amtFmt.format(p.amountLc)),
+            if (p.isFcy) _detailRow(isEnglish ? 'Amount (FC)' : 'จำนวนเงิน (FC)', '${_amtFmt.format(p.amountFc)} ${p.currencyCode}'),
+            if (p.remark != null && p.remark!.isNotEmpty) _detailRow(isEnglish ? 'Note' : 'หมายเหตุ', p.remark!),
+            const Divider(),
+            _detailRow(isEnglish ? 'Status' : 'สถานะ', cmPaymentStatusLabel(p.status, isEnglish)),
+            if (p.clearingDate != null) _detailRow(isEnglish ? 'Clearing Date' : 'วันที่เคลียร์', _dateFmt.format(p.clearingDate!)),
+            if (p.clearingNote != null && p.clearingNote!.isNotEmpty) _detailRow(isEnglish ? 'Note' : 'หมายเหตุ', p.clearingNote!),
+            const SizedBox(height: 20),
+            // Check print button
+            if (p.isCheck)
+              FilledButton.icon(
+                icon: const Icon(Icons.print, size: 16),
+                label: Text(isEnglish ? 'Print Check' : 'พิมพ์เช็ค'),
+                style: FilledButton.styleFrom(backgroundColor: Colors.indigo, minimumSize: const Size.fromHeight(36)),
+                onPressed: () => _printCheck(p),
+              ),
+            if (p.isCheck) const SizedBox(height: 8),
+            if (p.isPending) ...[
+              FilledButton.icon(
+                icon: const Icon(Icons.check_circle, size: 16),
+                label: Text(isEnglish ? 'Clear Item' : 'เคลียร์รายการ'),
+                style: FilledButton.styleFrom(backgroundColor: Colors.green, minimumSize: const Size.fromHeight(36)),
+                onPressed: () => _clear(p),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.block, size: 16, color: Colors.red),
+                label: const Text('Void', style: TextStyle(color: Colors.red)),
+                style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red),
+                    minimumSize: const Size.fromHeight(36)),
+                onPressed: () => _void(p),
+              ),
+            ],
+          ]),
+        ),
+      ),
+    ]);
+  }
 
   Widget _detailRow(String label, String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
@@ -530,13 +570,13 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
   );
 
   Color _statusColor(String s) =>
-      s == 'Cleared' ? Colors.green : s == 'Voided' ? Colors.grey : _kColor;
+      s == 'Cleared' ? Colors.green : s == 'Voided' ? Colors.red : _kColor;
 
   Widget _statusChip(String s) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
     decoration: BoxDecoration(
       color: _statusColor(s).withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-    child: Text(cmPaymentStatusOptions[s] ?? s,
+    child: Text(cmPaymentStatusLabel(s, _isEnglish),
         style: TextStyle(fontSize: 10, color: _statusColor(s), fontWeight: FontWeight.bold)),
   );
 }
@@ -618,12 +658,14 @@ class _CreatePaymentFormState extends State<_CreatePaymentForm> {
 
   @override
   Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Column(children: [
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         color: widget.kColor.withOpacity(0.08),
         child: Row(children: [
-          const Text('สร้างรายการจ่ายเงิน', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(isEnglish ? 'Create Payment' : 'สร้างรายการจ่ายเงิน',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           const Spacer(),
           IconButton(icon: const Icon(Icons.close, size: 18), onPressed: widget.onCancel),
         ]),
@@ -643,7 +685,9 @@ class _CreatePaymentFormState extends State<_CreatePaymentForm> {
                   if (d != null) setState(() => _paymentDate = d);
                 },
                 child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'วันที่จ่าย *', border: OutlineInputBorder(), isDense: true),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Payment Date *' : 'วันที่จ่าย *',
+                      border: const OutlineInputBorder(), isDense: true),
                   child: Text(_dateFmt.format(_paymentDate)),
                 ),
               ),
@@ -651,9 +695,11 @@ class _CreatePaymentFormState extends State<_CreatePaymentForm> {
               // Method type
               DropdownButtonFormField<String>(
                 value: _methodType,
-                decoration: const InputDecoration(labelText: 'วิธีจ่าย *', border: OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Payment Method *' : 'วิธีจ่าย *',
+                    border: const OutlineInputBorder(), isDense: true),
                 items: ['TRANSFER','CHECK','CASH','BILL_OF_EXCHANGE'].map((t) =>
-                    DropdownMenuItem(value: t, child: Text(cmPaymentMethodTypeLabels[t] ?? t))).toList(),
+                    DropdownMenuItem(value: t, child: Text(cmPaymentMethodTypeLabel(t, isEnglish)))).toList(),
                 onChanged: (v) => setState(() { _methodType = v!; _selectedCb = null; }),
               ),
               const SizedBox(height: 10),
@@ -661,11 +707,14 @@ class _CreatePaymentFormState extends State<_CreatePaymentForm> {
               if (_methodType == 'CHECK') ...[
                 DropdownButtonFormField<CmCheckbook?>(
                   value: _selectedCb,
-                  decoration: const InputDecoration(labelText: 'สมุดเช็ค', border: OutlineInputBorder(), isDense: true),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Checkbook' : 'สมุดเช็ค',
+                      border: const OutlineInputBorder(), isDense: true),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('— ไม่ระบุ —')),
+                    DropdownMenuItem(value: null, child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
                     ..._checkbooks.map((c) => DropdownMenuItem(value: c,
-                        child: Text('${c.checkbookCode} (ถัดไป: ${c.nextCheckNo ?? c.startCheckNo})'))),
+                        child: Text('${c.checkbookCode} '
+                            '(${isEnglish ? 'Next' : 'ถัดไป'}: ${c.nextCheckNo ?? c.startCheckNo})'))),
                   ],
                   onChanged: (v) => setState(() => _selectedCb = v),
                 ),
@@ -679,13 +728,15 @@ class _CreatePaymentFormState extends State<_CreatePaymentForm> {
                   },
                   child: InputDecorator(
                     decoration: InputDecoration(
-                      labelText: 'วันที่บนเช็ค', border: const OutlineInputBorder(), isDense: true,
+                      labelText: isEnglish ? 'Check Date' : 'วันที่บนเช็ค', border: const OutlineInputBorder(), isDense: true,
                       suffixIcon: _checkDate != null
                           ? IconButton(icon: const Icon(Icons.clear, size: 16),
                               onPressed: () => setState(() => _checkDate = null), padding: EdgeInsets.zero)
                           : null,
                     ),
-                    child: Text(_checkDate != null ? _dateFmt.format(_checkDate!) : '(ใช้วันที่จ่าย)'),
+                    child: Text(_checkDate != null
+                        ? _dateFmt.format(_checkDate!)
+                        : (isEnglish ? '(use payment date)' : '(ใช้วันที่จ่าย)')),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -693,19 +744,23 @@ class _CreatePaymentFormState extends State<_CreatePaymentForm> {
               // Payee
               TextFormField(
                 controller: _payeeCtrl,
-                decoration: const InputDecoration(labelText: 'ชื่อผู้รับเงิน *', border: OutlineInputBorder(), isDense: true),
-                validator: (v) => (v?.trim().isEmpty ?? true) ? 'กรุณาระบุ' : null,
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Payee Name *' : 'ชื่อผู้รับเงิน *',
+                    border: const OutlineInputBorder(), isDense: true),
+                validator: (v) => (v?.trim().isEmpty ?? true) ? (isEnglish ? 'Required' : 'กรุณาระบุ') : null,
               ),
               const SizedBox(height: 10),
               // Amount
               TextFormField(
                 controller: _amtCtrl,
-                decoration: const InputDecoration(labelText: 'จำนวนเงิน (THB) *', border: OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Amount (THB) *' : 'จำนวนเงิน (THB) *',
+                    border: const OutlineInputBorder(), isDense: true),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 textAlign: TextAlign.right,
                 validator: (v) {
                   final d = double.tryParse(v?.replaceAll(',', '') ?? '');
-                  if (d == null || d <= 0) return 'กรุณาระบุจำนวนเงิน > 0';
+                  if (d == null || d <= 0) return isEnglish ? 'Enter an amount > 0' : 'กรุณาระบุจำนวนเงิน > 0';
                   return null;
                 },
               ),
@@ -713,12 +768,14 @@ class _CreatePaymentFormState extends State<_CreatePaymentForm> {
               // Remark
               TextFormField(
                 controller: _remarkCtrl,
-                decoration: const InputDecoration(labelText: 'หมายเหตุ', border: OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Note' : 'หมายเหตุ',
+                    border: const OutlineInputBorder(), isDense: true),
                 maxLines: 2,
               ),
               const SizedBox(height: 16),
               Row(children: [
-                TextButton(onPressed: widget.onCancel, child: const Text('ยกเลิก')),
+                TextButton(onPressed: widget.onCancel, child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton(
@@ -726,7 +783,7 @@ class _CreatePaymentFormState extends State<_CreatePaymentForm> {
                     onPressed: _saving ? null : _submit,
                     child: _saving
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('บันทึก'),
+                        : Text(isEnglish ? 'Save' : 'บันทึก'),
                   ),
                 ),
               ]),

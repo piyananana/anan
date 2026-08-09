@@ -5,8 +5,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_bank_file_format.dart';
@@ -26,13 +28,28 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
   @override
   bool get wantKeepAlive => true;
 
+  bool _isEnglish = false;
   bool _leftExpanded = true;
+  double _leftWidth  = 420.0;
+  bool _isDragging   = false;
 
   // Accounts
   List<CmBankAccount> _bankAccounts  = [];
   CmBankAccount?      _selAccount;
   List<CmBankFileFormat> _formats    = [];
   CmBankFileFormat?      _selFormat;
+  String _acctSearch = '';
+
+  List<CmBankAccount> get _filteredAccounts {
+    if (_acctSearch.isEmpty) return _bankAccounts;
+    final q = _acctSearch.toLowerCase();
+    return _bankAccounts.where((a) {
+      final name = _isEnglish && (a.accountNameEn ?? '').isNotEmpty ? a.accountNameEn! : a.accountNameTh;
+      return a.accountCode.toLowerCase().contains(q) ||
+          name.toLowerCase().contains(q) ||
+          (a.bankShortName ?? '').toLowerCase().contains(q);
+    }).toList();
+  }
 
   // Filter
   DateTime _dateFrom = DateTime.now().copyWith(day: 1);
@@ -80,7 +97,10 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
   }
 
   Future<void> _loadPayments() async {
-    if (_selAccount == null) { _showError('กรุณาเลือกบัญชีธนาคาร'); return; }
+    if (_selAccount == null) {
+      _showError(_isEnglish ? 'Please select a bank account' : 'กรุณาเลือกบัญชีธนาคาร');
+      return;
+    }
     setState(() { _loadingPayments = true; _payments = []; _selected.clear(); });
     try {
       final headers = await AuthService().getAuthHeader();
@@ -111,8 +131,15 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
 
   Future<void> _generateFile() async {
     if (!(MenuScope.of(context)?.canExport ?? true)) return;
-    if (_selFormat == null) { _showError('กรุณาเลือก Format ไฟล์'); return; }
-    if (_selected.isEmpty) { _showError('กรุณาเลือกรายการจ่ายเงินอย่างน้อย 1 รายการ'); return; }
+    final isEnglish = _isEnglish;
+    if (_selFormat == null) {
+      _showError(isEnglish ? 'Please select a file format' : 'กรุณาเลือก Format ไฟล์');
+      return;
+    }
+    if (_selected.isEmpty) {
+      _showError(isEnglish ? 'Please select at least 1 payment' : 'กรุณาเลือกรายการจ่ายเงินอย่างน้อย 1 รายการ');
+      return;
+    }
     setState(() => _generating = true);
     try {
       final headers = {...await AuthService().getAuthHeader(), 'Content-Type': 'application/json'};
@@ -141,7 +168,9 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('สร้างไฟล์ $filename สำเร็จ ($rowCount รายการ)'),
+              content: Text(isEnglish
+                  ? 'Generated file $filename successfully ($rowCount items)'
+                  : 'สร้างไฟล์ $filename สำเร็จ ($rowCount รายการ)'),
               backgroundColor: Colors.green.shade700));
         }
       } else {
@@ -179,12 +208,13 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
         title: const MenuTitle(),
-        titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
         actions: [
           if (_selected.isNotEmpty)
@@ -194,70 +224,121 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
               icon: _generating
                   ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.download, size: 16),
-              label: Text('สร้างไฟล์ (${_selected.length})', style: const TextStyle(fontSize: 13)),
+              label: Text(isEnglish ? 'Generate File (${_selected.length})' : 'สร้างไฟล์ (${_selected.length})', style: const TextStyle(fontSize: 13)),
             ),
           const SizedBox(width: 8),
         ],
       ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            width: 36, color: _kTheme,
-            child: IconButton(
-              padding: EdgeInsets.zero, iconSize: 20, color: Colors.white,
-              icon: Icon(_leftExpanded ? Icons.chevron_left : Icons.chevron_right),
-              onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
+      body: LayoutBuilder(builder: (_, constraints) {
+        final maxLeft = (constraints.maxWidth - 36 - 5 - 320).clamp(100.0, double.infinity);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 36, color: _kTheme,
+              child: IconButton(
+                padding: EdgeInsets.zero, iconSize: 20, color: Colors.white,
+                icon: Icon(_leftExpanded ? Icons.chevron_left : Icons.chevron_right),
+                onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
+              ),
             ),
-          ),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: _leftExpanded ? 280 : 0,
-            child: ClipRect(child: OverflowBox(
-              alignment: Alignment.centerLeft, maxWidth: 280,
-              child: _buildLeftPanel(),
-            )),
-          ),
-          if (_leftExpanded) const VerticalDivider(width: 1, thickness: 1),
-          Expanded(child: _buildRightPanel()),
-        ],
-      ),
+            AnimatedContainer(
+              duration: _isDragging ? Duration.zero : const Duration(milliseconds: 200),
+              width: _leftExpanded ? _leftWidth : 0,
+              child: ClipRect(child: OverflowBox(
+                alignment: Alignment.centerLeft, maxWidth: _leftWidth, minWidth: _leftWidth,
+                child: _buildLeftPanel(),
+              )),
+            ),
+            if (_leftExpanded)
+              MouseRegion(
+                cursor: SystemMouseCursors.resizeColumn,
+                child: GestureDetector(
+                  onHorizontalDragStart: (_) => setState(() => _isDragging = true),
+                  onHorizontalDragUpdate: (d) => setState(() {
+                    _leftWidth = (_leftWidth + d.delta.dx).clamp(200.0, maxLeft);
+                  }),
+                  onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+                  child: Container(width: 5, color: Colors.grey[400]),
+                ),
+              ),
+            Expanded(child: _buildRightPanel()),
+          ],
+        );
+      }),
     );
   }
 
   Widget _buildLeftPanel() {
+    final isEnglish = _isEnglish;
+    final list = _filteredAccounts;
     return Container(
       color: Colors.blueGrey.shade100,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Container(height: 36, color: Colors.blueGrey.shade200,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             alignment: Alignment.centerLeft,
-            child: const Text('บัญชีธนาคาร', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+            child: Text(isEnglish ? 'Bank Accounts' : 'บัญชีธนาคาร', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: TextField(
+            decoration: InputDecoration(
+              hintText: isEnglish ? 'Search account...' : 'ค้นหาบัญชี...',
+              prefixIcon: const Icon(Icons.search),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+              border: const OutlineInputBorder(),
+            ),
+            onChanged: (v) => setState(() => _acctSearch = v),
+          ),
+        ),
         Expanded(
-          child: _bankAccounts.isEmpty
-              ? Center(child: Text('ไม่มีบัญชี', style: TextStyle(color: Colors.grey.shade400)))
+          child: list.isEmpty
+              ? Center(child: Text(isEnglish ? 'No accounts' : 'ไม่มีบัญชี', style: TextStyle(color: Colors.grey.shade400)))
               : ListView.builder(
-                  itemCount: _bankAccounts.length,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  itemCount: list.length,
                   itemBuilder: (_, i) {
-                    final a = _bankAccounts[i];
+                    final a = list[i];
                     final sel = a.id == _selAccount?.id;
-                    return InkWell(
-                      onTap: () => setState(() {
-                        _selAccount = a;
-                        _payments = [];
-                        _selected.clear();
-                      }),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                        color: sel ? _kTheme.withOpacity(0.10) : null,
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(a.accountCode,
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
-                                  color: sel ? _kTheme : Colors.black87)),
-                          Text(a.accountNameTh, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                          Text('${a.bankShortName ?? ''} | ${a.currencyCode}',
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                    final name = isEnglish && (a.accountNameEn ?? '').isNotEmpty ? a.accountNameEn! : a.accountNameTh;
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: ListTile(
+                        selected: sel,
+                        selectedTileColor: _kTheme.withOpacity(0.12),
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.indigo.shade100,
+                          child: const Icon(Icons.savings, size: 18),
+                        ),
+                        title: Text(a.accountCode,
+                            style: TextStyle(fontWeight: FontWeight.bold, color: a.isActive ? null : Colors.grey)),
+                        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(name,
+                              style: TextStyle(fontSize: 13, color: a.isActive ? Colors.black87 : Colors.grey),
+                              overflow: TextOverflow.ellipsis),
+                          Text(
+                            [
+                              cmCmTypeLabel(a.cmType, isEnglish),
+                              if (a.bankDisplay.isNotEmpty) a.bankDisplay,
+                              if ((a.accountNumber ?? '').isNotEmpty) a.accountNumber!,
+                              if (!a.isPettyCash) cmAccountTypeLabel(a.accountType, isEnglish),
+                              if (a.isFcy) a.currencyCode,
+                              if (a.isCheckAccount) (isEnglish ? 'Check' : 'เช็ค'),
+                            ].join(' · '),
+                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
                         ]),
+                        trailing: !a.isActive
+                            ? Chip(
+                                label: Text(isEnglish ? 'Inactive' : 'หยุดใช้', style: const TextStyle(fontSize: 11)),
+                                backgroundColor: const Color(0xFFEEEEEE),
+                              )
+                            : null,
+                        onTap: () => setState(() {
+                          _selAccount = a;
+                          _payments = [];
+                          _selected.clear();
+                        }),
                       ),
                     );
                   },
@@ -268,64 +349,60 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
   }
 
   Widget _buildRightPanel() {
+    final isEnglish = _isEnglish;
     return Column(children: [
       // Toolbar
       Container(
         padding: const EdgeInsets.all(10),
         color: Colors.grey.shade50,
-        child: Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.end, children: [
+        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           // Format
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Format ไฟล์', style: TextStyle(fontSize: 11, color: Colors.black54)),
-            const SizedBox(height: 2),
-            SizedBox(
-              width: 220,
-              child: DropdownButtonFormField<CmBankFileFormat?>(
-                value: _selFormat,
-                isDense: true,
-                decoration: InputDecoration(isDense: true, filled: true, fillColor: Colors.white,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(4))),
-                style: const TextStyle(fontSize: 12, color: Colors.black87),
-                hint: const Text('— เลือก format —'),
-                items: _formats.map((f) => DropdownMenuItem<CmBankFileFormat?>(
-                  value: f,
-                  child: Text('${f.formatCode} ${f.formatName}', style: const TextStyle(fontSize: 12)),
-                )).toList(),
-                onChanged: (v) => setState(() => _selFormat = v),
-              ),
+          Expanded(
+            flex: 2,
+            child: DropdownButtonFormField<CmBankFileFormat?>(
+              value: _selFormat,
+              isExpanded: true,
+              decoration: InputDecoration(
+                  labelText: isEnglish ? 'File Format' : 'Format ไฟล์',
+                  border: const OutlineInputBorder()),
+              hint: Text(isEnglish ? '— Select format —' : '— เลือก format —'),
+              items: _formats.map((f) => DropdownMenuItem<CmBankFileFormat?>(
+                value: f,
+                child: Text('${f.formatCode} ${f.formatName}', overflow: TextOverflow.ellipsis),
+              )).toList(),
+              onChanged: (v) => setState(() => _selFormat = v),
             ),
-          ]),
-          // Date from
-          _datePicker('วันที่จาก', _dateFrom, (d) => setState(() => _dateFrom = d)),
-          _datePicker('ถึงวันที่', _dateTo,   (d) => setState(() => _dateTo   = d)),
-          // Status
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('สถานะ', style: TextStyle(fontSize: 11, color: Colors.black54)),
-            const SizedBox(height: 2),
-            SizedBox(
-              width: 150,
-              child: DropdownButtonFormField<String>(
-                value: _statusFilter,
-                isDense: true,
-                decoration: InputDecoration(isDense: true, filled: true, fillColor: Colors.white,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(4))),
-                style: const TextStyle(fontSize: 12, color: Colors.black87),
-                items: const [
-                  DropdownMenuItem(value: 'All',      child: Text('ทั้งหมด')),
-                  DropdownMenuItem(value: 'Posted',   child: Text('Posted')),
-                  DropdownMenuItem(value: 'Cleared',  child: Text('Cleared')),
-                ],
-                onChanged: (v) => setState(() => _statusFilter = v ?? 'All'),
-              ),
-            ),
-          ]),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white,
-                minimumSize: const Size(100, 34)),
-            onPressed: _loadPayments,
-            icon: const Icon(Icons.search, size: 16),
-            label: const Text('โหลด', style: TextStyle(fontSize: 13)),
           ),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: _datePicker(isEnglish ? 'Date From' : 'วันที่จาก', _dateFrom, (d) => setState(() => _dateFrom = d))),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: _datePicker(isEnglish ? 'To Date' : 'ถึงวันที่', _dateTo,   (d) => setState(() => _dateTo   = d))),
+          const SizedBox(width: 8),
+          // Status
+          Expanded(
+            flex: 1,
+            child: DropdownButtonFormField<String>(
+              value: _statusFilter,
+              isExpanded: true,
+              decoration: InputDecoration(
+                  labelText: isEnglish ? 'Status' : 'สถานะ',
+                  border: const OutlineInputBorder()),
+              items: [
+                DropdownMenuItem(value: 'All',      child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
+                const DropdownMenuItem(value: 'Posted',   child: Text('Posted')),
+                const DropdownMenuItem(value: 'Cleared',  child: Text('Cleared')),
+              ],
+              onChanged: (v) => setState(() => _statusFilter = v ?? 'All'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16)),
+            onPressed: _loadPayments,
+            icon: const Icon(Icons.search, size: 18),
+            label: Text(isEnglish ? 'Load' : 'โหลด'),
+          )),
         ]),
       ),
       const Divider(height: 1),
@@ -334,12 +411,13 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
   }
 
   Widget _buildPaymentTable() {
+    final isEnglish = _isEnglish;
     if (_loadingPayments) return const Center(child: CircularProgressIndicator());
     if (_payments.isEmpty) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.file_download_off, size: 48, color: Colors.grey.shade300),
         const SizedBox(height: 8),
-        Text('กดโหลดเพื่อแสดงรายการจ่ายเงิน', style: TextStyle(color: Colors.grey.shade400)),
+        Text(isEnglish ? 'Press Load to show payments' : 'กดโหลดเพื่อแสดงรายการจ่ายเงิน', style: TextStyle(color: Colors.grey.shade400)),
       ]));
     }
 
@@ -355,7 +433,9 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           color: _kTheme.withOpacity(0.08),
           child: Row(children: [
-            Text('เลือก ${_selected.length} รายการ รวม ${_fmt.format(totalSel)} บาท',
+            Text(isEnglish
+                ? 'Selected ${_selected.length} items, total ${_fmt.format(totalSel)} THB'
+                : 'เลือก ${_selected.length} รายการ รวม ${_fmt.format(totalSel)} บาท',
                 style: TextStyle(fontSize: 13, color: _kTheme, fontWeight: FontWeight.w600)),
           ]),
         ),
@@ -374,14 +454,14 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
                   value: allSel, tristate: true,
                   onChanged: _toggleAll,
                 )),
-                const DataColumn(label: Text('เลขที่เอกสาร')),
-                const DataColumn(label: Text('วันที่')),
-                const DataColumn(label: Text('ผู้รับเงิน')),
-                const DataColumn(label: Text('วิธีจ่าย')),
-                const DataColumn(label: Text('เช็ค/เลขที่')),
-                const DataColumn(label: Text('สกุลเงิน')),
-                const DataColumn(label: Text('จำนวนเงิน'), numeric: true),
-                const DataColumn(label: Text('สถานะ')),
+                DataColumn(label: Text(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร')),
+                DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่')),
+                DataColumn(label: Text(isEnglish ? 'Payee' : 'ผู้รับเงิน')),
+                DataColumn(label: Text(isEnglish ? 'Payment Method' : 'วิธีจ่าย')),
+                DataColumn(label: Text(isEnglish ? 'Check/Ref No.' : 'เช็ค/เลขที่')),
+                DataColumn(label: Text(isEnglish ? 'Currency' : 'สกุลเงิน')),
+                DataColumn(label: Text(isEnglish ? 'Amount' : 'จำนวนเงิน'), numeric: true),
+                DataColumn(label: Text(isEnglish ? 'Status' : 'สถานะ')),
               ],
               rows: _payments.map((p) {
                 final id   = p['id'] as int;
@@ -424,7 +504,7 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
     switch (s) {
       case 'Posted':  return Colors.blue.shade50;
       case 'Cleared': return Colors.green.shade50;
-      case 'Voided':  return Colors.grey.shade100;
+      case 'Voided':  return Colors.red.shade50;
       default:        return Colors.orange.shade50;
     }
   }
@@ -433,34 +513,25 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
     switch (s) {
       case 'Posted':  return Colors.blue.shade700;
       case 'Cleared': return Colors.green.shade700;
-      case 'Voided':  return Colors.grey.shade600;
+      case 'Voided':  return Colors.red.shade700;
       default:        return Colors.orange.shade700;
     }
   }
 
   Widget _datePicker(String label, DateTime value, void Function(DateTime) onPick) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54)),
-      const SizedBox(height: 2),
-      InkWell(
-        onTap: () async {
-          final p = await showDatePicker(context: context, initialDate: value,
-              firstDate: DateTime(2000), lastDate: DateTime(2100));
-          if (p != null) onPick(p);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: Colors.white, border: Border.all(color: Colors.grey.shade400),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(_dateFmt.format(value), style: const TextStyle(fontSize: 12)),
-            const SizedBox(width: 6),
-            Icon(Icons.calendar_today, size: 13, color: Colors.grey.shade500),
-          ]),
-        ),
+    return InkWell(
+      onTap: () async {
+        final p = await showDatePicker(context: context, initialDate: value,
+            firstDate: DateTime(2000), lastDate: DateTime(2100));
+        if (p != null) onPick(p);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
+            suffixIcon: const Icon(Icons.calendar_today, size: 18)),
+        child: Text(_dateFmt.format(value)),
       ),
-    ]);
+    );
   }
 }

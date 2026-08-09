@@ -26,7 +26,10 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
   @override
   bool get wantKeepAlive => true;
 
+  bool _isEnglish = false;
   bool _leftExpanded = true;
+  double _leftWidth  = 300.0;
+  bool _isDragging   = false;
 
   // Accounts
   List<CmBankAccount> _bankAccounts = [];
@@ -136,7 +139,7 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
 
     final dataRows = _rawRows.skip(_skipRows).toList();
     if (dataRows.isEmpty) {
-      setState(() => _parseError = 'ไม่มีข้อมูลหลัง skip ${ _skipRows} แถว');
+      setState(() => _parseError = _isEnglish ? 'No data after skipping $_skipRows rows' : 'ไม่มีข้อมูลหลัง skip ${ _skipRows} แถว');
       return;
     }
 
@@ -152,7 +155,9 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
         dateStr = _parseDate(cells[_colDate].trim(), _datePattern);
       }
       if (dateStr == null) {
-        errors.add('แถว ${i + _skipRows + 1}: ไม่สามารถอ่านวันที่ "${_colDate < cells.length ? cells[_colDate] : ""}"');
+        errors.add(_isEnglish
+            ? 'Row ${i + _skipRows + 1}: cannot parse date "${_colDate < cells.length ? cells[_colDate] : ""}"'
+            : 'แถว ${i + _skipRows + 1}: ไม่สามารถอ่านวันที่ "${_colDate < cells.length ? cells[_colDate] : ""}"');
         continue;
       }
 
@@ -214,17 +219,21 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
   }
 
   Future<void> _import() async {
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final l = AppL10n(isEnglish);
     if (!(MenuScope.of(context)?.canCreate ?? true)) return;
-    if (_selAccount == null) { _showError('กรุณาเลือกบัญชีธนาคาร'); return; }
-    if (_previewRows.isEmpty) { _showError('ไม่มีข้อมูลที่จะนำเข้า'); return; }
+    if (_selAccount == null) { _showError(isEnglish ? 'Please select a bank account' : 'กรุณาเลือกบัญชีธนาคาร'); return; }
+    if (_previewRows.isEmpty) { _showError(isEnglish ? 'No data to import' : 'ไม่มีข้อมูลที่จะนำเข้า'); return; }
 
+    final accName = isEnglish && (_selAccount!.accountNameEn ?? '').isNotEmpty ? _selAccount!.accountNameEn! : _selAccount!.accountNameTh;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('ยืนยันนำเข้า Statement'),
-        content: Text('นำเข้า ${_previewRows.length} รายการ เข้า ${_selAccount!.accountNameTh} ใช่หรือไม่?\n'
-            'ระบบจะสร้าง Bank Statement ใหม่ (Draft)'),
+        title: Text(isEnglish ? 'Confirm Statement Import' : 'ยืนยันนำเข้า Statement'),
+        content: Text(isEnglish
+            ? 'Import ${_previewRows.length} items into $accName?\nA new Bank Statement (Draft) will be created'
+            : 'นำเข้า ${_previewRows.length} รายการ เข้า $accName ใช่หรือไม่?\n'
+              'ระบบจะสร้าง Bank Statement ใหม่ (Draft)'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(
@@ -249,7 +258,7 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
             'bank_account_id':     _selAccount!.id,
             'statement_date_from': dates.first,
             'statement_date_to':   dates.last,
-            'description':         'Import จาก $_fileName',
+            'description':         '${isEnglish ? 'Imported from' : 'Import จาก'} $_fileName',
             'lines':               _previewRows,
           }));
       if (!mounted) return;
@@ -258,14 +267,16 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
         final imported = result['lines_imported'] ?? 0;
         final errList  = (result['errors'] as List?)?.cast<String>() ?? [];
         setState(() {
-          _lastResult = 'นำเข้าสำเร็จ $imported รายการ'
-              '${errList.isNotEmpty ? " (${errList.length} รายการมีข้อผิดพลาด)" : ""}';
+          _lastResult = isEnglish
+              ? 'Imported $imported items successfully${errList.isNotEmpty ? " (${errList.length} items had errors)" : ""}'
+              : 'นำเข้าสำเร็จ $imported รายการ'
+                '${errList.isNotEmpty ? " (${errList.length} รายการมีข้อผิดพลาด)" : ""}';
         });
         if (errList.isNotEmpty) {
           _showError(errList.take(3).join('\n'));
         } else {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('นำเข้าสำเร็จ $imported รายการ'),
+              content: Text(isEnglish ? 'Imported $imported items successfully' : 'นำเข้าสำเร็จ $imported รายการ'),
               backgroundColor: Colors.green.shade700));
         }
       } else {
@@ -287,13 +298,13 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
         title: const MenuTitle(),
-        titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
         actions: [
           if (_previewRows.isNotEmpty)
@@ -303,133 +314,179 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
               icon: _importing
                   ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.upload, size: 16),
-              label: Text('นำเข้า (${_previewRows.length})', style: const TextStyle(fontSize: 13)),
+              label: Text(isEnglish ? 'Import (${_previewRows.length})' : 'นำเข้า (${_previewRows.length})', style: const TextStyle(fontSize: 13)),
             ),
           const SizedBox(width: 8),
         ],
       ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            width: 36, color: _kTheme,
-            child: IconButton(
-              padding: EdgeInsets.zero, iconSize: 20, color: Colors.white,
-              icon: Icon(_leftExpanded ? Icons.chevron_left : Icons.chevron_right),
-              onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
+      body: LayoutBuilder(builder: (_, constraints) {
+        final maxLeft = (constraints.maxWidth - 36 - 5 - 320).clamp(100.0, double.infinity);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 36, color: _kTheme,
+              child: IconButton(
+                padding: EdgeInsets.zero, iconSize: 20, color: Colors.white,
+                icon: Icon(_leftExpanded ? Icons.chevron_left : Icons.chevron_right),
+                onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
+              ),
             ),
-          ),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: _leftExpanded ? 300 : 0,
-            child: ClipRect(child: OverflowBox(
-              alignment: Alignment.centerLeft, maxWidth: 300,
-              child: _buildLeftPanel(),
-            )),
-          ),
-          if (_leftExpanded) const VerticalDivider(width: 1, thickness: 1),
-          Expanded(child: _buildRightPanel()),
-        ],
-      ),
+            AnimatedContainer(
+              duration: _isDragging ? Duration.zero : const Duration(milliseconds: 200),
+              width: _leftExpanded ? _leftWidth : 0,
+              child: ClipRect(child: OverflowBox(
+                alignment: Alignment.centerLeft, maxWidth: _leftWidth, minWidth: _leftWidth,
+                child: _buildLeftPanel(),
+              )),
+            ),
+            if (_leftExpanded)
+              MouseRegion(
+                cursor: SystemMouseCursors.resizeColumn,
+                child: GestureDetector(
+                  onHorizontalDragStart: (_) => setState(() => _isDragging = true),
+                  onHorizontalDragUpdate: (d) => setState(() {
+                    _leftWidth = (_leftWidth + d.delta.dx).clamp(220.0, maxLeft);
+                  }),
+                  onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+                  child: Container(width: 5, color: Colors.grey[400]),
+                ),
+              ),
+            Expanded(child: _buildRightPanel()),
+          ],
+        );
+      }),
     );
   }
 
   Widget _buildLeftPanel() {
+    final isEnglish = _isEnglish;
     return Container(
       color: Colors.blueGrey.shade100,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Container(height: 32, color: Colors.blueGrey.shade200,
+          Container(height: 36, color: Colors.blueGrey.shade200,
               alignment: Alignment.centerLeft,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: const Text('ตั้งค่าการนำเข้า', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(isEnglish ? 'Import Settings' : 'ตั้งค่าการนำเข้า', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
           const SizedBox(height: 10),
-          // Bank account
-          _lbl('บัญชีธนาคาร *'),
-          DropdownButtonFormField<CmBankAccount?>(
-            value: _selAccount,
-            isDense: true,
-            decoration: _dec(),
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-            items: _bankAccounts.map((a) => DropdownMenuItem<CmBankAccount?>(
-              value: a,
-              child: Text(a.displayName, style: const TextStyle(fontSize: 12)),
-            )).toList(),
-            onChanged: (v) => setState(() => _selAccount = v),
-          ),
-          const SizedBox(height: 10),
-          // File
-          _lbl('ไฟล์ CSV'),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white, foregroundColor: _kTheme,
-                side: BorderSide(color: _kTheme),
-                minimumSize: const Size.fromHeight(34)),
-            onPressed: _pickFile,
-            icon: const Icon(Icons.attach_file, size: 16),
-            label: Text(_fileName ?? 'เลือกไฟล์ .csv / .txt', style: const TextStyle(fontSize: 12)),
-          ),
-          const SizedBox(height: 10),
-          // Delimiter
-          _lbl('ตัวคั่น (Delimiter)'),
-          DropdownButtonFormField<String>(
-            value: _delimiter,
-            isDense: true,
-            decoration: _dec(),
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-            items: const [
-              DropdownMenuItem(value: ',', child: Text('จุลภาค (,)')),
-              DropdownMenuItem(value: '\t', child: Text('Tab')),
-              DropdownMenuItem(value: '|', child: Text('Pipe (|)')),
-              DropdownMenuItem(value: ';', child: Text('Semicolon (;)')),
+          _sectionCard(
+            title: isEnglish ? 'Account & File' : 'บัญชีและไฟล์',
+            children: [
+              DropdownButtonFormField<CmBankAccount?>(
+                value: _selAccount,
+                isExpanded: true,
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Bank Account *' : 'บัญชีธนาคาร *',
+                    border: const OutlineInputBorder()),
+                items: _bankAccounts.map((a) => DropdownMenuItem<CmBankAccount?>(
+                  value: a,
+                  child: Text(a.displayName, overflow: TextOverflow.ellipsis),
+                )).toList(),
+                onChanged: (v) => setState(() => _selAccount = v),
+              ),
+              const SizedBox(height: 12),
+              _lbl(isEnglish ? 'CSV File' : 'ไฟล์ CSV'),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.blue.shade700,
+                      side: BorderSide(color: Colors.blue.shade700),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12)),
+                  onPressed: _pickFile,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.attach_file, size: 18),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(_fileName ?? (isEnglish ? 'Select .csv / .txt file' : 'เลือกไฟล์ .csv / .txt'),
+                            overflow: TextOverflow.ellipsis, maxLines: 1),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
-            onChanged: (v) {
-              setState(() {
-                _delimiter = v ?? ',';
-                if (_rawRows.isNotEmpty && _fileName != null) {
-                  // Re-parse is not possible without the original content — just show note
-                }
-              });
-            },
-          ),
-          const SizedBox(height: 8),
-          _lbl('ข้ามแถวแรก (Skip rows)'),
-          _numField('จำนวนแถว Header', _skipRows, (v) { setState(() => _skipRows = v); _buildPreview(); }),
-          const SizedBox(height: 8),
-          _lbl('รูปแบบวันที่'),
-          DropdownButtonFormField<String>(
-            value: _datePattern,
-            isDense: true,
-            decoration: _dec(),
-            style: const TextStyle(fontSize: 12, color: Colors.black87),
-            items: const [
-              DropdownMenuItem(value: 'yyyy-MM-dd', child: Text('2024-01-31')),
-              DropdownMenuItem(value: 'dd/MM/yyyy', child: Text('31/01/2024')),
-              DropdownMenuItem(value: 'dd/MM/yy',   child: Text('31/01/24')),
-              DropdownMenuItem(value: 'MM/dd/yyyy', child: Text('01/31/2024')),
-              DropdownMenuItem(value: 'ddMMyyyy',   child: Text('31012024')),
-            ],
-            onChanged: (v) { setState(() => _datePattern = v ?? 'yyyy-MM-dd'); _buildPreview(); },
           ),
           const SizedBox(height: 10),
-          const Divider(),
-          const Text('ตำแหน่ง Column (0 = คอลัมน์แรก)',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          _colMappingRow('วันที่', _colDate, (v) { setState(() => _colDate = v); _buildPreview(); }),
-          _colMappingRow('คำอธิบาย', _colDescription, (v) { setState(() => _colDescription = v); _buildPreview(); }),
-          _colMappingRow('เดบิต (รายจ่าย)', _colDebit, (v) { setState(() => _colDebit = v); _buildPreview(); }),
-          _colMappingRow('เครดิต (รายรับ)', _colCredit, (v) { setState(() => _colCredit = v); _buildPreview(); }),
-          _colMappingRow('ยอดคงเหลือ', _colBalance, (v) { setState(() => _colBalance = v); _buildPreview(); }),
-          _colMappingRow('Reference (-1=ไม่มี)', _colReference, (v) { setState(() => _colReference = v); _buildPreview(); }),
-          if (_rawRows.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text('จำนวนแถวทั้งหมด: ${_rawRows.length}',
-                style: const TextStyle(fontSize: 11, color: Colors.black54)),
-            Text('ข้อมูล: ${_rawRows.isNotEmpty && _rawRows.first.isNotEmpty ? _rawRows.first.length : 0} คอลัมน์',
-                style: const TextStyle(fontSize: 11, color: Colors.black54)),
-          ],
+          _sectionCard(
+            title: isEnglish ? 'CSV Format' : 'รูปแบบไฟล์ CSV',
+            children: [
+              DropdownButtonFormField<String>(
+                value: _delimiter,
+                isExpanded: true,
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Delimiter' : 'ตัวคั่น (Delimiter)',
+                    border: const OutlineInputBorder()),
+                items: [
+                  DropdownMenuItem(value: ',', child: Text(isEnglish ? 'Comma (,)' : 'จุลภาค (,)')),
+                  const DropdownMenuItem(value: '\t', child: Text('Tab')),
+                  const DropdownMenuItem(value: '|', child: Text('Pipe (|)')),
+                  const DropdownMenuItem(value: ';', child: Text('Semicolon (;)')),
+                ],
+                onChanged: (v) => setState(() => _delimiter = v ?? ','),
+              ),
+              const SizedBox(height: 12),
+              _numField(isEnglish ? 'Skip First Rows' : 'ข้ามแถวแรก', _skipRows, (v) { setState(() => _skipRows = v); _buildPreview(); }),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _datePattern,
+                isExpanded: true,
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Date Format' : 'รูปแบบวันที่',
+                    border: const OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: 'yyyy-MM-dd', child: Text('2024-01-31')),
+                  DropdownMenuItem(value: 'dd/MM/yyyy', child: Text('31/01/2024')),
+                  DropdownMenuItem(value: 'dd/MM/yy',   child: Text('31/01/24')),
+                  DropdownMenuItem(value: 'MM/dd/yyyy', child: Text('01/31/2024')),
+                  DropdownMenuItem(value: 'ddMMyyyy',   child: Text('31012024')),
+                ],
+                onChanged: (v) { setState(() => _datePattern = v ?? 'yyyy-MM-dd'); _buildPreview(); },
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _sectionCard(
+            title: isEnglish ? 'Column Position (0 = first column)' : 'ตำแหน่ง Column (0 = คอลัมน์แรก)',
+            children: [
+              _colMappingRow(isEnglish ? 'Date' : 'วันที่', _colDate, (v) { setState(() => _colDate = v); _buildPreview(); }),
+              _colMappingRow(isEnglish ? 'Description' : 'คำอธิบาย', _colDescription, (v) { setState(() => _colDescription = v); _buildPreview(); }),
+              _colMappingRow(isEnglish ? 'Debit (Withdrawal)' : 'เดบิต (รายจ่าย)', _colDebit, (v) { setState(() => _colDebit = v); _buildPreview(); }),
+              _colMappingRow(isEnglish ? 'Credit (Deposit)' : 'เครดิต (รายรับ)', _colCredit, (v) { setState(() => _colCredit = v); _buildPreview(); }),
+              _colMappingRow(isEnglish ? 'Balance' : 'ยอดคงเหลือ', _colBalance, (v) { setState(() => _colBalance = v); _buildPreview(); }),
+              _colMappingRow(isEnglish ? 'Reference (-1=none)' : 'Reference (-1=ไม่มี)', _colReference, (v) { setState(() => _colReference = v); _buildPreview(); }),
+              if (_rawRows.isNotEmpty) ...[
+                const Divider(height: 14),
+                Text(isEnglish ? 'Total rows: ${_rawRows.length}' : 'จำนวนแถวทั้งหมด: ${_rawRows.length}',
+                    style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                Text(isEnglish
+                    ? 'Data: ${_rawRows.isNotEmpty && _rawRows.first.isNotEmpty ? _rawRows.first.length : 0} columns'
+                    : 'ข้อมูล: ${_rawRows.isNotEmpty && _rawRows.first.isNotEmpty ? _rawRows.first.length : 0} คอลัมน์',
+                    style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              ],
+            ],
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _sectionCard({required String title, required List<Widget> children}) {
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6), side: BorderSide(color: Colors.grey.shade300)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _kTheme)),
+          const SizedBox(height: 8),
+          ...children,
         ]),
       ),
     );
@@ -462,18 +519,19 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
   }
 
   Widget _buildPreviewTable() {
+    final isEnglish = _isEnglish;
     if (_rawRows.isEmpty) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.upload_file, size: 48, color: Colors.grey.shade300),
         const SizedBox(height: 8),
-        Text('เลือกไฟล์ CSV แล้วตั้งค่า mapping คอลัมน์',
+        Text(isEnglish ? 'Select a CSV file and configure column mapping' : 'เลือกไฟล์ CSV แล้วตั้งค่า mapping คอลัมน์',
             style: TextStyle(color: Colors.grey.shade400)),
       ]));
     }
 
     if (_previewRows.isEmpty) {
       return Center(child: Text(
-          'ไม่สามารถแปลงข้อมูลได้ กรุณาตรวจสอบ mapping',
+          isEnglish ? 'Could not parse the data. Please check the mapping' : 'ไม่สามารถแปลงข้อมูลได้ กรุณาตรวจสอบ mapping',
           style: TextStyle(color: Colors.grey.shade400)));
     }
 
@@ -485,14 +543,24 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         color: Colors.blueGrey.shade50,
         child: Row(children: [
-          Text('ตัวอย่าง ${_previewRows.length} รายการ',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-          const Spacer(),
-          Text('รายจ่ายรวม: ${_fmt.format(totalDebit)}',
-              style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
+          Expanded(
+            flex: 2,
+            child: Text(isEnglish ? 'Preview ${_previewRows.length} items' : 'ตัวอย่าง ${_previewRows.length} รายการ',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+          ),
+          Expanded(
+            flex: 1,
+            child: Text('${isEnglish ? 'Total Debit' : 'รายจ่ายรวม'}: ${_fmt.format(totalDebit)}',
+                textAlign: TextAlign.right,
+                style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
+          ),
           const SizedBox(width: 16),
-          Text('รายรับรวม: ${_fmt.format(totalCredit)}',
-              style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
+          Expanded(
+            flex: 1,
+            child: Text('${isEnglish ? 'Total Credit' : 'รายรับรวม'}: ${_fmt.format(totalCredit)}',
+                textAlign: TextAlign.right,
+                style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
+          ),
         ]),
       ),
       Expanded(
@@ -505,14 +573,14 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
               columnSpacing: 12,
               headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
               headingTextStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-              columns: const [
-                DataColumn(label: Text('#')),
-                DataColumn(label: Text('วันที่')),
-                DataColumn(label: Text('คำอธิบาย')),
-                DataColumn(label: Text('รายจ่าย'), numeric: true),
-                DataColumn(label: Text('รายรับ'), numeric: true),
-                DataColumn(label: Text('ยอดคงเหลือ'), numeric: true),
-                DataColumn(label: Text('Reference')),
+              columns: [
+                const DataColumn(label: Text('#')),
+                DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่')),
+                DataColumn(label: Text(isEnglish ? 'Description' : 'คำอธิบาย')),
+                DataColumn(label: Text(isEnglish ? 'Debit' : 'รายจ่าย'), numeric: true),
+                DataColumn(label: Text(isEnglish ? 'Credit' : 'รายรับ'), numeric: true),
+                DataColumn(label: Text(isEnglish ? 'Balance' : 'ยอดคงเหลือ'), numeric: true),
+                const DataColumn(label: Text('Reference')),
               ],
               rows: _previewRows.asMap().entries.map((entry) {
                 final i = entry.key;
@@ -547,24 +615,16 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
   }
 
   Widget _lbl(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 2),
-    child: Text(text, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(text, style: const TextStyle(fontSize: 12, color: Colors.black54)),
   );
 
-  InputDecoration _dec({String? hint}) => InputDecoration(
-    isDense: true, filled: true, fillColor: Colors.white,
-    hintText: hint,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-  );
-
-  Widget _numField(String hint, int value, void Function(int) onChanged) {
+  Widget _numField(String label, int value, void Function(int) onChanged) {
     final ctrl = TextEditingController(text: '$value');
     return TextField(
       controller: ctrl,
       keyboardType: TextInputType.number,
-      style: const TextStyle(fontSize: 12),
-      decoration: _dec(hint: hint),
+      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
       onChanged: (v) { final n = int.tryParse(v); if (n != null) onChanged(n); },
     );
   }
@@ -572,21 +632,16 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
   Widget _colMappingRow(String label, int value, void Function(int) onChanged) {
     final ctrl = TextEditingController(text: '$value');
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(children: [
-        Expanded(child: Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54))),
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 13, color: Colors.black87))),
         SizedBox(
-          width: 52,
+          width: 64,
           child: TextField(
             controller: ctrl,
             keyboardType: TextInputType.number,
-            style: const TextStyle(fontSize: 12),
             textAlign: TextAlign.center,
-            decoration: InputDecoration(
-              isDense: true, filled: true, fillColor: Colors.white,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            ),
+            decoration: const InputDecoration(border: OutlineInputBorder()),
             onChanged: (v) { final n = int.tryParse(v); if (n != null) onChanged(n); },
           ),
         ),

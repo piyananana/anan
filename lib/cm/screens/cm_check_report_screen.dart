@@ -1,4 +1,4 @@
-// lib/cm/screens/cm_bank_transaction_report_screen.dart
+// lib/cm/screens/cm_check_report_screen.dart
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -23,13 +23,13 @@ const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
 final _dateFmt = DateFormat('dd/MM/yyyy');
 
-class CmBankTransactionReportScreen extends StatefulWidget {
-  const CmBankTransactionReportScreen({super.key});
+class CmCheckReportScreen extends StatefulWidget {
+  const CmCheckReportScreen({super.key});
   @override
-  State<CmBankTransactionReportScreen> createState() => _State();
+  State<CmCheckReportScreen> createState() => _State();
 }
 
-class _State extends State<CmBankTransactionReportScreen>
+class _State extends State<CmCheckReportScreen>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
@@ -53,17 +53,28 @@ class _State extends State<CmBankTransactionReportScreen>
 
   DateTime _dateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _dateTo   = DateTime.now();
-  String _recordType = 'All'; // All / RECEIPT / PAYMENT
+  String _checkType = 'All'; // All / RECEIVED / ISSUED
+  String _status    = 'All'; // All / Pending / Cleared / Bounced / Voided
   bool _loading = false;
 
-  // Report data — one section per bank account
-  List<Map<String, dynamic>> _accountSections = [];
+  List<Map<String, dynamic>> _checks = [];
+  double _totalIssued   = 0;
+  double _totalReceived = 0;
   String? _reportDateFrom;
   String? _reportDateTo;
 
-  static const _recordTypes = ['All', 'RECEIPT', 'PAYMENT'];
-  static const _recordTypeLabels = {'All': 'ทุกประเภท', 'RECEIPT': 'รับเงิน', 'PAYMENT': 'จ่ายเงิน'};
-  static const _recordTypeLabelsEng = {'All': 'All Types', 'RECEIPT': 'Receipt', 'PAYMENT': 'Payment'};
+  static const _checkTypes     = ['All', 'RECEIVED', 'ISSUED'];
+  static const _checkLabels    = {'All': 'ทุกประเภท', 'RECEIVED': 'รับเช็ค', 'ISSUED': 'จ่ายเช็ค'};
+  static const _checkLabelsEng = {'All': 'All Types', 'RECEIVED': 'Received', 'ISSUED': 'Issued'};
+  static const _statusOptions  = ['All', 'Pending', 'Cleared', 'Bounced', 'Voided'];
+  static const _statusLabels   = {
+    'All': 'ทุกสถานะ', 'Pending': 'รอเรียกเก็บ',
+    'Cleared': 'ผ่านเรียบร้อย', 'Bounced': 'เช็คคืน', 'Voided': 'ยกเลิก',
+  };
+  static const _statusLabelsEng = {
+    'All': 'All Statuses', 'Pending': 'Pending',
+    'Cleared': 'Cleared', 'Bounced': 'Bounced', 'Voided': 'Voided',
+  };
 
   @override
   void initState() {
@@ -82,24 +93,27 @@ class _State extends State<CmBankTransactionReportScreen>
       _showError(_isEnglish ? 'Please specify a valid date range' : 'กรุณาระบุช่วงวันที่ให้ถูกต้อง');
       return;
     }
-    setState(() { _loading = true; _accountSections = []; });
+    setState(() { _loading = true; _checks = []; });
     try {
       final df = formatLocalDate(_dateFrom);
       final dt = formatLocalDate(_dateTo);
-      final data = await _rptSvc.getBankTransactions(
+      final data = await _rptSvc.getCheckRegister(
         accountCodeFrom: _accountFrom?.accountCode,
         accountCodeTo:   _accountTo?.accountCode,
         dateFrom: df, dateTo: dt,
-        recordType: _recordType == 'All' ? null : _recordType,
+        checkType: _checkType == 'All' ? null : _checkType,
+        status:    _status    == 'All' ? null : _status,
       );
       if (!mounted) return;
-      final sections = List<Map<String, dynamic>>.from(data['accounts'] as List);
-      if (sections.isEmpty) {
+      final checks = List<Map<String, dynamic>>.from(data['checks'] as List);
+      if (checks.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(_isEnglish ? 'No accounts found for the selected conditions' : 'ไม่พบบัญชีตามเงื่อนไขที่เลือก')));
+            content: Text(_isEnglish ? 'No checks found for the selected conditions' : 'ไม่พบเช็คตามเงื่อนไขที่เลือก')));
       }
       setState(() {
-        _accountSections = sections;
+        _checks        = checks;
+        _totalIssued   = _parseD(data['total_issued']);
+        _totalReceived = _parseD(data['total_received']);
         _reportDateFrom = df;
         _reportDateTo   = dt;
         _loading = false;
@@ -123,13 +137,16 @@ class _State extends State<CmBankTransactionReportScreen>
   String _acctName(CmBankAccount a) =>
       _isEnglish && (a.accountNameEn ?? '').isNotEmpty ? a.accountNameEn! : a.accountNameTh;
 
-  String _sectionAcctName(Map<String, dynamic> s) {
-    final nameEn = s['bank_account_name_en'] as String?;
-    return _isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (s['bank_account_name'] as String? ?? '');
+  String _rowAcctName(Map<String, dynamic> c) {
+    final nameEn = c['bank_account_name_en'] as String?;
+    return _isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (c['bank_account_name'] as String? ?? '');
   }
 
-  String _recordTypeLabel(String t, bool isEnglish) =>
-      isEnglish ? (_recordTypeLabelsEng[t] ?? t) : (_recordTypeLabels[t] ?? t);
+  String _checkTypeLabel(String t, bool isEnglish) =>
+      isEnglish ? (_checkLabelsEng[t] ?? t) : (_checkLabels[t] ?? t);
+
+  String _statusLabel(String s, bool isEnglish) =>
+      isEnglish ? (_statusLabelsEng[s] ?? s) : (_statusLabels[s] ?? s);
 
   // ─── PDF ──────────────────────────────────────────────────────────────────
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
@@ -155,16 +172,15 @@ class _State extends State<CmBankTransactionReportScreen>
           '${isEnglish ? 'Account code' : 'รหัสบัญชี'}: ${_accountFrom?.accountCode ?? allLabel}'
           ' – ${_accountTo?.accountCode ?? allLabel}');
     }
-    if (_recordType != 'All') {
-      conditions.add('${isEnglish ? 'Type' : 'ประเภท'}: ${_recordTypeLabel(_recordType, isEnglish)}');
-    }
+    if (_checkType != 'All') conditions.add('${isEnglish ? 'Type' : 'ประเภท'}: ${_checkTypeLabel(_checkType, isEnglish)}');
+    if (_status != 'All')    conditions.add('${isEnglish ? 'Status' : 'สถานะ'}: ${_statusLabel(_status, isEnglish)}');
     final conditionLine = conditions.isEmpty ? '' : conditions.join(' | ');
 
     pw.Widget Function(pw.Context) pageHeader() => (ctx) => pw.Column(children: [
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 11))),
         pw.Expanded(flex: 6,
-            child: pw.Text(isEnglish ? 'Bank Transaction Report' : 'รายงานธุรกรรมธนาคาร',
+            child: pw.Text(isEnglish ? 'Check Register Report' : 'รายงานทะเบียนเช็ค',
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold))),
         pw.Expanded(flex: 3,
@@ -203,24 +219,24 @@ class _State extends State<CmBankTransactionReportScreen>
     ]);
 
     const colW = {
-      0: pw.FlexColumnWidth(3),   // วันที่
-      1: pw.FlexColumnWidth(3),   // เลขที่เอกสาร
-      2: pw.FlexColumnWidth(3),   // เลขที่อ้างอิง
-      3: pw.FlexColumnWidth(2.5), // ประเภท
-      4: pw.FlexColumnWidth(5),   // คำอธิบาย
-      5: pw.FlexColumnWidth(2.5), // เลขที่เช็ค
-      6: pw.FlexColumnWidth(3),   // จ่าย
-      7: pw.FlexColumnWidth(3),   // รับ
-      8: pw.FlexColumnWidth(3),   // ยอดคงเหลือ
+      0: pw.FlexColumnWidth(2.5), // ประเภท
+      1: pw.FlexColumnWidth(2.5), // วันที่
+      2: pw.FlexColumnWidth(2.5), // เลขที่เช็ค
+      3: pw.FlexColumnWidth(2.5), // วันที่เช็ค
+      4: pw.FlexColumnWidth(2.5), // เลขที่อ้างอิง
+      5: pw.FlexColumnWidth(2.5), // บัญชีธนาคาร
+      6: pw.FlexColumnWidth(4),   // ชื่อบัญชี
+      7: pw.FlexColumnWidth(4),   // คู่ค้า
+      8: pw.FlexColumnWidth(3),   // จำนวนเงิน
+      9: pw.FlexColumnWidth(2.5), // เลขที่เอกสาร
+      10: pw.FlexColumnWidth(2.5),// สถานะ
     };
 
     pw.TextStyle tNormal(double fs) => pw.TextStyle(font: font, fontSize: fs);
     pw.TextStyle tBold(double fs)   => pw.TextStyle(font: fontBold, fontSize: fs);
 
-    const cGreen  = PdfColor(0.87, 0.94, 0.92);
-    const cYellow = PdfColor(1.0, 0.98, 0.88);
-    const cTotal  = PdfColor(0.75, 0.88, 0.83);
-    const cBlue   = PdfColor(0.85, 0.91, 0.97);
+    const cGreen = PdfColor(0.87, 0.94, 0.92);
+    const cTotal = PdfColor(0.75, 0.88, 0.83);
 
     pw.Widget hCell(String t, {pw.TextAlign a = pw.TextAlign.center}) => pw.Container(
         padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
@@ -230,92 +246,58 @@ class _State extends State<CmBankTransactionReportScreen>
         padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
         child: pw.Text(t, style: s, textAlign: a));
 
-    pw.Widget amtCell(double v, pw.TextStyle s, {bool blankZero = true}) => pw.Container(
+    pw.Widget amtCell(double v, pw.TextStyle s) => pw.Container(
         padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-        child: pw.Text(v == 0 && blankZero ? '' : _fmt.format(v), style: s, textAlign: pw.TextAlign.right));
+        child: pw.Text(_fmt.format(v), style: s, textAlign: pw.TextAlign.right));
 
-    pw.TableRow buildHeaderRow() => pw.TableRow(
+    final headerRow = pw.TableRow(
       decoration: const pw.BoxDecoration(color: cGreen),
       children: [
-        hCell(isEnglish ? 'Date' : 'วันที่'),
-        hCell(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร', a: pw.TextAlign.left),
-        hCell(isEnglish ? 'Reference No.' : 'เลขที่อ้างอิง'),
         hCell(isEnglish ? 'Type' : 'ประเภท'),
-        hCell(isEnglish ? 'Description' : 'คำอธิบาย', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Date' : 'วันที่'),
         hCell(isEnglish ? 'Check No.' : 'เลขที่เช็ค'),
-        hCell(isEnglish ? 'Debit' : 'จ่าย'),
-        hCell(isEnglish ? 'Credit' : 'รับ'),
-        hCell(isEnglish ? 'Balance' : 'ยอดคงเหลือ'),
+        hCell(isEnglish ? 'Check Date' : 'วันที่เช็ค'),
+        hCell(isEnglish ? 'Reference No.' : 'เลขที่อ้างอิง'),
+        hCell(isEnglish ? 'Bank Account' : 'บัญชีธนาคาร', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Account Name' : 'ชื่อบัญชี', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Counterparty' : 'คู่ค้า', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Amount' : 'จำนวนเงิน'),
+        hCell(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร'),
+        hCell(isEnglish ? 'Status' : 'สถานะ'),
       ],
     );
 
-    final pageWidgets = <pw.Widget>[];
+    final tableRows = <pw.TableRow>[headerRow];
 
-    for (final section in _accountSections) {
-      final acctLine = '${section['bank_account_code'] ?? ''}  ${_sectionAcctName(section)}'
-          '${(section['bank_short_name'] as String? ?? '').isNotEmpty ? ' (${section['bank_short_name']})' : ''}';
-      final opening = _parseD(section['opening_balance']);
-      final totalDebit  = _parseD(section['total_debit']);
-      final totalCredit = _parseD(section['total_credit']);
-      final closing = _parseD(section['closing_balance']);
-      final txs = List<Map<String, dynamic>>.from(section['transactions'] as List? ?? []);
-
-      final tableRows = <pw.TableRow>[
-        buildHeaderRow(),
-        pw.TableRow(
-          decoration: const pw.BoxDecoration(color: cYellow),
-          children: [
-            dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)),
-            dCell(isEnglish ? 'Opening Balance' : 'ยอดยกมา', tBold(9)),
-            dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)),
-            amtCell(opening, tBold(9), blankZero: false),
-          ],
-        ),
-      ];
-
-      for (final tx in txs) {
-        final isReceipt  = tx['record_type'] == 'RECEIPT';
-        final recordDate = parseLocalDateNullable(tx['record_date']);
-        final debit      = _parseD(tx['debit_amount']);
-        final credit     = _parseD(tx['credit_amount']);
-        final balance    = _parseD(tx['running_balance']);
-        tableRows.add(pw.TableRow(children: [
-          dCell(recordDate != null ? _dateFmt.format(recordDate) : '', tNormal(9), a: pw.TextAlign.center),
-          dCell(tx['doc_no'] as String? ?? '', tNormal(9)),
-          dCell(tx['reference_no'] as String? ?? '', tNormal(9), a: pw.TextAlign.center),
-          dCell(isReceipt ? (isEnglish ? 'Receipt' : 'รับเงิน') : (isEnglish ? 'Payment' : 'จ่ายเงิน'), tNormal(9), a: pw.TextAlign.center),
-          dCell(tx['description'] as String? ?? '', tNormal(9)),
-          dCell(tx['check_no'] as String? ?? '', tNormal(9), a: pw.TextAlign.center),
-          amtCell(debit, tNormal(9)),
-          amtCell(credit, tNormal(9)),
-          amtCell(balance, tBold(9), blankZero: false),
-        ]));
-      }
-
-      tableRows.add(pw.TableRow(
-        decoration: const pw.BoxDecoration(color: cTotal),
-        children: [
-          dCell(isEnglish ? 'Total' : 'รวม', tBold(9)),
-          dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)),
-          amtCell(totalDebit, tBold(9), blankZero: false),
-          amtCell(totalCredit, tBold(9), blankZero: false),
-          amtCell(closing, tBold(9), blankZero: false),
-        ],
-      ));
-
-      pageWidgets.add(pw.Container(
-        margin: const pw.EdgeInsets.only(bottom: 4, top: 4),
-        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-        color: cBlue,
-        child: pw.Text(acctLine, style: tBold(10)),
-      ));
-      pageWidgets.add(pw.Table(
-        border: pw.TableBorder.all(width: 0.3, color: PdfColors.grey400),
-        columnWidths: colW,
-        children: tableRows,
-      ));
-      pageWidgets.add(pw.SizedBox(height: 10));
+    for (final c in _checks) {
+      final isReceived = c['check_type'] == 'RECEIVED';
+      final recordDate = parseLocalDateNullable(c['record_date']);
+      final checkDate  = parseLocalDateNullable(c['check_date']);
+      tableRows.add(pw.TableRow(children: [
+        dCell(isReceived ? (isEnglish ? 'Received' : 'รับเช็ค') : (isEnglish ? 'Issued' : 'จ่ายเช็ค'), tNormal(9), a: pw.TextAlign.center),
+        dCell(recordDate != null ? _dateFmt.format(recordDate) : '', tNormal(9), a: pw.TextAlign.center),
+        dCell(c['check_no'] as String? ?? '', tNormal(9), a: pw.TextAlign.center),
+        dCell(checkDate != null ? _dateFmt.format(checkDate) : '', tNormal(9), a: pw.TextAlign.center),
+        dCell(c['reference_no'] as String? ?? '', tNormal(9), a: pw.TextAlign.center),
+        dCell(c['bank_account_code'] as String? ?? '', tNormal(9)),
+        dCell(_rowAcctName(c), tNormal(9)),
+        dCell(c['party_name'] as String? ?? '', tNormal(9)),
+        amtCell(_parseD(c['amount_lc']), tNormal(9)),
+        dCell(c['doc_no'] as String? ?? '', tNormal(9), a: pw.TextAlign.center),
+        dCell(_statusLabel(c['status'] as String? ?? '', isEnglish), tNormal(9), a: pw.TextAlign.center),
+      ]));
     }
+
+    tableRows.add(pw.TableRow(
+      decoration: const pw.BoxDecoration(color: cTotal),
+      children: [
+        dCell(isEnglish ? 'Total' : 'รวม', tBold(9)),
+        dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)), dCell('', tBold(9)),
+        dCell(isEnglish ? 'Received ${_fmt.format(_totalReceived)} / Issued ${_fmt.format(_totalIssued)}'
+            : 'รับ ${_fmt.format(_totalReceived)} / จ่าย ${_fmt.format(_totalIssued)}', tBold(9)),
+        dCell('', tBold(9)), dCell('', tBold(9)),
+      ],
+    ));
 
     doc.addPage(
       pw.MultiPage(
@@ -323,7 +305,13 @@ class _State extends State<CmBankTransactionReportScreen>
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(20),
         header: pageHeader(),
-        build: (ctx) => pageWidgets,
+        build: (ctx) => [
+          pw.Table(
+            border: pw.TableBorder.all(width: 0.3, color: PdfColors.grey400),
+            columnWidths: colW,
+            children: tableRows,
+          ),
+        ],
       ),
     );
 
@@ -336,64 +324,55 @@ class _State extends State<CmBankTransactionReportScreen>
     setState(() => _isExporting = true);
     try {
       final ex    = Excel.createExcel();
-      const sheet = 'BankTransactions';
+      const sheet = 'CheckRegister';
       ex.rename('Sheet1', sheet);
       final s = ex[sheet];
 
       final hdrBg = ExcelColor.fromHexString('#92D050');
       final totBg = ExcelColor.fromHexString('#BDD7EE');
-      final accBg = ExcelColor.fromHexString('#D9E1F2');
       final tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
       _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0, isEnglish ? 'Bank Transaction Report' : 'รายงานธุรกรรมธนาคาร', bold: true);
+      _xlCell(s, 1, 0, isEnglish ? 'Check Register Report' : 'รายงานทะเบียนเช็ค', bold: true);
       _xlCell(s, 2, 0,
           '${isEnglish ? 'Date range' : 'ช่วงวันที่'}: ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateFrom!))} – ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateTo!))}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $tsLabel');
 
       final hdrs = isEnglish
-          ? ['Date', 'Doc No.', 'Reference No.', 'Type', 'Description', 'Check No.', 'Debit', 'Credit', 'Balance']
-          : ['วันที่', 'เลขที่เอกสาร', 'เลขที่อ้างอิง', 'ประเภท', 'คำอธิบาย', 'เลขที่เช็ค', 'จ่าย', 'รับ', 'ยอดคงเหลือ'];
-
-      int row = 3;
-      for (final section in _accountSections) {
-        _xlCell(s, row, 0,
-            '${section['bank_account_code'] ?? ''}  ${_sectionAcctName(section)} (${section['bank_short_name'] ?? ''})',
-            bg: accBg, bold: true);
-        row++;
-        for (int i = 0; i < hdrs.length; i++) {
-          _xlCell(s, row, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
-        }
-        row++;
-        _xlCell(s, row, 3, isEnglish ? 'Opening Balance' : 'ยอดยกมา', bold: true);
-        _xlCell(s, row, 8, _parseD(section['opening_balance']), bold: true, align: HorizontalAlign.Right);
-        row++;
-
-        final txs = List<Map<String, dynamic>>.from(section['transactions'] as List? ?? []);
-        for (final tx in txs) {
-          final isReceipt  = tx['record_type'] == 'RECEIPT';
-          final recordDate = parseLocalDateNullable(tx['record_date']);
-          _xlCell(s, row, 0, recordDate != null ? _dateFmt.format(recordDate) : '');
-          _xlCell(s, row, 1, tx['doc_no'] ?? '');
-          _xlCell(s, row, 2, tx['reference_no'] ?? '');
-          _xlCell(s, row, 3, isReceipt ? (isEnglish ? 'Receipt' : 'รับเงิน') : (isEnglish ? 'Payment' : 'จ่ายเงิน'));
-          _xlCell(s, row, 4, tx['description'] ?? '');
-          _xlCell(s, row, 5, tx['check_no'] ?? '');
-          _xlCell(s, row, 6, _parseD(tx['debit_amount']), align: HorizontalAlign.Right);
-          _xlCell(s, row, 7, _parseD(tx['credit_amount']), align: HorizontalAlign.Right);
-          _xlCell(s, row, 8, _parseD(tx['running_balance']), align: HorizontalAlign.Right);
-          row++;
-        }
-
-        _xlCell(s, row, 0, isEnglish ? 'Total' : 'รวม', bg: totBg, bold: true);
-        _xlCell(s, row, 6, _parseD(section['total_debit']),  bg: totBg, bold: true, align: HorizontalAlign.Right);
-        _xlCell(s, row, 7, _parseD(section['total_credit']), bg: totBg, bold: true, align: HorizontalAlign.Right);
-        _xlCell(s, row, 8, _parseD(section['closing_balance']), bg: totBg, bold: true, align: HorizontalAlign.Right);
-        row += 2;
+          ? ['Type', 'Date', 'Check No.', 'Check Date', 'Reference No.', 'Bank Account', 'Account Name', 'Counterparty', 'Amount', 'Doc No.', 'Status']
+          : ['ประเภท', 'วันที่', 'เลขที่เช็ค', 'วันที่เช็ค', 'เลขที่อ้างอิง', 'บัญชีธนาคาร', 'ชื่อบัญชี', 'คู่ค้า', 'จำนวนเงิน', 'เลขที่เอกสาร', 'สถานะ'];
+      for (int i = 0; i < hdrs.length; i++) {
+        _xlCell(s, 3, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
       }
+
+      int row = 4;
+      for (final c in _checks) {
+        final isReceived = c['check_type'] == 'RECEIVED';
+        final recordDate = parseLocalDateNullable(c['record_date']);
+        final checkDate  = parseLocalDateNullable(c['check_date']);
+        _xlCell(s, row, 0, isReceived ? (isEnglish ? 'Received' : 'รับเช็ค') : (isEnglish ? 'Issued' : 'จ่ายเช็ค'));
+        _xlCell(s, row, 1, recordDate != null ? _dateFmt.format(recordDate) : '');
+        _xlCell(s, row, 2, c['check_no'] ?? '');
+        _xlCell(s, row, 3, checkDate != null ? _dateFmt.format(checkDate) : '');
+        _xlCell(s, row, 4, c['reference_no'] ?? '');
+        _xlCell(s, row, 5, c['bank_account_code'] ?? '');
+        _xlCell(s, row, 6, _rowAcctName(c));
+        _xlCell(s, row, 7, c['party_name'] ?? '');
+        _xlCell(s, row, 8, _parseD(c['amount_lc']), align: HorizontalAlign.Right);
+        _xlCell(s, row, 9, c['doc_no'] ?? '');
+        _xlCell(s, row, 10, _statusLabel(c['status'] as String? ?? '', isEnglish));
+        row++;
+      }
+
+      _xlCell(s, row, 0, isEnglish ? 'Total' : 'รวม', bg: totBg, bold: true);
+      _xlCell(s, row, 7, isEnglish ? 'Received' : 'รับ', bg: totBg, bold: true);
+      _xlCell(s, row, 8, _totalReceived, bg: totBg, bold: true, align: HorizontalAlign.Right);
+      row++;
+      _xlCell(s, row, 7, isEnglish ? 'Issued' : 'จ่าย', bg: totBg, bold: true);
+      _xlCell(s, row, 8, _totalIssued, bg: totBg, bold: true, align: HorizontalAlign.Right);
 
       final bytes = ex.encode();
       if (bytes == null) return;
-      final title = isEnglish ? 'Bank_Transaction_Report' : 'รายงานธุรกรรมธนาคาร';
+      final title = isEnglish ? 'Check_Register_Report' : 'รายงานทะเบียนเช็ค';
       final ts    = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       await downloadFile(bytes, '${title}_$ts.xlsx');
     } finally {
@@ -443,7 +422,7 @@ class _State extends State<CmBankTransactionReportScreen>
               IconButton(
                 icon: const Icon(Icons.table_chart_outlined),
                 tooltip: isEnglish ? 'Export Excel' : 'ส่งออก Excel',
-                onPressed: (_accountSections.isEmpty || !canExport) ? null : _exportExcel,
+                onPressed: (_checks.isEmpty || !canExport) ? null : _exportExcel,
               ),
           ],
           bottom: TabBar(
@@ -557,16 +536,29 @@ class _State extends State<CmBankTransactionReportScreen>
                     date: _dateTo, onPick: (d) => setState(() => _dateTo = d)),
                 const SizedBox(height: 12),
 
-                // ประเภทรายการ
+                // ประเภทเช็ค
                 DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: _recordType,
+                  value: _checkType,
                   decoration: InputDecoration(
-                      labelText: isEnglish ? 'Type' : 'ประเภทรายการ',
+                      labelText: isEnglish ? 'Check Type' : 'ประเภทเช็ค',
                       border: const OutlineInputBorder(), isDense: true),
-                  items: _recordTypes.map((t) => DropdownMenuItem(
-                      value: t, child: Text(_recordTypeLabel(t, isEnglish)))).toList(),
-                  onChanged: (v) => setState(() => _recordType = v!),
+                  items: _checkTypes.map((t) => DropdownMenuItem(
+                      value: t, child: Text(_checkTypeLabel(t, isEnglish)))).toList(),
+                  onChanged: (v) => setState(() => _checkType = v!),
+                ),
+                const SizedBox(height: 12),
+
+                // สถานะ
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  value: _status,
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Status' : 'สถานะ',
+                      border: const OutlineInputBorder(), isDense: true),
+                  items: _statusOptions.map((s) => DropdownMenuItem(
+                      value: s, child: Text(_statusLabel(s, isEnglish)))).toList(),
+                  onChanged: (v) => setState(() => _status = v!),
                 ),
               ],
             ),
@@ -647,163 +639,156 @@ class _State extends State<CmBankTransactionReportScreen>
 
   // ─── Data tab ─────────────────────────────────────────────────────────────
   Widget _buildDataTab(bool isEnglish) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_reportDateFrom == null) {
-      return Center(child: Text(isEnglish ? 'Select conditions and click Process Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผลรายงาน', style: const TextStyle(color: Colors.grey)));
-    }
-    if (_accountSections.isEmpty) {
-      return Center(child: Text(isEnglish ? 'No data' : 'ไม่มีข้อมูล', style: const TextStyle(color: Colors.grey)));
-    }
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final section in _accountSections) ...[
-            _buildSectionHeader(isEnglish, section),
-            _buildSectionTable(isEnglish, section),
-            _buildSectionFooter(isEnglish, section),
-            const Divider(height: 24, thickness: 4),
-          ],
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_reportDateFrom != null) _buildReportHeader(isEnglish),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _reportDateFrom == null
+                  ? Center(child: Text(isEnglish ? 'Select conditions and click Process Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผลรายงาน', style: const TextStyle(color: Colors.grey)))
+                  : _checks.isEmpty
+                      ? Center(child: Text(isEnglish ? 'No checks in this period' : 'ไม่มีเช็คในช่วงเวลานี้', style: const TextStyle(color: Colors.grey)))
+                      : _buildTable(isEnglish),
+        ),
+        if (_reportDateFrom != null && !_loading) _buildSummaryFooter(isEnglish),
+      ],
     );
   }
 
-  Widget _buildSectionHeader(bool isEnglish, Map<String, dynamic> section) {
+  Widget _buildReportHeader(bool isEnglish) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       color: _kTheme.withOpacity(0.08),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${section['bank_account_code'] ?? ''}  ${_sectionAcctName(section)} '
-                  '(${section['bank_short_name'] ?? ''})',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  '${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateFrom!))} – '
-                  '${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateTo!))}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(isEnglish ? 'Opening Balance' : 'ยอดยกมา', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-              Text(_fmt.format(_parseD(section['opening_balance'])),
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold,
-                      color: _parseD(section['opening_balance']) >= 0 ? Colors.black87 : Colors.red.shade700)),
-            ],
+          Text(isEnglish ? 'Check Register Report' : 'รายงานทะเบียนเช็ค', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          Text(
+            '${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateFrom!))} – '
+            '${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateTo!))}',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSectionTable(bool isEnglish, Map<String, dynamic> section) {
+  Widget _buildTable(bool isEnglish) {
     const headerStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.bold);
     const cellStyle   = TextStyle(fontSize: 12);
-    final txs = List<Map<String, dynamic>>.from(section['transactions'] as List? ?? []);
-
-    if (txs.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(isEnglish ? 'No items in this period' : 'ไม่มีรายการในช่วงเวลานี้', style: const TextStyle(color: Colors.grey)),
-      );
-    }
 
     return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        headingRowHeight: 38,
-        dataRowMinHeight: 30,
-        dataRowMaxHeight: 38,
-        columnSpacing: 16,
-        headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-        headingTextStyle: headerStyle,
-        columns: [
-          DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่')),
-          DataColumn(label: Text(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร')),
-          DataColumn(label: Text(isEnglish ? 'Reference No.' : 'เลขที่อ้างอิง')),
-          DataColumn(label: Text(isEnglish ? 'Type' : 'ประเภท')),
-          DataColumn(label: Text(isEnglish ? 'Description' : 'คำอธิบาย')),
-          DataColumn(label: Text(isEnglish ? 'Check No.' : 'เลขที่เช็ค')),
-          DataColumn(label: Text(isEnglish ? 'Debit' : 'จ่าย'),    numeric: true),
-          DataColumn(label: Text(isEnglish ? 'Credit' : 'รับ'),     numeric: true),
-          DataColumn(label: Text(isEnglish ? 'Balance' : 'ยอดคงเหลือ'), numeric: true),
-        ],
-        rows: txs.map((tx) {
-          final isReceipt = tx['record_type'] == 'RECEIPT';
-          final balance   = _parseD(tx['running_balance']);
-          final recordDate = parseLocalDateNullable(tx['record_date']);
-          return DataRow(cells: [
-            DataCell(Text(
-              recordDate != null ? _dateFmt.format(recordDate) : '',
-              style: cellStyle,
-            )),
-            DataCell(Text(tx['doc_no'] ?? '', style: cellStyle)),
-            DataCell(Text(tx['reference_no'] ?? '', style: cellStyle)),
-            DataCell(Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: isReceipt ? Colors.green.shade50 : Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: isReceipt ? Colors.green.shade200 : Colors.orange.shade200),
-              ),
-              child: Text(
-                isReceipt ? (isEnglish ? 'Receipt' : 'รับเงิน') : (isEnglish ? 'Payment' : 'จ่ายเงิน'),
-                style: TextStyle(fontSize: 11, color: isReceipt ? Colors.green.shade800 : Colors.orange.shade800),
-              ),
-            )),
-            DataCell(SizedBox(
-              width: 200,
-              child: Text(tx['description'] ?? '', style: cellStyle, overflow: TextOverflow.ellipsis),
-            )),
-            DataCell(Text(tx['check_no'] ?? '', style: cellStyle)),
-            DataCell(Text(
-              _parseD(tx['debit_amount']) > 0 ? _fmt.format(_parseD(tx['debit_amount'])) : '',
-              style: cellStyle.copyWith(color: Colors.red.shade700),
-            )),
-            DataCell(Text(
-              _parseD(tx['credit_amount']) > 0 ? _fmt.format(_parseD(tx['credit_amount'])) : '',
-              style: cellStyle.copyWith(color: Colors.green.shade700),
-            )),
-            DataCell(Text(
-              _fmt.format(balance),
-              style: TextStyle(
-                fontSize: 12, fontWeight: FontWeight.bold,
-                color: balance >= 0 ? Colors.black87 : Colors.red.shade700,
-              ),
-            )),
-          ]);
-        }).toList(),
+      scrollDirection: Axis.vertical,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowHeight: 38,
+          dataRowMinHeight: 30,
+          dataRowMaxHeight: 38,
+          columnSpacing: 16,
+          headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
+          headingTextStyle: headerStyle,
+          columns: [
+            DataColumn(label: Text(isEnglish ? 'Type' : 'ประเภท')),
+            DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่')),
+            DataColumn(label: Text(isEnglish ? 'Check No.' : 'เลขที่เช็ค')),
+            DataColumn(label: Text(isEnglish ? 'Check Date' : 'วันที่เช็ค')),
+            DataColumn(label: Text(isEnglish ? 'Reference No.' : 'เลขที่อ้างอิง')),
+            DataColumn(label: Text(isEnglish ? 'Bank Account' : 'บัญชีธนาคาร')),
+            DataColumn(label: Text(isEnglish ? 'Account Name' : 'ชื่อบัญชี')),
+            DataColumn(label: Text(isEnglish ? 'Counterparty' : 'คู่ค้า')),
+            DataColumn(label: Text(isEnglish ? 'Amount' : 'จำนวนเงิน'), numeric: true),
+            DataColumn(label: Text(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร')),
+            DataColumn(label: Text(isEnglish ? 'Status' : 'สถานะ')),
+          ],
+          rows: _checks.map((c) {
+            final isReceived = c['check_type'] == 'RECEIVED';
+            final amount = _parseD(c['amount_lc']);
+            final status = c['status']?.toString() ?? '';
+            final recordDate = parseLocalDateNullable(c['record_date']);
+            final checkDate  = parseLocalDateNullable(c['check_date']);
+            return DataRow(cells: [
+              DataCell(Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isReceived ? Colors.green.shade50 : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: isReceived ? Colors.green.shade200 : Colors.orange.shade200),
+                ),
+                child: Text(
+                  isReceived ? (isEnglish ? 'Received' : 'รับเช็ค') : (isEnglish ? 'Issued' : 'จ่ายเช็ค'),
+                  style: TextStyle(fontSize: 11, color: isReceived ? Colors.green.shade800 : Colors.orange.shade800),
+                ),
+              )),
+              DataCell(Text(
+                recordDate != null ? _dateFmt.format(recordDate) : '',
+                style: cellStyle,
+              )),
+              DataCell(Text(c['check_no'] ?? '', style: cellStyle.copyWith(fontWeight: FontWeight.w600))),
+              DataCell(Text(
+                checkDate != null ? _dateFmt.format(checkDate) : '—',
+                style: cellStyle,
+              )),
+              DataCell(Text(c['reference_no'] ?? '', style: cellStyle)),
+              DataCell(Text(c['bank_account_code'] ?? '', style: cellStyle)),
+              DataCell(SizedBox(
+                width: 140,
+                child: Text(_rowAcctName(c), style: cellStyle, overflow: TextOverflow.ellipsis),
+              )),
+              DataCell(SizedBox(
+                width: 180,
+                child: Text(c['party_name'] ?? '', style: cellStyle, overflow: TextOverflow.ellipsis),
+              )),
+              DataCell(Text(_fmt.format(amount),
+                  style: cellStyle.copyWith(fontWeight: FontWeight.w600,
+                      color: isReceived ? Colors.green.shade700 : Colors.red.shade700))),
+              DataCell(Text(c['doc_no'] ?? '', style: cellStyle)),
+              DataCell(_buildStatusChip(status)),
+            ]);
+          }).toList(),
+        ),
       ),
     );
   }
 
-  Widget _buildSectionFooter(bool isEnglish, Map<String, dynamic> section) {
-    final totalDebit    = _parseD(section['total_debit']);
-    final totalCredit   = _parseD(section['total_credit']);
-    final closingBalance = _parseD(section['closing_balance']);
+  Widget _buildStatusChip(String status) {
+    final isEnglish = _isEnglish;
+    Color bg, fg;
+    String label;
+    switch (status) {
+      case 'Cleared':
+        bg = Colors.green.shade100; fg = Colors.green.shade800; label = isEnglish ? 'Cleared' : 'ผ่านแล้ว';
+      case 'Bounced':
+        bg = Colors.red.shade100;   fg = Colors.red.shade800;   label = isEnglish ? 'Bounced' : 'เช็คคืน';
+      case 'Voided':
+        bg = Colors.grey.shade200;  fg = Colors.grey.shade700;  label = isEnglish ? 'Voided' : 'ยกเลิก';
+      default:
+        bg = Colors.blue.shade50;   fg = Colors.blue.shade800;  label = isEnglish ? 'Pending' : 'รอเรียกเก็บ';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
+      child: Text(label, style: TextStyle(fontSize: 11, color: fg)),
+    );
+  }
+
+  Widget _buildSummaryFooter(bool isEnglish) {
+    final issuedCount   = _checks.where((c) => c['check_type'] == 'ISSUED').length;
+    final receivedCount = _checks.where((c) => c['check_type'] == 'RECEIVED').length;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.blueGrey.shade50,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          _summaryItem(isEnglish ? 'Total Debit' : 'รวมจ่าย', totalDebit,   Colors.red.shade700),
+          Text(isEnglish ? 'Received: $receivedCount items' : 'รับเช็ค: $receivedCount รายการ', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          const SizedBox(width: 16),
+          Text(isEnglish ? 'Issued: $issuedCount items' : 'จ่ายเช็ค: $issuedCount รายการ', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          const Spacer(),
+          _summaryItem(isEnglish ? 'Total Received' : 'รวมรับเช็ค', _totalReceived, Colors.green.shade700),
           const SizedBox(width: 24),
-          _summaryItem(isEnglish ? 'Total Credit' : 'รวมรับ',  totalCredit, Colors.green.shade700),
-          const SizedBox(width: 24),
-          _summaryItem(isEnglish ? 'Closing Balance' : 'ยอดปิด', closingBalance,
-              closingBalance >= 0 ? Colors.black87 : Colors.red.shade700,
-              bold: true),
+          _summaryItem(isEnglish ? 'Total Issued' : 'รวมจ่ายเช็ค', _totalIssued, Colors.red.shade700, bold: true),
         ],
       ),
     );
@@ -827,7 +812,7 @@ class _State extends State<CmBankTransactionReportScreen>
       color: Colors.grey[200],
       child: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _reportDateFrom == null || _accountSections.isEmpty
+          : _reportDateFrom == null || _checks.isEmpty
               ? Center(child: Text(isEnglish ? 'Select conditions and click Process Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผลรายงาน'))
               : PdfPreview(
                   key: ValueKey(_pdfKey),

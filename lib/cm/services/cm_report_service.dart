@@ -14,12 +14,16 @@ class CmReportService {
 
   Future<Map<String, dynamic>> getCashPosition({
     int? bankAccountId,
+    String? accountCodeFrom,
+    String? accountCodeTo,
     required String dateFrom,
     required String dateTo,
   }) async {
     final headers = await _auth.getAuthHeader();
     final params = {'date_from': dateFrom, 'date_to': dateTo};
     if (bankAccountId != null) params['bank_account_id'] = bankAccountId.toString();
+    if (accountCodeFrom != null && accountCodeFrom.isNotEmpty) params['account_code_from'] = accountCodeFrom;
+    if (accountCodeTo   != null && accountCodeTo.isNotEmpty)   params['account_code_to']   = accountCodeTo;
     final uri = Uri.parse('$_base/cm_report/cash_position').replace(queryParameters: params);
     final resp = await http.get(uri, headers: headers);
     if (resp.statusCode == 200) return json.decode(resp.body) as Map<String, dynamic>;
@@ -27,18 +31,19 @@ class CmReportService {
   }
 
   Future<Map<String, dynamic>> getBankTransactions({
-    required int bankAccountId,
+    int? bankAccountId,
+    String? accountCodeFrom,
+    String? accountCodeTo,
     required String dateFrom,
     required String dateTo,
     String? recordType,
   }) async {
     final headers = await _auth.getAuthHeader();
-    final params = {
-      'bank_account_id': bankAccountId.toString(),
-      'date_from': dateFrom,
-      'date_to': dateTo,
-      if (recordType != null && recordType != 'All') 'record_type': recordType,
-    };
+    final params = {'date_from': dateFrom, 'date_to': dateTo};
+    if (bankAccountId != null) params['bank_account_id'] = bankAccountId.toString();
+    if (accountCodeFrom != null && accountCodeFrom.isNotEmpty) params['account_code_from'] = accountCodeFrom;
+    if (accountCodeTo   != null && accountCodeTo.isNotEmpty)   params['account_code_to']   = accountCodeTo;
+    if (recordType != null && recordType != 'All') params['record_type'] = recordType;
     final uri = Uri.parse('$_base/cm_report/bank_transactions').replace(queryParameters: params);
     final resp = await http.get(uri, headers: headers);
     if (resp.statusCode == 200) return json.decode(resp.body) as Map<String, dynamic>;
@@ -47,6 +52,8 @@ class CmReportService {
 
   Future<Map<String, dynamic>> getCheckRegister({
     int? bankAccountId,
+    String? accountCodeFrom,
+    String? accountCodeTo,
     required String dateFrom,
     required String dateTo,
     String? checkType,
@@ -55,9 +62,60 @@ class CmReportService {
     final headers = await _auth.getAuthHeader();
     final params = <String, String>{'date_from': dateFrom, 'date_to': dateTo};
     if (bankAccountId != null) params['bank_account_id'] = bankAccountId.toString();
+    if (accountCodeFrom != null && accountCodeFrom.isNotEmpty) params['account_code_from'] = accountCodeFrom;
+    if (accountCodeTo   != null && accountCodeTo.isNotEmpty)   params['account_code_to']   = accountCodeTo;
     if (checkType != null && checkType != 'All') params['check_type'] = checkType;
     if (status     != null && status     != 'All') params['status']     = status;
     final uri = Uri.parse('$_base/cm_report/check_register').replace(queryParameters: params);
+    final resp = await http.get(uri, headers: headers);
+    if (resp.statusCode == 200) return json.decode(resp.body) as Map<String, dynamic>;
+    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+  }
+
+  Future<Map<String, dynamic>> getFxGainLossReport({
+    int? bankAccountId,
+    String? accountCodeFrom,
+    String? accountCodeTo,
+    required String dateFrom,
+    required String dateTo,
+  }) async {
+    final headers = await _auth.getAuthHeader();
+    final params = {'date_from': dateFrom, 'date_to': dateTo};
+    if (bankAccountId != null) params['bank_account_id'] = bankAccountId.toString();
+    if (accountCodeFrom != null && accountCodeFrom.isNotEmpty) params['account_code_from'] = accountCodeFrom;
+    if (accountCodeTo   != null && accountCodeTo.isNotEmpty)   params['account_code_to']   = accountCodeTo;
+    final uri = Uri.parse('$_base/cm_fx_gain_loss_report').replace(queryParameters: params);
+    final resp = await http.get(uri, headers: headers);
+    if (resp.statusCode == 200) return json.decode(resp.body) as Map<String, dynamic>;
+    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+  }
+
+  Future<Map<String, dynamic>> getCashFlowStatement({
+    String? accountCodeFrom,
+    String? accountCodeTo,
+    required String dateFrom,
+    required String dateTo,
+  }) async {
+    final headers = await _auth.getAuthHeader();
+    final params = {'date_from': dateFrom, 'date_to': dateTo};
+    if (accountCodeFrom != null && accountCodeFrom.isNotEmpty) params['account_code_from'] = accountCodeFrom;
+    if (accountCodeTo   != null && accountCodeTo.isNotEmpty)   params['account_code_to']   = accountCodeTo;
+    final uri = Uri.parse('$_base/cm_cash_flow_statement').replace(queryParameters: params);
+    final resp = await http.get(uri, headers: headers);
+    if (resp.statusCode == 200) return json.decode(resp.body) as Map<String, dynamic>;
+    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+  }
+
+  Future<Map<String, dynamic>> getBankGlReconcile({
+    String? accountCodeFrom,
+    String? accountCodeTo,
+    required String asOfDate,
+  }) async {
+    final headers = await _auth.getAuthHeader();
+    final params = {'as_of_date': asOfDate};
+    if (accountCodeFrom != null && accountCodeFrom.isNotEmpty) params['account_code_from'] = accountCodeFrom;
+    if (accountCodeTo   != null && accountCodeTo.isNotEmpty)   params['account_code_to']   = accountCodeTo;
+    final uri = Uri.parse('$_base/cm_bank_gl_reconcile').replace(queryParameters: params);
     final resp = await http.get(uri, headers: headers);
     if (resp.statusCode == 200) return json.decode(resp.body) as Map<String, dynamic>;
     throw Exception(json.decode(resp.body)['error'] ?? resp.body);

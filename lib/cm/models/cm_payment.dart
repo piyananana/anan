@@ -135,3 +135,12 @@ const Map<String, String> cmPaymentStatusOptions = {
   'Cleared': 'เคลียร์แล้ว',
   'Voided':  'ยกเลิก',
 };
+
+const Map<String, String> cmPaymentStatusOptionsEng = {
+  'Pending': 'Pending',
+  'Cleared': 'Cleared',
+  'Voided':  'Voided',
+};
+
+String cmPaymentStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? cmPaymentStatusOptionsEng[s] : cmPaymentStatusOptions[s]) ?? s;

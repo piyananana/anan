@@ -1,4 +1,4 @@
-// lib/cm/screens/cm_bank_gl_reconcile_report_screen.dart
+// lib/cm/screens/cm_cash_position_report_screen.dart
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,7 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
-import 'package:excel/excel.dart' hide Border;
+import 'package:excel/excel.dart';
 
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_language_provider.dart';
@@ -23,13 +23,13 @@ const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
 final _dateFmt = DateFormat('dd/MM/yyyy');
 
-class CmBankGlReconcileReportScreen extends StatefulWidget {
-  const CmBankGlReconcileReportScreen({super.key});
+class CmCashPositionReportScreen extends StatefulWidget {
+  const CmCashPositionReportScreen({super.key});
   @override
-  State<CmBankGlReconcileReportScreen> createState() => _State();
+  State<CmCashPositionReportScreen> createState() => _CmCashPositionReportScreenState();
 }
 
-class _State extends State<CmBankGlReconcileReportScreen>
+class _CmCashPositionReportScreenState extends State<CmCashPositionReportScreen>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
@@ -51,13 +51,13 @@ class _State extends State<CmBankGlReconcileReportScreen>
   CmBankAccount? _accountFrom;
   CmBankAccount? _accountTo;
 
-  DateTime _asOfDate = DateTime(DateTime.now().year, DateTime.now().month + 1, 0);
+  DateTime _dateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  DateTime _dateTo   = DateTime.now();
   bool _loading = false;
 
   List<Map<String, dynamic>> _rows = [];
-  String? _reportDate;
-  int _totalMatched   = 0;
-  int _totalUnmatched = 0;
+  String? _reportDateFrom;
+  String? _reportDateTo;
 
   @override
   void initState() {
@@ -71,26 +71,30 @@ class _State extends State<CmBankGlReconcileReportScreen>
     if (mounted) setState(() {});
   }
 
-  Future<void> _loadReport() async {
+  Future<void> _generateReport() async {
+    if (_dateFrom.isAfter(_dateTo)) {
+      _showError(_isEnglish ? 'Please specify a valid date range' : 'กรุณาระบุช่วงวันที่ให้ถูกต้อง');
+      return;
+    }
     setState(() { _loading = true; _rows = []; });
     try {
-      final d = formatLocalDate(_asOfDate);
-      final data = await _rptSvc.getBankGlReconcile(
+      final df = formatLocalDate(_dateFrom);
+      final dt = formatLocalDate(_dateTo);
+      final data = await _rptSvc.getCashPosition(
         accountCodeFrom: _accountFrom?.accountCode,
         accountCodeTo:   _accountTo?.accountCode,
-        asOfDate: d,
+        dateFrom: df, dateTo: dt,
       );
       if (!mounted) return;
       final rows = List<Map<String, dynamic>>.from(data['rows'] as List);
       if (rows.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(_isEnglish ? 'No accounts with a GL Account configured' : 'ไม่พบบัญชีที่มี GL Account กำหนดไว้ตามเงื่อนไขที่เลือก')));
+            content: Text(_isEnglish ? 'No data found for the selected conditions' : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')));
       }
       setState(() {
-        _rows           = rows;
-        _totalMatched   = data['total_matched'] as int? ?? 0;
-        _totalUnmatched = data['total_unmatched'] as int? ?? 0;
-        _reportDate     = d;
+        _rows = rows;
+        _reportDateFrom = df;
+        _reportDateTo   = dt;
         _loading = false;
         _pdfKey++;
       });
@@ -109,17 +113,9 @@ class _State extends State<CmBankGlReconcileReportScreen>
 
   double _parseD(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
 
-  String _acctName(CmBankAccount a) =>
-      _isEnglish && (a.accountNameEn ?? '').isNotEmpty ? a.accountNameEn! : a.accountNameTh;
-
-  String _rowAcctName(Map<String, dynamic> r) {
+  String _acctName(Map<String, dynamic> r) {
     final nameEn = r['bank_account_name_en'] as String?;
     return _isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (r['bank_account_name'] as String? ?? '');
-  }
-
-  String _rowGlName(Map<String, dynamic> r) {
-    final nameEn = r['gl_account_name_en'] as String?;
-    return _isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (r['gl_account_name'] as String? ?? '');
   }
 
   // ─── PDF ──────────────────────────────────────────────────────────────────
@@ -135,10 +131,12 @@ class _State extends State<CmBankGlReconcileReportScreen>
         (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName     = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-    final asOfLine = '${isEnglish ? 'As of' : 'ณ วันที่'} ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDate!))}';
+    final dateRangeLine =
+        '${isEnglish ? 'Date range' : 'ช่วงวันที่'} ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateFrom!))}'
+        ' – ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateTo!))}';
 
-    final allLabel = isEnglish ? '(All)' : '(ทั้งหมด)';
     final conditions = <String>[];
+    final allLabel = isEnglish ? '(All)' : '(ทั้งหมด)';
     if (_accountFrom != null || _accountTo != null) {
       conditions.add(
           '${isEnglish ? 'Account code' : 'รหัสบัญชี'}: ${_accountFrom?.accountCode ?? allLabel}'
@@ -150,7 +148,7 @@ class _State extends State<CmBankGlReconcileReportScreen>
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 11))),
         pw.Expanded(flex: 6,
-            child: pw.Text(isEnglish ? 'CM vs GL Reconciliation Report' : 'รายงานกระทบยอด CM vs GL',
+            child: pw.Text(isEnglish ? 'Cash Position Report' : 'รายงานสถานะเงินสด',
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold))),
         pw.Expanded(flex: 3,
@@ -163,7 +161,7 @@ class _State extends State<CmBankGlReconcileReportScreen>
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.SizedBox()),
         pw.Expanded(flex: 6,
-            child: pw.Text(asOfLine, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10))),
+            child: pw.Text(dateRangeLine, textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10))),
         pw.Expanded(flex: 3,
             child: pw.Text(isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
                 textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 10))),
@@ -189,20 +187,21 @@ class _State extends State<CmBankGlReconcileReportScreen>
     ]);
 
     const colW = {
-      0: pw.FlexColumnWidth(5),   // บัญชีธนาคาร
-      1: pw.FlexColumnWidth(5),   // บัญชี GL
-      2: pw.FlexColumnWidth(2.5), // สกุลเงิน
-      3: pw.FlexColumnWidth(3.5), // ยอด CM
-      4: pw.FlexColumnWidth(3.5), // ยอด GL
-      5: pw.FlexColumnWidth(3.5), // ส่วนต่าง
-      6: pw.FlexColumnWidth(3),   // สถานะ
+      0: pw.FlexColumnWidth(4),   // บัญชีธนาคาร
+      1: pw.FlexColumnWidth(6),   // ชื่อบัญชี
+      2: pw.FlexColumnWidth(3),   // ธนาคาร
+      3: pw.FlexColumnWidth(2),   // สกุลเงิน
+      4: pw.FlexColumnWidth(3.5), // ยอดเปิด
+      5: pw.FlexColumnWidth(3.5), // รับเข้า
+      6: pw.FlexColumnWidth(3.5), // จ่ายออก
+      7: pw.FlexColumnWidth(3.5), // ยอดปิด
     };
 
     pw.TextStyle tNormal(double fs) => pw.TextStyle(font: font, fontSize: fs);
     pw.TextStyle tBold(double fs)   => pw.TextStyle(font: fontBold, fontSize: fs);
 
     const cGreen = PdfColor(0.87, 0.94, 0.92);
-    const cRed   = PdfColor(0.98, 0.90, 0.90);
+    const cTotal = PdfColor(0.75, 0.88, 0.83);
 
     pw.Widget hCell(String t, {pw.TextAlign a = pw.TextAlign.center}) => pw.Container(
         padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
@@ -220,34 +219,54 @@ class _State extends State<CmBankGlReconcileReportScreen>
       decoration: const pw.BoxDecoration(color: cGreen),
       children: [
         hCell(isEnglish ? 'Bank Account' : 'บัญชีธนาคาร', a: pw.TextAlign.left),
-        hCell(isEnglish ? 'GL Account' : 'บัญชี GL', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Account Name' : 'ชื่อบัญชี', a: pw.TextAlign.left),
+        hCell(isEnglish ? 'Bank' : 'ธนาคาร'),
         hCell(isEnglish ? 'Currency' : 'สกุลเงิน'),
-        hCell(isEnglish ? 'CM Balance' : 'ยอด CM'),
-        hCell(isEnglish ? 'GL Balance' : 'ยอด GL'),
-        hCell(isEnglish ? 'Difference' : 'ส่วนต่าง'),
-        hCell(isEnglish ? 'Status' : 'สถานะ'),
+        hCell(isEnglish ? 'Opening Balance' : 'ยอดเปิด'),
+        hCell(isEnglish ? 'Receipts' : 'รับเข้า'),
+        hCell(isEnglish ? 'Payments' : 'จ่ายออก'),
+        hCell(isEnglish ? 'Closing Balance' : 'ยอดปิด'),
       ],
     );
 
     final tableRows = <pw.TableRow>[headerRow];
+    double totOpen = 0, totReceipt = 0, totPayment = 0, totClose = 0;
 
     for (final r in _rows) {
-      final isMatched = r['is_matched'] == true;
-      final diff = _parseD(r['difference']);
-      tableRows.add(pw.TableRow(
-        decoration: isMatched ? null : const pw.BoxDecoration(color: cRed),
-        children: [
-          dCell('${r['bank_account_code'] ?? ''}  ${_rowAcctName(r)}', tNormal(9)),
-          dCell('${r['gl_account_code'] ?? ''}  ${_rowGlName(r)}', tNormal(9)),
-          dCell(r['currency_code'] as String? ?? 'THB', tNormal(9), a: pw.TextAlign.center),
-          amtCell(_parseD(r['cm_balance']), tNormal(9)),
-          amtCell(_parseD(r['gl_balance']), tNormal(9)),
-          amtCell(diff, diff == 0 ? tNormal(9) : tBold(9)),
-          dCell(isMatched ? (isEnglish ? 'Matched' : 'ตรงกัน') : (isEnglish ? 'Unmatched' : 'ไม่ตรงกัน'),
-              tBold(9), a: pw.TextAlign.center),
-        ],
-      ));
+      final opening = _parseD(r['opening_balance']);
+      final receipt = _parseD(r['period_receipts']);
+      final payment = _parseD(r['period_payments']);
+      final closing = _parseD(r['closing_balance']);
+      totOpen    += opening;
+      totReceipt += receipt;
+      totPayment += payment;
+      totClose   += closing;
+
+      tableRows.add(pw.TableRow(children: [
+        dCell(r['bank_account_code'] as String? ?? '', tBold(9)),
+        dCell(_acctName(r), tNormal(9)),
+        dCell(r['bank_short_name'] as String? ?? '', tNormal(9)),
+        dCell(r['currency_code'] as String? ?? 'THB', tNormal(9)),
+        amtCell(opening, tNormal(9)),
+        amtCell(receipt, tNormal(9)),
+        amtCell(payment, tNormal(9)),
+        amtCell(closing, tBold(9)),
+      ]));
     }
+
+    tableRows.add(pw.TableRow(
+      decoration: const pw.BoxDecoration(color: cTotal),
+      children: [
+        dCell(isEnglish ? 'Grand Total' : 'รวมทั้งสิ้น', tBold(9)),
+        dCell('', tBold(9)),
+        dCell('', tBold(9)),
+        dCell('', tBold(9)),
+        amtCell(totOpen, tBold(9)),
+        amtCell(totReceipt, tBold(9)),
+        amtCell(totPayment, tBold(9)),
+        amtCell(totClose, tBold(9)),
+      ],
+    ));
 
     doc.addPage(
       pw.MultiPage(
@@ -261,12 +280,6 @@ class _State extends State<CmBankGlReconcileReportScreen>
             columnWidths: colW,
             children: tableRows,
           ),
-          pw.SizedBox(height: 8),
-          pw.Text(
-              isEnglish
-                  ? 'Matched: $_totalMatched  |  Unmatched: $_totalUnmatched'
-                  : 'ตรงกัน: $_totalMatched  |  ไม่ตรงกัน: $_totalUnmatched',
-              style: tBold(10)),
         ],
       ),
     );
@@ -280,7 +293,7 @@ class _State extends State<CmBankGlReconcileReportScreen>
     setState(() => _isExporting = true);
     try {
       final ex    = Excel.createExcel();
-      const sheet = 'BankGlReconcile';
+      const sheet = 'CashPosition';
       ex.rename('Sheet1', sheet);
       final s = ex[sheet];
 
@@ -289,39 +302,49 @@ class _State extends State<CmBankGlReconcileReportScreen>
       final tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
       _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0, isEnglish ? 'CM vs GL Reconciliation Report' : 'รายงานกระทบยอด CM vs GL', bold: true);
+      _xlCell(s, 1, 0, isEnglish ? 'Cash Position Report' : 'รายงานสถานะเงินสด', bold: true);
       _xlCell(s, 2, 0,
-          '${isEnglish ? 'As of' : 'ณ วันที่'}: ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDate!))}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $tsLabel');
+          '${isEnglish ? 'Date range' : 'ช่วงวันที่'}: ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateFrom!))} – ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateTo!))}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $tsLabel');
 
       final hdrs = isEnglish
-          ? ['Bank Account', 'GL Account', 'Currency', 'CM Balance', 'GL Balance', 'Difference', 'Status']
-          : ['บัญชีธนาคาร', 'บัญชี GL', 'สกุลเงิน', 'ยอด CM', 'ยอด GL', 'ส่วนต่าง', 'สถานะ'];
+          ? ['Bank Account', 'Account Name', 'Bank', 'Currency', 'Opening Balance', 'Receipts', 'Payments', 'Closing Balance']
+          : ['บัญชีธนาคาร', 'ชื่อบัญชี', 'ธนาคาร', 'สกุลเงิน', 'ยอดเปิด', 'รับเข้า', 'จ่ายออก', 'ยอดปิด'];
       for (int i = 0; i < hdrs.length; i++) {
         _xlCell(s, 3, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
       }
 
       int row = 4;
+      double totOpen = 0, totReceipt = 0, totPayment = 0, totClose = 0;
       for (final r in _rows) {
-        final isMatched = r['is_matched'] == true;
-        _xlCell(s, row, 0, '${r['bank_account_code'] ?? ''}  ${_rowAcctName(r)}');
-        _xlCell(s, row, 1, '${r['gl_account_code'] ?? ''}  ${_rowGlName(r)}');
-        _xlCell(s, row, 2, r['currency_code'] ?? 'THB');
-        _xlCell(s, row, 3, _parseD(r['cm_balance']), align: HorizontalAlign.Right);
-        _xlCell(s, row, 4, _parseD(r['gl_balance']), align: HorizontalAlign.Right);
-        _xlCell(s, row, 5, _parseD(r['difference']), align: HorizontalAlign.Right);
-        _xlCell(s, row, 6, isMatched ? (isEnglish ? 'Matched' : 'ตรงกัน') : (isEnglish ? 'Unmatched' : 'ไม่ตรงกัน'));
+        final opening = _parseD(r['opening_balance']);
+        final receipt = _parseD(r['period_receipts']);
+        final payment = _parseD(r['period_payments']);
+        final closing = _parseD(r['closing_balance']);
+        totOpen += opening; totReceipt += receipt; totPayment += payment; totClose += closing;
+
+        _xlCell(s, row, 0, r['bank_account_code'] ?? '');
+        _xlCell(s, row, 1, _acctName(r));
+        _xlCell(s, row, 2, r['bank_short_name'] ?? '');
+        _xlCell(s, row, 3, r['currency_code'] ?? 'THB');
+        _xlCell(s, row, 4, opening, align: HorizontalAlign.Right);
+        _xlCell(s, row, 5, receipt, align: HorizontalAlign.Right);
+        _xlCell(s, row, 6, payment, align: HorizontalAlign.Right);
+        _xlCell(s, row, 7, closing, align: HorizontalAlign.Right);
         row++;
       }
 
-      _xlCell(s, row, 0, isEnglish ? 'Matched' : 'ตรงกัน', bg: totBg, bold: true);
-      _xlCell(s, row, 1, _totalMatched, bg: totBg, bold: true, align: HorizontalAlign.Right);
-      row++;
-      _xlCell(s, row, 0, isEnglish ? 'Unmatched' : 'ไม่ตรงกัน', bg: totBg, bold: true);
-      _xlCell(s, row, 1, _totalUnmatched, bg: totBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, row, 0, isEnglish ? 'Grand Total' : 'รวมทั้งสิ้น', bg: totBg, bold: true);
+      _xlCell(s, row, 1, '', bg: totBg);
+      _xlCell(s, row, 2, '', bg: totBg);
+      _xlCell(s, row, 3, '', bg: totBg);
+      _xlCell(s, row, 4, totOpen,    bg: totBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, row, 5, totReceipt, bg: totBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, row, 6, totPayment, bg: totBg, bold: true, align: HorizontalAlign.Right);
+      _xlCell(s, row, 7, totClose,   bg: totBg, bold: true, align: HorizontalAlign.Right);
 
       final bytes = ex.encode();
       if (bytes == null) return;
-      final title = isEnglish ? 'Bank_GL_Reconcile_Report' : 'รายงานกระทบยอด_CM_GL';
+      final title = isEnglish ? 'Cash_Position_Report' : 'รายงานสถานะเงินสด';
       final ts    = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       await downloadFile(bytes, '${title}_$ts.xlsx');
     } finally {
@@ -334,7 +357,7 @@ class _State extends State<CmBankGlReconcileReportScreen>
     final cell = s.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
     cell.value = v is double
         ? DoubleCellValue(v)
-        : (v is int ? IntCellValue(v) : TextCellValue(v?.toString() ?? ''));
+        : TextCellValue(v?.toString() ?? '');
     cell.cellStyle = CellStyle(
       backgroundColorHex: bg ?? ExcelColor.none,
       horizontalAlign: align ?? HorizontalAlign.Left,
@@ -384,58 +407,57 @@ class _State extends State<CmBankGlReconcileReportScreen>
             ],
           ),
         ),
-        body: LayoutBuilder(
-          builder: (_, constraints) {
-            final maxFilterWidth = (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Toggle strip
-                Container(
-                  width: 36,
-                  color: _kTheme,
-                  child: IconButton(
-                    padding: EdgeInsets.zero, iconSize: 20, color: Colors.white,
-                    icon: Icon(_isFilterExpanded ? Icons.filter_list_off : Icons.filter_list),
-                    tooltip: _isFilterExpanded ? (isEnglish ? 'Collapse Filter' : 'ย่อเงื่อนไข') : (isEnglish ? 'Expand Filter' : 'ขยายเงื่อนไข'),
-                    onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
+        body: LayoutBuilder(builder: (_, constraints) {
+          final maxFilterWidth = (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Toggle strip
+              Container(
+                width: 36,
+                color: _kTheme,
+                child: IconButton(
+                  icon: Icon(_isFilterExpanded ? Icons.filter_list_off : Icons.filter_list, color: Colors.white, size: 20),
+                  padding: EdgeInsets.zero,
+                  tooltip: _isFilterExpanded ? (isEnglish ? 'Collapse Filter' : 'ย่อเงื่อนไข') : (isEnglish ? 'Expand Filter' : 'ขยายเงื่อนไข'),
+                  onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
+                ),
+              ),
+              // Filter panel
+              AnimatedContainer(
+                duration: _isDraggingDivider ? Duration.zero : const Duration(milliseconds: 200),
+                width: _isFilterExpanded ? _filterPanelWidth : 0.0,
+                child: ClipRect(
+                  child: OverflowBox(
+                    maxWidth: _filterPanelWidth,
+                    minWidth: _filterPanelWidth,
+                    alignment: Alignment.topLeft,
+                    child: _buildFilterPanel(isEnglish),
                   ),
                 ),
-                // Filter panel
-                AnimatedContainer(
-                  duration: _isDraggingDivider ? Duration.zero : const Duration(milliseconds: 200),
-                  width: _isFilterExpanded ? _filterPanelWidth : 0.0,
-                  child: ClipRect(
-                    child: OverflowBox(
-                      alignment: Alignment.topLeft,
-                      maxWidth: _filterPanelWidth, minWidth: _filterPanelWidth,
-                      child: _buildFilterPanel(isEnglish),
-                    ),
+              ),
+              if (_isFilterExpanded)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) => setState(() => _isDraggingDivider = true),
+                    onHorizontalDragUpdate: (d) => setState(() {
+                      _filterPanelWidth = (_filterPanelWidth + d.delta.dx).clamp(200.0, maxFilterWidth);
+                    }),
+                    onHorizontalDragEnd: (_) => setState(() => _isDraggingDivider = false),
+                    child: Container(width: 5, color: Colors.grey[400]),
                   ),
                 ),
-                if (_isFilterExpanded)
-                  MouseRegion(
-                    cursor: SystemMouseCursors.resizeColumn,
-                    child: GestureDetector(
-                      onHorizontalDragStart: (_) => setState(() => _isDraggingDivider = true),
-                      onHorizontalDragUpdate: (d) => setState(() {
-                        _filterPanelWidth = (_filterPanelWidth + d.delta.dx).clamp(200.0, maxFilterWidth);
-                      }),
-                      onHorizontalDragEnd: (_) => setState(() => _isDraggingDivider = false),
-                      child: Container(width: 5, color: Colors.grey[400]),
-                    ),
-                  ),
-                // Right panel — Data / Report tabs
-                Expanded(
-                  child: TabBarView(children: [
-                    _buildDataTab(isEnglish),
-                    _buildReportTab(isEnglish, canPrint),
-                  ]),
-                ),
-              ],
-            );
-          },
-        ),
+              // Right panel — Data / Report tabs
+              Expanded(
+                child: TabBarView(children: [
+                  _buildDataTab(isEnglish),
+                  _buildReportTab(isEnglish, canPrint),
+                ]),
+              ),
+            ],
+          );
+        }),
       ),
     );
   }
@@ -475,19 +497,14 @@ class _State extends State<CmBankGlReconcileReportScreen>
                 const Divider(height: 1),
                 const SizedBox(height: 12),
 
-                // ณ วันที่
+                // วันที่ ตั้งแต่ / ถึง
                 _buildDateField(
-                    label: isEnglish ? 'As of Date' : 'ณ วันที่',
-                    date: _asOfDate, onPick: (d) => setState(() => _asOfDate = d)),
-
-                if (_reportDate != null) ...[
-                  const SizedBox(height: 16),
-                  const Divider(height: 1),
-                  const SizedBox(height: 12),
-                  _statCard(isEnglish ? 'Matched' : 'ตรงกัน',     _totalMatched,   Colors.green.shade700),
-                  const SizedBox(height: 8),
-                  _statCard(isEnglish ? 'Unmatched' : 'ไม่ตรงกัน', _totalUnmatched, Colors.red.shade700),
-                ],
+                    label: isEnglish ? 'Date From' : 'วันที่ ตั้งแต่',
+                    date: _dateFrom, onPick: (d) => setState(() => _dateFrom = d)),
+                const SizedBox(height: 12),
+                _buildDateField(
+                    label: isEnglish ? 'Date To' : 'วันที่ ถึง',
+                    date: _dateTo, onPick: (d) => setState(() => _dateTo = d)),
               ],
             ),
           ),
@@ -503,22 +520,10 @@ class _State extends State<CmBankGlReconcileReportScreen>
                   : const Icon(Icons.assessment),
               label: Text(isEnglish ? 'Process Report' : 'ประมวลผลรายงาน'),
               style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
-              onPressed: _loading ? null : _loadReport,
+              onPressed: _loading ? null : _generateReport,
             ),
           ),
         ),
-      ]),
-    );
-  }
-
-  Widget _statCard(String label, int count, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: color.withOpacity(0.1),
-          border: Border.all(color: color.withOpacity(0.3)), borderRadius: BorderRadius.circular(6)),
-      child: Row(children: [
-        Expanded(child: Text(label, style: TextStyle(fontSize: 12, color: color))),
-        Text('$count', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
       ]),
     );
   }
@@ -531,7 +536,10 @@ class _State extends State<CmBankGlReconcileReportScreen>
   }) {
     final isEnglish = _isEnglish;
     final hasValue = value != null;
-    final displayText = hasValue ? '${value.accountCode}  ${_acctName(value)}' : '';
+    final name = hasValue
+        ? (isEnglish && (value.accountNameEn ?? '').isNotEmpty ? value.accountNameEn! : value.accountNameTh)
+        : '';
+    final displayText = hasValue ? '${value.accountCode}  $name' : '';
     return InputDecorator(
       decoration: InputDecoration(
         labelText: label,
@@ -582,15 +590,14 @@ class _State extends State<CmBankGlReconcileReportScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_reportDate != null) _buildReportHeader(isEnglish),
+        if (_reportDateFrom != null) _buildReportHeader(isEnglish),
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
-              : _reportDate == null
-                  ? Center(child: Text(isEnglish ? 'Select conditions and click Process Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผลรายงาน', style: const TextStyle(color: Colors.grey)))
-                  : _rows.isEmpty
-                      ? Center(child: Text(isEnglish ? 'No accounts with a GL Account configured' : 'ไม่มีบัญชีที่มี GL Account กำหนดไว้',
-                          style: const TextStyle(color: Colors.grey)))
+              : _rows.isEmpty && _reportDateFrom != null
+                  ? Center(child: Text(isEnglish ? 'No data' : 'ไม่มีข้อมูล', style: const TextStyle(color: Colors.grey)))
+                  : _reportDateFrom == null
+                      ? Center(child: Text(isEnglish ? 'Select conditions and click Process Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผลรายงาน', style: const TextStyle(color: Colors.grey)))
                       : _buildTable(isEnglish),
         ),
       ],
@@ -601,72 +608,79 @@ class _State extends State<CmBankGlReconcileReportScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: _kTheme.withOpacity(0.08),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(isEnglish ? 'CM vs GL Reconciliation Report' : 'รายงานกระทบยอด CM vs GL',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-        Text('${isEnglish ? 'As of' : 'ณ วันที่'} ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDate!))}',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(isEnglish ? 'Cash Position Report' : 'รายงานสถานะเงินสด', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          Text(
+            '${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateFrom!))} – '
+            '${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateTo!))}',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildTable(bool isEnglish) {
-    const hStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.bold);
-    const cStyle = TextStyle(fontSize: 12);
+    double totOpen = 0, totReceipt = 0, totPayment = 0, totClose = 0;
+    for (final r in _rows) {
+      totOpen    += _parseD(r['opening_balance']);
+      totReceipt += _parseD(r['period_receipts']);
+      totPayment += _parseD(r['period_payments']);
+      totClose   += _parseD(r['closing_balance']);
+    }
+
+    const headerStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87);
+    const cellStyle   = TextStyle(fontSize: 12);
+
     return SingleChildScrollView(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowHeight: 38, dataRowMinHeight: 36, dataRowMaxHeight: 44,
-          columnSpacing: 16,
-          headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-          headingTextStyle: hStyle,
-          columns: [
-            DataColumn(label: Text(isEnglish ? 'Bank Account' : 'บัญชีธนาคาร')),
-            DataColumn(label: Text(isEnglish ? 'GL Account' : 'บัญชี GL')),
-            DataColumn(label: Text(isEnglish ? 'Currency' : 'สกุลเงิน')),
-            DataColumn(label: Text(isEnglish ? 'CM Balance' : 'ยอด CM'),   numeric: true),
-            DataColumn(label: Text(isEnglish ? 'GL Balance' : 'ยอด GL'),   numeric: true),
-            DataColumn(label: Text(isEnglish ? 'Difference' : 'ส่วนต่าง'), numeric: true),
-            DataColumn(label: Text(isEnglish ? 'Status' : 'สถานะ')),
-          ],
-          rows: _rows.map((r) {
-            final isMatched = r['is_matched'] == true;
-            final diff = _parseD(r['difference']);
-            return DataRow(
-              color: WidgetStateProperty.resolveWith((_) =>
-                  isMatched ? null : Colors.red.shade50),
-              cells: [
-                DataCell(Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                  Text(r['bank_account_code'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  Text('${_rowAcctName(r)} (${r['bank_short_name'] ?? ''})',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                ])),
-                DataCell(Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                  Text(r['gl_account_code'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  Text(_rowGlName(r), style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                ])),
-                DataCell(Text(r['currency_code'] ?? 'THB', style: cStyle)),
-                DataCell(Text(_fmt.format(_parseD(r['cm_balance'])), style: cStyle)),
-                DataCell(Text(_fmt.format(_parseD(r['gl_balance'])), style: cStyle)),
-                DataCell(Text(_fmt.format(diff),
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
-                        color: diff == 0 ? Colors.black87 : Colors.red.shade700))),
-                DataCell(isMatched
-                    ? Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.check_circle, size: 16, color: Colors.green.shade600),
-                        const SizedBox(width: 4),
-                        Text(isEnglish ? 'Matched' : 'ตรงกัน', style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
-                      ])
-                    : Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.error_outline, size: 16, color: Colors.red.shade600),
-                        const SizedBox(width: 4),
-                        Text(isEnglish ? 'Unmatched' : 'ไม่ตรงกัน', style: TextStyle(fontSize: 12, color: Colors.red.shade700, fontWeight: FontWeight.bold)),
-                      ])),
-              ],
-            );
-          }).toList(),
-        ),
+      child: DataTable(
+        headingRowHeight: 38,
+        dataRowMinHeight: 32,
+        dataRowMaxHeight: 44,
+        columnSpacing: 16,
+        headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
+        headingTextStyle: headerStyle,
+        columns: [
+          DataColumn(label: Text(isEnglish ? 'Bank Account' : 'บัญชีธนาคาร')),
+          DataColumn(label: Text(isEnglish ? 'Account Name' : 'ชื่อบัญชี')),
+          DataColumn(label: Text(isEnglish ? 'Bank' : 'ธนาคาร')),
+          DataColumn(label: Text(isEnglish ? 'Currency' : 'สกุลเงิน')),
+          DataColumn(label: Text(isEnglish ? 'Opening Balance' : 'ยอดเปิด'), numeric: true),
+          DataColumn(label: Text(isEnglish ? 'Receipts' : 'รับเข้า'), numeric: true),
+          DataColumn(label: Text(isEnglish ? 'Payments' : 'จ่ายออก'), numeric: true),
+          DataColumn(label: Text(isEnglish ? 'Closing Balance' : 'ยอดปิด'), numeric: true),
+        ],
+        rows: [
+          ..._rows.map((r) {
+            final closing = _parseD(r['closing_balance']);
+            return DataRow(cells: [
+              DataCell(Text(r['bank_account_code'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+              DataCell(Text(_acctName(r), style: const TextStyle(fontSize: 12))),
+              DataCell(Text(r['bank_short_name'] ?? '', style: cellStyle)),
+              DataCell(Text(r['currency_code'] ?? 'THB', style: cellStyle)),
+              DataCell(Text(_fmt.format(_parseD(r['opening_balance'])), style: cellStyle)),
+              DataCell(Text(_fmt.format(_parseD(r['period_receipts'])), style: cellStyle.copyWith(color: Colors.green.shade700))),
+              DataCell(Text(_fmt.format(_parseD(r['period_payments'])), style: cellStyle.copyWith(color: Colors.red.shade700))),
+              DataCell(Text(_fmt.format(closing),
+                  style: cellStyle.copyWith(fontWeight: FontWeight.bold, color: closing >= 0 ? Colors.black87 : Colors.red.shade700))),
+            ]);
+          }),
+          DataRow(
+            color: WidgetStateProperty.all(Colors.blueGrey.shade50),
+            cells: [
+              DataCell(Text(isEnglish ? 'Grand Total' : 'รวมทั้งสิ้น', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+              const DataCell(Text('')),
+              const DataCell(Text('')),
+              const DataCell(Text('')),
+              DataCell(Text(_fmt.format(totOpen), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+              DataCell(Text(_fmt.format(totReceipt), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green.shade700))),
+              DataCell(Text(_fmt.format(totPayment), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red.shade700))),
+              DataCell(Text(_fmt.format(totClose), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: totClose >= 0 ? Colors.black87 : Colors.red.shade700))),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -677,7 +691,7 @@ class _State extends State<CmBankGlReconcileReportScreen>
       color: Colors.grey[200],
       child: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _reportDate == null || _rows.isEmpty
+          : _rows.isEmpty
               ? Center(child: Text(isEnglish ? 'Select conditions and click Process Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผลรายงาน'))
               : PdfPreview(
                   key: ValueKey(_pdfKey),

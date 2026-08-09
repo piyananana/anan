@@ -109,6 +109,16 @@ const Map<String, String> cmReceiptStatusOptions = {
   'Voided':  'ยกเลิก',
 };
 
+const Map<String, String> cmReceiptStatusOptionsEng = {
+  'Pending': 'Pending',
+  'Cleared': 'Cleared',
+  'Bounced': 'Bounced',
+  'Voided':  'Voided',
+};
+
+String cmReceiptStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? cmReceiptStatusOptionsEng[s] : cmReceiptStatusOptions[s]) ?? s;
+
 const Map<String, String> cmPaymentMethodTypeLabels = {
   'CASH':             'เงินสด',
   'CHECK':            'เช็ค',
@@ -119,3 +129,17 @@ const Map<String, String> cmPaymentMethodTypeLabels = {
   'MOBILE_BANKING':   'Mobile Banking',
   'BILL_OF_EXCHANGE': 'ตั๋วแลกเงิน',
 };
+
+const Map<String, String> cmPaymentMethodTypeLabelsEng = {
+  'CASH':             'Cash',
+  'CHECK':            'Check',
+  'TRANSFER':         'Transfer',
+  'CREDIT_CARD':      'Credit Card',
+  'DEBIT_CARD':       'Debit Card',
+  'QR_CODE':          'QR Code',
+  'MOBILE_BANKING':   'Mobile Banking',
+  'BILL_OF_EXCHANGE': 'Bill of Exchange',
+};
+
+String cmPaymentMethodTypeLabel(String t, bool isEnglish) =>
+    (isEnglish ? cmPaymentMethodTypeLabelsEng[t] : cmPaymentMethodTypeLabels[t]) ?? t;

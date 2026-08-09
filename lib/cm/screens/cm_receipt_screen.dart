@@ -1,5 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:provider/provider.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_receipt.dart';
@@ -19,6 +21,8 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
     with AutomaticKeepAliveClientMixin {
 
   static const _kColor = Color(0xFF1565C0);
+
+  bool _isEnglish = false;
 
   final CmBankAccountService _acctSvc = CmBankAccountService();
   final CmReceiptService     _svc     = CmReceiptService();
@@ -97,38 +101,45 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
   // ── Status Actions ────────────────────────────────────────────────────────
 
   Future<void> _clear(CmReceipt r) async {
+    final isEnglish = _isEnglish;
     final result = await _showClearDialog(r);
     if (result == null) return;
     final dt = parseLocalDate(result['date']);
     if (!await CmPeriodService.canPost(context, dt)) return;
     try {
       await _svc.clearReceipt(r.id!, clearingDate: result['date'], clearingNote: result['note']);
-      _showOk('เคลียร์สำเร็จ');
+      _showOk(isEnglish ? 'Cleared successfully' : 'เคลียร์สำเร็จ');
       await _loadReceipts();
       setState(() => _selected = null);
     } catch (e) { _showErr(e.toString()); }
   }
 
   Future<void> _bounce(CmReceipt r) async {
-    final note = await _showNoteDialog('บันทึกเช็คคืน', 'หมายเหตุ / เหตุผล');
+    final isEnglish = _isEnglish;
+    final note = await _showNoteDialog(
+        isEnglish ? 'Record Bounced Check' : 'บันทึกเช็คคืน',
+        isEnglish ? 'Note / Reason' : 'หมายเหตุ / เหตุผล');
     if (note == null) return;
     try {
       await _svc.bounceReceipt(r.id!, clearingNote: note.isEmpty ? null : note);
-      _showOk('บันทึกเช็คคืนสำเร็จ');
+      _showOk(isEnglish ? 'Bounced check recorded' : 'บันทึกเช็คคืนสำเร็จ');
       await _loadReceipts();
       setState(() => _selected = null);
     } catch (e) { _showErr(e.toString()); }
   }
 
   Future<void> _void(CmReceipt r) async {
+    final isEnglish = _isEnglish;
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยัน Void'),
-        content: Text('ยืนยันการ Void รายการ ${r.arDocNo ?? r.id} ?'),
+        title: Text(isEnglish ? 'Confirm Void' : 'ยืนยัน Void'),
+        content: Text(isEnglish
+            ? 'Confirm void of item ${r.arDocNo ?? r.id}?'
+            : 'ยืนยันการ Void รายการ ${r.arDocNo ?? r.id} ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           TextButton(onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Void', style: TextStyle(color: Colors.red))),
         ],
@@ -137,20 +148,21 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
     if (!ok) return;
     try {
       await _svc.voidReceipt(r.id!);
-      _showOk('Void สำเร็จ');
+      _showOk(isEnglish ? 'Voided successfully' : 'Void สำเร็จ');
       await _loadReceipts();
       setState(() => _selected = null);
     } catch (e) { _showErr(e.toString()); }
   }
 
   Future<Map<String, String>?> _showClearDialog(CmReceipt r) async {
+    final isEnglish = _isEnglish;
     final noteCtrl = TextEditingController();
     DateTime clearDate = DateTime.now();
     return showDialog<Map<String, String>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
-          title: const Text('เคลียร์รายการรับเงิน'),
+          title: Text(isEnglish ? 'Clear Receipt' : 'เคลียร์รายการรับเงิน'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             InkWell(
               onTap: () async {
@@ -159,23 +171,27 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
                 if (d != null) setDlg(() => clearDate = d);
               },
               child: InputDecorator(
-                decoration: const InputDecoration(labelText: 'วันที่เคลียร์', border: OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Clearing Date' : 'วันที่เคลียร์',
+                    border: const OutlineInputBorder(), isDense: true),
                 child: Text(_dateFmt.format(clearDate)),
               ),
             ),
             const SizedBox(height: 8),
             TextField(controller: noteCtrl,
-                decoration: const InputDecoration(labelText: 'หมายเหตุ', border: OutlineInputBorder(), isDense: true)),
+                decoration: InputDecoration(
+                    labelText: isEnglish ? 'Note' : 'หมายเหตุ',
+                    border: const OutlineInputBorder(), isDense: true)),
           ]),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: _kColor),
               onPressed: () => Navigator.pop(ctx, {
                 'date': formatLocalDate(clearDate),
                 'note': noteCtrl.text.trim(),
               }),
-              child: const Text('ยืนยัน'),
+              child: Text(isEnglish ? 'Confirm' : 'ยืนยัน'),
             ),
           ],
         ),
@@ -184,6 +200,7 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
   }
 
   Future<String?> _showNoteDialog(String title, String label) async {
+    final isEnglish = _isEnglish;
     final ctrl = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -193,11 +210,11 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
             decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
             maxLines: 2),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.orange),
             onPressed: () => Navigator.pop(ctx, ctrl.text),
-            child: const Text('ยืนยัน'),
+            child: Text(isEnglish ? 'Confirm' : 'ยืนยัน'),
           ),
         ],
       ),
@@ -209,6 +226,8 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -216,7 +235,8 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
         foregroundColor: Colors.white,
         actions: [
           if (_selectedBank != null)
-            IconButton(icon: const Icon(Icons.refresh), onPressed: _loadReceipts, tooltip: 'โหลดใหม่'),
+            IconButton(icon: const Icon(Icons.refresh), onPressed: _loadReceipts,
+                tooltip: isEnglish ? 'Reload' : 'โหลดใหม่'),
         ],
       ),
       body: LayoutBuilder(builder: (ctx, constraints) {
@@ -257,46 +277,55 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
             ),
           // Right
           Expanded(child: _selectedBank == null
-              ? const Center(child: Text('เลือกบัญชีธนาคารทางซ้าย', style: TextStyle(color: Colors.grey)))
+              ? Center(child: Text(
+                  isEnglish ? 'Select a bank account on the left' : 'เลือกบัญชีธนาคารทางซ้าย',
+                  style: const TextStyle(color: Colors.grey)))
               : _buildMainPanel()),
         ]);
       }),
     );
   }
 
-  Widget _buildBankList() => Column(children: [
-    Container(
-      padding: const EdgeInsets.all(8), color: Colors.blueGrey.shade200,
-      child: const Row(children: [
-        Icon(Icons.savings, size: 16, color: Colors.black54), SizedBox(width: 6),
-        Text('บัญชีธนาคาร', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-      ]),
-    ),
-    Expanded(
-      child: _bankAccounts.isEmpty
-          ? const Center(child: Text('ไม่พบบัญชี', style: TextStyle(color: Colors.grey, fontSize: 12)))
-          : ListView.builder(
-              itemCount: _bankAccounts.length,
-              itemBuilder: (_, i) {
-                final b = _bankAccounts[i];
-                final sel = _selectedBank?.id == b.id;
-                return ListTile(
-                  dense: true, selected: sel,
-                  selectedTileColor: const Color(0xFFE3F2FD),
-                  leading: CircleAvatar(radius: 14,
-                    backgroundColor: sel ? _kColor : Colors.blueGrey.shade300,
-                    child: Text(b.accountCode.substring(0, 1),
-                        style: const TextStyle(color: Colors.white, fontSize: 11))),
-                  title: Text(b.accountCode,
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13,
-                          color: sel ? _kColor : null)),
-                  subtitle: Text(b.accountNameTh, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis),
-                  onTap: () => _selectBank(b),
-                );
-              },
-            ),
-    ),
-  ]);
+  Widget _buildBankList() {
+    final isEnglish = _isEnglish;
+    return Column(children: [
+      Container(
+        padding: const EdgeInsets.all(8), color: Colors.blueGrey.shade200,
+        child: Row(children: [
+          const Icon(Icons.savings, size: 16, color: Colors.black54), const SizedBox(width: 6),
+          Text(isEnglish ? 'Bank Accounts' : 'บัญชีธนาคาร',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+        ]),
+      ),
+      Expanded(
+        child: _bankAccounts.isEmpty
+            ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี',
+                style: const TextStyle(color: Colors.grey, fontSize: 12)))
+            : ListView.builder(
+                itemCount: _bankAccounts.length,
+                itemBuilder: (_, i) {
+                  final b = _bankAccounts[i];
+                  final sel = _selectedBank?.id == b.id;
+                  final name = isEnglish && (b.accountNameEn ?? '').isNotEmpty
+                      ? b.accountNameEn! : b.accountNameTh;
+                  return ListTile(
+                    dense: true, selected: sel,
+                    selectedTileColor: const Color(0xFFE3F2FD),
+                    leading: CircleAvatar(radius: 14,
+                      backgroundColor: sel ? _kColor : Colors.blueGrey.shade300,
+                      child: Text(b.accountCode.substring(0, 1),
+                          style: const TextStyle(color: Colors.white, fontSize: 11))),
+                    title: Text(b.accountCode,
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13,
+                            color: sel ? _kColor : null)),
+                    subtitle: Text(name, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis),
+                    onTap: () => _selectBank(b),
+                  );
+                },
+              ),
+      ),
+    ]);
+  }
 
   Widget _buildMainPanel() => Column(children: [
     _buildFilterBar(),
@@ -310,48 +339,55 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
     ])),
   ]);
 
-  Widget _buildFilterBar() => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    color: Colors.grey.shade50,
-    child: Row(children: [
-      // Status
-      SizedBox(width: 140,
-        child: DropdownButtonFormField<String>(
-          value: _statusFilter,
-          decoration: const InputDecoration(labelText: 'สถานะ', border: OutlineInputBorder(), isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
-          items: [
-            const DropdownMenuItem(value: 'All', child: Text('ทั้งหมด')),
-            ...cmReceiptStatusOptions.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))),
-          ],
-          onChanged: (v) => setState(() { _statusFilter = v!; _loadReceipts(); }),
+  Widget _buildFilterBar() {
+    final isEnglish = _isEnglish;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: Colors.grey.shade50,
+      child: Row(children: [
+        // Status
+        SizedBox(width: 140,
+          child: DropdownButtonFormField<String>(
+            value: _statusFilter,
+            decoration: InputDecoration(
+                labelText: isEnglish ? 'Status' : 'สถานะ', border: const OutlineInputBorder(), isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+            items: [
+              DropdownMenuItem(value: 'All', child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
+              ...cmReceiptStatusOptions.keys.map((k) => DropdownMenuItem(
+                  value: k, child: Text(cmReceiptStatusLabel(k, isEnglish)))),
+            ],
+            onChanged: (v) => setState(() { _statusFilter = v!; _loadReceipts(); }),
+          ),
         ),
-      ),
-      const SizedBox(width: 8),
-      // Type
-      SizedBox(width: 150,
-        child: DropdownButtonFormField<String?>(
-          value: _typeFilter,
-          decoration: const InputDecoration(labelText: 'ประเภท', border: OutlineInputBorder(), isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
-          items: [
-            const DropdownMenuItem(value: null, child: Text('ทั้งหมด')),
-            ...['CASH','CHECK','TRANSFER','QR_CODE','MOBILE_BANKING','CREDIT_CARD','DEBIT_CARD','BILL_OF_EXCHANGE']
-                .map((t) => DropdownMenuItem(value: t,
-                    child: Text(cmPaymentMethodTypeLabels[t] ?? t, style: const TextStyle(fontSize: 13)))),
-          ],
-          onChanged: (v) => setState(() { _typeFilter = v; _loadReceipts(); }),
+        const SizedBox(width: 8),
+        // Type
+        SizedBox(width: 150,
+          child: DropdownButtonFormField<String?>(
+            value: _typeFilter,
+            decoration: InputDecoration(
+                labelText: isEnglish ? 'Type' : 'ประเภท', border: const OutlineInputBorder(), isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+            items: [
+              DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
+              ...['CASH','CHECK','TRANSFER','QR_CODE','MOBILE_BANKING','CREDIT_CARD','DEBIT_CARD','BILL_OF_EXCHANGE']
+                  .map((t) => DropdownMenuItem(value: t,
+                      child: Text(cmPaymentMethodTypeLabel(t, isEnglish), style: const TextStyle(fontSize: 13)))),
+            ],
+            onChanged: (v) => setState(() { _typeFilter = v; _loadReceipts(); }),
+          ),
         ),
-      ),
-      const SizedBox(width: 8),
-      // Date from
-      _dateField('จากวันที่', _dateFrom, (d) => setState(() { _dateFrom = d; _loadReceipts(); })),
-      const SizedBox(width: 8),
-      _dateField('ถึงวันที่', _dateTo, (d) => setState(() { _dateTo = d; _loadReceipts(); })),
-      const Spacer(),
-      Text('${_receipts.length} รายการ', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-    ]),
-  );
+        const SizedBox(width: 8),
+        // Date from
+        _dateField(isEnglish ? 'From Date' : 'จากวันที่', _dateFrom, (d) => setState(() { _dateFrom = d; _loadReceipts(); })),
+        const SizedBox(width: 8),
+        _dateField(isEnglish ? 'To Date' : 'ถึงวันที่', _dateTo, (d) => setState(() { _dateTo = d; _loadReceipts(); })),
+        const Spacer(),
+        Text(isEnglish ? '${_receipts.length} items' : '${_receipts.length} รายการ',
+            style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      ]),
+    );
+  }
 
   Widget _dateField(String label, String? value, void Function(String?) onChanged) =>
     InkWell(
@@ -376,8 +412,10 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
     );
 
   Widget _buildList() {
+    final isEnglish = _isEnglish;
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_receipts.isEmpty) return const Center(child: Text('ไม่มีรายการ', style: TextStyle(color: Colors.grey)));
+    if (_receipts.isEmpty) return Center(child: Text(isEnglish ? 'No items' : 'ไม่มีรายการ',
+        style: const TextStyle(color: Colors.grey)));
     return ListView.builder(
       itemCount: _receipts.length,
       itemBuilder: (_, i) {
@@ -404,10 +442,11 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
                   '${r.customerCode ?? ''}  ${r.customerNameTh ?? ''}',
                   style: const TextStyle(fontSize: 11)),
               Row(children: [
-                Text(cmPaymentMethodTypeLabels[r.paymentMethodType] ?? r.paymentMethodType,
+                Text(cmPaymentMethodTypeLabel(r.paymentMethodType, isEnglish),
                     style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 if (r.checkNo != null)
-                  Text('  เช็ค ${r.checkNo}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text('  ${isEnglish ? 'Check' : 'เช็ค'} ${r.checkNo}',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 const Spacer(),
                 Text(_amtFmt.format(r.amountLc),
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _kColor)),
@@ -420,71 +459,75 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
     );
   }
 
-  Widget _buildDetail(CmReceipt r) => Column(children: [
-    Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: _kColor.withOpacity(0.08),
-      child: Row(children: [
-        const Text('รายละเอียด', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        const Spacer(),
-        IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() => _selected = null)),
-      ]),
-    ),
-    const Divider(height: 1),
-    Expanded(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _detailRow('เอกสาร AR', r.arDocNo ?? '—'),
-          _detailRow('วันที่', _dateFmt.format(r.receiptDate)),
-          _detailRow('ลูกค้า', '${r.customerCode ?? ''} ${r.customerNameTh ?? ''}'),
-          _detailRow('บัญชีธนาคาร', '${r.bankAccountCode ?? ''} ${r.bankAccountName ?? ''}'),
-          _detailRow('ธนาคาร', r.bankName ?? '—'),
-          _detailRow('วิธีชำระ', '${cmPaymentMethodTypeLabels[r.paymentMethodType] ?? r.paymentMethodType}'
-              '  (${r.paymentMethodCode ?? '—'})'),
-          if (r.isCheck) ...[
-            _detailRow('เลขที่เช็ค', r.checkNo ?? '—'),
-            _detailRow('วันที่เช็ค', r.checkDate != null ? _dateFmt.format(r.checkDate!) : '—'),
-            _detailRow('ธนาคารผู้สั่งจ่าย', r.drawerBank ?? '—'),
-          ],
-          _detailRow('จำนวนเงิน (THB)', _amtFmt.format(r.amountLc)),
-          if (r.isFcy) _detailRow('จำนวนเงิน (FC)', '${_amtFmt.format(r.amountFc)} ${r.currencyCode}'),
-          const Divider(),
-          _detailRow('สถานะ', cmReceiptStatusOptions[r.status] ?? r.status),
-          if (r.clearingDate != null)
-            _detailRow('วันที่เคลียร์', _dateFmt.format(r.clearingDate!)),
-          if (r.clearingNote != null && r.clearingNote!.isNotEmpty)
-            _detailRow('หมายเหตุ', r.clearingNote!),
-          const SizedBox(height: 20),
-          // Action buttons
-          if (r.isPending) ...[
-            FilledButton.icon(
-              icon: const Icon(Icons.check_circle, size: 16),
-              label: const Text('เคลียร์รายการ'),
-              style: FilledButton.styleFrom(backgroundColor: Colors.green, minimumSize: const Size.fromHeight(36)),
-              onPressed: () => _clear(r),
-            ),
-            const SizedBox(height: 8),
-            if (r.isCheck)
-              FilledButton.icon(
-                icon: const Icon(Icons.cancel, size: 16),
-                label: const Text('เช็คคืน (Bounced)'),
-                style: FilledButton.styleFrom(backgroundColor: Colors.orange, minimumSize: const Size.fromHeight(36)),
-                onPressed: () => _bounce(r),
-              ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.block, size: 16, color: Colors.red),
-              label: const Text('Void', style: TextStyle(color: Colors.red)),
-              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red),
-                  minimumSize: const Size.fromHeight(36)),
-              onPressed: () => _void(r),
-            ),
-          ],
+  Widget _buildDetail(CmReceipt r) {
+    final isEnglish = _isEnglish;
+    return Column(children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        color: _kColor.withOpacity(0.08),
+        child: Row(children: [
+          Text(isEnglish ? 'Details' : 'รายละเอียด', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          const Spacer(),
+          IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() => _selected = null)),
         ]),
       ),
-    ),
-  ]);
+      const Divider(height: 1),
+      Expanded(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _detailRow(isEnglish ? 'AR Document' : 'เอกสาร AR', r.arDocNo ?? '—'),
+            _detailRow(isEnglish ? 'Date' : 'วันที่', _dateFmt.format(r.receiptDate)),
+            _detailRow(isEnglish ? 'Customer' : 'ลูกค้า', '${r.customerCode ?? ''} ${r.customerNameTh ?? ''}'),
+            _detailRow(isEnglish ? 'Bank Account' : 'บัญชีธนาคาร', '${r.bankAccountCode ?? ''} ${r.bankAccountName ?? ''}'),
+            _detailRow(isEnglish ? 'Bank' : 'ธนาคาร', r.bankName ?? '—'),
+            _detailRow(isEnglish ? 'Payment Method' : 'วิธีชำระ',
+                '${cmPaymentMethodTypeLabel(r.paymentMethodType, isEnglish)}'
+                '  (${r.paymentMethodCode ?? '—'})'),
+            if (r.isCheck) ...[
+              _detailRow(isEnglish ? 'Check No.' : 'เลขที่เช็ค', r.checkNo ?? '—'),
+              _detailRow(isEnglish ? 'Check Date' : 'วันที่เช็ค', r.checkDate != null ? _dateFmt.format(r.checkDate!) : '—'),
+              _detailRow(isEnglish ? 'Drawer Bank' : 'ธนาคารผู้สั่งจ่าย', r.drawerBank ?? '—'),
+            ],
+            _detailRow(isEnglish ? 'Amount (THB)' : 'จำนวนเงิน (THB)', _amtFmt.format(r.amountLc)),
+            if (r.isFcy) _detailRow(isEnglish ? 'Amount (FC)' : 'จำนวนเงิน (FC)', '${_amtFmt.format(r.amountFc)} ${r.currencyCode}'),
+            const Divider(),
+            _detailRow(isEnglish ? 'Status' : 'สถานะ', cmReceiptStatusLabel(r.status, isEnglish)),
+            if (r.clearingDate != null)
+              _detailRow(isEnglish ? 'Clearing Date' : 'วันที่เคลียร์', _dateFmt.format(r.clearingDate!)),
+            if (r.clearingNote != null && r.clearingNote!.isNotEmpty)
+              _detailRow(isEnglish ? 'Note' : 'หมายเหตุ', r.clearingNote!),
+            const SizedBox(height: 20),
+            // Action buttons
+            if (r.isPending) ...[
+              FilledButton.icon(
+                icon: const Icon(Icons.check_circle, size: 16),
+                label: Text(isEnglish ? 'Clear Item' : 'เคลียร์รายการ'),
+                style: FilledButton.styleFrom(backgroundColor: Colors.green, minimumSize: const Size.fromHeight(36)),
+                onPressed: () => _clear(r),
+              ),
+              const SizedBox(height: 8),
+              if (r.isCheck)
+                FilledButton.icon(
+                  icon: const Icon(Icons.cancel, size: 16),
+                  label: Text(isEnglish ? 'Bounced Check' : 'เช็คคืน (Bounced)'),
+                  style: FilledButton.styleFrom(backgroundColor: Colors.orange, minimumSize: const Size.fromHeight(36)),
+                  onPressed: () => _bounce(r),
+                ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.block, size: 16, color: Colors.red),
+                label: const Text('Void', style: TextStyle(color: Colors.red)),
+                style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red),
+                    minimumSize: const Size.fromHeight(36)),
+                onPressed: () => _void(r),
+              ),
+            ],
+          ]),
+        ),
+      ),
+    ]);
+  }
 
   Widget _detailRow(String label, String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
@@ -498,7 +541,7 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
     switch (s) {
       case 'Cleared': return Colors.green;
       case 'Bounced': return Colors.orange;
-      case 'Voided':  return Colors.grey;
+      case 'Voided':  return Colors.red;
       default:        return _kColor;
     }
   }
@@ -507,7 +550,7 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
     decoration: BoxDecoration(
       color: _statusColor(s).withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-    child: Text(cmReceiptStatusOptions[s] ?? s,
+    child: Text(cmReceiptStatusLabel(s, _isEnglish),
         style: TextStyle(fontSize: 10, color: _statusColor(s), fontWeight: FontWeight.bold)),
   );
 

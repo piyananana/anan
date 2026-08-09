@@ -11,6 +11,7 @@ import '../models/cm_bank_account.dart';
 import '../../cd/services/cd_bank_service.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 
 class CmBankAccountDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -114,11 +115,13 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
   }
 
   Future<void> _pickCurrency() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     List<Currency> currencies;
     try {
       currencies = await Provider.of<CurrencyService>(context, listen: false).fetchRows();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('โหลดสกุลเงินล้มเหลว: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${isEnglish ? 'Failed to load currencies' : 'โหลดสกุลเงินล้มเหลว'}: $e')));
       return;
     }
     final active = currencies.where((c) => c.isActive).toList()
@@ -127,35 +130,38 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('เลือกสกุลเงิน'),
+        title: Text(isEnglish ? 'Select Currency' : 'เลือกสกุลเงิน'),
         content: SizedBox(
           width: 380, height: 400,
           child: ListView.builder(
             itemCount: active.length,
             itemBuilder: (_, i) {
               final c = active[i];
+              final name = isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai;
               return ListTile(
                 leading: Text(c.currencyCode, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                title: Text(c.currencyNameThai),
+                title: Text(name),
                 selected: c.currencyCode == _currencyCode,
                 onTap: () { setState(() => _currencyCode = c.currencyCode); Navigator.of(ctx).pop(); },
               );
             },
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก', style: TextStyle(color: Colors.red)))],
+        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก', style: const TextStyle(color: Colors.red)))],
       ),
     );
   }
 
   Future<void> _pickBank() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     List<Bank> banks;
     try {
       banks = await Provider.of<BankService>(context, listen: false).fetchRows();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('โหลดข้อมูลธนาคารล้มเหลว: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${isEnglish ? 'Failed to load banks' : 'โหลดข้อมูลธนาคารล้มเหลว'}: $e')));
       }
       return;
     }
@@ -166,20 +172,20 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
       context: context,
       builder: (ctx) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: const Text('เลือกธนาคาร', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Select Bank' : 'เลือกธนาคาร', style: const TextStyle(fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: 500,
           height: 480,
           child: active.isEmpty
-              ? const Center(child: Text('ไม่พบข้อมูลธนาคาร'))
+              ? Center(child: Text(isEnglish ? 'No banks found' : 'ไม่พบข้อมูลธนาคาร'))
               : ListView.builder(
                   itemCount: active.length,
                   itemBuilder: (_, i) {
                     final b = active[i];
                     return ListTile(
-                      title: Text('${b.bankCode} — ${b.bankNameThai}'),
-                      subtitle: (b.bankNameEng ?? '').isNotEmpty
-                          ? Text(b.bankNameEng!)
+                      title: Text('${b.bankCode} — ${isEnglish && b.bankNameEng.isNotEmpty ? b.bankNameEng : b.bankNameThai}'),
+                      subtitle: !isEnglish && b.bankNameEng.isNotEmpty
+                          ? Text(b.bankNameEng)
                           : null,
                       onTap: () {
                         setState(() {
@@ -195,7 +201,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ยกเลิก', style: TextStyle(color: Colors.red)),
+            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก', style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -203,13 +209,14 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
   }
 
   Future<void> _pickGlAccount() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     List<Account> accounts;
     try {
       accounts = await Provider.of<AccountService>(context, listen: false).fetchRows();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('โหลดข้อมูลบัญชีล้มเหลว: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${isEnglish ? 'Failed to load accounts' : 'โหลดข้อมูลบัญชีล้มเหลว'}: $e')));
       }
       return;
     }
@@ -231,12 +238,13 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                   ? List.from(leaf)
                   : leaf.where((a) =>
                       a.accountCode.toLowerCase().contains(lq) ||
-                      a.accountNameThai.toLowerCase().contains(lq)).toList();
+                      a.accountNameThai.toLowerCase().contains(lq) ||
+                      a.accountNameEng.toLowerCase().contains(lq)).toList();
             });
           }
 
           return AlertDialog(
-            title: const Text('เลือกบัญชี GL'),
+            title: Text(isEnglish ? 'Select GL Account' : 'เลือกบัญชี GL'),
             content: SizedBox(
               width: 520,
               height: 420,
@@ -245,29 +253,30 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                   TextField(
                     controller: searchCtrl,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'ค้นหา (รหัส / ชื่อ)',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                    decoration: InputDecoration(
+                      hintText: isEnglish ? 'Search (code / name)' : 'ค้นหา (รหัส / ชื่อ)',
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                     ),
                     onChanged: doFilter,
                   ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: filtered.isEmpty
-                        ? const Center(child: Text('ไม่พบบัญชี'))
+                        ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี'))
                         : ListView.builder(
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
                               final a = filtered[i];
+                              final name = isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
                               return ListTile(
-                                title: Text('${a.accountCode} — ${a.accountNameThai}'),
+                                title: Text('${a.accountCode} — $name'),
                                 onTap: () {
                                   setState(() {
                                     _glAccountId = a.id;
                                     _glAccountCode = a.accountCode;
-                                    _glAccountName = a.accountNameThai;
+                                    _glAccountName = name;
                                   });
                                   Navigator.of(ctx).pop();
                                 },
@@ -281,7 +290,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('ยกเลิก', style: TextStyle(color: Colors.red)),
+                child: Text(isEnglish ? 'Cancel' : 'ยกเลิก', style: const TextStyle(color: Colors.red)),
               ),
             ],
           );
@@ -292,6 +301,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     setState(() => _isSaving = true);
     try {
       final row = CmBankAccount(
@@ -315,7 +325,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text('${isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'}: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -324,9 +334,12 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     if (widget.isPlaceholder) {
-      return const Center(child: Text('เลือกบัญชีธนาคารเพื่อแก้ไข หรือกดปุ่ม + เพื่อเพิ่มใหม่'));
+      return Center(child: Text(isEnglish
+          ? 'Select a bank account to edit, or press + to add a new one'
+          : 'เลือกบัญชีธนาคารเพื่อแก้ไข หรือกดปุ่ม + เพื่อเพิ่มใหม่'));
     }
 
     final bool ro = widget.mode == Mode.view;
@@ -340,10 +353,10 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
           children: [
             Text(
               widget.mode == Mode.view
-                  ? 'ดูข้อมูลบัญชีธนาคาร'
+                  ? (isEnglish ? 'View Bank Account' : 'ดูข้อมูลบัญชีธนาคาร')
                   : widget.mode == Mode.edit
-                      ? 'แก้ไขบัญชีธนาคาร'
-                      : 'เพิ่มบัญชีธนาคาร',
+                      ? (isEnglish ? 'Edit Bank Account' : 'แก้ไขบัญชีธนาคาร')
+                      : (isEnglish ? 'Add Bank Account' : 'เพิ่มบัญชีธนาคาร'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 20),
@@ -353,12 +366,12 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
               controller: _codeCtrl,
               readOnly: widget.mode != Mode.add,
               style: const TextStyle(fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                labelText: 'รหัสบัญชีธนาคาร *',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Bank Account Code *' : 'รหัสบัญชีธนาคาร *',
+                border: const OutlineInputBorder(),
               ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'โปรดระบุรหัส' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? (isEnglish ? 'Please enter a code' : 'โปรดระบุรหัส') : null,
             ),
             const SizedBox(height: 12),
 
@@ -369,12 +382,12 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                   child: TextFormField(
                     controller: _nameTh,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'ชื่อบัญชี (ไทย) *',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Account Name (Thai) *' : 'ชื่อบัญชี (ไทย) *',
+                      border: const OutlineInputBorder(),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'โปรดระบุชื่อ' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? (isEnglish ? 'Please enter a name' : 'โปรดระบุชื่อ') : null,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -382,9 +395,9 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                   child: TextFormField(
                     controller: _nameEn,
                     readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'ชื่อบัญชี (อังกฤษ)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Account Name (English)' : 'ชื่อบัญชี (อังกฤษ)',
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -397,7 +410,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
               onTap: ro ? null : _pickBank,
               child: InputDecorator(
                 decoration: InputDecoration(
-                  labelText: 'ธนาคาร',
+                  labelText: isEnglish ? 'Bank' : 'ธนาคาร',
                   border: const OutlineInputBorder(),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -414,7 +427,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                     ],
                   ),
                 ),
-                child: Text(_bankId == null ? '— ไม่ระบุ —' : _bankDisplay ?? ''),
+                child: Text(_bankId == null ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —') : _bankDisplay ?? ''),
               ),
             ),
             const SizedBox(height: 12),
@@ -423,12 +436,12 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
             DropdownButtonFormField<String>(
               isExpanded: true,
               value: _cmType,
-              decoration: const InputDecoration(
-                labelText: 'ประเภทหลัก *',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Main Type *' : 'ประเภทหลัก *',
+                border: const OutlineInputBorder(),
               ),
-              items: cmCmTypeOptions.entries
-                  .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+              items: cmCmTypeOptions.keys
+                  .map((k) => DropdownMenuItem(value: k, child: Text(cmCmTypeLabel(k, isEnglish))))
                   .toList(),
               onChanged: ro ? null : (v) => setState(() => _cmType = v!),
             ),
@@ -442,9 +455,9 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                     child: TextFormField(
                       controller: _accountNumberCtrl,
                       readOnly: ro,
-                      decoration: const InputDecoration(
-                        labelText: 'เลขที่บัญชี',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'Account Number' : 'เลขที่บัญชี',
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                   ),
@@ -453,12 +466,12 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
                       value: _accountType,
-                      decoration: const InputDecoration(
-                        labelText: 'ประเภทบัญชี *',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'Account Type *' : 'ประเภทบัญชี *',
+                        border: const OutlineInputBorder(),
                       ),
-                      items: cmAccountTypeOptions.entries
-                          .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      items: cmAccountTypeOptions.keys
+                          .map((k) => DropdownMenuItem(value: k, child: Text(cmAccountTypeLabel(k, isEnglish))))
                           .toList(),
                       onChanged: ro ? null : (v) => setState(() => _accountType = v!),
                     ),
@@ -476,7 +489,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                     onTap: ro ? null : _pickCurrency,
                     child: InputDecorator(
                       decoration: InputDecoration(
-                        labelText: 'สกุลเงิน *',
+                        labelText: isEnglish ? 'Currency *' : 'สกุลเงิน *',
                         border: const OutlineInputBorder(),
                         suffixIcon: ro ? null : const Icon(Icons.arrow_drop_down),
                       ),
@@ -494,7 +507,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                       side: BorderSide(color: Colors.grey.shade400),
                     ),
                     dense: true,
-                    title: const Text('รองรับเช็ค', style: TextStyle(fontSize: 14)),
+                    title: Text(isEnglish ? 'Supports Check' : 'รองรับเช็ค', style: const TextStyle(fontSize: 14)),
                     value: _isCheckAccount,
                     onChanged: ro ? null : (v) => setState(() => _isCheckAccount = v),
                   ),
@@ -508,7 +521,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
               onTap: ro ? null : _pickGlAccount,
               child: InputDecorator(
                 decoration: InputDecoration(
-                  labelText: 'บัญชี GL (ลงบัญชีธนาคาร)',
+                  labelText: isEnglish ? 'GL Account (Bank Posting)' : 'บัญชี GL (ลงบัญชีธนาคาร)',
                   border: const OutlineInputBorder(),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -528,7 +541,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                 ),
                 child: Text(
                   _glAccountId == null
-                      ? '— ไม่ระบุ —'
+                      ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
                       : '${_glAccountCode ?? ''} ${_glAccountName ?? ''}',
                 ),
               ),
@@ -540,9 +553,9 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
               controller: _remarkCtrl,
               readOnly: ro,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'หมายเหตุ',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Note' : 'หมายเหตุ',
+                border: const OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
             ),
@@ -551,7 +564,9 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
             // สถานะ
             Row(
               children: [
-                Expanded(child: Text('สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
+                Expanded(child: Text(isEnglish
+                    ? 'Status: ${_isActive ? 'Active' : 'Inactive'}'
+                    : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
                 Switch(
                   value: _isActive,
                   onChanged: ro ? null : (v) => setState(() => _isActive = v),
@@ -566,7 +581,12 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                 if (widget.mode != Mode.view)
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _submit,
+                      onPressed: (_isSaving ||
+                              !(widget.mode == Mode.add
+                                  ? (MenuScope.of(context)?.canCreate ?? true)
+                                  : (MenuScope.of(context)?.canEdit ?? true)))
+                          ? null
+                          : _submit,
                       icon: _isSaving
                           ? const SizedBox(
                               width: 20,
@@ -575,10 +595,12 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                                   strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.save),
                       label: Text(_isSaving
-                          ? 'กำลังบันทึก...'
-                          : widget.mode == Mode.edit ? 'บันทึก' : 'เพิ่ม'),
+                          ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
+                          : widget.mode == Mode.edit
+                              ? (isEnglish ? 'Save' : 'บันทึก')
+                              : (isEnglish ? 'Add' : 'เพิ่ม')),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigo.shade700,
+                        backgroundColor: Colors.blue.shade700,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),

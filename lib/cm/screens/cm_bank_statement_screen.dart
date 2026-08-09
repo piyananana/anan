@@ -31,9 +31,23 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   final _accSvc  = CmBankAccountService();
   final _stmtSvc = CmBankStatementService();
 
+  bool _isEnglish = false;
+
   bool _leftExpanded = true;
+  double _leftWidth  = 420.0;
+  bool _isDragging   = false;
   List<CmBankAccount> _accounts = [];
   CmBankAccount? _selectedAccount;
+  String _acctSearch = '';
+
+  List<CmBankAccount> get _filteredAccounts {
+    if (_acctSearch.isEmpty) return _accounts;
+    final q = _acctSearch.toLowerCase();
+    return _accounts.where((a) =>
+        a.accountCode.toLowerCase().contains(q) ||
+        (a.bankShortName ?? '').toLowerCase().contains(q) ||
+        (a.accountNumber ?? '').toLowerCase().contains(q)).toList();
+  }
 
   List<CmBankStatement> _statements = [];
   CmBankStatement? _selectedStatement;
@@ -46,6 +60,16 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   String _statusFilter = 'All';
   DateTime? _filterFrom;
   DateTime? _filterTo;
+  String _stmtSearch = '';
+
+  List<CmBankStatement> get _filteredStatements {
+    if (_stmtSearch.isEmpty) return _statements;
+    final q = _stmtSearch.toLowerCase();
+    return _statements.where((s) =>
+        (s.fileName ?? '').toLowerCase().contains(q) ||
+        _dateFmt.format(s.statementDateFrom).contains(q) ||
+        _dateFmt.format(s.statementDateTo).contains(q)).toList();
+  }
 
   @override
   void initState() {
@@ -154,19 +178,20 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
       final updated = await _stmtSvc.confirmStatement(_selectedStatement!.id);
       setState(() { _selectedStatement = updated; });
       await _loadStatements();
-      _showSuccess('ยืนยัน Statement สำเร็จ');
+      _showSuccess(_isEnglish ? 'Statement confirmed successfully' : 'ยืนยัน Statement สำเร็จ');
     } catch (e) { _showError(e.toString()); }
   }
 
   Future<void> _voidStatement() async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = _isEnglish;
     if (_selectedStatement == null) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('ยืนยันการยกเลิก'),
-        content: const Text('ต้องการยกเลิก Bank Statement นี้ใช่หรือไม่?'),
+        title: Text(isEnglish ? 'Confirm Void' : 'ยืนยันการยกเลิก'),
+        content: Text(isEnglish ? 'Void this Bank Statement?' : 'ต้องการยกเลิก Bank Statement นี้ใช่หรือไม่?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: Text(l.confirm)),
@@ -178,19 +203,22 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
       final updated = await _stmtSvc.voidStatement(_selectedStatement!.id);
       setState(() { _selectedStatement = updated; });
       await _loadStatements();
-      _showSuccess('ยกเลิก Statement สำเร็จ');
+      _showSuccess(isEnglish ? 'Statement voided successfully' : 'ยกเลิก Statement สำเร็จ');
     } catch (e) { _showError(e.toString()); }
   }
 
   Future<void> _deleteStatement() async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    final isEnglish = _isEnglish;
     if (_selectedStatement == null) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('ยืนยันการลบ'),
-        content: const Text('ต้องการลบ Bank Statement และรายการทั้งหมดใช่หรือไม่?'),
+        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(isEnglish
+            ? 'Delete this Bank Statement and all its lines?'
+            : 'ต้องการลบ Bank Statement และรายการทั้งหมดใช่หรือไม่?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: Text(l.delete)),
@@ -202,7 +230,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
       await _stmtSvc.deleteStatement(_selectedStatement!.id);
       setState(() { _selectedStatement = null; _lines = []; });
       await _loadStatements();
-      _showSuccess('ลบสำเร็จ');
+      _showSuccess(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ');
     } catch (e) { _showError(e.toString()); }
   }
 
@@ -262,55 +290,71 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _kTheme,
         foregroundColor: Colors.white,
         title: const MenuTitle(),
-        titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         toolbarHeight: 40,
       ),
       body: LayoutBuilder(
-        builder: (_, constraints) => Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Toggle strip
-            Container(
-              width: 36,
-              color: _kTheme,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                iconSize: 20,
-                color: Colors.white,
-                icon: Icon(_leftExpanded ? Icons.filter_list_off : Icons.filter_list),
-                onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
-              ),
-            ),
-            // Left panel — account list
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: _leftExpanded ? 220 : 0,
-              child: ClipRect(
-                child: OverflowBox(
-                  alignment: Alignment.centerLeft,
-                  maxWidth: 220,
-                  child: _buildAccountPanel(),
+        builder: (_, constraints) {
+          final maxLeft = (constraints.maxWidth - 36 - 5 - 320).clamp(100.0, double.infinity);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Toggle strip
+              Container(
+                width: 36,
+                color: _kTheme,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 20,
+                  color: Colors.white,
+                  icon: Icon(_leftExpanded ? Icons.filter_list_off : Icons.filter_list),
+                  onPressed: () => setState(() => _leftExpanded = !_leftExpanded),
                 ),
               ),
-            ),
-            // Divider
-            if (_leftExpanded)
-              const VerticalDivider(width: 1, thickness: 1),
-            // Right panel
-            Expanded(child: _buildRightPanel()),
-          ],
-        ),
+              // Left panel — account list
+              AnimatedContainer(
+                duration: _isDragging ? Duration.zero : const Duration(milliseconds: 200),
+                width: _leftExpanded ? _leftWidth : 0,
+                child: ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.centerLeft,
+                    maxWidth: _leftWidth,
+                    minWidth: _leftWidth,
+                    child: _buildAccountPanel(),
+                  ),
+                ),
+              ),
+              // Divider
+              if (_leftExpanded)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) => setState(() => _isDragging = true),
+                    onHorizontalDragUpdate: (d) => setState(() {
+                      _leftWidth = (_leftWidth + d.delta.dx).clamp(180.0, maxLeft);
+                    }),
+                    onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+                    child: Container(width: 5, color: Colors.grey[400]),
+                  ),
+                ),
+              // Right panel
+              Expanded(child: _buildRightPanel()),
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildAccountPanel() {
+    final isEnglish = _isEnglish;
+    final list = _filteredAccounts;
     return Container(
       color: Colors.blueGrey.shade100,
       child: Column(
@@ -321,27 +365,69 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
             color: Colors.blueGrey.shade200,
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: const Text('บัญชีธนาคาร', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            child: Text(isEnglish ? 'Bank Accounts' : 'บัญชีธนาคาร',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: isEnglish ? 'Search account...' : 'ค้นหาบัญชี...',
+                prefixIcon: const Icon(Icons.search),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (v) => setState(() => _acctSearch = v),
+            ),
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: _accounts.length,
-              itemBuilder: (_, i) {
-                final acc = _accounts[i];
-                final selected = acc.id == _selectedAccount?.id;
-                return ListTile(
-                  dense: true,
-                  selected: selected,
-                  selectedTileColor: _kTheme.withOpacity(0.15),
-                  title: Text(acc.accountCode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  subtitle: Text(
-                    '${acc.bankShortName ?? ''} ${acc.accountNumber ?? ''}',
-                    style: const TextStyle(fontSize: 11),
+            child: list.isEmpty
+                ? Center(child: Text(isEnglish ? 'No accounts' : 'ไม่มีบัญชี', style: TextStyle(color: Colors.grey.shade400)))
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    itemCount: list.length,
+                    itemBuilder: (_, i) {
+                      final acc = list[i];
+                      final selected = acc.id == _selectedAccount?.id;
+                      final name = isEnglish && (acc.accountNameEn ?? '').isNotEmpty ? acc.accountNameEn! : acc.accountNameTh;
+                      return Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: ListTile(
+                          selected: selected,
+                          selectedTileColor: _kTheme.withOpacity(0.12),
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.indigo.shade100,
+                            child: const Icon(Icons.savings, size: 18),
+                          ),
+                          title: Text(acc.accountCode,
+                              style: TextStyle(fontWeight: FontWeight.bold, color: acc.isActive ? null : Colors.grey)),
+                          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(name,
+                                style: TextStyle(fontSize: 13, color: acc.isActive ? Colors.black87 : Colors.grey),
+                                overflow: TextOverflow.ellipsis),
+                            Text(
+                              [
+                                cmCmTypeLabel(acc.cmType, isEnglish),
+                                if (acc.bankDisplay.isNotEmpty) acc.bankDisplay,
+                                if ((acc.accountNumber ?? '').isNotEmpty) acc.accountNumber!,
+                                if (!acc.isPettyCash) cmAccountTypeLabel(acc.accountType, isEnglish),
+                                if (acc.isFcy) acc.currencyCode,
+                                if (acc.isCheckAccount) (isEnglish ? 'Check' : 'เช็ค'),
+                              ].join(' · '),
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                          ]),
+                          trailing: !acc.isActive
+                              ? Chip(
+                                  label: Text(isEnglish ? 'Inactive' : 'หยุดใช้', style: const TextStyle(fontSize: 11)),
+                                  backgroundColor: const Color(0xFFEEEEEE),
+                                )
+                              : null,
+                          onTap: () => _selectAccount(acc),
+                        ),
+                      );
+                    },
                   ),
-                  onTap: () => _selectAccount(acc),
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -350,7 +436,8 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
 
   Widget _buildRightPanel() {
     if (_selectedAccount == null) {
-      return const Center(child: Text('เลือกบัญชีธนาคาร', style: TextStyle(color: Colors.grey)));
+      return Center(child: Text(_isEnglish ? 'Select a bank account' : 'เลือกบัญชีธนาคาร',
+          style: const TextStyle(color: Colors.grey)));
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -368,6 +455,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   }
 
   Widget _buildStatementListPanel() {
+    final isEnglish = _isEnglish;
     return Container(
       color: Colors.grey.shade50,
       child: Column(
@@ -379,33 +467,39 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
             color: Colors.grey.shade200,
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: _statusFilter,
-                        isDense: true,
-                        decoration: const InputDecoration(labelText: 'สถานะ', isDense: true,
-                          border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
-                        items: ['All', ...cmStmtStatusOptions.keys]
-                            .map((s) => DropdownMenuItem(value: s, child: Text(s == 'All' ? 'ทั้งหมด' : (cmStmtStatusOptions[s] ?? s), style: const TextStyle(fontSize: 12))))
-                            .toList(),
-                        onChanged: (v) { setState(() => _statusFilter = v!); _loadStatements(); },
-                      ),
-                    ),
-                  ],
+                TextField(
+                  decoration: InputDecoration(
+                    hintText: isEnglish ? 'Search statement...' : 'ค้นหา statement...',
+                    prefixIcon: const Icon(Icons.search),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    border: const OutlineInputBorder(),
+                  ),
+                  onChanged: (v) => setState(() => _stmtSearch = v),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: _statusFilter,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Status' : 'สถานะ',
+                      border: const OutlineInputBorder()),
+                  items: ['All', ...cmStmtStatusOptions.keys]
+                      .map((s) => DropdownMenuItem(value: s,
+                          child: Text(s == 'All' ? (isEnglish ? 'All' : 'ทั้งหมด') : cmStmtStatusLabel(s, isEnglish))))
+                      .toList(),
+                  onChanged: (v) { setState(() => _statusFilter = v!); _loadStatements(); },
+                ),
+                const SizedBox(height: 10),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _kTheme,
+                    backgroundColor: Colors.blue.shade700,
                     foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 32),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(double.infinity, 0),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   onPressed: () => _openStatementForm(),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('สร้าง Statement', style: TextStyle(fontSize: 12)),
+                  icon: const Icon(Icons.add),
+                  label: Text(isEnglish ? 'Create Statement' : 'สร้าง Statement'),
                 ),
               ],
             ),
@@ -414,11 +508,12 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
           Expanded(
             child: _loadingStmts
                 ? const Center(child: CircularProgressIndicator())
-                : _statements.isEmpty
-                    ? const Center(child: Text('ไม่มีข้อมูล', style: TextStyle(color: Colors.grey)))
+                : _filteredStatements.isEmpty
+                    ? Center(child: Text(isEnglish ? 'No data' : 'ไม่มีข้อมูล', style: const TextStyle(color: Colors.grey)))
                     : ListView.builder(
-                        itemCount: _statements.length,
-                        itemBuilder: (_, i) => _buildStatementCard(_statements[i]),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        itemCount: _filteredStatements.length,
+                        itemBuilder: (_, i) => _buildStatementCard(_filteredStatements[i]),
                       ),
           ),
         ],
@@ -434,48 +529,39 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
       case 'Voided':    statusColor = Colors.red.shade700;   break;
       default:          statusColor = Colors.orange.shade700;
     }
-    return InkWell(
-      onTap: () => _selectStatement(s),
-      child: Container(
-        decoration: BoxDecoration(
-          color: selected ? _kTheme.withOpacity(0.1) : null,
-          border: Border(
-            left: BorderSide(width: 3, color: selected ? _kTheme : Colors.transparent),
-            bottom: BorderSide(color: Colors.grey.shade200),
-          ),
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ListTile(
+        selected: selected,
+        selectedTileColor: _kTheme.withOpacity(0.12),
+        title: Text(
+          '${_dateFmt.format(s.statementDateFrom)} – ${_dateFmt.format(s.statementDateTo)}',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Column(
+        subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${_dateFmt.format(s.statementDateFrom)} – ${_dateFmt.format(s.statementDateTo)}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(color: statusColor.withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
-                  child: Text(cmStmtStatusOptions[s.status] ?? s.status, style: TextStyle(fontSize: 10, color: statusColor)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text('ยอดปิด: ${_fmt.format(s.closingBalance)}', style: const TextStyle(fontSize: 11)),
+            Text('${_isEnglish ? 'Closing Balance' : 'ยอดปิด'}: ${_fmt.format(s.closingBalance)}', style: const TextStyle(fontSize: 13)),
             if (s.fileName != null)
-              Text(s.fileName!, style: TextStyle(fontSize: 10, color: Colors.grey.shade600), overflow: TextOverflow.ellipsis),
+              Text(s.fileName!, style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
           ],
         ),
+        trailing: Chip(
+          label: Text(cmStmtStatusLabel(s.status, _isEnglish), style: TextStyle(fontSize: 11, color: statusColor)),
+          backgroundColor: statusColor.withOpacity(0.12),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+        onTap: () => _selectStatement(s),
       ),
     );
   }
 
   Widget _buildStatementDetailPanel() {
+    final isEnglish = _isEnglish;
     if (_selectedStatement == null) {
-      return const Center(child: Text('เลือก Statement', style: TextStyle(color: Colors.grey)));
+      return Center(child: Text(isEnglish ? 'Select a Statement' : 'เลือก Statement',
+          style: const TextStyle(color: Colors.grey)));
     }
     final s = _selectedStatement!;
     final canEdit   = s.isDraft;
@@ -493,11 +579,11 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
                 child: Wrap(
                   spacing: 24,
                   children: [
-                    _infoChip('ช่วงวันที่', '${_dateFmt.format(s.statementDateFrom)} – ${_dateFmt.format(s.statementDateTo)}'),
-                    _infoChip('ยอดเปิด', _fmt.format(s.openingBalance)),
-                    _infoChip('ยอดปิด', _fmt.format(s.closingBalance)),
-                    _infoChip('สกุลเงิน', s.currencyCode),
-                    if (s.notes != null) _infoChip('หมายเหตุ', s.notes!),
+                    _infoChip(isEnglish ? 'Date Range' : 'ช่วงวันที่', '${_dateFmt.format(s.statementDateFrom)} – ${_dateFmt.format(s.statementDateTo)}'),
+                    _infoChip(isEnglish ? 'Opening Balance' : 'ยอดเปิด', _fmt.format(s.openingBalance)),
+                    _infoChip(isEnglish ? 'Closing Balance' : 'ยอดปิด', _fmt.format(s.closingBalance)),
+                    _infoChip(isEnglish ? 'Currency' : 'สกุลเงิน', s.currencyCode),
+                    if (s.notes != null) _infoChip(isEnglish ? 'Note' : 'หมายเหตุ', s.notes!),
                   ],
                 ),
               ),
@@ -519,7 +605,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
                       minimumSize: const Size(0, 30), padding: const EdgeInsets.symmetric(horizontal: 10)),
                   onPressed: () => _openLineForm(),
                   icon: const Icon(Icons.add, size: 14),
-                  label: const Text('เพิ่มรายการ', style: TextStyle(fontSize: 12)),
+                  label: Text(isEnglish ? 'Add Item' : 'เพิ่มรายการ', style: const TextStyle(fontSize: 12)),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
@@ -530,7 +616,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
                   label: const Text('Import CSV', style: TextStyle(fontSize: 12)),
                 ),
                 const Spacer(),
-                Text('${_lines.length} รายการ', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text(isEnglish ? '${_lines.length} items' : '${_lines.length} รายการ', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
               ],
             ),
           ),
@@ -539,7 +625,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
           child: _loadingLines
               ? const Center(child: CircularProgressIndicator())
               : _lines.isEmpty
-                  ? const Center(child: Text('ยังไม่มีรายการ', style: TextStyle(color: Colors.grey)))
+                  ? Center(child: Text(isEnglish ? 'No items yet' : 'ยังไม่มีรายการ', style: const TextStyle(color: Colors.grey)))
                   : _buildLinesTable(s),
         ),
       ],
@@ -555,6 +641,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   );
 
   Widget _buildHeaderActions(CmBankStatement s, bool canEdit) {
+    final isEnglish = _isEnglish;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -563,14 +650,14 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
             style: OutlinedButton.styleFrom(
                 minimumSize: const Size(0, 30), padding: const EdgeInsets.symmetric(horizontal: 10)),
             onPressed: () => _openStatementForm(existing: s),
-            child: const Text('แก้ไข', style: TextStyle(fontSize: 12)),
+            child: Text(isEnglish ? 'Edit' : 'แก้ไข', style: const TextStyle(fontSize: 12)),
           ),
           const SizedBox(width: 6),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white,
                 minimumSize: const Size(0, 30), padding: const EdgeInsets.symmetric(horizontal: 10)),
             onPressed: _confirmStatement,
-            child: const Text('ยืนยัน', style: TextStyle(fontSize: 12)),
+            child: Text(isEnglish ? 'Confirm' : 'ยืนยัน', style: const TextStyle(fontSize: 12)),
           ),
           const SizedBox(width: 6),
         ],
@@ -579,7 +666,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
             style: OutlinedButton.styleFrom(foregroundColor: Colors.red,
                 minimumSize: const Size(0, 30), padding: const EdgeInsets.symmetric(horizontal: 10)),
             onPressed: canEdit ? _deleteStatement : _voidStatement,
-            child: Text(canEdit ? 'ลบ' : 'ยกเลิก', style: const TextStyle(fontSize: 12)),
+            child: Text(canEdit ? (isEnglish ? 'Delete' : 'ลบ') : (isEnglish ? 'Void' : 'ยกเลิก'), style: const TextStyle(fontSize: 12)),
           ),
         ],
       ],
@@ -587,6 +674,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   }
 
   Widget _buildLinesTable(CmBankStatement stmt) {
+    final isEnglish = _isEnglish;
     final canEdit = stmt.isDraft;
     return SingleChildScrollView(
       child: DataTable(
@@ -596,13 +684,13 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
         columnSpacing: 12,
         headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
         columns: [
-          const DataColumn(label: Text('วันที่')),
-          const DataColumn(label: Text('รายการ')),
-          DataColumn(label: const Text('ถอน'), numeric: true),
-          DataColumn(label: const Text('ฝาก'), numeric: true),
-          DataColumn(label: const Text('คงเหลือ'), numeric: true),
-          const DataColumn(label: Text('เลขอ้างอิง')),
-          const DataColumn(label: Text('สถานะ')),
+          DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่')),
+          DataColumn(label: Text(isEnglish ? 'Description' : 'รายการ')),
+          DataColumn(label: Text(isEnglish ? 'Withdrawal' : 'ถอน'), numeric: true),
+          DataColumn(label: Text(isEnglish ? 'Deposit' : 'ฝาก'), numeric: true),
+          DataColumn(label: Text(isEnglish ? 'Balance' : 'คงเหลือ'), numeric: true),
+          DataColumn(label: Text(isEnglish ? 'Reference' : 'เลขอ้างอิง')),
+          DataColumn(label: Text(isEnglish ? 'Status' : 'สถานะ')),
           if (canEdit) const DataColumn(label: Text('')),
         ],
         rows: _lines.map((line) {
@@ -698,7 +786,9 @@ class _StatementFormDialogState extends State<_StatementFormDialog> {
 
   Future<void> _save() async {
     if (_dateFrom == null || _dateTo == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาระบุช่วงวันที่')));
+      final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'Please specify the date range' : 'กรุณาระบุช่วงวันที่')));
       return;
     }
     setState(() => _saving = true);
@@ -727,9 +817,12 @@ class _StatementFormDialogState extends State<_StatementFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return AlertDialog(
-      title: Text(widget.existing != null ? 'แก้ไข Statement' : 'สร้าง Bank Statement'),
+      title: Text(widget.existing != null
+          ? (isEnglish ? 'Edit Statement' : 'แก้ไข Statement')
+          : (isEnglish ? 'Create Bank Statement' : 'สร้าง Bank Statement')),
       content: SizedBox(
         width: 400,
         child: Column(
@@ -740,7 +833,8 @@ class _StatementFormDialogState extends State<_StatementFormDialog> {
                 Expanded(child: InkWell(
                   onTap: () => _pickDate(true),
                   child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'วันที่เริ่ม', border: OutlineInputBorder(), isDense: true),
+                    decoration: InputDecoration(
+                        labelText: isEnglish ? 'Start Date' : 'วันที่เริ่ม', border: const OutlineInputBorder(), isDense: true),
                     child: Text(_dateFrom != null ? _dateFmt.format(_dateFrom!) : '—'),
                   ),
                 )),
@@ -748,7 +842,8 @@ class _StatementFormDialogState extends State<_StatementFormDialog> {
                 Expanded(child: InkWell(
                   onTap: () => _pickDate(false),
                   child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'วันที่สิ้นสุด', border: OutlineInputBorder(), isDense: true),
+                    decoration: InputDecoration(
+                        labelText: isEnglish ? 'End Date' : 'วันที่สิ้นสุด', border: const OutlineInputBorder(), isDense: true),
                     child: Text(_dateTo != null ? _dateFmt.format(_dateTo!) : '—'),
                   ),
                 )),
@@ -759,13 +854,15 @@ class _StatementFormDialogState extends State<_StatementFormDialog> {
               children: [
                 Expanded(child: TextField(
                   controller: _openCtrl,
-                  decoration: const InputDecoration(labelText: 'ยอดเปิด', border: OutlineInputBorder(), isDense: true),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Opening Balance' : 'ยอดเปิด', border: const OutlineInputBorder(), isDense: true),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
                 const SizedBox(width: 12),
                 Expanded(child: TextField(
                   controller: _closeCtrl,
-                  decoration: const InputDecoration(labelText: 'ยอดปิด', border: OutlineInputBorder(), isDense: true),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Closing Balance' : 'ยอดปิด', border: const OutlineInputBorder(), isDense: true),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 )),
               ],
@@ -773,7 +870,8 @@ class _StatementFormDialogState extends State<_StatementFormDialog> {
             const SizedBox(height: 12),
             TextField(
               controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'หมายเหตุ', border: OutlineInputBorder(), isDense: true),
+              decoration: InputDecoration(
+                  labelText: isEnglish ? 'Note' : 'หมายเหตุ', border: const OutlineInputBorder(), isDense: true),
               maxLines: 2,
             ),
           ],
@@ -861,9 +959,12 @@ class _LineFormDialogState extends State<_LineFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     return AlertDialog(
-      title: Text(widget.existing != null ? 'แก้ไขรายการ' : 'เพิ่มรายการ'),
+      title: Text(widget.existing != null
+          ? (isEnglish ? 'Edit Item' : 'แก้ไขรายการ')
+          : (isEnglish ? 'Add Item' : 'เพิ่มรายการ')),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -875,22 +976,22 @@ class _LineFormDialogState extends State<_LineFormDialog> {
                 if (p != null) setState(() => _date = p);
               },
               child: InputDecorator(
-                decoration: const InputDecoration(labelText: 'วันที่', border: OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(labelText: isEnglish ? 'Date' : 'วันที่', border: const OutlineInputBorder(), isDense: true),
                 child: Text(_date != null ? _dateFmt.format(_date!) : '—'),
               ),
             ),
             const SizedBox(height: 10),
-            TextField(controller: _descCtrl, decoration: const InputDecoration(labelText: 'รายการ', border: OutlineInputBorder(), isDense: true)),
+            TextField(controller: _descCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Description' : 'รายการ', border: const OutlineInputBorder(), isDense: true)),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: TextField(controller: _wdCtrl, decoration: const InputDecoration(labelText: 'ถอน', border: OutlineInputBorder(), isDense: true), keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+              Expanded(child: TextField(controller: _wdCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Withdrawal' : 'ถอน', border: const OutlineInputBorder(), isDense: true), keyboardType: const TextInputType.numberWithOptions(decimal: true))),
               const SizedBox(width: 10),
-              Expanded(child: TextField(controller: _depCtrl, decoration: const InputDecoration(labelText: 'ฝาก', border: OutlineInputBorder(), isDense: true), keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+              Expanded(child: TextField(controller: _depCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Deposit' : 'ฝาก', border: const OutlineInputBorder(), isDense: true), keyboardType: const TextInputType.numberWithOptions(decimal: true))),
               const SizedBox(width: 10),
-              Expanded(child: TextField(controller: _balCtrl, decoration: const InputDecoration(labelText: 'คงเหลือ', border: OutlineInputBorder(), isDense: true), keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+              Expanded(child: TextField(controller: _balCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Balance' : 'คงเหลือ', border: const OutlineInputBorder(), isDense: true), keyboardType: const TextInputType.numberWithOptions(decimal: true))),
             ]),
             const SizedBox(height: 10),
-            TextField(controller: _refCtrl, decoration: const InputDecoration(labelText: 'เลขอ้างอิง', border: OutlineInputBorder(), isDense: true)),
+            TextField(controller: _refCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Reference' : 'เลขอ้างอิง', border: const OutlineInputBorder(), isDense: true)),
           ],
         ),
       ),
@@ -1048,7 +1149,7 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
     return result;
   }
 
-  Widget _colDrop(String label, int? value, void Function(int?) onChanged) {
+  Widget _colDrop(String label, int? value, void Function(int?) onChanged, bool isEnglish) {
     return DropdownButtonFormField<int?>(
       value: value,
       isExpanded: true,
@@ -1056,7 +1157,8 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
       decoration: InputDecoration(labelText: label, isDense: true, border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
       items: [
         const DropdownMenuItem<int?>(value: null, child: Text('—', style: TextStyle(fontSize: 12))),
-        ...List.generate(_numCols, (i) => DropdownMenuItem<int?>(value: i, child: Text('คอลัมน์ ${i + 1}', style: const TextStyle(fontSize: 12)))),
+        ...List.generate(_numCols, (i) => DropdownMenuItem<int?>(value: i,
+            child: Text('${isEnglish ? 'Column' : 'คอลัมน์'} ${i + 1}', style: const TextStyle(fontSize: 12)))),
       ],
       onChanged: (v) { setState(() { onChanged(v); _updatePreview(); }); },
     );
@@ -1064,7 +1166,8 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
     final lines = _buildLines();
     final colCount = _numCols;
     return AlertDialog(
@@ -1082,12 +1185,12 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
                   style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
                   onPressed: _pickFile,
                   icon: const Icon(Icons.folder_open, size: 16),
-                  label: const Text('เลือกไฟล์'),
+                  label: Text(isEnglish ? 'Choose File' : 'เลือกไฟล์'),
                 ),
                 const SizedBox(width: 12),
-                Expanded(child: Text(_fileName ?? 'ยังไม่ได้เลือกไฟล์', style: const TextStyle(fontSize: 12))),
+                Expanded(child: Text(_fileName ?? (isEnglish ? 'No file selected' : 'ยังไม่ได้เลือกไฟล์'), style: const TextStyle(fontSize: 12))),
                 if (_rawRows.isNotEmpty)
-                  Text('${_rawRows.length} บรรทัด', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                  Text(isEnglish ? '${_rawRows.length} lines' : '${_rawRows.length} บรรทัด', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
               ],
             ),
             if (_rawRows.isNotEmpty) ...[
@@ -1097,7 +1200,7 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
                 SizedBox(width: 120, child: DropdownButtonFormField<String>(
                   value: _delimiter,
                   isDense: true,
-                  decoration: const InputDecoration(labelText: 'ตัวคั่น', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                  decoration: InputDecoration(labelText: isEnglish ? 'Delimiter' : 'ตัวคั่น', isDense: true, border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
                   items: const [
                     DropdownMenuItem(value: ',', child: Text('Comma ,', style: TextStyle(fontSize: 12))),
                     DropdownMenuItem(value: ';', child: Text('Semicolon ;', style: TextStyle(fontSize: 12))),
@@ -1109,14 +1212,14 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
                 const SizedBox(width: 8),
                 SizedBox(width: 80, child: TextFormField(
                   initialValue: _skipHeader.toString(),
-                  decoration: const InputDecoration(labelText: 'ข้ามหัว', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                  decoration: InputDecoration(labelText: isEnglish ? 'Skip Head' : 'ข้ามหัว', isDense: true, border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
                   keyboardType: TextInputType.number,
                   onChanged: (v) { setState(() { _skipHeader = int.tryParse(v) ?? 0; _updatePreview(); }); },
                 )),
                 const SizedBox(width: 8),
                 SizedBox(width: 80, child: TextFormField(
                   initialValue: _skipFooter.toString(),
-                  decoration: const InputDecoration(labelText: 'ข้ามท้าย', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                  decoration: InputDecoration(labelText: isEnglish ? 'Skip Tail' : 'ข้ามท้าย', isDense: true, border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
                   keyboardType: TextInputType.number,
                   onChanged: (v) { setState(() { _skipFooter = int.tryParse(v) ?? 0; _updatePreview(); }); },
                 )),
@@ -1124,35 +1227,35 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
                 SizedBox(width: 150, child: DropdownButtonFormField<String>(
                   value: _dateFormat,
                   isDense: true,
-                  decoration: const InputDecoration(labelText: 'รูปแบบวันที่', isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                  decoration: InputDecoration(labelText: isEnglish ? 'Date Format' : 'รูปแบบวันที่', isDense: true, border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
                   items: _dateFormats.map((f) => DropdownMenuItem(value: f, child: Text(f, style: const TextStyle(fontSize: 11)))).toList(),
                   onChanged: (v) => setState(() => _dateFormat = v!),
                 )),
                 const SizedBox(width: 8),
                 Row(children: [
                   Checkbox(value: _singleAmount, onChanged: (v) => setState(() => _singleAmount = v ?? false), visualDensity: VisualDensity.compact),
-                  const Text('ยอดเดียว', style: TextStyle(fontSize: 12)),
+                  Text(isEnglish ? 'Single amount column' : 'ยอดเดียว', style: const TextStyle(fontSize: 12)),
                 ]),
               ]),
               const SizedBox(height: 10),
               // Column mapping
               if (colCount > 0)
                 Row(children: [
-                  Expanded(child: _colDrop('วันที่ *', _dateCol, (v) => _dateCol = v)),
+                  Expanded(child: _colDrop(isEnglish ? 'Date *' : 'วันที่ *', _dateCol, (v) => _dateCol = v, isEnglish)),
                   const SizedBox(width: 6),
-                  Expanded(child: _colDrop('รายการ', _descCol, (v) => _descCol = v)),
+                  Expanded(child: _colDrop(isEnglish ? 'Description' : 'รายการ', _descCol, (v) => _descCol = v, isEnglish)),
                   const SizedBox(width: 6),
                   if (!_singleAmount) ...[
-                    Expanded(child: _colDrop('ถอน', _wdCol, (v) => _wdCol = v)),
+                    Expanded(child: _colDrop(isEnglish ? 'Withdrawal' : 'ถอน', _wdCol, (v) => _wdCol = v, isEnglish)),
                     const SizedBox(width: 6),
-                    Expanded(child: _colDrop('ฝาก', _depCol, (v) => _depCol = v)),
+                    Expanded(child: _colDrop(isEnglish ? 'Deposit' : 'ฝาก', _depCol, (v) => _depCol = v, isEnglish)),
                   ] else ...[
-                    Expanded(child: _colDrop('ยอด (+ ฝาก)', _amtCol, (v) => _amtCol = v)),
+                    Expanded(child: _colDrop(isEnglish ? 'Amount (+ Deposit)' : 'ยอด (+ ฝาก)', _amtCol, (v) => _amtCol = v, isEnglish)),
                     const SizedBox(width: 6),
                   ],
-                  Expanded(child: _colDrop('คงเหลือ', _balCol, (v) => _balCol = v)),
+                  Expanded(child: _colDrop(isEnglish ? 'Balance' : 'คงเหลือ', _balCol, (v) => _balCol = v, isEnglish)),
                   const SizedBox(width: 6),
-                  Expanded(child: _colDrop('อ้างอิง', _refCol, (v) => _refCol = v)),
+                  Expanded(child: _colDrop(isEnglish ? 'Reference' : 'อ้างอิง', _refCol, (v) => _refCol = v, isEnglish)),
                 ]),
               const SizedBox(height: 10),
               // Raw preview
@@ -1169,7 +1272,7 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
                         columnSpacing: 10,
                         headingTextStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                         columns: List.generate(colCount, (i) => DataColumn(
-                          label: Text('คอล ${i + 1}', style: const TextStyle(fontSize: 11)),
+                          label: Text('${isEnglish ? 'Col' : 'คอล'} ${i + 1}', style: const TextStyle(fontSize: 11)),
                         )),
                         rows: _previewRows.map((row) => DataRow(
                           cells: List.generate(colCount, (i) => DataCell(
@@ -1183,7 +1286,8 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
               ),
               const SizedBox(height: 6),
               if (lines != null)
-                Text('พร้อม import ${lines.length} รายการ', style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
+                Text(isEnglish ? 'Ready to import ${lines.length} items' : 'พร้อม import ${lines.length} รายการ',
+                    style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
             ],
           ],
         ),
@@ -1193,7 +1297,7 @@ class _CsvImportDialogState extends State<_CsvImportDialog> {
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: _kTheme, foregroundColor: Colors.white),
           onPressed: (lines != null && lines.isNotEmpty) ? () => Navigator.pop(context, lines) : null,
-          child: Text('นำเข้า ${lines?.length ?? 0} รายการ'),
+          child: Text(isEnglish ? 'Import ${lines?.length ?? 0} items' : 'นำเข้า ${lines?.length ?? 0} รายการ'),
         ),
       ],
     );

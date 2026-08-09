@@ -27,6 +27,64 @@ const Map<String, String> vatTypeLabels = {
   'NOVAT': 'ไม่มี VAT',
 };
 
+// ── Status labels (Draft / Submitted / Approved / Posted / Void) ────────────
+// Submitted/Approved เกิดขึ้นเฉพาะเอกสารที่ผ่าน flow ขออนุมัติ (RA 70 หรือ Payment 80 ที่ไม่มีเลขที่อ้างอิง)
+const Map<String, String> apTransactionStatusLabels = {
+  'Draft':     'ร่าง',
+  'Submitted': 'รออนุมัติ',
+  'Approved':  'อนุมัติแล้ว',
+  'Posted':    'Post แล้ว',
+  'Void':      'ยกเลิก',
+};
+
+const Map<String, String> apTransactionStatusLabelsEn = {
+  'Draft':     'Draft',
+  'Submitted': 'On Approve',
+  'Approved':  'Approved',
+  'Posted':    'Posted',
+  'Void':      'Void',
+};
+
+String apTransactionStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? apTransactionStatusLabelsEn[s] : apTransactionStatusLabels[s]) ?? s;
+
+// ── Approval record (mirrors ApPaymentRunApproval) ──────────────────────────
+class ApTransactionApproval {
+  final int id;
+  final int transactionId;
+  final int approverUserId;
+  final String approverUserName;
+  final int sequenceNo;
+  final String status; // Pending / Approved / Rejected / Skipped
+  final String? remarks;
+  final DateTime? approvedAt;
+
+  const ApTransactionApproval({
+    required this.id,
+    required this.transactionId,
+    required this.approverUserId,
+    required this.approverUserName,
+    required this.sequenceNo,
+    required this.status,
+    this.remarks,
+    this.approvedAt,
+  });
+
+  factory ApTransactionApproval.fromJson(Map<String, dynamic> json) =>
+      ApTransactionApproval(
+        id: json['id'] as int,
+        transactionId: json['transaction_id'] as int,
+        approverUserId: json['approver_user_id'] as int,
+        approverUserName: json['approver_user_name'] ?? '',
+        sequenceNo: json['sequence_no'] ?? 1,
+        status: json['status'] ?? 'Pending',
+        remarks: json['remarks'],
+        approvedAt: json['approved_at'] != null
+            ? DateTime.parse(json['approved_at'])
+            : null,
+      );
+}
+
 // ── Header ─────────────────────────────────────────────────────────────────
 class ApTransactionHeader {
   final int id;
@@ -543,6 +601,7 @@ class ApTransaction {
   final List<ApTransactionApply> applies;
   final List<ApTransactionPayment> payments;
   final List<ApTransactionWht> whts;
+  final List<ApTransactionApproval> approvals;
 
   ApTransaction({
     required this.header,
@@ -550,6 +609,7 @@ class ApTransaction {
     this.applies = const [],
     this.payments = const [],
     this.whts = const [],
+    this.approvals = const [],
   });
 
   factory ApTransaction.fromJson(Map<String, dynamic> json) => ApTransaction(
@@ -562,6 +622,8 @@ class ApTransaction {
             .map((e) => ApTransactionPayment.fromJson(e)).toList(),
         whts: (json['whts'] as List<dynamic>? ?? [])
             .map((e) => ApTransactionWht.fromJson(e)).toList(),
+        approvals: (json['approvals'] as List<dynamic>? ?? [])
+            .map((e) => ApTransactionApproval.fromJson(e)).toList(),
       );
 }
 
