@@ -7,8 +7,12 @@ import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
 import '../models/im_item.dart';
 import '../models/im_item_category.dart';
+import '../models/im_uom.dart';
+import '../models/im_warehouse.dart';
 import '../services/im_item_running_service.dart';
 import '../widgets/im_item_category_list_tree_widget.dart';
+import '../widgets/im_uom_list_widget.dart';
+import '../widgets/im_warehouse_list_widget.dart';
 
 // ---------------------------------------------------------------------------
 // Collapsible section — same look as ap_vendor_detail_widget's _Section
@@ -110,6 +114,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
   bool _autoCodeOverridden = false;
 
   int? _categoryId; String? _categoryCode; String? _categoryName;
+  int? _baseUomId; String? _baseUomCode; String? _baseUomName;
+  int? _defaultWarehouseId; String? _defaultWarehouseCode; String? _defaultWarehouseName;
   int? _inventoryAccountId; String? _inventoryAccountCode; String? _inventoryAccountName;
   int? _cogsAccountId; String? _cogsAccountCode; String? _cogsAccountName;
   int? _revenueAccountId; String? _revenueAccountCode; String? _revenueAccountName;
@@ -195,6 +201,10 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _isLotTracked = item.isLotTracked;
     _isSerialTracked = item.isSerialTracked;
     _categoryId = item.categoryId; _categoryCode = item.categoryCode; _categoryName = item.categoryName;
+    _baseUomId = item.baseUomId; _baseUomCode = item.baseUomCode;
+    _baseUomName = _isEnglish && (item.baseUomNameEn ?? '').isNotEmpty ? item.baseUomNameEn : item.baseUomNameTh;
+    _defaultWarehouseId = item.defaultWarehouseId; _defaultWarehouseCode = item.defaultWarehouseCode;
+    _defaultWarehouseName = _isEnglish && (item.defaultWarehouseNameEn ?? '').isNotEmpty ? item.defaultWarehouseNameEn : item.defaultWarehouseNameTh;
     _inventoryAccountId = item.inventoryAccountId; _inventoryAccountCode = item.inventoryAccountCode; _inventoryAccountName = item.inventoryAccountName;
     _cogsAccountId = item.cogsAccountId; _cogsAccountCode = item.cogsAccountCode; _cogsAccountName = item.cogsAccountName;
     _revenueAccountId = item.revenueAccountId; _revenueAccountCode = item.revenueAccountCode; _revenueAccountName = item.revenueAccountName;
@@ -208,6 +218,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _isPurchaseItem = true; _isSalesItem = true; _isManufactured = false;
     _isLotTracked = false; _isSerialTracked = false; _autoCodeOverridden = false;
     _categoryId = null; _categoryCode = null; _categoryName = null;
+    _baseUomId = null; _baseUomCode = null; _baseUomName = null;
+    _defaultWarehouseId = null; _defaultWarehouseCode = null; _defaultWarehouseName = null;
     _inventoryAccountId = null; _inventoryAccountCode = null; _inventoryAccountName = null;
     _cogsAccountId = null; _cogsAccountCode = null; _cogsAccountName = null;
     _revenueAccountId = null; _revenueAccountCode = null; _revenueAccountName = null;
@@ -226,6 +238,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
         itemNameEn: _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         categoryId: _categoryId,
+        baseUomId: _baseUomId,
+        defaultWarehouseId: _defaultWarehouseId,
         itemType: _itemType,
         costingMethod: _costingMethod,
         standardCost: double.tryParse(_standardCostCtrl.text) ?? 0,
@@ -356,6 +370,26 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     });
   }
 
+  Future<void> _pickUom() async {
+    final isEnglish = _isEnglish;
+    await ImUomListWidget.search(context, onSelected: (ImUom u) {
+      setState(() {
+        _baseUomId = u.id; _baseUomCode = u.uomCode;
+        _baseUomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
+      });
+    });
+  }
+
+  Future<void> _pickWarehouse() async {
+    final isEnglish = _isEnglish;
+    await ImWarehouseListWidget.search(context, onSelected: (ImWarehouse w) {
+      setState(() {
+        _defaultWarehouseId = w.id; _defaultWarehouseCode = w.warehouseCode;
+        _defaultWarehouseName = isEnglish && (w.warehouseNameEn ?? '').isNotEmpty ? w.warehouseNameEn : w.warehouseNameTh;
+      });
+    });
+  }
+
   Future<void> _pickAccount(String title, void Function(Account) onPicked) async {
     if (_accounts.isEmpty) await _loadAccounts();
     if (!mounted) return;
@@ -465,6 +499,14 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
             ),
           ),
         ),
+        const SizedBox(width: 10),
+        Expanded(child: _buildFkField(
+          label: isEnglish ? 'Base Unit (UOM)' : 'หน่วยนับหลัก',
+          hasValue: _baseUomId != null,
+          displayText: '$_baseUomCode — $_baseUomName',
+          onSearch: _pickUom,
+          onClear: () => setState(() { _baseUomId = null; _baseUomCode = null; _baseUomName = null; }),
+        )),
       ]),
       if (_costingMethod == 'STANDARD')
         _buildField(isEnglish ? 'Standard Cost' : 'ต้นทุนมาตรฐาน', _standardCostCtrl,
@@ -522,6 +564,15 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     if (_itemType != 'STOCK') return const SizedBox.shrink();
     final isEnglish = _isEnglish;
     return _Section(title: isEnglish ? 'Replenishment' : 'การเติมสินค้า', initiallyExpanded: false, children: [
+      Row(children: [
+        Expanded(child: _buildFkField(
+          label: isEnglish ? 'Default Warehouse' : 'คลังสินค้าเริ่มต้น',
+          hasValue: _defaultWarehouseId != null,
+          displayText: '$_defaultWarehouseCode — $_defaultWarehouseName',
+          onSearch: _pickWarehouse,
+          onClear: () => setState(() { _defaultWarehouseId = null; _defaultWarehouseCode = null; _defaultWarehouseName = null; }),
+        )),
+      ]),
       Row(children: [
         Expanded(child: _buildField(isEnglish ? 'Min Stock Qty' : 'ปริมาณขั้นต่ำ', _minStockCtrl, keyboard: const TextInputType.numberWithOptions(decimal: true), formatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))])),
         const SizedBox(width: 10),

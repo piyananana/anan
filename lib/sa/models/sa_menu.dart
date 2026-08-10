@@ -99,6 +99,8 @@ import '../../cm/screens/cm_post_dated_check_screen.dart';
 import '../../im/screens/im_item_screen.dart';
 import '../../im/screens/im_item_category_screen.dart';
 import '../../im/screens/im_item_running_screen.dart';
+import '../../im/screens/im_uom_screen.dart';
+import '../../im/screens/im_warehouse_screen.dart';
 
 import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
@@ -287,6 +289,8 @@ class Menu {
     'ImItemScreen': (context) => ImItemScreen(onFieldsChanged: () {}),
     'ImItemCategoryScreen': (context) => ImItemCategoryScreen(onFieldsChanged: () {}),
     'ImItemRunningScreen': (context) => const ImItemRunningScreen(),
+    'ImUomScreen': (context) => ImUomScreen(onFieldsChanged: () {}),
+    'ImWarehouseScreen': (context) => ImWarehouseScreen(onFieldsChanged: () {}),
 
     'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
     'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),

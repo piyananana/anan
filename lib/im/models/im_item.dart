@@ -41,6 +41,9 @@ class ImItem {
   final String? categoryName;
   final String itemType;
   final int? baseUomId;
+  final String? baseUomCode;
+  final String? baseUomNameTh;
+  final String? baseUomNameEn;
   final String costingMethod;
   final double standardCost;
   final bool isPurchaseItem;
@@ -50,6 +53,9 @@ class ImItem {
   final bool isSerialTracked;
   final int? shelfLifeDays;
   final int? defaultWarehouseId;
+  final String? defaultWarehouseCode;
+  final String? defaultWarehouseNameTh;
+  final String? defaultWarehouseNameEn;
   final double minStockQty;
   final double maxStockQty;
   final double reorderPoint;
@@ -80,6 +86,9 @@ class ImItem {
     this.categoryName,
     this.itemType = 'STOCK',
     this.baseUomId,
+    this.baseUomCode,
+    this.baseUomNameTh,
+    this.baseUomNameEn,
     this.costingMethod = 'AVG',
     this.standardCost = 0,
     this.isPurchaseItem = true,
@@ -89,6 +98,9 @@ class ImItem {
     this.isSerialTracked = false,
     this.shelfLifeDays,
     this.defaultWarehouseId,
+    this.defaultWarehouseCode,
+    this.defaultWarehouseNameTh,
+    this.defaultWarehouseNameEn,
     this.minStockQty = 0,
     this.maxStockQty = 0,
     this.reorderPoint = 0,
@@ -112,6 +124,9 @@ class ImItem {
         categoryName: json['category_name'],
         itemType: json['item_type'] ?? 'STOCK',
         baseUomId: json['base_uom_id'],
+        baseUomCode: json['base_uom_code'],
+        baseUomNameTh: json['base_uom_name_th'],
+        baseUomNameEn: json['base_uom_name_en'],
         costingMethod: json['costing_method'] ?? 'AVG',
         standardCost: double.tryParse(json['standard_cost']?.toString() ?? '') ?? 0,
         isPurchaseItem: json['is_purchase_item'] ?? true,
@@ -121,6 +136,9 @@ class ImItem {
         isSerialTracked: json['is_serial_tracked'] ?? false,
         shelfLifeDays: json['shelf_life_days'],
         defaultWarehouseId: json['default_warehouse_id'],
+        defaultWarehouseCode: json['default_warehouse_code'],
+        defaultWarehouseNameTh: json['default_warehouse_name_th'],
+        defaultWarehouseNameEn: json['default_warehouse_name_en'],
         minStockQty: double.tryParse(json['min_stock_qty']?.toString() ?? '') ?? 0,
         maxStockQty: double.tryParse(json['max_stock_qty']?.toString() ?? '') ?? 0,
         reorderPoint: double.tryParse(json['reorder_point']?.toString() ?? '') ?? 0,
