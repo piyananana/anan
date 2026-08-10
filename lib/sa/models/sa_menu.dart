@@ -96,6 +96,10 @@ import '../../cm/screens/cm_bank_file_export_screen.dart';
 import '../../cm/screens/cm_bank_statement_import_screen.dart';
 import '../../cm/screens/cm_post_dated_check_screen.dart';
 
+import '../../im/screens/im_item_screen.dart';
+import '../../im/screens/im_item_category_screen.dart';
+import '../../im/screens/im_item_running_screen.dart';
+
 import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
 import '../../ap/screens/ap_vendor_import_screen.dart';
@@ -279,6 +283,10 @@ class Menu {
     'CmPostDatedCheckScreen':            (context) => const CmPostDatedCheckScreen(),
     'CmTransactionScreen':               (context) => const CmTransactionScreen(),
     'CmTransactionGlSetupScreen':        (context) => const CmTransactionGlSetupScreen(),
+
+    'ImItemScreen': (context) => ImItemScreen(onFieldsChanged: () {}),
+    'ImItemCategoryScreen': (context) => ImItemCategoryScreen(onFieldsChanged: () {}),
+    'ImItemRunningScreen': (context) => const ImItemRunningScreen(),
 
     'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
     'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),
