@@ -29,6 +29,103 @@ const Map<String, String> imCostingMethodLabelsEn = {
 String imCostingMethodLabel(String method, bool isEnglish) =>
     isEnglish ? (imCostingMethodLabelsEn[method] ?? method) : (imCostingMethodLabelsTh[method] ?? method);
 
+class ImUomConversion {
+  final int? id;
+  final int? itemId;
+  final int uomId;
+  final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
+  final double conversionFactor;
+  final String? barcode;
+  final bool isPurchaseDefault;
+  final bool isSalesDefault;
+
+  const ImUomConversion({
+    this.id,
+    this.itemId,
+    required this.uomId,
+    this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
+    this.conversionFactor = 1,
+    this.barcode,
+    this.isPurchaseDefault = false,
+    this.isSalesDefault = false,
+  });
+
+  factory ImUomConversion.fromJson(Map<String, dynamic> json) => ImUomConversion(
+        id: json['id'],
+        itemId: json['item_id'],
+        uomId: json['uom_id'] as int,
+        uomCode: json['uom_code'],
+        uomNameTh: json['uom_name_th'],
+        uomNameEn: json['uom_name_en'],
+        conversionFactor: double.tryParse(json['conversion_factor']?.toString() ?? '') ?? 1,
+        barcode: json['barcode'],
+        isPurchaseDefault: json['is_purchase_default'] ?? false,
+        isSalesDefault: json['is_sales_default'] ?? false,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'uom_id': uomId,
+        'conversion_factor': conversionFactor,
+        'barcode': barcode,
+        'is_purchase_default': isPurchaseDefault,
+        'is_sales_default': isSalesDefault,
+      };
+}
+
+class ImItemWarehouse {
+  final int? id;
+  final int? itemId;
+  final int warehouseId;
+  final String? warehouseCode;
+  final String? warehouseNameTh;
+  final String? warehouseNameEn;
+  final double minStockQty;
+  final double maxStockQty;
+  final double reorderPoint;
+  final int? defaultLocationId;
+  final String? defaultLocationCode;
+
+  const ImItemWarehouse({
+    this.id,
+    this.itemId,
+    required this.warehouseId,
+    this.warehouseCode,
+    this.warehouseNameTh,
+    this.warehouseNameEn,
+    this.minStockQty = 0,
+    this.maxStockQty = 0,
+    this.reorderPoint = 0,
+    this.defaultLocationId,
+    this.defaultLocationCode,
+  });
+
+  factory ImItemWarehouse.fromJson(Map<String, dynamic> json) => ImItemWarehouse(
+        id: json['id'],
+        itemId: json['item_id'],
+        warehouseId: json['warehouse_id'] as int,
+        warehouseCode: json['warehouse_code'],
+        warehouseNameTh: json['warehouse_name_th'],
+        warehouseNameEn: json['warehouse_name_en'],
+        minStockQty: double.tryParse(json['min_stock_qty']?.toString() ?? '') ?? 0,
+        maxStockQty: double.tryParse(json['max_stock_qty']?.toString() ?? '') ?? 0,
+        reorderPoint: double.tryParse(json['reorder_point']?.toString() ?? '') ?? 0,
+        defaultLocationId: json['default_location_id'],
+        defaultLocationCode: json['default_location_code'],
+      );
+
+  Map<String, dynamic> toJson() => {
+        'warehouse_id': warehouseId,
+        'min_stock_qty': minStockQty,
+        'max_stock_qty': maxStockQty,
+        'reorder_point': reorderPoint,
+        'default_location_id': defaultLocationId,
+      };
+}
+
 class ImItem {
   final int? id;
   final String itemCode;
@@ -73,6 +170,8 @@ class ImItem {
   final String? expenseAccountCode;
   final String? expenseAccountName;
   final bool isActive;
+  final List<ImUomConversion> uomConversions;
+  final List<ImItemWarehouse> itemWarehouses;
 
   const ImItem({
     this.id,
@@ -110,6 +209,8 @@ class ImItem {
     this.revenueAccountId, this.revenueAccountCode, this.revenueAccountName,
     this.expenseAccountId, this.expenseAccountCode, this.expenseAccountName,
     this.isActive = true,
+    this.uomConversions = const [],
+    this.itemWarehouses = const [],
   });
 
   factory ImItem.fromJson(Map<String, dynamic> json) => ImItem(
@@ -156,6 +257,8 @@ class ImItem {
         expenseAccountCode: json['expense_account_code'],
         expenseAccountName: json['expense_account_name'],
         isActive: json['is_active'] ?? true,
+        uomConversions: (json['uom_conversions'] as List<dynamic>? ?? []).map((e) => ImUomConversion.fromJson(e)).toList(),
+        itemWarehouses: (json['item_warehouses'] as List<dynamic>? ?? []).map((e) => ImItemWarehouse.fromJson(e)).toList(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -186,5 +289,7 @@ class ImItem {
         'revenue_account_id': revenueAccountId,
         'expense_account_id': expenseAccountId,
         'is_active': isActive,
+        'uom_conversions': uomConversions.map((e) => e.toJson()).toList(),
+        'item_warehouses': itemWarehouses.map((e) => e.toJson()).toList(),
       };
 }

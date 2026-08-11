@@ -9,7 +9,10 @@ import '../models/im_item.dart';
 import '../models/im_item_category.dart';
 import '../models/im_uom.dart';
 import '../models/im_warehouse.dart';
+import '../models/im_price_list.dart';
 import '../services/im_item_running_service.dart';
+import '../services/im_price_list_service.dart';
+import '../services/im_warehouse_service.dart';
 import '../widgets/im_item_category_list_tree_widget.dart';
 import '../widgets/im_uom_list_widget.dart';
 import '../widgets/im_warehouse_list_widget.dart';
@@ -21,8 +24,9 @@ class _Section extends StatefulWidget {
   final String title;
   final bool initiallyExpanded;
   final List<Widget> children;
+  final Widget? trailing;
 
-  const _Section({required this.title, this.initiallyExpanded = true, required this.children});
+  const _Section({required this.title, this.initiallyExpanded = true, required this.children, this.trailing});
 
   @override
   State<_Section> createState() => _SectionState();
@@ -51,6 +55,7 @@ class _SectionState extends State<_Section> {
               Icon(_expanded ? Icons.expand_less : Icons.expand_more, color: Colors.blueGrey.shade600),
               const SizedBox(width: 6),
               Expanded(child: Text(widget.title, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey.shade800))),
+              if (widget.trailing != null) widget.trailing!,
             ]),
           ),
         ),
@@ -63,6 +68,253 @@ class _SectionState extends State<_Section> {
       ],
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Add/Edit alternate unit dialog
+// ---------------------------------------------------------------------------
+Future<ImUomConversion?> _showUomConversionDialog(BuildContext context, ImUomConversion? existing) async {
+  final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+  int? uomId = existing?.uomId;
+  String? uomCode = existing?.uomCode;
+  String? uomName = isEnglish && (existing?.uomNameEn ?? '').isNotEmpty ? existing?.uomNameEn : existing?.uomNameTh;
+  final factorCtrl = TextEditingController(text: existing != null ? '${existing.conversionFactor}' : '1');
+  final barcodeCtrl = TextEditingController(text: existing?.barcode ?? '');
+  bool isPurchaseDefault = existing?.isPurchaseDefault ?? false;
+  bool isSalesDefault = existing?.isSalesDefault ?? false;
+
+  return showDialog<ImUomConversion>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
+      return AlertDialog(
+        title: Text(existing == null ? (isEnglish ? 'Add Alternate Unit' : 'เพิ่มหน่วยนับทางเลือก') : (isEnglish ? 'Edit Alternate Unit' : 'แก้ไขหน่วยนับทางเลือก')),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: InputDecorator(
+                  decoration: InputDecoration(labelText: isEnglish ? 'Unit *' : 'หน่วยนับ *', border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                  child: Row(children: [
+                    Expanded(
+                      child: uomId != null
+                          ? Text('$uomCode — $uomName', style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)
+                          : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —', style: TextStyle(color: Colors.grey.shade600)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.search, color: Colors.teal),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => ImUomListWidget.search(ctx, onSelected: (ImUom u) {
+                        setDlg(() {
+                          uomId = u.id; uomCode = u.uomCode;
+                          uomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
+                        });
+                      }),
+                    ),
+                  ]),
+                ),
+              ),
+              TextField(
+                controller: factorCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Conversion Factor (per base unit) *' : 'อัตราแปลงหน่วย (ต่อหน่วยหลัก) *',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: barcodeCtrl,
+                decoration: InputDecoration(labelText: isEnglish ? 'Barcode' : 'บาร์โค้ด', border: const OutlineInputBorder()),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: Text(isEnglish ? 'Default purchase unit' : 'หน่วยซื้อเริ่มต้น'),
+                value: isPurchaseDefault,
+                onChanged: (v) => setDlg(() => isPurchaseDefault = v ?? false),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: Text(isEnglish ? 'Default sales unit' : 'หน่วยขายเริ่มต้น'),
+                value: isSalesDefault,
+                onChanged: (v) => setDlg(() => isSalesDefault = v ?? false),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(
+            onPressed: () {
+              if (uomId == null) {
+                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a unit' : 'กรุณาเลือกหน่วยนับ')));
+                return;
+              }
+              Navigator.of(ctx).pop(ImUomConversion(
+                id: existing?.id,
+                uomId: uomId!,
+                uomCode: uomCode,
+                uomNameTh: isEnglish ? null : uomName,
+                uomNameEn: isEnglish ? uomName : null,
+                conversionFactor: double.tryParse(factorCtrl.text) ?? 1,
+                barcode: barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim(),
+                isPurchaseDefault: isPurchaseDefault,
+                isSalesDefault: isSalesDefault,
+              ));
+            },
+            child: Text(isEnglish ? 'OK' : 'ตกลง'),
+          ),
+        ],
+      );
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Add/Edit per-warehouse policy dialog
+// ---------------------------------------------------------------------------
+Future<ImItemWarehouse?> _showItemWarehouseDialog(BuildContext context, ImItemWarehouse? existing) async {
+  final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+  int? warehouseId = existing?.warehouseId;
+  String? warehouseCode = existing?.warehouseCode;
+  String? warehouseName = isEnglish && (existing?.warehouseNameEn ?? '').isNotEmpty ? existing?.warehouseNameEn : existing?.warehouseNameTh;
+  int? locationId = existing?.defaultLocationId;
+  String? locationCode = existing?.defaultLocationCode;
+  List<ImLocation> availableLocations = [];
+  final minCtrl = TextEditingController(text: existing != null ? '${existing.minStockQty}' : '0');
+  final maxCtrl = TextEditingController(text: existing != null ? '${existing.maxStockQty}' : '0');
+  final reorderCtrl = TextEditingController(text: existing != null ? '${existing.reorderPoint}' : '0');
+
+  return showDialog<ImItemWarehouse>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
+      Future<void> loadLocationsFor(int whId) async {
+        try {
+          final full = await ImWarehouseService().fetchRow(whId);
+          setDlg(() => availableLocations = full.locations.where((l) => l.isActive).toList());
+        } catch (_) {}
+      }
+
+      return AlertDialog(
+        title: Text(existing == null ? (isEnglish ? 'Add Warehouse Setting' : 'เพิ่มการตั้งค่าคลังสินค้า') : (isEnglish ? 'Edit Warehouse Setting' : 'แก้ไขการตั้งค่าคลังสินค้า')),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: InputDecorator(
+                  decoration: InputDecoration(labelText: isEnglish ? 'Warehouse *' : 'คลังสินค้า *', border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                  child: Row(children: [
+                    Expanded(
+                      child: warehouseId != null
+                          ? Text('$warehouseCode — $warehouseName', style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)
+                          : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —', style: TextStyle(color: Colors.grey.shade600)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.search, color: Colors.teal),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => ImWarehouseListWidget.search(ctx, onSelected: (ImWarehouse w) {
+                        setDlg(() {
+                          warehouseId = w.id; warehouseCode = w.warehouseCode;
+                          warehouseName = isEnglish && (w.warehouseNameEn ?? '').isNotEmpty ? w.warehouseNameEn : w.warehouseNameTh;
+                          locationId = null; locationCode = null; availableLocations = [];
+                        });
+                        loadLocationsFor(w.id);
+                      }),
+                    ),
+                  ]),
+                ),
+              ),
+              Row(children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10, right: 8),
+                    child: TextField(
+                      controller: minCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                      decoration: InputDecoration(labelText: isEnglish ? 'Min Qty' : 'ขั้นต่ำ', border: const OutlineInputBorder()),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10, right: 8),
+                    child: TextField(
+                      controller: maxCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                      decoration: InputDecoration(labelText: isEnglish ? 'Max Qty' : 'สูงสุด', border: const OutlineInputBorder()),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: TextField(
+                      controller: reorderCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                      decoration: InputDecoration(labelText: isEnglish ? 'Reorder' : 'สั่งซื้อซ้ำ', border: const OutlineInputBorder()),
+                    ),
+                  ),
+                ),
+              ]),
+              if (warehouseId != null)
+                DropdownButtonFormField<int?>(
+                  value: locationId,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: isEnglish ? 'Default Location' : 'ตำแหน่งจัดเก็บเริ่มต้น', border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                  items: [
+                    DropdownMenuItem(value: null, child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
+                    ...availableLocations.map((l) => DropdownMenuItem(value: l.id, child: Text('${l.locationCode}  ${l.locationName ?? ''}'))),
+                  ],
+                  onChanged: (v) => setDlg(() {
+                    locationId = v;
+                    locationCode = availableLocations.where((l) => l.id == v).firstOrNull?.locationCode;
+                  }),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(
+            onPressed: () {
+              if (warehouseId == null) {
+                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a warehouse' : 'กรุณาเลือกคลังสินค้า')));
+                return;
+              }
+              Navigator.of(ctx).pop(ImItemWarehouse(
+                id: existing?.id,
+                warehouseId: warehouseId!,
+                warehouseCode: warehouseCode,
+                warehouseNameTh: isEnglish ? null : warehouseName,
+                warehouseNameEn: isEnglish ? warehouseName : null,
+                minStockQty: double.tryParse(minCtrl.text) ?? 0,
+                maxStockQty: double.tryParse(maxCtrl.text) ?? 0,
+                reorderPoint: double.tryParse(reorderCtrl.text) ?? 0,
+                defaultLocationId: locationId,
+                defaultLocationCode: locationCode,
+              ));
+            },
+            child: Text(isEnglish ? 'OK' : 'ตกลง'),
+          ),
+        ],
+      );
+    }),
+  );
 }
 
 class ImItemDetailWidget extends StatefulWidget {
@@ -122,6 +374,10 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
   int? _expenseAccountId; String? _expenseAccountCode; String? _expenseAccountName;
 
   List<Account> _accounts = [];
+  List<ImItemPriceRow> _priceRows = [];
+  List<ImUomConversion> _uomConversions = [];
+  List<ImItemWarehouse> _itemWarehouses = [];
+  bool _isLoadingPrices = false;
 
   bool get _isReadOnly => widget.mode == Mode.view || widget.mode == Mode.none;
 
@@ -132,6 +388,18 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _loadAccounts();
     _loadAutoNumberingConfig();
     if (widget.selected != null) _populate(widget.selected!);
+    if (widget.selected?.id != null) _loadPrices(widget.selected!.id!);
+  }
+
+  Future<void> _loadPrices(int itemId) async {
+    setState(() => _isLoadingPrices = true);
+    try {
+      final rows = await ImPriceListService().fetchByItem(itemId);
+      if (mounted) setState(() => _priceRows = rows);
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isLoadingPrices = false);
+    }
   }
 
   void _initControllers() {
@@ -152,6 +420,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode) {
       if (widget.selected != null) {
         _populate(widget.selected!);
+        if (widget.selected!.id != null) _loadPrices(widget.selected!.id!);
       } else {
         _clear();
       }
@@ -209,6 +478,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _cogsAccountId = item.cogsAccountId; _cogsAccountCode = item.cogsAccountCode; _cogsAccountName = item.cogsAccountName;
     _revenueAccountId = item.revenueAccountId; _revenueAccountCode = item.revenueAccountCode; _revenueAccountName = item.revenueAccountName;
     _expenseAccountId = item.expenseAccountId; _expenseAccountCode = item.expenseAccountCode; _expenseAccountName = item.expenseAccountName;
+    _uomConversions = List.from(item.uomConversions);
+    _itemWarehouses = List.from(item.itemWarehouses);
   }
 
   void _clear() {
@@ -224,7 +495,34 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _cogsAccountId = null; _cogsAccountCode = null; _cogsAccountName = null;
     _revenueAccountId = null; _revenueAccountCode = null; _revenueAccountName = null;
     _expenseAccountId = null; _expenseAccountCode = null; _expenseAccountName = null;
+    _priceRows = [];
+    _uomConversions = [];
+    _itemWarehouses = [];
   }
+
+  Future<void> _addUomConversion() async {
+    final result = await _showUomConversionDialog(context, null);
+    if (result != null) setState(() => _uomConversions.add(result));
+  }
+
+  Future<void> _editUomConversion(int index) async {
+    final result = await _showUomConversionDialog(context, _uomConversions[index]);
+    if (result != null) setState(() => _uomConversions[index] = result);
+  }
+
+  void _removeUomConversion(int index) => setState(() => _uomConversions.removeAt(index));
+
+  Future<void> _addItemWarehouse() async {
+    final result = await _showItemWarehouseDialog(context, null);
+    if (result != null) setState(() => _itemWarehouses.add(result));
+  }
+
+  Future<void> _editItemWarehouse(int index) async {
+    final result = await _showItemWarehouseDialog(context, _itemWarehouses[index]);
+    if (result != null) setState(() => _itemWarehouses[index] = result);
+  }
+
+  void _removeItemWarehouse(int index) => setState(() => _itemWarehouses.removeAt(index));
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -256,6 +554,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
         revenueAccountId: _revenueAccountId,
         expenseAccountId: _expenseAccountId,
         isActive: _isActive,
+        uomConversions: _uomConversions,
+        itemWarehouses: _itemWarehouses,
       );
       await widget.onSubmit(item);
     } catch (e) {
@@ -560,6 +860,100 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     ]);
   }
 
+  Widget _buildUomConversionSection() {
+    final isEnglish = _isEnglish;
+    return _Section(
+      title: isEnglish ? 'Alternate Units (${_uomConversions.length})' : 'หน่วยนับทางเลือก (${_uomConversions.length})',
+      initiallyExpanded: false,
+      trailing: _isReadOnly ? null : IconButton(icon: const Icon(Icons.add_circle, color: Colors.teal), tooltip: isEnglish ? 'Add alternate unit' : 'เพิ่มหน่วยนับทางเลือก', onPressed: _addUomConversion),
+      children: [
+        if (_uomConversions.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(isEnglish ? 'No alternate units — only the base unit is used' : 'ยังไม่มีหน่วยนับทางเลือก — ใช้หน่วยหลักเท่านั้น', style: TextStyle(color: Colors.grey.shade600)),
+          )
+        else
+          ..._uomConversions.asMap().entries.map((entry) {
+            final i = entry.key;
+            final c = entry.value;
+            final name = isEnglish && (c.uomNameEn ?? '').isNotEmpty ? c.uomNameEn : c.uomNameTh;
+            final tags = [
+              if (c.isPurchaseDefault) (isEnglish ? 'Purchase default' : 'ค่าเริ่มต้นซื้อ'),
+              if (c.isSalesDefault) (isEnglish ? 'Sales default' : 'ค่าเริ่มต้นขาย'),
+            ].join('  ·  ');
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 3),
+              child: ListTile(
+                dense: true,
+                leading: const Icon(Icons.straighten, color: Colors.teal, size: 20),
+                title: Text('${c.uomCode}  $name'),
+                subtitle: Text(
+                  isEnglish
+                      ? '1 ${c.uomCode} = ${c.conversionFactor} base unit${c.barcode != null ? '  ·  Barcode: ${c.barcode}' : ''}${tags.isNotEmpty ? '  ·  $tags' : ''}'
+                      : '1 ${c.uomCode} = ${c.conversionFactor} หน่วยหลัก${c.barcode != null ? '  ·  บาร์โค้ด: ${c.barcode}' : ''}${tags.isNotEmpty ? '  ·  $tags' : ''}',
+                ),
+                trailing: _isReadOnly
+                    ? null
+                    : Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: () => _editUomConversion(i)),
+                        IconButton(icon: const Icon(Icons.delete, size: 18, color: Colors.red), onPressed: () => _removeUomConversion(i)),
+                      ]),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildItemWarehouseSection() {
+    if (_itemType != 'STOCK') return const SizedBox.shrink();
+    final isEnglish = _isEnglish;
+    return _Section(
+      title: isEnglish ? 'Warehouse Settings (${_itemWarehouses.length})' : 'การตั้งค่าต่อคลังสินค้า (${_itemWarehouses.length})',
+      initiallyExpanded: false,
+      trailing: _isReadOnly ? null : IconButton(icon: const Icon(Icons.add_circle, color: Colors.teal), tooltip: isEnglish ? 'Add warehouse setting' : 'เพิ่มการตั้งค่าคลังสินค้า', onPressed: _addItemWarehouse),
+      children: [
+        Text(
+          isEnglish
+              ? 'Overrides min/max/reorder for a specific warehouse; used later for physical count and opening balance setup.'
+              : 'ใช้แทนค่าขั้นต่ำ/สูงสุด/จุดสั่งซื้อของคลังนั้นๆ โดยเฉพาะ — ใช้ประกอบการนับสต็อกและตั้งยอดยกมาในภายหลัง',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 8),
+        if (_itemWarehouses.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(isEnglish ? 'No per-warehouse settings yet' : 'ยังไม่มีการตั้งค่าต่อคลังสินค้า', style: TextStyle(color: Colors.grey.shade600)),
+          )
+        else
+          ..._itemWarehouses.asMap().entries.map((entry) {
+            final i = entry.key;
+            final w = entry.value;
+            final name = isEnglish && (w.warehouseNameEn ?? '').isNotEmpty ? w.warehouseNameEn : w.warehouseNameTh;
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 3),
+              child: ListTile(
+                dense: true,
+                leading: const Icon(Icons.warehouse, color: Colors.teal, size: 20),
+                title: Text('${w.warehouseCode}  $name'),
+                subtitle: Text(
+                  isEnglish
+                      ? 'Min ${w.minStockQty} · Max ${w.maxStockQty} · Reorder ${w.reorderPoint}${w.defaultLocationCode != null ? '  ·  Location: ${w.defaultLocationCode}' : ''}'
+                      : 'ขั้นต่ำ ${w.minStockQty} · สูงสุด ${w.maxStockQty} · สั่งซื้อซ้ำ ${w.reorderPoint}${w.defaultLocationCode != null ? '  ·  ตำแหน่ง: ${w.defaultLocationCode}' : ''}',
+                ),
+                trailing: _isReadOnly
+                    ? null
+                    : Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: () => _editItemWarehouse(i)),
+                        IconButton(icon: const Icon(Icons.delete, size: 18, color: Colors.red), onPressed: () => _removeItemWarehouse(i)),
+                      ]),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
   Widget _buildStockSection() {
     if (_itemType != 'STOCK') return const SizedBox.shrink();
     final isEnglish = _isEnglish;
@@ -580,6 +974,56 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
         const SizedBox(width: 10),
         Expanded(child: _buildField(isEnglish ? 'Reorder Point' : 'จุดสั่งซื้อซ้ำ', _reorderCtrl, keyboard: const TextInputType.numberWithOptions(decimal: true), formatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))])),
       ]),
+    ]);
+  }
+
+  Widget _buildPricesSection() {
+    final isEnglish = _isEnglish;
+    final title = isEnglish ? 'Prices (${_priceRows.length})' : 'ราคา (${_priceRows.length})';
+
+    if (widget.selected?.id == null) {
+      return _Section(title: title, initiallyExpanded: false, children: [
+        Text(
+          isEnglish ? 'Save the item first to see and manage its prices.' : 'บันทึกสินค้าก่อนจึงจะดู/จัดการราคาได้',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+      ]);
+    }
+
+    return _Section(title: title, initiallyExpanded: false, children: [
+      Text(
+        isEnglish
+            ? 'Managed from the Price List screen — shown here for reference only.'
+            : 'จัดการได้จากหน้าจอตารางราคา — ตรงนี้แสดงไว้เพื่ออ้างอิงเท่านั้น',
+        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+      ),
+      const SizedBox(height: 8),
+      if (_isLoadingPrices)
+        const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Center(child: CircularProgressIndicator()))
+      else if (_priceRows.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Text(isEnglish ? 'This item is not on any price list yet' : 'สินค้านี้ยังไม่อยู่ในตารางราคาใด', style: TextStyle(color: Colors.grey.shade600)),
+        )
+      else
+        ..._priceRows.map((r) {
+          final rangeText = (r.effectiveFrom != null || r.effectiveTo != null)
+              ? '  ·  ${r.effectiveFrom != null ? '${r.effectiveFrom!.day}/${r.effectiveFrom!.month}/${r.effectiveFrom!.year}' : '…'} - ${r.effectiveTo != null ? '${r.effectiveTo!.day}/${r.effectiveTo!.month}/${r.effectiveTo!.year}' : '…'}'
+              : '';
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 3),
+            child: ListTile(
+              dense: true,
+              leading: Icon(r.listType == 'PURCHASE' ? Icons.shopping_cart_outlined : Icons.sell_outlined, color: Colors.teal, size: 20),
+              title: Text('${r.priceListCode}  ${r.priceListName}'),
+              subtitle: Text(
+                isEnglish
+                    ? 'Price: ${r.unitPriceFc} ${r.currencyCode ?? ''} / ${r.uomCode ?? ''}${r.minQty > 0 ? '  ·  Min qty ${r.minQty}' : ''}$rangeText'
+                    : 'ราคา: ${r.unitPriceFc} ${r.currencyCode ?? ''} / ${r.uomCode ?? ''}${r.minQty > 0 ? '  ·  ขั้นต่ำ ${r.minQty}' : ''}$rangeText',
+              ),
+            ),
+          );
+        }),
     ]);
   }
 
@@ -685,8 +1129,11 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
           child: ListView(children: [
             _buildBasicSection(),
             _buildFlagsSection(),
+            _buildUomConversionSection(),
             _buildStockSection(),
+            _buildItemWarehouseSection(),
             _buildGlAccountSection(),
+            _buildPricesSection(),
           ]),
         ),
       ]),
