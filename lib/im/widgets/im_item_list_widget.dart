@@ -9,6 +9,8 @@ class ImItemListWidget extends StatefulWidget {
   final bool enableEditButton;
   final bool enableViewButton;
   final bool enableDeleteButton;
+  final bool enableCardSelect;
+  final String? itemTypeFilter;
   final void Function() onAdd;
   final Function(ImItem) onEdit;
   final Function(ImItem) onView;
@@ -21,6 +23,8 @@ class ImItemListWidget extends StatefulWidget {
     required this.enableEditButton,
     required this.enableViewButton,
     required this.enableDeleteButton,
+    this.enableCardSelect = false,
+    this.itemTypeFilter,
     required this.onAdd,
     required this.onEdit,
     required this.onView,
@@ -30,6 +34,43 @@ class ImItemListWidget extends StatefulWidget {
 
   @override
   State<ImItemListWidget> createState() => ImItemListWidgetState();
+
+  /// Picker dialog. Pass [itemTypeFilter] (e.g. 'STOCK') to restrict selectable items.
+  static Future<void> search(BuildContext context,
+      {required void Function(ImItem) onSelected, String? itemTypeFilter}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        contentPadding: EdgeInsets.zero,
+        title: Text(isEnglish ? 'Search Item' : 'ค้นหาสินค้า', style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Container(
+          width: 520,
+          height: 600,
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10.0)),
+          child: ImItemListWidget(
+            enableAddButton: false,
+            enableEditButton: false,
+            enableViewButton: false,
+            enableDeleteButton: false,
+            enableCardSelect: true,
+            itemTypeFilter: itemTypeFilter,
+            onAdd: () {},
+            onEdit: (i) {},
+            onView: (i) {},
+            onDelete: (i) {},
+            onCallback: onSelected,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class ImItemListWidgetState extends State<ImItemListWidget> with AutomaticKeepAliveClientMixin {
@@ -59,7 +100,10 @@ class ImItemListWidgetState extends State<ImItemListWidget> with AutomaticKeepAl
   Future<void> _fetchList() async {
     setState(() => _isLoading = true);
     try {
-      final rows = await _svc.fetchRows(keyword: _searchQuery.isEmpty ? null : _searchQuery);
+      var rows = await _svc.fetchRows(keyword: _searchQuery.isEmpty ? null : _searchQuery);
+      if (widget.itemTypeFilter != null) {
+        rows = rows.where((i) => i.itemType == widget.itemTypeFilter).toList();
+      }
       if (mounted) {
         setState(() {
           _list = rows;
@@ -171,9 +215,23 @@ class ImItemListWidgetState extends State<ImItemListWidget> with AutomaticKeepAl
                                   IconButton(icon: const Icon(Icons.edit, size: 18), tooltip: isEnglish ? 'Edit' : 'แก้ไข', onPressed: () => widget.onEdit(item)),
                                 if (widget.enableDeleteButton)
                                   IconButton(icon: const Icon(Icons.delete, size: 18, color: Colors.red), tooltip: isEnglish ? 'Delete' : 'ลบ', onPressed: () => widget.onDelete(item)),
+                                if (widget.enableCardSelect)
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_right_outlined, color: Colors.black),
+                                    onPressed: () {
+                                      if (item.isActive) {
+                                        widget.onCallback(item);
+                                        Navigator.of(context).pop();
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text(isEnglish ? 'Cannot use: this item is inactive' : 'ไม่สามารถใช้ได้ เนื่องจากสินค้านี้หยุดใช้งาน'), backgroundColor: Colors.red),
+                                        );
+                                      }
+                                    },
+                                  ),
                               ],
                             ),
-                            onTap: () => widget.onCallback(item),
+                            onTap: widget.enableCardSelect ? null : () => widget.onCallback(item),
                           ),
                           if (!item.isActive)
                             Positioned.fill(
