@@ -343,6 +343,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
   bool _isEnglish = false;
 
   late TextEditingController _codeCtrl;
+  late TextEditingController _oldCodeCtrl;
   late TextEditingController _barcodeCtrl;
   late TextEditingController _nameThCtrl;
   late TextEditingController _nameEnCtrl;
@@ -404,6 +405,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
 
   void _initControllers() {
     _codeCtrl = TextEditingController();
+    _oldCodeCtrl = TextEditingController();
     _barcodeCtrl = TextEditingController();
     _nameThCtrl = TextEditingController();
     _nameEnCtrl = TextEditingController();
@@ -430,7 +432,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
 
   @override
   void dispose() {
-    _codeCtrl.dispose(); _barcodeCtrl.dispose(); _nameThCtrl.dispose(); _nameEnCtrl.dispose();
+    _codeCtrl.dispose(); _oldCodeCtrl.dispose(); _barcodeCtrl.dispose(); _nameThCtrl.dispose(); _nameEnCtrl.dispose();
     _descCtrl.dispose(); _standardCostCtrl.dispose(); _minStockCtrl.dispose();
     _maxStockCtrl.dispose(); _reorderCtrl.dispose();
     super.dispose();
@@ -453,6 +455,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
 
   void _populate(ImItem item) {
     _codeCtrl.text = item.itemCode;
+    _oldCodeCtrl.text = item.oldItemCode ?? '';
     _barcodeCtrl.text = item.barcode ?? '';
     _nameThCtrl.text = item.itemNameTh;
     _nameEnCtrl.text = item.itemNameEn ?? '';
@@ -483,7 +486,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
   }
 
   void _clear() {
-    _codeCtrl.clear(); _barcodeCtrl.clear(); _nameThCtrl.clear(); _nameEnCtrl.clear(); _descCtrl.clear();
+    _codeCtrl.clear(); _oldCodeCtrl.clear(); _barcodeCtrl.clear(); _nameThCtrl.clear(); _nameEnCtrl.clear(); _descCtrl.clear();
     _standardCostCtrl.text = '0'; _minStockCtrl.text = '0'; _maxStockCtrl.text = '0'; _reorderCtrl.text = '0';
     _isActive = true; _itemType = 'STOCK'; _costingMethod = 'AVG';
     _isPurchaseItem = true; _isSalesItem = true; _isManufactured = false;
@@ -531,6 +534,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
       final item = ImItem(
         id: widget.selected?.id,
         itemCode: (_autoNumberingEnabled && !_autoCodeOverridden) ? '' : _codeCtrl.text.trim().toUpperCase(),
+        oldItemCode: _oldCodeCtrl.text.trim().isEmpty ? null : _oldCodeCtrl.text.trim(),
         barcode: _barcodeCtrl.text.trim().isEmpty ? null : _barcodeCtrl.text.trim(),
         itemNameTh: _nameThCtrl.text.trim(),
         itemNameEn: _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
@@ -772,7 +776,11 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
         const SizedBox(width: 10),
         Expanded(child: _buildField(isEnglish ? 'Item Name (English)' : 'ชื่อสินค้า (อังกฤษ)', _nameEnCtrl)),
       ]),
-      _buildField(isEnglish ? 'Description' : 'คำอธิบาย', _descCtrl),
+      Row(children: [
+        Expanded(flex: 4, child: _buildField(isEnglish ? 'Description' : 'คำอธิบาย', _descCtrl)),
+        const SizedBox(width: 10),
+        Expanded(flex: 1, child: _buildField(isEnglish ? 'Old Item Code' : 'รหัสสินค้าเก่า', _oldCodeCtrl)),
+      ]),
       Row(children: [
         Expanded(
           child: Padding(

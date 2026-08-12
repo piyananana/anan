@@ -129,6 +129,7 @@ class ImItemWarehouse {
 class ImItem {
   final int? id;
   final String itemCode;
+  final String? oldItemCode;
   final String? barcode;
   final String itemNameTh;
   final String? itemNameEn;
@@ -176,6 +177,7 @@ class ImItem {
   const ImItem({
     this.id,
     required this.itemCode,
+    this.oldItemCode,
     this.barcode,
     required this.itemNameTh,
     this.itemNameEn,
@@ -216,6 +218,7 @@ class ImItem {
   factory ImItem.fromJson(Map<String, dynamic> json) => ImItem(
         id: json['id'],
         itemCode: json['item_code'] ?? '',
+        oldItemCode: json['old_item_code'],
         barcode: json['barcode'],
         itemNameTh: json['item_name_th'] ?? '',
         itemNameEn: json['item_name_en'],
@@ -264,6 +267,7 @@ class ImItem {
   Map<String, dynamic> toJson() => {
         if (id != null) 'id': id,
         'item_code': itemCode,
+        'old_item_code': oldItemCode,
         'barcode': barcode,
         'item_name_th': itemNameTh,
         'item_name_en': itemNameEn,
