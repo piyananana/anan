@@ -97,6 +97,7 @@ import '../../cm/screens/cm_bank_statement_import_screen.dart';
 import '../../cm/screens/cm_post_dated_check_screen.dart';
 
 import '../../im/screens/im_item_screen.dart';
+import '../../im/screens/im_item_import_screen.dart';
 import '../../im/screens/im_item_category_screen.dart';
 import '../../im/screens/im_item_running_screen.dart';
 import '../../im/screens/im_uom_screen.dart';
@@ -290,6 +291,7 @@ class Menu {
     'CmTransactionGlSetupScreen':        (context) => const CmTransactionGlSetupScreen(),
 
     'ImItemScreen': (context) => ImItemScreen(onFieldsChanged: () {}),
+    'ImItemImportScreen': (context) => ImItemImportScreen(onFieldsChanged: () {}),
     'ImItemCategoryScreen': (context) => ImItemCategoryScreen(onFieldsChanged: () {}),
     'ImItemRunningScreen': (context) => const ImItemRunningScreen(),
     'ImUomScreen': (context) => ImUomScreen(onFieldsChanged: () {}),

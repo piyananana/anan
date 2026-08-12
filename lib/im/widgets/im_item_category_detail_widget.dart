@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
@@ -35,6 +36,14 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
   bool _isActive = true;
   bool _isSaving = false;
   bool _isEnglish = false;
+  String _categoryType = 'CATEGORY';
+
+  bool _isAutoNumber = false;
+  late TextEditingController _prefixCtrl;
+  late TextEditingController _separatorCtrl;
+  String _suffixDate = '';
+  late TextEditingController _lengthCtrl;
+  late TextEditingController _nextNumCtrl;
 
   int? _inventoryAccountId; String? _inventoryAccountCode; String? _inventoryAccountName;
   int? _cogsAccountId; String? _cogsAccountCode; String? _cogsAccountName;
@@ -53,6 +62,10 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
     _codeCtrl = TextEditingController();
     _nameThCtrl = TextEditingController();
     _nameEnCtrl = TextEditingController();
+    _prefixCtrl = TextEditingController();
+    _separatorCtrl = TextEditingController();
+    _lengthCtrl = TextEditingController();
+    _nextNumCtrl = TextEditingController();
     _loadAccounts();
     _populate(widget.selected, widget.mode);
   }
@@ -70,6 +83,10 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
     _codeCtrl.dispose();
     _nameThCtrl.dispose();
     _nameEnCtrl.dispose();
+    _prefixCtrl.dispose();
+    _separatorCtrl.dispose();
+    _lengthCtrl.dispose();
+    _nextNumCtrl.dispose();
     super.dispose();
   }
 
@@ -87,6 +104,13 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
     _nameThCtrl.text = isNewNode ? '' : (c?.categoryNameTh ?? '');
     _nameEnCtrl.text = isNewNode ? '' : (c?.categoryNameEn ?? '');
     _isActive = isNewNode ? true : (c?.isActive ?? true);
+    _categoryType = isNewNode ? 'CATEGORY' : (c?.categoryType ?? 'CATEGORY');
+    _isAutoNumber = isNewNode ? false : (c?.isAutoNumber ?? false);
+    _prefixCtrl.text = isNewNode ? 'ITEM' : (c?.runningPrefix ?? 'ITEM');
+    _separatorCtrl.text = isNewNode ? '-' : (c?.runningSeparator ?? '-');
+    _suffixDate = isNewNode ? '' : (c?.runningSuffixDate ?? '');
+    _lengthCtrl.text = (isNewNode ? 4 : (c?.runningLength ?? 4)).toString();
+    _nextNumCtrl.text = (isNewNode ? 1 : (c?.runningNextNumber ?? 1)).toString();
     final src = isNewNode ? null : c;
     _inventoryAccountId = src?.inventoryAccountId; _inventoryAccountCode = src?.inventoryAccountCode; _inventoryAccountName = src?.inventoryAccountName;
     _cogsAccountId = src?.cogsAccountId; _cogsAccountCode = src?.cogsAccountCode; _cogsAccountName = src?.cogsAccountName;
@@ -111,6 +135,13 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
         categoryNameTh: _nameThCtrl.text.trim(),
         categoryNameEn: _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
         isActive: _isActive,
+        categoryType: _categoryType,
+        isAutoNumber: _categoryType == 'CATEGORY' && _isAutoNumber,
+        runningPrefix: _prefixCtrl.text.trim().isEmpty ? 'ITEM' : _prefixCtrl.text.trim(),
+        runningSeparator: _separatorCtrl.text,
+        runningSuffixDate: _suffixDate,
+        runningLength: int.tryParse(_lengthCtrl.text) ?? 4,
+        runningNextNumber: int.tryParse(_nextNumCtrl.text) ?? 1,
         inventoryAccountId: _inventoryAccountId,
         cogsAccountId: _cogsAccountId,
         revenueAccountId: _revenueAccountId,
@@ -246,6 +277,37 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
         ),
       );
 
+  List<DropdownMenuItem<String>> _suffixOptions(bool isEnglish) => [
+        DropdownMenuItem(value: '', child: Text(isEnglish ? '— No date —' : '— ไม่มีวันที่ —')),
+        DropdownMenuItem(value: 'YY', child: Text(isEnglish ? 'YY (e.g. 25)' : 'YY (เช่น 25)')),
+        DropdownMenuItem(value: 'YYYY', child: Text(isEnglish ? 'YYYY (e.g. 2025)' : 'YYYY (เช่น 2025)')),
+        DropdownMenuItem(value: 'YYMM', child: Text(isEnglish ? 'YYMM (e.g. 2503)' : 'YYMM (เช่น 2503)')),
+        DropdownMenuItem(value: 'YYYYMM', child: Text(isEnglish ? 'YYYYMM (e.g. 202503)' : 'YYYYMM (เช่น 202503)')),
+        DropdownMenuItem(value: 'YYMMDD', child: Text(isEnglish ? 'YYMMDD (e.g. 250315)' : 'YYMMDD (เช่น 250315)')),
+      ];
+
+  String get _sampleCode {
+    String code = _prefixCtrl.text;
+    if (_suffixDate.isNotEmpty) {
+      final now = DateTime.now();
+      final year = now.year.toString();
+      final month = now.month.toString().padLeft(2, '0');
+      final day = now.day.toString().padLeft(2, '0');
+      switch (_suffixDate) {
+        case 'YY':     code += year.substring(2); break;
+        case 'YYYY':   code += year; break;
+        case 'YYMM':   code += year.substring(2) + month; break;
+        case 'YYYYMM': code += year + month; break;
+        case 'YYMMDD': code += year.substring(2) + month + day; break;
+      }
+    }
+    code += _separatorCtrl.text;
+    final len = int.tryParse(_lengthCtrl.text) ?? 4;
+    final next = int.tryParse(_nextNumCtrl.text) ?? 1;
+    code += next.toString().padLeft(len, '0');
+    return code;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
@@ -312,6 +374,30 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
                 ),
               ),
             ]),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: Text(isEnglish ? 'Status: ${_isActive ? 'Active' : 'Inactive'}' : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
+              Switch(
+                value: _isActive,
+                activeColor: Colors.teal,
+                onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: _categoryType,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Type' : 'ประเภท',
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: imCategoryTypes
+                  .map((t) => DropdownMenuItem(value: t, child: Text(imCategoryTypeLabel(t, isEnglish))))
+                  .toList(),
+              onChanged: _isReadOnly ? null : (v) => setState(() => _categoryType = v ?? 'CATEGORY'),
+            ),
+            if (_categoryType == 'CATEGORY') ...[
             const SizedBox(height: 16),
             Text(isEnglish ? 'Default GL Accounts' : 'บัญชี GL ตั้งต้น',
                 style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
@@ -392,14 +478,84 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
               )),
             ]),
             const SizedBox(height: 16),
-            Row(children: [
-              Expanded(child: Text(isEnglish ? 'Status: ${_isActive ? 'Active' : 'Inactive'}' : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
-              Switch(
-                value: _isActive,
-                activeColor: Colors.teal,
-                onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v),
-              ),
-            ]),
+            Container(
+              decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SwitchListTile(
+                  title: Text(isEnglish ? 'Auto item numbering' : 'ออกรหัสสินค้าอัตโนมัติ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(
+                    _isAutoNumber
+                        ? (isEnglish ? 'Enabled — a code is generated automatically when an item is added to this category' : 'เปิดใช้งาน — รหัสจะถูกออกอัตโนมัติเมื่อเพิ่มสินค้าในหมวดหมู่นี้')
+                        : (isEnglish ? 'Disabled — the item code must be entered manually' : 'ปิดใช้งาน — ผู้ใช้ต้องระบุรหัสสินค้าเอง'),
+                    style: TextStyle(color: _isAutoNumber ? Colors.teal[700] : Colors.grey, fontSize: 12),
+                  ),
+                  value: _isAutoNumber,
+                  activeColor: Colors.teal,
+                  onChanged: _isReadOnly ? null : (v) => setState(() => _isAutoNumber = v),
+                ),
+                if (_isAutoNumber) ...[
+                  Divider(height: 1, color: Colors.grey.shade200),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Expanded(child: TextFormField(
+                          readOnly: _isReadOnly, controller: _prefixCtrl,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: const InputDecoration(labelText: 'Prefix', border: OutlineInputBorder(), hintText: 'ITEM'),
+                          onChanged: (_) => setState(() {}),
+                        )),
+                        const SizedBox(width: 8),
+                        SizedBox(width: 80, child: TextFormField(
+                          readOnly: _isReadOnly, controller: _separatorCtrl, textAlign: TextAlign.center,
+                          decoration: const InputDecoration(labelText: 'Separator', border: OutlineInputBorder(), hintText: '-'),
+                          onChanged: (_) => setState(() {}),
+                        )),
+                        const SizedBox(width: 8),
+                        Expanded(child: DropdownButtonFormField<String>(
+                          isExpanded: true, value: _suffixDate,
+                          decoration: InputDecoration(labelText: isEnglish ? 'Date in code' : 'วันที่ในรหัส', border: const OutlineInputBorder()),
+                          items: _suffixOptions(isEnglish),
+                          onChanged: _isReadOnly ? null : (v) => setState(() => _suffixDate = v ?? ''),
+                        )),
+                      ]),
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Expanded(child: TextFormField(
+                          readOnly: _isReadOnly, controller: _lengthCtrl,
+                          keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          textAlign: TextAlign.right,
+                          decoration: InputDecoration(labelText: isEnglish ? 'Number length' : 'ความยาวตัวเลข', border: const OutlineInputBorder()),
+                          onChanged: (_) => setState(() {}),
+                          validator: (v) { if (!_isAutoNumber) return null; final n = int.tryParse(v ?? ''); return (n == null || n < 1 || n > 10) ? '1-10' : null; },
+                        )),
+                        const SizedBox(width: 8),
+                        Expanded(child: TextFormField(
+                          readOnly: _isReadOnly, controller: _nextNumCtrl,
+                          keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          textAlign: TextAlign.right,
+                          decoration: InputDecoration(labelText: isEnglish ? 'Next number' : 'เลขที่ถัดไป', border: const OutlineInputBorder()),
+                          onChanged: (_) => setState(() {}),
+                          validator: (v) => !_isAutoNumber || int.tryParse(v ?? '') != null ? null : (isEnglish ? 'Must be a number' : 'ต้องเป็นตัวเลข'),
+                        )),
+                      ]),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.teal.shade200)),
+                        child: Row(children: [
+                          Icon(Icons.auto_awesome, color: Colors.teal[700], size: 16),
+                          const SizedBox(width: 8),
+                          Text(isEnglish ? 'Sample code: ' : 'ตัวอย่างรหัส: ', style: TextStyle(fontSize: 13, color: Colors.teal[700])),
+                          Text(_sampleCode, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.teal[700], letterSpacing: 1)),
+                        ]),
+                      ),
+                    ]),
+                  ),
+                ],
+              ]),
+            ),
+            ],
             const SizedBox(height: 32),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,

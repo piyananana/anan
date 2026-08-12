@@ -29,7 +29,20 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
   late List<Menu> _listRows;
   late Map<int, Menu> _mapRow;
 
+  // Folder nodes start collapsed; only ids added here are expanded.
+  final Set<int> _expandedIds = {};
+
   Set<int> get _currentGrantedIds => _currentPermissions.keys.toSet();
+
+  void _toggleExpand(int id) {
+    setState(() {
+      if (_expandedIds.contains(id)) {
+        _expandedIds.remove(id);
+      } else {
+        _expandedIds.add(id);
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -223,6 +236,9 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
     }
 
     final bool isFolder = row.menuType == 'folder';
+    final bool hasChildren = row.children.isNotEmpty;
+    final bool isExpandable = isFolder && hasChildren;
+    final bool isExpanded = _expandedIds.contains(row.id);
     bool? checkboxState = _getCheckboxState(row);
 
     // Show permission row only for non-folder items that have been granted
@@ -255,6 +271,19 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
                   ),
                 ),
               ),
+              if (isExpandable)
+                InkWell(
+                  onTap: () => _toggleExpand(row.id),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Icon(
+                      isExpanded ? Icons.arrow_drop_down : Icons.arrow_right,
+                      size: 20,
+                      color: Colors.blueGrey.shade600,
+                    ),
+                  ),
+                ),
               if (showPerms) ...[
                 const SizedBox(width: 8),
                 Flexible(child: _buildPermissionRow(row.id, isEnglish)),
@@ -262,8 +291,9 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
             ],
           ),
         ),
-        ...row.children
-            .map((child) => _buildNodeItem(child, level + 1, isEnglish)),
+        if (!isExpandable || isExpanded)
+          ...row.children
+              .map((child) => _buildNodeItem(child, level + 1, isEnglish)),
       ],
     );
   }
