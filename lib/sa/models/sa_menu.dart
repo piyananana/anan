@@ -99,6 +99,7 @@ import '../../cm/screens/cm_post_dated_check_screen.dart';
 import '../../im/screens/im_item_screen.dart';
 import '../../im/screens/im_item_import_screen.dart';
 import '../../im/screens/im_location_screen.dart';
+import '../../im/screens/im_location_import_screen.dart';
 import '../../im/screens/im_item_category_screen.dart';
 import '../../im/screens/im_item_running_screen.dart';
 import '../../im/screens/im_uom_screen.dart';
@@ -298,6 +299,7 @@ class Menu {
     'ImUomScreen': (context) => ImUomScreen(onFieldsChanged: () {}),
     'ImWarehouseScreen': (context) => ImWarehouseScreen(onFieldsChanged: () {}),
     'ImLocationScreen': (context) => ImLocationScreen(onFieldsChanged: () {}),
+    'ImLocationImportScreen': (context) => ImLocationImportScreen(onFieldsChanged: () {}),
     'ImBomScreen': (context) => ImBomScreen(onFieldsChanged: () {}),
     'ImPriceListScreen': (context) => ImPriceListScreen(onFieldsChanged: () {}),
     'ImGlAccountSetupScreen': (context) => const ImGlAccountSetupScreen(),
