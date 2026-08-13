@@ -840,7 +840,11 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
               isExpanded: true,
               decoration: InputDecoration(labelText: isEnglish ? 'Costing Method' : 'วิธีคิดต้นทุน', border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
               items: imCostingMethods.map((m) => DropdownMenuItem(value: m, child: Text(imCostingMethodLabel(m, isEnglish)))).toList(),
-              onChanged: (_isReadOnly || _itemType != 'STOCK') ? null : (v) => setState(() => _costingMethod = v ?? 'AVG'),
+              onChanged: (_isReadOnly || _itemType != 'STOCK') ? null : (v) => setState(() {
+                    _costingMethod = v ?? 'AVG';
+                    // ต้นทุนเฉพาะเจาะจง (SPECIFIC) ต้องติดตาม serial เสมอ
+                    if (_costingMethod == 'SPECIFIC') _isSerialTracked = true;
+                  }),
             ),
           ),
         ),
@@ -898,8 +902,16 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
         SwitchListTile(
           contentPadding: EdgeInsets.zero, dense: true,
           title: Text(isEnglish ? 'Serial number tracked' : 'ติดตามเป็นเลขซีเรียล'),
+          subtitle: _costingMethod == 'SPECIFIC'
+              ? Text(
+                  isEnglish
+                      ? 'Required — costing method is Specific Identification'
+                      : 'จำเป็นต้องเปิด — เนื่องจากตั้งวิธีคิดต้นทุนเป็นเฉพาะเจาะจง (ตาม Serial)',
+                  style: TextStyle(fontSize: 12, color: Colors.teal[700]),
+                )
+              : null,
           value: _isSerialTracked, activeColor: Colors.teal,
-          onChanged: _isReadOnly ? null : (v) => setState(() => _isSerialTracked = v),
+          onChanged: (_isReadOnly || _costingMethod == 'SPECIFIC') ? null : (v) => setState(() => _isSerialTracked = v),
         ),
       ],
     ]);

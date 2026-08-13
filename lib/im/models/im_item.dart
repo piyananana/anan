@@ -1,7 +1,7 @@
 // lib/im/models/im_item.dart
 
 const List<String> imItemTypes = ['STOCK', 'SERVICE', 'NON_STOCK'];
-const List<String> imCostingMethods = ['FIFO', 'AVG', 'STANDARD'];
+const List<String> imCostingMethods = ['FIFO', 'AVG', 'STANDARD', 'SPECIFIC'];
 
 const Map<String, String> imItemTypeLabelsTh = {
   'STOCK': 'สินค้าคงคลัง (นับสต็อก)',
@@ -20,11 +20,13 @@ const Map<String, String> imCostingMethodLabelsTh = {
   'FIFO': 'FIFO (เข้าก่อนออกก่อน)',
   'AVG': 'ถัวเฉลี่ยเคลื่อนที่ (Moving Average)',
   'STANDARD': 'ต้นทุนมาตรฐาน (Standard Cost)',
+  'SPECIFIC': 'ต้นทุนเฉพาะเจาะจง (ตาม Serial)',
 };
 const Map<String, String> imCostingMethodLabelsEn = {
   'FIFO': 'FIFO',
   'AVG': 'Moving Average',
   'STANDARD': 'Standard Cost',
+  'SPECIFIC': 'Specific Identification (by Serial)',
 };
 String imCostingMethodLabel(String method, bool isEnglish) =>
     isEnglish ? (imCostingMethodLabelsEn[method] ?? method) : (imCostingMethodLabelsTh[method] ?? method);
