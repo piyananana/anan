@@ -6,71 +6,7 @@ import '../../sa/utils/sa_app_l10n.dart';
 import '../../cd/models/cd_branch.dart';
 import '../../cd/widgets/cd_branch_list_widget.dart';
 import '../models/im_warehouse.dart';
-
-// ---------------------------------------------------------------------------
-// Add/Edit location dialog
-// ---------------------------------------------------------------------------
-Future<ImLocation?> _showLocationDialog(BuildContext context, ImLocation? existing) async {
-  final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-  final codeCtrl = TextEditingController(text: existing?.locationCode ?? '');
-  final nameCtrl = TextEditingController(text: existing?.locationName ?? '');
-  bool isActive = existing?.isActive ?? true;
-
-  return showDialog<ImLocation>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
-      return AlertDialog(
-        title: Text(existing == null ? (isEnglish ? 'Add Location' : 'เพิ่มตำแหน่งจัดเก็บ') : (isEnglish ? 'Edit Location' : 'แก้ไขตำแหน่งจัดเก็บ')),
-        content: SizedBox(
-          width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: codeCtrl,
-                textCapitalization: TextCapitalization.characters,
-                decoration: InputDecoration(labelText: isEnglish ? 'Location Code *' : 'รหัสตำแหน่ง *', border: const OutlineInputBorder()),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: nameCtrl,
-                decoration: InputDecoration(labelText: isEnglish ? 'Location Name' : 'ชื่อตำแหน่ง', border: const OutlineInputBorder()),
-              ),
-              const SizedBox(height: 6),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: Text(isEnglish ? 'Active' : 'ใช้งาน'),
-                value: isActive,
-                activeColor: Colors.teal,
-                onChanged: (v) => setDlg(() => isActive = v),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          ElevatedButton(
-            onPressed: () {
-              if (codeCtrl.text.trim().isEmpty) {
-                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please enter the location code' : 'กรุณาป้อนรหัสตำแหน่ง')));
-                return;
-              }
-              Navigator.of(ctx).pop(ImLocation(
-                id: existing?.id,
-                locationCode: codeCtrl.text.trim().toUpperCase(),
-                locationName: nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim(),
-                isActive: isActive,
-              ));
-            },
-            child: Text(isEnglish ? 'OK' : 'ตกลง'),
-          ),
-        ],
-      );
-    }),
-  );
-}
+import '../screens/im_location_screen.dart';
 
 class ImWarehouseDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -103,7 +39,6 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
   bool _isEnglish = false;
 
   int? _branchId; String? _branchCode; String? _branchName;
-  List<ImLocation> _locations = [];
 
   bool get _isReadOnly => widget.mode == Mode.view;
 
@@ -144,20 +79,16 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
     final src = isNew ? null : w;
     _branchId = src?.branchId; _branchCode = src?.branchCode;
     _branchName = _isEnglish && (src?.branchNameEn ?? '').isNotEmpty ? src?.branchNameEn : src?.branchNameTh;
-    _locations = isNew ? [] : List.from(w?.locations ?? []);
   }
 
-  Future<void> _addLocation() async {
-    final result = await _showLocationDialog(context, null);
-    if (result != null) setState(() => _locations.add(result));
+  void _openLocationLayout() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => ImLocationScreen(
+        onFieldsChanged: () {},
+        initialWarehouseId: widget.selected?.id,
+      ),
+    ));
   }
-
-  Future<void> _editLocation(int index) async {
-    final result = await _showLocationDialog(context, _locations[index]);
-    if (result != null) setState(() => _locations[index] = result);
-  }
-
-  void _removeLocation(int index) => setState(() => _locations.removeAt(index));
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -171,7 +102,6 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
         branchId: _branchId,
         address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
         isActive: _isActive,
-        locations: _locations,
       );
       await widget.onSubmit(row);
     } catch (e) {
@@ -296,40 +226,20 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
               Expanded(child: Text(isEnglish ? 'Status: ${_isActive ? 'Active' : 'Inactive'}' : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
               Switch(value: _isActive, activeColor: Colors.teal, onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v)),
             ]),
-            const SizedBox(height: 24),
-            const Divider(),
-            Row(children: [
-              Expanded(
-                child: Text(isEnglish ? 'Locations (${_locations.length})' : 'ตำแหน่งจัดเก็บ (${_locations.length})',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+            if (widget.mode == Mode.edit || widget.mode == Mode.view) ...[
+              const SizedBox(height: 24),
+              const Divider(),
+              Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.map_outlined, color: Colors.teal),
+                  title: Text(isEnglish ? 'Storage Location Layout' : 'ผังตำแหน่งจัดเก็บ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(isEnglish ? 'Manage zones/bins and their assigned category' : 'จัดการโซน/ช่องเก็บ และหมวดหมู่ที่กำหนดให้เก็บ'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _openLocationLayout,
+                ),
               ),
-              if (!_isReadOnly)
-                IconButton(icon: const Icon(Icons.add_circle, color: Colors.teal), tooltip: isEnglish ? 'Add location' : 'เพิ่มตำแหน่งจัดเก็บ', onPressed: _addLocation),
-            ]),
-            if (_locations.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(isEnglish ? 'No locations yet' : 'ยังไม่มีตำแหน่งจัดเก็บ', style: TextStyle(color: Colors.grey.shade600)),
-              )
-            else
-              ..._locations.asMap().entries.map((entry) {
-                final i = entry.key;
-                final l = entry.value;
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 3),
-                  child: ListTile(
-                    dense: true,
-                    leading: Icon(Icons.inventory_outlined, color: l.isActive ? Colors.teal : Colors.grey, size: 20),
-                    title: Text('${l.locationCode}  ${l.locationName ?? ''}', style: TextStyle(color: l.isActive ? null : Colors.grey)),
-                    trailing: _isReadOnly
-                        ? null
-                        : Row(mainAxisSize: MainAxisSize.min, children: [
-                            IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: () => _editLocation(i)),
-                            IconButton(icon: const Icon(Icons.delete, size: 18, color: Colors.red), onPressed: () => _removeLocation(i)),
-                          ]),
-                  ),
-                );
-              }),
+            ],
             const SizedBox(height: 32),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,

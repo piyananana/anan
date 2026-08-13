@@ -1,34 +1,7 @@
 // lib/im/models/im_warehouse.dart
-
-class ImLocation {
-  final int? id;
-  final int? warehouseId;
-  final String locationCode;
-  final String? locationName;
-  final bool isActive;
-
-  const ImLocation({
-    this.id,
-    this.warehouseId,
-    required this.locationCode,
-    this.locationName,
-    this.isActive = true,
-  });
-
-  factory ImLocation.fromJson(Map<String, dynamic> json) => ImLocation(
-        id: json['id'],
-        warehouseId: json['warehouse_id'],
-        locationCode: json['location_code'] ?? '',
-        locationName: json['location_name'],
-        isActive: json['is_active'] ?? true,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'location_code': locationCode,
-        'location_name': locationName,
-        'is_active': isActive,
-      };
-}
+//
+// im_location (โซน/แถว/ช่องเก็บ) is a standalone tree master — see im_location.dart /
+// ImLocationScreen — no longer nested inside this model.
 
 class ImWarehouse {
   final int id;
@@ -41,7 +14,6 @@ class ImWarehouse {
   final String? branchNameEn;
   final String? address;
   final bool isActive;
-  final List<ImLocation> locations;
 
   const ImWarehouse({
     required this.id,
@@ -54,7 +26,6 @@ class ImWarehouse {
     this.branchNameEn,
     this.address,
     this.isActive = true,
-    this.locations = const [],
   });
 
   factory ImWarehouse.fromJson(Map<String, dynamic> json) => ImWarehouse(
@@ -68,7 +39,6 @@ class ImWarehouse {
         branchNameEn: json['branch_name_en'],
         address: json['address'],
         isActive: json['is_active'] ?? true,
-        locations: (json['locations'] as List<dynamic>? ?? []).map((e) => ImLocation.fromJson(e)).toList(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -79,6 +49,5 @@ class ImWarehouse {
         'branch_id': branchId,
         'address': address,
         'is_active': isActive,
-        'locations': locations.map((e) => e.toJson()).toList(),
       };
 }

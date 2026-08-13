@@ -9,10 +9,11 @@ import '../models/im_item.dart';
 import '../models/im_item_category.dart';
 import '../models/im_uom.dart';
 import '../models/im_warehouse.dart';
+import '../models/im_location.dart';
 import '../models/im_price_list.dart';
 import '../services/im_item_running_service.dart';
+import '../services/im_location_service.dart';
 import '../services/im_price_list_service.dart';
-import '../services/im_warehouse_service.dart';
 import '../widgets/im_item_category_list_tree_widget.dart';
 import '../widgets/im_uom_list_widget.dart';
 import '../widgets/im_warehouse_list_widget.dart';
@@ -188,17 +189,24 @@ Future<ImItemWarehouse?> _showItemWarehouseDialog(BuildContext context, ImItemWa
   int? locationId = existing?.defaultLocationId;
   String? locationCode = existing?.defaultLocationCode;
   List<ImLocation> availableLocations = [];
+  if (warehouseId != null) {
+    try {
+      final locations = await ImLocationService().fetchActiveRows(warehouseId: warehouseId);
+      availableLocations = locations.where((l) => l.locationType == 'BIN').toList();
+    } catch (_) {}
+  }
   final minCtrl = TextEditingController(text: existing != null ? '${existing.minStockQty}' : '0');
   final maxCtrl = TextEditingController(text: existing != null ? '${existing.maxStockQty}' : '0');
   final reorderCtrl = TextEditingController(text: existing != null ? '${existing.reorderPoint}' : '0');
 
+  if (!context.mounted) return null;
   return showDialog<ImItemWarehouse>(
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
       Future<void> loadLocationsFor(int whId) async {
         try {
-          final full = await ImWarehouseService().fetchRow(whId);
-          setDlg(() => availableLocations = full.locations.where((l) => l.isActive).toList());
+          final locations = await ImLocationService().fetchActiveRows(warehouseId: whId);
+          setDlg(() => availableLocations = locations.where((l) => l.locationType == 'BIN').toList());
         } catch (_) {}
       }
 
