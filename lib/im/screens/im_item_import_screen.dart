@@ -592,11 +592,11 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
   ];
 
   static const _itemWarehouseColumns = [
-    ['warehouse_id', 'คลังสินค้า (id)'],
+    ['warehouse_code', 'คลังสินค้า'],
     ['min_stock_qty', 'สต็อกขั้นต่ำ'],
     ['max_stock_qty', 'สต็อกสูงสุด'],
     ['reorder_point', 'จุดสั่งซื้อ'],
-    ['default_location_id', 'ตำแหน่งจัดเก็บ (id)'],
+    ['location_code', 'ตำแหน่งจัดเก็บ'],
   ];
 
   void _showItemDetailDialog(Map<String, dynamic> row) {
