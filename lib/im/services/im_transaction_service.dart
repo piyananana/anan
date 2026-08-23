@@ -1,0 +1,216 @@
+// lib/im/services/im_transaction_service.dart
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../../config/app_config.dart';
+import '../../sa/services/sa_auth_service.dart';
+import '../../sa/models/sa_module_document.dart';
+import '../models/im_transaction.dart';
+import '../models/im_gl_account_setup.dart';
+
+class ImTransactionService {
+  final String baseUrl = AppConfig.apiIm;
+  final AuthService authService = AuthService();
+
+  Future<List<ModuleDocument>> fetchDocTypesByUser() async {
+    final headers = await authService.getAuthHeader();
+    final userId = authService.currentUser?.id ?? 0;
+    final response = await http.get(
+      Uri.parse('${AppConfig.apiSa}/sa_module_document/module_user/IM/$userId'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      final List jsonList = json.decode(response.body);
+      return jsonList.map((e) => ModuleDocument.fromJson(e as Map<String, dynamic>)).toList();
+    } else {
+      return [];
+    }
+  }
+
+  Future<List<ImTransactionHeader>> fetchRows({
+    String? docCode,
+    String? status,
+    int? warehouseId,
+    String? dateFrom,
+    String? dateTo,
+    String? search,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final queryParams = <String, String>{};
+    if (docCode != null && docCode.isNotEmpty) queryParams['doc_code'] = docCode;
+    if (status != null && status.isNotEmpty) queryParams['status'] = status;
+    if (warehouseId != null) queryParams['warehouse_id'] = warehouseId.toString();
+    if (dateFrom != null && dateFrom.isNotEmpty) queryParams['date_from'] = dateFrom;
+    if (dateTo != null && dateTo.isNotEmpty) queryParams['date_to'] = dateTo;
+    if (search != null && search.isNotEmpty) queryParams['search'] = search;
+
+    final uri = Uri.parse('$baseUrl/im_transaction').replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List)
+          .map((e) => ImTransactionHeader.fromJson(e)).toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    } else {
+      throw Exception('โหลดข้อมูลธุรกรรมสินค้าล้มเหลว: ${response.statusCode}');
+    }
+  }
+
+  Future<ImTransaction> fetchRow(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(
+      Uri.parse('$baseUrl/im_transaction/$id'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      return ImTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    } else {
+      throw Exception('โหลดข้อมูลธุรกรรมสินค้าล้มเหลว: ${response.statusCode}');
+    }
+  }
+
+  // ยอดคงเหลือปัจจุบันตาม item/warehouse/location/lot หรือ serial — ใช้ prefill "ยอดระบบ" ตอนเพิ่มบรรทัดนับสต็อก
+  Future<double> fetchSystemQty({
+    required int itemId,
+    required int warehouseId,
+    int? locationId,
+    String? lotNo,
+    String? serialNo,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final queryParams = <String, String>{
+      'item_id': itemId.toString(),
+      'warehouse_id': warehouseId.toString(),
+      if (locationId != null) 'location_id': locationId.toString(),
+      if (lotNo != null && lotNo.isNotEmpty) 'lot_no': lotNo,
+      if (serialNo != null && serialNo.isNotEmpty) 'serial_no': serialNo,
+    };
+    final uri = Uri.parse('$baseUrl/im_transaction/system_qty').replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return double.tryParse(body['system_qty']?.toString() ?? '0') ?? 0;
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      throw Exception('โหลดยอดคงเหลือระบบล้มเหลว: ${response.statusCode}');
+    }
+  }
+
+  Future<ImTransaction> createTransaction({
+    required ImTransactionHeader header,
+    required List<ImTransactionDetail> details,
+    required String action,
+  }) async {
+    final authHeaders = await authService.getAuthHeader();
+    final body = jsonEncode({
+      'header': header.toJson(),
+      'details': details.map((e) => e.toJson()).toList(),
+      'action': action,
+    });
+    final response = await http.post(
+      Uri.parse('$baseUrl/im_transaction'),
+      headers: authHeaders,
+      body: body,
+    );
+    if (response.statusCode == 201) {
+      return ImTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'บันทึกข้อมูลล้มเหลว');
+    }
+  }
+
+  Future<ImTransaction> updateTransaction({
+    required int id,
+    required ImTransactionHeader header,
+    required List<ImTransactionDetail> details,
+  }) async {
+    final authHeaders = await authService.getAuthHeader();
+    final body = jsonEncode({
+      'header': header.toJson(),
+      'details': details.map((e) => e.toJson()).toList(),
+    });
+    final response = await http.put(
+      Uri.parse('$baseUrl/im_transaction/$id'),
+      headers: authHeaders,
+      body: body,
+    );
+    if (response.statusCode == 200) {
+      return ImTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'บันทึกข้อมูลล้มเหลว');
+    }
+  }
+
+  Future<ImTransaction> postTransaction(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/im_transaction/$id/post'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      return ImTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'Post ล้มเหลว');
+    }
+  }
+
+  Future<ImTransaction> voidTransaction(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/im_transaction/$id/void'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      return ImTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'Void ล้มเหลว');
+    }
+  }
+
+  Future<void> deleteTransaction(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/im_transaction/$id'),
+      headers: headers,
+    );
+    if (response.statusCode == 204) return;
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'ลบข้อมูลล้มเหลว');
+    }
+  }
+
+  Future<ImGlAccountSetup?> fetchSetupByDocCode(String docCode) async {
+    final headers = await authService.getAuthHeader();
+    final res = await http.get(
+      Uri.parse('$baseUrl/im_gl_account_setup/$docCode'),
+      headers: headers,
+    );
+    if (res.statusCode == 200) return ImGlAccountSetup.fromJson(json.decode(res.body));
+    return null;
+  }
+}

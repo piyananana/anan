@@ -107,6 +107,16 @@ import '../../im/screens/im_warehouse_screen.dart';
 import '../../im/screens/im_bom_screen.dart';
 import '../../im/screens/im_price_list_screen.dart';
 import '../../im/screens/im_gl_account_setup_screen.dart';
+import '../../im/screens/im_accounting_setting_screen.dart';
+import '../../im/screens/im_period_closing_screen.dart';
+import '../../im/screens/im_transaction_screen.dart';
+import '../../im/screens/im_opening_balance_import_screen.dart';
+import '../../im/screens/im_stock_count_running_screen.dart';
+import '../../im/screens/im_stock_count_create_screen.dart';
+import '../../im/screens/im_stock_count_print_screen.dart';
+import '../../im/screens/im_stock_count_record_screen.dart';
+import '../../im/screens/im_stock_count_variance_report_screen.dart';
+import '../../im/screens/im_stock_count_summary_screen.dart';
 
 import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
@@ -303,6 +313,16 @@ class Menu {
     'ImBomScreen': (context) => ImBomScreen(onFieldsChanged: () {}),
     'ImPriceListScreen': (context) => ImPriceListScreen(onFieldsChanged: () {}),
     'ImGlAccountSetupScreen': (context) => const ImGlAccountSetupScreen(),
+    'ImAccountingSettingScreen': (context) => const ImAccountingSettingScreen(),
+    'ImPeriodClosingScreen': (context) => const ImPeriodClosingScreen(),
+    'ImTransactionScreen': (context) => const ImTransactionScreen(),
+    'ImOpeningBalanceImportScreen': (context) => ImOpeningBalanceImportScreen(onFieldsChanged: () {}),
+    'ImStockCountRunningScreen': (context) => const ImStockCountRunningScreen(),
+    'ImStockCountCreateScreen': (context) => const ImStockCountCreateScreen(),
+    'ImStockCountPrintScreen': (context) => const ImStockCountPrintScreen(),
+    'ImStockCountRecordScreen': (context) => const ImStockCountRecordScreen(),
+    'ImStockCountVarianceReportScreen': (context) => const ImStockCountVarianceReportScreen(),
+    'ImStockCountSummaryScreen': (context) => const ImStockCountSummaryScreen(),
 
     'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
     'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),

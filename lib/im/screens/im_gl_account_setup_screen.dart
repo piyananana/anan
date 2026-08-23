@@ -434,6 +434,139 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         : 'เมื่อ Post จะสร้างเอกสาร $moduleLabel ประเภท "${s.targetDocCode}"';
   }
 
+  // ── Journal preview ───────────────────────────────────────────────────────
+  // Dr/Cr ต้องขึ้นกับ sys_doc_type (มาตรฐานคงที่ตาม imSysDocType ใน sa_anan_module.dart) เสมอ ไม่ใช่ doc_code
+  // เพราะแต่ละ sys_doc_type อาจมีได้หลาย doc_code (เช่น GRN1/GRN2 ใต้ sys_doc_type='10') ซึ่งแต่ละตัวมีรหัสบัญชี
+  // ของตัวเอง แต่ยึดพฤติกรรม Dr/Cr เดียวกัน — รูปแบบเดียวกับ ar_gl_account_setup_screen.dart's `_sdt`
+  // AJS (sys_doc_type='80') ตรงกับ logic ที่ใช้งานจริงใน imTransactionController.js:postGlEntry
+  // (ส่วนเกิน = Dr คลัง/Cr ผลต่าง, ส่วนขาด = กลับด้าน) ส่วน sys_doc_type อื่นยังไม่มีการ Post จริงในระบบ
+  String get _sdt => widget.setup.sysDocType ?? '';
+
+  String _acctLabel(int? id, String? code, String? name, bool isEnglish, String placeholder) =>
+      id != null ? '$code  ${_acctName(id, name)}' : placeholder;
+
+  List<_JournalSection> _journalSections(bool isEnglish) {
+    final inv = _acctLabel(_inventoryAccountId, _inventoryAccountCode, _inventoryAccountName, isEnglish,
+        isEnglish ? '(Inventory — not set)' : '(บัญชีสินค้าคงคลัง — ยังไม่ตั้งค่า)');
+    final cogs = _acctLabel(_cogsAccountId, _cogsAccountCode, _cogsAccountName, isEnglish,
+        isEnglish ? '(COGS — not set)' : '(บัญชีต้นทุนขาย — ยังไม่ตั้งค่า)');
+    final variance = _acctLabel(_varianceAccountId, _varianceAccountCode, _varianceAccountName, isEnglish,
+        isEnglish ? '(Variance — not set)' : '(บัญชีผลต่างต้นทุน — ยังไม่ตั้งค่า)');
+    final ap = isEnglish ? '(AP — posted in AP module)' : '(เจ้าหนี้ — บันทึกในโมดูล AP)';
+
+    switch (_sdt) {
+      case '80': // AJS — ปรับยอดสินค้า
+        return [
+          _JournalSection(
+            title: isEnglish ? 'Counted qty > system qty (surplus)' : 'ยอดนับได้ > ยอดระบบ (ส่วนเกิน)',
+            lines: [_JournalLine('Dr', inv), _JournalLine('  Cr', variance)],
+          ),
+          _JournalSection(
+            title: isEnglish ? 'Counted qty < system qty (shortage)' : 'ยอดนับได้ < ยอดระบบ (ส่วนขาด)',
+            lines: [_JournalLine('Dr', variance), _JournalLine('  Cr', inv)],
+          ),
+        ];
+      case '60': // ISS — เบิกสินค้า
+        return [
+          _JournalSection(lines: [_JournalLine('Dr', cogs), _JournalLine('  Cr', inv)]),
+        ];
+      case '70': // TRF — โอนสินค้า
+        return [
+          _JournalSection(lines: [
+            _JournalLine('Dr', isEnglish ? '$inv (destination warehouse)' : '$inv (คลังปลายทาง)'),
+            _JournalLine('  Cr', isEnglish ? '$inv (source warehouse)' : '$inv (คลังต้นทาง)'),
+          ]),
+        ];
+      case '10': // GRN — รับสินค้า
+      case '25': // DNS — เพิ่มหนี้เจ้าหนี้
+        return [
+          _JournalSection(lines: [_JournalLine('Dr', inv), _JournalLine('  Cr', ap)]),
+        ];
+      case '15': // RTS — คืนสินค้า
+      case '20': // CNS — ลดหนี้เจ้าหนี้
+        return [
+          _JournalSection(lines: [_JournalLine('Dr', ap), _JournalLine('  Cr', inv)]),
+        ];
+      case '30': // DLN — ส่งสินค้า (ขาย)
+      case '45': // DNC — เพิ่มหนี้ลูกหนี้
+        return [
+          _JournalSection(lines: [_JournalLine('Dr', cogs), _JournalLine('  Cr', inv)]),
+        ];
+      case '35': // RTC — รับคืนสินค้า
+      case '40': // CNC — ลดหนี้ลูกหนี้
+        return [
+          _JournalSection(lines: [_JournalLine('Dr', inv), _JournalLine('  Cr', cogs)]),
+        ];
+      default:
+        return [];
+    }
+  }
+
+  Widget _buildJournalPreview(bool isEnglish) {
+    final sections = _journalSections(isEnglish);
+    if (sections.isEmpty) return const SizedBox.shrink();
+    final isLive = ['80', '60', '70'].contains(_sdt);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.shade50,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.blueGrey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(isEnglish ? 'Journal Entry Preview' : 'ตัวอย่าง Journal Entry',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueGrey.shade700)),
+          const SizedBox(height: 6),
+          for (final section in sections) ...[
+            if (section.title != null) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 2),
+                child: Text(section.title!, style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.blueGrey.shade600)),
+              ),
+            ],
+            ...section.lines.map((l) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 1),
+                  child: Row(children: [
+                    SizedBox(
+                      width: 36,
+                      child: Text(l.drCr,
+                          style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              color: l.drCr.trim() == 'Dr' ? Colors.blue.shade700 : Colors.green.shade700,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                    Expanded(child: Text(l.name, style: const TextStyle(fontSize: 12))),
+                  ]),
+                )),
+          ],
+          if (!isLive) ...[
+            const SizedBox(height: 6),
+            Text(
+              isEnglish
+                  ? '* Posting for this document type is not yet implemented — shown as a conceptual reference only.'
+                  : '* ประเภทเอกสารนี้ยังไม่รองรับการ Post จริงในระบบ — แสดงเป็นแนวทางบัญชีเบื้องต้นเท่านั้น',
+              style: TextStyle(fontSize: 11, color: Colors.orange.shade800, fontStyle: FontStyle.italic),
+            ),
+          ],
+          if (_sdt == '70') ...[
+            const SizedBox(height: 6),
+            Text(
+              isEnglish
+                  ? '* Inventory accounts are not yet warehouse-specific — both sides resolve to the same account today, so no GL entry actually posts until per-warehouse accounts are configured (im_warehouse).'
+                  : '* บัญชีสต็อกยังไม่ได้แยกตามคลัง ทั้งสองฝั่งจึงชี้ไปที่บัญชีเดียวกันในวันนี้ — จะยังไม่มีการโพสต์ GL จริงจนกว่าจะตั้งค่าบัญชีแยกตามคลัง (im_warehouse)',
+              style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
@@ -523,6 +656,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           onClear: () => setState(() { _wipAccountId = null; _wipAccountCode = null; _wipAccountName = null; }),
         ),
 
+        _buildJournalPreview(isEnglish),
+
         const SizedBox(height: 4),
         Row(children: [
           Expanded(
@@ -550,4 +685,15 @@ class _SectionHeader extends StatelessWidget {
       child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blueGrey.shade700)),
     );
   }
+}
+
+class _JournalSection {
+  final String? title;
+  final List<_JournalLine> lines;
+  _JournalSection({this.title, required this.lines});
+}
+
+class _JournalLine {
+  final String drCr, name;
+  _JournalLine(this.drCr, this.name);
 }

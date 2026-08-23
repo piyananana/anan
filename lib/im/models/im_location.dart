@@ -23,6 +23,7 @@ class ImLocation {
   final String? categoryNameTh;
   final String? categoryNameEn;
   final bool isActive;
+  final int? sortOrder; // ลำดับการเดินตรวจนับสต็อก — ไม่ระบุ = เรียงตาม locationCode แทน
 
   const ImLocation({
     required this.id,
@@ -40,6 +41,7 @@ class ImLocation {
     this.categoryNameTh,
     this.categoryNameEn,
     this.isActive = true,
+    this.sortOrder,
   });
 
   factory ImLocation.fromJson(Map<String, dynamic> json) => ImLocation(
@@ -58,6 +60,7 @@ class ImLocation {
         categoryNameTh: json['category_name_th'],
         categoryNameEn: json['category_name_en'],
         isActive: json['is_active'] ?? true,
+        sortOrder: json['sort_order'],
       );
 
   Map<String, dynamic> toJson() => {
@@ -69,5 +72,6 @@ class ImLocation {
         'location_type': locationType,
         'category_id': categoryId,
         'is_active': isActive,
+        'sort_order': sortOrder,
       };
 }

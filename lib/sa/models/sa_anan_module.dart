@@ -24,11 +24,16 @@ const Map<String, String> sysModules = {
 // '01': 'บัญชีแยกประเภท'
 const Map<String, String> glSysDocType = {
   '10': 'ตั้งยอดบัญชียกมา - Opening Balance',
-  '30': 'ใบสำคัญรับ - Receive Voucher',
-  '50': 'ใบสำคัญจ่าย - Payment Voucher',
-  '70': 'ใบสำคัญทั่วไป - Journal Voucher',
-  '80': 'ปรับปรุงบัญชี - Adjusting Entry',
-  '90': 'ปิดบัญชี - Closing Entry',
+  '20': 'ใบสำคัญรับ - Receive Voucher',
+  '30': 'ใบสำคัญจ่าย - Payment Voucher',
+  '40': 'ใบสำคัญทั่วไป - Journal Voucher',
+  '50': 'ปรับปรุงบัญชี - Adjusting Entry',
+  '60': 'ยกเลิกบัญชี - Reversing Entry',
+  '70': 'ปิดบัญชี - Closing Entry',
+  '81': 'ลูกหนี้ - AR Posting',
+  '82': 'เจ้าหนี้ - AP Posting',
+  '83': 'เงินสด - CM Posting',
+  '84': 'สินค้าคงคลัง - IM Posting',
 };
 // '11': 'บัญชีลูกหนี้'
 const Map<String, String> arSysDocType = {
