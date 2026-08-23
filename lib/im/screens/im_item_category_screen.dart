@@ -31,6 +31,9 @@ class _ImItemCategoryScreenState extends State<ImItemCategoryScreen>
 
   Mode _mode = Mode.none;
   ImItemCategory? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ImItemCategoryDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มหมวดหมู่หลัก" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
@@ -43,21 +46,25 @@ class _ImItemCategoryScreenState extends State<ImItemCategoryScreen>
   void _onAddRoot() => setState(() {
         _mode = Mode.addRoot;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onAddChild(ImItemCategory parent) => setState(() {
         _mode = Mode.addChild;
         _selectedData = parent;
+        _requestSeq++;
       });
 
   void _onEdit(ImItemCategory row) => setState(() {
         _mode = Mode.edit;
         _selectedData = row;
+        _requestSeq++;
       });
 
   void _onView(ImItemCategory row) => setState(() {
         _mode = Mode.view;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Future<void> _onDelete(ImItemCategory row) async {
@@ -124,11 +131,13 @@ class _ImItemCategoryScreenState extends State<ImItemCategoryScreen>
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onCallback(ImItemCategory row) => setState(() {
         _mode = Mode.none;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Widget _buildRightPanel() {
@@ -141,6 +150,7 @@ class _ImItemCategoryScreenState extends State<ImItemCategoryScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.addRoot:
         return ImItemCategoryDetailWidget(
@@ -149,6 +159,7 @@ class _ImItemCategoryScreenState extends State<ImItemCategoryScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.addChild:
         return ImItemCategoryDetailWidget(
@@ -157,6 +168,7 @@ class _ImItemCategoryScreenState extends State<ImItemCategoryScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return ImItemCategoryDetailWidget(
@@ -165,6 +177,7 @@ class _ImItemCategoryScreenState extends State<ImItemCategoryScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return ImItemCategoryDetailWidget(
@@ -173,6 +186,7 @@ class _ImItemCategoryScreenState extends State<ImItemCategoryScreen>
           selected: _selectedData,
           onSubmit: (_) async {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

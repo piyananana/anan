@@ -33,6 +33,10 @@ class _AccountScreenState extends State<AccountScreen>
   bool _isImportOrExport = false;
   AccountMode _mode = AccountMode.none;
   Account? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ AccountDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มหมวดหลัก" ซ้ำหลังพิมพ์ข้อมูลค้างไว้ หรือ
+  // กดเพิ่มหลังจาก placeholder ที่ใช้ mode/selected ชุดเดียวกันโดยบังเอิญ)
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
@@ -188,6 +192,7 @@ class _AccountScreenState extends State<AccountScreen>
     setState(() {
       _mode = AccountMode.addRoot;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -195,6 +200,7 @@ class _AccountScreenState extends State<AccountScreen>
     setState(() {
       _mode = AccountMode.addChild;
       _selectedData = parent;
+      _requestSeq++;
     });
   }
 
@@ -202,6 +208,7 @@ class _AccountScreenState extends State<AccountScreen>
     setState(() {
       _mode = AccountMode.edit;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -209,6 +216,7 @@ class _AccountScreenState extends State<AccountScreen>
     setState(() {
       _mode = AccountMode.view;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -302,6 +310,7 @@ class _AccountScreenState extends State<AccountScreen>
     setState(() {
       _mode = AccountMode.none;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -309,6 +318,7 @@ class _AccountScreenState extends State<AccountScreen>
     setState(() {
       _mode = AccountMode.none;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -435,6 +445,7 @@ class _AccountScreenState extends State<AccountScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case AccountMode.addRoot:
         return AccountDetailWidget(
@@ -443,6 +454,7 @@ class _AccountScreenState extends State<AccountScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case AccountMode.addChild:
         return AccountDetailWidget(
@@ -451,6 +463,7 @@ class _AccountScreenState extends State<AccountScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case AccountMode.edit:
         return AccountDetailWidget(
@@ -459,6 +472,7 @@ class _AccountScreenState extends State<AccountScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case AccountMode.view:
         return AccountDetailWidget(
@@ -467,6 +481,7 @@ class _AccountScreenState extends State<AccountScreen>
           selected: _selectedData,
           onSubmit: (row){},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

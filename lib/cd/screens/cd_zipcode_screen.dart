@@ -34,6 +34,9 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
   bool _isImportOrExport = false;
   Mode _mode = Mode.none;
   Zipcode? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ZipcodeDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
@@ -185,6 +188,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
     setState(() {
       _mode = Mode.add;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -192,6 +196,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
     setState(() {
       _mode = Mode.edit;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -199,6 +204,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
     setState(() {
       _mode = Mode.view;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -283,6 +289,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
     setState(() {
       _mode = Mode.none;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -290,6 +297,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
     setState(() {
       _mode = Mode.none;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -436,6 +444,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return ZipcodeDetailWidget(
@@ -444,6 +453,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return ZipcodeDetailWidget(
@@ -452,6 +462,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return ZipcodeDetailWidget(
@@ -460,6 +471,7 @@ class _ZipcodeScreenState extends State<ZipcodeScreen>
           selected: _selectedData,
           onSubmit: (zipcode) {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

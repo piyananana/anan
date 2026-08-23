@@ -14,6 +14,7 @@ class ImLocationDetailWidget extends StatefulWidget {
   final Function(ImLocation) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
+  final int requestSeq;
 
   const ImLocationDetailWidget({
     super.key,
@@ -23,6 +24,7 @@ class ImLocationDetailWidget extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.isPlaceholder = false,
+    this.requestSeq = 0,
   });
 
   @override
@@ -33,6 +35,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _codeCtrl;
   late TextEditingController _nameCtrl;
+  late TextEditingController _sortOrderCtrl;
   bool _isActive = true;
   bool _isSaving = false;
   bool _isEnglish = false;
@@ -47,13 +50,14 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
     super.initState();
     _codeCtrl = TextEditingController();
     _nameCtrl = TextEditingController();
+    _sortOrderCtrl = TextEditingController();
     _populate(widget.selected, widget.mode);
   }
 
   @override
   void didUpdateWidget(covariant ImLocationDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode) {
+    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode || widget.requestSeq != oldWidget.requestSeq) {
       _populate(widget.selected, widget.mode);
     }
   }
@@ -62,6 +66,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
   void dispose() {
     _codeCtrl.dispose();
     _nameCtrl.dispose();
+    _sortOrderCtrl.dispose();
     super.dispose();
   }
 
@@ -70,6 +75,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
     final isNewNode = mode == Mode.addRoot || mode == Mode.addChild;
     _codeCtrl.text = isNewNode ? '' : (l?.locationCode ?? '');
     _nameCtrl.text = isNewNode ? '' : (l?.locationName ?? '');
+    _sortOrderCtrl.text = isNewNode ? '' : (l?.sortOrder?.toString() ?? '');
     _isActive = isNewNode ? true : (l?.isActive ?? true);
     _locationType = isNewNode ? 'BIN' : (l?.locationType ?? 'BIN');
     final src = isNewNode ? null : l;
@@ -96,6 +102,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
         locationType: _locationType,
         categoryId: _locationType == 'BIN' ? _categoryId : null,
         isActive: _isActive,
+        sortOrder: _sortOrderCtrl.text.trim().isEmpty ? null : int.tryParse(_sortOrderCtrl.text.trim()),
       );
       await widget.onSubmit(row);
     } catch (e) {
@@ -225,6 +232,19 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
               readOnly: _isReadOnly,
               controller: _nameCtrl,
               decoration: InputDecoration(labelText: isEnglish ? 'Location Name' : 'ชื่อตำแหน่ง', border: const OutlineInputBorder()),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              readOnly: _isReadOnly,
+              controller: _sortOrderCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Walk Sequence (for count sheets)' : 'ลำดับการเดินตรวจนับ',
+                border: const OutlineInputBorder(),
+                helperText: isEnglish
+                    ? 'Optional — controls print order on stock count sheets. Falls back to location code if blank.'
+                    : 'ไม่บังคับ — กำหนดลำดับการพิมพ์ในใบตรวจนับสต็อก ถ้าไม่ระบุจะเรียงตามรหัสตำแหน่งแทน',
+              ),
             ),
             const SizedBox(height: 16),
             Row(children: [

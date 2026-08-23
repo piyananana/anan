@@ -30,6 +30,9 @@ class _VatRateScreenState extends State<VatRateScreen>
   final GlobalKey<VatRateDetailWidgetState> _detailKey = GlobalKey();
   Mode _mode = Mode.none;
   VatRate? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ VatRateDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 400.0;
@@ -41,16 +44,19 @@ class _VatRateScreenState extends State<VatRateScreen>
   void _onAdd() => setState(() {
         _mode = Mode.add;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onEdit(VatRate row) => setState(() {
         _mode = Mode.edit;
         _selectedData = row;
+        _requestSeq++;
       });
 
   void _onView(VatRate row) => setState(() {
         _mode = Mode.view;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Future<void> _onDelete(VatRate row) async {
@@ -129,11 +135,13 @@ class _VatRateScreenState extends State<VatRateScreen>
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onCallback(VatRate row) => setState(() {
         _mode = Mode.none;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Widget _buildRightPanel() {
@@ -146,6 +154,7 @@ class _VatRateScreenState extends State<VatRateScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return VatRateDetailWidget(
@@ -154,6 +163,7 @@ class _VatRateScreenState extends State<VatRateScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return VatRateDetailWidget(
@@ -162,6 +172,7 @@ class _VatRateScreenState extends State<VatRateScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return VatRateDetailWidget(
@@ -170,6 +181,7 @@ class _VatRateScreenState extends State<VatRateScreen>
           selected: _selectedData,
           onSubmit: (_) {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

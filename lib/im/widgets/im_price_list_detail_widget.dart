@@ -228,6 +228,9 @@ class ImPriceListDetailWidget extends StatefulWidget {
   final Future<void> Function(ImPriceListHeader) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
+  // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
+  // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน (เช่น กดเพิ่มตารางราคาซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  final int requestSeq;
 
   const ImPriceListDetailWidget({
     super.key,
@@ -236,6 +239,7 @@ class ImPriceListDetailWidget extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.isPlaceholder = false,
+    this.requestSeq = 0,
   });
 
   @override
@@ -270,7 +274,7 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
   @override
   void didUpdateWidget(covariant ImPriceListDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode) {
+    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode || widget.requestSeq != oldWidget.requestSeq) {
       if (widget.selected != null) {
         _populate(widget.selected!);
       } else {

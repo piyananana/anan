@@ -29,6 +29,9 @@ class _ImPriceListScreenState extends State<ImPriceListScreen> with AutomaticKee
 
   Mode _mode = Mode.none;
   ImPriceListHeader? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ImPriceListDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มตารางราคา" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 380.0;
@@ -40,12 +43,14 @@ class _ImPriceListScreenState extends State<ImPriceListScreen> with AutomaticKee
   void _onAdd() => setState(() {
         _mode = Mode.add;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onEdit(ImPriceListHeader row) {
     setState(() {
       _mode = Mode.edit;
       _selectedData = row;
+      _requestSeq++;
     });
     _fetchFull(row);
   }
@@ -54,6 +59,7 @@ class _ImPriceListScreenState extends State<ImPriceListScreen> with AutomaticKee
     setState(() {
       _mode = Mode.view;
       _selectedData = row;
+      _requestSeq++;
     });
     _fetchFull(row);
   }
@@ -128,23 +134,25 @@ class _ImPriceListScreenState extends State<ImPriceListScreen> with AutomaticKee
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onCallback(ImPriceListHeader row) => setState(() {
         _mode = Mode.none;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Widget _buildRightPanel() {
     switch (_mode) {
       case Mode.none:
-        return ImPriceListDetailWidget(key: _detailKey, mode: Mode.none, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, isPlaceholder: true);
+        return ImPriceListDetailWidget(key: _detailKey, mode: Mode.none, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, isPlaceholder: true, requestSeq: _requestSeq);
       case Mode.add:
-        return ImPriceListDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel);
+        return ImPriceListDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
       case Mode.edit:
-        return ImPriceListDetailWidget(key: _detailKey, mode: Mode.edit, selected: _selectedData, onSubmit: _onSubmit, onCancel: _onCancel);
+        return ImPriceListDetailWidget(key: _detailKey, mode: Mode.edit, selected: _selectedData, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
       case Mode.view:
-        return ImPriceListDetailWidget(key: _detailKey, mode: Mode.view, selected: _selectedData, onSubmit: (_) async {}, onCancel: _onCancel);
+        return ImPriceListDetailWidget(key: _detailKey, mode: Mode.view, selected: _selectedData, onSubmit: (_) async {}, onCancel: _onCancel, requestSeq: _requestSeq);
       default:
         return const SizedBox.shrink();
     }

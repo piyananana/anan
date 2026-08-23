@@ -13,6 +13,9 @@ class BankDetailWidget extends StatefulWidget {
   final Function(Bank) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
+  // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
+  // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน
+  final int requestSeq;
 
   const BankDetailWidget({
     super.key,
@@ -21,6 +24,7 @@ class BankDetailWidget extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.isPlaceholder = false,
+    this.requestSeq = 0,
   });
 
   @override
@@ -65,7 +69,7 @@ class BankDetailWidgetState extends State<BankDetailWidget> {
   @override
   void didUpdateWidget(covariant BankDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected) {
+    if (widget.selected != oldWidget.selected || widget.requestSeq != oldWidget.requestSeq) {
       _bankCodeCtrl.text = widget.selected?.bankCode ?? '';
       _bankNameThaiCtrl.text = widget.selected?.bankNameThai ?? '';
       _bankNameEngCtrl.text = widget.selected?.bankNameEng ?? '';

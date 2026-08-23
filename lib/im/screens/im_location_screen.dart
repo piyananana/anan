@@ -34,6 +34,7 @@ class _ImLocationScreenState extends State<ImLocationScreen>
 
   Mode _mode = Mode.none;
   ImLocation? _selectedData;
+  int _requestSeq = 0;
 
   List<ImWarehouse> _warehouses = [];
   int? _selectedWarehouseId;
@@ -73,21 +74,25 @@ class _ImLocationScreenState extends State<ImLocationScreen>
   void _onAddRoot() => setState(() {
         _mode = Mode.addRoot;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onAddChild(ImLocation parent) => setState(() {
         _mode = Mode.addChild;
         _selectedData = parent;
+        _requestSeq++;
       });
 
   void _onEdit(ImLocation row) => setState(() {
         _mode = Mode.edit;
         _selectedData = row;
+        _requestSeq++;
       });
 
   void _onView(ImLocation row) => setState(() {
         _mode = Mode.view;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Future<void> _onDelete(ImLocation row) async {
@@ -153,11 +158,13 @@ class _ImLocationScreenState extends State<ImLocationScreen>
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onCallback(ImLocation row) => setState(() {
         _mode = Mode.none;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Widget _buildRightPanel() {
@@ -179,6 +186,7 @@ class _ImLocationScreenState extends State<ImLocationScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.addRoot:
         return ImLocationDetailWidget(
@@ -187,6 +195,7 @@ class _ImLocationScreenState extends State<ImLocationScreen>
           warehouseId: warehouseId,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.addChild:
         return ImLocationDetailWidget(
@@ -195,6 +204,7 @@ class _ImLocationScreenState extends State<ImLocationScreen>
           warehouseId: warehouseId,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return ImLocationDetailWidget(
@@ -203,6 +213,7 @@ class _ImLocationScreenState extends State<ImLocationScreen>
           warehouseId: warehouseId,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return ImLocationDetailWidget(
@@ -211,6 +222,7 @@ class _ImLocationScreenState extends State<ImLocationScreen>
           warehouseId: warehouseId,
           onSubmit: (_) async {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

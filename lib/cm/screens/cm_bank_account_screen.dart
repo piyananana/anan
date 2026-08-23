@@ -31,6 +31,9 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
 
   Mode _mode = Mode.none;
   CmBankAccount? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ CmBankAccountDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่ม" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  int _requestSeq = 0;
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 420.0;
   bool _isDraggingDivider = false;
@@ -41,16 +44,19 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
   void _onAdd() => setState(() {
         _mode = Mode.add;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onEdit(CmBankAccount row) => setState(() {
         _mode = Mode.edit;
         _selectedData = row;
+        _requestSeq++;
       });
 
   void _onView(CmBankAccount row) => setState(() {
         _mode = Mode.view;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Future<void> _onDelete(CmBankAccount row) async {
@@ -101,6 +107,7 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
       setState(() {
         _mode = Mode.edit;
         _selectedData = created;
+        _requestSeq++;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -109,7 +116,10 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
     } else {
       await service.updateRow(row);
       _listKey.currentState?.refresh();
-      setState(() => _selectedData = row);
+      setState(() {
+        _selectedData = row;
+        _requestSeq++;
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
@@ -121,11 +131,13 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onCallback(CmBankAccount row) => setState(() {
         _mode = Mode.edit;
         _selectedData = row;
+        _requestSeq++;
       });
 
   @override
@@ -243,6 +255,7 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return CmBankAccountDetailWidget(
@@ -251,6 +264,7 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return CmBankAccountDetailWidget(
@@ -259,6 +273,7 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return CmBankAccountDetailWidget(
@@ -267,6 +282,7 @@ class _CmBankAccountScreenState extends State<CmBankAccountScreen>
           selected: _selectedData,
           onSubmit: (_) async {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

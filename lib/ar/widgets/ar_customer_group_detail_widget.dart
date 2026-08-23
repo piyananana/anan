@@ -88,6 +88,9 @@ class ArCustomerGroupDetailWidget extends StatefulWidget {
   final Function(ArCustomerGroup) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
+  // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
+  // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน (เช่น กดเพิ่มกลุ่มลูกค้าซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  final int requestSeq;
 
   const ArCustomerGroupDetailWidget({
     super.key,
@@ -96,6 +99,7 @@ class ArCustomerGroupDetailWidget extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.isPlaceholder = false,
+    this.requestSeq = 0,
   });
 
   @override
@@ -216,54 +220,70 @@ class ArCustomerGroupDetailWidgetState
     _glAccountNameThai = data?.glAccountNameThai;
   }
 
+  void _applyFromSelected(ArCustomerGroup? d) {
+    _codeController.text = d?.groupCode ?? '';
+    _nameThaController.text = d?.groupNameThai ?? '';
+    _nameEngController.text = d?.groupNameEng ?? '';
+    _descriptionController.text = d?.description ?? '';
+    _creditTermMonthsController.text = (d?.creditTermMonths ?? 0).toString();
+    _creditTermDaysController.text = (d?.creditTermDays ?? 30).toString();
+    _creditLimitController.text = d?.creditLimit.toStringAsFixed(2) ?? '0.00';
+    _discountPercentController.text = d?.discountPercent.toStringAsFixed(2) ?? '0.00';
+    _isActive = d?.isActive ?? true;
+    _isAutoNumber = d?.isAutoNumber ?? false;
+    _runningPrefixCtrl.text = d?.runningPrefix ?? 'CUST';
+    _runningSeparatorCtrl.text = d?.runningSeparator ?? '-';
+    _runningSuffixDate = d?.runningSuffixDate ?? '';
+    _runningLengthCtrl.text = (d?.runningLength ?? 4).toString();
+    _runningNextNumberCtrl.text = (d?.runningNextNumber ?? 1).toString();
+    _requiresBilling = d?.requiresBilling ?? false;
+    _billingConditions = List.from(d?.billingConditions ?? []);
+    _paymentConditions = List.from(d?.paymentConditions ?? []);
+    _glAccountId = d?.glAccountId;
+    _glAccountCode = d?.glAccountCode;
+    _glAccountNameThai = d?.glAccountNameThai;
+  }
+
+  void _applyAddDefaults() {
+    _codeController.clear();
+    _nameThaController.clear();
+    _nameEngController.clear();
+    _descriptionController.clear();
+    _creditTermMonthsController.text = '0';
+    _creditTermDaysController.text = '30';
+    _creditLimitController.text = '0.00';
+    _discountPercentController.text = '0.00';
+    _isActive = true;
+    _isAutoNumber = false;
+    _runningPrefixCtrl.text = 'CUST';
+    _runningSeparatorCtrl.text = '-';
+    _runningSuffixDate = '';
+    _runningLengthCtrl.text = '4';
+    _runningNextNumberCtrl.text = '1';
+    _requiresBilling = false;
+    _billingConditions = [];
+    _paymentConditions = [];
+    _glAccountId = null;
+    _glAccountCode = null;
+    _glAccountNameThai = null;
+  }
+
   @override
   void didUpdateWidget(covariant ArCustomerGroupDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.selected != oldWidget.selected) {
-      final d = widget.selected;
-      _codeController.text = d?.groupCode ?? '';
-      _nameThaController.text = d?.groupNameThai ?? '';
-      _nameEngController.text = d?.groupNameEng ?? '';
-      _descriptionController.text = d?.description ?? '';
-      _creditTermMonthsController.text = (d?.creditTermMonths ?? 0).toString();
-      _creditTermDaysController.text = (d?.creditTermDays ?? 30).toString();
-      _creditLimitController.text = d?.creditLimit.toStringAsFixed(2) ?? '0.00';
-      _discountPercentController.text = d?.discountPercent.toStringAsFixed(2) ?? '0.00';
-      _isActive = d?.isActive ?? true;
-      _isAutoNumber = d?.isAutoNumber ?? false;
-      _runningPrefixCtrl.text = d?.runningPrefix ?? 'CUST';
-      _runningSeparatorCtrl.text = d?.runningSeparator ?? '-';
-      _runningSuffixDate = d?.runningSuffixDate ?? '';
-      _runningLengthCtrl.text = (d?.runningLength ?? 4).toString();
-      _runningNextNumberCtrl.text = (d?.runningNextNumber ?? 1).toString();
-      _requiresBilling = d?.requiresBilling ?? false;
-      _billingConditions = List.from(d?.billingConditions ?? []);
-      _paymentConditions = List.from(d?.paymentConditions ?? []);
-      _glAccountId = d?.glAccountId;
-      _glAccountCode = d?.glAccountCode;
-      _glAccountNameThai = d?.glAccountNameThai;
+      _applyFromSelected(widget.selected);
     } else if (widget.mode == Mode.add && oldWidget.mode != Mode.add) {
-      _codeController.clear();
-      _nameThaController.clear();
-      _nameEngController.clear();
-      _descriptionController.clear();
-      _creditTermMonthsController.text = '0';
-      _creditTermDaysController.text = '30';
-      _creditLimitController.text = '0.00';
-      _discountPercentController.text = '0.00';
-      _isActive = true;
-      _isAutoNumber = false;
-      _runningPrefixCtrl.text = 'CUST';
-      _runningSeparatorCtrl.text = '-';
-      _runningSuffixDate = '';
-      _runningLengthCtrl.text = '4';
-      _runningNextNumberCtrl.text = '1';
-      _requiresBilling = false;
-      _billingConditions = [];
-      _paymentConditions = [];
-      _glAccountId = null;
-      _glAccountCode = null;
-      _glAccountNameThai = null;
+      _applyAddDefaults();
+    } else if (widget.mode != oldWidget.mode ||
+        widget.requestSeq != oldWidget.requestSeq) {
+      // ครอบคลุมกรณีทั่วไปที่ mode เปลี่ยน (ไม่ใช่แค่การเข้าสู่ Mode.add) และกรณี requestSeq
+      // เปลี่ยนแต่ mode/selected เหมือนเดิมกับครั้งก่อน (เช่น กดเพิ่มซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+      if (widget.mode == Mode.add) {
+        _applyAddDefaults();
+      } else {
+        _applyFromSelected(widget.selected);
+      }
     }
     setState(() {});
   }

@@ -31,6 +31,9 @@ class _BankScreenState extends State<BankScreen>
 
   Mode _mode = Mode.none;
   Bank? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ BankDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 400.0;
@@ -42,16 +45,19 @@ class _BankScreenState extends State<BankScreen>
   void _onAdd() => setState(() {
         _mode = Mode.add;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onEdit(Bank row) => setState(() {
         _mode = Mode.edit;
         _selectedData = row;
+        _requestSeq++;
       });
 
   void _onView(Bank row) => setState(() {
         _mode = Mode.view;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Future<void> _onDelete(Bank row) async {
@@ -109,6 +115,7 @@ class _BankScreenState extends State<BankScreen>
         setState(() {
           _mode = Mode.edit;
           _selectedData = created;
+          _requestSeq++;
         });
         if (mounted) {
           ScaffoldMessenger.of(context)
@@ -117,7 +124,10 @@ class _BankScreenState extends State<BankScreen>
       } else {
         await service.updateRow(row);
         _listKey.currentState?.refresh();
-        setState(() => _selectedData = row);
+        setState(() {
+          _selectedData = row;
+          _requestSeq++;
+        });
         if (mounted) {
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text(l.savedSuccess)));
@@ -139,11 +149,13 @@ class _BankScreenState extends State<BankScreen>
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onCallback(Bank row) => setState(() {
         _mode = Mode.edit;
         _selectedData = row;
+        _requestSeq++;
       });
 
   @override
@@ -265,6 +277,7 @@ class _BankScreenState extends State<BankScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return BankDetailWidget(
@@ -273,6 +286,7 @@ class _BankScreenState extends State<BankScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return BankDetailWidget(
@@ -281,6 +295,7 @@ class _BankScreenState extends State<BankScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return BankDetailWidget(
@@ -289,6 +304,7 @@ class _BankScreenState extends State<BankScreen>
           selected: _selectedData,
           onSubmit: (_) {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

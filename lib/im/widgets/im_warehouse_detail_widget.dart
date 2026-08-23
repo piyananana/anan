@@ -14,6 +14,9 @@ class ImWarehouseDetailWidget extends StatefulWidget {
   final Function(ImWarehouse) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
+  // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
+  // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน (เช่น กดเพิ่มคลังสินค้าซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  final int requestSeq;
 
   const ImWarehouseDetailWidget({
     super.key,
@@ -22,6 +25,7 @@ class ImWarehouseDetailWidget extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.isPlaceholder = false,
+    this.requestSeq = 0,
   });
 
   @override
@@ -55,7 +59,7 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
   @override
   void didUpdateWidget(covariant ImWarehouseDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode) {
+    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode || widget.requestSeq != oldWidget.requestSeq) {
       _populate(widget.selected, widget.mode);
     }
   }

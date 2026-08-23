@@ -31,6 +31,9 @@ class _SalespersonScreenState extends State<SalespersonScreen>
 
   Mode _mode = Mode.none;
   Salesperson? _selected;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ SalespersonDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 400.0;
@@ -42,23 +45,24 @@ class _SalespersonScreenState extends State<SalespersonScreen>
   void _onAdd() => setState(() {
         _mode = Mode.add;
         _selected = null;
+        _requestSeq++;
       });
 
   Future<void> _onEdit(Salesperson row) async {
-    setState(() { _mode = Mode.edit; _selected = row; });
+    setState(() { _mode = Mode.edit; _selected = row; _requestSeq++; });
     try {
       final full = await Provider.of<SalespersonService>(context, listen: false)
           .fetchRow(row.id!);
-      if (mounted) setState(() => _selected = full);
+      if (mounted) setState(() { _selected = full; _requestSeq++; });
     } catch (_) {}
   }
 
   Future<void> _onView(Salesperson row) async {
-    setState(() { _mode = Mode.view; _selected = row; });
+    setState(() { _mode = Mode.view; _selected = row; _requestSeq++; });
     try {
       final full = await Provider.of<SalespersonService>(context, listen: false)
           .fetchRow(row.id!);
-      if (mounted) setState(() => _selected = full);
+      if (mounted) setState(() { _selected = full; _requestSeq++; });
     } catch (_) {}
   }
 
@@ -134,6 +138,7 @@ class _SalespersonScreenState extends State<SalespersonScreen>
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selected = null;
+        _requestSeq++;
       });
 
   @override
@@ -252,6 +257,7 @@ class _SalespersonScreenState extends State<SalespersonScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return SalespersonDetailWidget(
@@ -260,6 +266,7 @@ class _SalespersonScreenState extends State<SalespersonScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return SalespersonDetailWidget(
@@ -268,6 +275,7 @@ class _SalespersonScreenState extends State<SalespersonScreen>
           selected: _selected,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return SalespersonDetailWidget(
@@ -276,6 +284,7 @@ class _SalespersonScreenState extends State<SalespersonScreen>
           selected: _selected,
           onSubmit: (_) {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

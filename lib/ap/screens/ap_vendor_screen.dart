@@ -31,6 +31,9 @@ class _ApVendorScreenState extends State<ApVendorScreen>
 
   Mode _mode = Mode.none;
   ApVendor? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ApVendorDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มเจ้าหนี้" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
@@ -42,12 +45,14 @@ class _ApVendorScreenState extends State<ApVendorScreen>
   void _onAdd() => setState(() {
         _mode = Mode.add;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onEdit(ApVendor row) {
     setState(() {
       _mode = Mode.edit;
       _selectedData = row;
+      _requestSeq++;
     });
     _fetchFull(row);
   }
@@ -56,6 +61,7 @@ class _ApVendorScreenState extends State<ApVendorScreen>
     setState(() {
       _mode = Mode.view;
       _selectedData = row;
+      _requestSeq++;
     });
     _fetchFull(row);
   }
@@ -139,11 +145,13 @@ class _ApVendorScreenState extends State<ApVendorScreen>
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onCallback(ApVendor row) => setState(() {
         _mode = Mode.none;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Widget _buildRightPanel() {
@@ -156,6 +164,7 @@ class _ApVendorScreenState extends State<ApVendorScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return ApVendorDetailWidget(
@@ -164,6 +173,7 @@ class _ApVendorScreenState extends State<ApVendorScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return ApVendorDetailWidget(
@@ -172,6 +182,7 @@ class _ApVendorScreenState extends State<ApVendorScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return ApVendorDetailWidget(
@@ -180,6 +191,7 @@ class _ApVendorScreenState extends State<ApVendorScreen>
           selected: _selectedData,
           onSubmit: (_) async {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

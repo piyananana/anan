@@ -31,6 +31,9 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
 
   Mode _mode = Mode.none;
   ArCollector? _selected;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ArCollectorDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่ม" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 400.0;
@@ -42,12 +45,14 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
   void _onAdd() => setState(() {
         _mode = Mode.add;
         _selected = null;
+        _requestSeq++;
       });
 
   Future<void> _onEdit(ArCollector row) async {
     setState(() {
       _mode = Mode.edit;
       _selected = row;
+      _requestSeq++;
     });
     try {
       final full =
@@ -61,6 +66,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
     setState(() {
       _mode = Mode.view;
       _selected = row;
+      _requestSeq++;
     });
     try {
       final full =
@@ -138,6 +144,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selected = null;
+        _requestSeq++;
       });
 
   @override
@@ -256,6 +263,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return ArCollectorDetailWidget(
@@ -264,6 +272,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return ArCollectorDetailWidget(
@@ -272,6 +281,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
           selected: _selected,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return ArCollectorDetailWidget(
@@ -280,6 +290,7 @@ class _ArCollectorScreenState extends State<ArCollectorScreen>
           selected: _selected,
           onSubmit: (_) {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

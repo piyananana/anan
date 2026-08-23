@@ -32,6 +32,9 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
 
   Mode _mode = Mode.none;
   ArCustomerGroup? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ArCustomerGroupDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มกลุ่มลูกค้า" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 400.0;
@@ -44,6 +47,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
     setState(() {
       _mode = Mode.add;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -51,6 +55,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
     setState(() {
       _mode = Mode.edit;
       _selectedData = row; // show immediately, then replace with full data
+      _requestSeq++;
     });
     try {
       final full = await Provider.of<ArCustomerGroupService>(context, listen: false)
@@ -63,6 +68,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
     setState(() {
       _mode = Mode.view;
       _selectedData = row;
+      _requestSeq++;
     });
     try {
       final full = await Provider.of<ArCustomerGroupService>(context, listen: false)
@@ -156,6 +162,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
     setState(() {
       _mode = Mode.none;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -163,6 +170,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
     setState(() {
       _mode = Mode.none;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -294,6 +302,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return ArCustomerGroupDetailWidget(
@@ -302,6 +311,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return ArCustomerGroupDetailWidget(
@@ -310,6 +320,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return ArCustomerGroupDetailWidget(
@@ -318,6 +329,7 @@ class _ArCustomerGroupScreenState extends State<ArCustomerGroupScreen>
           selected: _selectedData,
           onSubmit: (_) {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

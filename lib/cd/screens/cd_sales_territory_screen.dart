@@ -32,6 +32,9 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
   Mode _mode = Mode.none;
   SalesTerritory? _selected;
   SalesTerritory? _parentForAdd; // pre-fill parent when adding child
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ SalesTerritoryDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 400.0;
@@ -44,6 +47,7 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
         _mode = Mode.add;
         _selected = null;
         _parentForAdd = null;
+        _requestSeq++;
       });
 
   void _onAddChild(SalesTerritory parent) => setState(() {
@@ -56,16 +60,19 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
           parentNameThai: parent.territoryNameThai,
         );
         _parentForAdd = parent;
+        _requestSeq++;
       });
 
   void _onEdit(SalesTerritory row) => setState(() {
         _mode = Mode.edit;
         _selected = row;
+        _requestSeq++;
       });
 
   void _onView(SalesTerritory row) => setState(() {
         _mode = Mode.view;
         _selected = row;
+        _requestSeq++;
       });
 
   Future<void> _onDelete(SalesTerritory row) async {
@@ -132,6 +139,7 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
         _mode = Mode.none;
         _selected = null;
         _parentForAdd = null;
+        _requestSeq++;
       });
       widget.onFieldsChanged();
     } catch (e) {
@@ -146,6 +154,7 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
         _mode = Mode.none;
         _selected = null;
         _parentForAdd = null;
+        _requestSeq++;
       });
 
   @override
@@ -266,6 +275,7 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return SalesTerritoryDetailWidget(
@@ -274,6 +284,7 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
           selected: _parentForAdd != null ? _selected : null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return SalesTerritoryDetailWidget(
@@ -282,6 +293,7 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
           selected: _selected,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return SalesTerritoryDetailWidget(
@@ -290,6 +302,7 @@ class _SalesTerritoryScreenState extends State<SalesTerritoryScreen>
           selected: _selected,
           onSubmit: (_) {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

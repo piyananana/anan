@@ -11,6 +11,9 @@ class ImUomDetailWidget extends StatefulWidget {
   final Function(ImUom) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
+  // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
+  // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน (เช่น กดเพิ่มหน่วยนับซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  final int requestSeq;
 
   const ImUomDetailWidget({
     super.key,
@@ -19,6 +22,7 @@ class ImUomDetailWidget extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.isPlaceholder = false,
+    this.requestSeq = 0,
   });
 
   @override
@@ -47,7 +51,7 @@ class ImUomDetailWidgetState extends State<ImUomDetailWidget> {
   @override
   void didUpdateWidget(covariant ImUomDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode) {
+    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode || widget.requestSeq != oldWidget.requestSeq) {
       _codeCtrl.text = widget.mode == Mode.add ? '' : (widget.selected?.uomCode ?? '');
       _nameThCtrl.text = widget.mode == Mode.add ? '' : (widget.selected?.uomNameTh ?? '');
       _nameEnCtrl.text = widget.mode == Mode.add ? '' : (widget.selected?.uomNameEn ?? '');

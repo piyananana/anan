@@ -29,6 +29,9 @@ class _ImWarehouseScreenState extends State<ImWarehouseScreen> with AutomaticKee
 
   Mode _mode = Mode.none;
   ImWarehouse? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ImWarehouseDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มคลังสินค้า" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  int _requestSeq = 0;
   bool _isEnglish = false;
 
   bool _isLeftPanelExpanded = true;
@@ -41,16 +44,19 @@ class _ImWarehouseScreenState extends State<ImWarehouseScreen> with AutomaticKee
   void _onAdd() => setState(() {
         _mode = Mode.add;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onEdit(ImWarehouse row) => setState(() {
         _mode = Mode.edit;
         _selectedData = row;
+        _requestSeq++;
       });
 
   void _onView(ImWarehouse row) => setState(() {
         _mode = Mode.view;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Future<void> _onDelete(ImWarehouse row) async {
@@ -107,23 +113,25 @@ class _ImWarehouseScreenState extends State<ImWarehouseScreen> with AutomaticKee
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onCallback(ImWarehouse row) => setState(() {
         _mode = Mode.none;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Widget _buildRightPanel() {
     switch (_mode) {
       case Mode.none:
-        return ImWarehouseDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, isPlaceholder: true);
+        return ImWarehouseDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, isPlaceholder: true, requestSeq: _requestSeq);
       case Mode.add:
-        return ImWarehouseDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel);
+        return ImWarehouseDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
       case Mode.edit:
-        return ImWarehouseDetailWidget(key: _detailKey, mode: Mode.edit, selected: _selectedData, onSubmit: _onSubmit, onCancel: _onCancel);
+        return ImWarehouseDetailWidget(key: _detailKey, mode: Mode.edit, selected: _selectedData, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
       case Mode.view:
-        return ImWarehouseDetailWidget(key: _detailKey, mode: Mode.view, selected: _selectedData, onSubmit: (_) async {}, onCancel: _onCancel);
+        return ImWarehouseDetailWidget(key: _detailKey, mode: Mode.view, selected: _selectedData, onSubmit: (_) async {}, onCancel: _onCancel, requestSeq: _requestSeq);
       default:
         return const SizedBox.shrink();
     }

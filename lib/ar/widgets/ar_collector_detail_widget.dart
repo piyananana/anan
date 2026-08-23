@@ -13,6 +13,9 @@ class ArCollectorDetailWidget extends StatefulWidget {
   final Function(ArCollector) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
+  // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
+  // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน (เช่น กดเพิ่มผู้วางบิล/รับชำระซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  final int requestSeq;
 
   const ArCollectorDetailWidget({
     super.key,
@@ -21,6 +24,7 @@ class ArCollectorDetailWidget extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.isPlaceholder = false,
+    this.requestSeq = 0,
   });
 
   @override
@@ -72,7 +76,8 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
   void didUpdateWidget(covariant ArCollectorDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.selected != oldWidget.selected ||
-        (widget.mode == Mode.add && oldWidget.mode != Mode.add)) {
+        (widget.mode == Mode.add && oldWidget.mode != Mode.add) ||
+        widget.requestSeq != oldWidget.requestSeq) {
       _codeCtrl.text = widget.selected?.collectorCode ?? '';
       _nameThaCtrl.text = widget.selected?.collectorNameThai ?? '';
       _nameEngCtrl.text = widget.selected?.collectorNameEng ?? '';

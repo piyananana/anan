@@ -12,6 +12,9 @@ class BusinessTypeDetailWidget extends StatefulWidget {
   final Function(BusinessType) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
+  // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
+  // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน
+  final int requestSeq;
 
   const BusinessTypeDetailWidget({
     super.key,
@@ -20,6 +23,7 @@ class BusinessTypeDetailWidget extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.isPlaceholder = false,
+    this.requestSeq = 0,
   });
 
   @override
@@ -56,7 +60,7 @@ class BusinessTypeDetailWidgetState extends State<BusinessTypeDetailWidget> {
   @override
   void didUpdateWidget(covariant BusinessTypeDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected) {
+    if (widget.selected != oldWidget.selected || widget.requestSeq != oldWidget.requestSeq) {
       _codeController.text = widget.selected?.businessTypeCode ?? '';
       _nameThaController.text = widget.selected?.businessTypeNameThai ?? '';
       _nameEngController.text = widget.selected?.businessTypeNameEng ?? '';

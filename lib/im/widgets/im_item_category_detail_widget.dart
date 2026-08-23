@@ -14,6 +14,10 @@ class ImItemCategoryDetailWidget extends StatefulWidget {
   final Function(ImItemCategory) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
+  // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
+  // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน (เช่น กดเพิ่มหมวดหมู่หลักซ้ำหลังพิมพ์ข้อมูลค้างไว้ หรือ
+  // กดเพิ่มหมวดหมู่หลักหลังจากหน้าจออยู่ในสถานะ placeholder ที่ใช้ mode/selected ชุดเดียวกันโดยบังเอิญ)
+  final int requestSeq;
 
   const ImItemCategoryDetailWidget({
     super.key,
@@ -22,6 +26,7 @@ class ImItemCategoryDetailWidget extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.isPlaceholder = false,
+    this.requestSeq = 0,
   });
 
   @override
@@ -73,7 +78,7 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
   @override
   void didUpdateWidget(covariant ImItemCategoryDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode) {
+    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode || widget.requestSeq != oldWidget.requestSeq) {
       _populate(widget.selected, widget.mode);
     }
   }

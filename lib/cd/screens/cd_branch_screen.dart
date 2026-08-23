@@ -35,6 +35,9 @@ class _BranchScreenState extends State<BranchScreen>
   bool _isImportOrExport = false;
   Mode _mode = Mode.none;
   Branch? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ BranchDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
@@ -184,6 +187,7 @@ class _BranchScreenState extends State<BranchScreen>
     setState(() {
       _mode = Mode.add;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -191,6 +195,7 @@ class _BranchScreenState extends State<BranchScreen>
     setState(() {
       _mode = Mode.edit;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -198,6 +203,7 @@ class _BranchScreenState extends State<BranchScreen>
     setState(() {
       _mode = Mode.view;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -280,6 +286,7 @@ class _BranchScreenState extends State<BranchScreen>
     setState(() {
       _mode = Mode.none;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -287,6 +294,7 @@ class _BranchScreenState extends State<BranchScreen>
     setState(() {
       _mode = Mode.none;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -409,6 +417,7 @@ class _BranchScreenState extends State<BranchScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return BranchDetailWidget(
@@ -417,6 +426,7 @@ class _BranchScreenState extends State<BranchScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return BranchDetailWidget(
@@ -425,6 +435,7 @@ class _BranchScreenState extends State<BranchScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return BranchDetailWidget(
@@ -433,6 +444,7 @@ class _BranchScreenState extends State<BranchScreen>
           selected: _selectedData,
           onSubmit: (branch) {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

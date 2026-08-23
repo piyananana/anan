@@ -31,6 +31,9 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
 
   Mode _mode = Mode.none;
   BusinessType? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ BusinessTypeDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 380.0;
@@ -43,6 +46,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
     setState(() {
       _mode = Mode.add;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -50,6 +54,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
     setState(() {
       _mode = Mode.edit;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -57,6 +62,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
     setState(() {
       _mode = Mode.view;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -140,6 +146,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
     setState(() {
       _mode = Mode.none;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -147,6 +154,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
     setState(() {
       _mode = Mode.none;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -276,6 +284,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return BusinessTypeDetailWidget(
@@ -284,6 +293,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return BusinessTypeDetailWidget(
@@ -292,6 +302,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return BusinessTypeDetailWidget(
@@ -300,6 +311,7 @@ class _BusinessTypeScreenState extends State<BusinessTypeScreen>
           selected: _selectedData,
           onSubmit: (_) {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

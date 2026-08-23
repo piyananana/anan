@@ -33,6 +33,10 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
   bool _isImportOrExport = false;
   Mode _mode = Mode.none;
   ModuleDocument? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ModuleDocumentDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มโมดูลหลัก" ซ้ำหลังพิมพ์ข้อมูลค้างไว้ หรือ
+  // กดเพิ่มหลังจาก placeholder ที่ใช้ mode/selected ชุดเดียวกันโดยบังเอิญ)
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
@@ -178,6 +182,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
     setState(() {
       _mode = Mode.addRoot;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -185,6 +190,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
     setState(() {
       _mode = Mode.addChild;
       _selectedData = parent;
+      _requestSeq++;
     });
   }
 
@@ -192,6 +198,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
     setState(() {
       _mode = Mode.edit;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -199,6 +206,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
     setState(() {
       _mode = Mode.view;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -275,6 +283,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
     setState(() {
       _mode = Mode.none;
       _selectedData = null;
+      _requestSeq++;
     });
   }
 
@@ -282,6 +291,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
     setState(() {
       _mode = Mode.none;
       _selectedData = row;
+      _requestSeq++;
     });
   }
 
@@ -429,6 +439,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.addRoot:
         return ModuleDocumentDetailWidget(
@@ -437,6 +448,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.addChild:
         return ModuleDocumentDetailWidget(
@@ -445,6 +457,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return ModuleDocumentDetailWidget(
@@ -453,6 +466,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return ModuleDocumentDetailWidget(
@@ -461,6 +475,7 @@ class _ModuleDocumentScreenState extends State<ModuleDocumentScreen>
           selected: _selectedData,
           onSubmit: (row){},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();

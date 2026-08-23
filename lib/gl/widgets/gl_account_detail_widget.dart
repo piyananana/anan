@@ -15,6 +15,10 @@ class AccountDetailWidget extends StatefulWidget {
   final Function(Account) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
+  // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
+  // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน (เช่น กดเพิ่มหมวดหลักซ้ำหลังพิมพ์ข้อมูลค้างไว้ หรือ
+  // กดเพิ่มหมวดหลักหลังจากหน้าจออยู่ในสถานะ placeholder ที่ใช้ mode: AccountMode.addRoot, selected: null ชุดเดียวกันโดยบังเอิญ)
+  final int requestSeq;
 
   const AccountDetailWidget({
     super.key,
@@ -23,6 +27,7 @@ class AccountDetailWidget extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     this.isPlaceholder = false,
+    this.requestSeq = 0,
   });
 
   @override
@@ -158,7 +163,8 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
   void didUpdateWidget(covariant AccountDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     // if (oldWidget.selected != null) {
-    if (widget.selected != oldWidget.selected) {
+    if (widget.selected != oldWidget.selected ||
+        widget.requestSeq != oldWidget.requestSeq) {
       _selected = widget.selected;
 
       _accountCodeController =

@@ -30,6 +30,9 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
   final GlobalKey<ArCustomerDetailWidgetState> _detailKey = GlobalKey();
   Mode _mode = Mode.none;
   ArCustomer? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ArCustomerDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มลูกค้า" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  int _requestSeq = 0;
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 360.0;
@@ -43,12 +46,14 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
   void _onAdd() => setState(() {
         _mode = Mode.add;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onEdit(ArCustomer row) {
     setState(() {
       _mode = Mode.edit;
       _selectedData = row;
+      _requestSeq++;
     });
     _fetchFull(row);
   }
@@ -57,6 +62,7 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
     setState(() {
       _mode = Mode.view;
       _selectedData = row;
+      _requestSeq++;
     });
     _fetchFull(row);
   }
@@ -145,11 +151,13 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
   void _onCancel() => setState(() {
         _mode = Mode.none;
         _selectedData = null;
+        _requestSeq++;
       });
 
   void _onCallback(ArCustomer row) => setState(() {
         _mode = Mode.none;
         _selectedData = row;
+        _requestSeq++;
       });
 
   Widget _buildRightPanel() {
@@ -162,6 +170,7 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
           onSubmit: _onSubmit,
           onCancel: _onCancel,
           isPlaceholder: true,
+          requestSeq: _requestSeq,
         );
       case Mode.add:
         return ArCustomerDetailWidget(
@@ -170,6 +179,7 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
           selected: null,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.edit:
         return ArCustomerDetailWidget(
@@ -178,6 +188,7 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
           selected: _selectedData,
           onSubmit: _onSubmit,
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       case Mode.view:
         return ArCustomerDetailWidget(
@@ -186,6 +197,7 @@ class _ArCustomerScreenState extends State<ArCustomerScreen>
           selected: _selectedData,
           onSubmit: (_) {},
           onCancel: _onCancel,
+          requestSeq: _requestSeq,
         );
       default:
         return const SizedBox.shrink();
