@@ -63,6 +63,7 @@ const Map<String, String> apSysDocType = {
 const Map<String, String> imSysDocType = {
   '10': 'รับสินค้า - Good Receive Note', // receive(buy) (+stock +ap)
   '11': 'รับสินค้าใบแจ้งหนี้ - Good Receive Note Billing', // receive(buy) (+stock +ap)
+  '12': 'รับสินค้า (รอตั้งหนี้) - GR Pending AP Billing', // receive(buy) (+stock only) ตั้งหนี้+GL ทีหลังเมื่อได้ invoice
   '15': 'คืนสินค้า - Return to Supplier', // return (-stock -ap)
   '20': 'ลดหนี้เจ้าหนี้ - Credit Note from Supplier', // cn (-stock -ap)
   '25': 'เพิ่มหนี้เจ้าหนี้ - Debit Note from Supplier', // dn (+stock +ap)

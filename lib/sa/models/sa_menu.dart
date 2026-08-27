@@ -117,6 +117,7 @@ import '../../im/screens/im_stock_count_print_screen.dart';
 import '../../im/screens/im_stock_count_record_screen.dart';
 import '../../im/screens/im_stock_count_variance_report_screen.dart';
 import '../../im/screens/im_stock_count_summary_screen.dart';
+import '../../im/screens/im_gr_billing_report_screen.dart';
 
 import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
@@ -323,6 +324,7 @@ class Menu {
     'ImStockCountRecordScreen': (context) => const ImStockCountRecordScreen(),
     'ImStockCountVarianceReportScreen': (context) => const ImStockCountVarianceReportScreen(),
     'ImStockCountSummaryScreen': (context) => const ImStockCountSummaryScreen(),
+    'ImGrBillingReportScreen': (context) => const ImGrBillingReportScreen(),
 
     'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
     'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),

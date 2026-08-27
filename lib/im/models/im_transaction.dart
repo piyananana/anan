@@ -195,6 +195,7 @@ class ImTransactionDetail {
   final double countedQty;
   final double? qty; // variance — null until Posted (server computes from live balance at Post time)
   final double? unitCost;
+  final double? billedUnitCost; // '12' (รับสินค้า รอตั้งหนี้) เท่านั้น — ต้นทุนจริงตามใบกำกับ อาจต่างจาก unitCost
   final double? totalValueLc;
   final String? description;
 
@@ -217,6 +218,7 @@ class ImTransactionDetail {
     this.countedQty = 0,
     this.qty,
     this.unitCost,
+    this.billedUnitCost,
     this.totalValueLc,
     this.description,
   });
@@ -245,6 +247,7 @@ class ImTransactionDetail {
       countedQty: toDouble(json['counted_qty']),
       qty: toDoubleN(json['qty']),
       unitCost: toDoubleN(json['unit_cost']),
+      billedUnitCost: toDoubleN(json['billed_unit_cost']),
       totalValueLc: toDoubleN(json['total_value_lc']),
       description: json['description'],
     );
@@ -264,6 +267,7 @@ class ImTransactionDetail {
         'system_qty': systemQty,
         'counted_qty': countedQty,
         if (unitCost != null) 'unit_cost': unitCost,
+        if (billedUnitCost != null) 'billed_unit_cost': billedUnitCost,
         if (description != null) 'description': description,
       };
 }

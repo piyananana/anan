@@ -47,6 +47,7 @@ class _CountLine {
   final TextEditingController countedQtyCtrl;
   final TextEditingController issueQtyCtrl;
   final TextEditingController unitCostCtrl;
+  final TextEditingController billedUnitCostCtrl; // '12' เท่านั้น — ต้นทุนตามใบกำกับจริง (อาจต่างจาก unitCostCtrl)
   final TextEditingController lotNoCtrl;
   final TextEditingController serialNoCtrl;
 
@@ -66,11 +67,13 @@ class _CountLine {
     double countedQty = 0,
     double issueQty = 0,
     double? unitCost,
+    double? billedUnitCost,
     String lotNo = '',
     String serialNo = '',
   })  : countedQtyCtrl = TextEditingController(text: countedQty == 0 ? '' : _fmtInput(countedQty)),
         issueQtyCtrl = TextEditingController(text: issueQty == 0 ? '' : _fmtInput(issueQty)),
         unitCostCtrl = TextEditingController(text: unitCost != null && unitCost != 0 ? _fmtInput(unitCost) : ''),
+        billedUnitCostCtrl = TextEditingController(text: billedUnitCost != null && billedUnitCost != 0 ? _fmtInput(billedUnitCost) : ''),
         lotNoCtrl = TextEditingController(text: lotNo),
         serialNoCtrl = TextEditingController(text: serialNo);
 
@@ -89,6 +92,7 @@ class _CountLine {
     countedQtyCtrl.dispose();
     issueQtyCtrl.dispose();
     unitCostCtrl.dispose();
+    billedUnitCostCtrl.dispose();
     lotNoCtrl.dispose();
     serialNoCtrl.dispose();
   }
@@ -156,8 +160,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   bool get _isReadOnly => widget.viewOnly || _status != 'Draft';
   bool get _isIssueMode => _selectedSysDocType == '60'; // ISS — เบิกสินค้า
   bool get _isTransferMode => _selectedSysDocType == '70'; // TRF — โอนสินค้า
-  bool get _isReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11'; // GRN — รับสินค้า
+  bool get _isReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12'; // GRN — รับสินค้า
   bool get _isGrnBillingMode => _selectedSysDocType == '11'; // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ
+  bool get _isGrDeferredMode => _selectedSysDocType == '12'; // GR รอตั้งหนี้ — Post IM ก่อน ค่อย Post AP/GL ทีหลัง
+  // สถานะ Received ('12' ที่ Post IM แล้วแต่ยังไม่ Post AP/GL) แก้ได้แค่เลขที่ใบกำกับ + billed cost — ฟิลด์อื่น
+  // (จำนวน/สินค้า/คลัง) ยังคง lock ผ่าน _isReadOnly ตามปกติ เพราะรับของจริงไปแล้ว
+  bool get _canEditBilling => !widget.viewOnly && (_status == 'Draft' || (_isGrDeferredMode && _status == 'Received'));
 
   @override
   void initState() {
@@ -282,6 +290,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             ? (d.countedQty - d.systemQty)
             : (_isIssueMode || _isTransferMode) ? (d.systemQty - d.countedQty) : 0,
         unitCost: d.unitCost,
+        billedUnitCost: d.billedUnitCost,
         lotNo: d.lotNo ?? '',
         serialNo: d.serialNo ?? '',
       ));
@@ -487,6 +496,64 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
   }
 
+  // '12' สถานะ Received — บันทึกแค่เลขที่ใบกำกับ + billed cost รายบรรทัด ไม่แตะจำนวน/สินค้า/คลัง (รับของจริงไปแล้ว)
+  Future<void> _saveBillingInfo() async {
+    if (_id == null) return;
+    final isEnglish = _isEnglish;
+    void warn(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    setState(() => _isSaving = true);
+    try {
+      final header = ImTransactionHeader(
+        id: _id!, docId: _docId!, docNo: _docNo, docDate: _docDate, warehouseId: _warehouseId!,
+        vendorId: _vendorId, refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
+      );
+      final details = _lines.map((l) => ImTransactionDetail(
+            id: l.id,
+            itemId: l.item.id!,
+            billedUnitCost: l.billedUnitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.billedUnitCostCtrl.text),
+          )).toList();
+      await _service.updateTransaction(id: _id!, header: header, details: details);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
+        await _loadExisting(_id!);
+        setState(() {});
+      }
+    } catch (e) {
+      if (mounted) warn(isEnglish ? 'Save failed: $e' : 'บันทึกล้มเหลว: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  // '12' สถานะ Received -> Posted — สร้าง+โพสต์ ap_transaction ด้วย billed cost (ถ้าไม่กรอก = ใช้ unit_cost เดิม)
+  Future<void> _postBilling() async {
+    if (_id == null) return;
+    final isEnglish = _isEnglish;
+    void warn(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    final refNo = _refNoCtrl.text.trim();
+    if (refNo.isEmpty) {
+      warn(isEnglish ? 'Please enter the vendor invoice number' : 'กรุณาระบุเลขที่ใบกำกับสินค้าผู้ขาย');
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      final details = _lines.map((l) => ImTransactionDetail(
+            id: l.id,
+            itemId: l.item.id!,
+            billedUnitCost: l.billedUnitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.billedUnitCostCtrl.text),
+          )).toList();
+      await _service.postBilling(id: _id!, refNo: refNo, details: details);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Posted successfully' : 'Post สำเร็จ')));
+        widget.onSaveSuccess();
+      }
+    } catch (e) {
+      if (mounted) warn(isEnglish ? 'Post failed: $e' : 'Post ล้มเหลว: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   Future<void> _void() async {
     if (_id == null) return;
     final isEnglish = _isEnglish;
@@ -639,9 +706,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           flex: 1,
           child: TextField(
             controller: _refNoCtrl,
-            readOnly: _isReadOnly,
+            readOnly: !_canEditBilling,
             decoration: InputDecoration(
-                labelText: _isGrnBillingMode
+                labelText: (_isGrnBillingMode || (_isGrDeferredMode && _status == 'Received'))
                     ? (isEnglish ? 'Vendor Invoice No. *' : 'เลขที่ใบกำกับสินค้าผู้ขาย *')
                     : (isEnglish ? 'Ref No.' : 'เลขที่อ้างอิง'),
                 border: const OutlineInputBorder(), isDense: true),
@@ -885,6 +952,20 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                           style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                     ),
             ),
+            if (_isGrDeferredMode && (_status == 'Received' || _status == 'Posted'))
+              SizedBox(
+                width: 120,
+                child: TextField(
+                  controller: line.billedUnitCostCtrl,
+                  readOnly: !_canEditBilling,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Billed Unit Cost' : 'ต้นทุนตามใบกำกับ',
+                      helperText: isEnglish ? 'Blank = same as Unit Cost' : 'เว้นว่าง = เท่ากับต้นทุน/หน่วย',
+                      helperMaxLines: 2,
+                      border: const OutlineInputBorder(), isDense: true),
+                ),
+              ),
           ]),
         ]),
       ),
@@ -896,6 +977,50 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       return _card(title: isEnglish ? 'GL Entries (Posted)' : 'รายการบัญชี (Posted จริง)', children: [
         ..._postedGlDetails!.map((d) => _glLine(d.accountCode, isEnglish && d.accountNameEng.isNotEmpty ? d.accountNameEng : d.accountName, d.debitLc, d.creditLc)),
       ]);
+    }
+
+    // '12' ไม่มี im_gl_account_setup ของตัวเองเลย (Stage 1 ไม่มี GL, Stage 2 ใช้บัญชีของ AP) จึงต้องดักก่อนเช็ค
+    // _docSetup ด้านล่าง — และ gl_entry_id ของ im_transaction เองก็เป็น null เสมอแม้ Posted แล้ว (entry อยู่ที่
+    // ap_transaction ที่สร้างให้ เหมือน '11') จึงแสดงตัวอย่างที่คำนวณจากค่าปัจจุบันแทนของจริงจาก server เสมอ
+    if (_isGrDeferredMode) {
+      if (_status == 'Draft') {
+        return _card(title: isEnglish ? 'GL Preview' : 'ตัวอย่างรายการบัญชี', children: [
+          Text(
+            isEnglish
+                ? 'No GL posts at "Post IM" — GL is only posted later when this document is billed via "Post AP/GL".'
+                : 'ตอน "Post IM" จะยังไม่มีการโพสต์บัญชี — จะโพสต์บัญชีก็ต่อเมื่อ "Post AP/GL" ภายหลังเมื่อได้รับใบกำกับ',
+            style: TextStyle(color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+          ),
+        ]);
+      }
+      double billedValue = 0;
+      for (final l in _lines) {
+        final billed = l.billedUnitCostCtrl.text.trim().isEmpty ? _parseNum(l.unitCostCtrl.text) : _parseNum(l.billedUnitCostCtrl.text);
+        billedValue += l.counted * billed;
+      }
+      final isPostedYet = _status == 'Posted';
+      return _card(
+        title: isPostedYet
+            ? (isEnglish ? 'GL Preview (Posted reference)' : 'ตัวอย่างรายการบัญชี (อ้างอิงยอดที่ Posted แล้ว)')
+            : (isEnglish ? 'GL Preview (not posted yet)' : 'ตัวอย่างรายการบัญชี (ยังไม่ได้ Post)'),
+        children: [
+          _glLine(_docSetup?.inventoryAccountCode, isEnglish ? 'Inventory (on the AP bill)' : 'สินค้าคงคลัง (บนใบตั้งหนี้ AP)', billedValue, 0),
+          _glLine(null, isEnglish ? 'AP payable' : 'เจ้าหนี้การค้า', 0, billedValue),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              isPostedYet
+                  ? (isEnglish
+                      ? 'This reflects the billed cost currently saved on this document — it should match what was actually posted to AP/GL.'
+                      : 'ยอดนี้คำนวณจากต้นทุนตามใบกำกับที่บันทึกไว้ในเอกสารนี้ — ควรตรงกับยอดที่ Post จริงในโมดูล AP/GL')
+                  : (isEnglish
+                      ? 'Not posted yet — enter the vendor invoice number and Post AP/GL to create the real entry. Leaving Billed Unit Cost blank uses the original received cost.'
+                      : 'ยังไม่ได้ Post — กรอกเลขที่ใบกำกับแล้วกด Post AP/GL เพื่อสร้าง entry จริง หากเว้นว่างต้นทุนตามใบกำกับจะใช้ต้นทุนตอนรับของเดิม'),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+            ),
+          ),
+        ],
+      );
     }
 
     if (_docSetup == null || !_docSetup!.isConfigured) {
@@ -1062,10 +1187,23 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           ElevatedButton(
             onPressed: _isSaving ? null : () => _save('Post'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
-            child: Text(isEnglish ? 'Post' : 'Post'),
+            child: Text(_isGrDeferredMode ? (isEnglish ? 'Post IM' : 'Post IM') : (isEnglish ? 'Post' : 'Post')),
           ),
         ],
-        if (_status == 'Posted' && !widget.viewOnly)
+        if (_status == 'Received' && _isGrDeferredMode && !widget.viewOnly) ...[
+          OutlinedButton(
+            onPressed: _isSaving ? null : _saveBillingInfo,
+            child: Text(isEnglish ? 'Save' : 'บันทึก'),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: _isSaving ? null : _postBilling,
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
+            child: Text(isEnglish ? 'Post AP/GL' : 'Post AP/GL'),
+          ),
+          const SizedBox(width: 8),
+        ],
+        if ((_status == 'Posted' || _status == 'Received') && !widget.viewOnly)
           ElevatedButton(
             onPressed: _isSaving ? null : _void,
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),

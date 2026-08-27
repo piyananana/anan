@@ -6,6 +6,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../models/im_transaction.dart';
 import '../models/im_gl_account_setup.dart';
+import '../models/im_gr_billing_report.dart';
 
 class ImTransactionService {
   final String baseUrl = AppConfig.apiIm;
@@ -171,6 +172,33 @@ class ImTransactionService {
     }
   }
 
+  // Post AP/GL สำหรับ '12' (รับสินค้า รอตั้งหนี้) — ครั้งที่สองเมื่อได้ใบกำกับผู้ขายแล้ว บันทึกเลขที่ใบกำกับ +
+  // billed cost รายบรรทัดในคำขอเดียวกันได้เลย ไม่บังคับต้อง Save แยกก่อน
+  Future<ImTransaction> postBilling({
+    required int id,
+    required String refNo,
+    required List<ImTransactionDetail> details,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/im_transaction/$id/post_billing'),
+      headers: headers,
+      body: jsonEncode({
+        'ref_no': refNo,
+        'lines': details.map((d) => {'id': d.id, 'billed_unit_cost': d.billedUnitCost}).toList(),
+      }),
+    );
+    if (response.statusCode == 200) {
+      return ImTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'Post AP/GL ล้มเหลว');
+    }
+  }
+
   Future<ImTransaction> voidTransaction(int id) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -212,5 +240,39 @@ class ImTransactionService {
     );
     if (res.statusCode == 200) return ImGlAccountSetup.fromJson(json.decode(res.body));
     return null;
+  }
+
+  // Review report for sys_doc_type='12' (GR รอตั้งหนี้) — Received docs with no GL backing yet
+  // (accrual gap) and Posted docs whose billed cost differs from the cost that valued the stock
+  // (price variance). See imGrBillingReportController.js.
+  Future<List<ImGrBillingReportVendor>> fetchGrBillingReport({
+    String? asOfDate,
+    int? warehouseId,
+    int? vendorId,
+    String? dateFrom,
+    String? dateTo,
+    String? status,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final queryParams = <String, String>{
+      if (asOfDate != null && asOfDate.isNotEmpty) 'as_of_date': asOfDate,
+      if (warehouseId != null) 'warehouse_id': warehouseId.toString(),
+      if (vendorId != null) 'vendor_id': vendorId.toString(),
+      if (dateFrom != null && dateFrom.isNotEmpty) 'date_from': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'date_to': dateTo,
+      if (status != null && status.isNotEmpty) 'status': status,
+    };
+    final uri = Uri.parse('$baseUrl/im_transaction/gr_billing_report').replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List)
+          .map((e) => ImGrBillingReportVendor.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      throw Exception('โหลดรายงาน GR รอตั้งหนี้ล้มเหลว: ${response.statusCode}');
+    }
   }
 }
