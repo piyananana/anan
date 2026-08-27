@@ -65,6 +65,7 @@ class ApOpenInvoice {
   final String docNo;
   final DateTime docDate;
   final DateTime? dueDate;
+  final String? refNo;
   final int vendorId;
   final String vendorCode;
   final String vendorNameTh;
@@ -83,6 +84,7 @@ class ApOpenInvoice {
     required this.docNo,
     required this.docDate,
     this.dueDate,
+    this.refNo,
     required this.vendorId,
     required this.vendorCode,
     required this.vendorNameTh,
@@ -102,6 +104,7 @@ class ApOpenInvoice {
         docNo: json['doc_no'] ?? '',
         docDate: parseLocalDate(json['doc_date']),
         dueDate: parseLocalDateNullable(json['due_date']),
+        refNo: json['ref_no'],
         vendorId: json['vendor_id'] as int,
         vendorCode: json['vendor_code'] ?? '',
         vendorNameTh: json['vendor_name_th'] ?? '',

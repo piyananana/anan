@@ -33,6 +33,10 @@ class ImTransactionHeader {
   final int? toWarehouseId;
   final String? toWarehouseCode;
   final String? toWarehouseNameTh;
+  final int? vendorId; // GRN ('10'/'11') เท่านั้น
+  final String? vendorCode;
+  final String? vendorNameTh;
+  final int? linkedApTransactionId; // GRN Billing ('11') เท่านั้น — ใบตั้งหนี้ AP ที่ระบบสร้างให้อัตโนมัติ
   final String? refNo;
   final int? refDocId;
   final String? refDocNo;
@@ -76,6 +80,10 @@ class ImTransactionHeader {
     this.toWarehouseId,
     this.toWarehouseCode,
     this.toWarehouseNameTh,
+    this.vendorId,
+    this.vendorCode,
+    this.vendorNameTh,
+    this.linkedApTransactionId,
     this.refNo,
     this.refDocId,
     this.refDocNo,
@@ -113,6 +121,10 @@ class ImTransactionHeader {
       toWarehouseId: json['to_warehouse_id'],
       toWarehouseCode: json['to_warehouse_code'],
       toWarehouseNameTh: json['to_warehouse_name_th'],
+      vendorId: json['vendor_id'],
+      vendorCode: json['vendor_code'],
+      vendorNameTh: json['vendor_name_th'],
+      linkedApTransactionId: json['linked_ap_transaction_id'],
       refNo: json['ref_no'],
       refDocId: json['ref_doc_id'],
       refDocNo: json['ref_doc_no'],
@@ -147,6 +159,7 @@ class ImTransactionHeader {
         'doc_date': formatLocalDate(docDate),
         'warehouse_id': warehouseId,
         if (toWarehouseId != null) 'to_warehouse_id': toWarehouseId,
+        if (vendorId != null) 'vendor_id': vendorId,
         if (refNo != null) 'ref_no': refNo,
         if (refDocId != null) 'ref_doc_id': refDocId,
         if (refDocNo != null) 'ref_doc_no': refDocNo,

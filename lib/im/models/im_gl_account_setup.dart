@@ -24,6 +24,9 @@ class ImGlAccountSetup {
   final int? wipAccountId;
   final String? wipAccountCode;
   final String? wipAccountName;
+  final int? grirAccountId;
+  final String? grirAccountCode;
+  final String? grirAccountName;
 
   const ImGlAccountSetup({
     this.id,
@@ -41,9 +44,10 @@ class ImGlAccountSetup {
     this.cogsAccountId, this.cogsAccountCode, this.cogsAccountName,
     this.varianceAccountId, this.varianceAccountCode, this.varianceAccountName,
     this.wipAccountId, this.wipAccountCode, this.wipAccountName,
+    this.grirAccountId, this.grirAccountCode, this.grirAccountName,
   });
 
-  bool get isConfigured => inventoryAccountId != null || cogsAccountId != null || varianceAccountId != null || wipAccountId != null;
+  bool get isConfigured => inventoryAccountId != null || cogsAccountId != null || varianceAccountId != null || wipAccountId != null || grirAccountId != null;
 
   factory ImGlAccountSetup.fromJson(Map<String, dynamic> json) => ImGlAccountSetup(
         id: json['id'],
@@ -69,6 +73,9 @@ class ImGlAccountSetup {
         wipAccountId: json['wip_account_id'],
         wipAccountCode: json['wip_account_code'],
         wipAccountName: json['wip_account_name'],
+        grirAccountId: json['grir_account_id'],
+        grirAccountCode: json['grir_account_code'],
+        grirAccountName: json['grir_account_name'],
       );
 
   Map<String, dynamic> toJson() => {
@@ -76,6 +83,7 @@ class ImGlAccountSetup {
         'cogs_account_id': cogsAccountId,
         'variance_account_id': varianceAccountId,
         'wip_account_id': wipAccountId,
+        'grir_account_id': grirAccountId,
         'gl_doc_id': glDocId,
       };
 }

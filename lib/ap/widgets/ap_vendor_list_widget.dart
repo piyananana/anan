@@ -30,6 +30,42 @@ class ApVendorListWidget extends StatefulWidget {
 
   @override
   State<ApVendorListWidget> createState() => ApVendorListWidgetState();
+
+  static Future<void> search(BuildContext context, {required void Function(ApVendor) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    return showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        contentPadding: EdgeInsets.zero,
+        title: Text(isEnglish ? 'Search Vendor' : 'ค้นหาผู้ขาย', style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Container(
+          width: 520,
+          height: 560,
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10.0)),
+          child: ApVendorListWidget(
+            enableAddButton: false,
+            enableEditButton: false,
+            enableViewButton: false,
+            enableDeleteButton: false,
+            onAdd: () {},
+            onEdit: (v) {},
+            onView: (v) {},
+            onDelete: (v) {},
+            onCallback: (v) {
+              onSelected(v);
+              Navigator.of(dialogContext).pop();
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class ApVendorListWidgetState extends State<ApVendorListWidget>

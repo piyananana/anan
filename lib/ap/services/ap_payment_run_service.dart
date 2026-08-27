@@ -124,6 +124,7 @@ class ApPaymentRunService {
     String? dateTo,
     int? paymentMethodId,
     String? dueDateMax,
+    String? refNo,
   }) async {
     final headers = await _auth.getAuthHeader();
     final params = <String, String>{};
@@ -132,6 +133,7 @@ class ApPaymentRunService {
     if (dateTo != null) params['date_to'] = dateTo;
     if (paymentMethodId != null) params['payment_method_id'] = paymentMethodId.toString();
     if (dueDateMax != null) params['due_date_max'] = dueDateMax;
+    if (refNo != null && refNo.isNotEmpty) params['ref_no'] = refNo;
     final uri = Uri.parse('$_base/ap_payment_run/open_invoices').replace(queryParameters: params);
     final resp = await http.get(uri, headers: headers);
     if (resp.statusCode == 200) {

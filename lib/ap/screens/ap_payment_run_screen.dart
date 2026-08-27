@@ -1934,6 +1934,7 @@ class _InvoicePickerDialog extends StatefulWidget {
 
 class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
   final _vendorCtrl = TextEditingController();
+  final _refNoCtrl = TextEditingController();
   DateTime? _dateFrom;
   DateTime? _dateTo;
 
@@ -1950,6 +1951,7 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
   @override
   void dispose() {
     _vendorCtrl.dispose();
+    _refNoCtrl.dispose();
     super.dispose();
   }
 
@@ -1962,6 +1964,7 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
         dateTo:   _dateTo   == null ? null : formatLocalDate(_dateTo!),
         paymentMethodId: widget.paymentMethodId,
         dueDateMax: widget.dueDateMax == null ? null : formatLocalDate(widget.dueDateMax!),
+        refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
       );
       if (mounted) {
         setState(() {
@@ -2062,6 +2065,19 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
                 ),
               ),
               const SizedBox(width: 8),
+              SizedBox(
+                width: 180,
+                child: TextField(
+                  controller: _refNoCtrl,
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Vendor Invoice No.' : 'เลขที่ใบกำกับผู้ขาย',
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                  onSubmitted: (_) => _search(),
+                ),
+              ),
+              const SizedBox(width: 8),
               _DateBtn(
                 label: isEnglish ? 'From Date' : 'วันที่จาก',
                 date: _dateFrom,
@@ -2106,6 +2122,7 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
               _ph(isEnglish ? 'Vendor Name' : 'ชื่อเจ้าหนี้', 160),
               _ph(isEnglish ? 'Account No.' : 'เลขที่บัญชี', 120),
               _ph(isEnglish ? 'Invoice No.' : 'เลขที่ใบแจ้งหนี้', 130),
+              _ph(isEnglish ? 'Vendor Invoice No.' : 'เลขที่ใบกำกับผู้ขาย', 130),
               _ph(isEnglish ? 'Invoice Date' : 'วันที่ใบ', 90),
               _ph(isEnglish ? 'Due Date' : 'วันครบกำหนด', 90),
               _ph(isEnglish ? 'Invoice Amount' : 'ยอดใบแจ้งหนี้', 110, right: true),
@@ -2157,6 +2174,7 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
                                     160),
                                 _pd(inv.accountNumber ?? '', 120),
                                 _pd(inv.docNo, 130),
+                                _pd(inv.refNo ?? '', 130),
                                 _pd(_fmtDate(inv.docDate), 90),
                                 _pd(_fmtDate(inv.dueDate), 90),
                                 _pd(_fmt.format(inv.totalAmountLc), 110, right: true),

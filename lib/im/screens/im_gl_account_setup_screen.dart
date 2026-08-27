@@ -213,6 +213,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   int? _cogsAccountId;      String? _cogsAccountCode;      String? _cogsAccountName;
   int? _varianceAccountId;  String? _varianceAccountCode;  String? _varianceAccountName;
   int? _wipAccountId;       String? _wipAccountCode;       String? _wipAccountName;
+  int? _grirAccountId;      String? _grirAccountCode;      String? _grirAccountName;
   int? _glDocId;            String? _glDocCode;            String? _glDocName;
   bool _isSaving = false;
 
@@ -233,6 +234,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     _cogsAccountId      = s.cogsAccountId;      _cogsAccountCode      = s.cogsAccountCode;      _cogsAccountName      = s.cogsAccountName;
     _varianceAccountId  = s.varianceAccountId;  _varianceAccountCode  = s.varianceAccountCode;  _varianceAccountName  = s.varianceAccountName;
     _wipAccountId       = s.wipAccountId;       _wipAccountCode       = s.wipAccountCode;       _wipAccountName       = s.wipAccountName;
+    _grirAccountId      = s.grirAccountId;      _grirAccountCode      = s.grirAccountCode;      _grirAccountName      = s.grirAccountName;
     _glDocId            = s.glDocId;            _glDocCode            = s.glDocCode;            _glDocName            = s.glDocName;
   }
 
@@ -418,6 +420,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         cogsAccountId: _cogsAccountId, cogsAccountCode: _cogsAccountCode, cogsAccountName: _cogsAccountName,
         varianceAccountId: _varianceAccountId, varianceAccountCode: _varianceAccountCode, varianceAccountName: _varianceAccountName,
         wipAccountId: _wipAccountId, wipAccountCode: _wipAccountCode, wipAccountName: _wipAccountName,
+        grirAccountId: _grirAccountId, grirAccountCode: _grirAccountCode, grirAccountName: _grirAccountName,
       );
       await widget.onSave(updated);
     } finally {
@@ -452,7 +455,10 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         isEnglish ? '(COGS — not set)' : '(บัญชีต้นทุนขาย — ยังไม่ตั้งค่า)');
     final variance = _acctLabel(_varianceAccountId, _varianceAccountCode, _varianceAccountName, isEnglish,
         isEnglish ? '(Variance — not set)' : '(บัญชีผลต่างต้นทุน — ยังไม่ตั้งค่า)');
+    final grir = _acctLabel(_grirAccountId, _grirAccountCode, _grirAccountName, isEnglish,
+        isEnglish ? '(GR/IR clearing — not set)' : '(บัญชีพักรอใบกำกับ GR/IR — ยังไม่ตั้งค่า)');
     final ap = isEnglish ? '(AP — posted in AP module)' : '(เจ้าหนี้ — บันทึกในโมดูล AP)';
+    final purchases = isEnglish ? 'Purchases (Periodic mode)' : 'บัญชีซื้อสินค้า (โหมด Periodic)';
 
     switch (_sdt) {
       case '80': // AJS — ปรับยอดสินค้า
@@ -477,7 +483,24 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
             _JournalLine('  Cr', isEnglish ? '$inv (source warehouse)' : '$inv (คลังต้นทาง)'),
           ]),
         ];
-      case '10': // GRN — รับสินค้า
+      case '10': // GRN — รับสินค้า (ไม่มีเลขที่อ้างอิง) — AP ตั้งหนี้เองภายหลัง (Dr GR/IR / Cr AP แยกต่างหาก)
+        return [
+          _JournalSection(
+            title: isEnglish ? 'Perpetual mode' : 'โหมด Perpetual',
+            lines: [_JournalLine('Dr', inv), _JournalLine('  Cr', grir)],
+          ),
+          _JournalSection(
+            title: isEnglish ? 'Periodic mode' : 'โหมด Periodic',
+            lines: [_JournalLine('Dr', purchases), _JournalLine('  Cr', grir)],
+          ),
+        ];
+      case '11': // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ — ไม่ Post ที่นี่ สร้าง ap_transaction แล้วโพสต์ที่นั่นแทน
+        return [
+          _JournalSection(lines: [
+            _JournalLine('Dr', isEnglish ? '$inv / $purchases (auto, on the AP bill)' : '$inv / $purchases (อัตโนมัติ บนใบตั้งหนี้ AP)'),
+            _JournalLine('  Cr', ap),
+          ]),
+        ];
       case '25': // DNS — เพิ่มหนี้เจ้าหนี้
         return [
           _JournalSection(lines: [_JournalLine('Dr', inv), _JournalLine('  Cr', ap)]),
@@ -505,7 +528,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   Widget _buildJournalPreview(bool isEnglish) {
     final sections = _journalSections(isEnglish);
     if (sections.isEmpty) return const SizedBox.shrink();
-    final isLive = ['80', '60', '70'].contains(_sdt);
+    final isLive = ['80', '60', '70', '10', '11'].contains(_sdt);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -559,6 +582,15 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
               isEnglish
                   ? '* Inventory accounts are not yet warehouse-specific — both sides resolve to the same account today, so no GL entry actually posts until per-warehouse accounts are configured (im_warehouse).'
                   : '* บัญชีสต็อกยังไม่ได้แยกตามคลัง ทั้งสองฝั่งจึงชี้ไปที่บัญชีเดียวกันในวันนี้ — จะยังไม่มีการโพสต์ GL จริงจนกว่าจะตั้งค่าบัญชีแยกตามคลัง (im_warehouse)',
+              style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
+            ),
+          ],
+          if (_sdt == '11') ...[
+            const SizedBox(height: 6),
+            Text(
+              isEnglish
+                  ? '* This document type does not post its own GL entry — Posting it creates a linked AP Purchase Invoice automatically, and that invoice\'s own entry is the one shown above.'
+                  : '* ประเภทเอกสารนี้ไม่ได้ Post บัญชีของตัวเอง — เมื่อ Post จะสร้างใบตั้งหนี้ในโมดูล AP ให้อัตโนมัติ และ entry ที่แสดงด้านบนคือ entry ของใบตั้งหนี้นั้น',
               style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
             ),
           ],
@@ -654,6 +686,12 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           accountId: _wipAccountId, accountCode: _wipAccountCode, accountName: _wipAccountName,
           onPick: (a) { _wipAccountId = a.id; _wipAccountCode = a.accountCode; _wipAccountName = a.accountNameThai; },
           onClear: () => setState(() { _wipAccountId = null; _wipAccountCode = null; _wipAccountName = null; }),
+        ),
+        _accountField(
+          label: isEnglish ? 'GR/IR Clearing Account (used by "10" — GRN with no reference)' : 'บัญชีพักรอใบกำกับ GR/IR (ใช้กับ "10" — รับสินค้าไม่มีเลขที่อ้างอิง)',
+          accountId: _grirAccountId, accountCode: _grirAccountCode, accountName: _grirAccountName,
+          onPick: (a) { _grirAccountId = a.id; _grirAccountCode = a.accountCode; _grirAccountName = a.accountNameThai; },
+          onClear: () => setState(() { _grirAccountId = null; _grirAccountCode = null; _grirAccountName = null; }),
         ),
 
         _buildJournalPreview(isEnglish),
