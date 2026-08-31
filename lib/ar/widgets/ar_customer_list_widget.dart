@@ -32,6 +32,40 @@ class ArCustomerListWidget extends StatefulWidget {
 
   @override
   State<ArCustomerListWidget> createState() => ArCustomerListWidgetState();
+
+  static Future<void> search(BuildContext context, {required void Function(ArCustomer) onSelected}) {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        contentPadding: EdgeInsets.zero,
+        title: Text(isEnglish ? 'Search Customer' : 'ค้นหาลูกค้า', style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Container(
+          width: 480,
+          height: 560,
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10.0)),
+          child: ArCustomerListWidget(
+            enableAddButton: false,
+            enableEditButton: false,
+            enableViewButton: false,
+            enableDeleteButton: false,
+            enableCardSelect: true,
+            onAdd: () {},
+            onEdit: (c) {},
+            onView: (c) {},
+            onDelete: (c) {},
+            onCallback: onSelected,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(isEnglish ? 'Close' : 'ปิด', style: const TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class ArCustomerListWidgetState extends State<ArCustomerListWidget>

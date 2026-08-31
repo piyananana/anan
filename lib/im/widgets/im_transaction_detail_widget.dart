@@ -19,17 +19,20 @@ import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../ap/models/ap_vendor.dart';
 import '../../ap/widgets/ap_vendor_list_widget.dart';
+import '../../ar/models/ar_customer.dart';
+import '../../ar/widgets/ar_customer_list_widget.dart';
 
 double _parseNum(String s) => double.tryParse(s.trim()) ?? 0;
 
 // ── Mutable UI state for one count line — kept separate from ImTransactionDetail
 // so controllers/loading flags don't leak into the plain data model. ───────────
 // isIssueMode (sys_doc_type='60', ISS — เบิกสินค้า) / isTransferMode (sys_doc_type='70', TRF — โอนสินค้า) /
-// isReceiveMode (sys_doc_type='10'/'11', GRN — รับสินค้า): ผู้ใช้กรอก "จำนวนที่เบิก/โอน/รับ" (delta) โดยตรง
-// แทนที่จะกรอก "ยอดนับได้" (absolute target) แบบ AJS — counted ยังคงเป็น absolute target เสมอ เพื่อให้ backend
-// (im_transaction_detail.counted_qty / applyStockMovement) ใช้สูตรเดียวกันได้โดยไม่ต้องแก้ engine: counted =
-// systemQty -/+ จำนวนที่กรอก (ลบสำหรับเบิก/โอนออก, บวกสำหรับรับเข้า) — ทั้งสามโหมดใช้กลไกเดียวกันทุกประการ
-// ต่างกันแค่ label ที่แสดงและทิศทางบวก/ลบ (ดู _isIssueMode / _isTransferMode / _isReceiveMode ใน state)
+// isReceiveMode (sys_doc_type='10'/'11'/'12', GRN — รับสินค้า) / isDeliverMode (sys_doc_type='30'/'31'/'32', DLN —
+// ส่งสินค้า): ผู้ใช้กรอก "จำนวนที่เบิก/โอน/รับ/ส่ง" (delta) โดยตรง แทนที่จะกรอก "ยอดนับได้" (absolute target) แบบ AJS
+// — counted ยังคงเป็น absolute target เสมอ เพื่อให้ backend (im_transaction_detail.counted_qty /
+// applyStockMovement) ใช้สูตรเดียวกันได้โดยไม่ต้องแก้ engine: counted = systemQty -/+ จำนวนที่กรอก (ลบสำหรับ
+// เบิก/โอนออก/ส่ง, บวกสำหรับรับเข้า) — ทุกโหมดใช้กลไกเดียวกันทุกประการ ต่างกันแค่ label ที่แสดงและทิศทางบวก/ลบ
+// (ดู _isIssueMode / _isTransferMode / _isReceiveMode / _isDeliverMode ใน state)
 class _CountLine {
   int? id;
   ImItem item;
@@ -44,10 +47,12 @@ class _CountLine {
   final bool isIssueMode;
   final bool isTransferMode;
   final bool isReceiveMode;
+  final bool isDeliverMode;
   final TextEditingController countedQtyCtrl;
   final TextEditingController issueQtyCtrl;
   final TextEditingController unitCostCtrl;
   final TextEditingController billedUnitCostCtrl; // '12' เท่านั้น — ต้นทุนตามใบกำกับจริง (อาจต่างจาก unitCostCtrl)
+  final TextEditingController unitPriceCtrl; // '31'/'32' เท่านั้น — ราคาขายต่อหน่วย ใช้คำนวณรายได้ตอนสร้างใบแจ้งหนี้ AR
   final TextEditingController lotNoCtrl;
   final TextEditingController serialNoCtrl;
 
@@ -64,20 +69,23 @@ class _CountLine {
     this.isIssueMode = false,
     this.isTransferMode = false,
     this.isReceiveMode = false,
+    this.isDeliverMode = false,
     double countedQty = 0,
     double issueQty = 0,
     double? unitCost,
     double? billedUnitCost,
+    double? unitPrice,
     String lotNo = '',
     String serialNo = '',
   })  : countedQtyCtrl = TextEditingController(text: countedQty == 0 ? '' : _fmtInput(countedQty)),
         issueQtyCtrl = TextEditingController(text: issueQty == 0 ? '' : _fmtInput(issueQty)),
         unitCostCtrl = TextEditingController(text: unitCost != null && unitCost != 0 ? _fmtInput(unitCost) : ''),
         billedUnitCostCtrl = TextEditingController(text: billedUnitCost != null && billedUnitCost != 0 ? _fmtInput(billedUnitCost) : ''),
+        unitPriceCtrl = TextEditingController(text: unitPrice != null && unitPrice != 0 ? _fmtInput(unitPrice) : ''),
         lotNoCtrl = TextEditingController(text: lotNo),
         serialNoCtrl = TextEditingController(text: serialNo);
 
-  bool get isDeltaMode => isIssueMode || isTransferMode || isReceiveMode;
+  bool get isDeltaMode => isIssueMode || isTransferMode || isReceiveMode || isDeliverMode;
   double get counted {
     if (!isDeltaMode) return _parseNum(countedQtyCtrl.text);
     final delta = _parseNum(issueQtyCtrl.text);
@@ -93,6 +101,7 @@ class _CountLine {
     issueQtyCtrl.dispose();
     unitCostCtrl.dispose();
     billedUnitCostCtrl.dispose();
+    unitPriceCtrl.dispose();
     lotNoCtrl.dispose();
     serialNoCtrl.dispose();
   }
@@ -146,6 +155,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   int? _vendorId;
   String? _vendorLabel;
   int? _linkedApTransactionId;
+  int? _customerId;
+  String? _customerLabel;
+  int? _linkedArTransactionId;
   final _refNoCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
@@ -163,9 +175,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   bool get _isReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12'; // GRN — รับสินค้า
   bool get _isGrnBillingMode => _selectedSysDocType == '11'; // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ
   bool get _isGrDeferredMode => _selectedSysDocType == '12'; // GR รอตั้งหนี้ — Post IM ก่อน ค่อย Post AP/GL ทีหลัง
-  // สถานะ Received ('12' ที่ Post IM แล้วแต่ยังไม่ Post AP/GL) แก้ได้แค่เลขที่ใบกำกับ + billed cost — ฟิลด์อื่น
-  // (จำนวน/สินค้า/คลัง) ยังคง lock ผ่าน _isReadOnly ตามปกติ เพราะรับของจริงไปแล้ว
-  bool get _canEditBilling => !widget.viewOnly && (_status == 'Draft' || (_isGrDeferredMode && _status == 'Received'));
+  bool get _isDeliverMode => _selectedSysDocType == '30' || _selectedSysDocType == '31' || _selectedSysDocType == '32'; // DLN — ส่งสินค้า
+  bool get _isDlnBillingMode => _selectedSysDocType == '31'; // DLN Billing — ส่งสินค้า+ตั้งหนี้อัตโนมัติ
+  bool get _isDlnDeferredMode => _selectedSysDocType == '32'; // DLN รอตั้งหนี้ — Post IM ก่อน (COGS ทันที) ค่อย Post AR/GL ทีหลัง
+  // สถานะ Received ('12' ที่ Post IM แล้วแต่ยังไม่ Post AP/GL) หรือ Delivered ('32' ที่ Post IM แล้วแต่ยังไม่ Post
+  // AR/GL) แก้ได้แค่เลขที่อ้างอิง + billed cost/ราคาขาย — ฟิลด์อื่น (จำนวน/สินค้า/คลัง) ยังคง lock ผ่าน _isReadOnly
+  // ตามปกติ เพราะรับของ/ส่งของจริงไปแล้ว
+  bool get _canEditBilling => !widget.viewOnly &&
+      (_status == 'Draft' || (_isGrDeferredMode && _status == 'Received') || (_isDlnDeferredMode && _status == 'Delivered'));
 
   @override
   void initState() {
@@ -208,6 +225,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _vendorId = null;
     _vendorLabel = null;
     _linkedApTransactionId = null;
+    _customerId = null;
+    _customerLabel = null;
+    _linkedArTransactionId = null;
     _refNoCtrl.clear();
     _descCtrl.clear();
     _status = 'Draft';
@@ -263,6 +283,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _vendorId = h.vendorId;
     _vendorLabel = '${h.vendorCode ?? ''} ${h.vendorNameTh ?? ''}'.trim();
     _linkedApTransactionId = h.linkedApTransactionId;
+    _customerId = h.customerId;
+    _customerLabel = '${h.customerCode ?? ''} ${h.customerNameTh ?? ''}'.trim();
+    _linkedArTransactionId = h.linkedArTransactionId;
     _refNoCtrl.text = h.refNo ?? '';
     _descCtrl.text = h.description ?? '';
     _status = h.status;
@@ -285,12 +308,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         isIssueMode: _isIssueMode,
         isTransferMode: _isTransferMode,
         isReceiveMode: _isReceiveMode,
+        isDeliverMode: _isDeliverMode,
         countedQty: d.countedQty,
         issueQty: _isReceiveMode
             ? (d.countedQty - d.systemQty)
-            : (_isIssueMode || _isTransferMode) ? (d.systemQty - d.countedQty) : 0,
+            : (_isIssueMode || _isTransferMode || _isDeliverMode) ? (d.systemQty - d.countedQty) : 0,
         unitCost: d.unitCost,
         billedUnitCost: d.billedUnitCost,
+        unitPrice: d.unitPrice,
         lotNo: d.lotNo ?? '',
         serialNo: d.serialNo ?? '',
       ));
@@ -300,7 +325,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (_docCode != null) {
       _docSetup = await _service.fetchSetupByDocCode(_docCode!).catchError((_) => null);
     }
-    if (_status == 'Posted' && _glEntryId != null) {
+    // '32' ที่ Delivered แล้ว: ต้นทุนขาย (COGS) Post ไปแล้วตอน Post IM (gl_entry_id ถูกตั้งค่าจริง) ต่างจาก '12' ที่
+    // ยังไม่มี GL ใดๆ เลยตอน Received — จึงต้อง fetch entry จริงมาแสดงเหมือนสถานะ Posted ทั่วไป
+    if ((_status == 'Posted' || (_isDlnDeferredMode && _status == 'Delivered')) && _glEntryId != null) {
       final result = await _glEntryService.fetchEntryDetail(_glEntryId!);
       _postedGlDetails = result['details'] as List<GlEntryDetail>;
     }
@@ -349,6 +376,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     });
   }
 
+  void _selectCustomer(ArCustomer c) {
+    setState(() {
+      _customerId = c.id;
+      _customerLabel = '${c.customerCode} ${c.customerNameTh}';
+    });
+  }
+
   Future<void> _refreshSystemQty(_CountLine line) async {
     if (_warehouseId == null || line.item.id == null) return;
     setState(() => line.loadingSystemQty = true);
@@ -374,7 +408,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       return;
     }
     ImItemListWidget.search(context, itemTypeFilter: 'STOCK', onSelected: (ImItem item) {
-      final line = _CountLine(item: item, uomId: item.baseUomId, uomCode: item.baseUomCode, isIssueMode: _isIssueMode, isTransferMode: _isTransferMode, isReceiveMode: _isReceiveMode);
+      final line = _CountLine(item: item, uomId: item.baseUomId, uomCode: item.baseUomCode, isIssueMode: _isIssueMode, isTransferMode: _isTransferMode, isReceiveMode: _isReceiveMode, isDeliverMode: _isDeliverMode);
       setState(() => _lines.add(line));
       _refreshSystemQty(line);
     });
@@ -403,6 +437,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       warn(isEnglish ? 'Please enter the vendor invoice number' : 'กรุณาระบุเลขที่ใบกำกับสินค้าผู้ขาย');
       return;
     }
+    if (_isDeliverMode && _customerId == null) {
+      warn(isEnglish ? 'Please select a customer' : 'กรุณาเลือกลูกค้า');
+      return;
+    }
     if (_lines.isEmpty) {
       warn(_isTransferMode
           ? (isEnglish ? 'Please add at least one transfer line' : 'กรุณาเพิ่มรายการโอนสินค้าอย่างน้อย 1 รายการ')
@@ -410,7 +448,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
               ? (isEnglish ? 'Please add at least one receiving line' : 'กรุณาเพิ่มรายการรับสินค้าอย่างน้อย 1 รายการ')
               : _isIssueMode
                   ? (isEnglish ? 'Please add at least one issue line' : 'กรุณาเพิ่มรายการเบิกสินค้าอย่างน้อย 1 รายการ')
-                  : (isEnglish ? 'Please add at least one count line' : 'กรุณาเพิ่มรายการนับสต็อกอย่างน้อย 1 รายการ'));
+                  : _isDeliverMode
+                      ? (isEnglish ? 'Please add at least one delivery line' : 'กรุณาเพิ่มรายการส่งสินค้าอย่างน้อย 1 รายการ')
+                      : (isEnglish ? 'Please add at least one count line' : 'กรุณาเพิ่มรายการนับสต็อกอย่างน้อย 1 รายการ'));
       return;
     }
 
@@ -423,11 +463,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       }
       for (final l in _lines) {
         if (l.isDeltaMode && _parseNum(l.issueQtyCtrl.text) <= 0) {
-          warn('${l.item.itemCode}: ${l.isTransferMode ? (isEnglish ? 'Transfer qty is required' : 'กรุณาระบุจำนวนที่โอน') : l.isReceiveMode ? (isEnglish ? 'Receive qty is required' : 'กรุณาระบุจำนวนที่รับ') : (isEnglish ? 'Issue qty is required' : 'กรุณาระบุจำนวนที่เบิก')}');
+          warn('${l.item.itemCode}: ${l.isTransferMode ? (isEnglish ? 'Transfer qty is required' : 'กรุณาระบุจำนวนที่โอน') : l.isReceiveMode ? (isEnglish ? 'Receive qty is required' : 'กรุณาระบุจำนวนที่รับ') : l.isDeliverMode ? (isEnglish ? 'Delivery qty is required' : 'กรุณาระบุจำนวนที่ส่ง') : (isEnglish ? 'Issue qty is required' : 'กรุณาระบุจำนวนที่เบิก')}');
           return;
         }
         if (l.isDeltaMode && !l.isReceiveMode && l.counted < 0) {
-          warn('${l.item.itemCode}: ${l.isTransferMode ? (isEnglish ? 'Transfer qty exceeds current balance' : 'จำนวนที่โอนเกินยอดคงเหลือ') : (isEnglish ? 'Issue qty exceeds current balance' : 'จำนวนที่เบิกเกินยอดคงเหลือ')}');
+          warn('${l.item.itemCode}: ${l.isTransferMode ? (isEnglish ? 'Transfer qty exceeds current balance' : 'จำนวนที่โอนเกินยอดคงเหลือ') : l.isDeliverMode ? (isEnglish ? 'Delivery qty exceeds current balance' : 'จำนวนที่ส่งเกินยอดคงเหลือ') : (isEnglish ? 'Issue qty exceeds current balance' : 'จำนวนที่เบิกเกินยอดคงเหลือ')}');
           return;
         }
         if (l.isTransferMode && _warehouseId == _toWarehouseId && l.locationId != null && l.locationId == l.toLocationId) {
@@ -455,6 +495,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         warehouseId: _warehouseId!,
         toWarehouseId: _isTransferMode ? _toWarehouseId : null,
         vendorId: _isReceiveMode ? _vendorId : null,
+        customerId: _isDeliverMode ? _customerId : null,
         refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       );
@@ -471,6 +512,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             systemQty: l.systemQty,
             countedQty: l.counted,
             unitCost: l.unitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.unitCostCtrl.text),
+            unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
           )).toList();
 
       if (_id == null) {
@@ -554,6 +596,60 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
   }
 
+  // '32' สถานะ Delivered — บันทึกแค่เลขที่อ้างอิง + ราคาขายรายบรรทัด ไม่แตะจำนวน/สินค้า/คลัง (ส่งของจริงไปแล้ว
+  // ต้นทุนขายก็ Post ไปแล้วตอน Post IM)
+  Future<void> _saveBillingInfoDln() async {
+    if (_id == null) return;
+    final isEnglish = _isEnglish;
+    void warn(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    setState(() => _isSaving = true);
+    try {
+      final header = ImTransactionHeader(
+        id: _id!, docId: _docId!, docNo: _docNo, docDate: _docDate, warehouseId: _warehouseId!,
+        customerId: _customerId, refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
+      );
+      final details = _lines.map((l) => ImTransactionDetail(
+            id: l.id,
+            itemId: l.item.id!,
+            unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
+          )).toList();
+      await _service.updateTransaction(id: _id!, header: header, details: details);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
+        await _loadExisting(_id!);
+        setState(() {});
+      }
+    } catch (e) {
+      if (mounted) warn(isEnglish ? 'Save failed: $e' : 'บันทึกล้มเหลว: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  // '32' สถานะ Delivered -> Posted — สร้าง+โพสต์ ar_transaction ด้วยราคาขายที่บันทึกไว้ (ต้นทุนขาย Post ไปแล้วตอน Post IM)
+  Future<void> _postBillingDln() async {
+    if (_id == null) return;
+    final isEnglish = _isEnglish;
+    void warn(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    setState(() => _isSaving = true);
+    try {
+      final details = _lines.map((l) => ImTransactionDetail(
+            id: l.id,
+            itemId: l.item.id!,
+            unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
+          )).toList();
+      await _service.postBillingDln(id: _id!, refNo: _refNoCtrl.text.trim(), details: details);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Posted successfully' : 'Post สำเร็จ')));
+        widget.onSaveSuccess();
+      }
+    } catch (e) {
+      if (mounted) warn(isEnglish ? 'Post failed: $e' : 'Post ล้มเหลว: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   Future<void> _void() async {
     if (_id == null) return;
     final isEnglish = _isEnglish;
@@ -618,6 +714,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 _buildDetailCard(isEnglish),
                 const SizedBox(height: 12),
                 _buildGlCard(isEnglish),
+                if (_isDlnBillingMode || _isDlnDeferredMode) ...[
+                  const SizedBox(height: 12),
+                  _buildArPreviewCard(isEnglish),
+                ],
                 const SizedBox(height: 12),
                 _buildTotalsCard(isEnglish),
               ],
@@ -710,7 +810,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             decoration: InputDecoration(
                 labelText: (_isGrnBillingMode || (_isGrDeferredMode && _status == 'Received'))
                     ? (isEnglish ? 'Vendor Invoice No. *' : 'เลขที่ใบกำกับสินค้าผู้ขาย *')
-                    : (isEnglish ? 'Ref No.' : 'เลขที่อ้างอิง'),
+                    : _isDeliverMode
+                        ? (isEnglish ? 'Customer Ref. No.' : 'เลขที่อ้างอิงลูกค้า')
+                        : (isEnglish ? 'Ref No.' : 'เลขที่อ้างอิง'),
                 border: const OutlineInputBorder(), isDense: true),
           ),
         ),
@@ -748,6 +850,18 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             ),
           ),
         ],
+        if (_isDeliverMode) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: _fkField(
+              label: isEnglish ? 'Customer *' : 'ลูกค้า *',
+              hasValue: _customerId != null,
+              displayText: _customerLabel,
+              onSearch: _isReadOnly ? null : () => ArCustomerListWidget.search(context, onSelected: _selectCustomer),
+            ),
+          ),
+        ],
       ]),
       const SizedBox(height: 6),
       TextField(
@@ -773,6 +887,17 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             ),
           ),
         ],
+        if (_linkedArTransactionId != null) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+            child: Text(
+              isEnglish ? 'AR invoice created (#$_linkedArTransactionId)' : 'สร้างใบแจ้งหนี้ AR แล้ว (#$_linkedArTransactionId)',
+              style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+          ),
+        ],
       ]),
     ]);
   }
@@ -794,7 +919,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
               ? (isEnglish ? 'Receiving Lines' : 'รายการรับสินค้า')
               : _isIssueMode
                   ? (isEnglish ? 'Issue Lines' : 'รายการเบิกสินค้า')
-                  : (isEnglish ? 'Count Lines' : 'รายการปรับยอดสินค้า'),
+                  : _isDeliverMode
+                      ? (isEnglish ? 'Delivery Lines' : 'รายการส่งสินค้า')
+                      : (isEnglish ? 'Count Lines' : 'รายการปรับยอดสินค้า'),
       children: [
         if (_lines.isEmpty)
           Padding(
@@ -912,7 +1039,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                             ? (isEnglish ? 'Receive Qty *' : 'จำนวนที่รับ *')
                             : line.isIssueMode
                                 ? (isEnglish ? 'Issue Qty *' : 'จำนวนที่เบิก *')
-                                : (isEnglish ? 'Counted Qty *' : 'ยอดนับได้ *'),
+                                : line.isDeliverMode
+                                    ? (isEnglish ? 'Delivery Qty *' : 'จำนวนที่ส่ง *')
+                                    : (isEnglish ? 'Counted Qty *' : 'ยอดนับได้ *'),
                     border: const OutlineInputBorder(),
                     isDense: true),
                 onChanged: (_) => setState(() {}),
@@ -928,7 +1057,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                             ? (isEnglish ? 'Balance After' : 'คงเหลือหลังรับ')
                             : line.isIssueMode
                                 ? (isEnglish ? 'Balance After' : 'คงเหลือหลังเบิก')
-                                : (isEnglish ? 'Variance' : 'ผลต่าง'),
+                                : line.isDeliverMode
+                                    ? (isEnglish ? 'Balance After' : 'คงเหลือหลังส่ง')
+                                    : (isEnglish ? 'Variance' : 'ผลต่าง'),
                     border: const OutlineInputBorder(),
                     isDense: true),
                 child: Text(
@@ -966,6 +1097,18 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       border: const OutlineInputBorder(), isDense: true),
                 ),
               ),
+            if (_isDlnBillingMode || _isDlnDeferredMode)
+              SizedBox(
+                width: 120,
+                child: TextField(
+                  controller: line.unitPriceCtrl,
+                  readOnly: !_canEditBilling,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Unit Price' : 'ราคาขาย/หน่วย',
+                      border: const OutlineInputBorder(), isDense: true),
+                ),
+              ),
           ]),
         ]),
       ),
@@ -973,7 +1116,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   }
 
   Widget _buildGlCard(bool isEnglish) {
-    if (_status == 'Posted' && _postedGlDetails != null) {
+    // '32' ที่ Delivered แล้ว: ต้นทุนขาย (COGS) Post ไปแล้วตอน Post IM (gl_entry_id ตั้งค่าจริง) จึงแสดง entry จริง
+    // เหมือนสถานะ Posted ทั่วไป ต่างจาก '12' ที่ยังไม่มี GL ใดๆ เลยตอน Received
+    if ((_status == 'Posted' || (_isDlnDeferredMode && _status == 'Delivered')) && _postedGlDetails != null) {
       return _card(title: isEnglish ? 'GL Entries (Posted)' : 'รายการบัญชี (Posted จริง)', children: [
         ..._postedGlDetails!.map((d) => _glLine(d.accountCode, isEnglish && d.accountNameEng.isNotEmpty ? d.accountNameEng : d.accountName, d.debitLc, d.creditLc)),
       ]);
@@ -1118,10 +1263,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       }
     }
 
-    // บัญชีคู่บัญชี (counterpart ของคลัง) ต้องตรงกับที่ postGlEntry ใช้จริง — ISS ใช้ cogs, ที่เหลือใช้ variance (AJS)
+    // บัญชีคู่บัญชี (counterpart ของคลัง) ต้องตรงกับที่ postGlEntry ใช้จริง — ISS/DLN ใช้ cogs, ที่เหลือใช้ variance (AJS)
     // ดู pattern_sys_doc_type_vs_doc_code: ตัดสินจาก sys_doc_type ไม่ใช่ doc_code
-    final counterCode = _isIssueMode ? _docSetup!.cogsAccountCode : _docSetup!.varianceAccountCode;
-    final counterName = _isIssueMode ? _docSetup!.cogsAccountName : _docSetup!.varianceAccountName;
+    final counterCode = (_isIssueMode || _isDeliverMode) ? _docSetup!.cogsAccountCode : _docSetup!.varianceAccountCode;
+    final counterName = (_isIssueMode || _isDeliverMode) ? _docSetup!.cogsAccountName : _docSetup!.varianceAccountName;
     return _card(title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
       _glLine(_docSetup!.inventoryAccountCode, _docSetup!.inventoryAccountName,
           positiveValue > 0 ? positiveValue : 0, positiveValue < 0 ? -positiveValue : 0),
@@ -1138,6 +1283,61 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           ),
         ),
     ]);
+  }
+
+  // ใบแจ้งหนี้ลูกหนี้ที่ระบบสร้างให้อัตโนมัติจาก DLN Billing ('31' Post ทันที / '32' Post AR/GL แยกต่างหาก) — แยกจาก
+  // _buildGlCard เพราะการขายมี 2 journal entry แยกกันตามหลักบัญชีคู่ (ต้นทุนขายฝั่ง IM เอง + ใบแจ้งหนี้ฝั่ง AR)
+  // ไม่ได้ fetch entry จริงของ ar_transaction ต่างหาก (gl_entry_id ของ ar_transaction เอง ไม่ใช่ im_transaction.gl_entry_id)
+  // จึงแสดงตัวอย่างที่คำนวณจากค่าที่บันทึกไว้เสมอ แม้ Posted แล้ว — known gap เดียวกับที่ '11' มีต่อ AP bill ของตัวเอง
+  Widget _buildArPreviewCard(bool isEnglish) {
+    double subtotal = 0;
+    for (final l in _lines) {
+      subtotal += l.variance.abs() * _parseNum(l.unitPriceCtrl.text);
+    }
+    final vat = subtotal * 0.07;
+    final total = subtotal + vat;
+
+    if (_status == 'Posted' && _linkedArTransactionId != null) {
+      return _card(title: isEnglish ? 'AR Invoice (Posted reference)' : 'ใบแจ้งหนี้ลูกหนี้ (อ้างอิงยอดที่ Posted แล้ว)', children: [
+        _glLine(null, isEnglish ? 'Accounts Receivable' : 'ลูกหนี้การค้า', total, 0),
+        _glLine(null, isEnglish ? 'Revenue' : 'รายได้', 0, subtotal),
+        _glLine(null, isEnglish ? 'VAT Output (7%)' : 'ภาษีขาย (7%)', 0, vat),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            isEnglish
+                ? 'This reflects the unit price currently saved on this document — it should match what was actually posted to AR/GL.'
+                : 'ยอดนี้คำนวณจากราคาขายที่บันทึกไว้ในเอกสารนี้ — ควรตรงกับยอดที่ Post จริงในโมดูล AR/GL',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+          ),
+        ),
+      ]);
+    }
+
+    final isDeferredPending = _isDlnDeferredMode && _status == 'Delivered';
+    return _card(
+      title: isDeferredPending
+          ? (isEnglish ? 'AR Invoice Preview (not posted yet)' : 'ตัวอย่างใบแจ้งหนี้ลูกหนี้ (ยังไม่ได้ Post)')
+          : (isEnglish ? 'AR Invoice Preview (Draft)' : 'ตัวอย่างใบแจ้งหนี้ลูกหนี้ (Draft)'),
+      children: [
+        _glLine(null, isEnglish ? 'Accounts Receivable' : 'ลูกหนี้การค้า', total, 0),
+        _glLine(null, isEnglish ? 'Revenue' : 'รายได้', 0, subtotal),
+        _glLine(null, isEnglish ? 'VAT Output (7%)' : 'ภาษีขาย (7%)', 0, vat),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            isDeferredPending
+                ? (isEnglish
+                    ? 'Not posted yet — enter unit price per line and Post AR/GL to create the real invoice.'
+                    : 'ยังไม่ได้ Post — กรอกราคาขายต่อหน่วยรายบรรทัดแล้วกด Post AR/GL เพื่อสร้างใบแจ้งหนี้จริง')
+                : (isEnglish
+                    ? 'This document does not post its own AR entry separately — Posting it will create a linked AR Invoice automatically, and its entry is shown above for reference.'
+                    : 'เอกสารนี้ไม่ได้ Post บัญชีลูกหนี้ของตัวเองแยกต่างหาก — เมื่อ Post จะสร้างใบแจ้งหนี้ AR ให้อัตโนมัติ และ entry ที่แสดงด้านบนคือ entry ของใบแจ้งหนี้นั้น'),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _glLine(String? code, String? name, double debit, double credit) {
@@ -1160,7 +1360,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
               ? '${isEnglish ? 'Total received qty' : 'จำนวนที่รับรวม'}: ${_fmtQty.format(totalQty)}'
               : _isIssueMode
                   ? '${isEnglish ? 'Total issued qty' : 'จำนวนที่เบิกรวม'}: ${_fmtQty.format(-totalQty)}'
-                  : '${isEnglish ? 'Total variance qty' : 'จำนวนผลต่างรวม'}: ${_fmtQty.format(totalQty)}'),
+                  : _isDeliverMode
+                      ? '${isEnglish ? 'Total delivered qty' : 'จำนวนที่ส่งรวม'}: ${_fmtQty.format(-totalQty)}'
+                      : '${isEnglish ? 'Total variance qty' : 'จำนวนผลต่างรวม'}: ${_fmtQty.format(totalQty)}'),
     ]);
   }
 
@@ -1187,7 +1389,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           ElevatedButton(
             onPressed: _isSaving ? null : () => _save('Post'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
-            child: Text(_isGrDeferredMode ? (isEnglish ? 'Post IM' : 'Post IM') : (isEnglish ? 'Post' : 'Post')),
+            child: Text((_isGrDeferredMode || _isDlnDeferredMode) ? (isEnglish ? 'Post IM' : 'Post IM') : (isEnglish ? 'Post' : 'Post')),
           ),
         ],
         if (_status == 'Received' && _isGrDeferredMode && !widget.viewOnly) ...[
@@ -1203,7 +1405,20 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           ),
           const SizedBox(width: 8),
         ],
-        if ((_status == 'Posted' || _status == 'Received') && !widget.viewOnly)
+        if (_status == 'Delivered' && _isDlnDeferredMode && !widget.viewOnly) ...[
+          OutlinedButton(
+            onPressed: _isSaving ? null : _saveBillingInfoDln,
+            child: Text(isEnglish ? 'Save' : 'บันทึก'),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: _isSaving ? null : _postBillingDln,
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
+            child: Text(isEnglish ? 'Post AR/GL' : 'Post AR/GL'),
+          ),
+          const SizedBox(width: 8),
+        ],
+        if ((_status == 'Posted' || _status == 'Received' || _status == 'Delivered') && !widget.viewOnly)
           ElevatedButton(
             onPressed: _isSaving ? null : _void,
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),

@@ -7,6 +7,7 @@ import '../../sa/models/sa_module_document.dart';
 import '../models/im_transaction.dart';
 import '../models/im_gl_account_setup.dart';
 import '../models/im_gr_billing_report.dart';
+import '../models/im_dln_billing_report.dart';
 
 class ImTransactionService {
   final String baseUrl = AppConfig.apiIm;
@@ -199,6 +200,33 @@ class ImTransactionService {
     }
   }
 
+  // Post AR/GL สำหรับ '32' (ส่งสินค้า รอตั้งหนี้) — ครั้งที่สองเมื่อจะออกใบแจ้งหนี้จริงให้ลูกค้า บันทึกเลขที่อ้างอิง +
+  // ราคาขายรายบรรทัดในคำขอเดียวกันได้เลย ไม่บังคับต้อง Save แยกก่อน (ต้นทุนขายถูก Post ไปแล้วตอน Post IM)
+  Future<ImTransaction> postBillingDln({
+    required int id,
+    required String refNo,
+    required List<ImTransactionDetail> details,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/im_transaction/$id/post_billing_ar'),
+      headers: headers,
+      body: jsonEncode({
+        'ref_no': refNo,
+        'lines': details.map((d) => {'id': d.id, 'unit_price': d.unitPrice}).toList(),
+      }),
+    );
+    if (response.statusCode == 200) {
+      return ImTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'Post AR/GL ล้มเหลว');
+    }
+  }
+
   Future<ImTransaction> voidTransaction(int id) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -273,6 +301,39 @@ class ImTransactionService {
       throw Exception('Unauthorized.');
     } else {
       throw Exception('โหลดรายงาน GR รอตั้งหนี้ล้มเหลว: ${response.statusCode}');
+    }
+  }
+
+  // Review report for sys_doc_type='32' (DLN รอตั้งหนี้) — Delivered docs (COGS posted, revenue not yet) and Posted
+  // docs (revenue booked). See imDlnBillingReportController.js.
+  Future<List<ImDlnBillingReportCustomer>> fetchDlnBillingReport({
+    String? asOfDate,
+    int? warehouseId,
+    int? customerId,
+    String? dateFrom,
+    String? dateTo,
+    String? status,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final queryParams = <String, String>{
+      if (asOfDate != null && asOfDate.isNotEmpty) 'as_of_date': asOfDate,
+      if (warehouseId != null) 'warehouse_id': warehouseId.toString(),
+      if (customerId != null) 'customer_id': customerId.toString(),
+      if (dateFrom != null && dateFrom.isNotEmpty) 'date_from': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'date_to': dateTo,
+      if (status != null && status.isNotEmpty) 'status': status,
+    };
+    final uri = Uri.parse('$baseUrl/im_transaction/dln_billing_report').replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List)
+          .map((e) => ImDlnBillingReportCustomer.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      throw Exception('โหลดรายงาน DLN รอตั้งหนี้ล้มเหลว: ${response.statusCode}');
     }
   }
 }

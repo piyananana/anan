@@ -33,10 +33,14 @@ class ImTransactionHeader {
   final int? toWarehouseId;
   final String? toWarehouseCode;
   final String? toWarehouseNameTh;
-  final int? vendorId; // GRN ('10'/'11') เท่านั้น
+  final int? vendorId; // GRN ('10'/'11'/'12') เท่านั้น
   final String? vendorCode;
   final String? vendorNameTh;
-  final int? linkedApTransactionId; // GRN Billing ('11') เท่านั้น — ใบตั้งหนี้ AP ที่ระบบสร้างให้อัตโนมัติ
+  final int? linkedApTransactionId; // GRN Billing ('11'/'12' หลัง Post AP/GL) เท่านั้น — ใบตั้งหนี้ AP ที่ระบบสร้างให้อัตโนมัติ
+  final int? customerId; // DLN ('30'/'31'/'32') เท่านั้น
+  final String? customerCode;
+  final String? customerNameTh;
+  final int? linkedArTransactionId; // DLN Billing ('31'/'32' หลัง Post AR/GL) เท่านั้น — ใบแจ้งหนี้ AR ที่ระบบสร้างให้อัตโนมัติ
   final String? refNo;
   final int? refDocId;
   final String? refDocNo;
@@ -84,6 +88,10 @@ class ImTransactionHeader {
     this.vendorCode,
     this.vendorNameTh,
     this.linkedApTransactionId,
+    this.customerId,
+    this.customerCode,
+    this.customerNameTh,
+    this.linkedArTransactionId,
     this.refNo,
     this.refDocId,
     this.refDocNo,
@@ -125,6 +133,10 @@ class ImTransactionHeader {
       vendorCode: json['vendor_code'],
       vendorNameTh: json['vendor_name_th'],
       linkedApTransactionId: json['linked_ap_transaction_id'],
+      customerId: json['customer_id'],
+      customerCode: json['customer_code'],
+      customerNameTh: json['customer_name_th'],
+      linkedArTransactionId: json['linked_ar_transaction_id'],
       refNo: json['ref_no'],
       refDocId: json['ref_doc_id'],
       refDocNo: json['ref_doc_no'],
@@ -160,6 +172,7 @@ class ImTransactionHeader {
         'warehouse_id': warehouseId,
         if (toWarehouseId != null) 'to_warehouse_id': toWarehouseId,
         if (vendorId != null) 'vendor_id': vendorId,
+        if (customerId != null) 'customer_id': customerId,
         if (refNo != null) 'ref_no': refNo,
         if (refDocId != null) 'ref_doc_id': refDocId,
         if (refDocNo != null) 'ref_doc_no': refDocNo,
@@ -196,6 +209,7 @@ class ImTransactionDetail {
   final double? qty; // variance — null until Posted (server computes from live balance at Post time)
   final double? unitCost;
   final double? billedUnitCost; // '12' (รับสินค้า รอตั้งหนี้) เท่านั้น — ต้นทุนจริงตามใบกำกับ อาจต่างจาก unitCost
+  final double? unitPrice; // '31'/'32' (DLN + ตั้งหนี้ลูกหนี้) เท่านั้น — ราคาขายต่อหน่วย ใช้คำนวณรายได้ตอนสร้างใบแจ้งหนี้ AR
   final double? totalValueLc;
   final String? description;
 
@@ -219,6 +233,7 @@ class ImTransactionDetail {
     this.qty,
     this.unitCost,
     this.billedUnitCost,
+    this.unitPrice,
     this.totalValueLc,
     this.description,
   });
@@ -248,6 +263,7 @@ class ImTransactionDetail {
       qty: toDoubleN(json['qty']),
       unitCost: toDoubleN(json['unit_cost']),
       billedUnitCost: toDoubleN(json['billed_unit_cost']),
+      unitPrice: toDoubleN(json['unit_price']),
       totalValueLc: toDoubleN(json['total_value_lc']),
       description: json['description'],
     );
@@ -268,6 +284,7 @@ class ImTransactionDetail {
         'counted_qty': countedQty,
         if (unitCost != null) 'unit_cost': unitCost,
         if (billedUnitCost != null) 'billed_unit_cost': billedUnitCost,
+        if (unitPrice != null) 'unit_price': unitPrice,
         if (description != null) 'description': description,
       };
 }

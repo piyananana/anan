@@ -61,14 +61,15 @@ const Map<String, String> apSysDocType = {
 };
 // '31': 'สินค้าคงคลัง'
 const Map<String, String> imSysDocType = {
-  '10': 'รับสินค้า - Good Receive Note', // receive(buy) (+stock +ap)
-  '11': 'รับสินค้าใบแจ้งหนี้ - Good Receive Note Billing', // receive(buy) (+stock +ap)
-  '12': 'รับสินค้า (รอตั้งหนี้) - GR Pending AP Billing', // receive(buy) (+stock only) ตั้งหนี้+GL ทีหลังเมื่อได้ invoice
+  '10': 'รับสินค้า - Good Receipt', // receive(buy) (+stock +ap)
+  '11': 'รับสินค้าพร้อมใบแจ้งหนี้ - Good Receipt with AP Billing', // receive(buy) (+stock +ap)
+  '12': 'รับสินค้ารอใบแจ้งหนี้ - Good Receipt Pending AP Billing', // receive(buy) (+stock only) ตั้งหนี้+GL ทีหลังเมื่อได้ invoice
   '15': 'คืนสินค้า - Return to Supplier', // return (-stock -ap)
   '20': 'ลดหนี้เจ้าหนี้ - Credit Note from Supplier', // cn (-stock -ap)
   '25': 'เพิ่มหนี้เจ้าหนี้ - Debit Note from Supplier', // dn (+stock +ap)
   '30': 'ส่งสินค้า - Delivery Note', // delivery(sale) (-stock +ar)
-  '31': 'ส่งสินค้าใบแจ้งหนี้ - Delivery Note Billing', // delivery(sale) (-stock +ar)
+  '31': 'ส่งสินค้าพร้อมใบแจ้งหนี้ - Delivery Note with AR Billing', // delivery(sale) (-stock +ar)
+  '32': 'ส่งสินค้ารอใบแจ้งหนี้ - Delivery Note Pending AR Billing', // delivery(sale) (-stock only) ตั้งหนี้+GL ทีหลังเมื่อได้ invoice
   '35': 'รับคืนสินค้า - Return from Customer', // return (+stock -ar)
   '40': 'ลดหนี้ลูกหนี้ - Credit Note to Customer', // cn (+stock -ar)
   '45': 'เพิ่มหนี้ลูกหนี้ - Debit Note to Customer', // dn (-stock +ar)
