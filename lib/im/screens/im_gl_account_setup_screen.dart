@@ -214,6 +214,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   int? _varianceAccountId;  String? _varianceAccountCode;  String? _varianceAccountName;
   int? _wipAccountId;       String? _wipAccountCode;       String? _wipAccountName;
   int? _grirAccountId;      String? _grirAccountCode;      String? _grirAccountName;
+  int? _vatOutputAccountId; String? _vatOutputAccountCode; String? _vatOutputAccountName;
+  int? _vatInputAccountId;  String? _vatInputAccountCode;  String? _vatInputAccountName;
   int? _glDocId;            String? _glDocCode;            String? _glDocName;
   bool _isSaving = false;
 
@@ -235,6 +237,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     _varianceAccountId  = s.varianceAccountId;  _varianceAccountCode  = s.varianceAccountCode;  _varianceAccountName  = s.varianceAccountName;
     _wipAccountId       = s.wipAccountId;       _wipAccountCode       = s.wipAccountCode;       _wipAccountName       = s.wipAccountName;
     _grirAccountId      = s.grirAccountId;      _grirAccountCode      = s.grirAccountCode;      _grirAccountName      = s.grirAccountName;
+    _vatOutputAccountId = s.vatOutputAccountId; _vatOutputAccountCode = s.vatOutputAccountCode; _vatOutputAccountName = s.vatOutputAccountName;
+    _vatInputAccountId  = s.vatInputAccountId;  _vatInputAccountCode  = s.vatInputAccountCode;  _vatInputAccountName  = s.vatInputAccountName;
     _glDocId            = s.glDocId;            _glDocCode            = s.glDocCode;            _glDocName            = s.glDocName;
   }
 
@@ -421,6 +425,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         varianceAccountId: _varianceAccountId, varianceAccountCode: _varianceAccountCode, varianceAccountName: _varianceAccountName,
         wipAccountId: _wipAccountId, wipAccountCode: _wipAccountCode, wipAccountName: _wipAccountName,
         grirAccountId: _grirAccountId, grirAccountCode: _grirAccountCode, grirAccountName: _grirAccountName,
+        vatOutputAccountId: _vatOutputAccountId, vatOutputAccountCode: _vatOutputAccountCode, vatOutputAccountName: _vatOutputAccountName,
+        vatInputAccountId: _vatInputAccountId, vatInputAccountCode: _vatInputAccountCode, vatInputAccountName: _vatInputAccountName,
       );
       await widget.onSave(updated);
     } finally {
@@ -457,6 +463,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         isEnglish ? '(Variance — not set)' : '(บัญชีผลต่างต้นทุน — ยังไม่ตั้งค่า)');
     final grir = _acctLabel(_grirAccountId, _grirAccountCode, _grirAccountName, isEnglish,
         isEnglish ? '(GR/IR clearing — not set)' : '(บัญชีพักรอใบกำกับ GR/IR — ยังไม่ตั้งค่า)');
+    final vatIn = _acctLabel(_vatInputAccountId, _vatInputAccountCode, _vatInputAccountName, isEnglish,
+        isEnglish ? '(VAT Input — not set, falls back to AP\'s own setup)' : '(บัญชี VAT ซื้อ — ยังไม่ตั้งค่า จะ fallback ไปที่ของ AP เอง)');
     final ap = isEnglish ? '(AP — posted in AP module)' : '(เจ้าหนี้ — บันทึกในโมดูล AP)';
     final purchases = isEnglish ? 'Purchases (Periodic mode)' : 'บัญชีซื้อสินค้า (โหมด Periodic)';
 
@@ -495,22 +503,34 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           ),
         ];
       case '11': // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ — ไม่ Post ที่นี่ สร้าง ap_transaction แล้วโพสต์ที่นั่นแทน
+      case '12': // GR รอตั้งหนี้ — Stage 1 (Post IM) ไม่ Post บัญชีเลย, Stage 2 (Post AP/GL) เหมือน '11' ทุกประการ
         return [
           _JournalSection(lines: [
             _JournalLine('Dr', isEnglish ? '$inv / $purchases (auto, on the AP bill)' : '$inv / $purchases (อัตโนมัติ บนใบตั้งหนี้ AP)'),
+            _JournalLine('Dr', isEnglish ? '$vatIn (if VAT selected on a line)' : '$vatIn (ถ้าบรรทัดใดเลือก VAT)'),
             _JournalLine('  Cr', ap),
           ]),
         ];
       case '25': // DNS — เพิ่มหนี้เจ้าหนี้
         return [
-          _JournalSection(lines: [_JournalLine('Dr', inv), _JournalLine('  Cr', ap)]),
+          _JournalSection(lines: [
+            _JournalLine('Dr', inv),
+            _JournalLine('Dr', isEnglish ? '$vatIn (if VAT selected on a line)' : '$vatIn (ถ้าบรรทัดใดเลือก VAT)'),
+            _JournalLine('  Cr', ap),
+          ]),
         ];
       case '15': // RTS — คืนสินค้า
       case '20': // CNS — ลดหนี้เจ้าหนี้
         return [
-          _JournalSection(lines: [_JournalLine('Dr', ap), _JournalLine('  Cr', inv)]),
+          _JournalSection(lines: [
+            _JournalLine('Dr', ap),
+            _JournalLine('  Cr', inv),
+            _JournalLine('  Cr', isEnglish ? '$vatIn (reversed, if VAT selected on a line)' : '$vatIn (กลับรายการ ถ้าบรรทัดใดเลือก VAT)'),
+          ]),
         ];
       case '30': // DLN — ส่งสินค้า (ขาย)
+      case '31': // DLN Billing — ส่งสินค้า+ตั้งหนี้อัตโนมัติ — ต้นทุนขาย Post ที่นี่เสมอ ใบแจ้งหนี้ AR แยกต่างหาก (ดู note ด้านล่าง)
+      case '32': // DLN รอตั้งหนี้ — ต้นทุนขาย Post ทันทีตอน Post IM เหมือนกัน (ไม่ขึ้นกับราคาขาย) ต่างจาก '12' ตรงนี้
       case '45': // DNC — เพิ่มหนี้ลูกหนี้
         return [
           _JournalSection(lines: [_JournalLine('Dr', cogs), _JournalLine('  Cr', inv)]),
@@ -528,7 +548,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   Widget _buildJournalPreview(bool isEnglish) {
     final sections = _journalSections(isEnglish);
     if (sections.isEmpty) return const SizedBox.shrink();
-    final isLive = ['80', '60', '70', '10', '11'].contains(_sdt);
+    final isLive = ['80', '60', '70', '10', '11', '12', '30', '31', '32', '15', '20', '25', '35', '40', '45'].contains(_sdt);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -591,6 +611,51 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
               isEnglish
                   ? '* This document type does not post its own GL entry — Posting it creates a linked AP Purchase Invoice automatically, and that invoice\'s own entry is the one shown above.'
                   : '* ประเภทเอกสารนี้ไม่ได้ Post บัญชีของตัวเอง — เมื่อ Post จะสร้างใบตั้งหนี้ในโมดูล AP ให้อัตโนมัติ และ entry ที่แสดงด้านบนคือ entry ของใบตั้งหนี้นั้น',
+              style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
+            ),
+          ],
+          if (_sdt == '12') ...[
+            const SizedBox(height: 6),
+            Text(
+              isEnglish
+                  ? '* Two-stage: "Post IM" posts no GL at all (goods received, invoice not yet in hand). Only "Post AP/GL" later — when the vendor invoice arrives — creates the linked AP Purchase Invoice shown above, using the billed cost entered at that point.'
+                  : '* สองขั้นตอน: "Post IM" จะยังไม่มีการ Post บัญชีใดๆ เลย (รับของแล้วแต่ยังไม่ได้ใบกำกับ) ต้องรอ "Post AP/GL" ภายหลังเมื่อได้รับใบกำกับจากผู้ขายก่อน จึงจะสร้างใบตั้งหนี้ AP ตาม entry ด้านบน โดยใช้ต้นทุนตามใบกำกับที่กรอก ณ ตอนนั้น',
+              style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
+            ),
+          ],
+          if (['15', '20', '25'].contains(_sdt)) ...[
+            const SizedBox(height: 6),
+            Text(
+              isEnglish
+                  ? '* This document type does not post its own GL entry — Posting it creates a linked AP Credit/Debit Note automatically, and that document\'s own entry is the one shown above.'
+                  : '* ประเภทเอกสารนี้ไม่ได้ Post บัญชีของตัวเอง — เมื่อ Post จะสร้างใบลดหนี้/เพิ่มหนี้ในโมดูล AP ให้อัตโนมัติ และ entry ที่แสดงด้านบนคือ entry ของใบนั้น',
+              style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
+            ),
+          ],
+          if (_sdt == '31') ...[
+            const SizedBox(height: 6),
+            Text(
+              isEnglish
+                  ? '* Two separate entries post: the COGS entry above (this module — suppressed in Periodic mode, same as plain DLN/ISS) plus a linked AR Invoice\'s own entry (created automatically, not shown here, and always posts regardless of mode since it is a real obligation to the customer, not a stock valuation).'
+                  : '* มีการ Post 2 entry แยกกัน: entry ต้นทุนขายข้างบน (โมดูลนี้ — ถูกระงับในโหมด Periodic เหมือน DLN ธรรมดา/ISS) กับ entry ของใบแจ้งหนี้ AR ที่สร้างอัตโนมัติ (ไม่ได้แสดงที่นี่ และ Post เสมอไม่ว่าโหมดใด เพราะเป็นภาระผูกพันจริงกับลูกค้า ไม่ใช่การตีมูลค่าสต็อก)',
+              style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
+            ),
+          ],
+          if (_sdt == '32') ...[
+            const SizedBox(height: 6),
+            Text(
+              isEnglish
+                  ? '* Two-stage: "Post IM" posts the COGS entry above immediately (cost comes from the stock ledger, independent of the not-yet-issued selling price). "Post AR/GL" later creates the linked AR Invoice separately (not shown here) once the price is confirmed.'
+                  : '* สองขั้นตอน: "Post IM" จะ Post entry ต้นทุนขายข้างบนทันที (ต้นทุนมาจาก stock ledger ไม่ขึ้นกับราคาขายที่ยังไม่ออกใบแจ้งหนี้) ต้องรอ "Post AR/GL" ภายหลังจึงจะสร้างใบแจ้งหนี้ AR แยกต่างหาก (ไม่ได้แสดงที่นี่) เมื่อยืนยันราคาขายแล้ว',
+              style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
+            ),
+          ],
+          if (['35', '40', '45'].contains(_sdt)) ...[
+            const SizedBox(height: 6),
+            Text(
+              isEnglish
+                  ? '* Two separate entries post: the COGS entry above (this module) plus a linked AR Credit/Debit Note\'s own entry (created automatically, not shown here) — matching the DLN sale/invoice split.'
+                  : '* มีการ Post 2 entry แยกกัน: entry ต้นทุนขายข้างบน (โมดูลนี้) กับ entry ของใบลดหนี้/เพิ่มหนี้ AR ที่สร้างอัตโนมัติ (ไม่ได้แสดงที่นี่) — มิเรอร์การแยก entry ของ DLN ตอนขาย/ตั้งหนี้',
               style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
             ),
           ],
@@ -692,6 +757,22 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           accountId: _grirAccountId, accountCode: _grirAccountCode, accountName: _grirAccountName,
           onPick: (a) { _grirAccountId = a.id; _grirAccountCode = a.accountCode; _grirAccountName = a.accountNameThai; },
           onClear: () => setState(() { _grirAccountId = null; _grirAccountCode = null; _grirAccountName = null; }),
+        ),
+        _accountField(
+          label: isEnglish
+              ? 'VAT Input Account (used by "11"/"12"/"15"/"20"/"25" — overrides AP\'s own setup)'
+              : 'บัญชี VAT ซื้อ (ใช้กับ "11"/"12"/"15"/"20"/"25" — override บัญชี VAT ของ AP เอง)',
+          accountId: _vatInputAccountId, accountCode: _vatInputAccountCode, accountName: _vatInputAccountName,
+          onPick: (a) { _vatInputAccountId = a.id; _vatInputAccountCode = a.accountCode; _vatInputAccountName = a.accountNameThai; },
+          onClear: () => setState(() { _vatInputAccountId = null; _vatInputAccountCode = null; _vatInputAccountName = null; }),
+        ),
+        _accountField(
+          label: isEnglish
+              ? 'VAT Output Account (used by "31"/"32"/"35"/"40"/"45" — overrides AR\'s own setup)'
+              : 'บัญชี VAT ขาย (ใช้กับ "31"/"32"/"35"/"40"/"45" — override บัญชี VAT ของ AR เอง)',
+          accountId: _vatOutputAccountId, accountCode: _vatOutputAccountCode, accountName: _vatOutputAccountName,
+          onPick: (a) { _vatOutputAccountId = a.id; _vatOutputAccountCode = a.accountCode; _vatOutputAccountName = a.accountNameThai; },
+          onClear: () => setState(() { _vatOutputAccountId = null; _vatOutputAccountCode = null; _vatOutputAccountName = null; }),
         ),
 
         _buildJournalPreview(isEnglish),

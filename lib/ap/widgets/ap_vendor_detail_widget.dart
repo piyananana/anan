@@ -1633,6 +1633,15 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
               ),
             ),
           ]),
+          _buildFkField(
+            label: isEnglish ? 'Main Payment Method' : 'ประเภทการชำระหลัก',
+            hasValue: _paymentMethodId != null,
+            displayText: '$_paymentMethodCode — ${isEnglish && (_paymentMethodNameEng ?? '').isNotEmpty ? _paymentMethodNameEng : _paymentMethodNameThai}',
+            onSearch: _pickPaymentMethod,
+            onClear: () => setState(() {
+              _paymentMethodId = null; _paymentMethodCode = null; _paymentMethodNameThai = null; _paymentMethodNameEng = null;
+            }),
+          ),
           _buildField(isEnglish ? 'Remark' : 'หมายเหตุ', _remarkCtrl),
           SwitchListTile(
             title: Text(isEnglish ? 'Status: ${_isActive ? 'Active' : 'Inactive'}' : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
@@ -1896,15 +1905,6 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
                   color: Colors.blueGrey.shade400,
                   fontStyle: FontStyle.italic),
             ),
-          ),
-          _buildFkField(
-            label: isEnglish ? 'Main Payment Method' : 'ประเภทการชำระหลัก',
-            hasValue: _paymentMethodId != null,
-            displayText: '$_paymentMethodCode — ${isEnglish && (_paymentMethodNameEng ?? '').isNotEmpty ? _paymentMethodNameEng : _paymentMethodNameThai}',
-            onSearch: _pickPaymentMethod,
-            onClear: () => setState(() {
-              _paymentMethodId = null; _paymentMethodCode = null; _paymentMethodNameThai = null; _paymentMethodNameEng = null;
-            }),
           ),
         ],
       );

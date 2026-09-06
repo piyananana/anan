@@ -50,10 +50,10 @@ const Map<String, String> arSysDocType = {
 // '21': 'บัญชีเจ้าหนี้'
 const Map<String, String> apSysDocType = {
   '10': 'ตั้งหนี้ - Billing', // buy (+ap +expense)
-  '30': 'เพิ่มหนี้ - Debit Note from Supplier', // dn (+ap +expense)
-  '35': 'เพิ่มหนี้ใบแจ้งหนี้ - Debit Note from Supplier Billing',  // dn (+ap +expense)
-  '50': 'ลดหนี้ - Credit Note from Supplier', // cn (-ap -expense)
-  '55': 'ลดหนี้ใบแจ้งหนี้ - Credit Note from Supplier Billing',  // cn (-ap -expense)
+  '30': 'ลดหนี้ - Credit Note from Supplier', // cn (-ap -expense)
+  '35': 'ลดหนี้ใบแจ้งหนี้ - Credit Note from Supplier Billing',  // cn (-ap -expense)
+  '50': 'เพิ่มหนี้ - Debit Note from Supplier', // dn (+ap +expense)
+  '55': 'เพิ่มหนี้ใบแจ้งหนี้ - Debit Note from Supplier Billing',  // dn (+ap +expense)
   '60': 'จ่ายเงินมัดจำ - Pay Deposit',  // pay deposit (-cash +deposit)
   '65': 'รับคืนเงินมัดจำ - Return Deposit',  // return deposit (+cash -deposit)
   '70': 'แจ้งชำระ - Remittance Advice', // remittance advice (no GL)

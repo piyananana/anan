@@ -103,6 +103,51 @@ class ImTransactionService {
     }
   }
 
+  // เอกสาร GRN/DLN ที่ Post แล้ว ให้เลือกเป็นต้นฉบับสำหรับ '15' (คืนสินค้าผู้ขาย) / '35' (รับคืนจากลูกค้า)
+  Future<List<ImReturnableDoc>> fetchReturnableDocs({
+    required String family, // 'GRN' | 'DLN'
+    int? vendorId,
+    int? customerId,
+    String? search,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final queryParams = <String, String>{
+      'family': family,
+      if (vendorId != null) 'vendor_id': vendorId.toString(),
+      if (customerId != null) 'customer_id': customerId.toString(),
+      if (search != null && search.isNotEmpty) 'search': search,
+    };
+    final uri = Uri.parse('$baseUrl/im_transaction/returnable_docs').replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List)
+          .map((e) => ImReturnableDoc.fromJson(e as Map<String, dynamic>)).toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      throw Exception('โหลดรายการเอกสารต้นฉบับล้มเหลว: ${response.statusCode}');
+    }
+  }
+
+  // บรรทัดของเอกสารต้นฉบับที่เลือก พร้อมจำนวนคงเหลือที่คืนได้ต่อบรรทัด
+  Future<List<ImReturnableLine>> fetchReturnableLines(int refImTransactionId) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(
+      Uri.parse('$baseUrl/im_transaction/$refImTransactionId/returnable_lines'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List)
+          .map((e) => ImReturnableLine.fromJson(e as Map<String, dynamic>)).toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      throw Exception('โหลดบรรทัดเอกสารต้นฉบับล้มเหลว: ${response.statusCode}');
+    }
+  }
+
   Future<ImTransaction> createTransaction({
     required ImTransactionHeader header,
     required List<ImTransactionDetail> details,

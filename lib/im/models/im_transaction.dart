@@ -44,6 +44,8 @@ class ImTransactionHeader {
   final String? refNo;
   final int? refDocId;
   final String? refDocNo;
+  final int? refImTransactionId; // '15'/'35' (คืนสินค้าผู้ขาย/รับคืนจากลูกค้า) เท่านั้น — เอกสาร GRN/DLN ต้นฉบับที่จะคืน
+  final String? refImTransactionDocNo; // จาก join — เลขที่เอกสารต้นฉบับ ใช้แสดงผลเท่านั้น
   final String? description;
   final String status;
   final int? glEntryId;
@@ -95,6 +97,8 @@ class ImTransactionHeader {
     this.refNo,
     this.refDocId,
     this.refDocNo,
+    this.refImTransactionId,
+    this.refImTransactionDocNo,
     this.description,
     this.status = 'Draft',
     this.glEntryId,
@@ -140,6 +144,8 @@ class ImTransactionHeader {
       refNo: json['ref_no'],
       refDocId: json['ref_doc_id'],
       refDocNo: json['ref_doc_no'],
+      refImTransactionId: json['ref_im_transaction_id'],
+      refImTransactionDocNo: json['ref_im_transaction_doc_no'],
       description: json['description'],
       status: json['status'] ?? 'Draft',
       glEntryId: json['gl_entry_id'],
@@ -176,6 +182,7 @@ class ImTransactionHeader {
         if (refNo != null) 'ref_no': refNo,
         if (refDocId != null) 'ref_doc_id': refDocId,
         if (refDocNo != null) 'ref_doc_no': refDocNo,
+        if (refImTransactionId != null) 'ref_im_transaction_id': refImTransactionId,
         if (description != null) 'description': description,
         if (dim1Id != null) 'dim1_id': dim1Id,
         if (dim2Id != null) 'dim2_id': dim2Id,
@@ -210,6 +217,9 @@ class ImTransactionDetail {
   final double? unitCost;
   final double? billedUnitCost; // '12' (รับสินค้า รอตั้งหนี้) เท่านั้น — ต้นทุนจริงตามใบกำกับ อาจต่างจาก unitCost
   final double? unitPrice; // '31'/'32' (DLN + ตั้งหนี้ลูกหนี้) เท่านั้น — ราคาขายต่อหน่วย ใช้คำนวณรายได้ตอนสร้างใบแจ้งหนี้ AR
+  final String? vatType; // ใช้เฉพาะประเภทเอกสารที่สร้าง/อ้างอิงใบกำกับ AP/AR อัตโนมัติ — vat_code อ้างอิง cd_vat_rate
+  final double? vatRate; // snapshot อัตรา ณ ตอนเลือก (ไม่ผูกกับ cd_vat_rate อีกทีตอน Post เหมือน AR/AP เอง)
+  final int? refImTransactionDetailId; // '15'/'35' เท่านั้น — บรรทัดต้นฉบับ (GRN/DLN) ที่บรรทัดนี้คืน ใช้ตรวจคงเหลือที่คืนได้
   final double? totalValueLc;
   final String? description;
 
@@ -234,6 +244,9 @@ class ImTransactionDetail {
     this.unitCost,
     this.billedUnitCost,
     this.unitPrice,
+    this.vatType,
+    this.vatRate,
+    this.refImTransactionDetailId,
     this.totalValueLc,
     this.description,
   });
@@ -264,6 +277,9 @@ class ImTransactionDetail {
       unitCost: toDoubleN(json['unit_cost']),
       billedUnitCost: toDoubleN(json['billed_unit_cost']),
       unitPrice: toDoubleN(json['unit_price']),
+      vatType: json['vat_type'],
+      vatRate: toDoubleN(json['vat_rate']),
+      refImTransactionDetailId: json['ref_im_transaction_detail_id'],
       totalValueLc: toDoubleN(json['total_value_lc']),
       description: json['description'],
     );
@@ -285,8 +301,114 @@ class ImTransactionDetail {
         if (unitCost != null) 'unit_cost': unitCost,
         if (billedUnitCost != null) 'billed_unit_cost': billedUnitCost,
         if (unitPrice != null) 'unit_price': unitPrice,
+        if (vatType != null) 'vat_type': vatType,
+        if (vatRate != null) 'vat_rate': vatRate,
+        if (refImTransactionDetailId != null) 'ref_im_transaction_detail_id': refImTransactionDetailId,
         if (description != null) 'description': description,
       };
+}
+
+// ── Returnable doc/line (สำหรับ document picker ของ '15'/'35') ─────────────
+// เอกสาร GRN/DLN ที่ Post แล้ว ให้เลือกเป็นต้นฉบับสำหรับคืนสินค้า — ดู fetchReturnableDocs ใน imTransactionController.js
+class ImReturnableDoc {
+  final int id;
+  final String docNo;
+  final DateTime docDate;
+  final String status;
+  final int? vendorId;
+  final String? vendorCode;
+  final String? vendorNameTh;
+  final int? customerId;
+  final String? customerCode;
+  final String? customerNameTh;
+  final String docCode;
+  final String sysDocType;
+
+  const ImReturnableDoc({
+    required this.id,
+    required this.docNo,
+    required this.docDate,
+    required this.status,
+    this.vendorId,
+    this.vendorCode,
+    this.vendorNameTh,
+    this.customerId,
+    this.customerCode,
+    this.customerNameTh,
+    required this.docCode,
+    required this.sysDocType,
+  });
+
+  factory ImReturnableDoc.fromJson(Map<String, dynamic> json) => ImReturnableDoc(
+        id: json['id'],
+        docNo: json['doc_no'] ?? '',
+        docDate: parseLocalDate(json['doc_date']),
+        status: json['status'] ?? '',
+        vendorId: json['vendor_id'],
+        vendorCode: json['vendor_code'],
+        vendorNameTh: json['vendor_name_th'],
+        customerId: json['customer_id'],
+        customerCode: json['customer_code'],
+        customerNameTh: json['customer_name_th'],
+        docCode: json['doc_code'] ?? '',
+        sysDocType: json['sys_doc_type']?.toString() ?? '',
+      );
+}
+
+// บรรทัดของเอกสารต้นฉบับ พร้อมจำนวนคงเหลือที่คืนได้ (originalQty ลบผลรวมที่ถูกคืนไปแล้ว) — ดู fetchReturnableLines
+class ImReturnableLine {
+  final int id;
+  final int lineNo;
+  final int itemId;
+  final String? itemCode;
+  final String? itemName;
+  final int? locationId;
+  final String? locationCode;
+  final String? lotNo;
+  final String? serialNo;
+  final int? uomId;
+  final String? uomCode;
+  final double originalQty;
+  final double remainingQty;
+  final double? unitCost;
+
+  const ImReturnableLine({
+    required this.id,
+    required this.lineNo,
+    required this.itemId,
+    this.itemCode,
+    this.itemName,
+    this.locationId,
+    this.locationCode,
+    this.lotNo,
+    this.serialNo,
+    this.uomId,
+    this.uomCode,
+    required this.originalQty,
+    required this.remainingQty,
+    this.unitCost,
+  });
+
+  factory ImReturnableLine.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    double? toDoubleN(dynamic v) => v == null ? null : double.tryParse(v.toString());
+    return ImReturnableLine(
+      id: json['id'],
+      lineNo: json['line_no'] ?? 1,
+      itemId: json['item_id'] ?? 0,
+      itemCode: json['item_code'],
+      itemName: json['item_name'],
+      locationId: json['location_id'],
+      locationCode: json['location_code'],
+      lotNo: json['lot_no'],
+      serialNo: json['serial_no'],
+      uomId: json['uom_id'],
+      uomCode: json['uom_code'],
+      originalQty: toDouble(json['original_qty']),
+      remainingQty: toDouble(json['remaining_qty']),
+      unitCost: toDoubleN(json['unit_cost']),
+    );
+  }
 }
 
 // ── Wrapper ───────────────────────────────────────────────────────────────

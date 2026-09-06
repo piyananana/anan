@@ -5,6 +5,8 @@ import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
+import '../../cd/models/cd_vat_rate.dart';
+import '../../cd/services/cd_vat_rate_service.dart';
 import '../models/im_item.dart';
 import '../models/im_item_category.dart';
 import '../models/im_uom.dart';
@@ -364,10 +366,13 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
   late TextEditingController _minStockCtrl;
   late TextEditingController _maxStockCtrl;
   late TextEditingController _reorderCtrl;
+  late TextEditingController _shelfLifeCtrl;
 
   bool _isActive = true;
   String _itemType = 'STOCK';
   String _costingMethod = 'AVG';
+  String _defaultVatType = 'VAT7';
+  List<VatRate> _vatRates = [];
   bool _isPurchaseItem = true;
   bool _isSalesItem = true;
   bool _isManufactured = false;
@@ -407,6 +412,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     super.initState();
     _initControllers();
     _loadAccounts();
+    _loadVatRates();
     _loadAutoNumberingConfig();
     if (widget.selected != null) _populate(widget.selected!);
     if (widget.selected?.id != null) _loadPrices(widget.selected!.id!);
@@ -434,6 +440,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _minStockCtrl = TextEditingController(text: '0');
     _maxStockCtrl = TextEditingController(text: '0');
     _reorderCtrl = TextEditingController(text: '0');
+    _shelfLifeCtrl = TextEditingController();
   }
 
   @override
@@ -454,7 +461,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
   void dispose() {
     _codeCtrl.dispose(); _oldCodeCtrl.dispose(); _barcodeCtrl.dispose(); _nameThCtrl.dispose(); _nameEnCtrl.dispose();
     _descCtrl.dispose(); _standardCostCtrl.dispose(); _minStockCtrl.dispose();
-    _maxStockCtrl.dispose(); _reorderCtrl.dispose();
+    _maxStockCtrl.dispose(); _reorderCtrl.dispose(); _shelfLifeCtrl.dispose();
     super.dispose();
   }
 
@@ -463,6 +470,31 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
       final list = await AccountService().fetchRows();
       if (mounted) setState(() => _accounts = list.where((a) => a.isActive && a.isNormalAccount).toList());
     } catch (_) {}
+  }
+
+  Future<void> _loadVatRates() async {
+    try {
+      final list = await VatRateService().fetchRows();
+      if (!mounted) return;
+      setState(() {
+        _vatRates = list.where((v) => v.isActive).toList();
+        // 'VAT7' เป็นแค่ placeholder ตอนสร้างสินค้าใหม่ (widget.selected == null) ไม่ใช่รหัสที่รับประกันว่ามีจริง
+        // ในระบบ (แต่ละบริษัทตั้งรหัส VAT เองไม่เหมือนกัน) — ถ้าไม่พบใน _vatRates ต้องเปลี่ยนเป็นรหัสแรกที่มีจริง
+        // ไม่เช่นนั้นจะบันทึก default_vat_type ที่ไม่มีอยู่จริงแบบเงียบๆ (dropdown โชว์ "ไม่ระบุ" แต่ค่าจริงยังเป็น 'VAT7')
+        if (widget.selected == null && !_vatRates.any((v) => v.vatCode == _defaultVatType) && _vatRates.isNotEmpty) {
+          _defaultVatType = _vatRates.first.vatCode;
+        }
+      });
+    } catch (_) {}
+  }
+
+  String _vatLabel(String vatCode) {
+    final v = _vatRates.cast<VatRate?>().firstWhere((x) => x?.vatCode == vatCode, orElse: () => null);
+    if (v != null) {
+      final rateStr = v.rate == v.rate.roundToDouble() ? v.rate.toStringAsFixed(0) : v.rate.toString();
+      return '${v.vatCode}  $rateStr%';
+    }
+    return vatCode;
   }
 
   Future<void> _loadAutoNumberingConfig() async {
@@ -484,9 +516,11 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _minStockCtrl.text = '${item.minStockQty}';
     _maxStockCtrl.text = '${item.maxStockQty}';
     _reorderCtrl.text = '${item.reorderPoint}';
+    _shelfLifeCtrl.text = item.shelfLifeDays?.toString() ?? '';
     _isActive = item.isActive;
     _itemType = item.itemType;
     _costingMethod = item.costingMethod;
+    _defaultVatType = item.defaultVatType;
     _isPurchaseItem = item.isPurchaseItem;
     _isSalesItem = item.isSalesItem;
     _isManufactured = item.isManufactured;
@@ -509,7 +543,9 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
   void _clear() {
     _codeCtrl.clear(); _oldCodeCtrl.clear(); _barcodeCtrl.clear(); _nameThCtrl.clear(); _nameEnCtrl.clear(); _descCtrl.clear();
     _standardCostCtrl.text = '0'; _minStockCtrl.text = '0'; _maxStockCtrl.text = '0'; _reorderCtrl.text = '0';
+    _shelfLifeCtrl.clear();
     _isActive = true; _itemType = 'STOCK'; _costingMethod = 'AVG';
+    _defaultVatType = _vatRates.isNotEmpty ? _vatRates.first.vatCode : 'VAT7';
     _isPurchaseItem = true; _isSalesItem = true; _isManufactured = false;
     _isLotTracked = false; _isSerialTracked = false; _autoCodeOverridden = false;
     _categoryId = null; _categoryCode = null; _categoryName = null; _categoryIsAutoNumber = false;
@@ -575,6 +611,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
         minStockQty: double.tryParse(_minStockCtrl.text) ?? 0,
         maxStockQty: double.tryParse(_maxStockCtrl.text) ?? 0,
         reorderPoint: double.tryParse(_reorderCtrl.text) ?? 0,
+        shelfLifeDays: _shelfLifeCtrl.text.trim().isEmpty ? null : int.tryParse(_shelfLifeCtrl.text.trim()),
+        defaultVatType: _defaultVatType,
         inventoryAccountId: _inventoryAccountId,
         cogsAccountId: _cogsAccountId,
         revenueAccountId: _revenueAccountId,
@@ -864,6 +902,24 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
       if (_costingMethod == 'STANDARD')
         _buildField(isEnglish ? 'Standard Cost' : 'ต้นทุนมาตรฐาน', _standardCostCtrl,
             keyboard: const TextInputType.numberWithOptions(decimal: true), formatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))]),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: DropdownButtonFormField<String>(
+          value: _vatRates.any((v) => v.vatCode == _defaultVatType) ? _defaultVatType : null,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: isEnglish ? 'Default VAT Type' : 'ประเภทภาษี VAT ตั้งต้น',
+            helperText: isEnglish
+                ? 'Pre-fills VAT on new transaction lines for this item'
+                : 'ใช้ prefill VAT ตอนเพิ่มบรรทัดธุรกรรมของสินค้านี้',
+            helperMaxLines: 2,
+            border: const OutlineInputBorder(),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          items: _vatRates.map((v) => DropdownMenuItem(value: v.vatCode, child: Text(_vatLabel(v.vatCode)))).toList(),
+          onChanged: _isReadOnly ? null : (v) => setState(() => _defaultVatType = v ?? 'VAT7'),
+        ),
+      ),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         dense: true,
@@ -903,6 +959,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
           value: _isLotTracked, activeColor: Colors.teal,
           onChanged: _isReadOnly ? null : (v) => setState(() => _isLotTracked = v),
         ),
+        _buildField(isEnglish ? 'Shelf Life (days)' : 'อายุสินค้า (วัน)', _shelfLifeCtrl,
+            keyboard: TextInputType.number, formatters: [FilteringTextInputFormatter.digitsOnly]),
         SwitchListTile(
           contentPadding: EdgeInsets.zero, dense: true,
           title: Text(isEnglish ? 'Serial number tracked' : 'ติดตามเป็นเลขซีเรียล'),
