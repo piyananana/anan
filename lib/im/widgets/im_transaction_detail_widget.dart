@@ -872,6 +872,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             id: l.id,
             itemId: l.item.id!,
             billedUnitCost: l.billedUnitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.billedUnitCostCtrl.text),
+            vatType: _isVatMode ? l.vatType : null,
+            vatRate: _isVatMode ? l.vatRate : null,
           )).toList();
       await _service.postBilling(id: _id!, refNo: refNo, details: details);
       if (mounted) {
@@ -926,6 +928,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             id: l.id,
             itemId: l.item.id!,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
+            vatType: _isVatMode ? l.vatType : null,
+            vatRate: _isVatMode ? l.vatRate : null,
           )).toList();
       await _service.postBillingDln(id: _id!, refNo: _refNoCtrl.text.trim(), details: details);
       if (mounted) {

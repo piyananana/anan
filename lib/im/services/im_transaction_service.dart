@@ -231,7 +231,7 @@ class ImTransactionService {
       headers: headers,
       body: jsonEncode({
         'ref_no': refNo,
-        'lines': details.map((d) => {'id': d.id, 'billed_unit_cost': d.billedUnitCost}).toList(),
+        'lines': details.map((d) => {'id': d.id, 'billed_unit_cost': d.billedUnitCost, 'vat_type': d.vatType, 'vat_rate': d.vatRate}).toList(),
       }),
     );
     if (response.statusCode == 200) {
@@ -258,7 +258,7 @@ class ImTransactionService {
       headers: headers,
       body: jsonEncode({
         'ref_no': refNo,
-        'lines': details.map((d) => {'id': d.id, 'unit_price': d.unitPrice}).toList(),
+        'lines': details.map((d) => {'id': d.id, 'unit_price': d.unitPrice, 'vat_type': d.vatType, 'vat_rate': d.vatRate}).toList(),
       }),
     );
     if (response.statusCode == 200) {
