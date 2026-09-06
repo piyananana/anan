@@ -44,6 +44,8 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 
   // Data
   Company? _company;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
   List<FiscalYear> _fiscalYears = [];
   List<PostingPeriod> _periods = [];
   List<Map<String, dynamic>> _reportData = [];
@@ -194,6 +196,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
     _isExporting = true;
     setState(() {});
     final bool isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     try {
       final ex = Excel.createExcel();
       ex.rename('Sheet1', 'TrialBalance');
@@ -206,7 +209,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
           : 'ปี ${_selectedYear?.fyCode ?? ''}';
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.displayName(_isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0, _isEnglish ? 'Trial Balance' : 'งบทดลอง (Trial Balance)', bold: true);
+      _xlCell(s, 1, 0, reportTitle, bold: true);
       _xlCell(s, 2, 0, '$_periodLabel  |  ${isEnglish ? 'Printed:' : 'พิมพ์:'} $_ts');
 
       int r = 3;
@@ -291,6 +294,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
     final fontItalic = pw.Font.ttf(fontItalicData);
 
     final bool isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     String companyName = _company != null
         ? _company!.displayName(isEnglish)
         : (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
@@ -396,7 +400,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                         style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 7,
-                    child: pw.Text(isEnglish ? 'Trial Balance' : 'งบทดลอง (Trial Balance)',
+                    child: pw.Text(reportTitle,
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(
                             fontSize: 16, fontWeight: pw.FontWeight.bold))),
@@ -908,6 +912,9 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'Trial Balance' : 'งบทดลอง (Trial Balance)'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

@@ -52,6 +52,8 @@ class _ArFxGainLossReportScreenState
 
   Company? _company;
   Map<String, String>? _headers;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
   String _baseCurrencyCode  = '';
 
   List<ArCustomerGroup> _customerGroups  = [];
@@ -143,6 +145,7 @@ class _ArFxGainLossReportScreenState
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -198,7 +201,7 @@ class _ArFxGainLossReportScreenState
             child: pw.Text(companyName,
                 style: const pw.TextStyle(fontSize: 11))),
         pw.Expanded(flex: 6,
-            child: pw.Text(isEnglish ? 'FX Gain/Loss Report' : 'รายงานกำไร/ขาดทุนจากอัตราแลกเปลี่ยน',
+            child: pw.Text(reportTitle,
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 14,
                     fontWeight: pw.FontWeight.bold))),
@@ -428,6 +431,7 @@ class _ArFxGainLossReportScreenState
   Future<void> _exportExcel() async {
     if (_reportRows.isEmpty || _isExporting) return;
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     _isExporting = true; // synchronous — ป้องกัน re-entry ก่อน setState rebuild
     setState(() {});
 
@@ -445,7 +449,7 @@ class _ArFxGainLossReportScreenState
       // ── Title block ──────────────────────────────────────────────────────
       final _tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(sh, 0, 0, TextCellValue(_company?.displayName(isEnglish) ?? ''), bold: true);
-      _xlCell(sh, 1, 0, TextCellValue('${isEnglish ? 'FX Gain/Loss Report' : 'รายงานกำไร/ขาดทุนจากอัตราแลกเปลี่ยน'}  [${isEnglish ? 'Base currency' : 'สกุลเงินหลัก'}: $_reportBaseCurrency]'), bold: true);
+      _xlCell(sh, 1, 0, TextCellValue('$reportTitle  [${isEnglish ? 'Base currency' : 'สกุลเงินหลัก'}: $_reportBaseCurrency]'), bold: true);
       _xlCell(sh, 2, 0, TextCellValue('${isEnglish ? 'Receipt date' : 'วันที่รับชำระ'}: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $_tsLabel'));
 
       int row = 3;
@@ -592,6 +596,9 @@ class _ArFxGainLossReportScreenState
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'FX Gain/Loss Report' : 'รายงานกำไร/ขาดทุนจากอัตราแลกเปลี่ยน'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

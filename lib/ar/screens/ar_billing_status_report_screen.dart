@@ -49,6 +49,8 @@ class _ArBillingStatusReportScreenState
 
   Company?             _company;
   Map<String, String>? _headers;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
 
   List<Branch>          _branches       = [];
   List<ArCustomerGroup> _customerGroups = [];
@@ -127,6 +129,7 @@ class _ArBillingStatusReportScreenState
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish       = _isEnglish;
+    final reportTitle     = _reportTitle;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -191,7 +194,7 @@ class _ArBillingStatusReportScreenState
         pw.Expanded(flex: 3, child: pw.Text(companyName,
             style: const pw.TextStyle(fontSize: 11))),
         pw.Expanded(flex: 6, child: pw.Text(
-            isEnglish ? 'Billing Status Report' : 'รายงานสถานะใบวางบิล',
+            reportTitle,
             textAlign: pw.TextAlign.center,
             style: pw.TextStyle(fontSize: 15,
                 fontWeight: pw.FontWeight.bold))),
@@ -411,6 +414,9 @@ class _ArBillingStatusReportScreenState
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
     final l = AppL10n(isEnglish);
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'Billing Status Report' : 'รายงานสถานะใบวางบิล'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -795,6 +801,7 @@ class _ArBillingStatusReportScreenState
   // ─── Excel Export ─────────────────────────────────────────────────────────
 
   Future<void> _exportExcel() async {
+    final reportTitle = _reportTitle;
     _isExporting = true;
     setState(() {});
     try {
@@ -809,7 +816,7 @@ class _ArBillingStatusReportScreenState
 
       final _tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
-      _xlCell(s, 1, 0, 'รายงานสถานะใบวางบิล', bold: true);
+      _xlCell(s, 1, 0, reportTitle, bold: true);
       _xlCell(s, 2, 0, 'วันที่วางบิล: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $_tsLabel');
 
       final hdrs = ['ประเภทเอกสาร', 'เลขที่ใบวางบิล', 'วันที่เอกสาร',

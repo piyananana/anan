@@ -35,6 +35,8 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
   late Map<String, String> headers;
 
   Company? _company;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
   List<FiscalYear> _fiscalYears = [];
   List<PostingPeriod> _periods = [];
   List<Map<String, dynamic>> _reportData = [];
@@ -212,6 +214,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
     setState(() {});
     try {
       final bool isEnglish = _isEnglish;
+      final reportTitle = _reportTitle;
       final ex = Excel.createExcel();
       ex.rename('Sheet1', 'BalanceSheet');
       final s = ex['BalanceSheet'];
@@ -227,7 +230,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
           : '${isEnglish ? 'Year' : 'ปี'}: ${_selectedYear?.fyCode ?? ''}';
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0, isEnglish ? 'Balance Sheet' : 'งบดุล (Balance Sheet)', bold: true);
+      _xlCell(s, 1, 0, reportTitle, bold: true);
       _xlCell(s, 2, 0, '$_asOfLabel  |  ${isEnglish ? 'Printed:' : 'พิมพ์:'} $_ts');
 
       int r = 3;
@@ -298,6 +301,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
     final fontBold = pw.Font.ttf(fontBoldData);
 
     final bool isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     final companyName = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName = headers['UserName'] ?? (isEnglish ? '(Unknown user)' : '(ไม่ระบุชื่อ)');
     final printDateStr =
@@ -526,7 +530,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
           pw.Expanded(
               flex: 7,
               child: pw.Text(
-                isEnglish ? 'Balance Sheet' : 'งบดุล (Balance Sheet)',
+                reportTitle,
                 textAlign: pw.TextAlign.center,
                 style:
                     pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
@@ -620,6 +624,9 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'Balance Sheet' : 'งบดุล (Balance Sheet)'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

@@ -55,6 +55,8 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
 
   Company? _company;
   Map<String, String>? _headers;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
 
   // Filters
   DateTime _dateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
@@ -146,10 +148,15 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
     } catch (_) { return raw; }
   }
 
+  // Postgres NUMERIC columns come back over JSON as strings (e.g. "47000.0000"), not numbers —
+  // a plain `as num?` cast throws at runtime the moment real data loads. Parse defensively instead.
+  static num _num(dynamic v) => v is num ? v : (num.tryParse(v?.toString() ?? '') ?? 0);
+
   // ─── PDF ──────────────────────────────────────────────────────────────────
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -225,7 +232,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
     pw.Widget Function(pw.Context) pageHeader() => (ctx) => pw.Column(children: [
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.Text(companyName, style: tN(11))),
-        pw.Expanded(flex: 6, child: pw.Text(isEnglish ? 'IM Transaction Report' : 'รายงานธุรกรรมสินค้าคงคลัง',
+        pw.Expanded(flex: 6, child: pw.Text(reportTitle,
             textAlign: pw.TextAlign.center, style: tB(15))),
         pw.Expanded(flex: 3, child: pw.Text(isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
             textAlign: pw.TextAlign.right, style: tN(10))),
@@ -284,8 +291,8 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
     List<String> detailValues(_Family fam, bool vat, Map<String, dynamic> l) {
       final itemLabel = '${l['item_code'] ?? ''} ${l['item_name'] ?? ''}';
       final uom = l['uom_code']?.toString() ?? '';
-      final qty = fmtQty.format((l['qty'] as num?) ?? 0);
-      final value = fmt.format((l['total_value_lc'] as num?) ?? 0);
+      final qty = fmtQty.format(_num(l['qty']));
+      final value = fmt.format(_num(l['total_value_lc']));
       final vatCell = (l['vat_type'] == null || l['vat_type'] == 'NOVAT')
           ? '-'
           : '${l['vat_type']}  ${l['vat_rate']}%';
@@ -294,17 +301,17 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
           final loc = l['location_code']?.toString() ?? '';
           final toLoc = l['to_location_code']?.toString() ?? '';
           final locCell = toLoc.isNotEmpty ? '$loc → $toLoc' : loc;
-          return [itemLabel, uom, qty, fmt.format((l['unit_cost'] as num?) ?? 0), value, locCell];
+          return [itemLabel, uom, qty, fmt.format(_num(l['unit_cost'])), value, locCell];
         case _Family.purchase:
-          final billed = l['billed_unit_cost'] != null ? fmt.format((l['billed_unit_cost'] as num?) ?? 0) : '';
+          final billed = l['billed_unit_cost'] != null ? fmt.format(_num(l['billed_unit_cost'])) : '';
           return [
-            itemLabel, uom, qty, fmt.format((l['unit_cost'] as num?) ?? 0), billed,
+            itemLabel, uom, qty, fmt.format(_num(l['unit_cost'])), billed,
             if (vat) vatCell,
             value,
           ];
         case _Family.sales:
           return [
-            itemLabel, uom, qty, fmt.format((l['unit_price'] as num?) ?? 0),
+            itemLabel, uom, qty, fmt.format(_num(l['unit_price'])),
             if (vat) vatCell,
             value,
           ];
@@ -354,7 +361,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
       final sdt = h['sys_doc_type'] as String? ?? '';
       final bg = idx.isOdd ? cStripe : null;
       final desc = (h['description'] as String? ?? '').trim();
-      final amount = (h['total_value_lc'] as num?)?.toDouble() ?? 0;
+      final amount = _num(h['total_value_lc']).toDouble();
 
       content.add(pw.Container(
         color: bg,
@@ -411,6 +418,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
 
   Future<void> _exportExcel() async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     setState(() => _isExporting = true);
     try {
       final ex = Excel.createExcel();
@@ -424,7 +432,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
       final tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
       _xl(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xl(s, 1, 0, isEnglish ? 'IM Transaction Report' : 'รายงานธุรกรรมสินค้าคงคลัง', bold: true);
+      _xl(s, 1, 0, reportTitle, bold: true);
       _xl(s, 2, 0,
           '${isEnglish ? "Date range" : "ช่วงวันที่"}: ${DateFormat("dd/MM/yyyy").format(_dateFrom)} – ${DateFormat("dd/MM/yyyy").format(_dateTo)}  |  ${isEnglish ? "Printed" : "พิมพ์"}: $tsLabel');
 
@@ -437,7 +445,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
 
       int row = 4;
       for (final h in _reportData) {
-        final amount = (h['total_value_lc'] as num?)?.toDouble() ?? 0;
+        final amount = _num(h['total_value_lc']).toDouble();
         _xl(s, row, 0, _fmtDate(h['doc_date'] as String?));
         _xl(s, row, 1, '${h['doc_code'] ?? ''}  ${_docTypeName(h, isEnglish)}');
         _xl(s, row, 2, h['doc_no'] as String? ?? '');
@@ -456,13 +464,13 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
           final lines = (h['lines'] as List? ?? []).cast<Map<String, dynamic>>();
           final fam = _familyOf(h['sys_doc_type'] as String? ?? '');
           for (final l in lines) {
-            final unitVal = fam == _Family.sales ? (l['unit_price'] as num?) : (l['unit_cost'] as num?);
+            final unitVal = fam == _Family.sales ? _num(l['unit_price']) : _num(l['unit_cost']);
             _xl(s, row, 0, '   ${l['item_code'] ?? ''} ${l['item_name'] ?? ''}', bg: detBg);
             _xl(s, row, 1, l['uom_code']?.toString() ?? '', bg: detBg);
-            _xl(s, row, 2, (l['qty'] as num?)?.toDouble() ?? 0, bg: detBg, align: HorizontalAlign.Right);
-            _xl(s, row, 3, unitVal?.toDouble() ?? 0, bg: detBg, align: HorizontalAlign.Right);
+            _xl(s, row, 2, _num(l['qty']).toDouble(), bg: detBg, align: HorizontalAlign.Right);
+            _xl(s, row, 3, unitVal.toDouble(), bg: detBg, align: HorizontalAlign.Right);
             _xl(s, row, 4, (l['vat_type'] == null || l['vat_type'] == 'NOVAT') ? '' : '${l['vat_type']} ${l['vat_rate']}%', bg: detBg);
-            _xl(s, row, 5, (l['total_value_lc'] as num?)?.toDouble() ?? 0, bg: detBg, align: HorizontalAlign.Right);
+            _xl(s, row, 5, _num(l['total_value_lc']).toDouble(), bg: detBg, align: HorizontalAlign.Right);
             row++;
           }
         }
@@ -556,6 +564,9 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'IM Transaction Report' : 'รายงานธุรกรรมสินค้าคงคลัง'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

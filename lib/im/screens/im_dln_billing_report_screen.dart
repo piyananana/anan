@@ -53,6 +53,8 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
 
   Company? _company;
   Map<String, String>? _headers;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
 
   DateTime  _asOfDate  = DateTime.now();
   DateTime? _dateFrom;
@@ -145,6 +147,7 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
 
   Future<void> _exportExcel() async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     _isExporting = true;
     setState(() {});
     try {
@@ -158,9 +161,7 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
 
       final ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0,
-          isEnglish ? 'DLN Pending AR Billing Report' : 'รายงานส่งสินค้ารอตั้งหนี้ (DLN)',
-          bold: true);
+      _xlCell(s, 1, 0, reportTitle, bold: true);
       _xlCell(s, 2, 0,
           '${isEnglish ? "As of" : "ณ วันที่"}: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  ${isEnglish ? "Printed" : "พิมพ์"}: $ts');
 
@@ -260,6 +261,7 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish       = _isEnglish;
+    final reportTitle     = _reportTitle;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -315,7 +317,7 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
             pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
               pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
               pw.Expanded(flex: 7, child: pw.Text(
-                  isEnglish ? 'DLN Pending AR Billing Report' : 'รายงานส่งสินค้ารอตั้งหนี้ (DLN)',
+                  reportTitle,
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
               pw.Expanded(flex: 3, child: pw.Text('${isEnglish ? "Page" : "หน้า"} ${ctx.pageNumber}/${ctx.pagesCount}',
@@ -450,6 +452,9 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'DLN Pending AR Billing Report' : 'รายงานส่งสินค้ารอตั้งหนี้ (DLN)'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

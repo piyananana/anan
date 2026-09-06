@@ -45,6 +45,8 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
 
   Company? _company;
   Map<String, String>? _headers;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
 
   DateTime _dateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _dateTo   = DateTime.now();
@@ -109,6 +111,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
 
   Future<void> _exportExcel() async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     _isExporting = true;
     setState(() {});
     try {
@@ -129,7 +132,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
 
       final tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0, isEnglish ? 'AP Movement Report' : 'รายงานการเคลื่อนไหวเจ้าหนี้', bold: true);
+      _xlCell(s, 1, 0, reportTitle, bold: true);
       _xlCell(s, 2, 0, '${isEnglish ? 'Date range' : 'ช่วงวันที่'}: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $tsLabel');
 
       int r = 3;
@@ -306,6 +309,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -366,7 +370,7 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
     pw.Widget Function(pw.Context) pageHeader() => (ctx) => pw.Column(children: [
           pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
             pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
-            pw.Expanded(flex: 7, child: pw.Text(isEnglish ? 'AP Movement Report' : 'รายงานการเคลื่อนไหวเจ้าหนี้',
+            pw.Expanded(flex: 7, child: pw.Text(reportTitle,
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
             pw.Expanded(flex: 3, child: pw.Text(isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
@@ -600,6 +604,9 @@ class _ApMovementReportScreenState extends State<ApMovementReportScreen> {
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'AP Movement Report' : 'รายงานการเคลื่อนไหวเจ้าหนี้'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

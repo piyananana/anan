@@ -54,6 +54,8 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
   Company? _company;
   Map<String, String>? _headers;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
 
   DateTime _asOfDate = DateTime.now();
   List<UserBranch> _allowedBranches = [];
@@ -244,6 +246,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
   Future<void> _exportExcel() async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     _isExporting = true;
     setState(() {});
     try {
@@ -259,7 +262,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0, isEnglish ? 'AR Aging Report' : 'รายงานลูกหนี้คงค้างตามอายุหนี้', bold: true);
+      _xlCell(s, 1, 0, reportTitle, bold: true);
       _xlCell(s, 2, 0,
           '${isEnglish ? "As of" : "ณ วันที่"}: ${DateFormat('dd/MM/yyyy').format(_asOfDate)}  |  ${isEnglish ? "Printed" : "พิมพ์"}: $_ts');
 
@@ -343,6 +346,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish         = _isEnglish;
+    final reportTitle       = _reportTitle;
     final doc              = pw.Document();
     final fontData         = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData     = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -487,7 +491,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
                         style: const pw.TextStyle(fontSize: 12))),
                 pw.Expanded(
                     flex: 7,
-                    child: pw.Text(isEnglish ? 'AR Aging Report' : 'รายงานลูกหนี้คงค้างตามอายุหนี้',
+                    child: pw.Text(reportTitle,
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(
                             fontSize: 16, fontWeight: pw.FontWeight.bold))),
@@ -706,6 +710,9 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = l.isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (l.isEnglish ? 'AR Aging Report' : 'รายงานลูกหนี้คงค้างตามอายุหนี้'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

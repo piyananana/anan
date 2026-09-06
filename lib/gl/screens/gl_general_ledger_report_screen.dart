@@ -47,6 +47,8 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
   // Data
   Company? _company;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
   List<FiscalYear> _fiscalYears = [];
   List<PostingPeriod> _periods = [];
   List<dynamic> _branchList = []; // [{id, branchCode, branchNameThai}]
@@ -325,6 +327,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   // --- Excel Export ---
   Future<void> _exportExcel() async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     _isExporting = true;
     setState(() {});
     try {
@@ -348,7 +351,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
           : (isEnglish ? 'Year ${_selectedYear?.fyCode ?? ''}' : 'ปี ${_selectedYear?.fyCode ?? ''}');
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.displayName(_isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0, _isEnglish ? 'General Ledger' : 'บัญชีแยกประเภท (General Ledger)', bold: true);
+      _xlCell(s, 1, 0, reportTitle, bold: true);
       _xlCell(s, 2, 0, '$_periodLabel  |  ${isEnglish ? 'Printed: $_ts' : 'พิมพ์: $_ts'}');
 
       int r = 3;
@@ -536,6 +539,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   // --- สร้าง PDF ---
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     final doc = pw.Document();
     final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -563,7 +567,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
               pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
-              pw.Expanded(flex: 7, child: pw.Text(isEnglish ? "General Ledger" : "บัญชีแยกประเภท (General Ledger)", textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
+              pw.Expanded(flex: 7, child: pw.Text(reportTitle, textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
               pw.Expanded(flex: 3, child: pw.Text(isEnglish ? "Page ${context.pageNumber}/${context.pagesCount}" : "หน้า ${context.pageNumber}/${context.pagesCount}", textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 12)))
             ],
           ),
@@ -866,6 +870,9 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'General Ledger' : 'บัญชีแยกประเภท (General Ledger)'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

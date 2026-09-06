@@ -38,6 +38,8 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
   bool _isEnglish = false;
   bool _isProcessing = false;
   bool _isExporting = false;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
 
   ImStockCountHeader? _selectedCount;
   ImLocation? _selectedLocation;
@@ -71,6 +73,7 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     final doc = pw.Document();
 
     final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
@@ -88,7 +91,7 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
             pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 12))),
             pw.Expanded(
                 flex: 7,
-                child: pw.Text(isEnglish ? 'Stock Count Variance Report' : 'รายงานเปรียบเทียบยอดตรวจนับ',
+                child: pw.Text(reportTitle,
                     textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))),
             pw.Expanded(
                 flex: 3,
@@ -183,12 +186,13 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
   Future<void> _exportExcel() async {
     setState(() => _isExporting = true);
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     try {
       final ex = Excel.createExcel();
       ex.rename('Sheet1', 'Variance');
       final s = ex['Variance'];
       final hdrBg = ExcelColor.fromHexString('#92D050');
-      _xlCell(s, 0, 0, isEnglish ? 'Stock Count Variance Report' : 'รายงานเปรียบเทียบยอดตรวจนับ', bold: true);
+      _xlCell(s, 0, 0, reportTitle, bold: true);
       _xlCell(s, 1, 0, '${_selectedCount?.countNo ?? ''}   ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}');
 
       int r = 3;
@@ -241,6 +245,9 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
     final perm = MenuScope.of(context);
     final canPrint = perm?.canPrint ?? true;
     final canExport = perm?.canExport ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'Stock Count Variance Report' : 'รายงานเปรียบเทียบยอดตรวจนับ'));
 
     return Scaffold(
       appBar: AppBar(

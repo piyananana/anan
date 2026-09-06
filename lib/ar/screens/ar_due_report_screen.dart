@@ -53,6 +53,8 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
   Company? _company;
   Map<String, String>? _headers;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
 
   DateTime _asOfDate = DateTime.now();
   List<UserBranch> _allowedBranches = [];
@@ -259,6 +261,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
   Future<void> _exportExcel() async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     _isExporting = true;
     setState(() {});
     try {
@@ -281,9 +284,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0,
-          isEnglish ? 'AR Due Date Report' : 'รายงานกำหนดชำระลูกหนี้',
-          bold: true);
+      _xlCell(s, 1, 0, reportTitle, bold: true);
       _xlCell(
           s,
           2,
@@ -373,6 +374,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish       = _isEnglish;
+    final reportTitle     = _reportTitle;
     final doc            = pw.Document();
     final fontData       = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData   = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -520,9 +522,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
                 pw.Expanded(
                     flex: 7,
                     child: pw.Text(
-                        isEnglish
-                            ? 'AR Due Date Report'
-                            : 'รายงานกำหนดชำระลูกหนี้',
+                        reportTitle,
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(
                             fontSize: 16, fontWeight: pw.FontWeight.bold))),
@@ -754,6 +754,9 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'AR Due Date Report' : 'รายงานกำหนดชำระลูกหนี้'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),

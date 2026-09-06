@@ -45,6 +45,8 @@ class _ApCreditLimitReportScreenState
 
   Company? _company;
   Map<String, String>? _headers;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
 
   List<ApVendorGroup> _vendorGroups = [];
 
@@ -114,6 +116,7 @@ class _ApCreditLimitReportScreenState
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish    = _isEnglish;
+    final reportTitle  = _reportTitle;
     final doc          = pw.Document();
     final fontData     = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -165,7 +168,7 @@ class _ApCreditLimitReportScreenState
             child: pw.Text(companyName,
                 style: const pw.TextStyle(fontSize: 11))),
         pw.Expanded(flex: 6,
-            child: pw.Text(isEnglish ? 'AP Credit Limit Report' : 'รายงานวงเงินคงเหลือผู้ขาย',
+            child: pw.Text(reportTitle,
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 15,
                     fontWeight: pw.FontWeight.bold))),
@@ -369,6 +372,9 @@ class _ApCreditLimitReportScreenState
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'AP Credit Limit Report' : 'รายงานวงเงินคงเหลือผู้ขาย'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -641,6 +647,7 @@ class _ApCreditLimitReportScreenState
 
   Future<void> _exportExcel() async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     _isExporting = true;
     setState(() {});
     try {
@@ -654,7 +661,7 @@ class _ApCreditLimitReportScreenState
 
       final tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0, isEnglish ? 'AP Credit Limit Report' : 'รายงานวงเงินคงเหลือผู้ขาย', bold: true);
+      _xlCell(s, 1, 0, reportTitle, bold: true);
       _xlCell(s, 2, 0, '${isEnglish ? 'Printed: ' : 'พิมพ์วันที่: '}$tsLabel');
 
       final hdrs = isEnglish

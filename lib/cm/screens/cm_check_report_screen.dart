@@ -47,6 +47,8 @@ class _State extends State<CmCheckReportScreen>
 
   Company? _company;
   Map<String, String>? _headers;
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
 
   CmBankAccount? _accountFrom;
   CmBankAccount? _accountTo;
@@ -151,6 +153,7 @@ class _State extends State<CmCheckReportScreen>
   // ─── PDF ──────────────────────────────────────────────────────────────────
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     final doc          = pw.Document();
     final fontData     = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -180,7 +183,7 @@ class _State extends State<CmCheckReportScreen>
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.Text(companyName, style: const pw.TextStyle(fontSize: 11))),
         pw.Expanded(flex: 6,
-            child: pw.Text(isEnglish ? 'Check Register Report' : 'รายงานทะเบียนเช็ค',
+            child: pw.Text(reportTitle,
                 textAlign: pw.TextAlign.center,
                 style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold))),
         pw.Expanded(flex: 3,
@@ -321,6 +324,7 @@ class _State extends State<CmCheckReportScreen>
   // ─── Excel Export ─────────────────────────────────────────────────────────
   Future<void> _exportExcel() async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     setState(() => _isExporting = true);
     try {
       final ex    = Excel.createExcel();
@@ -333,7 +337,7 @@ class _State extends State<CmCheckReportScreen>
       final tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
 
       _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xlCell(s, 1, 0, isEnglish ? 'Check Register Report' : 'รายงานทะเบียนเช็ค', bold: true);
+      _xlCell(s, 1, 0, reportTitle, bold: true);
       _xlCell(s, 2, 0,
           '${isEnglish ? 'Date range' : 'ช่วงวันที่'}: ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateFrom!))} – ${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateTo!))}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $tsLabel');
 
@@ -402,6 +406,9 @@ class _State extends State<CmCheckReportScreen>
     final perm = MenuScope.of(context);
     final canPrint = perm?.canPrint ?? true;
     final canExport = perm?.canExport ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'Check Register Report' : 'รายงานทะเบียนเช็ค'));
 
     return DefaultTabController(
       length: 2,
@@ -664,7 +671,7 @@ class _State extends State<CmCheckReportScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(isEnglish ? 'Check Register Report' : 'รายงานทะเบียนเช็ค', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          Text(_reportTitle, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           Text(
             '${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateFrom!))} – '
             '${_dateFmt.format(DateFormat('yyyy-MM-dd').parse(_reportDateTo!))}',

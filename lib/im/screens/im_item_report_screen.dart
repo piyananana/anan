@@ -71,6 +71,8 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
   List<ImItemCategory>   _categories  = [];
   List<ImWarehouse>      _warehouses  = [];
   List<VatRate>          _vatRates    = [];
+  // ชื่อรายงาน — ใช้ชื่อเมนู (จาก AppBar/MenuTitle) แทนข้อความ hardcode เพื่อให้ตรงกับที่ผู้ใช้เห็นบนแท็บเสมอ
+  String _reportTitle = '';
 
   // Filters
   List<int> _selectedCategoryIds = [];
@@ -310,6 +312,7 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
 
   Future<Uint8List> _generatePdf(PdfPageFormat format) async {
     final isEnglish     = _isEnglish;
+    final reportTitle   = _reportTitle;
     final doc          = pw.Document();
     final fontData     = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
@@ -370,7 +373,7 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
     pw.Widget Function(pw.Context) pageHeader() => (ctx) => pw.Column(children: [
       pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
         pw.Expanded(flex: 3, child: pw.Text(companyName, style: tN(11))),
-        pw.Expanded(flex: 6, child: pw.Text(isEnglish ? 'Item Master Report' : 'รายงานข้อมูลสินค้า',
+        pw.Expanded(flex: 6, child: pw.Text(reportTitle,
             textAlign: pw.TextAlign.center, style: tB(15))),
         pw.Expanded(flex: 3, child: pw.Text('${isEnglish ? "Page" : "หน้า"} ${ctx.pageNumber}/${ctx.pagesCount}',
             textAlign: pw.TextAlign.right, style: tN(10))),
@@ -498,6 +501,7 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
 
   Future<void> _exportExcel() async {
     final isEnglish = _isEnglish;
+    final reportTitle = _reportTitle;
     setState(() => _isExporting = true);
     try {
       final ex = Excel.createExcel();
@@ -510,7 +514,7 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
       final catBg = ExcelColor.fromHexString('#D0E4F7');
 
       _xl(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
-      _xl(s, 1, 0, isEnglish ? 'Item Master Report' : 'รายงานข้อมูลสินค้า', bold: true);
+      _xl(s, 1, 0, reportTitle, bold: true);
       _xl(s, 2, 0, '${isEnglish ? "Condition" : "เงื่อนไข"}: ${_conditionLine(isEnglish)}');
       _xl(s, 3, 0, '${isEnglish ? "Printed" : "พิมพ์"}: ${DateFormat("dd/MM/yyyy HH:mm").format(DateTime.now())}');
 
@@ -865,6 +869,9 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
     final perm = MenuScope.of(context);
     final canExport = perm?.canExport ?? true;
     final canPrint = perm?.canPrint ?? true;
+    _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
+        ? perm.menuNameEn
+        : (perm?.menuName ?? (isEnglish ? 'Item Master Report' : 'รายงานข้อมูลสินค้า'));
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
