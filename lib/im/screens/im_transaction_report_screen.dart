@@ -118,6 +118,19 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
     return isEnglish && (en ?? '').isNotEmpty ? en! : (h['doc_name_thai'] as String? ?? '');
   }
 
+  String _itemName(Map<String, dynamic> l, bool isEnglish) {
+    final en = l['item_name_en'] as String?;
+    return isEnglish && (en ?? '').isNotEmpty ? en! : (l['item_name_th'] as String? ?? '');
+  }
+
+  String _uomName(Map<String, dynamic> l, bool isEnglish) {
+    final en = l['uom_name_en'] as String?;
+    final th = l['uom_name_th'] as String?;
+    if (isEnglish && (en ?? '').isNotEmpty) return en!;
+    if ((th ?? '').isNotEmpty) return th!;
+    return l['uom_code']?.toString() ?? '';
+  }
+
   String _partyName(Map<String, dynamic> h) {
     final sdt = h['sys_doc_type'] as String? ?? '';
     switch (_familyOf(sdt)) {
@@ -260,8 +273,8 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
         case _Family.generic:
           return [
             MapEntry(isEnglish ? 'Item' : 'สินค้า', 0.32),
-            MapEntry(isEnglish ? 'Unit' : 'หน่วย', 0.10),
             MapEntry(isEnglish ? 'Qty' : 'จำนวน', 0.14),
+            MapEntry(isEnglish ? 'Unit' : 'หน่วย', 0.10),
             MapEntry(isEnglish ? 'Unit Cost' : 'ต้นทุน/หน่วย', 0.14),
             MapEntry(isEnglish ? 'Value' : 'มูลค่า', 0.15),
             MapEntry(isEnglish ? 'Location' : 'ตำแหน่ง', 0.15),
@@ -269,8 +282,8 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
         case _Family.purchase:
           return [
             MapEntry(isEnglish ? 'Item' : 'สินค้า', 0.28),
-            MapEntry(isEnglish ? 'Unit' : 'หน่วย', 0.08),
             MapEntry(isEnglish ? 'Qty' : 'จำนวน', 0.12),
+            MapEntry(isEnglish ? 'Unit' : 'หน่วย', 0.08),
             MapEntry(isEnglish ? 'Unit Cost' : 'ต้นทุน/หน่วย', 0.13),
             MapEntry(isEnglish ? 'Billed Cost' : 'ต้นทุนตามใบกำกับ', 0.13),
             if (vat) MapEntry('VAT', 0.12),
@@ -279,8 +292,8 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
         case _Family.sales:
           return [
             MapEntry(isEnglish ? 'Item' : 'สินค้า', 0.30),
-            MapEntry(isEnglish ? 'Unit' : 'หน่วย', 0.08),
             MapEntry(isEnglish ? 'Qty' : 'จำนวน', 0.14),
+            MapEntry(isEnglish ? 'Unit' : 'หน่วย', 0.08),
             MapEntry(isEnglish ? 'Unit Price' : 'ราคาขาย/หน่วย', 0.16),
             if (vat) MapEntry('VAT', 0.14),
             MapEntry(isEnglish ? 'Value' : 'มูลค่า', vat ? 0.18 : 0.32),
@@ -289,8 +302,8 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
     }
 
     List<String> detailValues(_Family fam, bool vat, Map<String, dynamic> l) {
-      final itemLabel = '${l['item_code'] ?? ''} ${l['item_name'] ?? ''}';
-      final uom = l['uom_code']?.toString() ?? '';
+      final itemLabel = '${l['item_code'] ?? ''} ${_itemName(l, isEnglish)}';
+      final uom = _uomName(l, isEnglish);
       final qty = fmtQty.format(_num(l['qty']));
       final value = fmt.format(_num(l['total_value_lc']));
       final vatCell = (l['vat_type'] == null || l['vat_type'] == 'NOVAT')
@@ -301,17 +314,17 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
           final loc = l['location_code']?.toString() ?? '';
           final toLoc = l['to_location_code']?.toString() ?? '';
           final locCell = toLoc.isNotEmpty ? '$loc → $toLoc' : loc;
-          return [itemLabel, uom, qty, fmt.format(_num(l['unit_cost'])), value, locCell];
+          return [itemLabel, qty, uom, fmt.format(_num(l['unit_cost'])), value, locCell];
         case _Family.purchase:
           final billed = l['billed_unit_cost'] != null ? fmt.format(_num(l['billed_unit_cost'])) : '';
           return [
-            itemLabel, uom, qty, fmt.format(_num(l['unit_cost'])), billed,
+            itemLabel, qty, uom, fmt.format(_num(l['unit_cost'])), billed,
             if (vat) vatCell,
             value,
           ];
         case _Family.sales:
           return [
-            itemLabel, uom, qty, fmt.format(_num(l['unit_price'])),
+            itemLabel, qty, uom, fmt.format(_num(l['unit_price'])),
             if (vat) vatCell,
             value,
           ];
@@ -465,9 +478,9 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
           final fam = _familyOf(h['sys_doc_type'] as String? ?? '');
           for (final l in lines) {
             final unitVal = fam == _Family.sales ? _num(l['unit_price']) : _num(l['unit_cost']);
-            _xl(s, row, 0, '   ${l['item_code'] ?? ''} ${l['item_name'] ?? ''}', bg: detBg);
-            _xl(s, row, 1, l['uom_code']?.toString() ?? '', bg: detBg);
-            _xl(s, row, 2, _num(l['qty']).toDouble(), bg: detBg, align: HorizontalAlign.Right);
+            _xl(s, row, 0, '   ${l['item_code'] ?? ''} ${_itemName(l, isEnglish)}', bg: detBg);
+            _xl(s, row, 1, _num(l['qty']).toDouble(), bg: detBg, align: HorizontalAlign.Right);
+            _xl(s, row, 2, _uomName(l, isEnglish), bg: detBg);
             _xl(s, row, 3, unitVal.toDouble(), bg: detBg, align: HorizontalAlign.Right);
             _xl(s, row, 4, (l['vat_type'] == null || l['vat_type'] == 'NOVAT') ? '' : '${l['vat_type']} ${l['vat_rate']}%', bg: detBg);
             _xl(s, row, 5, _num(l['total_value_lc']).toDouble(), bg: detBg, align: HorizontalAlign.Right);
