@@ -273,8 +273,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
         case _Family.generic:
           return [
             MapEntry(isEnglish ? 'Item' : 'สินค้า', 0.32),
-            MapEntry(isEnglish ? 'Qty' : 'จำนวน', 0.14),
-            MapEntry(isEnglish ? 'Unit' : 'หน่วย', 0.10),
+            MapEntry(isEnglish ? 'Qty  Unit' : 'จำนวน  หน่วย', 0.24),
             MapEntry(isEnglish ? 'Unit Cost' : 'ต้นทุน/หน่วย', 0.14),
             MapEntry(isEnglish ? 'Value' : 'มูลค่า', 0.15),
             MapEntry(isEnglish ? 'Location' : 'ตำแหน่ง', 0.15),
@@ -282,8 +281,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
         case _Family.purchase:
           return [
             MapEntry(isEnglish ? 'Item' : 'สินค้า', 0.28),
-            MapEntry(isEnglish ? 'Qty' : 'จำนวน', 0.12),
-            MapEntry(isEnglish ? 'Unit' : 'หน่วย', 0.08),
+            MapEntry(isEnglish ? 'Qty  Unit' : 'จำนวน  หน่วย', 0.20),
             MapEntry(isEnglish ? 'Unit Cost' : 'ต้นทุน/หน่วย', 0.13),
             MapEntry(isEnglish ? 'Billed Cost' : 'ต้นทุนตามใบกำกับ', 0.13),
             if (vat) MapEntry('VAT', 0.12),
@@ -292,8 +290,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
         case _Family.sales:
           return [
             MapEntry(isEnglish ? 'Item' : 'สินค้า', 0.30),
-            MapEntry(isEnglish ? 'Qty' : 'จำนวน', 0.14),
-            MapEntry(isEnglish ? 'Unit' : 'หน่วย', 0.08),
+            MapEntry(isEnglish ? 'Qty  Unit' : 'จำนวน  หน่วย', 0.22),
             MapEntry(isEnglish ? 'Unit Price' : 'ราคาขาย/หน่วย', 0.16),
             if (vat) MapEntry('VAT', 0.14),
             MapEntry(isEnglish ? 'Value' : 'มูลค่า', vat ? 0.18 : 0.32),
@@ -303,8 +300,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
 
     List<String> detailValues(_Family fam, bool vat, Map<String, dynamic> l) {
       final itemLabel = '${l['item_code'] ?? ''} ${_itemName(l, isEnglish)}';
-      final uom = _uomName(l, isEnglish);
-      final qty = fmtQty.format(_num(l['qty']));
+      final qtyUnit = '${fmtQty.format(_num(l['qty']))} ${_uomName(l, isEnglish)}';
       final value = fmt.format(_num(l['total_value_lc']));
       final vatCell = (l['vat_type'] == null || l['vat_type'] == 'NOVAT')
           ? '-'
@@ -314,17 +310,17 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
           final loc = l['location_code']?.toString() ?? '';
           final toLoc = l['to_location_code']?.toString() ?? '';
           final locCell = toLoc.isNotEmpty ? '$loc → $toLoc' : loc;
-          return [itemLabel, qty, uom, fmt.format(_num(l['unit_cost'])), value, locCell];
+          return [itemLabel, qtyUnit, fmt.format(_num(l['unit_cost'])), value, locCell];
         case _Family.purchase:
           final billed = l['billed_unit_cost'] != null ? fmt.format(_num(l['billed_unit_cost'])) : '';
           return [
-            itemLabel, qty, uom, fmt.format(_num(l['unit_cost'])), billed,
+            itemLabel, qtyUnit, fmt.format(_num(l['unit_cost'])), billed,
             if (vat) vatCell,
             value,
           ];
         case _Family.sales:
           return [
-            itemLabel, qty, uom, fmt.format(_num(l['unit_price'])),
+            itemLabel, qtyUnit, fmt.format(_num(l['unit_price'])),
             if (vat) vatCell,
             value,
           ];
@@ -349,7 +345,8 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
         pw.Container(
           color: cDetail,
           child: pw.Row(children: [
-            for (final c in cols) cell(detailW * c.value, c.key, bold: true, a: c.key == (isEnglish ? 'Qty' : 'จำนวน') || c.key.contains('Value') || c.key.contains('มูลค่า') || c.key.contains('Cost') || c.key.contains('Price') || c.key.contains('ต้นทุน') || c.key.contains('ราคา') ? pw.TextAlign.right : pw.TextAlign.left),
+            for (int i = 0; i < cols.length; i++)
+              cell(detailW * cols[i].value, cols[i].key, bold: true, a: i == 0 ? pw.TextAlign.left : pw.TextAlign.right),
           ]),
         ),
       ];
@@ -398,7 +395,12 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
 
       if (_showDetail) {
         final lines = h['lines'] as List? ?? [];
-        if (lines.isNotEmpty) content.add(buildDetailTable(sdt, lines));
+        if (lines.isNotEmpty) {
+          content.add(buildDetailTable(sdt, lines));
+          // เส้นใต้หลังแสดงรายละเอียดสินค้าครบแล้ว แยกจากเอกสารถัดไปให้ชัดเจนขึ้น (แถวหัวเอกสารเองมีเส้นบางๆ
+          // อยู่แล้ว แต่ตารางรายละเอียดไม่มี ทำให้ต่อกับเอกสารถัดไปแบบไม่มีเส้นคั่น)
+          content.add(pw.Divider(color: cBorder, thickness: 0.6, height: 6));
+        }
       }
       idx++;
     }
