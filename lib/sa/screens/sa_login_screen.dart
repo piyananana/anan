@@ -146,6 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final cardHeight   = screenHeight * 0.7;
 
     return Scaffold(
+      backgroundColor: Colors.green.shade900,
       body: Stack(
         children: [
           // ── Main login card ─────────────────────────────────────────────
