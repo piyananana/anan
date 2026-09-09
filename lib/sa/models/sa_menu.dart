@@ -165,6 +165,7 @@ class Menu {
   final int sortOrder;
   final Widget Function(BuildContext context)
       builder; // ฟังก์ชันสำหรับสร้าง Widget ของหน้านั้นๆ
+  final bool isActive;
   final bool isSystem;
   final bool canView;
   final bool canCreate;
@@ -390,6 +391,7 @@ class Menu {
     required this.sortOrder,
     this.children = const [],
     required this.builder,
+    this.isActive = true,
     this.isSystem = false,
     this.canView = true,
     this.canCreate = false,
@@ -422,6 +424,7 @@ class Menu {
         sortOrder: json['sort_order'],
         children: [],
         builder: screenBuilder,
+        isActive: json['is_active'] ?? true,
         isSystem: json['is_system'] ?? false,
         canView: json['can_view'] ?? true,
         canCreate: json['can_create'] ?? false,

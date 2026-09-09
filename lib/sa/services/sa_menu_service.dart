@@ -60,12 +60,12 @@ class MenuService {
     }
   }
 
-  Future<List<Menu>> fetchMenus() async {
+  Future<List<Menu>> fetchMenus({bool includeInactive = false}) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.get(
-      Uri.parse('$baseUrl/sa_menu'),
-      headers: headers,
+    final uri = Uri.parse('$baseUrl/sa_menu').replace(
+      queryParameters: includeInactive ? {'include_inactive': 'true'} : null,
     );
+    final response = await http.get(uri, headers: headers);
 
     if (response.statusCode == 200) {
       List jsonResponse = json.decode(response.body);

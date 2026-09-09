@@ -59,6 +59,9 @@ class _MenuScreenState extends State<MenuScreen>
   double _leftPanelWidth = 360.0;
   bool _isDraggingDivider = false;
   bool _isImportingOrExporting = false; // สำหรับแสดงสถานะ Loading
+  // แสดงเมนูที่ถูกปิดใช้งานด้วยหรือไม่ — ปกติ backend กรอง is_active=false ออกทั้งหมด ทำให้หาเมนูที่เคยปิดไว้
+  // เพื่อเปิดกลับมาใช้งานใหม่ไม่เจอเลย เปิดสวิตช์นี้เพื่อดึงมาแสดง (พร้อม icon บอกสถานะ) แล้วแก้ไขกลับได้
+  bool _showInactive = false;
 
   @override
   void initState() {
@@ -96,7 +99,7 @@ class _MenuScreenState extends State<MenuScreen>
     }
     try {
       final masterService = Provider.of<MenuService>(context, listen: false);
-      final fetchedMenus = await masterService.fetchMenus();
+      final fetchedMenus = await masterService.fetchMenus(includeInactive: _showInactive);
       // setState(() {
       //   _currentList = fetchedMenus;
       //   _isLoading = false;
@@ -197,7 +200,7 @@ class _MenuScreenState extends State<MenuScreen>
       // คุณอาจจะต้อง fetch menu_contents แยก หรือให้ Menu model มี fields นี้
       // สำหรับตอนนี้ เราสมมติว่า content data จะถูกโหลดในฟอร์มเมื่อแก้ไข
       _loadContentForEdit(menu.id);
-      _isActive = true;
+      _isActive = menu.isActive;
       _isSystem = menu.isSystem;
       _requiresApproval = menu.requiresApproval;
     });
@@ -481,13 +484,25 @@ class _MenuScreenState extends State<MenuScreen>
                 if (isFolder && hasChildren)
                   Icon(isExpanded ? Icons.arrow_drop_down : Icons.arrow_right),
                 if (!isFolder || !hasChildren) const SizedBox(width: 24),
-                Icon(isFolder ? Icons.folder : Icons.insert_drive_file),
+                Icon(isFolder ? Icons.folder : Icons.insert_drive_file,
+                    color: menu.isActive ? null : Colors.grey),
+                if (!menu.isActive) ...[
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: l.isEnglish ? 'Inactive' : 'ปิดใช้งาน',
+                    child: Icon(Icons.visibility_off, size: 16, color: Colors.red.shade300),
+                  ),
+                ],
                 const SizedBox(width: 8),
                 Expanded(
                   child: Consumer<LanguageProvider>(
                     builder: (ctx, lang, _) => Text(
                       menu.localName(lang.isEnglish),
-                      style: const TextStyle(fontSize: 16),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: menu.isActive ? null : Colors.grey,
+                        fontStyle: menu.isActive ? FontStyle.normal : FontStyle.italic,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -869,13 +884,36 @@ class _MenuScreenState extends State<MenuScreen>
                         children: [
                           Padding(
                             padding: const EdgeInsets.all(8.0),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: _setAddRootMode,
-                                icon: const Icon(Icons.add),
-                                label: Text(l.isEnglish ? 'Add Root Menu' : 'เพิ่มเมนูหลักใหม่'),
-                              ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _setAddRootMode,
+                                    icon: const Icon(Icons.add),
+                                    label: Text(l.isEnglish ? 'Add Root Menu' : 'เพิ่มเมนูหลักใหม่'),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                // toggle แสดง/ซ่อนเมนูที่ปิดใช้งาน — ปกติ backend กรองออกทั้งหมด ทำให้หาเมนูที่
+                                // เคยปิดไว้เพื่อเปิดกลับมาใช้งานใหม่ไม่เจอเลย
+                                Material(
+                                  color: _showInactive ? Colors.deepOrange[900] : Colors.white,
+                                  shape: const CircleBorder(),
+                                  child: IconButton(
+                                    icon: Icon(
+                                      _showInactive ? Icons.visibility : Icons.visibility_off,
+                                      color: _showInactive ? Colors.white : Colors.deepOrange[900],
+                                    ),
+                                    tooltip: _showInactive
+                                        ? (l.isEnglish ? 'Showing inactive menus — tap to hide' : 'กำลังแสดงเมนูที่ปิดใช้งาน — แตะเพื่อซ่อน')
+                                        : (l.isEnglish ? 'Show inactive menus' : 'แสดงเมนูที่ปิดใช้งาน'),
+                                    onPressed: () {
+                                      setState(() => _showInactive = !_showInactive);
+                                      _fetchNodes();
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           Expanded(
