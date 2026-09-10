@@ -77,7 +77,16 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
   // Filters
   List<int> _selectedCategoryIds = [];
   int?      _selectedWarehouseId;
-  String    _itemType            = '';   // '' | STOCK | SERVICE | NON_STOCK
+  List<String> _selectedItemTypes      = [];  // multi-select ประเภทสินค้า (STOCK/SERVICE/NON_STOCK)
+  List<String> _selectedCostingMethods = [];  // multi-select วิธีคิดต้นทุน (FIFO/AVG/STANDARD/SPECIFIC)
+  // 5 flag ด้านล่าง — tri-state (null=ไม่ระบุ/ไม่กรอง, true/false=กรองตามค่า) มิเรอร์ฟิลด์เดียวกันใน
+  // im_item_detail_widget.dart (_buildFlagsSection): is_purchase_item/is_sales_item/is_manufactured/
+  // is_lot_tracked/is_serial_tracked
+  bool?     _isPurchaseItem;
+  bool?     _isSalesItem;
+  bool?     _isManufactured;
+  bool?     _isLotTracked;
+  bool?     _isSerialTracked;
   String?   _itemCodeFrom;
   String?   _itemCodeTo;
   String    _fromLabel           = '';
@@ -135,8 +144,26 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
       if (_selectedWarehouseId != null) {
         list = list.where((i) => i.defaultWarehouseId == _selectedWarehouseId).toList();
       }
-      if (_itemType.isNotEmpty) {
-        list = list.where((i) => i.itemType == _itemType).toList();
+      if (_selectedItemTypes.isNotEmpty) {
+        list = list.where((i) => _selectedItemTypes.contains(i.itemType)).toList();
+      }
+      if (_selectedCostingMethods.isNotEmpty) {
+        list = list.where((i) => _selectedCostingMethods.contains(i.costingMethod)).toList();
+      }
+      if (_isPurchaseItem != null) {
+        list = list.where((i) => i.isPurchaseItem == _isPurchaseItem).toList();
+      }
+      if (_isSalesItem != null) {
+        list = list.where((i) => i.isSalesItem == _isSalesItem).toList();
+      }
+      if (_isManufactured != null) {
+        list = list.where((i) => i.isManufactured == _isManufactured).toList();
+      }
+      if (_isLotTracked != null) {
+        list = list.where((i) => i.isLotTracked == _isLotTracked).toList();
+      }
+      if (_isSerialTracked != null) {
+        list = list.where((i) => i.isSerialTracked == _isSerialTracked).toList();
       }
       if ((_itemCodeFrom ?? '').isNotEmpty) {
         list = list.where((i) => i.itemCode.compareTo(_itemCodeFrom!) >= 0).toList();
@@ -294,9 +321,20 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
       final name = isEnglish && (w.warehouseNameEn ?? '').isNotEmpty ? w.warehouseNameEn! : w.warehouseNameTh;
       p.add('${isEnglish ? "Default Warehouse" : "คลังตั้งต้น"}: ${w.warehouseCode} $name');
     }
-    if (_itemType.isNotEmpty) {
-      p.add('${isEnglish ? "Item Type" : "ประเภทสินค้า"}: ${imItemTypeLabel(_itemType, isEnglish)}');
+    if (_selectedItemTypes.isNotEmpty) {
+      final names = _selectedItemTypes.map((t) => imItemTypeLabel(t, isEnglish)).join(', ');
+      p.add('${isEnglish ? "Item Type" : "ประเภทสินค้า"}: $names');
     }
+    if (_selectedCostingMethods.isNotEmpty) {
+      final names = _selectedCostingMethods.map((m) => imCostingMethodLabel(m, isEnglish)).join(', ');
+      p.add('${isEnglish ? "Costing Method" : "วิธีคิดต้นทุน"}: $names');
+    }
+    String yn(bool v) => v ? (isEnglish ? 'Yes' : 'ใช่') : (isEnglish ? 'No' : 'ไม่ใช่');
+    if (_isPurchaseItem != null) p.add('${isEnglish ? "Purchase" : "ใช้ในการซื้อ"}: ${yn(_isPurchaseItem!)}');
+    if (_isSalesItem != null) p.add('${isEnglish ? "Sales" : "ใช้ในการขาย"}: ${yn(_isSalesItem!)}');
+    if (_isManufactured != null) p.add('${isEnglish ? "Manufactured" : "ผลิตเอง"}: ${yn(_isManufactured!)}');
+    if (_isLotTracked != null) p.add('${isEnglish ? "Lot Tracked" : "ติดตามล็อต"}: ${yn(_isLotTracked!)}');
+    if (_isSerialTracked != null) p.add('${isEnglish ? "Serial Tracked" : "ติดตามซีเรียล"}: ${yn(_isSerialTracked!)}');
     if ((_itemCodeFrom ?? '').isNotEmpty || (_itemCodeTo ?? '').isNotEmpty) {
       final all = isEnglish ? '(All)' : '(ทั้งหมด)';
       final f = (_itemCodeFrom ?? '').isEmpty ? all : _itemCodeFrom!;
@@ -623,6 +661,44 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
     if (result != null && mounted) setState(() => _selectedCategoryIds = result);
   }
 
+  // imItemTypes/imCostingMethods เป็น const List<String> (ไม่มี id เป็น int) จึงใช้ index ในลิสต์เป็น id
+  // ของ _MultiPickerDialog<T> แทน (มิเรอร์ pattern เดียวกับ _pickSections ด้านล่างที่ใช้ _Section.index)
+  Future<void> _pickItemTypes() async {
+    final isEnglish = _isEnglish;
+    final result = await showDialog<List<int>>(
+      context: context,
+      builder: (_) => _MultiPickerDialog<String>(
+        title: isEnglish ? 'Select Item Types' : 'เลือกประเภทสินค้า',
+        items: imItemTypes,
+        selected: _selectedItemTypes.map((t) => imItemTypes.indexOf(t)).toList(),
+        idOf: (t) => imItemTypes.indexOf(t),
+        labelOf: (t) => imItemTypeLabel(t, isEnglish),
+        isEnglish: isEnglish,
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() => _selectedItemTypes = result.map((i) => imItemTypes[i]).toList());
+    }
+  }
+
+  Future<void> _pickCostingMethods() async {
+    final isEnglish = _isEnglish;
+    final result = await showDialog<List<int>>(
+      context: context,
+      builder: (_) => _MultiPickerDialog<String>(
+        title: isEnglish ? 'Select Costing Methods' : 'เลือกวิธีคิดต้นทุน',
+        items: imCostingMethods,
+        selected: _selectedCostingMethods.map((m) => imCostingMethods.indexOf(m)).toList(),
+        idOf: (m) => imCostingMethods.indexOf(m),
+        labelOf: (m) => imCostingMethodLabel(m, isEnglish),
+        isEnglish: isEnglish,
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() => _selectedCostingMethods = result.map((i) => imCostingMethods[i]).toList());
+    }
+  }
+
   Future<void> _pickSections() async {
     final isEnglish = _isEnglish;
     final result = await showDialog<List<int>>(
@@ -716,6 +792,29 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
     );
   }
 
+  // tri-state (null=ไม่ระบุ/ไม่กรอง, true/false=กรองตามค่า) — ใช้กับ 5 flag ใน im_item (ซื้อ/ขาย/ผลิตเอง/
+  // ล็อต/ซีเรียล) ที่ default ต้องเป็น "ไม่ระบุ" เพื่อไม่ให้กรองข้อมูลออกโดยไม่ตั้งใจ
+  Widget _buildTriStateDropdown({
+    required String label,
+    required bool? value,
+    required String trueLabel,
+    required String falseLabel,
+    required void Function(bool?) onChanged,
+  }) {
+    final isEnglish = _isEnglish;
+    return DropdownButtonFormField<bool?>(
+      isExpanded: true,
+      value: value,
+      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
+      items: [
+        DropdownMenuItem<bool?>(value: null, child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
+        DropdownMenuItem<bool?>(value: true, child: Text(trueLabel)),
+        DropdownMenuItem<bool?>(value: false, child: Text(falseLabel)),
+      ],
+      onChanged: onChanged,
+    );
+  }
+
   Widget _buildFilterPanel() {
     final isEnglish = _isEnglish;
     return Card(
@@ -762,18 +861,65 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // ประเภทสินค้า
-                DropdownButtonFormField<String>(
-                  value: _itemType,
-                  decoration: InputDecoration(
-                      labelText: isEnglish ? 'Item Type' : 'ประเภทสินค้า',
-                      border: const OutlineInputBorder(),
-                      isDense: true),
-                  items: [
-                    DropdownMenuItem(value: '', child: Text(isEnglish ? '— All —' : '— ทั้งหมด —')),
-                    ...imItemTypes.map((t) => DropdownMenuItem(value: t, child: Text(imItemTypeLabel(t, isEnglish)))),
-                  ],
-                  onChanged: (v) { if (v != null) setState(() => _itemType = v); },
+                // ประเภทสินค้า (multi-select)
+                _buildMultiField(
+                  label: isEnglish ? 'Item Type' : 'ประเภทสินค้า',
+                  count: _selectedItemTypes.length,
+                  allLabel: isEnglish ? '— All Item Types —' : '— ทุกประเภทสินค้า —',
+                  onTap: _pickItemTypes,
+                  onClear: () => setState(() => _selectedItemTypes = []),
+                ),
+                const SizedBox(height: 12),
+
+                // วิธีคิดต้นทุน (multi-select)
+                _buildMultiField(
+                  label: isEnglish ? 'Costing Method' : 'วิธีคิดต้นทุน',
+                  count: _selectedCostingMethods.length,
+                  allLabel: isEnglish ? '— All Costing Methods —' : '— ทุกวิธีคิดต้นทุน —',
+                  onTap: _pickCostingMethods,
+                  onClear: () => setState(() => _selectedCostingMethods = []),
+                ),
+                const SizedBox(height: 12),
+
+                // ใช้ในการซื้อ / ใช้ในการขาย / ผลิตเอง / ติดตามล็อต / ติดตามซีเรียล — tri-state, default ไม่ระบุ
+                _buildTriStateDropdown(
+                  label: isEnglish ? 'Purchase Item' : 'ใช้ในการซื้อ',
+                  value: _isPurchaseItem,
+                  trueLabel: isEnglish ? 'Purchase item' : 'ใช้ในการซื้อ',
+                  falseLabel: isEnglish ? 'Not a purchase item' : 'ไม่ใช้ในการซื้อ',
+                  onChanged: (v) => setState(() => _isPurchaseItem = v),
+                ),
+                const SizedBox(height: 12),
+                _buildTriStateDropdown(
+                  label: isEnglish ? 'Sales Item' : 'ใช้ในการขาย',
+                  value: _isSalesItem,
+                  trueLabel: isEnglish ? 'Sales item' : 'ใช้ในการขาย',
+                  falseLabel: isEnglish ? 'Not a sales item' : 'ไม่ใช้ในการขาย',
+                  onChanged: (v) => setState(() => _isSalesItem = v),
+                ),
+                const SizedBox(height: 12),
+                _buildTriStateDropdown(
+                  label: isEnglish ? 'Manufactured' : 'ผลิตเอง',
+                  value: _isManufactured,
+                  trueLabel: isEnglish ? 'Manufactured' : 'ผลิตเอง',
+                  falseLabel: isEnglish ? 'Not manufactured' : 'ผลิตที่อื่น',
+                  onChanged: (v) => setState(() => _isManufactured = v),
+                ),
+                const SizedBox(height: 12),
+                _buildTriStateDropdown(
+                  label: isEnglish ? 'Lot Tracked' : 'ติดตามเป็นล็อต',
+                  value: _isLotTracked,
+                  trueLabel: isEnglish ? 'Lot tracked' : 'ติดตามเป็นล็อต',
+                  falseLabel: isEnglish ? 'Not lot tracked' : 'ไม่ใช้ล็อต',
+                  onChanged: (v) => setState(() => _isLotTracked = v),
+                ),
+                const SizedBox(height: 12),
+                _buildTriStateDropdown(
+                  label: isEnglish ? 'Serial Tracked' : 'ติดตามเป็นซีเรียล',
+                  value: _isSerialTracked,
+                  trueLabel: isEnglish ? 'Serial tracked' : 'ติดตามเป็นซีเรียล',
+                  falseLabel: isEnglish ? 'Not serial tracked' : 'ไม่ใช้ซีเรียล',
+                  onChanged: (v) => setState(() => _isSerialTracked = v),
                 ),
                 const SizedBox(height: 12),
 
