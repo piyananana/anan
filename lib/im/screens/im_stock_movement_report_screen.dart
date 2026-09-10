@@ -234,16 +234,18 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
       pw.SizedBox(height: 6),
     ]);
 
-    // ─── ตารางการเคลื่อนไหว 9 คอลัมน์ ───────────────────────────────────────
+    // ─── ตารางการเคลื่อนไหว 10 คอลัมน์ (เพิ่มคอลัมน์ Lot/Serial ถัดจากเลขที่เอกสาร) ─────────────────────
+    // balance คงความกว้างเดิมไว้ (ต้องตรงกับ hcw ยอดยกมาของหัวการ์ดเป๊ะ — ดูหมายเหตุที่ cardHeaderRow ด้านล่าง)
     final mw = {
-      'date':   pageW * 0.09,
-      'type':   pageW * 0.15,
-      'docNo':  pageW * 0.12,
-      'receive':pageW * 0.11,
-      'issue':  pageW * 0.11,
-      'withdraw':pageW * 0.11,
-      'transfer':pageW * 0.11,
-      'adjust': pageW * 0.11,
+      'date':   pageW * 0.08,
+      'type':   pageW * 0.12,
+      'docNo':  pageW * 0.10,
+      'lotSerial': pageW * 0.09,
+      'receive':pageW * 0.105,
+      'issue':  pageW * 0.105,
+      'withdraw':pageW * 0.105,
+      'transfer':pageW * 0.105,
+      'adjust': pageW * 0.10,
       'balance':pageW * 0.09,
     };
     const bucketOrder = ['receive', 'issue', 'withdraw', 'transfer', 'adjust'];
@@ -258,14 +260,17 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
           ),
         );
 
-    // showDocCols=false (โหมดแสดงเฉพาะยอดรวม) — เว้นว่างหัวคอลัมน์วันที่เอกสาร/ประเภทเอกสาร/เลขที่เอกสาร แต่ยัง
-    // กินพื้นที่คอลัมน์ไว้เหมือนเดิม เพื่อให้บรรทัดยอดรวมด้านล่างยังตรงคอลัมน์กัน
-    pw.Widget movementHeaderRow({required bool showDocCols}) => pw.Container(
+    // showDocCols=false (โหมดแสดงเฉพาะยอดรวม) — เว้นว่างหัวคอลัมน์วันที่เอกสาร/ประเภทเอกสาร/เลขที่เอกสาร/Lot-Serial
+    // แต่ยังกินพื้นที่คอลัมน์ไว้เหมือนเดิม เพื่อให้บรรทัดยอดรวมด้านล่างยังตรงคอลัมน์กัน — lotSerialLabel มาจาก
+    // costing_method/is_lot_tracked/is_serial_tracked ของสินค้าแต่ละการ์ด (ดู flushItem) จึงส่งมาเฉพาะตอน
+    // showDocCols=true เท่านั้น
+    pw.Widget movementHeaderRow({required bool showDocCols, String lotSerialLabel = ''}) => pw.Container(
           color: cGreen,
           child: pw.Row(children: [
             mCell(mw['date']!,   showDocCols ? (isEnglish ? 'Date' : 'วันที่เอกสาร') : '', bold: true),
             mCell(mw['type']!,   showDocCols ? (isEnglish ? 'Doc Type' : 'ประเภทเอกสาร') : '', bold: true),
             mCell(mw['docNo']!,  showDocCols ? (isEnglish ? 'Doc No.' : 'เลขที่เอกสาร') : '', bold: true),
+            mCell(mw['lotSerial']!, showDocCols ? lotSerialLabel : '', bold: true),
             mCell(mw['receive']!, isEnglish ? 'Receive' : 'รับ', bold: true, a: pw.TextAlign.right),
             mCell(mw['issue']!,   isEnglish ? 'Issue' : 'จ่าย', bold: true, a: pw.TextAlign.right),
             mCell(mw['withdraw']!,isEnglish ? 'Withdraw' : 'เบิก', bold: true, a: pw.TextAlign.right),
@@ -282,17 +287,18 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
       return fmt.format(display);
     }
 
-    pw.Widget movementDataRow(Map<String, dynamic> row) => pw.Row(children: [
+    pw.Widget movementDataRow(Map<String, dynamic> row, {String lotSerialText = ''}) => pw.Row(children: [
           mCell(mw['date']!,  _fmtDate(row['doc_date'] as String?)),
           mCell(mw['type']!,  '${row['doc_code'] ?? ''}  ${_docTypeName(row, isEnglish)}'),
           mCell(mw['docNo']!, row['doc_no'] as String? ?? ''),
+          mCell(mw['lotSerial']!, lotSerialText),
           for (final b in bucketOrder) mCell(mw[b == 'withdraw' ? 'withdraw' : b]!, bucketCellText(b, row), a: pw.TextAlign.right),
           mCell(mw['balance']!, fmt.format(_runningAmount(row)), bold: true, a: pw.TextAlign.right),
         ]);
 
     pw.Widget totalsRow(String label, Map<String, num> bucketTotals, num closing, {double indent = 0}) => pw.Row(children: [
           pw.SizedBox(
-            width: mw['date']! + mw['type']! + mw['docNo']!,
+            width: mw['date']! + mw['type']! + mw['docNo']! + mw['lotSerial']!,
             child: pw.Padding(
               padding: pw.EdgeInsets.only(left: 3 + indent, right: 3, top: 2.5, bottom: 2.5),
               child: pw.Text(label, style: tB(8.5)),
@@ -389,6 +395,18 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
       final txnRows = curItemRows.where((r) => r['txn_id'] != null).toList();
       final opening = _openingAmount(first);
       final costingLabel = imCostingMethodLabel(first['costing_method'] as String? ?? 'AVG', isEnglish);
+      // Lot/Serial — SPECIFIC (บังคับ serial ตาม project rule) หรือ is_serial_tracked มาก่อน is_lot_tracked
+      // เพราะสินค้าจะติดตามได้ทีละแบบเท่านั้นในทางปฏิบัติ (serial ละเอียดกว่า lot)
+      final isSerialItem = first['costing_method'] == 'SPECIFIC' || first['is_serial_tracked'] == true;
+      final isLotItem = !isSerialItem && first['is_lot_tracked'] == true;
+      final lotSerialLabel = isSerialItem
+          ? (isEnglish ? 'Serial#' : 'ซีเรียล')
+          : (isLotItem ? (isEnglish ? 'Lot#' : 'ล็อต') : '');
+      String lotSerialText(Map<String, dynamic> row) {
+        if (isSerialItem) return row['serial_no']?.toString() ?? '';
+        if (isLotItem) return row['lot_no']?.toString() ?? '';
+        return '';
+      }
 
       maybeNewPage();
       content.add(cardHeaderRow(
@@ -402,13 +420,13 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
         uomName: _uomName(first, isEnglish),
         opening: opening,
       ));
-      content.add(movementHeaderRow(showDocCols: showMovement));
+      content.add(movementHeaderRow(showDocCols: showMovement, lotSerialLabel: lotSerialLabel));
 
       num closing = opening;
       final bucketTotals = emptyBuckets();
       if (showMovement) {
         for (final row in txnRows) {
-          content.add(movementDataRow(row));
+          content.add(movementDataRow(row, lotSerialText: lotSerialText(row)));
           final v = _rowAmount(row);
           final b = row['bucket'] as String?;
           if (b != null && bucketTotals.containsKey(b)) bucketTotals[b] = bucketTotals[b]! + v;
@@ -607,10 +625,10 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
       const signedBuckets = {'transfer', 'adjust'};
       Map<String, num> emptyBuckets() => {for (final b in bucketOrder) b: 0.0};
 
-      void writeMovementHeader(int r, {required bool showDocCols}) {
+      void writeMovementHeader(int r, {required bool showDocCols, String lotSerialLabel = ''}) {
         final hdrs = isEnglish
-            ? [showDocCols ? 'Date' : '', showDocCols ? 'Doc Type' : '', showDocCols ? 'Doc No.' : '', 'Receive', 'Issue', 'Withdraw', 'Transfer', 'Adjust', 'Balance']
-            : [showDocCols ? 'วันที่เอกสาร' : '', showDocCols ? 'ประเภทเอกสาร' : '', showDocCols ? 'เลขที่เอกสาร' : '', 'รับ', 'จ่าย', 'เบิก', 'โอน', 'ปรับ', 'ยอดสะสม'];
+            ? [showDocCols ? 'Date' : '', showDocCols ? 'Doc Type' : '', showDocCols ? 'Doc No.' : '', showDocCols ? lotSerialLabel : '', 'Receive', 'Issue', 'Withdraw', 'Transfer', 'Adjust', 'Balance']
+            : [showDocCols ? 'วันที่เอกสาร' : '', showDocCols ? 'ประเภทเอกสาร' : '', showDocCols ? 'เลขที่เอกสาร' : '', showDocCols ? lotSerialLabel : '', 'รับ', 'จ่าย', 'เบิก', 'โอน', 'ปรับ', 'ยอดสะสม'];
         for (int i = 0; i < hdrs.length; i++) {
           _xl(s, r, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
         }
@@ -621,9 +639,9 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
         for (int ci = 0; ci < bucketOrder.length; ci++) {
           final bc = bucketOrder[ci];
           final t = bucketTotals[bc]!;
-          _xl(s, r, 3 + ci, (signedBuckets.contains(bc) ? t : t.abs()).toDouble(), bg: bg, align: HorizontalAlign.Right, bold: true);
+          _xl(s, r, 4 + ci, (signedBuckets.contains(bc) ? t : t.abs()).toDouble(), bg: bg, align: HorizontalAlign.Right, bold: true);
         }
-        _xl(s, r, 8, closing.toDouble(), bg: bg, align: HorizontalAlign.Right, bold: true);
+        _xl(s, r, 9, closing.toDouble(), bg: bg, align: HorizontalAlign.Right, bold: true);
       }
 
       int row = 3;
@@ -653,22 +671,32 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
         final txnRows = curItemRows.where((r) => r['txn_id'] != null).toList();
         final opening = _openingAmount(first);
         final costingLabel = imCostingMethodLabel(first['costing_method'] as String? ?? 'AVG', isEnglish);
+        final isSerialItem = first['costing_method'] == 'SPECIFIC' || first['is_serial_tracked'] == true;
+        final isLotItem = !isSerialItem && first['is_lot_tracked'] == true;
+        final lotSerialLabel = isSerialItem
+            ? (isEnglish ? 'Serial#' : 'ซีเรียล')
+            : (isLotItem ? (isEnglish ? 'Lot#' : 'ล็อต') : '');
+        String lotSerialText(Map<String, dynamic> r) {
+          if (isSerialItem) return r['serial_no']?.toString() ?? '';
+          if (isLotItem) return r['lot_no']?.toString() ?? '';
+          return '';
+        }
 
-        // การ์ดหัว 3 แถว: ป้ายกำกับ / รหัส (+วิธีคิดต้นทุน+ยอดยกมา) / ชื่อ — คอลัมน์ ยอดยกมา อยู่ที่ col 8
+        // การ์ดหัว 3 แถว: ป้ายกำกับ / รหัส (+วิธีคิดต้นทุน+ยอดยกมา) / ชื่อ — คอลัมน์ ยอดยกมา อยู่ที่ col 9
         // ตรงกับคอลัมน์ยอดสะสมด้านล่างเป๊ะ (Requirement 1)
         _xl(s, row, 0, isEnglish ? 'Warehouse' : 'คลัง', bg: groupBg, bold: true);
         _xl(s, row, 1, isEnglish ? 'Category' : 'หมวดหมู่', bg: groupBg, bold: true);
         _xl(s, row, 2, isEnglish ? 'Item' : 'สินค้า', bg: groupBg, bold: true);
         _xl(s, row, 3, isEnglish ? 'Costing Method' : 'วิธีคิดต้นทุน', bg: groupBg, bold: true);
         _xl(s, row, 4, isEnglish ? 'Unit' : 'หน่วย', bg: groupBg, bold: true);
-        _xl(s, row, 8, isEnglish ? 'Opening Balance' : 'ยอดยกมา', bg: groupBg, bold: true, align: HorizontalAlign.Right);
+        _xl(s, row, 9, isEnglish ? 'Opening Balance' : 'ยอดยกมา', bg: groupBg, bold: true, align: HorizontalAlign.Right);
         row++;
         _xl(s, row, 0, first['warehouse_code'] as String? ?? '');
         _xl(s, row, 1, first['category_code'] as String? ?? '');
         _xl(s, row, 2, first['item_code'] as String? ?? '');
         _xl(s, row, 3, costingLabel);
         _xl(s, row, 4, first['uom_code']?.toString() ?? '');
-        _xl(s, row, 8, opening.toDouble(), align: HorizontalAlign.Right, bold: true);
+        _xl(s, row, 9, opening.toDouble(), align: HorizontalAlign.Right, bold: true);
         row++;
         _xl(s, row, 0, _warehouseName(first, isEnglish));
         _xl(s, row, 1, _categoryLabel(first, isEnglish));
@@ -676,7 +704,7 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
         _xl(s, row, 4, _uomName(first, isEnglish));
         row++;
 
-        writeMovementHeader(row, showDocCols: showMovement);
+        writeMovementHeader(row, showDocCols: showMovement, lotSerialLabel: lotSerialLabel);
         row++;
 
         num closing = opening;
@@ -688,14 +716,15 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
             _xl(s, row, 0, _fmtDate(r['doc_date'] as String?));
             _xl(s, row, 1, '${r['doc_code'] ?? ''}  ${_docTypeName(r, isEnglish)}');
             _xl(s, row, 2, r['doc_no'] as String? ?? '');
+            _xl(s, row, 3, lotSerialText(r));
             for (int ci = 0; ci < bucketOrder.length; ci++) {
               final bc = bucketOrder[ci];
               if (bc == b) {
                 final display = signedBuckets.contains(bc) ? v : v.abs();
-                _xl(s, row, 3 + ci, display.toDouble(), align: HorizontalAlign.Right);
+                _xl(s, row, 4 + ci, display.toDouble(), align: HorizontalAlign.Right);
               }
             }
-            _xl(s, row, 8, _runningAmount(r).toDouble(), align: HorizontalAlign.Right);
+            _xl(s, row, 9, _runningAmount(r).toDouble(), align: HorizontalAlign.Right);
             row++;
           }
           if (b != null && bucketTotals.containsKey(b)) bucketTotals[b] = bucketTotals[b]! + v;
