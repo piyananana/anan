@@ -124,6 +124,7 @@ import '../../im/screens/im_item_report_screen.dart';
 import '../../im/screens/im_transaction_report_screen.dart';
 import '../../im/screens/im_item_transaction_report_screen.dart';
 import '../../im/screens/im_stock_movement_report_screen.dart';
+import '../../im/screens/im_stock_balance_by_item_report_screen.dart';
 
 import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
@@ -338,6 +339,7 @@ class Menu {
     'ImTransactionReportScreen': (context) => const ImTransactionReportScreen(),
     'ImItemTransactionReportScreen': (context) => const ImItemTransactionReportScreen(),
     'ImStockMovementReportScreen': (context) => const ImStockMovementReportScreen(),
+    'ImStockBalanceByItemReportScreen': (context) => const ImStockBalanceByItemReportScreen(),
 
     'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
     'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),
