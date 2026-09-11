@@ -138,9 +138,16 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
   String _categoryLabel(Map<String, dynamic> r, bool isEnglish) {
     final code = r['category_code'] as String?;
     if ((code ?? '').isEmpty) return isEnglish ? '(No category)' : '(ไม่ระบุหมวดหมู่)';
+    return '$code  ${_categoryNameOnly(r, isEnglish)}';
+  }
+
+  // ชื่อหมวดหมู่ล้วนๆ (ไม่มีรหัสนำหน้า) — ใช้กับหัวการ์ดที่ต้องแสดงรหัสและชื่อคนละบรรทัด (มิเรอร์ _warehouseName/
+  // _itemName ที่คืนแค่ชื่อเช่นกัน)
+  String _categoryNameOnly(Map<String, dynamic> r, bool isEnglish) {
+    final code = r['category_code'] as String?;
+    if ((code ?? '').isEmpty) return isEnglish ? '(No category)' : '(ไม่ระบุหมวดหมู่)';
     final en = r['category_name_en'] as String?;
-    final name = isEnglish && (en ?? '').isNotEmpty ? en! : (r['category_name_th'] as String? ?? '');
-    return '$code  $name';
+    return isEnglish && (en ?? '').isNotEmpty ? en! : (r['category_name_th'] as String? ?? '');
   }
 
   String _itemName(Map<String, dynamic> r, bool isEnglish) {
@@ -249,8 +256,9 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
       'balance':pageW * 0.09,
     };
     const bucketOrder = ['receive', 'issue', 'withdraw', 'transfer', 'adjust'];
-    // รับ/จ่าย/เบิก มีทิศทางคงที่เสมอ แสดงแบบ absolute value ได้ — โอน/ปรับ มีได้ทั้งสองทิศทาง ต้องคงเครื่องหมาย
-    const signedBuckets = {'transfer', 'adjust'};
+    // จ่าย/เบิก แสดงเครื่องหมายลบเสมอ (ให้เห็นชัดว่าเป็นยอดหักจากยอดสะสม) — รับ ทิศทางคงที่เป็นบวกเสมอจึงยังคง
+    // แสดงแบบ absolute value ได้ ส่วนโอน/ปรับ มีได้ทั้งสองทิศทางแม้ในการ์ดเดียวกัน จึงต้องคงเครื่องหมาย +/- ไว้
+    const signedBuckets = {'issue', 'withdraw', 'transfer', 'adjust'};
 
     pw.Widget mCell(double w, String t, {bool bold = false, pw.TextAlign a = pw.TextAlign.left}) => pw.SizedBox(
           width: w,
@@ -322,6 +330,9 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
       'unit':      pageW * 0.10,
     };
 
+    // เว้นวรรค/บรรทัดว่างล้วน — pw.Text ใน package:pdf ยุบ height เป็น 0 เมื่อเนื้อหาเป็น whitespace ล้วน (ต่างจาก
+    // Flutter's Text ที่ยังกิน line-height ปกติ) จึงต้องแทนที่ด้วย Opacity(opacity:0) ครอบตัวอักษรจริง เพื่อให้
+    // ได้ line-height เท่าบรรทัดข้อความปกติแต่มองไม่เห็น — verify แล้วด้วย pw.Page ทดสอบจริง
     pw.Widget headerCell(double w, String label, List<String> lines, {pw.TextAlign a = pw.TextAlign.left}) => pw.SizedBox(
           width: w,
           child: pw.Padding(
@@ -330,7 +341,10 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
               crossAxisAlignment: a == pw.TextAlign.right ? pw.CrossAxisAlignment.end : pw.CrossAxisAlignment.start,
               children: [
                 pw.Text(label, style: tB(8.5)),
-                for (final line in lines) pw.Text(line, style: tN(8.5), textAlign: a),
+                for (final line in lines)
+                  line.trim().isEmpty
+                      ? pw.Opacity(opacity: 0, child: pw.Text('X', style: tN(8.5), textAlign: a))
+                      : pw.Text(line, style: tN(8.5), textAlign: a),
               ],
             ),
           ),
@@ -338,7 +352,7 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
 
     pw.Widget cardHeaderRow({
       required String warehouseCode, required String warehouseName,
-      required String categoryLabel,
+      required String categoryCode, required String categoryName,
       required String itemCode, required String itemName,
       required String costingLabel, required String uomCode, required String uomName,
       required num opening,
@@ -347,11 +361,14 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
           decoration: pw.BoxDecoration(color: cHeaderBg, borderRadius: pw.BorderRadius.circular(2)),
           child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
             headerCell(hcw['warehouse']!, isEnglish ? 'Warehouse' : 'คลัง', [warehouseCode, warehouseName]),
-            headerCell(hcw['category']!,  isEnglish ? 'Category'  : 'หมวดหมู่', [categoryLabel]),
+            headerCell(hcw['category']!,  isEnglish ? 'Category'  : 'หมวดหมู่', [categoryCode, categoryName]),
             headerCell(hcw['item']!,      isEnglish ? 'Item'      : 'สินค้า', [itemCode, itemName]),
-            headerCell(hcw['costing']!,   isEnglish ? 'Costing Method' : 'วิธีคิดต้นทุน', [costingLabel]),
+            // เว้นบรรทัดแรกว่าง (สลับกับ warehouse/category/item ที่มีรหัสอยู่บรรทัดแรก) เพื่อให้ค่าจริงลง
+            // มาอยู่บรรทัดเดียวกับชื่อสินค้า (บรรทัดที่ 2) ตามที่ผู้ใช้ต้องการ — headerCell แปลงบรรทัดว่างเป็น
+            // spacer ที่มองไม่เห็นแต่กิน line-height จริงให้อัตโนมัติ (ดูหมายเหตุใน headerCell ด้านบน)
+            headerCell(hcw['costing']!,   isEnglish ? 'Costing Method' : 'วิธีคิดต้นทุน', ['', costingLabel]),
             headerCell(hcw['unit']!,      isEnglish ? 'Unit'      : 'หน่วย', [uomCode, uomName]),
-            headerCell(mw['balance']!,    isEnglish ? 'Opening Balance' : 'ยอดยกมา', [fmt.format(opening)], a: pw.TextAlign.right),
+            headerCell(mw['balance']!,    isEnglish ? 'Opening Balance' : 'ยอดยกมา', ['', fmt.format(opening)], a: pw.TextAlign.right),
           ]),
         );
 
@@ -412,7 +429,8 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
       content.add(cardHeaderRow(
         warehouseCode: first['warehouse_code'] as String? ?? '',
         warehouseName: _warehouseName(first, isEnglish),
-        categoryLabel: _categoryLabel(first, isEnglish),
+        categoryCode: (first['category_code'] as String?) ?? '',
+        categoryName: _categoryNameOnly(first, isEnglish),
         itemCode: first['item_code'] as String? ?? '',
         itemName: _itemName(first, isEnglish),
         costingLabel: costingLabel,
@@ -622,7 +640,9 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
           '${isEnglish ? "Date range" : "ช่วงวันที่"}: ${DateFormat("dd/MM/yyyy").format(_dateFrom)} – ${DateFormat("dd/MM/yyyy").format(_dateTo)}  |  ${isEnglish ? "Printed" : "พิมพ์"}: $tsLabel');
 
       const bucketOrder = ['receive', 'issue', 'withdraw', 'transfer', 'adjust'];
-      const signedBuckets = {'transfer', 'adjust'};
+      // จ่าย/เบิก แสดงเครื่องหมายลบเสมอ (ให้เห็นชัดว่าเป็นยอดหักจากยอดสะสม) — รับ ทิศทางคงที่เป็นบวกเสมอจึงยังคง
+      // แสดงแบบ absolute value ได้ ส่วนโอน/ปรับ มีได้ทั้งสองทิศทางแม้ในการ์ดเดียวกัน จึงต้องคงเครื่องหมาย +/- ไว้
+      const signedBuckets = {'issue', 'withdraw', 'transfer', 'adjust'};
       Map<String, num> emptyBuckets() => {for (final b in bucketOrder) b: 0.0};
 
       void writeMovementHeader(int r, {required bool showDocCols, String lotSerialLabel = ''}) {
@@ -694,14 +714,15 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
         _xl(s, row, 0, first['warehouse_code'] as String? ?? '');
         _xl(s, row, 1, first['category_code'] as String? ?? '');
         _xl(s, row, 2, first['item_code'] as String? ?? '');
-        _xl(s, row, 3, costingLabel);
         _xl(s, row, 4, first['uom_code']?.toString() ?? '');
-        _xl(s, row, 9, opening.toDouble(), align: HorizontalAlign.Right, bold: true);
         row++;
+        // วิธีคิดต้นทุน/ยอดยกมา ลงมาอยู่แถวเดียวกับชื่อสินค้า (ต่างจาก code cells ด้านบนที่อยู่แถวรหัส)
         _xl(s, row, 0, _warehouseName(first, isEnglish));
-        _xl(s, row, 1, _categoryLabel(first, isEnglish));
+        _xl(s, row, 1, _categoryNameOnly(first, isEnglish));
         _xl(s, row, 2, _itemName(first, isEnglish));
+        _xl(s, row, 3, costingLabel);
         _xl(s, row, 4, _uomName(first, isEnglish));
+        _xl(s, row, 9, opening.toDouble(), align: HorizontalAlign.Right, bold: true);
         row++;
 
         writeMovementHeader(row, showDocCols: showMovement, lotSerialLabel: lotSerialLabel);
