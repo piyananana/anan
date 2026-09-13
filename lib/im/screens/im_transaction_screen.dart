@@ -116,7 +116,10 @@ class _ImTransactionScreenState extends State<ImTransactionScreen>
                 ImTransactionListWidget(
                   onAddPressed: () => _openDetailTab(),
                   onEditPressed: (id) => _openDetailTab(id: id),
-                  onViewPressed: (id) => _openDetailTab(id: id, viewOnly: true),
+                  // ไม่บังคับ viewOnly:true สำหรับเอกสารที่ไม่ใช่ Draft — ฟิลด์ข้อมูลถูกล็อกด้วย _isReadOnly
+                  // (ยึดตาม status) อยู่แล้วโดยไม่ต้องพึ่ง viewOnly เลย แต่ viewOnly:true จะซ่อนปุ่ม action ทั้งหมด
+                  // (Void/Reverse to Draft/Post AP-AR billing) ไปด้วย ซึ่งไม่ใช่เจตนา — ปุ่ม "ดู" ควรยังกดปุ่มเหล่านี้ได้
+                  onViewPressed: (id) => _openDetailTab(id: id),
                   shouldRefresh: _shouldRefreshList,
                   onRefreshComplete: () => setState(() => _shouldRefreshList = false),
                   enableAddButton: canCreate,
