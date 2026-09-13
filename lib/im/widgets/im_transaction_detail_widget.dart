@@ -991,6 +991,38 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
   }
 
+  // ถอยเอกสารที่ Posted/Received/Delivered แล้วกลับไปเป็น Draft — มิเรอร์ _void() ทุกประการ (ย้อนสต็อก, Void
+  // AP/AR/GL ที่ผูกไว้) ต่างกันแค่สถานะปลายทางที่ยังแก้ไขแล้ว Post ใหม่ได้ ใช้กรณีกรอกข้อมูลผิดแล้วต้องการแก้ไข
+  // เอกสารเดิม แทนที่จะ Void แล้วสร้างใหม่ (ดู reverseToDraft ใน imTransactionController.js)
+  Future<void> _reverseToDraft() async {
+    if (_id == null) return;
+    final isEnglish = _isEnglish;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Reverse to Draft' : 'ถอยกลับเป็นฉบับร่าง'),
+        content: Text(isEnglish
+            ? 'Reverse this document back to Draft? Stock and GL impact (including any linked AP/AR document) will be reversed, and you will be able to edit and re-post it.'
+            : 'ถอยเอกสารนี้กลับเป็นฉบับร่าง? ผลกระทบต่อสต็อกและบัญชี (รวมถึงเอกสาร AP/AR ที่ผูกไว้ ถ้ามี) จะถูกย้อนกลับ และจะสามารถแก้ไขแล้ว Post ใหม่ได้'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Reverse' : 'ยืนยันถอยกลับ')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _isSaving = true);
+    try {
+      await _service.reverseToDraft(_id!);
+      if (mounted) widget.onSaveSuccess();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'Reverse to Draft failed: $e' : 'ถอยกลับเป็นฉบับร่างล้มเหลว: $e')));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   Future<void> _delete() async {
     if (_id == null) return;
     final isEnglish = _isEnglish;
@@ -1867,6 +1899,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             onPressed: _isSaving ? null : _postBillingDln,
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
             child: Text(isEnglish ? 'Post AR/GL' : 'Post AR/GL'),
+          ),
+          const SizedBox(width: 8),
+        ],
+        if ((_status == 'Posted' || _status == 'Received' || _status == 'Delivered') && !widget.viewOnly) ...[
+          OutlinedButton(
+            onPressed: _isSaving ? null : _reverseToDraft,
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
+            child: Text(isEnglish ? 'Reverse to Draft' : 'ถอยกลับเป็นฉบับร่าง'),
           ),
           const SizedBox(width: 8),
         ],

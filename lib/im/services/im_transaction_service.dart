@@ -289,6 +289,23 @@ class ImTransactionService {
     }
   }
 
+  Future<ImTransaction> reverseToDraft(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/im_transaction/$id/reverse_to_draft'),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      return ImTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'ถอยกลับเป็นฉบับร่างล้มเหลว');
+    }
+  }
+
   Future<void> deleteTransaction(int id) async {
     final headers = await authService.getAuthHeader();
     final response = await http.delete(
