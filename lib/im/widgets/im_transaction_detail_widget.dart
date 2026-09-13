@@ -59,6 +59,9 @@ class _CountLine {
   // field ธรรมดาแทน controller เพราะเป็นค่าที่เลือกจาก dropdown ไม่ใช่กรอกอิสระ (มิเรอร์ ar_transaction_detail_widget.dart)
   String? vatType;
   double vatRate;
+  // ของแถม — ฝั่งรับ (isReceiveMode) ยกเว้นบังคับ unitCostCtrl>0, ฝั่งขาย (isDeliverMode) auto-zero+lock unitPriceCtrl
+  // (ดู build() ของบรรทัดและ validation ตอน save) เป็น field ธรรมดาเหมือน vatType เพราะเป็น toggle ไม่ใช่กรอกอิสระ
+  bool isFree;
   final TextEditingController countedQtyCtrl;
   final TextEditingController issueQtyCtrl;
   final TextEditingController unitCostCtrl;
@@ -88,6 +91,7 @@ class _CountLine {
     this.refImTransactionDetailId,
     this.vatType,
     this.vatRate = 0,
+    this.isFree = false,
     double countedQty = 0,
     double issueQty = 0,
     double? unitCost,
@@ -199,9 +203,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   bool get _isReadOnly => widget.viewOnly || _status != 'Draft';
   bool get _isIssueMode => _selectedSysDocType == '60'; // ISS — เบิกสินค้า
   bool get _isTransferMode => _selectedSysDocType == '70'; // TRF — โอนสินค้า
-  bool get _isReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12'; // GRN — รับสินค้า
+  bool get _isReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12' || _selectedSysDocType == '13'; // GRN — รับสินค้า (รวมรับฝากขาย '13')
   bool get _isGrnBillingMode => _selectedSysDocType == '11'; // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ
   bool get _isGrDeferredMode => _selectedSysDocType == '12'; // GR รอตั้งหนี้ — Post IM ก่อน ค่อย Post AP/GL ทีหลัง
+  // รับฝากขาย (Consignment) — ต้นทุนจริงตั้งแต่รับ (ไม่ใช่ 0 เหมือนของแถม) แต่ยังไม่เป็นหนี้ AP จริงจนกว่าจะขายออก
+  // (ตั้งหนี้เป็นก้อนภายหลังผ่านหน้า Consignment Settlement) บังคับ FIFO/SPECIFIC เท่านั้น ไม่ให้ปนกับต้นทุนเฉลี่ย
+  // ของสินค้าของเราเอง และไม่ให้ใช้ ของแถม (is_free) ร่วมกัน เพราะเป็นคนละแนวคิดกัน
+  bool get _isConsignmentReceiveMode => _selectedSysDocType == '13';
   bool get _isDeliverMode => _selectedSysDocType == '30' || _selectedSysDocType == '31' || _selectedSysDocType == '32'; // DLN — ส่งสินค้า
   bool get _isDlnBillingMode => _selectedSysDocType == '31'; // DLN Billing — ส่งสินค้า+ตั้งหนี้อัตโนมัติ
   bool get _isDlnDeferredMode => _selectedSysDocType == '32'; // DLN รอตั้งหนี้ — Post IM ก่อน (COGS ทันที) ค่อย Post AR/GL ทีหลัง
@@ -375,6 +383,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         unitPrice: d.unitPrice,
         vatType: d.vatType,
         vatRate: d.vatRate ?? 0,
+        isFree: d.isFree,
         lotNo: d.lotNo ?? '',
         serialNo: d.serialNo ?? '',
       ));
@@ -487,6 +496,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       return;
     }
     ImItemListWidget.search(context, itemTypeFilter: 'STOCK', onSelected: (ImItem item) {
+      // รับฝากขาย ('13') บังคับ FIFO/SPECIFIC เท่านั้น — กันปนกับต้นทุนเฉลี่ยของสินค้าของเราเอง (มิเรอร์ validation
+      // ฝั่ง backend ใน insertAndPostAdjustment) เช็คที่นี่เพื่อไม่ให้ผู้ใช้เพิ่มบรรทัดที่จะถูก reject ตอน save
+      if (_isConsignmentReceiveMode && item.costingMethod != 'FIFO' && item.costingMethod != 'SPECIFIC') {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+            ? '${item.itemCode}: consignment items must use FIFO or Specific costing (this item uses ${item.costingMethod})'
+            : '${item.itemCode}: สินค้าฝากขายต้องใช้วิธีคิดต้นทุนแบบ FIFO หรือ Specific เท่านั้น (สินค้านี้ใช้ ${item.costingMethod})')));
+        return;
+      }
       // prefill VAT ตอนเพิ่มบรรทัดจาก default_vat_type ของสินค้า (ถ้ามีตั้งค่าไว้และเอกสารประเภทนี้ใช้ VAT)
       final vatType = _isVatMode ? _safeVatCode(item.defaultVatType) : null;
       final line = _CountLine(
@@ -759,7 +776,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           warn('${l.item.itemCode}: ${isEnglish ? 'Serial No. is required' : 'กรุณาระบุ Serial No.'}');
           return;
         }
-        if (l.variance > 0 && l.item.costingMethod != 'STANDARD' && _parseNum(l.unitCostCtrl.text) <= 0) {
+        // ของแถม (l.isFree) ยกเว้นการบังคับต้นทุนต่อหน่วย — ปล่อยเป็น 0 ได้ตามที่ออกแบบไว้ (ดูหมายเหตุที่ isFree)
+        if (!l.isFree && l.variance > 0 && l.item.costingMethod != 'STANDARD' && _parseNum(l.unitCostCtrl.text) <= 0) {
           warn('${l.item.itemCode}: ${isEnglish ? 'Unit cost is required' : 'กรุณาระบุต้นทุนต่อหน่วย'}');
           return;
         }
@@ -799,6 +817,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             countedQty: l.counted,
             unitCost: l.unitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.unitCostCtrl.text),
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
+            isFree: l.isFree,
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
             refImTransactionDetailId: l.refImTransactionDetailId,
@@ -1398,6 +1417,30 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                           style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                     ),
             ),
+            // ของแถม — เฉพาะบรรทัดฝั่งรับ (GR family, ไม่รวมรับฝากขาย '13' ซึ่งมีต้นทุนจริงเสมอ คนละแนวคิดกับของแถม)
+            // หรือฝั่งขาย (DL family) เท่านั้น เมื่อติ๊กแล้ว: ฝั่งรับยกเว้นการบังคับ Unit Cost>0 (ดู validation ตอน
+            // save), ฝั่งขาย auto-zero + lock Unit Price ทันที
+            if ((line.isReceiveMode && !_isConsignmentReceiveMode) || line.isDeliverMode)
+              SizedBox(
+                width: 90,
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: isEnglish ? 'Free Item' : 'ของแถม',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  ),
+                  child: Checkbox(
+                    value: line.isFree,
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: _isReadOnly ? null : (v) => setState(() {
+                          line.isFree = v ?? false;
+                          if (line.isFree && line.isDeliverMode) line.unitPriceCtrl.clear();
+                        }),
+                  ),
+                ),
+              ),
             if (_isGrDeferredMode && (_status == 'Received' || _status == 'Posted'))
               SizedBox(
                 width: 120,
@@ -1417,7 +1460,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 width: 120,
                 child: TextField(
                   controller: line.unitPriceCtrl,
-                  readOnly: !_canEditBilling,
+                  readOnly: !_canEditBilling || line.isFree,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                       labelText: isEnglish ? 'Unit Price' : 'ราคาขาย/หน่วย',

@@ -151,13 +151,19 @@ class ImWarehouseListWidgetState extends State<ImWarehouseListWidget> with Autom
                         child: ListTile(
                           leading: CircleAvatar(
                             backgroundColor: item.isActive ? Colors.teal.shade100 : Colors.grey.shade200,
-                            child: Icon(Icons.warehouse, color: item.isActive ? Colors.teal.shade700 : Colors.grey, size: 20),
+                            child: Icon(item.isConsignee ? Icons.handshake_outlined : Icons.warehouse,
+                                color: item.isActive ? Colors.teal.shade700 : Colors.grey, size: 20),
                           ),
                           title: Text(
                             '${item.warehouseCode}  ${_warehouseName(item, isEnglish)}',
                             style: TextStyle(fontWeight: FontWeight.bold, color: item.isActive ? null : Colors.grey),
                           ),
-                          subtitle: item.branchId != null ? Text(_branchName(item, isEnglish)) : null,
+                          subtitle: (item.isConsignee || item.branchId != null)
+                              ? Text([
+                                  if (item.isConsignee) (isEnglish ? 'Consignee warehouse' : 'คลังผู้รับฝากขาย'),
+                                  if (item.branchId != null) _branchName(item, isEnglish),
+                                ].join('  •  '))
+                              : null,
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [

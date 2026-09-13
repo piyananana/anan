@@ -25,7 +25,7 @@ import '../../utils/file_download.dart';
 enum _Family { generic, purchase, sales }
 
 _Family _familyOf(String sdt) {
-  if (['10', '11', '12', '15', '20', '25'].contains(sdt)) return _Family.purchase;
+  if (['10', '11', '12', '13', '15', '20', '25'].contains(sdt)) return _Family.purchase;
   if (['30', '31', '32', '35', '40', '45'].contains(sdt)) return _Family.sales;
   return _Family.generic; // '60' ISS, '70' TRF, '80' AJS
 }
@@ -122,6 +122,10 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
     final en = l['item_name_en'] as String?;
     return isEnglish && (en ?? '').isNotEmpty ? en! : (l['item_name_th'] as String? ?? '');
   }
+
+  // ของแถม — badge ต่อท้ายชื่อสินค้า เพื่อตรวจสอบย้อนหลังได้ว่าบรรทัดใดเป็นของแถม (ไม่กระทบ GL/logic ใดๆ)
+  String _freeSuffix(Map<String, dynamic> l, bool isEnglish) =>
+      l['is_free'] == true ? (isEnglish ? '  (Free)' : '  (ของแถม)') : '';
 
   String _uomName(Map<String, dynamic> l, bool isEnglish) {
     final en = l['uom_name_en'] as String?;
@@ -299,7 +303,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
     }
 
     List<String> detailValues(_Family fam, bool vat, Map<String, dynamic> l) {
-      final itemLabel = '${l['item_code'] ?? ''} ${_itemName(l, isEnglish)}';
+      final itemLabel = '${l['item_code'] ?? ''} ${_itemName(l, isEnglish)}${_freeSuffix(l, isEnglish)}';
       final qtyUnit = '${fmtQty.format(_num(l['qty']))} ${_uomName(l, isEnglish)}';
       final value = fmt.format(_num(l['total_value_lc']));
       final vatCell = (l['vat_type'] == null || l['vat_type'] == 'NOVAT')
@@ -480,7 +484,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
           final fam = _familyOf(h['sys_doc_type'] as String? ?? '');
           for (final l in lines) {
             final unitVal = fam == _Family.sales ? _num(l['unit_price']) : _num(l['unit_cost']);
-            _xl(s, row, 0, '   ${l['item_code'] ?? ''} ${_itemName(l, isEnglish)}', bg: detBg);
+            _xl(s, row, 0, '   ${l['item_code'] ?? ''} ${_itemName(l, isEnglish)}${_freeSuffix(l, isEnglish)}', bg: detBg);
             _xl(s, row, 1, _num(l['qty']).toDouble(), bg: detBg, align: HorizontalAlign.Right);
             _xl(s, row, 2, _uomName(l, isEnglish), bg: detBg);
             _xl(s, row, 3, unitVal.toDouble(), bg: detBg, align: HorizontalAlign.Right);

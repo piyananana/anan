@@ -216,6 +216,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   int? _grirAccountId;      String? _grirAccountCode;      String? _grirAccountName;
   int? _vatOutputAccountId; String? _vatOutputAccountCode; String? _vatOutputAccountName;
   int? _vatInputAccountId;  String? _vatInputAccountCode;  String? _vatInputAccountName;
+  int? _consignmentPayableAccountId; String? _consignmentPayableAccountCode; String? _consignmentPayableAccountName;
   int? _glDocId;            String? _glDocCode;            String? _glDocName;
   bool _isSaving = false;
 
@@ -239,6 +240,9 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     _grirAccountId      = s.grirAccountId;      _grirAccountCode      = s.grirAccountCode;      _grirAccountName      = s.grirAccountName;
     _vatOutputAccountId = s.vatOutputAccountId; _vatOutputAccountCode = s.vatOutputAccountCode; _vatOutputAccountName = s.vatOutputAccountName;
     _vatInputAccountId  = s.vatInputAccountId;  _vatInputAccountCode  = s.vatInputAccountCode;  _vatInputAccountName  = s.vatInputAccountName;
+    _consignmentPayableAccountId = s.consignmentPayableAccountId;
+    _consignmentPayableAccountCode = s.consignmentPayableAccountCode;
+    _consignmentPayableAccountName = s.consignmentPayableAccountName;
     _glDocId            = s.glDocId;            _glDocCode            = s.glDocCode;            _glDocName            = s.glDocName;
   }
 
@@ -427,6 +431,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         grirAccountId: _grirAccountId, grirAccountCode: _grirAccountCode, grirAccountName: _grirAccountName,
         vatOutputAccountId: _vatOutputAccountId, vatOutputAccountCode: _vatOutputAccountCode, vatOutputAccountName: _vatOutputAccountName,
         vatInputAccountId: _vatInputAccountId, vatInputAccountCode: _vatInputAccountCode, vatInputAccountName: _vatInputAccountName,
+        consignmentPayableAccountId: _consignmentPayableAccountId, consignmentPayableAccountCode: _consignmentPayableAccountCode, consignmentPayableAccountName: _consignmentPayableAccountName,
       );
       await widget.onSave(updated);
     } finally {
@@ -465,6 +470,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         isEnglish ? '(GR/IR clearing — not set)' : '(บัญชีพักรอใบกำกับ GR/IR — ยังไม่ตั้งค่า)');
     final vatIn = _acctLabel(_vatInputAccountId, _vatInputAccountCode, _vatInputAccountName, isEnglish,
         isEnglish ? '(VAT Input — not set, falls back to AP\'s own setup)' : '(บัญชี VAT ซื้อ — ยังไม่ตั้งค่า จะ fallback ไปที่ของ AP เอง)');
+    final consignPayable = _acctLabel(_consignmentPayableAccountId, _consignmentPayableAccountCode, _consignmentPayableAccountName, isEnglish,
+        isEnglish ? '(Consignment Payable — not set)' : '(บัญชีเจ้าหนี้ฝากขาย — ยังไม่ตั้งค่า)');
     final ap = isEnglish ? '(AP — posted in AP module)' : '(เจ้าหนี้ — บันทึกในโมดูล AP)';
     final purchases = isEnglish ? 'Purchases (Periodic mode)' : 'บัญชีซื้อสินค้า (โหมด Periodic)';
 
@@ -500,6 +507,18 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           _JournalSection(
             title: isEnglish ? 'Periodic mode' : 'โหมด Periodic',
             lines: [_JournalLine('Dr', purchases), _JournalLine('  Cr', grir)],
+          ),
+        ];
+      case '13': // รับฝากขาย (Consignment) — ต้นทุนจริงตั้งแต่รับ แต่ยังไม่เป็นหนี้ AP จริง พักไว้ที่บัญชีเจ้าหนี้
+        // ฝากขายแทน GR/IR จนกว่าจะขายออกและ settle เป็น AP จริงภายหลัง (ดู Consignment Settlement)
+        return [
+          _JournalSection(
+            title: isEnglish ? 'Perpetual mode' : 'โหมด Perpetual',
+            lines: [_JournalLine('Dr', inv), _JournalLine('  Cr', consignPayable)],
+          ),
+          _JournalSection(
+            title: isEnglish ? 'Periodic mode' : 'โหมด Periodic',
+            lines: [_JournalLine('Dr', purchases), _JournalLine('  Cr', consignPayable)],
           ),
         ];
       case '11': // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ — ไม่ Post ที่นี่ สร้าง ap_transaction แล้วโพสต์ที่นั่นแทน
@@ -548,7 +567,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   Widget _buildJournalPreview(bool isEnglish) {
     final sections = _journalSections(isEnglish);
     if (sections.isEmpty) return const SizedBox.shrink();
-    final isLive = ['80', '60', '70', '10', '11', '12', '30', '31', '32', '15', '20', '25', '35', '40', '45'].contains(_sdt);
+    final isLive = ['80', '60', '70', '10', '11', '12', '13', '30', '31', '32', '15', '20', '25', '35', '40', '45'].contains(_sdt);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -602,6 +621,15 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
               isEnglish
                   ? '* Inventory accounts are not yet warehouse-specific — both sides resolve to the same account today, so no GL entry actually posts until per-warehouse accounts are configured (im_warehouse).'
                   : '* บัญชีสต็อกยังไม่ได้แยกตามคลัง ทั้งสองฝั่งจึงชี้ไปที่บัญชีเดียวกันในวันนี้ — จะยังไม่มีการโพสต์ GL จริงจนกว่าจะตั้งค่าบัญชีแยกตามคลัง (im_warehouse)',
+              style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
+            ),
+          ],
+          if (_sdt == '13') ...[
+            const SizedBox(height: 6),
+            Text(
+              isEnglish
+                  ? '* No AP bill is created when this document is posted. Consigned items must use FIFO or Specific costing. AP liability is only recognized later, in aggregate, when sold units are settled with the consignor via the Consignment Settlement screen.'
+                  : '* เมื่อ Post เอกสารนี้จะยังไม่มีการสร้างใบตั้งหนี้ AP — สินค้าฝากขายต้องใช้วิธีคิดต้นทุนแบบ FIFO หรือ Specific เท่านั้น และจะรับรู้เป็นหนี้ AP จริงเป็นก้อนภายหลัง เมื่อทำการ Settlement กับผู้ฝากขายตามจำนวนที่ขายออกจริง ผ่านหน้า Consignment Settlement',
               style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
             ),
           ],
@@ -757,6 +785,12 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           accountId: _grirAccountId, accountCode: _grirAccountCode, accountName: _grirAccountName,
           onPick: (a) { _grirAccountId = a.id; _grirAccountCode = a.accountCode; _grirAccountName = a.accountNameThai; },
           onClear: () => setState(() { _grirAccountId = null; _grirAccountCode = null; _grirAccountName = null; }),
+        ),
+        _accountField(
+          label: isEnglish ? 'Consignment Payable Account (used by "13" — Consignment Receipt)' : 'บัญชีเจ้าหนี้ฝากขาย (ใช้กับ "13" — รับฝากขาย)',
+          accountId: _consignmentPayableAccountId, accountCode: _consignmentPayableAccountCode, accountName: _consignmentPayableAccountName,
+          onPick: (a) { _consignmentPayableAccountId = a.id; _consignmentPayableAccountCode = a.accountCode; _consignmentPayableAccountName = a.accountNameThai; },
+          onClear: () => setState(() { _consignmentPayableAccountId = null; _consignmentPayableAccountCode = null; _consignmentPayableAccountName = null; }),
         ),
         _accountField(
           label: isEnglish

@@ -14,6 +14,9 @@ class ImWarehouse {
   final String? branchNameEn;
   final String? address;
   final bool isActive;
+  // Consignment-OUT — คลังนี้แทนสถานที่ของผู้รับฝากขาย สินค้าที่โอนเข้ามาด้วย TRF ยังเป็นของเราอยู่จนกว่าจะขายออก
+  // ด้วย DLN ตามปกติ — เป็นแค่ flag เพื่อความชัดเจน/กรองรายงาน ไม่มีผลต่อการผ่านบัญชีใดๆ
+  final bool isConsignee;
 
   const ImWarehouse({
     required this.id,
@@ -26,6 +29,7 @@ class ImWarehouse {
     this.branchNameEn,
     this.address,
     this.isActive = true,
+    this.isConsignee = false,
   });
 
   factory ImWarehouse.fromJson(Map<String, dynamic> json) => ImWarehouse(
@@ -39,6 +43,7 @@ class ImWarehouse {
         branchNameEn: json['branch_name_en'],
         address: json['address'],
         isActive: json['is_active'] ?? true,
+        isConsignee: json['is_consignee'] ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -49,5 +54,6 @@ class ImWarehouse {
         'branch_id': branchId,
         'address': address,
         'is_active': isActive,
+        'is_consignee': isConsignee,
       };
 }

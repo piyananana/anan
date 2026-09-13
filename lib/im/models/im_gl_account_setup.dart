@@ -33,6 +33,9 @@ class ImGlAccountSetup {
   final int? vatInputAccountId;
   final String? vatInputAccountCode;
   final String? vatInputAccountName;
+  final int? consignmentPayableAccountId;
+  final String? consignmentPayableAccountCode;
+  final String? consignmentPayableAccountName;
 
   const ImGlAccountSetup({
     this.id,
@@ -53,6 +56,7 @@ class ImGlAccountSetup {
     this.grirAccountId, this.grirAccountCode, this.grirAccountName,
     this.vatOutputAccountId, this.vatOutputAccountCode, this.vatOutputAccountName,
     this.vatInputAccountId, this.vatInputAccountCode, this.vatInputAccountName,
+    this.consignmentPayableAccountId, this.consignmentPayableAccountCode, this.consignmentPayableAccountName,
   });
 
   bool get isConfigured => inventoryAccountId != null || cogsAccountId != null || varianceAccountId != null || wipAccountId != null || grirAccountId != null;
@@ -90,6 +94,9 @@ class ImGlAccountSetup {
         vatInputAccountId: json['vat_input_account_id'],
         vatInputAccountCode: json['vat_input_account_code'],
         vatInputAccountName: json['vat_input_account_name'],
+        consignmentPayableAccountId: json['consignment_payable_account_id'],
+        consignmentPayableAccountCode: json['consignment_payable_account_code'],
+        consignmentPayableAccountName: json['consignment_payable_account_name'],
       );
 
   Map<String, dynamic> toJson() => {
@@ -100,6 +107,7 @@ class ImGlAccountSetup {
         'grir_account_id': grirAccountId,
         'vat_output_account_id': vatOutputAccountId,
         'vat_input_account_id': vatInputAccountId,
+        'consignment_payable_account_id': consignmentPayableAccountId,
         'gl_doc_id': glDocId,
       };
 }

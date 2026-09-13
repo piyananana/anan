@@ -217,6 +217,7 @@ class ImTransactionDetail {
   final double? unitCost;
   final double? billedUnitCost; // '12' (รับสินค้า รอตั้งหนี้) เท่านั้น — ต้นทุนจริงตามใบกำกับ อาจต่างจาก unitCost
   final double? unitPrice; // '31'/'32' (DLN + ตั้งหนี้ลูกหนี้) เท่านั้น — ราคาขายต่อหน่วย ใช้คำนวณรายได้ตอนสร้างใบแจ้งหนี้ AR
+  final bool isFree; // ของแถม — ฝั่งรับ (GR family) ยกเว้นบังคับ unitCost>0, ฝั่งขาย (DL family) auto-zero+lock unitPrice
   final String? vatType; // ใช้เฉพาะประเภทเอกสารที่สร้าง/อ้างอิงใบกำกับ AP/AR อัตโนมัติ — vat_code อ้างอิง cd_vat_rate
   final double? vatRate; // snapshot อัตรา ณ ตอนเลือก (ไม่ผูกกับ cd_vat_rate อีกทีตอน Post เหมือน AR/AP เอง)
   final int? refImTransactionDetailId; // '15'/'35' เท่านั้น — บรรทัดต้นฉบับ (GRN/DLN) ที่บรรทัดนี้คืน ใช้ตรวจคงเหลือที่คืนได้
@@ -244,6 +245,7 @@ class ImTransactionDetail {
     this.unitCost,
     this.billedUnitCost,
     this.unitPrice,
+    this.isFree = false,
     this.vatType,
     this.vatRate,
     this.refImTransactionDetailId,
@@ -277,6 +279,7 @@ class ImTransactionDetail {
       unitCost: toDoubleN(json['unit_cost']),
       billedUnitCost: toDoubleN(json['billed_unit_cost']),
       unitPrice: toDoubleN(json['unit_price']),
+      isFree: json['is_free'] ?? false,
       vatType: json['vat_type'],
       vatRate: toDoubleN(json['vat_rate']),
       refImTransactionDetailId: json['ref_im_transaction_detail_id'],
@@ -301,6 +304,7 @@ class ImTransactionDetail {
         if (unitCost != null) 'unit_cost': unitCost,
         if (billedUnitCost != null) 'billed_unit_cost': billedUnitCost,
         if (unitPrice != null) 'unit_price': unitPrice,
+        'is_free': isFree,
         if (vatType != null) 'vat_type': vatType,
         if (vatRate != null) 'vat_rate': vatRate,
         if (refImTransactionDetailId != null) 'ref_im_transaction_detail_id': refImTransactionDetailId,

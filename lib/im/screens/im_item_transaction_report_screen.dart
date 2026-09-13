@@ -141,6 +141,10 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
     return isEnglish && (en ?? '').isNotEmpty ? en! : (r['item_name_th'] as String? ?? '');
   }
 
+  // ของแถม — badge ต่อท้ายชื่อสินค้า เพื่อตรวจสอบย้อนหลังได้ว่าบรรทัดใดเป็นของแถม (ไม่กระทบ GL/logic ใดๆ)
+  String _freeSuffix(Map<String, dynamic> r, bool isEnglish) =>
+      r['is_free'] == true ? (isEnglish ? '  (Free)' : '  (ของแถม)') : '';
+
   String _uomName(Map<String, dynamic> r, bool isEnglish) {
     final en = r['uom_name_en'] as String?;
     final th = r['uom_name_th'] as String?;
@@ -377,7 +381,7 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
           cell(cw['type']!,   '${r['doc_code'] ?? ''}  ${_docTypeName(r, isEnglish)}'),
           cell(cw['docNo']!,  r['doc_no'] as String? ?? ''),
           cell(cw['party']!,  _partyLabel(r, isEnglish)),
-          cell(cw['item']!,   '${r['item_code'] ?? ''}  ${_itemName(r, isEnglish)}'),
+          cell(cw['item']!,   '${r['item_code'] ?? ''}  ${_itemName(r, isEnglish)}${_freeSuffix(r, isEnglish)}'),
           cell(cw['qty']!,    qtyUnit, a: pw.TextAlign.right),
           cell(cw['amount']!, fmt.format(amount), a: pw.TextAlign.right),
         ]),
@@ -480,7 +484,7 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
         _xl(s, row, 1, '${r['doc_code'] ?? ''}  ${_docTypeName(r, isEnglish)}');
         _xl(s, row, 2, r['doc_no'] as String? ?? '');
         _xl(s, row, 3, _partyLabel(r, isEnglish));
-        _xl(s, row, 4, '${r['item_code'] ?? ''}  ${_itemName(r, isEnglish)}');
+        _xl(s, row, 4, '${r['item_code'] ?? ''}  ${_itemName(r, isEnglish)}${_freeSuffix(r, isEnglish)}');
         _xl(s, row, 5, _num(r['qty']).toDouble(), align: HorizontalAlign.Right);
         _xl(s, row, 6, _uomName(r, isEnglish));
         _xl(s, row, 7, amount, align: HorizontalAlign.Right);

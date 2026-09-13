@@ -39,6 +39,7 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
   late TextEditingController _nameEnCtrl;
   late TextEditingController _addressCtrl;
   bool _isActive = true;
+  bool _isConsignee = false;
   bool _isSaving = false;
   bool _isEnglish = false;
 
@@ -80,6 +81,7 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
     _nameEnCtrl.text = isNew ? '' : (w?.warehouseNameEn ?? '');
     _addressCtrl.text = isNew ? '' : (w?.address ?? '');
     _isActive = isNew ? true : (w?.isActive ?? true);
+    _isConsignee = isNew ? false : (w?.isConsignee ?? false);
     final src = isNew ? null : w;
     _branchId = src?.branchId; _branchCode = src?.branchCode;
     _branchName = _isEnglish && (src?.branchNameEn ?? '').isNotEmpty ? src?.branchNameEn : src?.branchNameTh;
@@ -106,6 +108,7 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
         branchId: _branchId,
         address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
         isActive: _isActive,
+        isConsignee: _isConsignee,
       );
       await widget.onSubmit(row);
     } catch (e) {
@@ -229,6 +232,16 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
             Row(children: [
               Expanded(child: Text(isEnglish ? 'Status: ${_isActive ? 'Active' : 'Inactive'}' : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
               Switch(value: _isActive, activeColor: Colors.teal, onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v)),
+            ]),
+            // Consignment-OUT — คลังนี้แทนสถานที่ของผู้รับฝากขาย สินค้าที่โอนเข้ามาด้วยใบโอน (TRF) ยังเป็นของเราอยู่
+            // จนกว่าจะขายออกจากคลังนี้ด้วยใบส่งสินค้า (DLN) ตามปกติ
+            Row(children: [
+              Expanded(
+                child: Text(isEnglish
+                    ? 'Consignee warehouse (goods held here are still ours until sold)'
+                    : 'คลังผู้รับฝากขาย (สินค้าที่อยู่ในคลังนี้ยังเป็นของเราจนกว่าจะขาย)'),
+              ),
+              Switch(value: _isConsignee, activeColor: Colors.teal, onChanged: _isReadOnly ? null : (v) => setState(() => _isConsignee = v)),
             ]),
             if (widget.mode == Mode.edit || widget.mode == Mode.view) ...[
               const SizedBox(height: 24),

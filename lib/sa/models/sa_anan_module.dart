@@ -64,6 +64,7 @@ const Map<String, String> imSysDocType = {
   '10': 'รับสินค้า - Good Receipt', // receive(buy) (+stock +ap)
   '11': 'รับสินค้าพร้อมใบแจ้งหนี้ - Good Receipt with AP Billing', // receive(buy) (+stock +ap)
   '12': 'รับสินค้ารอใบแจ้งหนี้ - Good Receipt Pending AP Billing', // receive(buy) (+stock only) ตั้งหนี้+GL ทีหลังเมื่อได้ invoice
+  '13': 'รับฝากขาย - Consignment Receipt', // receive (+stock, +consignment payable, ไม่ใช่ AP จริง) FIFO/SPECIFIC เท่านั้น — ตั้งหนี้ AP จริงทีหลังผ่าน Consignment Settlement ตามยอดขายจริง
   '15': 'คืนสินค้า - Return to Supplier', // return (-stock -ap)
   '20': 'ลดหนี้เจ้าหนี้ - Credit Note from Supplier', // cn (-stock -ap)
   '25': 'เพิ่มหนี้เจ้าหนี้ - Debit Note from Supplier', // dn (+stock +ap)

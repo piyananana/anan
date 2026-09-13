@@ -168,6 +168,10 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
     return isEnglish && (en ?? '').isNotEmpty ? en! : (r['doc_name_thai'] as String? ?? '');
   }
 
+  // ของแถม — badge ต่อท้ายประเภทเอกสาร เพื่อตรวจสอบย้อนหลังได้ว่าบรรทัดเคลื่อนไหวใดเป็นของแถม (ไม่กระทบ logic ใดๆ)
+  String _freeSuffix(Map<String, dynamic> r, bool isEnglish) =>
+      r['is_free'] == true ? (isEnglish ? '  (Free)' : '  (ของแถม)') : '';
+
   static String _fmtDate(String? raw) {
     if (raw == null || raw.isEmpty) return '';
     try {
@@ -297,7 +301,7 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
 
     pw.Widget movementDataRow(Map<String, dynamic> row, {String lotSerialText = ''}) => pw.Row(children: [
           mCell(mw['date']!,  _fmtDate(row['doc_date'] as String?)),
-          mCell(mw['type']!,  '${row['doc_code'] ?? ''}  ${_docTypeName(row, isEnglish)}'),
+          mCell(mw['type']!,  '${row['doc_code'] ?? ''}  ${_docTypeName(row, isEnglish)}${_freeSuffix(row, isEnglish)}'),
           mCell(mw['docNo']!, row['doc_no'] as String? ?? ''),
           mCell(mw['lotSerial']!, lotSerialText),
           for (final b in bucketOrder) mCell(mw[b == 'withdraw' ? 'withdraw' : b]!, bucketCellText(b, row), a: pw.TextAlign.right),
@@ -735,7 +739,7 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
           final b = r['bucket'] as String?;
           if (showMovement) {
             _xl(s, row, 0, _fmtDate(r['doc_date'] as String?));
-            _xl(s, row, 1, '${r['doc_code'] ?? ''}  ${_docTypeName(r, isEnglish)}');
+            _xl(s, row, 1, '${r['doc_code'] ?? ''}  ${_docTypeName(r, isEnglish)}${_freeSuffix(r, isEnglish)}');
             _xl(s, row, 2, r['doc_no'] as String? ?? '');
             _xl(s, row, 3, lotSerialText(r));
             for (int ci = 0; ci < bucketOrder.length; ci++) {
