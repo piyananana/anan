@@ -117,6 +117,44 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
     }
   }
 
+  Future<void> _reverseToPosted() async {
+    final isEnglish = _isEnglish;
+    if (_selectedCount == null) return;
+    final isClosed = _selectedCount!.status == 'Closed';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Reverse to Posted' : 'ถอยกลับเป็น Posted'),
+        content: Text(isEnglish
+            ? (isClosed
+                ? 'Reverse this count sheet back to Posted? The posted adjustment (AJS) will be voided and its stock/GL impact reversed, and you will be able to re-record and re-approve it.'
+                : 'Reverse this count sheet back to Posted? The approval will be undone and you will be able to re-approve it.')
+            : (isClosed
+                ? 'ถอยใบตรวจนับนี้กลับเป็น Posted? ใบปรับยอด (AJS) ที่ Post ไปแล้วจะถูกยกเลิกและย้อนผลกระทบต่อสต็อก/บัญชีกลับ แล้วจะสามารถบันทึกยอดตรวจนับและอนุมัติใหม่ได้'
+                : 'ถอยใบตรวจนับนี้กลับเป็น Posted? การอนุมัติจะถูกยกเลิก แล้วจะสามารถอนุมัติใหม่ได้')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+            child: Text(isEnglish ? 'Reverse' : 'ยืนยันถอยกลับ'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _isSaving = true);
+    try {
+      await _service.reverseCount(_selectedCount!.id);
+      await _refreshSelectedCount();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Reversed to Posted' : 'ถอยกลับเป็น Posted สำเร็จ')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Reverse failed: $e' : 'ถอยกลับล้มเหลว: $e')));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   Widget _summaryLine(String label, List<MapEntry<String, String>> parts) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -146,6 +184,7 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
     final canApprove = perm?.canApprove ?? false;
     final isApproved = _selectedCount?.status == 'Approved';
     final isPosted = _selectedCount?.status == 'Posted';
+    final isClosed = _selectedCount?.status == 'Closed';
 
     return Scaffold(
       appBar: AppBar(title: const MenuTitle(), backgroundColor: Colors.teal[800], foregroundColor: Colors.white),
@@ -208,6 +247,15 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
                           icon: const Icon(Icons.save, size: 18),
                           label: Text(isEnglish ? 'Save Adjustment' : 'บันทึกปรับยอด'),
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
+                        ),
+                      ],
+                      if (canApprove && (isApproved || isClosed)) ...[
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: _isSaving ? null : _reverseToPosted,
+                          icon: const Icon(Icons.undo, size: 18),
+                          label: Text(isEnglish ? 'Reverse to Posted' : 'ถอยกลับเป็น Posted'),
+                          style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
                         ),
                       ],
                     ]),

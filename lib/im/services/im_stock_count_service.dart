@@ -231,6 +231,20 @@ class ImStockCountService {
     }
   }
 
+  Future<ImStockCount> reverseCount(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(Uri.parse('$baseUrl/im_stock_count/$id/reverse'), headers: headers);
+    if (response.statusCode == 200) {
+      return ImStockCount.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'ถอยกลับล้มเหลว');
+    }
+  }
+
   Future<List<ImStockCountVarianceRow>> fetchVarianceReport({
     int? countId,
     int? warehouseId,
