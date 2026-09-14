@@ -20,9 +20,10 @@ class ImConsignmentSettlementScreen extends StatefulWidget {
   State<ImConsignmentSettlementScreen> createState() => _ImConsignmentSettlementScreenState();
 }
 
-class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementScreen> {
+class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementScreen> with SingleTickerProviderStateMixin {
   final _svc = ImConsignmentSettlementService();
   final _refNoCtrl = TextEditingController();
+  late final TabController _tabController;
 
   bool _isEnglish = false;
   bool _isLoading = false;
@@ -34,9 +35,20 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
   List<Map<String, dynamic>> _rows = [];
   final Set<int> _selected = {};
 
+  bool _isLoadingSettled = false;
+  List<Map<String, dynamic>> _settled = [];
+  int? _voidingId;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
   @override
   void dispose() {
     _refNoCtrl.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -65,9 +77,61 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
         _vendorLabel = '${v.vendorCode}  ${v.vendorNameTh}';
         _rows = [];
         _selected.clear();
+        _settled = [];
       });
       _loadPending();
+      _loadSettled();
     });
+  }
+
+  Future<void> _loadSettled() async {
+    if (_vendorId == null) return;
+    setState(() => _isLoadingSettled = true);
+    try {
+      final rows = await _svc.fetchSettled(vendorId: _vendorId!);
+      if (mounted) setState(() => _settled = rows);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoadingSettled = false);
+    }
+  }
+
+  Future<void> _voidSettlement(Map<String, dynamic> row) async {
+    final isEnglish = _isEnglish;
+    final id = row['id'] as int;
+    final docNo = row['doc_no'] as String? ?? '';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Void Settlement' : 'ยกเลิกใบตั้งหนี้ฝากขาย'),
+        content: Text(isEnglish
+            ? 'Void AP bill $docNo? Its GL entry will be voided and the consignment sale lines it settled will return to Pending so they can be re-settled.'
+            : 'ยกเลิกใบตั้งหนี้ $docNo? รายการบัญชีที่ผูกไว้จะถูกยกเลิก และรายการขายสินค้าฝากขายที่ตั้งหนี้ไปแล้วจะกลับไปอยู่ในแท็บ "รอตั้งหนี้" เพื่อตั้งหนี้ใหม่ได้'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+            child: Text(isEnglish ? 'Void' : 'ยืนยันยกเลิก'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _voidingId = id);
+    try {
+      await _svc.voidSettlement(id);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: Colors.green,
+          content: Text(isEnglish ? 'Settlement voided' : 'ยกเลิกใบตั้งหนี้สำเร็จ')));
+      await _loadSettled();
+      await _loadPending();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _voidingId = null);
+    }
   }
 
   Future<void> _loadPending() async {
@@ -141,10 +205,178 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
     );
   }
 
+  Widget _buildPendingTab(bool isEnglish, NumberFormat fmt, NumberFormat fmtQty) {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_vendorId == null) {
+      return Center(
+          child: Text(isEnglish ? 'Please select a consignor vendor' : 'กรุณาเลือกผู้ฝากขาย',
+              style: const TextStyle(color: Colors.grey)));
+    }
+    if (_rows.isEmpty) {
+      return Center(
+          child: Text(isEnglish ? 'No pending consignment sales' : 'ไม่มีรายการขายสินค้าฝากขายที่รอตั้งหนี้',
+              style: const TextStyle(color: Colors.grey)));
+    }
+    return Column(children: [
+      Container(
+        color: Colors.teal[50],
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(children: [
+          Checkbox(
+            value: _selected.length == _rows.length,
+            onChanged: (v) => setState(() {
+              if (v == true) {
+                _selected.addAll(_rows.map((r) => r['consumption_id'] as int));
+              } else {
+                _selected.clear();
+              }
+            }),
+          ),
+          Expanded(flex: 3, child: Text(isEnglish ? 'Item' : 'สินค้า', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          Expanded(flex: 2, child: Text(isEnglish ? 'Lot/Serial' : 'ล็อต/ซีเรียล', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          Expanded(flex: 2, child: Text(isEnglish ? 'Sale Doc' : 'เลขที่เอกสารขาย', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          Expanded(flex: 2, child: Text(isEnglish ? 'Receipt Doc' : 'เลขที่เอกสารรับ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          Expanded(flex: 1, child: Text(isEnglish ? 'Qty' : 'จำนวน', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          Expanded(flex: 1, child: Text(isEnglish ? 'Unit Cost' : 'ต้นทุน/หน่วย', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          Expanded(flex: 1, child: Text(isEnglish ? 'Amount' : 'จำนวนเงิน', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+        ]),
+      ),
+      Expanded(
+        child: ListView.separated(
+          itemCount: _rows.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (ctx, i) {
+            final r = _rows[i];
+            final id = r['consumption_id'] as int;
+            final lotSerial = (r['serial_no'] as String?)?.isNotEmpty == true ? r['serial_no'] : (r['lot_no'] as String?) ?? '';
+            return Container(
+              color: i.isOdd ? Colors.grey.shade50 : null,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(children: [
+                Checkbox(
+                  value: _selected.contains(id),
+                  onChanged: (v) => setState(() {
+                    if (v == true) { _selected.add(id); } else { _selected.remove(id); }
+                  }),
+                ),
+                Expanded(flex: 3, child: Text(_itemLabel(r, isEnglish), style: const TextStyle(fontSize: 13))),
+                Expanded(flex: 2, child: Text(lotSerial ?? '', style: const TextStyle(fontSize: 13))),
+                Expanded(flex: 2, child: Text(
+                    '${r['sale_doc_no'] ?? ''}\n${_fmtDate(r['sale_doc_date'] as String?)}',
+                    style: const TextStyle(fontSize: 13))),
+                Expanded(flex: 2, child: Text(r['receipt_doc_no'] as String? ?? '', style: const TextStyle(fontSize: 13))),
+                Expanded(flex: 1, child: Text(fmtQty.format(_num(r['qty'])), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
+                Expanded(flex: 1, child: Text(fmt.format(_num(r['unit_cost'])), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
+                Expanded(flex: 1, child: Text(fmt.format(_amount(r)), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
+              ]),
+            );
+          },
+        ),
+      ),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(color: Colors.grey.shade100, border: Border(top: BorderSide(color: Colors.grey.shade300))),
+        child: Row(children: [
+          Expanded(
+            child: Text(
+              isEnglish
+                  ? '${_selected.length} of ${_rows.length} line(s) selected — Total: ${fmt.format(_selectedTotal)}'
+                  : 'เลือก ${_selected.length} จาก ${_rows.length} รายการ — ยอดรวม: ${fmt.format(_selectedTotal)}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ),
+          ElevatedButton.icon(
+            icon: _isSubmitting
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.receipt_long),
+            label: Text(isEnglish ? 'Create AP Bill' : 'สร้างใบตั้งหนี้'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[800], foregroundColor: Colors.white),
+            onPressed: (_isSubmitting || _selected.isEmpty) ? null : _settle,
+          ),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _buildHistoryTab(bool isEnglish, NumberFormat fmt, bool canApprove) {
+    if (_isLoadingSettled) return const Center(child: CircularProgressIndicator());
+    if (_vendorId == null) {
+      return Center(
+          child: Text(isEnglish ? 'Please select a consignor vendor' : 'กรุณาเลือกผู้ฝากขาย',
+              style: const TextStyle(color: Colors.grey)));
+    }
+    if (_settled.isEmpty) {
+      return Center(
+          child: Text(isEnglish ? 'No settlement history for this vendor' : 'ยังไม่มีประวัติการตั้งหนี้ฝากขายสำหรับผู้ฝากขายรายนี้',
+              style: const TextStyle(color: Colors.grey)));
+    }
+    return Column(children: [
+      Container(
+        color: Colors.teal[50],
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(children: [
+          Expanded(flex: 2, child: Text(isEnglish ? 'AP Bill No.' : 'เลขที่ใบตั้งหนี้', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          Expanded(flex: 2, child: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          Expanded(flex: 2, child: Text(isEnglish ? 'Reference' : 'เลขที่อ้างอิง', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          Expanded(flex: 1, child: Text(isEnglish ? 'Amount' : 'จำนวนเงิน', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          Expanded(flex: 1, child: Text(isEnglish ? 'Status' : 'สถานะ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          const SizedBox(width: 90),
+        ]),
+      ),
+      Expanded(
+        child: ListView.separated(
+          itemCount: _settled.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (ctx, i) {
+            final r = _settled[i];
+            final status = r['status'] as String? ?? '';
+            final isVoid = status == 'Void';
+            final id = r['id'] as int;
+            return Container(
+              color: i.isOdd ? Colors.grey.shade50 : null,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(children: [
+                Expanded(flex: 2, child: Text(r['doc_no'] as String? ?? '', style: const TextStyle(fontSize: 13))),
+                Expanded(flex: 2, child: Text(_fmtDate(r['doc_date'] as String?), style: const TextStyle(fontSize: 13))),
+                Expanded(flex: 2, child: Text(r['ref_no'] as String? ?? '', style: const TextStyle(fontSize: 13))),
+                Expanded(flex: 1, child: Text(fmt.format(_num(r['total_amount_lc'])), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isVoid ? Colors.grey.shade300 : Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(status, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center),
+                  ),
+                ),
+                SizedBox(
+                  width: 90,
+                  child: (canApprove && !isVoid)
+                      ? TextButton.icon(
+                          onPressed: _voidingId == id ? null : () => _voidSettlement(r),
+                          icon: _voidingId == id
+                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.undo, size: 16),
+                          label: Text(isEnglish ? 'Void' : 'ยกเลิก', style: const TextStyle(fontSize: 12)),
+                          style: TextButton.styleFrom(foregroundColor: Colors.orange[800]),
+                        )
+                      : null,
+                ),
+              ]),
+            );
+          },
+        ),
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
+    final canApprove = MenuScope.of(context)?.canApprove ?? false;
     final fmt = NumberFormat('#,##0.00', 'en_US');
     final fmtQty = NumberFormat('#,##0.####', 'en_US');
 
@@ -195,97 +427,24 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
             ]),
           ),
         ),
-        if (_isLoading)
-          const Expanded(child: Center(child: CircularProgressIndicator()))
-        else if (_vendorId == null)
-          Expanded(
-              child: Center(
-                  child: Text(isEnglish ? 'Please select a consignor vendor' : 'กรุณาเลือกผู้ฝากขาย',
-                      style: const TextStyle(color: Colors.grey))))
-        else if (_rows.isEmpty)
-          Expanded(
-              child: Center(
-                  child: Text(isEnglish ? 'No pending consignment sales' : 'ไม่มีรายการขายสินค้าฝากขายที่รอตั้งหนี้',
-                      style: const TextStyle(color: Colors.grey))))
-        else ...[
-          Container(
-            color: Colors.teal[50],
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(children: [
-              Checkbox(
-                value: _selected.length == _rows.length,
-                onChanged: (v) => setState(() {
-                  if (v == true) {
-                    _selected.addAll(_rows.map((r) => r['consumption_id'] as int));
-                  } else {
-                    _selected.clear();
-                  }
-                }),
-              ),
-              Expanded(flex: 3, child: Text(isEnglish ? 'Item' : 'สินค้า', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(flex: 2, child: Text(isEnglish ? 'Lot/Serial' : 'ล็อต/ซีเรียล', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(flex: 2, child: Text(isEnglish ? 'Sale Doc' : 'เลขที่เอกสารขาย', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(flex: 2, child: Text(isEnglish ? 'Receipt Doc' : 'เลขที่เอกสารรับ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(flex: 1, child: Text(isEnglish ? 'Qty' : 'จำนวน', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(flex: 1, child: Text(isEnglish ? 'Unit Cost' : 'ต้นทุน/หน่วย', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              Expanded(flex: 1, child: Text(isEnglish ? 'Amount' : 'จำนวนเงิน', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-            ]),
+        TabBar(
+          controller: _tabController,
+          labelColor: Colors.teal[800],
+          indicatorColor: Colors.teal[800],
+          tabs: [
+            Tab(text: isEnglish ? 'Pending' : 'รอตั้งหนี้'),
+            Tab(text: isEnglish ? 'History' : 'ประวัติ'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildPendingTab(isEnglish, fmt, fmtQty),
+              _buildHistoryTab(isEnglish, fmt, canApprove),
+            ],
           ),
-          Expanded(
-            child: ListView.separated(
-              itemCount: _rows.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (ctx, i) {
-                final r = _rows[i];
-                final id = r['consumption_id'] as int;
-                final lotSerial = (r['serial_no'] as String?)?.isNotEmpty == true ? r['serial_no'] : (r['lot_no'] as String?) ?? '';
-                return Container(
-                  color: i.isOdd ? Colors.grey.shade50 : null,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Row(children: [
-                    Checkbox(
-                      value: _selected.contains(id),
-                      onChanged: (v) => setState(() {
-                        if (v == true) { _selected.add(id); } else { _selected.remove(id); }
-                      }),
-                    ),
-                    Expanded(flex: 3, child: Text(_itemLabel(r, isEnglish), style: const TextStyle(fontSize: 13))),
-                    Expanded(flex: 2, child: Text(lotSerial ?? '', style: const TextStyle(fontSize: 13))),
-                    Expanded(flex: 2, child: Text(
-                        '${r['sale_doc_no'] ?? ''}\n${_fmtDate(r['sale_doc_date'] as String?)}',
-                        style: const TextStyle(fontSize: 13))),
-                    Expanded(flex: 2, child: Text(r['receipt_doc_no'] as String? ?? '', style: const TextStyle(fontSize: 13))),
-                    Expanded(flex: 1, child: Text(fmtQty.format(_num(r['qty'])), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
-                    Expanded(flex: 1, child: Text(fmt.format(_num(r['unit_cost'])), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
-                    Expanded(flex: 1, child: Text(fmt.format(_amount(r)), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
-                  ]),
-                );
-              },
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(color: Colors.grey.shade100, border: Border(top: BorderSide(color: Colors.grey.shade300))),
-            child: Row(children: [
-              Expanded(
-                child: Text(
-                  isEnglish
-                      ? '${_selected.length} of ${_rows.length} line(s) selected — Total: ${fmt.format(_selectedTotal)}'
-                      : 'เลือก ${_selected.length} จาก ${_rows.length} รายการ — ยอดรวม: ${fmt.format(_selectedTotal)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-              ),
-              ElevatedButton.icon(
-                icon: _isSubmitting
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.receipt_long),
-                label: Text(isEnglish ? 'Create AP Bill' : 'สร้างใบตั้งหนี้'),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[800], foregroundColor: Colors.white),
-                onPressed: (_isSubmitting || _selected.isEmpty) ? null : _settle,
-              ),
-            ]),
-          ),
-        ],
+        ),
       ]),
     );
   }
