@@ -49,12 +49,17 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
   bool _isLoading = false;
   bool _isImporting = false;
 
+  bool _isLoadingBatches = false;
+  List<Map<String, dynamic>> _batches = [];
+  int? _reversingBatchId;
+
   static const _appColor = Colors.teal;
 
   @override
   void initState() {
     super.initState();
     _loadTemplateSheets();
+    _loadBatches();
   }
 
   @override
@@ -77,6 +82,77 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
         setState(() => _templateSheets = List<Map<String, dynamic>>.from(data['sheets'] ?? []));
       }
     } catch (_) {}
+  }
+
+  Future<void> _loadBatches() async {
+    setState(() => _isLoadingBatches = true);
+    try {
+      final authService = context.read<AuthService>();
+      final headers = await authService.getAuthHeader();
+      final response = await http.get(Uri.parse('${AppConfig.apiIm}/im_opening_balance/batches'), headers: headers);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List;
+        if (mounted) setState(() => _batches = List<Map<String, dynamic>>.from(data));
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isLoadingBatches = false);
+    }
+  }
+
+  Future<void> _reverseBatch(Map<String, dynamic> batch) async {
+    final id = batch['id'] as int;
+    final desc = (batch['description'] as String?)?.isNotEmpty == true ? batch['description'] as String : 'OPBAL-${id.toString().padLeft(6, '0')}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ถอยกลับการตั้งยอด'),
+        content: Text('ถอยกลับชุดข้อมูล "$desc" (${batch['line_count']} รายการ)? '
+            'ยอดคงเหลือที่ตั้งไว้จากชุดนี้จะถูกย้อนกลับทั้งหมด รายการที่มีการเคลื่อนไหวไปแล้วหลังตั้งยอดจะทำให้ถอยกลับไม่ได้'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
+            child: const Text('ยืนยันถอยกลับ'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _reversingBatchId = id);
+    try {
+      final authService = context.read<AuthService>();
+      final headers = await authService.getAuthHeader();
+      final response = await http.put(Uri.parse('${AppConfig.apiIm}/im_opening_balance/batch/$id/reverse'), headers: headers);
+      if (response.statusCode == 200) {
+        _showSnack('ถอยกลับชุดข้อมูลสำเร็จ');
+        await _loadBatches();
+      } else {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final blocking = (body['blocking_rows'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        if (blocking.isNotEmpty) {
+          final detail = blocking.map((b) => '• ${b['item_code']} (${b['reason']})').join('\n');
+          if (mounted) {
+            await showDialog<void>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('ถอยกลับไม่ได้'),
+                content: Text('${body['message']}\n\n$detail'),
+                actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ปิด'))],
+              ),
+            );
+          }
+        } else {
+          _showSnack(body['message'] ?? 'เกิดข้อผิดพลาด', isError: true);
+        }
+      }
+    } catch (e) {
+      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _reversingBatchId = null);
+    }
   }
 
   Future<void> _pickDate() async {
@@ -187,6 +263,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
             _validatedData = [];
           });
           widget.onFieldsChanged();
+          await _loadBatches();
         }
       } else {
         String errMsg = 'เกิดข้อผิดพลาด (${response.statusCode})';
@@ -282,6 +359,8 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
             const SizedBox(height: 16),
             _buildResultSection(),
           ],
+          const SizedBox(height: 16),
+          _buildHistorySection(),
           const SizedBox(height: 80),
         ]),
       ),
@@ -420,6 +499,71 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
             ),
           ]),
         ]),
+      ),
+    );
+  }
+
+  Widget _buildHistorySection() {
+    final canApprove = MenuScope.of(context)?.canApprove ?? false;
+    return Card(
+      child: ExpansionTile(
+        leading: Icon(Icons.history, color: _appColor.shade700),
+        title: const Text('ประวัติการตั้งยอด', style: TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(_isLoadingBatches ? 'กำลังโหลด...' : '${_batches.length} ชุดข้อมูล'),
+        initiallyExpanded: false,
+        children: [
+          if (_isLoadingBatches)
+            const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
+          else if (_batches.isEmpty)
+            const Padding(padding: EdgeInsets.all(16), child: Text('ยังไม่มีประวัติการตั้งยอด', style: TextStyle(color: Colors.grey)))
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 16,
+                headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
+                columns: const [
+                  DataColumn(label: Text('วันที่ตั้งยอด', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('คำอธิบาย', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('จำนวนรายการ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                  DataColumn(label: Text('โดย', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('สถานะ', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('')),
+                ],
+                rows: _batches.map((b) {
+                  final isReversed = b['reversed_at'] != null;
+                  final id = b['id'] as int;
+                  return DataRow(cells: [
+                    DataCell(Text(_dateFmt.format(DateTime.parse(b['import_date'] as String)))),
+                    DataCell(Text(b['description'] as String? ?? '-')),
+                    DataCell(Text('${b['line_count']}')),
+                    DataCell(Text(b['created_by'] as String? ?? '-')),
+                    DataCell(Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isReversed ? Colors.grey.shade300 : Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(isReversed ? 'ถอยกลับแล้ว' : 'ตั้งยอดแล้ว', style: const TextStyle(fontSize: 11)),
+                    )),
+                    DataCell(
+                      (canApprove && !isReversed)
+                          ? TextButton.icon(
+                              onPressed: _reversingBatchId == id ? null : () => _reverseBatch(b),
+                              icon: _reversingBatchId == id
+                                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.undo, size: 16),
+                              label: const Text('ถอยกลับ', style: TextStyle(fontSize: 12)),
+                              style: TextButton.styleFrom(foregroundColor: Colors.orange.shade800),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ]);
+                }).toList(),
+              ),
+            ),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }
