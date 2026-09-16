@@ -127,6 +127,7 @@ import '../../im/screens/im_stock_movement_report_screen.dart';
 import '../../im/screens/im_stock_balance_by_item_report_screen.dart';
 import '../../im/screens/im_stock_aging_report_screen.dart';
 import '../../im/screens/im_consignment_settlement_screen.dart';
+import '../../po/screens/po_transaction_screen.dart';
 
 import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
@@ -344,6 +345,7 @@ class Menu {
     'ImStockBalanceByItemReportScreen': (context) => const ImStockBalanceByItemReportScreen(),
     'ImStockAgingReportScreen': (context) => const ImStockAgingReportScreen(),
     'ImConsignmentSettlementScreen': (context) => const ImConsignmentSettlementScreen(),
+    'PoTransactionScreen': (context) => const PoTransactionScreen(),
 
     'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
     'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),

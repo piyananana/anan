@@ -16,6 +16,8 @@ const Map<String, String> sysModules = {
   '11': 'บัญชีลูกหนี้ - Accounts Receivable (AR)',
   '21': 'บัญชีเจ้าหนี้ - Accounts Payable (AP)',
   '31': 'สินค้าคงคลัง - Inventory Management (IM)',
+  '41': 'สั่งขาย - Sale Order (SO)',
+  '51': 'สั่งซื้อ - Purchase Order (PO)',
   '81': 'เงินสดและเช็ค - Cash & Cheque Management(CM)',
   // '86': 'เงินมัดจำ - Deposit Management (DS)',
   // '91': 'ภาษีซื้อ - VAT Purchase (VP)',
@@ -77,6 +79,14 @@ const Map<String, String> imSysDocType = {
   '60': 'เบิกสินค้า - Issue Stock', // issue (-stock) for project, ...
   '70': 'โอนสินค้า - Transfer in-out', // transfer between location (=stock)
   '80': 'ปรับยอดสินค้า - Adjust quantity', // adjust (+-stock) for Phys.Count, ...
+};
+// '41': 'สั่งขาย'
+const Map<String, String> soSysDocType = {
+  '10': 'สั่งขาย - Sale Order', // sale order (no GL)
+};
+// '51': 'สั่งซื้อ'
+const Map<String, String> poSysDocType = {
+  '10': 'สั่งซื้อ - Purchase Order', // purchase order (no GL)
 };
 // '81': 'เงินสดและเช็ค / Cash & Cheque Management (CM)'
 const Map<String, String> cmSysDocType = {

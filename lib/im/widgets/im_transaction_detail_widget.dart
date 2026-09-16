@@ -6,6 +6,7 @@ import '../models/im_item.dart';
 import '../models/im_gl_account_setup.dart';
 import '../services/im_transaction_service.dart';
 import '../services/im_item_service.dart';
+import '../../po/services/po_transaction_service.dart';
 import '../widgets/im_item_list_widget.dart';
 import '../widgets/im_warehouse_list_widget.dart';
 import '../widgets/im_location_tree_widget.dart';
@@ -55,6 +56,7 @@ class _CountLine {
   final bool isArReturnCnMode; // '35'/'40' (รับคืนจากลูกค้า/ลดหนี้ลูกหนี้) — เพิ่มสต็อก, AR CN
   final bool isArDnMode; // '45' (เพิ่มหนี้ลูกหนี้) — ลดสต็อก, AR DN
   final int? refImTransactionDetailId; // '15'/'35' เท่านั้น — บรรทัดต้นฉบับ (GRN/DLN) ที่บรรทัดนี้คืน
+  int? refPoDetailId; // '10'/'11'/'12' เท่านั้น — บรรทัด PO ต้นฉบับที่บรรทัดนี้รับตาม (ไม่ final — ผู้ใช้เลือกทีหลังได้ผ่าน picker)
   // VAT ต่อบรรทัด — ใช้เฉพาะประเภทเอกสารที่สร้าง/อ้างอิงใบกำกับ AP/AR อัตโนมัติ (ดู _isVatMode ใน state) เก็บเป็น
   // field ธรรมดาแทน controller เพราะเป็นค่าที่เลือกจาก dropdown ไม่ใช่กรอกอิสระ (มิเรอร์ ar_transaction_detail_widget.dart)
   String? vatType;
@@ -89,6 +91,7 @@ class _CountLine {
     this.isArReturnCnMode = false,
     this.isArDnMode = false,
     this.refImTransactionDetailId,
+    this.refPoDetailId,
     this.vatType,
     this.vatRate = 0,
     this.isFree = false,
@@ -159,6 +162,7 @@ class ImTransactionDetailWidget extends StatefulWidget {
 class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   final ImTransactionService _service = ImTransactionService();
   final ImItemService _itemService = ImItemService();
+  final PoTransactionService _poService = PoTransactionService();
   final PeriodService _periodService = PeriodService();
   final GlEntryService _glEntryService = GlEntryService();
   final VatRateService _vatRateService = VatRateService();
@@ -189,6 +193,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   int? _linkedArTransactionId;
   int? _refImTransactionId; // '15'/'35' เท่านั้น — เอกสาร GRN/DLN ต้นฉบับที่จะคืน
   String? _refImTransactionLabel;
+  int? _refPoId; // '10'/'11'/'12' เท่านั้น — PO ที่อ้างอิง (สะดวก/แสดงผล — เก็บจากบรรทัดแรกที่เลือกผ่าน picker เท่านั้น)
+  String? _refPoDocNoLabel;
   final _refNoCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
@@ -204,6 +210,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   bool get _isIssueMode => _selectedSysDocType == '60'; // ISS — เบิกสินค้า
   bool get _isTransferMode => _selectedSysDocType == '70'; // TRF — โอนสินค้า
   bool get _isReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12' || _selectedSysDocType == '13'; // GRN — รับสินค้า (รวมรับฝากขาย '13')
+  // รับสินค้าตามใบสั่งซื้อ (PO) — ไม่รวม '13' (รับฝากขาย) เพราะฝากขายไม่มีแนวคิด PO ผูกไว้เลยในระบบนี้
+  bool get _isPoReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12';
   bool get _isGrnBillingMode => _selectedSysDocType == '11'; // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ
   bool get _isGrDeferredMode => _selectedSysDocType == '12'; // GR รอตั้งหนี้ — Post IM ก่อน ค่อย Post AP/GL ทีหลัง
   // รับฝากขาย (Consignment) — ต้นทุนจริงตั้งแต่รับ (ไม่ใช่ 0 เหมือนของแถม) แต่ยังไม่เป็นหนี้ AP จริงจนกว่าจะขายออก
@@ -284,6 +292,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _linkedArTransactionId = null;
     _refImTransactionId = null;
     _refImTransactionLabel = null;
+    _refPoId = null;
+    _refPoDocNoLabel = null;
     _refNoCtrl.clear();
     _descCtrl.clear();
     _status = 'Draft';
@@ -346,6 +356,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _linkedArTransactionId = h.linkedArTransactionId;
     _refImTransactionId = h.refImTransactionId;
     _refImTransactionLabel = h.refImTransactionDocNo;
+    _refPoId = h.refPoId;
+    _refPoDocNoLabel = h.refPoDocNo;
     _refNoCtrl.text = h.refNo ?? '';
     _descCtrl.text = h.description ?? '';
     _status = h.status;
@@ -376,6 +388,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         isArReturnCnMode: _isArReturnCnMode,
         isArDnMode: _isArDnMode,
         refImTransactionDetailId: d.refImTransactionDetailId,
+        refPoDetailId: d.refPoDetailId,
         countedQty: d.countedQty,
         issueQty: isIncrease ? (d.countedQty - d.systemQty) : isDecrease ? (d.systemQty - d.countedQty) : 0,
         unitCost: d.unitCost,
@@ -706,6 +719,103 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     });
   }
 
+  // '10'/'11'/'12' — เพิ่มรายการเข้า GRN จากบรรทัดที่ยังรับได้ของ PO ที่อนุมัติแล้วของผู้ขายนี้ (multi-select ได้
+  // ข้าม PO หลายใบในครั้งเดียว) มิเรอร์ _pickReturnLines แต่ไม่ต้องเลือกเอกสารต้นฉบับก่อน เพราะดึงจากผู้ขายที่เลือก
+  // ไว้แล้วตรงๆ (ต่างจากคืนสินค้าที่ต้องระบุ GRN/DLN ต้นฉบับเจาะจงก่อนเสมอ)
+  Future<void> _pickPoLines() async {
+    final isEnglish = _isEnglish;
+    if (_vendorId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a vendor first' : 'กรุณาระบุผู้ขายก่อน')));
+      return;
+    }
+    List<Map<String, dynamic>> lines;
+    try {
+      lines = await _poService.fetchReceivableLines(vendorId: _vendorId);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
+      return;
+    }
+    final alreadyPicked = _lines.map((l) => l.refPoDetailId).whereType<int>().toSet();
+    final selectable = lines.where((l) => !alreadyPicked.contains(l['detail_id'] as int)).toList();
+    if (selectable.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'No receivable PO lines left for this vendor' : 'ไม่มีรายการที่รับได้เหลืออยู่สำหรับผู้ขายนี้')));
+      return;
+    }
+    final qtyCtrls = {for (final l in selectable) l['detail_id'] as int: TextEditingController(text: _CountLine._fmtInput((l['qty_remaining'] as num).toDouble()))};
+    final selected = {for (final l in selectable) l['detail_id'] as int: false};
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) => AlertDialog(
+            title: Text(isEnglish ? 'Select Lines from Purchase Order' : 'เลือกรายการจากใบสั่งซื้อ'),
+            content: SizedBox(
+              width: 620,
+              height: 420,
+              child: ListView.builder(
+                itemCount: selectable.length,
+                itemBuilder: (_, i) {
+                  final l = selectable[i];
+                  final id = l['detail_id'] as int;
+                  final remaining = (l['qty_remaining'] as num).toDouble();
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(children: [
+                      Checkbox(value: selected[id], onChanged: (v) => setSt(() => selected[id] = v ?? false)),
+                      Expanded(flex: 2, child: Text('${l['doc_no']}', style: const TextStyle(fontSize: 12, color: Colors.grey))),
+                      Expanded(flex: 3, child: Text('${l['item_code'] ?? ''} ${l['item_name'] ?? ''}', overflow: TextOverflow.ellipsis)),
+                      Expanded(
+                        flex: 2,
+                        child: Text(isEnglish ? 'Remaining: ${_fmtQty.format(remaining)}' : 'คงเหลือรับได้: ${_fmtQty.format(remaining)}', style: const TextStyle(fontSize: 12)),
+                      ),
+                      SizedBox(
+                        width: 100,
+                        child: TextField(
+                          controller: qtyCtrls[id],
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: InputDecoration(isDense: true, border: const OutlineInputBorder(), labelText: isEnglish ? 'Qty' : 'จำนวน'),
+                        ),
+                      ),
+                    ]),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Add' : 'เพิ่ม')),
+            ],
+          )),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final pickedLines = selectable.where((l) => selected[l['detail_id']] == true && _parseNum(qtyCtrls[l['detail_id']]!.text) > 0).toList();
+    if (pickedLines.isEmpty) return;
+    final items = await Future.wait(pickedLines.map((l) => _itemService.fetchRow(l['item_id'] as int)));
+    if (!mounted) return;
+    setState(() {
+      for (var i = 0; i < pickedLines.length; i++) {
+        final l = pickedLines[i];
+        final id = l['detail_id'] as int;
+        final remaining = (l['qty_remaining'] as num).toDouble();
+        final qty = _parseNum(qtyCtrls[id]!.text).clamp(0, remaining);
+        final vatType = _isVatMode ? _safeVatCode(items[i].defaultVatType) : null;
+        final line = _CountLine(
+          item: items[i],
+          uomId: l['uom_id'] as int?, uomCode: l['uom_code'] as String?,
+          isReceiveMode: true,
+          issueQty: qty.toDouble(),
+          unitCost: (l['unit_price_fc'] as num?)?.toDouble(),
+          refPoDetailId: id,
+          vatType: vatType, vatRate: vatType != null ? _rateForVatCode(vatType) : 0,
+        );
+        _lines.add(line);
+        _refreshSystemQty(line);
+      }
+      _refPoId = pickedLines.first['header_id'] as int;
+      _refPoDocNoLabel = pickedLines.first['doc_no'] as String?;
+    });
+  }
+
   void _removeLine(_CountLine line) {
     setState(() => _lines.remove(line));
     line.dispose();
@@ -801,6 +911,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         customerId: _isArCustomerMode ? _customerId : null,
         refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
         refImTransactionId: _isReturnSourceDocMode ? _refImTransactionId : null,
+        refPoId: _isReceiveMode ? _refPoId : null,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       );
       final details = _lines.map((l) => ImTransactionDetail(
@@ -821,6 +932,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
             refImTransactionDetailId: l.refImTransactionDetailId,
+            refPoDetailId: l.refPoDetailId,
           )).toList();
 
       if (_id == null) {
@@ -1216,6 +1328,29 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
               displayText: _refImTransactionLabel,
               onSearch: _isReadOnly ? null : _pickReturnSourceDoc,
             ),
+          ),
+        ],
+        if (_isPoReceiveMode) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: Row(children: [
+              Expanded(
+                child: _fkField(
+                  label: isEnglish ? 'PO Reference' : 'อ้างอิงใบสั่งซื้อ',
+                  hasValue: _refPoId != null,
+                  displayText: _refPoDocNoLabel ?? '',
+                ),
+              ),
+              if (!_isReadOnly && _vendorId != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.playlist_add, size: 20, color: Colors.teal),
+                  tooltip: isEnglish ? 'Add lines from PO' : 'เพิ่มรายการจากใบสั่งซื้อ',
+                  onPressed: _pickPoLines,
+                ),
+              ],
+            ]),
           ),
         ],
       ]),

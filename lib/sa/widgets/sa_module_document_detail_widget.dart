@@ -197,6 +197,10 @@ class ModuleDocumentDetailWidgetState
         return apSysDocType;
       case '31':
         return imSysDocType;
+      case '41':
+        return soSysDocType;
+      case '51':
+        return poSysDocType;
       case '81':
         return cmSysDocType;
       // case '86':
