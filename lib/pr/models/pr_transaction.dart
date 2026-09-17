@@ -71,6 +71,9 @@ class PrTransactionHeader {
   final String? warehouseCode;
   final String? warehouseNameTh;
   final String? warehouseNameEn;
+  final int? currencyId;
+  final String? currencyCode;
+  final double exchangeRate;
   final String status;
   final String approvalMode;
   final double totalQty;
@@ -105,6 +108,9 @@ class PrTransactionHeader {
     this.warehouseCode,
     this.warehouseNameTh,
     this.warehouseNameEn,
+    this.currencyId,
+    this.currencyCode,
+    this.exchangeRate = 1,
     this.status = 'Draft',
     this.approvalMode = 'ALL',
     this.totalQty = 0,
@@ -141,6 +147,9 @@ class PrTransactionHeader {
       warehouseCode: json['warehouse_code'],
       warehouseNameTh: json['warehouse_name_th'],
       warehouseNameEn: json['warehouse_name_en'],
+      currencyId: json['currency_id'],
+      currencyCode: json['currency_code'],
+      exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       status: json['status'] ?? 'Draft',
       approvalMode: json['approval_mode'] ?? 'ALL',
       totalQty: toDouble(json['total_qty']),
@@ -168,6 +177,9 @@ class PrTransactionHeader {
         'doc_date': formatLocalDate(docDate),
         if (vendorId != null) 'vendor_id': vendorId,
         if (warehouseId != null) 'warehouse_id': warehouseId,
+        if (currencyId != null) 'currency_id': currencyId,
+        if (currencyCode != null) 'currency_code': currencyCode,
+        'exchange_rate': exchangeRate,
         if (description != null) 'description': description,
         if (branchId != null) 'branch_id': branchId,
         if (createdBy != null) 'created_by': createdBy,

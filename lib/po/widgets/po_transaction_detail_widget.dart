@@ -18,6 +18,8 @@ import '../../im/services/im_item_service.dart';
 import '../services/po_transaction_service.dart';
 import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../../pr/services/pr_transaction_service.dart';
+import '../../cd/models/cd_currency.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 class PoTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -56,6 +58,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
   final _service = PoTransactionService();
   final _itemService = ImItemService();
   final _prService = PrTransactionService();
+  final _currencyService = CurrencyService();
   final _fmtQty = NumberFormat('#,##0.####');
   final _fmtValue = NumberFormat('#,##0.00');
   final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -74,6 +77,12 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
   String _status = 'Draft';
   int? _refPrId; // ใบขอซื้อ (PR) ต้นทาง ถ้าเพิ่มรายการมาจาก _pickPrLines()
   String? _refPrDocNoLabel;
+
+  // รองรับสั่งซื้อสินค้าต่างประเทศเป็นสกุลเงินต่างประเทศ — unit_price_fc ต่อบรรทัดคือราคาในสกุลเงินนี้ (FC),
+  // total_value_lc คำนวณจาก unit_price_fc * exchange_rate เสมอ มิเรอร์ ap_transaction_detail_widget.dart ทุกประการ
+  List<Currency> _currencies = [];
+  Currency? _currency;
+  double _exchangeRate = 1;
 
   // sys_module='51' มีมากกว่าหนึ่งประเภทเอกสารได้ (เช่น POR ของ PO, PRQ ของ PR) จึงต้องกรองซ้ำด้วย sys_doc_type
   // '10' คือ PO (ตาม poSysDocType ใน sa_anan_module.dart) แล้วให้ผู้ใช้เลือกเองเหมือนหน้าจอธุรกรรม AR/AP — เผื่อ
@@ -119,6 +128,8 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     _status = 'Draft';
     _refPrId = null;
     _refPrDocNoLabel = null;
+    _currency = _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null);
+    _exchangeRate = _currency?.baseRate ?? 1;
     _lines = [];
   }
 
@@ -129,6 +140,9 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       if (_allowedDocTypes.isEmpty) {
         final docTypes = await _service.fetchDocTypesByUser();
         _allowedDocTypes = docTypes.where((d) => d.isDocType && d.sysDocType == _poSysDocType).toList();
+      }
+      if (_currencies.isEmpty) {
+        _currencies = await _currencyService.fetchActiveRows();
       }
       if (widget.transactionId == null) {
         _resetForm();
@@ -148,6 +162,9 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         _status = h.status;
         _refPrId = h.refPrId;
         _refPrDocNoLabel = h.refPrDocNo;
+        _currency = _currencies.cast<Currency?>().firstWhere(
+            (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
+        _exchangeRate = h.exchangeRate;
         // ดึง ImItem เต็มจาก itemId เสมอ ไม่ใช้ค่า snapshot (item_code/item_name) ที่บันทึกไว้ตอนสร้างเอกสารมาแสดง
         // ตรงๆ — มิเรอร์ im_transaction_detail_widget.dart:366 (โหลด GRN) ทุกประการ เพื่อให้ชื่อสินค้าที่แสดงตรงกับ
         // ข้อมูลสินค้าปัจจุบันเสมอ ไม่ขึ้นกับว่า snapshot ตอนสร้างถูกบันทึกไว้ครบหรือไม่
@@ -181,6 +198,14 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         if (v.creditTermMonths > 0) base = DateTime(base.year, base.month + v.creditTermMonths, base.day);
         if (v.creditTermDays > 0) base = base.add(Duration(days: v.creditTermDays));
         _dueDate = base;
+      }
+      // สกุลเงินหลักของผู้ขาย (ap_vendor.currency_code) — มิเรอร์ ap_transaction_detail_widget.dart:_onVendorChanged
+      if (v.currencyCode.isNotEmpty) {
+        final matched = _currencies.cast<Currency?>().firstWhere((c) => c!.currencyCode == v.currencyCode, orElse: () => null);
+        if (matched != null) {
+          _currency = matched;
+          _exchangeRate = matched.baseRate > 0 ? matched.baseRate : 1;
+        }
       }
     });
   }
@@ -300,6 +325,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       final header = PoTransactionHeader(
         id: _id ?? 0, docId: _docId ?? 0, docNo: _docNo, docDate: _docDate,
         vendorId: _vendor!.id!, warehouseId: _warehouse!.id, dueDate: _dueDate,
+        currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? 'THB', exchangeRate: _exchangeRate,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         refPrId: _refPrId,
       );
@@ -358,6 +384,11 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
   }
 
   String _docTypeLabel(ModuleDocument d) => _isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai;
+
+  String _currencyLabel(Currency c) => _isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai;
+
+  String get _baseCurrencyCode =>
+      _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
 
   Widget _fkField({required String label, required bool hasValue, required String displayText, VoidCallback? onSearch}) {
     return InputDecorator(
@@ -461,11 +492,40 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                 ),
               ]),
               const SizedBox(height: 12),
-              TextField(
-                controller: _descCtrl,
-                enabled: !_isReadOnly,
-                decoration: InputDecoration(labelText: isEnglish ? 'Description' : 'คำอธิบาย', border: const OutlineInputBorder(), isDense: true),
-              ),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: DropdownButtonFormField<Currency>(
+                    value: _currency,
+                    isExpanded: true,
+                    decoration: InputDecoration(labelText: isEnglish ? 'Currency' : 'สกุลเงิน', border: const OutlineInputBorder(), isDense: true),
+                    items: _currencies.map((c) => DropdownMenuItem(
+                          value: c,
+                          child: Text('${c.currencyCode} - ${_currencyLabel(c)}', overflow: TextOverflow.ellipsis),
+                        )).toList(),
+                    onChanged: _isReadOnly ? null : (v) => setState(() { _currency = v; _exchangeRate = v?.baseRate ?? 1; }),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    key: ValueKey('po_rate_${widget.resetKey}_$_id'),
+                    initialValue: _exchangeRate.toStringAsFixed(6),
+                    enabled: !_isReadOnly,
+                    decoration: InputDecoration(labelText: isEnglish ? 'Exchange Rate' : 'อัตราแลกเปลี่ยน', border: const OutlineInputBorder(), isDense: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (v) => setState(() => _exchangeRate = double.tryParse(v) ?? 1),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: _descCtrl,
+                    enabled: !_isReadOnly,
+                    decoration: InputDecoration(labelText: isEnglish ? 'Description' : 'คำอธิบาย', border: const OutlineInputBorder(), isDense: true),
+                  ),
+                ),
+              ]),
             ]),
           ),
         ),
@@ -476,6 +536,14 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Text(isEnglish ? 'Lines' : 'รายการสั่งซื้อ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                if (_currency != null && !_currency!.baseCurrencyFlag) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.orange.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                    child: Text(isEnglish ? 'Unit price in ${_currency!.currencyCode}' : 'ราคา/หน่วยเป็น ${_currency!.currencyCode}', style: TextStyle(fontSize: 11, color: Colors.orange[800])),
+                  ),
+                ],
                 if (_refPrDocNoLabel != null) ...[
                   const SizedBox(width: 8),
                   Container(
@@ -516,12 +584,15 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                         initialValue: _fmtValue.format(l.unitPriceFc),
                         enabled: !_isReadOnly,
                         textAlign: TextAlign.right,
-                        decoration: InputDecoration(labelText: isEnglish ? 'Unit Price' : 'ราคา/หน่วย', isDense: true, border: const OutlineInputBorder()),
+                        decoration: InputDecoration(
+                          labelText: (isEnglish ? 'Unit Price' : 'ราคา/หน่วย') + (_currency != null ? ' (${_currency!.currencyCode})' : ''),
+                          isDense: true, border: const OutlineInputBorder(),
+                        ),
                         onChanged: (v) => setState(() => l.unitPriceFc = double.tryParse(v) ?? 0),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    SizedBox(width: 100, child: Text(_fmtValue.format(l.totalValueLc), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(width: 100, child: Text(_fmtValue.format(l.totalValueLc * _exchangeRate), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
                     if (l.qtyReceived > 0)
                       Padding(
                         padding: const EdgeInsets.only(left: 8),
@@ -536,10 +607,17 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
               const Divider(),
               Align(
                 alignment: Alignment.centerRight,
-                child: Text(
-                  '${isEnglish ? "Total" : "รวม"}: ${_fmtValue.format(_lines.fold<double>(0, (s, l) => s + l.totalValueLc))}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  if (_currency != null && !_currency!.baseCurrencyFlag)
+                    Text(
+                      '${isEnglish ? "Total" : "รวม"}: ${_fmtValue.format(_lines.fold<double>(0, (s, l) => s + l.totalValueLc))} ${_currency!.currencyCode}',
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  Text(
+                    '${isEnglish ? "Total" : "รวม"} ($_baseCurrencyCode): ${_fmtValue.format(_lines.fold<double>(0, (s, l) => s + l.totalValueLc * _exchangeRate))}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ]),
               ),
             ]),
           ),
