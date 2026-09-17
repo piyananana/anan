@@ -13,11 +13,16 @@ class ImTransactionService {
   final String baseUrl = AppConfig.apiIm;
   final AuthService authService = AuthService();
 
+  // sys_module='31' (สินค้าคงคลัง - Inventory Management, ดู sysModules ใน sa_anan_module.dart) — ใช้ sys_module
+  // แทนการผูกกับ doc_code ของโหนดแม่ตัวใดตัวหนึ่งตายตัว (เดิม hardcode 'IM') เพื่อให้ผู้ใช้สร้างโหนดแม่/ประเภทเอกสาร
+  // ได้หลายชุดภายใต้โมดูลนี้ (เช่น แยกตามประเภทการบันทึกบัญชี) แล้วยังค้นพบได้ทั้งหมด ไม่ผูกกับชื่อโหนดแม่ใดโหนดหนึ่ง
+  // (มิเรอร์การแก้ไขเดียวกันที่ทำใน PoTransactionService — ดู pattern เดียวกันที่นั่น) วันนี้ผลลัพธ์เหมือนเดิมทุกประการ
+  // เพราะ doc type ของ IM ทั้งหมดยังอยู่ใต้โหนดแม่ตัวเดียว (doc_code='IM') แต่รองรับการแยกโหนดในอนาคตได้ทันที
   Future<List<ModuleDocument>> fetchDocTypesByUser() async {
     final headers = await authService.getAuthHeader();
     final userId = authService.currentUser?.id ?? 0;
     final response = await http.get(
-      Uri.parse('${AppConfig.apiSa}/sa_module_document/module_user/IM/$userId'),
+      Uri.parse('${AppConfig.apiSa}/sa_module_document/sys_module_user/31/$userId'),
       headers: headers,
     );
     if (response.statusCode == 200) {

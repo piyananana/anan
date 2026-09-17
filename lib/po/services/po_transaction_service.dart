@@ -10,12 +10,14 @@ class PoTransactionService {
   final String baseUrl = AppConfig.apiPo;
   final AuthService authService = AuthService();
 
-  // parent doc_code='PUR' (จัดซื้อ) — mirrors ImTransactionService.fetchDocTypesByUser's use of 'IM'
+  // sys_module='51' (สั่งซื้อ - Purchase Order, ดู sysModules ใน sa_anan_module.dart) — ใช้ sys_module แทนการ
+  // ผูกกับ doc_code ของโหนดแม่ตัวใดตัวหนึ่งตายตัว (ต่างจาก ImTransactionService ที่ hardcode 'IM') เพื่อให้ผู้ใช้
+  // สร้างโหนดแม่/ประเภทเอกสารได้หลายชุดภายใต้โมดูลนี้ (เช่น แยกตามประเภทการบันทึกบัญชี) แล้วยังค้นพบได้ทั้งหมด
   Future<List<ModuleDocument>> fetchDocTypesByUser() async {
     final headers = await authService.getAuthHeader();
     final userId = authService.currentUser?.id ?? 0;
     final response = await http.get(
-      Uri.parse('${AppConfig.apiSa}/sa_module_document/module_user/PUR/$userId'),
+      Uri.parse('${AppConfig.apiSa}/sa_module_document/sys_module_user/51/$userId'),
       headers: headers,
     );
     if (response.statusCode == 200) {

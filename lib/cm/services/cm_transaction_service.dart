@@ -9,11 +9,14 @@ class CmTransactionService {
   final String baseUrl = AppConfig.apiCm;
   final AuthService authService = AuthService();
 
+  // sys_module='81' (เงินสดและเช็ค - Cash & Cheque Management, ดู sysModules ใน sa_anan_module.dart) — ใช้
+  // sys_module แทนการผูกกับ doc_code ของโหนดแม่ตัวใดตัวหนึ่งตายตัว (เดิม hardcode 'CM') เพื่อให้ผู้ใช้สร้างโหนดแม่/
+  // ประเภทเอกสารได้หลายชุดภายใต้โมดูลนี้แล้วยังค้นพบได้ทั้งหมด (มิเรอร์การแก้ไขเดียวกันที่ทำใน Po/ImTransactionService)
   Future<List<ModuleDocument>> fetchDocTypesByUser() async {
     final headers = await authService.getAuthHeader();
     final userId = authService.currentUser?.id ?? 0;
     final response = await http.get(
-      Uri.parse('${AppConfig.apiSa}/sa_module_document/module_user/CM/$userId'),
+      Uri.parse('${AppConfig.apiSa}/sa_module_document/sys_module_user/81/$userId'),
       headers: headers,
     );
     if (response.statusCode == 200) {

@@ -15,11 +15,14 @@ class ApTransactionService {
   final String baseUrl = AppConfig.apiAp;
   final AuthService authService = AuthService();
 
+  // sys_module='21' (บัญชีเจ้าหนี้ - Accounts Payable, ดู sysModules ใน sa_anan_module.dart) — ใช้ sys_module
+  // แทนการผูกกับ doc_code ของโหนดแม่ตัวใดตัวหนึ่งตายตัว (เดิม hardcode 'AP') เพื่อให้ผู้ใช้สร้างโหนดแม่/ประเภทเอกสาร
+  // ได้หลายชุดภายใต้โมดูลนี้แล้วยังค้นพบได้ทั้งหมด (มิเรอร์การแก้ไขเดียวกันที่ทำใน Po/ImTransactionService)
   Future<List<ModuleDocument>> fetchDocTypesByUser() async {
     final headers = await authService.getAuthHeader();
     final userId = authService.currentUser?.id ?? 0;
     final response = await http.get(
-      Uri.parse('${AppConfig.apiSa}/sa_module_document/module_user/AP/$userId'),
+      Uri.parse('${AppConfig.apiSa}/sa_module_document/sys_module_user/21/$userId'),
       headers: headers,
     );
     if (response.statusCode == 200) {

@@ -152,13 +152,16 @@ class GlEntryService {
   //     return [];
   //   }
   // }
+  // sys_module='01' (บัญชีแยกประเภท - General Ledger, ดู sysModules ใน sa_anan_module.dart) — ใช้ sys_module แทน
+  // การผูกกับ doc_code ของโหนดแม่ตัวใดตัวหนึ่งตายตัว (เดิม hardcode 'GL') เพื่อให้ผู้ใช้สร้างโหนดแม่/ประเภทเอกสาร
+  // ได้หลายชุดภายใต้โมดูลนี้แล้วยังค้นพบได้ทั้งหมด (มิเรอร์การแก้ไขเดียวกันที่ทำใน Po/ImTransactionService)
   Future<List<ModuleDocument>> fetchRowsByModuleUserId() async {
     final String url = AppConfig.apiSa;
     final headers = await authService.getAuthHeader();
-    const String module = 'GL';
+    const String sysModule = '01';
     int userId = authService.currentUser?.id ?? 0;
     final res = await http.get(
-      Uri.parse('$url/sa_module_document/module_user/$module/$userId'),
+      Uri.parse('$url/sa_module_document/sys_module_user/$sysModule/$userId'),
       headers: headers
     );
     if (res.statusCode == 200) {
