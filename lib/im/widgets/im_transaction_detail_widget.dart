@@ -24,6 +24,8 @@ import '../../ar/models/ar_customer.dart';
 import '../../ar/widgets/ar_customer_list_widget.dart';
 import '../../cd/models/cd_vat_rate.dart';
 import '../../cd/services/cd_vat_rate_service.dart';
+import '../../cd/models/cd_currency.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 double _parseNum(String s) => double.tryParse(s.trim()) ?? 0;
 
@@ -200,6 +202,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   String _status = 'Draft';
   int? _glEntryId;
 
+  // รองรับรับสินค้าจากผู้ขายต่างประเทศเป็นสกุลเงินต่างประเทศ (เฉพาะ _isApVendorMode) — มิเรอร์
+  // po_transaction_detail_widget.dart ทุกประการ unit_cost (LC) ยังคงใช้ตีมูลค่าสต็อก/โพสต์ GL เหมือนเดิมเสมอ
+  final CurrencyService _currencyService = CurrencyService();
+  List<Currency> _currencies = [];
+  Currency? _currency;
+  double _exchangeRate = 1;
+
   List<_CountLine> _lines = [];
   List<ModuleDocument> _docTypes = [];
   List<PostingPeriod> _openPeriods = [];
@@ -298,6 +307,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _descCtrl.clear();
     _status = 'Draft';
     _glEntryId = null;
+    _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
+    _exchangeRate = _currency?.baseRate ?? 1;
     _lines = [];
     _docSetup = null;
     _postedGlDetails = null;
@@ -312,10 +323,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _service.fetchDocTypesByUser(),
         _periodService.fetchOpenGlPeriods(),
         _vatRateService.fetchRows(),
+        _currencyService.fetchActiveRows(),
       ]);
       _docTypes = (results[0] as List<ModuleDocument>).where((d) => d.isDocType).toList();
       _openPeriods = results[1] as List<PostingPeriod>;
       _vatRates = (results[2] as List<VatRate>).where((v) => v.isActive).toList();
+      _currencies = results[3] as List<Currency>;
+      _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
+      _exchangeRate = _currency?.baseRate ?? 1;
       if (_docTypes.length == 1) {
         await _selectDocType(_docTypes.first);
       }
@@ -362,6 +377,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _descCtrl.text = h.description ?? '';
     _status = h.status;
     _glEntryId = h.glEntryId;
+    _currency = _currencies.cast<Currency?>().firstWhere(
+        (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
+    _exchangeRate = h.exchangeRate;
 
     final items = await Future.wait(tx.details.map((d) => _itemService.fetchRow(d.itemId)));
     final lines = <_CountLine>[];
@@ -391,8 +409,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         refPoDetailId: d.refPoDetailId,
         countedQty: d.countedQty,
         issueQty: isIncrease ? (d.countedQty - d.systemQty) : isDecrease ? (d.systemQty - d.countedQty) : 0,
-        unitCost: d.unitCost,
-        billedUnitCost: d.billedUnitCost,
+        // _isApVendorMode: unitCostCtrl แสดงราคาที่กรอกจริงในสกุลเงินของ header (unitCostFc) ไม่ใช่ unitCost (LC) —
+        // fallback เป็น unitCost เดิมสำหรับแถวเก่าก่อนมีฟีเจอร์นี้ (ถือว่าเป็น THB, unitCostFc == unitCost พอดี)
+        unitCost: _isApVendorMode ? (d.unitCostFc ?? d.unitCost) : d.unitCost,
+        billedUnitCost: _isApVendorMode ? (d.billedUnitCostFc ?? d.billedUnitCost) : d.billedUnitCost,
         unitPrice: d.unitPrice,
         vatType: d.vatType,
         vatRate: d.vatRate ?? 0,
@@ -454,6 +474,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     setState(() {
       _vendorId = v.id;
       _vendorLabel = '${v.vendorCode} ${v.vendorNameTh}';
+      // สกุลเงินหลักของผู้ขาย (ap_vendor.currency_code) — มิเรอร์ po_transaction_detail_widget.dart:_selectVendor
+      if (v.currencyCode.isNotEmpty) {
+        final matched = _currencies.cast<Currency?>().firstWhere((c) => c?.currencyCode == v.currencyCode, orElse: () => null);
+        if (matched != null) {
+          _currency = matched;
+          _exchangeRate = matched.baseRate > 0 ? matched.baseRate : 1;
+        }
+      }
     });
   }
 
@@ -822,9 +850,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           uomId: l['uom_id'] as int?, uomCode: l['uom_code'] as String?,
           isReceiveMode: true,
           issueQty: qty.toDouble(),
-          // แปลงเป็นบาทด้วยอัตราแลกเปลี่ยนของ PO ต้นทาง (unit_price_fc * exchange_rate) — im_transaction_detail.unit_cost
-          // เก็บเป็นบาทเสมอ ไม่ใช่ค่า FC ดิบจาก PO (ดู _poUnitCostLc ด้านบน)
-          unitCost: _poUnitCostLc(l),
+          // GRN เก็บ unitCostCtrl เป็นราคาในสกุลเงินของ header (_currency) เสมอ — ตั้ง header ให้ตรงกับ PO ต้นทางไว้
+          // ข้างล่างแล้ว (สกุลเงินเดียวกันทั้งใบ) จึงเติมราคาดิบจาก PO ตรงๆ ได้เลยโดยไม่ต้องแปลงเป็นบาท
+          unitCost: _poNum(l['unit_price_fc']),
           refPoDetailId: id,
           vatType: vatType, vatRate: vatType != null ? _rateForVatCode(vatType) : 0,
         );
@@ -833,6 +861,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       }
       _refPoId = pickedLines.first['header_id'] as int;
       _refPoDocNoLabel = pickedLines.first['doc_no'] as String?;
+      // รับตามสกุลเงินของ PO ต้นทางเสมอ (ทุกบรรทัดที่เลือกมาจาก fetchReceivableLines ของผู้ขายเดียวกัน แต่อาจมาจาก
+      // PO คนละใบ คนละสกุลเงินได้ในทางทฤษฎี — ใช้สกุลเงินของ PO ใบแรกที่เลือกเป็นสกุลเงินของทั้ง GRN นี้)
+      final poCurrencyCode = _poCurrencyCode(pickedLines.first);
+      final matched = _currencies.cast<Currency?>().firstWhere((c) => c?.currencyCode == poCurrencyCode, orElse: () => null);
+      if (matched != null) {
+        _currency = matched;
+        _exchangeRate = _poNum(pickedLines.first['exchange_rate']) > 0 ? _poNum(pickedLines.first['exchange_rate']) : (matched.baseRate > 0 ? matched.baseRate : 1);
+      }
     });
   }
 
@@ -932,6 +968,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
         refImTransactionId: _isReturnSourceDocMode ? _refImTransactionId : null,
         refPoId: _isReceiveMode ? _refPoId : null,
+        currencyId: _isApVendorMode ? _currency?.id : null,
+        currencyCode: _isApVendorMode ? (_currency?.currencyCode ?? 'THB') : null,
+        exchangeRate: _isApVendorMode ? _exchangeRate : 1,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       );
       final details = _lines.map((l) => ImTransactionDetail(
@@ -946,7 +985,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             uomId: l.uomId,
             systemQty: l.systemQty,
             countedQty: l.counted,
-            unitCost: l.unitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.unitCostCtrl.text),
+            // _isApVendorMode: unitCostCtrl คือราคาที่กรอกในสกุลเงินของ header (_currency) เสมอ ส่งเป็น unitCostFc
+            // ให้ backend คูณ exchange_rate เองตอนบันทึก (ดู insertAndPostAdjustment/updateTransaction) — โหมดอื่น
+            // ไม่มีสกุลเงินต่างประเทศ ส่ง unitCost ตรงๆ เหมือนเดิมทุกประการ
+            unitCost: _isApVendorMode ? null : (l.unitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.unitCostCtrl.text)),
+            unitCostFc: _isApVendorMode && l.unitCostCtrl.text.trim().isNotEmpty ? _parseNum(l.unitCostCtrl.text) : null,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
             isFree: l.isFree,
             vatType: _isVatMode ? l.vatType : null,
@@ -992,7 +1035,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       final details = _lines.map((l) => ImTransactionDetail(
             id: l.id,
             itemId: l.item.id!,
-            billedUnitCost: l.billedUnitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.billedUnitCostCtrl.text),
+            billedUnitCostFc: l.billedUnitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.billedUnitCostCtrl.text),
           )).toList();
       await _service.updateTransaction(id: _id!, header: header, details: details);
       if (mounted) {
@@ -1022,7 +1065,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       final details = _lines.map((l) => ImTransactionDetail(
             id: l.id,
             itemId: l.item.id!,
-            billedUnitCost: l.billedUnitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.billedUnitCostCtrl.text),
+            billedUnitCostFc: l.billedUnitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.billedUnitCostCtrl.text),
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
           )).toList();
@@ -1219,6 +1262,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         ),
       );
 
+  String _currencyLabel(Currency c) => _isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai;
+
   Widget _fkField({required String label, required String? displayText, required bool hasValue, VoidCallback? onSearch}) {
     return InputDecorator(
       decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
@@ -1374,6 +1419,37 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           ),
         ],
       ]),
+      if (_isApVendorMode) ...[
+        const SizedBox(height: 6),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            flex: 1,
+            child: DropdownButtonFormField<Currency>(
+              value: _currency,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: isEnglish ? 'Currency' : 'สกุลเงิน', border: const OutlineInputBorder(), isDense: true),
+              items: _currencies.map((c) => DropdownMenuItem(
+                    value: c,
+                    child: Text('${c.currencyCode} - ${_currencyLabel(c)}', overflow: TextOverflow.ellipsis),
+                  )).toList(),
+              onChanged: _isReadOnly ? null : (v) => setState(() { _currency = v; _exchangeRate = v?.baseRate ?? 1; }),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: TextFormField(
+              key: ValueKey('im_rate_${widget.resetKey}_$_id'),
+              initialValue: _exchangeRate.toStringAsFixed(6),
+              enabled: !_isReadOnly,
+              decoration: InputDecoration(labelText: isEnglish ? 'Exchange Rate' : 'อัตราแลกเปลี่ยน', border: const OutlineInputBorder(), isDense: true),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (v) => setState(() => _exchangeRate = double.tryParse(v) ?? 1),
+            ),
+          ),
+          const Expanded(flex: 2, child: SizedBox()),
+        ]),
+      ],
       const SizedBox(height: 6),
       TextField(
         controller: _descCtrl,
@@ -1596,7 +1672,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       controller: line.unitCostCtrl,
                       readOnly: _isReadOnly,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(labelText: isEnglish ? 'Unit Cost *' : 'ต้นทุน/หน่วย *', border: const OutlineInputBorder(), isDense: true),
+                      decoration: InputDecoration(
+                        labelText: (isEnglish ? 'Unit Cost *' : 'ต้นทุน/หน่วย *') + (_isApVendorMode && _currency != null ? ' (${_currency!.currencyCode})' : ''),
+                        border: const OutlineInputBorder(), isDense: true,
+                      ),
                     )
                   : InputDecorator(
                       decoration: InputDecoration(labelText: isEnglish ? 'Unit Cost' : 'ต้นทุน/หน่วย', border: const OutlineInputBorder(), isDense: true),
@@ -1636,7 +1715,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   readOnly: !_canEditBilling,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
-                      labelText: isEnglish ? 'Billed Unit Cost' : 'ต้นทุนตามใบกำกับ',
+                      labelText: (isEnglish ? 'Billed Unit Cost' : 'ต้นทุนตามใบกำกับ') + (_currency != null && !_currency!.baseCurrencyFlag ? ' (${_currency!.currencyCode})' : ''),
                       helperText: isEnglish ? 'Blank = same as Unit Cost' : 'เว้นว่าง = เท่ากับต้นทุน/หน่วย',
                       helperMaxLines: 2,
                       border: const OutlineInputBorder(), isDense: true),

@@ -48,6 +48,11 @@ class ImTransactionHeader {
   final String? refImTransactionDocNo; // จาก join — เลขที่เอกสารต้นฉบับ ใช้แสดงผลเท่านั้น
   final int? refPoId; // '10'/'11'/'12' เท่านั้น — PO ที่ GRN นี้อ้างอิง (สะดวก/แสดงผล — การตรวจจริงอยู่ระดับบรรทัด)
   final String? refPoDocNo; // จาก join — เลขที่ PO ใช้แสดงผลเท่านั้น
+  // สกุลเงินต่างประเทศ (ฝั่งรับจากผู้ขายเท่านั้น — GRN family '10'/'11'/'12'/'13' + คืนสินค้า/AP CN/DN '15'/'20'/'25')
+  // unit_cost (LC) ยังคงใช้ตีมูลค่าสต็อก/โพสต์ GL เหมือนเดิมเสมอ — ฟิลด์นี้ควบคุมแค่การแสดงผล/กรอกข้อมูลเท่านั้น
+  final int? currencyId;
+  final String? currencyCode;
+  final double exchangeRate;
   final String? description;
   final String status;
   final int? glEntryId;
@@ -103,6 +108,9 @@ class ImTransactionHeader {
     this.refImTransactionDocNo,
     this.refPoId,
     this.refPoDocNo,
+    this.currencyId,
+    this.currencyCode,
+    this.exchangeRate = 1,
     this.description,
     this.status = 'Draft',
     this.glEntryId,
@@ -152,6 +160,9 @@ class ImTransactionHeader {
       refImTransactionDocNo: json['ref_im_transaction_doc_no'],
       refPoId: json['ref_po_id'],
       refPoDocNo: json['ref_po_doc_no'],
+      currencyId: json['currency_id'],
+      currencyCode: json['currency_code'],
+      exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       description: json['description'],
       status: json['status'] ?? 'Draft',
       glEntryId: json['gl_entry_id'],
@@ -190,6 +201,9 @@ class ImTransactionHeader {
         if (refDocNo != null) 'ref_doc_no': refDocNo,
         if (refImTransactionId != null) 'ref_im_transaction_id': refImTransactionId,
         if (refPoId != null) 'ref_po_id': refPoId,
+        if (currencyId != null) 'currency_id': currencyId,
+        if (currencyCode != null) 'currency_code': currencyCode,
+        'exchange_rate': exchangeRate,
         if (description != null) 'description': description,
         if (dim1Id != null) 'dim1_id': dim1Id,
         if (dim2Id != null) 'dim2_id': dim2Id,
@@ -222,7 +236,9 @@ class ImTransactionDetail {
   final double countedQty;
   final double? qty; // variance — null until Posted (server computes from live balance at Post time)
   final double? unitCost;
+  final double? unitCostFc; // ราคาที่ผู้ใช้กรอกจริงในสกุลเงินผู้ขาย (ถ้าไม่ใช่ THB) — unitCost (LC) = unitCostFc * exchangeRate
   final double? billedUnitCost; // '12' (รับสินค้า รอตั้งหนี้) เท่านั้น — ต้นทุนจริงตามใบกำกับ อาจต่างจาก unitCost
+  final double? billedUnitCostFc; // เหมือน unitCostFc แต่สำหรับ billedUnitCost
   final double? unitPrice; // '31'/'32' (DLN + ตั้งหนี้ลูกหนี้) เท่านั้น — ราคาขายต่อหน่วย ใช้คำนวณรายได้ตอนสร้างใบแจ้งหนี้ AR
   final bool isFree; // ของแถม — ฝั่งรับ (GR family) ยกเว้นบังคับ unitCost>0, ฝั่งขาย (DL family) auto-zero+lock unitPrice
   final String? vatType; // ใช้เฉพาะประเภทเอกสารที่สร้าง/อ้างอิงใบกำกับ AP/AR อัตโนมัติ — vat_code อ้างอิง cd_vat_rate
@@ -252,7 +268,9 @@ class ImTransactionDetail {
     this.countedQty = 0,
     this.qty,
     this.unitCost,
+    this.unitCostFc,
     this.billedUnitCost,
+    this.billedUnitCostFc,
     this.unitPrice,
     this.isFree = false,
     this.vatType,
@@ -288,7 +306,9 @@ class ImTransactionDetail {
       countedQty: toDouble(json['counted_qty']),
       qty: toDoubleN(json['qty']),
       unitCost: toDoubleN(json['unit_cost']),
+      unitCostFc: toDoubleN(json['unit_cost_fc']),
       billedUnitCost: toDoubleN(json['billed_unit_cost']),
+      billedUnitCostFc: toDoubleN(json['billed_unit_cost_fc']),
       unitPrice: toDoubleN(json['unit_price']),
       isFree: json['is_free'] ?? false,
       vatType: json['vat_type'],
@@ -315,7 +335,9 @@ class ImTransactionDetail {
         'system_qty': systemQty,
         'counted_qty': countedQty,
         if (unitCost != null) 'unit_cost': unitCost,
+        if (unitCostFc != null) 'unit_cost_fc': unitCostFc,
         if (billedUnitCost != null) 'billed_unit_cost': billedUnitCost,
+        if (billedUnitCostFc != null) 'billed_unit_cost_fc': billedUnitCostFc,
         if (unitPrice != null) 'unit_price': unitPrice,
         'is_free': isFree,
         if (vatType != null) 'vat_type': vatType,
