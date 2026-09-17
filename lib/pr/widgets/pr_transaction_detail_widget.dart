@@ -72,7 +72,11 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
   String _status = 'Draft';
   List<PrTransactionApproval> _approvals = [];
 
-  ModuleDocument? _docType; // sys_module='51' — PRQ อยู่ใต้โหนด PO เดียวกัน
+  // sys_module='51' มีมากกว่าหนึ่งประเภทเอกสารได้ (เช่น POR ของ PO, PRQ ของ PR) จึงต้องกรองซ้ำด้วย sys_doc_type
+  // '05' คือ PR (ตาม poSysDocType ใน sa_anan_module.dart) แล้วให้ผู้ใช้เลือกเองเหมือนหน้าจอธุรกรรม AR/AP
+  static const _prSysDocType = '05';
+  List<ModuleDocument> _allowedDocTypes = [];
+  ModuleDocument? _docType;
 
   List<_LineForm> _lines = [];
 
@@ -100,6 +104,8 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
 
   void _resetForm() {
     _id = null;
+    _docType = _allowedDocTypes.isNotEmpty ? _allowedDocTypes.first : null;
+    _docId = _docType?.id;
     _docNo = 'AUTO';
     _docDate = DateTime.now();
     _vendor = null;
@@ -114,10 +120,9 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
     final isEnglish = _isEnglish;
     setState(() => _isLoading = true);
     try {
-      if (_docType == null) {
+      if (_allowedDocTypes.isEmpty) {
         final docTypes = await _service.fetchDocTypesByUser();
-        _docType = docTypes.where((d) => d.isDocType).isNotEmpty ? docTypes.firstWhere((d) => d.isDocType) : null;
-        _docId = _docType?.id;
+        _allowedDocTypes = docTypes.where((d) => d.isDocType && d.sysDocType == _prSysDocType).toList();
       }
       if (widget.transactionId == null) {
         _resetForm();
@@ -125,6 +130,9 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
         final h = await _service.fetchRow(widget.transactionId!);
         _id = h.id;
         _docId = h.docId;
+        _docType = _allowedDocTypes.isNotEmpty
+            ? _allowedDocTypes.firstWhere((d) => d.id == h.docId, orElse: () => _allowedDocTypes.first)
+            : null;
         _docNo = h.docNo;
         _docDate = h.docDate;
         _vendor = h.vendorId != null ? ApVendor(id: h.vendorId, vendorCode: h.vendorCode ?? '', vendorNameTh: h.vendorNameTh ?? '') : null;
@@ -164,6 +172,7 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
 
   Future<void> _save() async {
     final isEnglish = _isEnglish;
+    if (_docType == null) { _warn(isEnglish ? 'Please select a document type' : 'กรุณาเลือกประเภทเอกสาร'); return; }
     if (_lines.isEmpty) { _warn(isEnglish ? 'At least 1 line is required' : 'ต้องมีรายการขอซื้ออย่างน้อย 1 รายการ'); return; }
     for (final l in _lines) {
       if (l.item == null || l.qtyRequested <= 0) { _warn(isEnglish ? 'Please complete every line' : 'กรุณากรอกรายการให้ครบถ้วน'); return; }
@@ -259,6 +268,8 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.orange));
   }
 
+  String _docTypeLabel(ModuleDocument d) => _isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai;
+
   Widget _fkField({required String label, required bool hasValue, required String displayText, VoidCallback? onSearch, VoidCallback? onClear}) {
     return InputDecorator(
       decoration: InputDecoration(
@@ -293,7 +304,24 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<ModuleDocument>(
+                    value: _docType,
+                    isExpanded: true,
+                    decoration: InputDecoration(labelText: isEnglish ? 'Document Type *' : 'ประเภทเอกสาร *', border: const OutlineInputBorder(), isDense: true),
+                    items: _allowedDocTypes.map((d) => DropdownMenuItem(
+                          value: d,
+                          child: Text('${d.docCode} ${_docTypeLabel(d)}', overflow: TextOverflow.ellipsis),
+                        )).toList(),
+                    // เลือกเปลี่ยนได้เฉพาะตอนยังไม่บันทึกครั้งแรก (_id == null) — endpoint update ไม่รองรับการเปลี่ยน
+                    // doc_id ของเอกสารที่มีอยู่แล้ว (เลขที่เอกสาร/ชุดเลขวิ่งผูกกับประเภทเอกสารตอนสร้างเท่านั้น)
+                    onChanged: (_isReadOnly || _id != null) ? null : (v) => setState(() { _docType = v; _docId = v?.id; }),
+                    validator: (v) => v == null ? (isEnglish ? 'Please select' : 'กรุณาเลือก') : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(child: Text('${isEnglish ? "PR No." : "เลขที่ใบขอซื้อ"}: $_docNo', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
