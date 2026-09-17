@@ -225,6 +225,10 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     }
   }
 
+  // ค่า NUMERIC จาก PostgreSQL ผ่าน pg driver มาเป็น String เสมอ (ไม่ใช่ num) — ต้อง parse ด้วย toString() เท่านั้น
+  // ห้ามใช้ `as num?` ตรงๆ (จะ throw runtime TypeError) มิเรอร์ toDouble() ที่ใช้ทั่วทั้ง *_transaction.dart models
+  double _prNum(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0;
+
   // เพิ่มรายการเข้า PO จากบรรทัดที่ยังแปลงได้ของใบขอซื้อ (PR) ที่อนุมัติแล้ว (multi-select ได้ ข้าม PR หลายใบใน
   // ครั้งเดียว) มิเรอร์ _pickPoLines ใน im_transaction_detail_widget.dart (เพิ่มรายการเข้า GRN จาก PO) ทุกประการ
   Future<void> _pickPrLines() async {
@@ -268,6 +272,14 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                         flex: 2,
                         child: Text(isEnglish ? 'Remaining: ${_fmtQty.format(remaining)}' : 'คงเหลือแปลงได้: ${_fmtQty.format(remaining)}', style: const TextStyle(fontSize: 12)),
                       ),
+                      // ราคาประมาณของ PR เป็นสกุลเงินของ PR เอง ซึ่งอาจไม่ตรงกับสกุลเงินที่เลือกไว้ในใบสั่งซื้อนี้ —
+                      // แสดงกำกับไว้เป็น hint เท่านั้น ผู้ใช้ต้องตรวจสอบ/แก้ราคาเองหลังเพิ่มรายการ ไม่ auto-convert ให้
+                      // (ต่างจาก PO→GRN ที่ exchange_rate ของ PO ต้นทางนำมาใช้แปลงได้ตรงๆ เพราะเป็นเอกสารเดียวกัน)
+                      Expanded(
+                        flex: 1,
+                        child: Text('@ ${_fmtQty.format(_prNum(l['estimated_unit_cost']))} ${l['currency_code'] ?? ''}'.trim(),
+                            style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      ),
                       SizedBox(
                         width: 100,
                         child: TextField(
@@ -302,7 +314,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         _lines.add(_LineForm(
           item: items[i],
           qtyOrdered: qty.toDouble(),
-          unitPriceFc: (l['estimated_unit_cost'] as num?)?.toDouble() ?? 0,
+          unitPriceFc: _prNum(l['estimated_unit_cost']),
           refPrDetailId: id,
         ));
       }

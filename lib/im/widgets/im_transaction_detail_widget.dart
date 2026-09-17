@@ -722,6 +722,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // '10'/'11'/'12' — เพิ่มรายการเข้า GRN จากบรรทัดที่ยังรับได้ของ PO ที่อนุมัติแล้วของผู้ขายนี้ (multi-select ได้
   // ข้าม PO หลายใบในครั้งเดียว) มิเรอร์ _pickReturnLines แต่ไม่ต้องเลือกเอกสารต้นฉบับก่อน เพราะดึงจากผู้ขายที่เลือก
   // ไว้แล้วตรงๆ (ต่างจากคืนสินค้าที่ต้องระบุ GRN/DLN ต้นฉบับเจาะจงก่อนเสมอ)
+  // ค่า NUMERIC จาก PostgreSQL ผ่าน pg driver มาเป็น String เสมอ (ไม่ใช่ num) — ต้อง parse ด้วย toString() เท่านั้น
+  // ห้ามใช้ `as num?` ตรงๆ (จะ throw runtime TypeError) มิเรอร์ toDouble() ที่ใช้ทั่วทั้ง *_transaction.dart models
+  double _poNum(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0;
+  String _poCurrencyCode(Map<String, dynamic> l) => (l['currency_code'] as String?) ?? 'THB';
+  double _poUnitCostLc(Map<String, dynamic> l) => _poNum(l['unit_price_fc']) * (_poNum(l['exchange_rate']) == 0 ? 1 : _poNum(l['exchange_rate']));
+
   Future<void> _pickPoLines() async {
     final isEnglish = _isEnglish;
     if (_vendorId == null) {
@@ -767,6 +773,18 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                         flex: 2,
                         child: Text(isEnglish ? 'Remaining: ${_fmtQty.format(remaining)}' : 'คงเหลือรับได้: ${_fmtQty.format(remaining)}', style: const TextStyle(fontSize: 12)),
                       ),
+                      // ราคา/หน่วยของ PO เป็นสกุลเงินต่างประเทศได้ (unit_price_fc) — ต้นทุน/หน่วยของ GRN เก็บเป็น
+                      // บาทเสมอ (im_transaction ไม่มีแนวคิดสกุลเงินต่างประเทศ) จึงต้องแปลงด้วย exchange_rate ของ PO
+                      // ก่อนเติมให้ผู้ใช้เห็น มิฉะนั้นจะเข้าใจผิดว่าต้นทุนต่ำกว่าความเป็นจริงหลายสิบเท่า
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          _poCurrencyCode(l) == 'THB'
+                              ? '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))}'
+                              : '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))} ${_poCurrencyCode(l)} (≈${_fmtQty.format(_poUnitCostLc(l))} THB)',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ),
                       SizedBox(
                         width: 100,
                         child: TextField(
@@ -804,7 +822,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           uomId: l['uom_id'] as int?, uomCode: l['uom_code'] as String?,
           isReceiveMode: true,
           issueQty: qty.toDouble(),
-          unitCost: (l['unit_price_fc'] as num?)?.toDouble(),
+          // แปลงเป็นบาทด้วยอัตราแลกเปลี่ยนของ PO ต้นทาง (unit_price_fc * exchange_rate) — im_transaction_detail.unit_cost
+          // เก็บเป็นบาทเสมอ ไม่ใช่ค่า FC ดิบจาก PO (ดู _poUnitCostLc ด้านบน)
+          unitCost: _poUnitCostLc(l),
           refPoDetailId: id,
           vatType: vatType, vatRate: vatType != null ? _rateForVatCode(vatType) : 0,
         );
