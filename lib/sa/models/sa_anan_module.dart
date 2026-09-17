@@ -86,6 +86,7 @@ const Map<String, String> soSysDocType = {
 };
 // '51': 'สั่งซื้อ'
 const Map<String, String> poSysDocType = {
+  '05': 'ขอซื้อ - Purchase Request', // purchase request (no GL)
   '10': 'สั่งซื้อ - Purchase Order', // purchase order (no GL)
 };
 // '81': 'เงินสดและเช็ค / Cash & Cheque Management (CM)'

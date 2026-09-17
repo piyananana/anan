@@ -17,6 +17,7 @@ import '../models/po_transaction.dart';
 import '../../im/services/im_item_service.dart';
 import '../services/po_transaction_service.dart';
 import '../../im/widgets/im_warehouse_list_widget.dart';
+import '../../pr/services/pr_transaction_service.dart';
 
 class PoTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -46,13 +47,15 @@ class _LineForm {
   double qtyOrdered;
   double unitPriceFc;
   double qtyReceived;
-  _LineForm({this.id, this.item, this.qtyOrdered = 0, this.unitPriceFc = 0, this.qtyReceived = 0});
+  int? refPrDetailId; // บรรทัดใบขอซื้อ (PR) ต้นทาง ถ้าเพิ่มมาจาก picker _pickPrLines()
+  _LineForm({this.id, this.item, this.qtyOrdered = 0, this.unitPriceFc = 0, this.qtyReceived = 0, this.refPrDetailId});
   double get totalValueLc => qtyOrdered * unitPriceFc;
 }
 
 class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
   final _service = PoTransactionService();
   final _itemService = ImItemService();
+  final _prService = PrTransactionService();
   final _fmtQty = NumberFormat('#,##0.####');
   final _fmtValue = NumberFormat('#,##0.00');
   final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -69,6 +72,8 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
   ImWarehouse? _warehouse;
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
+  int? _refPrId; // ใบขอซื้อ (PR) ต้นทาง ถ้าเพิ่มรายการมาจาก _pickPrLines()
+  String? _refPrDocNoLabel;
 
   ModuleDocument? _docType; // sys_module='51' มีดอกเดียว (PO) — ไม่ต้องมี picker เหมือน GRN
 
@@ -105,6 +110,8 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     _warehouse = null;
     _descCtrl.clear();
     _status = 'Draft';
+    _refPrId = null;
+    _refPrDocNoLabel = null;
     _lines = [];
   }
 
@@ -130,6 +137,8 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         _warehouse = ImWarehouse(id: h.warehouseId, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn);
         _descCtrl.text = h.description ?? '';
         _status = h.status;
+        _refPrId = h.refPrId;
+        _refPrDocNoLabel = h.refPrDocNo;
         // ดึง ImItem เต็มจาก itemId เสมอ ไม่ใช้ค่า snapshot (item_code/item_name) ที่บันทึกไว้ตอนสร้างเอกสารมาแสดง
         // ตรงๆ — มิเรอร์ im_transaction_detail_widget.dart:366 (โหลด GRN) ทุกประการ เพื่อให้ชื่อสินค้าที่แสดงตรงกับ
         // ข้อมูลสินค้าปัจจุบันเสมอ ไม่ขึ้นกับว่า snapshot ตอนสร้างถูกบันทึกไว้ครบหรือไม่
@@ -142,6 +151,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
               qtyOrdered: h.details[i].qtyOrdered,
               unitPriceFc: h.details[i].unitPriceFc,
               qtyReceived: h.details[i].qtyReceived,
+              refPrDetailId: h.details[i].refPrDetailId,
             ),
         ];
       }
@@ -181,6 +191,92 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     }
   }
 
+  // เพิ่มรายการเข้า PO จากบรรทัดที่ยังแปลงได้ของใบขอซื้อ (PR) ที่อนุมัติแล้ว (multi-select ได้ ข้าม PR หลายใบใน
+  // ครั้งเดียว) มิเรอร์ _pickPoLines ใน im_transaction_detail_widget.dart (เพิ่มรายการเข้า GRN จาก PO) ทุกประการ
+  Future<void> _pickPrLines() async {
+    final isEnglish = _isEnglish;
+    List<Map<String, dynamic>> lines;
+    try {
+      lines = await _prService.fetchConvertibleLines();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
+      return;
+    }
+    final alreadyPicked = _lines.map((l) => l.refPrDetailId).whereType<int>().toSet();
+    final selectable = lines.where((l) => !alreadyPicked.contains(l['detail_id'] as int)).toList();
+    if (selectable.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'No convertible PR lines left' : 'ไม่มีรายการที่แปลงได้เหลืออยู่')));
+      return;
+    }
+    final qtyCtrls = {for (final l in selectable) l['detail_id'] as int: TextEditingController(text: _fmtQty.format((l['qty_remaining'] as num).toDouble()))};
+    final selected = {for (final l in selectable) l['detail_id'] as int: false};
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) => AlertDialog(
+            title: Text(isEnglish ? 'Select Lines from Purchase Requisition' : 'เลือกรายการจากใบขอซื้อ'),
+            content: SizedBox(
+              width: 620,
+              height: 420,
+              child: ListView.builder(
+                itemCount: selectable.length,
+                itemBuilder: (_, i) {
+                  final l = selectable[i];
+                  final id = l['detail_id'] as int;
+                  final remaining = (l['qty_remaining'] as num).toDouble();
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(children: [
+                      Checkbox(value: selected[id], onChanged: (v) => setSt(() => selected[id] = v ?? false)),
+                      Expanded(flex: 2, child: Text('${l['doc_no']}', style: const TextStyle(fontSize: 12, color: Colors.grey))),
+                      Expanded(flex: 3, child: Text('${l['item_code'] ?? ''} ${l['item_name'] ?? ''}', overflow: TextOverflow.ellipsis)),
+                      Expanded(
+                        flex: 2,
+                        child: Text(isEnglish ? 'Remaining: ${_fmtQty.format(remaining)}' : 'คงเหลือแปลงได้: ${_fmtQty.format(remaining)}', style: const TextStyle(fontSize: 12)),
+                      ),
+                      SizedBox(
+                        width: 100,
+                        child: TextField(
+                          controller: qtyCtrls[id],
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: InputDecoration(isDense: true, border: const OutlineInputBorder(), labelText: isEnglish ? 'Qty' : 'จำนวน'),
+                        ),
+                      ),
+                    ]),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Add' : 'เพิ่ม')),
+            ],
+          )),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final pickedLines = selectable.where((l) => selected[l['detail_id']] == true && (double.tryParse(qtyCtrls[l['detail_id']]!.text) ?? 0) > 0).toList();
+    if (pickedLines.isEmpty) return;
+    final items = await Future.wait(pickedLines.map((l) => _itemService.fetchRow(l['item_id'] as int)));
+    if (!mounted) return;
+    setState(() {
+      for (var i = 0; i < pickedLines.length; i++) {
+        final l = pickedLines[i];
+        final id = l['detail_id'] as int;
+        final remaining = (l['qty_remaining'] as num).toDouble();
+        final qty = (double.tryParse(qtyCtrls[id]!.text) ?? 0).clamp(0, remaining);
+        _lines.add(_LineForm(
+          item: items[i],
+          qtyOrdered: qty.toDouble(),
+          unitPriceFc: (l['estimated_unit_cost'] as num?)?.toDouble() ?? 0,
+          refPrDetailId: id,
+        ));
+      }
+      _refPrId = pickedLines.first['header_id'] as int;
+      _refPrDocNoLabel = pickedLines.first['doc_no'] as String?;
+    });
+  }
+
   Future<void> _save() async {
     final isEnglish = _isEnglish;
     if (_vendor == null) { _warn(isEnglish ? 'Please select a vendor' : 'กรุณาระบุผู้ขาย'); return; }
@@ -195,11 +291,12 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         id: _id ?? 0, docId: _docId ?? 0, docNo: _docNo, docDate: _docDate,
         vendorId: _vendor!.id!, warehouseId: _warehouse!.id, dueDate: _dueDate,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        refPrId: _refPrId,
       );
       final details = _lines
           .map((l) => PoTransactionDetail(
                 id: l.id, lineNo: 0, itemId: l.item!.id!, itemCode: l.item!.itemCode, itemName: l.item!.itemNameTh,
-                qtyOrdered: l.qtyOrdered, unitPriceFc: l.unitPriceFc,
+                qtyOrdered: l.qtyOrdered, unitPriceFc: l.unitPriceFc, refPrDetailId: l.refPrDetailId,
               ))
           .toList();
       if (_id == null) {
@@ -350,9 +447,20 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Text(isEnglish ? 'Lines' : 'รายการสั่งซื้อ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                if (_refPrDocNoLabel != null) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.indigo.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                    child: Text(isEnglish ? 'From PR: $_refPrDocNoLabel' : 'อ้างอิงจากใบขอซื้อ: $_refPrDocNoLabel', style: TextStyle(fontSize: 11, color: Colors.indigo[700])),
+                  ),
+                ],
                 const Spacer(),
-                if (!_isReadOnly)
+                if (!_isReadOnly) ...[
+                  OutlinedButton.icon(onPressed: _pickPrLines, icon: const Icon(Icons.playlist_add_check, size: 16), label: Text(isEnglish ? 'From PR' : 'จากใบขอซื้อ')),
+                  const SizedBox(width: 8),
                   OutlinedButton.icon(onPressed: _addLine, icon: const Icon(Icons.add, size: 16), label: Text(isEnglish ? 'Add Line' : 'เพิ่มรายการ')),
+                ],
               ]),
               const Divider(),
               ..._lines.asMap().entries.map((entry) {

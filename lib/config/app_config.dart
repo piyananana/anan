@@ -12,4 +12,5 @@ class AppConfig {
   static const String apiAp = '${baseHost}/api/ap';
   static const String apiIm = '${baseHost}/api/im';
   static const String apiPo = '${baseHost}/api/po';
+  static const String apiPr = '${baseHost}/api/pr';
 }

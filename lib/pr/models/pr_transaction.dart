@@ -1,54 +1,84 @@
-// lib/po/models/po_transaction.dart — ใบสั่งซื้อ (Purchase Order, sys_module='51')
+// lib/pr/models/pr_transaction.dart — ใบขอซื้อ (Purchase Requisition, sys_module='51', อยู่ใต้โหนด PO)
 import '../../utils/date_utils.dart';
 
-const Map<String, String> poTransactionStatusLabelsTh = {
+const Map<String, String> prTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
+  'Submitted': 'รออนุมัติ',
   'Approved': 'อนุมัติแล้ว',
-  'PartiallyReceived': 'รับสินค้าบางส่วน',
-  'FullyReceived': 'รับสินค้าครบแล้ว',
+  'Rejected': 'ถูกปฏิเสธ',
+  'PartiallyConverted': 'แปลงเป็น PO บางส่วน',
+  'FullyConverted': 'แปลงเป็น PO ครบแล้ว',
   'Closed': 'ปิดแล้ว',
   'Void': 'ยกเลิก',
 };
 
-const Map<String, String> poTransactionStatusLabelsEn = {
+const Map<String, String> prTransactionStatusLabelsEn = {
   'Draft': 'Draft',
+  'Submitted': 'Submitted',
   'Approved': 'Approved',
-  'PartiallyReceived': 'Partially Received',
-  'FullyReceived': 'Fully Received',
+  'Rejected': 'Rejected',
+  'PartiallyConverted': 'Partially Converted',
+  'FullyConverted': 'Fully Converted',
   'Closed': 'Closed',
   'Void': 'Void',
 };
 
-String poTransactionStatusLabel(String s, bool isEnglish) =>
-    (isEnglish ? poTransactionStatusLabelsEn[s] : poTransactionStatusLabelsTh[s]) ?? s;
+String prTransactionStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? prTransactionStatusLabelsEn[s] : prTransactionStatusLabelsTh[s]) ?? s;
 
-class PoTransactionHeader {
+// มิเรอร์ ApPaymentRunApproval (lib/ap/models/ap_payment_run.dart) ทุกประการ
+class PrTransactionApproval {
+  final int id;
+  final int headerId;
+  final int approverUserId;
+  final String approverUserName;
+  final int sequenceNo;
+  final String status; // Pending / Approved / Rejected / Skipped
+  final String? remarks;
+
+  const PrTransactionApproval({
+    required this.id,
+    required this.headerId,
+    required this.approverUserId,
+    required this.approverUserName,
+    required this.sequenceNo,
+    required this.status,
+    this.remarks,
+  });
+
+  factory PrTransactionApproval.fromJson(Map<String, dynamic> json) => PrTransactionApproval(
+        id: json['id'] ?? 0,
+        headerId: json['header_id'] ?? 0,
+        approverUserId: json['approver_user_id'] ?? 0,
+        approverUserName: json['approver_user_name'] ?? '',
+        sequenceNo: json['sequence_no'] ?? 1,
+        status: json['status'] ?? 'Pending',
+        remarks: json['remarks'],
+      );
+}
+
+class PrTransactionHeader {
   final int id;
   final int docId;
   final String docNo;
   final DateTime docDate;
-  final int vendorId;
+  final int? requestedBy;
+  final String? requestedByName;
+  final int? vendorId;
   final String? vendorCode;
   final String? vendorNameTh;
-  final int warehouseId;
+  final int? warehouseId;
   final String? warehouseCode;
   final String? warehouseNameTh;
   final String? warehouseNameEn;
-  final int? currencyId;
-  final String? currencyCode;
-  final double exchangeRate;
-  final DateTime? dueDate;
   final String status;
+  final String approvalMode;
   final double totalQty;
   final double totalValueLc;
   final String? description;
   final int? branchId;
   final String? branchCode;
   final String? branchNameThai;
-  final DateTime? approvedAt;
-  final String? approvedBy;
-  final int? refPrId; // ใบขอซื้อ (PR) ต้นทาง — สะดวก/แสดงผลเท่านั้น
-  final String? refPrDocNo;
   // From join
   final String? docCode;
   final String? docNameThai;
@@ -58,35 +88,31 @@ class PoTransactionHeader {
   final DateTime? updatedAt;
   final String? createdBy;
   final String? updatedBy;
-  final List<PoTransactionDetail> details;
+  final List<PrTransactionDetail> details;
+  final List<PrTransactionApproval> approvals;
 
-  const PoTransactionHeader({
+  const PrTransactionHeader({
     this.id = 0,
     required this.docId,
     this.docNo = 'AUTO',
     required this.docDate,
-    required this.vendorId,
+    this.requestedBy,
+    this.requestedByName,
+    this.vendorId,
     this.vendorCode,
     this.vendorNameTh,
-    required this.warehouseId,
+    this.warehouseId,
     this.warehouseCode,
     this.warehouseNameTh,
     this.warehouseNameEn,
-    this.currencyId,
-    this.currencyCode,
-    this.exchangeRate = 1,
-    this.dueDate,
     this.status = 'Draft',
+    this.approvalMode = 'ALL',
     this.totalQty = 0,
     this.totalValueLc = 0,
     this.description,
     this.branchId,
     this.branchCode,
     this.branchNameThai,
-    this.approvedAt,
-    this.approvedBy,
-    this.refPrId,
-    this.refPrDocNo,
     this.docCode,
     this.docNameThai,
     this.docNameEng,
@@ -96,37 +122,33 @@ class PoTransactionHeader {
     this.createdBy,
     this.updatedBy,
     this.details = const [],
+    this.approvals = const [],
   });
 
-  factory PoTransactionHeader.fromJson(Map<String, dynamic> json) {
+  factory PrTransactionHeader.fromJson(Map<String, dynamic> json) {
     double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
-    return PoTransactionHeader(
+    return PrTransactionHeader(
       id: json['id'] ?? 0,
       docId: json['doc_id'] ?? 0,
       docNo: json['doc_no'] ?? 'AUTO',
       docDate: parseLocalDate(json['doc_date']),
-      vendorId: json['vendor_id'] ?? 0,
+      requestedBy: json['requested_by'],
+      requestedByName: json['requested_by_name'],
+      vendorId: json['vendor_id'],
       vendorCode: json['vendor_code'] ?? json['v_vendor_code'],
       vendorNameTh: json['vendor_name_th'] ?? json['v_vendor_name_th'],
-      warehouseId: json['warehouse_id'] ?? 0,
+      warehouseId: json['warehouse_id'],
       warehouseCode: json['warehouse_code'],
       warehouseNameTh: json['warehouse_name_th'],
       warehouseNameEn: json['warehouse_name_en'],
-      currencyId: json['currency_id'],
-      currencyCode: json['currency_code'],
-      exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
-      dueDate: json['due_date'] != null ? parseLocalDate(json['due_date']) : null,
       status: json['status'] ?? 'Draft',
+      approvalMode: json['approval_mode'] ?? 'ALL',
       totalQty: toDouble(json['total_qty']),
       totalValueLc: toDouble(json['total_value_lc']),
       description: json['description'],
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
-      approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString()) : null,
-      approvedBy: json['approved_by'],
-      refPrId: json['ref_pr_id'],
-      refPrDocNo: json['ref_pr_doc_no'],
       docCode: json['doc_code'] ?? json['d_doc_code'],
       docNameThai: json['doc_name_thai'],
       docNameEng: json['doc_name_eng'],
@@ -135,7 +157,8 @@ class PoTransactionHeader {
       updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString()) : null,
       createdBy: json['created_by'],
       updatedBy: json['updated_by'],
-      details: (json['details'] as List<dynamic>? ?? []).map((e) => PoTransactionDetail.fromJson(e as Map<String, dynamic>)).toList(),
+      details: (json['details'] as List<dynamic>? ?? []).map((e) => PrTransactionDetail.fromJson(e as Map<String, dynamic>)).toList(),
+      approvals: (json['approvals'] as List<dynamic>? ?? []).map((e) => PrTransactionApproval.fromJson(e as Map<String, dynamic>)).toList(),
     );
   }
 
@@ -143,21 +166,16 @@ class PoTransactionHeader {
         'doc_id': docId,
         'doc_no': docNo,
         'doc_date': formatLocalDate(docDate),
-        'vendor_id': vendorId,
-        'warehouse_id': warehouseId,
-        if (currencyId != null) 'currency_id': currencyId,
-        if (currencyCode != null) 'currency_code': currencyCode,
-        'exchange_rate': exchangeRate,
-        if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
+        if (vendorId != null) 'vendor_id': vendorId,
+        if (warehouseId != null) 'warehouse_id': warehouseId,
         if (description != null) 'description': description,
-        if (refPrId != null) 'ref_pr_id': refPrId,
         if (branchId != null) 'branch_id': branchId,
         if (createdBy != null) 'created_by': createdBy,
         if (updatedBy != null) 'updated_by': updatedBy,
       };
 }
 
-class PoTransactionDetail {
+class PrTransactionDetail {
   final int? id;
   final int? headerId;
   final int lineNo;
@@ -166,16 +184,16 @@ class PoTransactionDetail {
   final String? itemName;
   final int? uomId;
   final String? uomCode;
-  final double qtyOrdered;
-  final double unitPriceFc;
+  final double qtyRequested;
+  final DateTime? neededByDate;
+  final double estimatedUnitCost;
   final double totalValueLc;
-  final double qtyReceived; // computed server-side — จำนวนที่รับแล้วผ่าน GRN ที่ Posted/Received (ref_po_detail_id)
-  final int? refPrDetailId; // บรรทัดใบขอซื้อ (PR) ต้นทาง ถ้าบรรทัดนี้แปลงมาจาก PR
+  final double qtyConverted; // computed server-side — จำนวนที่แปลงเป็น PO แล้ว (ref_pr_detail_id, PO ไม่ Void)
   final String? description;
 
-  double get qtyRemaining => qtyOrdered - qtyReceived;
+  double get qtyRemaining => qtyRequested - qtyConverted;
 
-  const PoTransactionDetail({
+  const PrTransactionDetail({
     this.id,
     this.headerId,
     required this.lineNo,
@@ -184,17 +202,17 @@ class PoTransactionDetail {
     this.itemName,
     this.uomId,
     this.uomCode,
-    this.qtyOrdered = 0,
-    this.unitPriceFc = 0,
+    this.qtyRequested = 0,
+    this.neededByDate,
+    this.estimatedUnitCost = 0,
     this.totalValueLc = 0,
-    this.qtyReceived = 0,
-    this.refPrDetailId,
+    this.qtyConverted = 0,
     this.description,
   });
 
-  factory PoTransactionDetail.fromJson(Map<String, dynamic> json) {
+  factory PrTransactionDetail.fromJson(Map<String, dynamic> json) {
     double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
-    return PoTransactionDetail(
+    return PrTransactionDetail(
       id: json['id'],
       headerId: json['header_id'],
       lineNo: json['line_no'] ?? 0,
@@ -203,11 +221,11 @@ class PoTransactionDetail {
       itemName: json['item_name'],
       uomId: json['uom_id'],
       uomCode: json['uom_code'],
-      qtyOrdered: toDouble(json['qty_ordered']),
-      unitPriceFc: toDouble(json['unit_price_fc']),
+      qtyRequested: toDouble(json['qty_requested']),
+      neededByDate: json['needed_by_date'] != null ? parseLocalDate(json['needed_by_date']) : null,
+      estimatedUnitCost: toDouble(json['estimated_unit_cost']),
       totalValueLc: toDouble(json['total_value_lc']),
-      qtyReceived: toDouble(json['qty_received']),
-      refPrDetailId: json['ref_pr_detail_id'],
+      qtyConverted: toDouble(json['qty_converted']),
       description: json['description'],
     );
   }
@@ -219,9 +237,9 @@ class PoTransactionDetail {
         if (itemCode != null) 'item_code': itemCode,
         if (itemName != null) 'item_name': itemName,
         if (uomId != null) 'uom_id': uomId,
-        'qty_ordered': qtyOrdered,
-        'unit_price_fc': unitPriceFc,
-        if (refPrDetailId != null) 'ref_pr_detail_id': refPrDetailId,
+        'qty_requested': qtyRequested,
+        if (neededByDate != null) 'needed_by_date': formatLocalDate(neededByDate!),
+        'estimated_unit_cost': estimatedUnitCost,
         if (description != null) 'description': description,
       };
 }
