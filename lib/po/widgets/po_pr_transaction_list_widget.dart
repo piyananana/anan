@@ -1,10 +1,10 @@
-// lib/pr/widgets/pr_transaction_list_widget.dart — มิเรอร์ po_transaction_list_widget.dart (ไม่มี vendor filter
-// เป็นหลัก เพราะ PR ไม่บังคับผู้ขาย — ใช้ค้นหาด้วยเลขที่/คำอธิบายแทน)
+// lib/po/widgets/po_pr_transaction_list_widget.dart — มิเรอร์ po_transaction_list_widget.dart (ไม่มี vendor filter
+// เป็นหลัก เพราะ PR ไม่บังคับผู้ขาย — ใช้ค้นหาด้วยเลขที่/คำอธิบายแทน) ย้ายมารวมกับโฟลเดอร์ po (เดิมอยู่ lib/pr/)
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../models/pr_transaction.dart';
-import '../services/pr_transaction_service.dart';
+import '../models/po_pr_transaction.dart';
+import '../services/po_pr_transaction_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../utils/date_utils.dart';
 

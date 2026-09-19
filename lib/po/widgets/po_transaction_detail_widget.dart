@@ -17,7 +17,7 @@ import '../models/po_transaction.dart';
 import '../../im/services/im_item_service.dart';
 import '../services/po_transaction_service.dart';
 import '../../im/widgets/im_warehouse_list_widget.dart';
-import '../../pr/services/pr_transaction_service.dart';
+import '../services/po_pr_transaction_service.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
 

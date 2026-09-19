@@ -1,7 +1,8 @@
-// lib/pr/widgets/pr_transaction_detail_widget.dart — แก้ไขรายละเอียดใบขอซื้อ (header+lines) + แผงอนุมัติ
+// lib/po/widgets/po_pr_transaction_detail_widget.dart — แก้ไขรายละเอียดใบขอซื้อ (header+lines) + แผงอนุมัติ
 // มิเรอร์โครงสร้าง po_transaction_detail_widget.dart แต่ vendor/warehouse ไม่บังคับ (PR คือ "ขอซื้ออะไร" ไม่ใช่
 // "ซื้อจากใคร/ลงคลังไหน") และเพิ่มขั้นตอน Submit->Approve/Reject ผ่านคิวอนุมัติจริง (sa_module_approver) มิเรอร์
-// _ApprovalPanel ของ ap_payment_run_screen.dart — ดู prTransactionController.js สำหรับ workflow เต็ม
+// _ApprovalPanel ของ ap_payment_run_screen.dart — ดู poPrTransactionController.js สำหรับ workflow เต็ม (ย้ายมา
+// รวมกับโฟลเดอร์ po เดิมอยู่ lib/pr/)
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -14,9 +15,9 @@ import '../../ap/models/ap_vendor.dart';
 import '../../ap/widgets/ap_vendor_list_widget.dart';
 import '../../im/models/im_item.dart';
 import '../../im/models/im_warehouse.dart';
-import '../models/pr_transaction.dart';
+import '../models/po_pr_transaction.dart';
 import '../../im/services/im_item_service.dart';
-import '../services/pr_transaction_service.dart';
+import '../services/po_pr_transaction_service.dart';
 import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';

@@ -29,8 +29,8 @@ import '../models/po_replenishment.dart';
 import '../services/po_replenishment_service.dart';
 import '../models/po_transaction.dart';
 import '../services/po_transaction_service.dart';
-import '../../pr/models/pr_transaction.dart';
-import '../../pr/services/pr_transaction_service.dart';
+import '../models/po_pr_transaction.dart';
+import '../services/po_pr_transaction_service.dart';
 import '../../utils/date_utils.dart';
 
 class PoReplenishmentReportScreen extends StatefulWidget {

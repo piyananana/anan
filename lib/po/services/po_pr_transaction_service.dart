@@ -1,13 +1,15 @@
-// lib/pr/services/pr_transaction_service.dart
+// lib/po/services/po_pr_transaction_service.dart — ย้ายมารวมกับโฟลเดอร์ po (เดิมอยู่ lib/pr/) เพราะ PR เป็นส่วน
+// หนึ่งของ workflow จัดซื้อเดียวกับ PO — endpoint ย้ายไปอยู่ใต้ /api/po ด้วย (ดู routes/po.js) จึงใช้ AppConfig.apiPo
+// แทน AppConfig.apiPr เดิม (ลบทิ้งแล้ว) — ชื่อ class/method ทั้งหมดยังคงเดิมทุกประการ
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/models/sa_module_document.dart';
-import '../models/pr_transaction.dart';
+import '../models/po_pr_transaction.dart';
 
 class PrTransactionService {
-  final String baseUrl = AppConfig.apiPr;
+  final String baseUrl = AppConfig.apiPo;
   final AuthService authService = AuthService();
 
   // sys_module='51' (สั่งซื้อ - Purchase Order/Requisition, ดู sysModules ใน sa_anan_module.dart) — ใช้ sys_module

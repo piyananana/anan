@@ -1,10 +1,12 @@
-// lib/pr/screens/pr_transaction_screen.dart — มิเรอร์ po_transaction_screen.dart (List/Detail tab shell)
+// lib/po/screens/po_pr_transaction_screen.dart — มิเรอร์ po_transaction_screen.dart (List/Detail tab shell)
+// ย้ายมารวมกับโฟลเดอร์ po (เดิมอยู่ lib/pr/) เพราะ PR เป็นส่วนหนึ่งของ workflow จัดซื้อเดียวกับ PO — ชื่อ class
+// (PrTransactionScreen) คงเดิม ตรงกับ target_path ที่ตั้งไว้ใน sa_menu แล้ว ไม่ต้องแก้ข้อมูลเมนูในฐานข้อมูล
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../widgets/pr_transaction_list_widget.dart';
-import '../widgets/pr_transaction_detail_widget.dart';
+import '../widgets/po_pr_transaction_list_widget.dart';
+import '../widgets/po_pr_transaction_detail_widget.dart';
 
 class PrTransactionScreen extends StatefulWidget {
   const PrTransactionScreen({super.key});

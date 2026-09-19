@@ -11,6 +11,7 @@ class AppConfig {
   static const String apiVt = '${baseHost}/api/vt';
   static const String apiAp = '${baseHost}/api/ap';
   static const String apiIm = '${baseHost}/api/im';
+  // PR (ใบขอซื้อ) รวมอยู่ใต้ /api/po เดียวกันแล้ว (routes/po.js) เพราะ PR เป็นส่วนหนึ่งของ workflow จัดซื้อของ PO —
+  // ไม่มี apiPr แยกต่างหากอีกต่อไป
   static const String apiPo = '${baseHost}/api/po';
-  static const String apiPr = '${baseHost}/api/pr';
 }

@@ -1,4 +1,6 @@
-// lib/pr/models/pr_transaction.dart — ใบขอซื้อ (Purchase Requisition, sys_module='51', อยู่ใต้โหนด PO)
+// lib/po/models/po_pr_transaction.dart — ใบขอซื้อ (Purchase Requisition, sys_module='51', อยู่ใต้โหนด PO)
+// ย้ายมารวมกับโฟลเดอร์ po (เดิมอยู่ lib/pr/) เพราะ PR เป็นส่วนหนึ่งของ workflow จัดซื้อเดียวกับ PO — ชื่อ
+// class/field ทั้งหมดยังคงเดิมทุกประการ ย้ายแค่ตำแหน่งไฟล์
 import '../../utils/date_utils.dart';
 
 const Map<String, String> prTransactionStatusLabelsTh = {
