@@ -6,6 +6,10 @@ class ReplenishmentSuggestion {
   final String? itemNameEn;
   final int? uomId;
   final String? uomCode;
+  final int warehouseId;
+  final String warehouseCode;
+  final String warehouseNameTh;
+  final String? warehouseNameEn;
   final double onHand;
   final double incoming;
   final double avgDailySales;
@@ -26,6 +30,10 @@ class ReplenishmentSuggestion {
     this.itemNameEn,
     this.uomId,
     this.uomCode,
+    required this.warehouseId,
+    required this.warehouseCode,
+    required this.warehouseNameTh,
+    this.warehouseNameEn,
     required this.onHand,
     required this.incoming,
     required this.avgDailySales,
@@ -50,6 +58,10 @@ class ReplenishmentSuggestion {
       itemNameEn: json['item_name_en'],
       uomId: json['uom_id'],
       uomCode: json['uom_code'],
+      warehouseId: json['warehouse_id'] ?? 0,
+      warehouseCode: json['warehouse_code'] ?? '',
+      warehouseNameTh: json['warehouse_name_th'] ?? '',
+      warehouseNameEn: json['warehouse_name_en'],
       onHand: toDouble(json['on_hand']),
       incoming: toDouble(json['incoming']),
       avgDailySales: toDouble(json['avg_daily_sales']),

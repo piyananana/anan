@@ -10,19 +10,19 @@ class PoReplenishmentService {
   final AuthService authService = AuthService();
 
   Future<List<ReplenishmentSuggestion>> fetchSuggestions({
-    required int warehouseId,
+    required List<int> warehouseIds,
     required String asOf,
     required int lookbackDays,
     required int coverageDays,
-    int? categoryId,
+    List<int>? categoryIds,
   }) async {
     final headers = await authService.getAuthHeader();
     final params = <String, String>{
-      'warehouse_id': warehouseId.toString(),
+      'warehouse_ids': warehouseIds.join(','),
       'as_of': asOf,
       'lookback_days': lookbackDays.toString(),
       'coverage_days': coverageDays.toString(),
-      if (categoryId != null) 'category_id': categoryId.toString(),
+      if (categoryIds != null && categoryIds.isNotEmpty) 'category_ids': categoryIds.join(','),
     };
     final uri = Uri.parse('$baseUrl/po_replenishment/suggestions').replace(queryParameters: params);
     final response = await http.get(uri, headers: headers);
