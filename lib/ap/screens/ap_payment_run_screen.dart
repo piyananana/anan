@@ -86,7 +86,9 @@ class _LineRow {
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 class ApPaymentRunScreen extends StatefulWidget {
-  const ApPaymentRunScreen({super.key});
+  // เปิดตรงไปที่ payment run นี้ทันที (เช่น จากกระดิ่งแจ้งเตือนรายการรออนุมัติ) แทนที่จะเปิดหน้าว่างให้เลือกเองก่อน
+  final int? initialRunId;
+  const ApPaymentRunScreen({super.key, this.initialRunId});
 
   @override
   State<ApPaymentRunScreen> createState() => _ApPaymentRunScreenState();
@@ -114,6 +116,7 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
   void initState() {
     super.initState();
     _loadList();
+    if (widget.initialRunId != null) _openInitialRun(widget.initialRunId!);
   }
 
   Future<void> _loadList() async {
@@ -125,6 +128,13 @@ class _ApPaymentRunScreenState extends State<ApPaymentRunScreen>
     } catch (_) {
       if (mounted) setState(() => _listLoading = false);
     }
+  }
+
+  Future<void> _openInitialRun(int id) async {
+    try {
+      final full = await _svc.fetchRow(id);
+      if (mounted) setState(() { _isAdding = false; _selected = full; });
+    } catch (_) {}
   }
 
   void _onAdd() => setState(() { _selected = null; _isAdding = true; });

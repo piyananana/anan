@@ -18,8 +18,11 @@ import 'sa_login_screen.dart';
 import 'sa_menu_screen.dart';
 import 'sa_user_screen.dart';
 import 'sa_user_menu_screen.dart';
-import '../../ap/models/ap_payment_run.dart';
-import '../../ap/services/ap_payment_run_service.dart';
+import '../models/sa_pending_approval.dart';
+import '../services/sa_pending_approval_service.dart';
+import '../../ap/screens/ap_payment_run_screen.dart';
+import '../../ap/screens/ap_transaction_screen.dart';
+import '../../po/screens/po_pr_transaction_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final PasswordStatus? passwordStatus; // รับสถานะรหัสผ่านจาก LoginScreen
@@ -49,9 +52,9 @@ class HomeScreenState extends State<HomeScreen> {
   bool _isDraggingDivider = false;
   bool _menuWidthInitialized = false;
 
-  final _paymentRunSvc = ApPaymentRunService();
-  List<ApPaymentRun> _pendingRuns = [];
-  int get _pendingCount => _pendingRuns.length;
+  final _pendingApprovalSvc = PendingApprovalService();
+  List<PendingApprovalItem> _pendingItems = [];
+  int get _pendingCount => _pendingItems.length;
 
   // เพิ่ม TextEditingController สำหรับ Search Bar
   final TextEditingController _searchController = TextEditingController();
@@ -104,6 +107,58 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Menu? _findMenuByTargetPath(List<Menu> menus, String targetPath) {
+    for (final m in menus) {
+      if (m.targetPath == targetPath) return m;
+      final found = _findMenuByTargetPath(m.children, targetPath);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
+  // เปิดหน้าจอที่จะทำอนุมัติของรายการรออนุมัติหนึ่งรายการ ตรงไปที่แท็บรายละเอียด/บันทึกนั้นเลย โดยไม่ต้องเลือกเมนู
+  // เองจาก panel ซ้าย — บังคับสร้าง widget ใหม่ (ไม่ใช้ menu.builder เดิมที่ cache ไว้แบบไม่มีพารามิเตอร์) เพื่อส่ง
+  // id ของรายการที่ต้องเปิดตรงเข้าไปได้
+  void _openPendingApprovalTarget(PendingApprovalItem item) {
+    final menu = _findMenuByTargetPath(_allMenus, item.targetPath);
+    if (menu == null) {
+      final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(isEnglish ? 'You do not have access to this menu' : 'ไม่มีสิทธิ์เข้าถึงเมนูนี้'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+    final id = menu.id ?? 0;
+    Widget target;
+    switch (item.targetPath) {
+      case 'PrTransactionScreen':
+        target = PrTransactionScreen(initialDetailId: item.id);
+        break;
+      case 'ApTransactionScreen':
+        target = ApTransactionScreen(initialDetailId: item.id);
+        break;
+      case 'ApPaymentRunScreen':
+        target = ApPaymentRunScreen(initialRunId: item.id);
+        break;
+      default:
+        target = menu.builder(context);
+    }
+    setState(() {
+      _cachedTabWidgets[id] = KeyedSubtree(
+        key: ValueKey('${id}_pending_${item.module}_${item.id}'),
+        child: MenuScope(menu: menu, child: target),
+      );
+      final existingIndex = _openTabs.indexWhere((tab) => tab.id == id);
+      if (existingIndex != -1) {
+        _currentIndex = existingIndex;
+      } else {
+        _openTabs.add(menu);
+        _currentIndex = _openTabs.length - 1;
+      }
+    });
+  }
+
   void _closeTab(int index) {
     if (index < 0 || index >= _openTabs.length) return;
     setState(() {
@@ -146,18 +201,22 @@ class HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadPendingApprovals() async {
     try {
-      final runs = await _paymentRunSvc.fetchMyPending();
-      if (mounted) setState(() => _pendingRuns = runs);
+      final items = await _pendingApprovalSvc.fetchAll();
+      if (mounted) setState(() => _pendingItems = items);
     } catch (_) {}
   }
 
-  void _showPendingApprovalsDialog() {
+  Future<void> _showPendingApprovalsDialog() async {
+    await _loadPendingApprovals(); // เอาข้อมูลล่าสุดทุกครั้งที่กดกระดิ่ง เผื่อมีรายการใหม่/ถูกอนุมัติไปแล้วจากที่อื่น
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (ctx) => _PendingApprovalsDialog(
-        runs: _pendingRuns,
-        svc: _paymentRunSvc,
-        onActioned: _loadPendingApprovals,
+        items: _pendingItems,
+        onCardTap: (item) {
+          Navigator.of(ctx).pop();
+          _openPendingApprovalTarget(item);
+        },
       ),
     );
   }
@@ -1078,102 +1137,32 @@ class _TabArrowButton extends StatelessWidget {
 }
 
 // ── Pending Approvals Dialog ──────────────────────────────────────────────────
-class _PendingApprovalsDialog extends StatefulWidget {
-  final List<ApPaymentRun> runs;
-  final ApPaymentRunService svc;
-  final VoidCallback onActioned;
+// รายการรออนุมัติแบบ card รวมทุกโมดูล — คลิก card แล้วปิด dialog ไปเปิดหน้าจอที่ทำอนุมัติจริงในแท็บทันที (ผ่าน
+// onCardTap) ไม่มีปุ่มอนุมัติ/ปฏิเสธในนี้อีกต่อไป (ย้ายไปทำที่หน้าจอปลายทางแทน ซึ่งมีปุ่มนี้อยู่แล้วทุกโมดูล)
+class _PendingApprovalsDialog extends StatelessWidget {
+  final List<PendingApprovalItem> items;
+  final ValueChanged<PendingApprovalItem> onCardTap;
 
-  const _PendingApprovalsDialog({
-    required this.runs,
-    required this.svc,
-    required this.onActioned,
-  });
+  const _PendingApprovalsDialog({required this.items, required this.onCardTap});
 
-  @override
-  State<_PendingApprovalsDialog> createState() =>
-      _PendingApprovalsDialogState();
-}
-
-class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
-  late List<ApPaymentRun> _runs;
-  bool _busy = false;
-  String? _err;
-
-  @override
-  void initState() {
-    super.initState();
-    _runs = List.of(widget.runs);
-  }
-
-  Future<void> _act(ApPaymentRun run, bool approve) async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    final remarksCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(approve
-            ? (isEnglish ? 'Approve Payment Run' : 'อนุมัติ Payment Run')
-            : (isEnglish ? 'Reject Payment Run'  : 'ปฏิเสธ Payment Run')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${isEnglish ? 'No.' : 'เลขที่'}: ${run.runNumber ?? '-'}'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: remarksCtrl,
-              decoration: InputDecoration(
-                labelText: isEnglish ? 'Remarks' : 'หมายเหตุ',
-                border: const OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: approve
-                ? null
-                : ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(approve
-                ? (isEnglish ? 'Approve' : 'อนุมัติ')
-                : (isEnglish ? 'Reject'  : 'ปฏิเสธ')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    setState(() { _busy = true; _err = null; });
-    try {
-      final remarks = remarksCtrl.text.trim();
-      if (approve) {
-        await widget.svc.approveRun(run.id!, remarks: remarks.isEmpty ? null : remarks);
-      } else {
-        await widget.svc.rejectRun(run.id!, remarks: remarks.isEmpty ? null : remarks);
-      }
-      setState(() => _runs.removeWhere((r) => r.id == run.id));
-      widget.onActioned();
-    } catch (e) {
-      setState(() => _err = e.toString());
-    } finally {
-      setState(() => _busy = false);
+  IconData _moduleIcon(String module) {
+    switch (module) {
+      case 'ap_payment_run': return Icons.payments_outlined;
+      case 'ap_transaction': return Icons.receipt_long_outlined;
+      case 'pr_transaction': return Icons.assignment_outlined;
+      default: return Icons.notifications_outlined;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    final fmt = (DateTime d) =>
-        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-    final numFmt = (double v) =>
-        v.toStringAsFixed(2).replaceAllMapped(
-            RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+    final fmt = (DateTime? d) => d == null
+        ? ''
+        : '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    final numFmt = (double v) => v
+        .toStringAsFixed(2)
+        .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
 
     return AlertDialog(
       title: Row(children: [
@@ -1181,12 +1170,12 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
         const SizedBox(width: 8),
         Text(isEnglish ? 'Pending Approvals' : 'รายการรออนุมัติ'),
         const Spacer(),
-        Text('(${_runs.length})', style: const TextStyle(color: Colors.grey)),
+        Text('(${items.length})', style: const TextStyle(color: Colors.grey)),
       ]),
       contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       content: SizedBox(
-        width: 600,
-        child: _runs.isEmpty
+        width: 520,
+        child: items.isEmpty
             ? Padding(
                 padding: const EdgeInsets.symmetric(vertical: 32),
                 child: Center(
@@ -1195,150 +1184,64 @@ class _PendingApprovalsDialogState extends State<_PendingApprovalsDialog> {
                       style: const TextStyle(color: Colors.grey)),
                 ),
               )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_err != null)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.red[50],
-                        border: Border.all(color: Colors.red),
-                        borderRadius: BorderRadius.circular(4),
+            : ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final item = items[i];
+                    return Card(
+                      margin: EdgeInsets.zero,
+                      elevation: 1,
+                      color: Colors.orange[50],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: Colors.orange.shade200),
                       ),
-                      child: Text(_err!,
-                          style: const TextStyle(color: Colors.red)),
-                    ),
-                  // Header row
-                  Container(
-                    color: Colors.blueGrey[100],
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 6),
-                    child: Row(children: [
-                      SizedBox(
-                          width: 140,
-                          child: Text(isEnglish ? 'Run No.' : 'เลขที่',
-                              style: const TextStyle(fontWeight: FontWeight.bold))),
-                      SizedBox(
-                          width: 100,
-                          child: Text(isEnglish ? 'Date' : 'วันที่',
-                              style: const TextStyle(fontWeight: FontWeight.bold))),
-                      Expanded(
-                          child: Text(isEnglish ? 'Description' : 'รายละเอียด',
-                              style: const TextStyle(fontWeight: FontWeight.bold))),
-                      SizedBox(
-                          width: 110,
-                          child: Text(isEnglish ? 'Amount' : 'จำนวนเงิน',
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(fontWeight: FontWeight.bold))),
-                      const SizedBox(width: 180),
-                    ]),
-                  ),
-                  const Divider(height: 1),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 360),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: _runs.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final run = _runs[i];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => onCardTap(item),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
                           child: Row(children: [
-                            SizedBox(
-                              width: 140,
-                              child: Text(run.runNumber ?? '-',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w500)),
+                            CircleAvatar(
+                              backgroundColor: Colors.orange[100],
+                              child: Icon(_moduleIcon(item.module), color: Colors.orange[800], size: 20),
                             ),
-                            SizedBox(
-                              width: 100,
-                              child: Text(fmt(run.runDate)),
-                            ),
+                            const SizedBox(width: 12),
                             Expanded(
-                              child: Text(
-                                run.description ?? '',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item.title(isEnglish),
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    isEnglish
+                                        ? 'From: ${item.submittedBy ?? '-'}'
+                                        : 'จาก: ${item.submittedBy ?? '-'}',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    [
+                                      if (item.date != null) fmt(item.date),
+                                      if (item.amount != 0) numFmt(item.amount),
+                                    ].join('   •   '),
+                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                  ),
+                                ],
                               ),
                             ),
-                            SizedBox(
-                              width: 110,
-                              child: Text(
-                                numFmt(run.totalAmountLc),
-                                textAlign: TextAlign.right,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 172,
-                              child: _busy
-                                  ? const Center(
-                                      child: SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child:
-                                              CircularProgressIndicator(
-                                                  strokeWidth: 2)))
-                                  : Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        ElevatedButton.icon(
-                                          onPressed: () =>
-                                              _act(run, true),
-                                          icon: const Icon(
-                                              Icons.check_circle_outline,
-                                              size: 14),
-                                          label: Text(isEnglish ? 'Approve' : 'อนุมัติ'),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                Colors.green[700],
-                                            foregroundColor: Colors.white,
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 4),
-                                            minimumSize: Size.zero,
-                                            tapTargetSize:
-                                                MaterialTapTargetSize
-                                                    .shrinkWrap,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        ElevatedButton.icon(
-                                          onPressed: () =>
-                                              _act(run, false),
-                                          icon: const Icon(
-                                              Icons.cancel_outlined,
-                                              size: 14),
-                                          label: Text(isEnglish ? 'Reject' : 'ปฏิเสธ'),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red[700],
-                                            foregroundColor: Colors.white,
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 4),
-                                            minimumSize: Size.zero,
-                                            tapTargetSize:
-                                                MaterialTapTargetSize
-                                                    .shrinkWrap,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                            ),
+                            Icon(Icons.chevron_right, color: Colors.grey[500]),
                           ]),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
       ),
       actions: [

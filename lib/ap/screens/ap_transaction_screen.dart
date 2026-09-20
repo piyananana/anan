@@ -6,7 +6,10 @@ import '../widgets/ap_transaction_list_widget.dart';
 import '../widgets/ap_transaction_detail_widget.dart';
 
 class ApTransactionScreen extends StatefulWidget {
-  const ApTransactionScreen({super.key});
+  // เปิดตรงไปที่แท็บรายละเอียดของ id นี้ทันที (เช่น จากกระดิ่งแจ้งเตือนรายการรออนุมัติ) แทนที่จะเปิดแท็บค้นหา/รายการ
+  // ก่อนตามปกติ
+  final int? initialDetailId;
+  const ApTransactionScreen({super.key, this.initialDetailId});
 
   @override
   State<ApTransactionScreen> createState() => _ApTransactionScreenState();
@@ -27,6 +30,11 @@ class _ApTransactionScreenState extends State<ApTransactionScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
+    if (widget.initialDetailId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openDetailTab(id: widget.initialDetailId);
+      });
+    }
   }
 
   void _onTabChanged() {
