@@ -63,6 +63,8 @@ class _PoReplenishmentReportScreenState extends State<PoReplenishmentReportScree
   List<ImItemCategory> _categories = [];
 
   List<ReplenishmentSuggestion> _rows = [];
+  bool _hasGenerated = false; // แยกสถานะ "ยังไม่เคยกดประมวลผล" ออกจาก "กดแล้วแต่ไม่มีรายการที่ต้องสั่งซื้อ" — เดิม
+  // ใช้ _rows.isEmpty เงื่อนไขเดียวทำให้สองสถานะนี้แสดงข้อความเดียวกัน ผู้ใช้กดประมวลผลแล้วดูเหมือนไม่มีอะไรเกิดขึ้น
   final Set<int> _selected = {};
 
   Company? _company;
@@ -114,6 +116,7 @@ class _PoReplenishmentReportScreenState extends State<PoReplenishmentReportScree
       );
       setState(() {
         _rows = rows;
+        _hasGenerated = true;
         _selected.clear();
       });
     } catch (e) {
@@ -433,7 +436,13 @@ class _PoReplenishmentReportScreenState extends State<PoReplenishmentReportScree
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _rows.isEmpty
-                  ? Center(child: Text(isEnglish ? 'Select a warehouse and click Generate' : 'เลือกคลังสินค้าแล้วกดประมวลผล', style: const TextStyle(color: Colors.grey)))
+                  ? Center(child: Text(
+                      _hasGenerated
+                          ? (isEnglish
+                              ? 'No items need reordering for the selected warehouse/conditions'
+                              : 'ไม่มีรายการที่ต้องสั่งซื้อสำหรับคลังสินค้า/เงื่อนไขที่เลือก')
+                          : (isEnglish ? 'Select a warehouse and click Generate' : 'เลือกคลังสินค้าแล้วกดประมวลผล'),
+                      style: const TextStyle(color: Colors.grey)))
                   : _buildTable(isEnglish),
         ),
       ]),
