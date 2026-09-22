@@ -21,6 +21,7 @@ import '../services/po_pr_transaction_service.dart';
 import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
+import '../../sa/widgets/sa_attachment_widget.dart';
 
 class PrTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -504,6 +505,7 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
                         child: Text(isEnglish ? 'PO: ${_fmtQty.format(l.qtyConverted)}' : 'สั่งซื้อแล้ว: ${_fmtQty.format(l.qtyConverted)}',
                             style: TextStyle(fontSize: 11, color: Colors.green.shade700)),
                       ),
+                    AttachmentButton(moduleCode: 'pr_transaction_detail', entityId: l.id, readOnly: _isReadOnly),
                     if (!_isReadOnly)
                       IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red), onPressed: () => setState(() => _lines.removeAt(i))),
                   ]),

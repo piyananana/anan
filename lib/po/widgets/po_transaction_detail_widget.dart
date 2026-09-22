@@ -20,6 +20,7 @@ import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../services/po_pr_transaction_service.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
+import '../../sa/widgets/sa_attachment_widget.dart';
 
 class PoTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -611,6 +612,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                         child: Text(isEnglish ? 'Recv: ${_fmtQty.format(l.qtyReceived)}' : 'รับแล้ว: ${_fmtQty.format(l.qtyReceived)}',
                             style: TextStyle(fontSize: 11, color: Colors.green.shade700)),
                       ),
+                    AttachmentButton(moduleCode: 'po_transaction_detail', entityId: l.id, readOnly: _isReadOnly),
                     if (!_isReadOnly)
                       IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red), onPressed: () => setState(() => _lines.removeAt(i))),
                   ]),
