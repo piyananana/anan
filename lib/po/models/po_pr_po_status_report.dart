@@ -47,11 +47,11 @@ class PrPoStatusReportRow {
   });
 
   // ระยะเวลา(วัน): เริ่มจากวันที่ PR ถ้ามี PR ไม่งั้นวันที่ PO — สิ้นสุดที่วันที่อนุมัติ PO ถ้า PO อนุมัติแล้ว
-  // (หรือสถานะถัดจากอนุมัติ) ไม่งั้นใช้วันปัจจุบัน (ยังไม่จบ) — ไม่คำนวณเลยถ้า PR ถูก Void/Rejected(ไม่มี PO)
-  // หรือ PO ถูก Void เพราะถือเป็นทางตัน ไม่มีความหมายที่จะนับระยะเวลาต่อ
+  // (หรือสถานะถัดจากอนุมัติ) ไม่งั้นใช้วันปัจจุบัน (ยังไม่จบ) — ไม่คำนวณเลยถ้า PR ถูก Void/Rejected/Closed
+  // (ไม่มี PO) หรือ PO ถูก Void เพราะถือเป็นทางตัน ไม่มีความหมายที่จะนับระยะเวลาต่อ
   int? get durationDays {
     if (prStatus == 'Void') return null;
-    if (prStatus == 'Rejected' && poId == null) return null;
+    if (poId == null && (prStatus == 'Rejected' || prStatus == 'Closed')) return null;
     if (poId != null && poStatus == 'Void') return null;
 
     final anchorDate = prId != null ? prDocDate : poDocDate;
