@@ -23,6 +23,7 @@ class PrPoStatusReportRow {
   final int? prId;
   final String? prDocNo;
   final DateTime? prDocDate;
+  final DateTime? prUpdatedAt; // วันที่สถานะปัจจุบันถูกตั้ง — ทุก transition (submit/approve/reject/close/void) set ค่านี้เสมอ
   final String? prRequestedByName;
   final String? prApproverName;
   final String? prStatus;
@@ -31,23 +32,33 @@ class PrPoStatusReportRow {
   final int? poId;
   final String? poDocNo;
   final DateTime? poDocDate;
+  final DateTime? poUpdatedAt;
   final String? poCreatedBy;
   final String? poApproverName;
   final String? poStatus;
   final List<PrPoStatusReportItem> poItems;
 
   const PrPoStatusReportRow({
-    this.prId, this.prDocNo, this.prDocDate, this.prRequestedByName, this.prApproverName, this.prStatus,
+    this.prId, this.prDocNo, this.prDocDate, this.prUpdatedAt, this.prRequestedByName, this.prApproverName, this.prStatus,
     this.prItems = const [],
-    this.poId, this.poDocNo, this.poDocDate, this.poCreatedBy, this.poApproverName, this.poStatus,
+    this.poId, this.poDocNo, this.poDocDate, this.poUpdatedAt, this.poCreatedBy, this.poApproverName, this.poStatus,
     this.poItems = const [],
   });
+
+  // ระยะเวลา(วัน) จากวันที่เอกสารถึงวันที่สถานะล่าสุด — ใช้ฝั่ง PR ถ้ามี PR ไม่งั้นใช้ฝั่ง PO (ตามที่ผู้ใช้ระบุ)
+  int? get durationDays {
+    final anchorDate = prId != null ? prDocDate : poDocDate;
+    final statusDate = prId != null ? prUpdatedAt : poUpdatedAt;
+    if (anchorDate == null || statusDate == null) return null;
+    return statusDate.difference(anchorDate).inDays;
+  }
 
   factory PrPoStatusReportRow.fromJson(Map<String, dynamic> json) {
     return PrPoStatusReportRow(
       prId: json['pr_id'],
       prDocNo: json['pr_doc_no'],
       prDocDate: parseLocalDateNullable(json['pr_doc_date']),
+      prUpdatedAt: parseLocalDateNullable(json['pr_updated_at']),
       prRequestedByName: json['pr_requested_by_name'],
       prApproverName: json['pr_approver_name'],
       prStatus: json['pr_status'],
@@ -55,6 +66,7 @@ class PrPoStatusReportRow {
       poId: json['po_id'],
       poDocNo: json['po_doc_no'],
       poDocDate: parseLocalDateNullable(json['po_doc_date']),
+      poUpdatedAt: parseLocalDateNullable(json['po_updated_at']),
       poCreatedBy: json['po_created_by'],
       poApproverName: json['po_approver_name'],
       poStatus: json['po_status'],

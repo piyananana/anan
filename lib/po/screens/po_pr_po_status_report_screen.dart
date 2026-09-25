@@ -159,6 +159,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         isEnglish ? 'Requester' : 'ผู้ขอ', isEnglish ? 'Approver' : 'ผู้อนุมัติ', isEnglish ? 'PR Status' : 'สถานะใบขอซื้อ',
         isEnglish ? 'PO No.' : 'ใบสั่งซื้อ', isEnglish ? 'PO Date' : 'วันที่สั่ง',
         isEnglish ? 'Requester' : 'ผู้ขอ', isEnglish ? 'Approver' : 'ผู้อนุมัติ', isEnglish ? 'PO Status' : 'สถานะใบสั่งซื้อ',
+        isEnglish ? 'Duration (days)' : 'ระยะเวลา (วัน)',
       ];
       for (int c = 0; c < headers.length; c++) {
         _xlCell(s, r, c, headers[c], bg: hdrBg, bold: true);
@@ -166,6 +167,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
       r++;
 
       for (final row in _reportData) {
+        final duration = row.durationDays;
         _xlCell(s, r, 0, row.prDocNo ?? '-');
         _xlCell(s, r, 1, row.prDocDate != null ? _dateFmt.format(row.prDocDate!) : '-');
         _xlCell(s, r, 2, row.prRequestedByName ?? '-');
@@ -176,6 +178,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         _xlCell(s, r, 7, row.poCreatedBy ?? '-');
         _xlCell(s, r, 8, row.poApproverName ?? '-');
         _xlCell(s, r, 9, _statusLabel(_poStatusOptions, row.poStatus, isEnglish));
+        _xlCell(s, r, 10, duration == null ? '-' : DoubleCellValue(duration.toDouble()), align: HorizontalAlign.Right, bold: true);
         r++;
         if (_showPrItems) {
           for (final it in row.prItems) {
@@ -194,6 +197,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
             _xlCell(s, r, 7, DoubleCellValue(it.price), bg: detBg, align: HorizontalAlign.Right);
             _xlCell(s, r, 8, '', bg: detBg);
             _xlCell(s, r, 9, '', bg: detBg);
+            _xlCell(s, r, 10, '', bg: detBg);
             r++;
           }
         }
@@ -221,10 +225,8 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
     final doc = pw.Document();
     final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
     final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
-    final fontItalicData = await rootBundle.load('assets/fonts/THSarabun Italic.ttf');
     final font = pw.Font.ttf(fontData);
     final fontBold = pw.Font.ttf(fontBoldData);
-    final fontItalic = pw.Font.ttf(fontItalicData);
 
     final companyName = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName = _headers?['UserName'] ?? '';
@@ -233,26 +235,31 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
 
     pw.TextStyle tN(double fs) => pw.TextStyle(font: font, fontSize: fs);
     pw.TextStyle tB(double fs) => pw.TextStyle(font: fontBold, fontSize: fs);
-    pw.TextStyle tI(double fs) => pw.TextStyle(font: fontItalic, fontSize: fs);
+    // หมายเหตุ: เดิมใช้ fontItalic (THSarabun Italic) สำหรับบรรทัดรายละเอียดสินค้า แต่ฟอนต์ตัวเอียงไม่ครอบคลุม
+    // สระ/วรรณยุกต์ไทยบางตัว ทำให้ชื่อสินค้าบางรายการแสดงเป็นสัญลักษณ์ผิด (เช่น "X") — เปลี่ยนมาใช้ฟอนต์ปกติ
+    // สีเทาแทนเพื่อให้ยังดูแตกต่างจากแถวหลักแต่ไม่เสี่ยงกับฟอนต์ไม่ครบ
+    pw.TextStyle tGrey(double fs) => pw.TextStyle(font: font, fontSize: fs, color: PdfColors.grey700);
     const mg = 20.0;
     final pageW = format.width - mg * 2;
     const cHeader = PdfColor(0.87, 0.94, 0.92);
+    const cSubHeader = PdfColor(0.93, 0.93, 0.93);
     const cDetail = PdfColor(0.96, 0.96, 0.96);
     const cBorder = PdfColors.grey400;
 
     final cw = {
-      'prNo': pageW * 0.12, 'prDate': pageW * 0.07, 'prReq': pageW * 0.095, 'prAppr': pageW * 0.095, 'prStatus': pageW * 0.08,
-      'poNo': pageW * 0.12, 'poDate': pageW * 0.07, 'poReq': pageW * 0.095, 'poAppr': pageW * 0.095, 'poStatus': pageW * 0.08,
+      'prNo': pageW * 0.11, 'prDate': pageW * 0.065, 'prReq': pageW * 0.09, 'prAppr': pageW * 0.09, 'prStatus': pageW * 0.075,
+      'poNo': pageW * 0.11, 'poDate': pageW * 0.065, 'poReq': pageW * 0.09, 'poAppr': pageW * 0.09, 'poStatus': pageW * 0.075,
+      'duration': pageW * 0.07,
     };
     const divider = 4.0;
     final prHalfW = cw['prNo']! + cw['prDate']! + cw['prReq']! + cw['prAppr']! + cw['prStatus']!;
     final poHalfW = cw['poNo']! + cw['poDate']! + cw['poReq']! + cw['poAppr']! + cw['poStatus']!;
 
-    pw.Widget cell(double w, String t, {bool bold = false, bool italic = false, pw.TextAlign a = pw.TextAlign.left}) => pw.SizedBox(
+    pw.Widget cell(double w, String t, {bool bold = false, bool grey = false, pw.TextAlign a = pw.TextAlign.left}) => pw.SizedBox(
           width: w,
           child: pw.Padding(
             padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
-            child: pw.Text(t, style: bold ? tB(8) : (italic ? tI(8) : tN(8)), textAlign: a),
+            child: pw.Text(t, style: bold ? tB(8) : (grey ? tGrey(8) : tN(8)), textAlign: a),
           ),
         );
 
@@ -270,17 +277,35 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         cell(cw['poReq']!, isEnglish ? 'Requester' : 'ผู้ขอ', bold: true),
         cell(cw['poAppr']!, isEnglish ? 'Approver' : 'ผู้อนุมัติ', bold: true),
         cell(cw['poStatus']!, isEnglish ? 'Status' : 'สถานะ', bold: true),
+        cell(cw['duration']!, isEnglish ? 'Duration (days)' : 'ระยะเวลา (วัน)', bold: true, a: pw.TextAlign.right),
+      ]),
+    );
+
+    // หัวคอลัมน์ของส่วนรายละเอียดสินค้า — แสดงเฉพาะตอนมีสวิตช์ฝั่งใดฝั่งหนึ่งเปิดอยู่ เพื่อบอกความหมายของ
+    // คอลัมน์ที่ยุบรวมมาจากคอลัมน์หลัก (รหัส/ชื่อสินค้า, จำนวน, ราคา)
+    final detailHeader = pw.Container(
+      decoration: const pw.BoxDecoration(color: cSubHeader, border: pw.Border(bottom: pw.BorderSide(color: cBorder, width: 0.5))),
+      child: pw.Row(children: [
+        cell(cw['prNo']! + cw['prDate']!, isEnglish ? 'Item Code / Name' : 'รหัส/ชื่อสินค้า', bold: true),
+        cell(cw['prReq']!, isEnglish ? 'Qty' : 'จำนวน', bold: true, a: pw.TextAlign.right),
+        cell(cw['prAppr']! + cw['prStatus']!, isEnglish ? 'Price' : 'ราคา', bold: true, a: pw.TextAlign.right),
+        pw.SizedBox(width: divider),
+        cell(cw['poNo']! + cw['poDate']!, isEnglish ? 'Item Code / Name' : 'รหัส/ชื่อสินค้า', bold: true),
+        cell(cw['poReq']!, isEnglish ? 'Qty' : 'จำนวน', bold: true, a: pw.TextAlign.right),
+        cell(cw['poAppr']! + cw['poStatus']!, isEnglish ? 'Price' : 'ราคา', bold: true, a: pw.TextAlign.right),
+        cell(cw['duration']!, '', bold: true),
       ]),
     );
 
     pw.Widget prItemRow(PrPoStatusReportItem it) => pw.Container(
           color: cDetail,
           child: pw.Row(children: [
-            cell(cw['prNo']! + cw['prDate']!, '   ${it.itemCode ?? ''} ${it.itemName ?? ''}', italic: true),
-            cell(cw['prReq']!, _fmtQty.format(it.qty), italic: true, a: pw.TextAlign.right),
-            cell(cw['prAppr']! + cw['prStatus']!, _fmtValue.format(it.price), italic: true, a: pw.TextAlign.right),
+            cell(cw['prNo']! + cw['prDate']!, '   ${it.itemCode ?? ''} ${it.itemName ?? ''}', grey: true),
+            cell(cw['prReq']!, _fmtQty.format(it.qty), grey: true, a: pw.TextAlign.right),
+            cell(cw['prAppr']! + cw['prStatus']!, _fmtValue.format(it.price), grey: true, a: pw.TextAlign.right),
             pw.SizedBox(width: divider),
             pw.SizedBox(width: poHalfW),
+            pw.SizedBox(width: cw['duration']!),
           ]),
         );
 
@@ -289,9 +314,10 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
           child: pw.Row(children: [
             pw.SizedBox(width: prHalfW),
             pw.SizedBox(width: divider),
-            cell(cw['poNo']! + cw['poDate']!, '   ${it.itemCode ?? ''} ${it.itemName ?? ''}', italic: true),
-            cell(cw['poReq']!, _fmtQty.format(it.qty), italic: true, a: pw.TextAlign.right),
-            cell(cw['poAppr']! + cw['poStatus']!, _fmtValue.format(it.price), italic: true, a: pw.TextAlign.right),
+            cell(cw['poNo']! + cw['poDate']!, '   ${it.itemCode ?? ''} ${it.itemName ?? ''}', grey: true),
+            cell(cw['poReq']!, _fmtQty.format(it.qty), grey: true, a: pw.TextAlign.right),
+            cell(cw['poAppr']! + cw['poStatus']!, _fmtValue.format(it.price), grey: true, a: pw.TextAlign.right),
+            cell(cw['duration']!, ''),
           ]),
         );
 
@@ -315,10 +341,13 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         ]),
         pw.SizedBox(height: 4),
         tableHeader,
+        if (_showPrItems || _showPoItems) detailHeader,
       ]),
       build: (ctx) => _reportData.asMap().entries.expand((entry) {
         final i = entry.key;
         final row = entry.value;
+        final duration = row.durationDays;
+        final durationText = duration == null ? '-' : (isEnglish ? '$duration d' : '$duration วัน');
         final widgets = <pw.Widget>[
           pw.Container(
             decoration: pw.BoxDecoration(color: i.isEven ? PdfColors.white : const PdfColor(0.98, 0.98, 0.98)),
@@ -334,6 +363,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
               cell(cw['poReq']!, row.poCreatedBy ?? '-'),
               cell(cw['poAppr']!, row.poApproverName ?? '-'),
               cell(cw['poStatus']!, _statusLabel(_poStatusOptions, row.poStatus, isEnglish)),
+              cell(cw['duration']!, durationText, bold: true, a: pw.TextAlign.right),
             ]),
           ),
         ];
