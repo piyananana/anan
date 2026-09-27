@@ -13,10 +13,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:excel/excel.dart';
 
+import '../../widgets/zoomable_pdf_preview.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/models/sa_company.dart';
@@ -716,8 +716,8 @@ class _PoReplenishmentReportScreenState extends State<PoReplenishmentReportScree
                       ? (isEnglish ? 'No items need reordering for the selected warehouse/conditions' : 'ไม่มีรายการที่ต้องสั่งซื้อสำหรับคลังสินค้า/เงื่อนไขที่เลือก')
                       : (isEnglish ? 'Select warehouse(s) and click Generate' : 'เลือกคลังสินค้าแล้วกดประมวลผล'),
                   style: const TextStyle(color: Colors.grey)))
-              : PdfPreview(
-                  key: ValueKey(_pdfKey),
+              : ZoomablePdfPreview(
+                  documentVersion: _pdfKey,
                   build: (fmt) => _generatePdf(fmt),
                   initialPageFormat: PdfPageFormat.a4.landscape,
                   canChangeOrientation: false,

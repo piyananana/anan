@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:excel/excel.dart';
 
@@ -16,6 +15,7 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/models/sa_company.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 import '../widgets/po_search_multi_picker.dart';
 import '../models/po_pr_po_status_report.dart';
 import '../services/po_pr_po_status_report_service.dart';
@@ -632,8 +632,8 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
                             _hasGenerated
                                 ? (isEnglish ? 'No data found for the selected conditions' : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')
                                 : (isEnglish ? 'Please select conditions and click Generate' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล')))
-                        : PdfPreview(
-                            key: ValueKey(_pdfKey),
+                        : ZoomablePdfPreview(
+                            documentVersion: _pdfKey,
                             build: (fmt) => _generatePdf(fmt),
                             initialPageFormat: PdfPageFormat.a4.landscape,
                             canChangeOrientation: false,
