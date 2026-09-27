@@ -48,6 +48,7 @@ class _PoPendingReceiptReportScreenState
   bool _isDraggingDivider = false;
   int _pdfKey = 0;
   double _zoom = 1.0;
+  Offset _panOffset = Offset.zero;
 
   DateTime? _poDateFrom;
   DateTime? _poDateTo;
@@ -106,6 +107,7 @@ class _PoPendingReceiptReportScreenState
         _reportData = rows;
         _hasGenerated = true;
         _pdfKey++;
+        _panOffset = Offset.zero;
       });
     } catch (e) {
       if (mounted)
@@ -117,7 +119,10 @@ class _PoPendingReceiptReportScreenState
   }
 
   void _setZoom(double z) {
-    setState(() => _zoom = z);
+    setState(() {
+      _zoom = z;
+      if (z <= 1.0) _panOffset = Offset.zero;
+    });
   }
 
   // ─── PDF ──────────────────────────────────────────────────────────────────────
@@ -560,18 +565,26 @@ class _PoPendingReceiptReportScreenState
                                         ? 'Please select conditions and click Generate'
                                         : 'กรุณาเลือกเงื่อนไขและกดประมวลผล')))
                             : ClipRect(
-                                child: Transform.scale(
-                                  scale: _zoom,
-                                  alignment: Alignment.topCenter,
-                                  child: PdfPreview(
-                                    key: ValueKey(_pdfKey),
-                                    build: (fmt) => _generatePdf(fmt),
-                                    initialPageFormat:
-                                        PdfPageFormat.a4.landscape,
-                                    canChangeOrientation: false,
-                                    canDebug: false,
-                                    allowPrinting: canPrint,
-                                    allowSharing: canPrint,
+                                child: GestureDetector(
+                                  onPanUpdate: _zoom > 1.0
+                                      ? (details) => setState(
+                                          () => _panOffset += details.delta)
+                                      : null,
+                                  child: Transform(
+                                    alignment: Alignment.topCenter,
+                                    transform: Matrix4.identity()
+                                      ..translate(_panOffset.dx, _panOffset.dy)
+                                      ..scale(_zoom),
+                                    child: PdfPreview(
+                                      key: ValueKey(_pdfKey),
+                                      build: (fmt) => _generatePdf(fmt),
+                                      initialPageFormat:
+                                          PdfPageFormat.a4.landscape,
+                                      canChangeOrientation: false,
+                                      canDebug: false,
+                                      allowPrinting: canPrint,
+                                      allowSharing: canPrint,
+                                    ),
                                   ),
                                 ),
                               ),
