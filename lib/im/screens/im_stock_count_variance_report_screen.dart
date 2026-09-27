@@ -6,7 +6,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 import 'package:provider/provider.dart';
 import '../models/im_stock_count.dart';
 import '../models/im_location.dart';
@@ -47,6 +47,7 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
 
   List<ImStockCountVarianceRow> _rows = [];
   bool _hasResult = false;
+  int _pdfKey = 0;
 
   Future<void> _process() async {
     final isEnglish = _isEnglish;
@@ -61,7 +62,7 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
         locationId: _selectedLocation?.id,
         varianceOnly: _varianceOnly,
       );
-      if (mounted) setState(() { _rows = rows; _hasResult = true; });
+      if (mounted) setState(() { _rows = rows; _hasResult = true; _pdfKey++; });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
     } finally {
@@ -353,7 +354,8 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
               color: Colors.grey[200],
               child: !_hasResult
                   ? Center(child: Text(isEnglish ? 'Select filters and click Process Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผลรายงาน'))
-                  : PdfPreview(
+                  : ZoomablePdfPreview(
+                      documentVersion: _pdfKey,
                       build: (format) => _generatePdf(format),
                       initialPageFormat: PdfPageFormat.a4.landscape,
                       canChangeOrientation: false,

@@ -5,7 +5,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 import 'package:provider/provider.dart';
 import '../models/im_stock_count.dart';
 import '../models/im_location.dart';
@@ -43,6 +43,7 @@ class _ImStockCountPrintScreenState extends State<ImStockCountPrintScreen> {
   List<ImStockCountDetail> _lines = [];
   List<ImLocation> _locations = [];
   bool _hasReport = false;
+  int _pdfKey = 0;
 
   Future<void> _process() async {
     if (_selectedCount == null) {
@@ -61,6 +62,7 @@ class _ImStockCountPrintScreenState extends State<ImStockCountPrintScreen> {
           _lines = data.details;
           _locations = locations;
           _hasReport = true;
+          _pdfKey++;
         });
       }
     } catch (e) {
@@ -332,7 +334,8 @@ class _ImStockCountPrintScreenState extends State<ImStockCountPrintScreen> {
               color: Colors.grey[200],
               child: !_hasReport
                   ? Center(child: Text(isEnglish ? 'Select a count sheet and click Process Report' : 'กรุณาเลือกใบตรวจนับและกดประมวลผลรายงาน'))
-                  : PdfPreview(
+                  : ZoomablePdfPreview(
+                      documentVersion: _pdfKey,
                       build: (format) => _generatePdf(format),
                       canChangeOrientation: false,
                       canDebug: false,
