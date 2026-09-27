@@ -34,19 +34,13 @@ const _prStatusOptions = [
   _StatusOption(1, 'Submitted', 'รออนุมัติ', 'Pending Approval'),
   _StatusOption(2, 'Approved', 'อนุมัติแล้ว', 'Approved'),
   _StatusOption(3, 'Rejected', 'ถูกปฏิเสธ', 'Rejected'),
-  _StatusOption(4, 'PartiallyConverted', 'แปลงเป็นใบสั่งซื้อบางส่วน', 'Partially Converted'),
-  _StatusOption(5, 'FullyConverted', 'แปลงเป็นใบสั่งซื้อครบแล้ว', 'Fully Converted'),
-  _StatusOption(6, 'Closed', 'ปิดแล้ว', 'Closed'),
-  _StatusOption(7, 'Void', 'ยกเลิก', 'Void'),
+  _StatusOption(4, 'Void', 'ยกเลิก', 'Void'),
 ];
 
 const _poStatusOptions = [
   _StatusOption(0, 'Draft', 'ร่าง', 'Draft'),
   _StatusOption(1, 'Approved', 'อนุมัติแล้ว', 'Approved'),
-  _StatusOption(2, 'PartiallyReceived', 'รับสินค้าบางส่วน', 'Partially Received'),
-  _StatusOption(3, 'FullyReceived', 'รับสินค้าครบแล้ว', 'Fully Received'),
-  _StatusOption(4, 'Closed', 'ปิดแล้ว', 'Closed'),
-  _StatusOption(5, 'Void', 'ยกเลิก', 'Void'),
+  _StatusOption(2, 'Void', 'ยกเลิก', 'Void'),
 ];
 
 String _statusLabel(List<_StatusOption> options, String? value, bool isEnglish) {
@@ -80,13 +74,15 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
   bool _isDraggingDivider = false;
   int _pdfKey = 0;
 
+  bool _showPr = true;
+  bool _showPo = true;
   DateTime? _prDateFrom;
   DateTime? _prDateTo;
   DateTime? _poDateFrom;
   DateTime? _poDateTo;
   List<int> _selectedPrStatusIds = [];
   List<int> _selectedPoStatusIds = [];
-  bool _showPrItems = true;
+  bool _showPrItems = false;
   bool _showPoItems = true;
 
   List<PrPoStatusReportRow> _reportData = [];
@@ -114,6 +110,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
     setState(() => _isLoading = true);
     try {
       final rows = await _service.fetchReport(
+        showPr: _showPr, showPo: _showPo,
         prDateFrom: _prDateFrom, prDateTo: _prDateTo,
         poDateFrom: _poDateFrom, poDateTo: _poDateTo,
         prStatuses: _selectedPrStatusIds.isEmpty ? null : _selectedPrStatusIds.map((i) => _prStatusOptions[i].value).toList(),
@@ -156,10 +153,11 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
       int r = 3;
       final headers = [
         isEnglish ? 'PR No.' : 'ใบขอซื้อ', isEnglish ? 'PR Date' : 'วันที่ขอ',
-        isEnglish ? 'Requester' : 'ผู้ขอ', isEnglish ? 'Approver' : 'ผู้อนุมัติ', isEnglish ? 'PR Status' : 'สถานะใบขอซื้อ',
+        isEnglish ? 'Requester' : 'ผู้ขอ', isEnglish ? 'Approver' : 'ผู้อนุมัติ', isEnglish ? 'Request Status' : 'สถานะขอซื้อ',
         isEnglish ? 'PO No.' : 'ใบสั่งซื้อ', isEnglish ? 'PO Date' : 'วันที่สั่ง',
-        isEnglish ? 'Requester' : 'ผู้ขอ', isEnglish ? 'Approver' : 'ผู้อนุมัติ', isEnglish ? 'PO Status' : 'สถานะใบสั่งซื้อ',
-        isEnglish ? 'Duration (days)' : 'ระยะเวลา (วัน)',
+        isEnglish ? 'Requester' : 'ผู้ขอ', isEnglish ? 'Approver' : 'ผู้อนุมัติ', isEnglish ? 'Order Status' : 'สถานะสั่งซื้อ',
+        isEnglish ? 'Approved/Rejected Date' : 'วันที่อนุมัติ/ปฏิเสธ',
+        isEnglish ? 'Request to Order (days)' : 'ขอซื้อถึงสั่งซื้อ(วัน)',
       ];
       for (int c = 0; c < headers.length; c++) {
         _xlCell(s, r, c, headers[c], bg: hdrBg, bold: true);
@@ -168,6 +166,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
 
       for (final row in _reportData) {
         final duration = row.durationDays;
+        final decided = row.approvalOrRejectionDate;
         _xlCell(s, r, 0, row.prDocNo ?? '-');
         _xlCell(s, r, 1, row.prDocDate != null ? _dateFmt.format(row.prDocDate!) : '-');
         _xlCell(s, r, 2, row.prRequestedByName ?? '-');
@@ -178,7 +177,8 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         _xlCell(s, r, 7, row.poCreatedBy ?? '-');
         _xlCell(s, r, 8, row.poApproverName ?? '-');
         _xlCell(s, r, 9, _statusLabel(_poStatusOptions, row.poStatus, isEnglish));
-        _xlCell(s, r, 10, duration == null ? '-' : DoubleCellValue(duration.toDouble()), align: HorizontalAlign.Right, bold: true);
+        _xlCell(s, r, 10, decided != null ? _dateFmt.format(decided) : '-');
+        _xlCell(s, r, 11, duration == null ? '-' : DoubleCellValue(duration.toDouble()), align: HorizontalAlign.Right, bold: true);
         r++;
         if (_showPrItems) {
           for (final it in row.prItems) {
@@ -198,6 +198,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
             _xlCell(s, r, 8, '', bg: detBg);
             _xlCell(s, r, 9, '', bg: detBg);
             _xlCell(s, r, 10, '', bg: detBg);
+            _xlCell(s, r, 11, '', bg: detBg);
             r++;
           }
         }
@@ -247,9 +248,9 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
     const cBorder = PdfColors.grey400;
 
     final cw = {
-      'prNo': pageW * 0.11, 'prDate': pageW * 0.065, 'prReq': pageW * 0.09, 'prAppr': pageW * 0.09, 'prStatus': pageW * 0.075,
-      'poNo': pageW * 0.11, 'poDate': pageW * 0.065, 'poReq': pageW * 0.09, 'poAppr': pageW * 0.09, 'poStatus': pageW * 0.075,
-      'duration': pageW * 0.07,
+      'prNo': pageW * 0.10, 'prDate': pageW * 0.06, 'prReq': pageW * 0.085, 'prAppr': pageW * 0.085, 'prStatus': pageW * 0.07,
+      'poNo': pageW * 0.10, 'poDate': pageW * 0.06, 'poReq': pageW * 0.085, 'poAppr': pageW * 0.085, 'poStatus': pageW * 0.07,
+      'decided': pageW * 0.08, 'duration': pageW * 0.06,
     };
     const divider = 4.0;
     final prHalfW = cw['prNo']! + cw['prDate']! + cw['prReq']! + cw['prAppr']! + cw['prStatus']!;
@@ -270,14 +271,15 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         cell(cw['prDate']!, isEnglish ? 'PR Date' : 'วันที่ขอ', bold: true),
         cell(cw['prReq']!, isEnglish ? 'Requester' : 'ผู้ขอ', bold: true),
         cell(cw['prAppr']!, isEnglish ? 'Approver' : 'ผู้อนุมัติ', bold: true),
-        cell(cw['prStatus']!, isEnglish ? 'Status' : 'สถานะ', bold: true),
+        cell(cw['prStatus']!, isEnglish ? 'Request Status' : 'สถานะขอซื้อ', bold: true),
         pw.SizedBox(width: divider),
         cell(cw['poNo']!, isEnglish ? 'PO No.' : 'ใบสั่งซื้อ', bold: true),
         cell(cw['poDate']!, isEnglish ? 'PO Date' : 'วันที่สั่ง', bold: true),
         cell(cw['poReq']!, isEnglish ? 'Requester' : 'ผู้ขอ', bold: true),
         cell(cw['poAppr']!, isEnglish ? 'Approver' : 'ผู้อนุมัติ', bold: true),
-        cell(cw['poStatus']!, isEnglish ? 'Status' : 'สถานะ', bold: true),
-        cell(cw['duration']!, isEnglish ? 'Duration (days)' : 'ระยะเวลา (วัน)', bold: true, a: pw.TextAlign.right),
+        cell(cw['poStatus']!, isEnglish ? 'Order Status' : 'สถานะสั่งซื้อ', bold: true),
+        cell(cw['decided']!, isEnglish ? 'Approved/\nRejected Date' : 'วันที่อนุมัติ/\nปฏิเสธ', bold: true, a: pw.TextAlign.right),
+        cell(cw['duration']!, isEnglish ? 'Request to\nOrder (days)' : 'ขอซื้อถึง\nสั่งซื้อ(วัน)', bold: true, a: pw.TextAlign.right),
       ]),
     );
 
@@ -293,6 +295,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         cell(cw['poNo']! + cw['poDate']!, isEnglish ? 'Item Code / Name' : 'รหัส/ชื่อสินค้า', bold: true),
         cell(cw['poReq']!, isEnglish ? 'Qty' : 'จำนวน', bold: true, a: pw.TextAlign.right),
         cell(cw['poAppr']! + cw['poStatus']!, isEnglish ? 'Price' : 'ราคา', bold: true, a: pw.TextAlign.right),
+        cell(cw['decided']!, '', bold: true),
         cell(cw['duration']!, '', bold: true),
       ]),
     );
@@ -305,6 +308,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
             cell(cw['prAppr']! + cw['prStatus']!, _fmtValue.format(it.price), grey: true, a: pw.TextAlign.right),
             pw.SizedBox(width: divider),
             pw.SizedBox(width: poHalfW),
+            pw.SizedBox(width: cw['decided']!),
             pw.SizedBox(width: cw['duration']!),
           ]),
         );
@@ -317,6 +321,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
             cell(cw['poNo']! + cw['poDate']!, '   ${it.itemCode ?? ''} ${it.itemName ?? ''}', grey: true),
             cell(cw['poReq']!, _fmtQty.format(it.qty), grey: true, a: pw.TextAlign.right),
             cell(cw['poAppr']! + cw['poStatus']!, _fmtValue.format(it.price), grey: true, a: pw.TextAlign.right),
+            cell(cw['decided']!, ''),
             cell(cw['duration']!, ''),
           ]),
         );
@@ -348,6 +353,8 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         final row = entry.value;
         final duration = row.durationDays;
         final durationText = duration == null ? '-' : (isEnglish ? '$duration d' : '$duration วัน');
+        final decided = row.approvalOrRejectionDate;
+        final decidedText = decided != null ? _dateFmt.format(decided) : '-';
         final widgets = <pw.Widget>[
           pw.Container(
             decoration: pw.BoxDecoration(color: i.isEven ? PdfColors.white : const PdfColor(0.98, 0.98, 0.98)),
@@ -363,6 +370,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
               cell(cw['poReq']!, row.poCreatedBy ?? '-'),
               cell(cw['poAppr']!, row.poApproverName ?? '-'),
               cell(cw['poStatus']!, _statusLabel(_poStatusOptions, row.poStatus, isEnglish)),
+              cell(cw['decided']!, decidedText, a: pw.TextAlign.right),
               cell(cw['duration']!, durationText, bold: true, a: pw.TextAlign.right),
             ]),
           ),
@@ -446,68 +454,95 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
 
                               Text(isEnglish ? 'Purchase Requisition (PR)' : 'ใบขอซื้อ',
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal[800])),
-                              const SizedBox(height: 8),
                               Row(children: [
-                                Expanded(child: _dateField(isEnglish ? 'From' : 'ตั้งแต่', _prDateFrom, (d) => setState(() => _prDateFrom = d))),
-                                const SizedBox(width: 8),
-                                Expanded(child: _dateField(isEnglish ? 'To' : 'ถึง', _prDateTo, (d) => setState(() => _prDateTo = d))),
+                                Expanded(child: Text(isEnglish ? 'Show PR' : 'แสดงใบขอซื้อ', style: const TextStyle(fontSize: 13))),
+                                Switch(
+                                  value: _showPr,
+                                  activeColor: Colors.teal[800],
+                                  onChanged: (v) => setState(() => _showPr = v),
+                                ),
                               ]),
-                              const SizedBox(height: 12),
-                              SearchMultiPicker<_StatusOption>(
-                                items: _prStatusOptions,
-                                selectedIds: _selectedPrStatusIds,
-                                idOf: (o) => o.id,
-                                labelOf: (o, en) => en ? o.labelEn : o.labelTh,
-                                searchTextOf: (o) => '${o.labelTh} ${o.labelEn} ${o.value}',
-                                onChanged: (v) => setState(() => _selectedPrStatusIds = v),
-                                labelTh: 'สถานะใบขอซื้อ', labelEn: 'PR Status',
-                                allLabelTh: '— ทั้งหมด —', allLabelEn: '— All —',
+                              Opacity(
+                                opacity: _showPr ? 1.0 : 0.4,
+                                child: IgnorePointer(
+                                  ignoring: !_showPr,
+                                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                    const SizedBox(height: 4),
+                                    Row(children: [
+                                      Expanded(child: _dateField(isEnglish ? 'From' : 'ตั้งแต่', _prDateFrom, (d) => setState(() => _prDateFrom = d))),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: _dateField(isEnglish ? 'To' : 'ถึง', _prDateTo, (d) => setState(() => _prDateTo = d))),
+                                    ]),
+                                    const SizedBox(height: 12),
+                                    SearchMultiPicker<_StatusOption>(
+                                      items: _prStatusOptions,
+                                      selectedIds: _selectedPrStatusIds,
+                                      idOf: (o) => o.id,
+                                      labelOf: (o, en) => en ? o.labelEn : o.labelTh,
+                                      searchTextOf: (o) => '${o.labelTh} ${o.labelEn} ${o.value}',
+                                      onChanged: (v) => setState(() => _selectedPrStatusIds = v),
+                                      labelTh: 'สถานะใบขอซื้อ', labelEn: 'PR Status',
+                                      allLabelTh: '— ทั้งหมด —', allLabelEn: '— All —',
+                                    ),
+                                    Row(children: [
+                                      Expanded(child: Text(isEnglish ? 'Show PR item details' : 'แสดงรายละเอียดสินค้าใบขอซื้อ', style: const TextStyle(fontSize: 13))),
+                                      Switch(
+                                        value: _showPrItems,
+                                        activeColor: Colors.teal[800],
+                                        onChanged: (v) { setState(() => _showPrItems = v); _onSettingChanged(); },
+                                      ),
+                                    ]),
+                                  ]),
+                                ),
                               ),
 
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 12),
                               const Divider(height: 1),
                               const SizedBox(height: 12),
 
                               Text(isEnglish ? 'Purchase Order (PO)' : 'ใบสั่งซื้อ',
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal[800])),
-                              const SizedBox(height: 8),
                               Row(children: [
-                                Expanded(child: _dateField(isEnglish ? 'From' : 'ตั้งแต่', _poDateFrom, (d) => setState(() => _poDateFrom = d))),
-                                const SizedBox(width: 8),
-                                Expanded(child: _dateField(isEnglish ? 'To' : 'ถึง', _poDateTo, (d) => setState(() => _poDateTo = d))),
+                                Expanded(child: Text(isEnglish ? 'Show PO' : 'แสดงใบสั่งซื้อ', style: const TextStyle(fontSize: 13))),
+                                Switch(
+                                  value: _showPo,
+                                  activeColor: Colors.teal[800],
+                                  onChanged: (v) => setState(() => _showPo = v),
+                                ),
                               ]),
-                              const SizedBox(height: 12),
-                              SearchMultiPicker<_StatusOption>(
-                                items: _poStatusOptions,
-                                selectedIds: _selectedPoStatusIds,
-                                idOf: (o) => o.id,
-                                labelOf: (o, en) => en ? o.labelEn : o.labelTh,
-                                searchTextOf: (o) => '${o.labelTh} ${o.labelEn} ${o.value}',
-                                onChanged: (v) => setState(() => _selectedPoStatusIds = v),
-                                labelTh: 'สถานะใบสั่งซื้อ', labelEn: 'PO Status',
-                                allLabelTh: '— ทั้งหมด —', allLabelEn: '— All —',
+                              Opacity(
+                                opacity: _showPo ? 1.0 : 0.4,
+                                child: IgnorePointer(
+                                  ignoring: !_showPo,
+                                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                    const SizedBox(height: 4),
+                                    Row(children: [
+                                      Expanded(child: _dateField(isEnglish ? 'From' : 'ตั้งแต่', _poDateFrom, (d) => setState(() => _poDateFrom = d))),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: _dateField(isEnglish ? 'To' : 'ถึง', _poDateTo, (d) => setState(() => _poDateTo = d))),
+                                    ]),
+                                    const SizedBox(height: 12),
+                                    SearchMultiPicker<_StatusOption>(
+                                      items: _poStatusOptions,
+                                      selectedIds: _selectedPoStatusIds,
+                                      idOf: (o) => o.id,
+                                      labelOf: (o, en) => en ? o.labelEn : o.labelTh,
+                                      searchTextOf: (o) => '${o.labelTh} ${o.labelEn} ${o.value}',
+                                      onChanged: (v) => setState(() => _selectedPoStatusIds = v),
+                                      labelTh: 'สถานะใบสั่งซื้อ', labelEn: 'PO Status',
+                                      allLabelTh: '— ทั้งหมด —', allLabelEn: '— All —',
+                                    ),
+                                    Row(children: [
+                                      Expanded(child: Text(isEnglish ? 'Show PO item details' : 'แสดงรายละเอียดสินค้าใบสั่งซื้อ', style: const TextStyle(fontSize: 13))),
+                                      Switch(
+                                        value: _showPoItems,
+                                        activeColor: Colors.teal[800],
+                                        onChanged: (v) { setState(() => _showPoItems = v); _onSettingChanged(); },
+                                      ),
+                                    ]),
+                                  ]),
+                                ),
                               ),
-
-                              const SizedBox(height: 16),
-                              const Divider(height: 1),
-                              const SizedBox(height: 8),
-
-                              Row(children: [
-                                Expanded(child: Text(isEnglish ? 'Show PR item details' : 'แสดงรายละเอียดสินค้าใบขอซื้อ', style: const TextStyle(fontSize: 13))),
-                                Switch(
-                                  value: _showPrItems,
-                                  activeColor: Colors.teal[800],
-                                  onChanged: (v) { setState(() => _showPrItems = v); _onSettingChanged(); },
-                                ),
-                              ]),
-                              Row(children: [
-                                Expanded(child: Text(isEnglish ? 'Show PO item details' : 'แสดงรายละเอียดสินค้าใบสั่งซื้อ', style: const TextStyle(fontSize: 13))),
-                                Switch(
-                                  value: _showPoItems,
-                                  activeColor: Colors.teal[800],
-                                  onChanged: (v) { setState(() => _showPoItems = v); _onSettingChanged(); },
-                                ),
-                              ]),
                             ],
                           ),
                         ),

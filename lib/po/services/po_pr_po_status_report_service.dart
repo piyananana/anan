@@ -17,6 +17,8 @@ class PrPoStatusReportService {
     DateTime? poDateTo,
     List<String>? prStatuses,
     List<String>? poStatuses,
+    bool showPr = true,
+    bool showPo = true,
   }) async {
     final headers = await authService.getAuthHeader();
     final params = <String, String>{
@@ -26,6 +28,8 @@ class PrPoStatusReportService {
       if (poDateTo != null) 'po_date_to': formatLocalDate(poDateTo),
       if (prStatuses != null && prStatuses.isNotEmpty) 'pr_statuses': prStatuses.join(','),
       if (poStatuses != null && poStatuses.isNotEmpty) 'po_statuses': poStatuses.join(','),
+      'show_pr': showPr.toString(),
+      'show_po': showPo.toString(),
     };
     final uri = Uri.parse('$baseUrl/pr_po_status_report').replace(queryParameters: params);
     final response = await http.get(uri, headers: headers);

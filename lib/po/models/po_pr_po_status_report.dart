@@ -27,6 +27,7 @@ class PrPoStatusReportRow {
   final DateTime? prDocDate;
   final String? prRequestedByName;
   final String? prApproverName;
+  final DateTime? prDecidedAt; // วันที่ผู้อนุมัติคนล่าสุดตัดสินใจ (อนุมัติ/ปฏิเสธ) — จาก pr_transaction_approval
   final String? prStatus;
   final List<PrPoStatusReportItem> prItems;
 
@@ -40,11 +41,21 @@ class PrPoStatusReportRow {
   final List<PrPoStatusReportItem> poItems;
 
   const PrPoStatusReportRow({
-    this.prId, this.prDocNo, this.prDocDate, this.prRequestedByName, this.prApproverName, this.prStatus,
+    this.prId, this.prDocNo, this.prDocDate, this.prRequestedByName, this.prApproverName, this.prDecidedAt, this.prStatus,
     this.prItems = const [],
     this.poId, this.poDocNo, this.poDocDate, this.poApprovedAt, this.poCreatedBy, this.poApproverName, this.poStatus,
     this.poItems = const [],
   });
+
+  // วันที่อนุมัติ/ปฏิเสธ ที่จะแสดงในรายงาน — ถ้ามี PO และ PO อนุมัติแล้ว(หรือสถานะถัดจากอนุมัติ) ใช้วันที่อนุมัติ PO
+  // ถ้ายังไม่มี PO ใช้วันที่ PR เองถูกอนุมัติ/ปฏิเสธ (ถ้ามี) — นอกเหนือจากนี้ไม่แสดง (ยังไม่ถึงจุดตัดสินใจ)
+  DateTime? get approvalOrRejectionDate {
+    if (poId != null) {
+      return _poDoneStatuses.contains(poStatus) ? poApprovedAt : null;
+    }
+    if (prStatus == 'Approved' || prStatus == 'Rejected') return prDecidedAt;
+    return null;
+  }
 
   // ระยะเวลา(วัน): เริ่มจากวันที่ PR ถ้ามี PR ไม่งั้นวันที่ PO — สิ้นสุดที่วันที่อนุมัติ PO ถ้า PO อนุมัติแล้ว
   // (หรือสถานะถัดจากอนุมัติ) ไม่งั้นใช้วันปัจจุบัน (ยังไม่จบ) — ไม่คำนวณเลยถ้า PR ถูก Void/Rejected/Closed
@@ -75,6 +86,7 @@ class PrPoStatusReportRow {
       prDocDate: parseLocalDateNullable(json['pr_doc_date']),
       prRequestedByName: json['pr_requested_by_name'],
       prApproverName: json['pr_approver_name'],
+      prDecidedAt: parseLocalDateNullable(json['pr_decided_at']),
       prStatus: json['pr_status'],
       prItems: (json['pr_items'] as List<dynamic>? ?? []).map((e) => PrPoStatusReportItem.fromJson(e as Map<String, dynamic>)).toList(),
       poId: json['po_id'],
