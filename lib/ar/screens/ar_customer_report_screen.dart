@@ -4,7 +4,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 import 'package:excel/excel.dart';
 import 'package:provider/provider.dart';
 
@@ -1048,8 +1048,8 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
                                   child: Text(isEnglish
                                       ? 'Please select conditions and click Generate Report'
                                       : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
-                              : PdfPreview(
-                                  key: ValueKey(_pdfKey),
+                              : ZoomablePdfPreview(
+                                  documentVersion: _pdfKey,
                                   build: (fmt) => _generatePdf(fmt),
                                   initialPageFormat: PdfPageFormat.a4,
                                   canChangeOrientation: false,

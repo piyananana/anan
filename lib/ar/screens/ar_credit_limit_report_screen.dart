@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/ar_customer.dart';
@@ -621,8 +621,8 @@ class _ArCreditLimitReportScreenState
                           : _reportData.isEmpty
                               ? Center(
                                   child: Text(isEnglish ? 'Please select filter conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
-                              : PdfPreview(
-                                  key: ValueKey(_pdfKey),
+                              : ZoomablePdfPreview(
+                                  documentVersion: _pdfKey,
                                   build: (fmt) => _generatePdf(fmt),
                                   initialPageFormat: PdfPageFormat.a4,
                                   canChangeOrientation: false,
