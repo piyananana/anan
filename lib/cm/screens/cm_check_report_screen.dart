@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 import 'package:provider/provider.dart';
 import 'package:excel/excel.dart' hide Border;
 
@@ -821,8 +821,8 @@ class _State extends State<CmCheckReportScreen>
           ? const Center(child: CircularProgressIndicator())
           : _reportDateFrom == null || _checks.isEmpty
               ? Center(child: Text(isEnglish ? 'Select conditions and click Process Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผลรายงาน'))
-              : PdfPreview(
-                  key: ValueKey(_pdfKey),
+              : ZoomablePdfPreview(
+                  documentVersion: _pdfKey,
                   build: (fmt) => _generatePdf(fmt),
                   initialPageFormat: PdfPageFormat.a4.landscape,
                   canChangeOrientation: false,
