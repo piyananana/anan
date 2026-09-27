@@ -100,7 +100,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
   List<int> _selectedPrStatusIds = [];
   List<int> _selectedPoStatusIds = [];
   bool _showPrItems = false;
-  bool _showPoItems = true;
+  bool _showPoItems = false;
 
   List<PrPoStatusReportRow> _reportData = [];
   bool _hasGenerated = false;
