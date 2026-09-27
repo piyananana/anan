@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../sa/utils/sa_menu_scope.dart';
@@ -20,6 +19,7 @@ import '../../im/services/im_item_service.dart';
 import '../widgets/po_search_multi_picker.dart';
 import '../models/po_pending_receipt_report.dart';
 import '../services/po_pending_receipt_report_service.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 
 class PoPendingReceiptReportScreen extends StatefulWidget {
   const PoPendingReceiptReportScreen({super.key});
@@ -47,8 +47,6 @@ class _PoPendingReceiptReportScreenState
   double _filterPanelWidth = 320.0;
   bool _isDraggingDivider = false;
   int _pdfKey = 0;
-  double _zoom = 1.0;
-  Offset _panOffset = Offset.zero;
 
   DateTime? _poDateFrom;
   DateTime? _poDateTo;
@@ -107,7 +105,6 @@ class _PoPendingReceiptReportScreenState
         _reportData = rows;
         _hasGenerated = true;
         _pdfKey++;
-        _panOffset = Offset.zero;
       });
     } catch (e) {
       if (mounted)
@@ -116,13 +113,6 @@ class _PoPendingReceiptReportScreenState
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _setZoom(double z) {
-    setState(() {
-      _zoom = z;
-      if (z <= 1.0) _panOffset = Offset.zero;
-    });
   }
 
   // ─── PDF ──────────────────────────────────────────────────────────────────────
@@ -512,85 +502,29 @@ class _PoPendingReceiptReportScreenState
                 ),
               ),
             Expanded(
-              child: Column(children: [
-                if (_reportData.isNotEmpty)
-                  Container(
-                    color: Colors.grey[100],
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    child: Row(children: [
-                      Icon(Icons.zoom_out, size: 18, color: Colors.grey[700]),
-                      Expanded(
-                        child: SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            trackHeight: 2,
-                            thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 6),
-                            overlayShape: const RoundSliderOverlayShape(
-                                overlayRadius: 12),
+              child: Container(
+                color: Colors.grey[200],
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _reportData.isEmpty
+                        ? Center(
+                            child: Text(_hasGenerated
+                                ? (isEnglish
+                                    ? 'No data found for the selected conditions'
+                                    : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')
+                                : (isEnglish
+                                    ? 'Please select conditions and click Generate'
+                                    : 'กรุณาเลือกเงื่อนไขและกดประมวลผล')))
+                        : ZoomablePdfPreview(
+                            documentVersion: _pdfKey,
+                            build: (fmt) => _generatePdf(fmt),
+                            initialPageFormat: PdfPageFormat.a4.landscape,
+                            canChangeOrientation: false,
+                            canDebug: false,
+                            allowPrinting: canPrint,
+                            allowSharing: canPrint,
                           ),
-                          child: SizedBox(
-                            height: 24,
-                            child: Slider(
-                              value: _zoom,
-                              min: 0.5,
-                              max: 2.5,
-                              divisions: 20,
-                              label: '${(_zoom * 100).round()}%',
-                              onChanged: _setZoom,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Icon(Icons.zoom_in, size: 18, color: Colors.grey[700]),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                          width: 48,
-                          child: Text('${(_zoom * 100).round()}%',
-                              style: const TextStyle(fontSize: 12))),
-                    ]),
-                  ),
-                Expanded(
-                  child: Container(
-                    color: Colors.grey[200],
-                    child: _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : _reportData.isEmpty
-                            ? Center(
-                                child: Text(_hasGenerated
-                                    ? (isEnglish
-                                        ? 'No data found for the selected conditions'
-                                        : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')
-                                    : (isEnglish
-                                        ? 'Please select conditions and click Generate'
-                                        : 'กรุณาเลือกเงื่อนไขและกดประมวลผล')))
-                            : ClipRect(
-                                child: GestureDetector(
-                                  onPanUpdate: _zoom > 1.0
-                                      ? (details) => setState(
-                                          () => _panOffset += details.delta)
-                                      : null,
-                                  child: Transform(
-                                    alignment: Alignment.topCenter,
-                                    transform: Matrix4.identity()
-                                      ..translate(_panOffset.dx, _panOffset.dy)
-                                      ..scale(_zoom),
-                                    child: PdfPreview(
-                                      key: ValueKey(_pdfKey),
-                                      build: (fmt) => _generatePdf(fmt),
-                                      initialPageFormat:
-                                          PdfPageFormat.a4.landscape,
-                                      canChangeOrientation: false,
-                                      canDebug: false,
-                                      allowPrinting: canPrint,
-                                      allowSharing: canPrint,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                  ),
-                ),
-              ]),
+              ),
             ),
           ],
         );
