@@ -378,13 +378,23 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
                     child: Row(children: [
                       Icon(Icons.zoom_out, size: 18, color: Colors.grey[700]),
                       Expanded(
-                        child: Slider(
-                          value: _zoom,
-                          min: 0.5,
-                          max: 2.5,
-                          divisions: 20,
-                          label: '${(_zoom * 100).round()}%',
-                          onChanged: _setZoom,
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 2,
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                          ),
+                          child: SizedBox(
+                            height: 24,
+                            child: Slider(
+                              value: _zoom,
+                              min: 0.5,
+                              max: 2.5,
+                              divisions: 20,
+                              label: '${(_zoom * 100).round()}%',
+                              onChanged: _setZoom,
+                            ),
+                          ),
                         ),
                       ),
                       Icon(Icons.zoom_in, size: 18, color: Colors.grey[700]),
@@ -406,6 +416,7 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
                                 transformationController: _zoomController,
                                 minScale: 0.5,
                                 maxScale: 2.5,
+                                scaleEnabled: false,
                                 child: PdfPreview(
                                   key: ValueKey(_pdfKey),
                                   build: (fmt) => _generatePdf(fmt),
