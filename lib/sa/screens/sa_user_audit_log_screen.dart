@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../utils/sa_menu_scope.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 
 import '../models/sa_company.dart';
 import '../services/sa_auth_service.dart';
@@ -350,7 +350,8 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
               onPressed: () => Navigator.pop(ctx),
             ),
           ),
-          body: PdfPreview(
+          body: ZoomablePdfPreview(
+            documentVersion: 0,
             build:                (format) => _generatePdf(format, isEnglish),
             initialPageFormat:    PdfPageFormat.a4.landscape,
             canChangeOrientation: false,
