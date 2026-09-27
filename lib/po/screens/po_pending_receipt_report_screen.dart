@@ -25,10 +25,12 @@ class PoPendingReceiptReportScreen extends StatefulWidget {
   const PoPendingReceiptReportScreen({super.key});
 
   @override
-  State<PoPendingReceiptReportScreen> createState() => _PoPendingReceiptReportScreenState();
+  State<PoPendingReceiptReportScreen> createState() =>
+      _PoPendingReceiptReportScreenState();
 }
 
-class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScreen> {
+class _PoPendingReceiptReportScreenState
+    extends State<PoPendingReceiptReportScreen> {
   final _service = PoPendingReceiptReportService();
   final _vendorService = ApVendorService();
   final _itemService = ImItemService();
@@ -46,7 +48,6 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
   bool _isDraggingDivider = false;
   int _pdfKey = 0;
   double _zoom = 1.0;
-  final _zoomController = TransformationController();
 
   DateTime? _poDateFrom;
   DateTime? _poDateTo;
@@ -82,7 +83,9 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
     setState(() {
       _company = results[0] as Company?;
       _vendors = results[1] as List<ApVendor>;
-      _items = (results[2] as List<ImItem>).where((i) => i.isActive && i.isPurchaseItem).toList();
+      _items = (results[2] as List<ImItem>)
+          .where((i) => i.isActive && i.isPurchaseItem)
+          .toList();
     });
   }
 
@@ -91,9 +94,12 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
     setState(() => _isLoading = true);
     try {
       final rows = await _service.fetchReport(
-        poDateFrom: _poDateFrom, poDateTo: _poDateTo,
-        dueDateFrom: _dueDateFrom, dueDateTo: _dueDateTo,
-        vendorIds: _selectedVendorIds, itemIds: _selectedItemIds,
+        poDateFrom: _poDateFrom,
+        poDateTo: _poDateTo,
+        dueDateFrom: _dueDateFrom,
+        dueDateTo: _dueDateTo,
+        vendorIds: _selectedVendorIds,
+        itemIds: _selectedItemIds,
         sortDueDateAsc: _sortDueDateAsc,
       );
       setState(() {
@@ -102,7 +108,9 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
         _pdfKey++;
       });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -110,7 +118,6 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
 
   void _setZoom(double z) {
     setState(() => _zoom = z);
-    _zoomController.value = Matrix4.identity()..scale(z);
   }
 
   // ─── PDF ──────────────────────────────────────────────────────────────────────
@@ -119,14 +126,18 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
     final isEnglish = _isEnglish;
     final doc = pw.Document();
     final fontData = await rootBundle.load('assets/fonts/THSarabun.ttf');
-    final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
+    final fontBoldData =
+        await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
     final font = pw.Font.ttf(fontData);
     final fontBold = pw.Font.ttf(fontBoldData);
 
-    final companyName = _company?.displayName(isEnglish) ?? (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
+    final companyName = _company?.displayName(isEnglish) ??
+        (isEnglish ? '(No company name)' : '(ไม่ระบุชื่อบริษัท)');
     final userName = _headers?['UserName'] ?? '';
     final printDateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-    final reportTitle = _reportTitle.isNotEmpty ? _reportTitle : (isEnglish ? 'Pending Receipt Report' : 'รายงานจัดซื้อสินค้าค้างรับ');
+    final reportTitle = _reportTitle.isNotEmpty
+        ? _reportTitle
+        : (isEnglish ? 'Pending Receipt Report' : 'รายงานจัดซื้อสินค้าค้างรับ');
 
     pw.TextStyle tN(double fs) => pw.TextStyle(font: font, fontSize: fs);
     pw.TextStyle tB(double fs) => pw.TextStyle(font: fontBold, fontSize: fs);
@@ -136,32 +147,57 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
     const cBorder = PdfColors.grey400;
 
     final cw = {
-      'dueDate': pageW * 0.09, 'overdue': pageW * 0.08, 'poNo': pageW * 0.10, 'poDate': pageW * 0.08,
-      'item': pageW * 0.16, 'vendor': pageW * 0.15, 'warehouse': pageW * 0.13,
-      'qty': pageW * 0.07, 'unitPrice': pageW * 0.07, 'total': pageW * 0.07,
+      'dueDate': pageW * 0.09,
+      'overdue': pageW * 0.08,
+      'poNo': pageW * 0.10,
+      'poDate': pageW * 0.08,
+      'item': pageW * 0.16,
+      'vendor': pageW * 0.15,
+      'warehouse': pageW * 0.13,
+      'qty': pageW * 0.07,
+      'unitPrice': pageW * 0.07,
+      'total': pageW * 0.07,
     };
 
-    pw.Widget cell(double w, String t, {bool bold = false, pw.TextAlign a = pw.TextAlign.left, PdfColor? color}) => pw.SizedBox(
+    pw.Widget cell(double w, String t,
+            {bool bold = false,
+            pw.TextAlign a = pw.TextAlign.left,
+            PdfColor? color}) =>
+        pw.SizedBox(
           width: w,
           child: pw.Padding(
             padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
-            child: pw.Text(t, style: (bold ? tB(8) : tN(8)).copyWith(color: color), textAlign: a),
+            child: pw.Text(t,
+                style: (bold ? tB(8) : tN(8)).copyWith(color: color),
+                textAlign: a),
           ),
         );
 
     final tableHeader = pw.Container(
-      decoration: const pw.BoxDecoration(color: cHeader, border: pw.Border(bottom: pw.BorderSide(color: cBorder, width: 0.5))),
+      decoration: const pw.BoxDecoration(
+          color: cHeader,
+          border: pw.Border(bottom: pw.BorderSide(color: cBorder, width: 0.5))),
       child: pw.Row(children: [
-        cell(cw['dueDate']!, isEnglish ? 'Due Date' : 'วันที่ครบกำหนด', bold: true),
-        cell(cw['overdue']!, isEnglish ? 'Overdue/\nDue (days)' : 'เกิน/ถึง\nกำหนด(วัน)', bold: true, a: pw.TextAlign.right),
-        cell(cw['poNo']!, isEnglish ? 'PO No.' : 'เลขที่ใบสั่งซื้อ', bold: true),
-        cell(cw['poDate']!, isEnglish ? 'PO Date' : 'วันที่สั่งซื้อ', bold: true),
+        cell(cw['dueDate']!, isEnglish ? 'Due Date' : 'วันที่ครบกำหนด',
+            bold: true),
+        cell(cw['overdue']!,
+            isEnglish ? 'Overdue/\nDue (days)' : 'เกิน/ถึง\nกำหนด(วัน)',
+            bold: true, a: pw.TextAlign.right),
+        cell(cw['poNo']!, isEnglish ? 'PO No.' : 'เลขที่ใบสั่งซื้อ',
+            bold: true),
+        cell(cw['poDate']!, isEnglish ? 'PO Date' : 'วันที่สั่งซื้อ',
+            bold: true),
         cell(cw['item']!, isEnglish ? 'Item' : 'รหัส/ชื่อสินค้า', bold: true),
-        cell(cw['vendor']!, isEnglish ? 'Vendor' : 'รหัส/ชื่อผู้ขาย', bold: true),
-        cell(cw['warehouse']!, isEnglish ? 'Warehouse' : 'รหัส/ชื่อคลัง', bold: true),
-        cell(cw['qty']!, isEnglish ? 'Qty' : 'จำนวน', bold: true, a: pw.TextAlign.right),
-        cell(cw['unitPrice']!, isEnglish ? 'Unit Price' : 'ราคา/หน่วย', bold: true, a: pw.TextAlign.right),
-        cell(cw['total']!, isEnglish ? 'Total' : 'ราคารวม', bold: true, a: pw.TextAlign.right),
+        cell(cw['vendor']!, isEnglish ? 'Vendor' : 'รหัส/ชื่อผู้ขาย',
+            bold: true),
+        cell(cw['warehouse']!, isEnglish ? 'Warehouse' : 'รหัส/ชื่อคลัง',
+            bold: true),
+        cell(cw['qty']!, isEnglish ? 'Qty' : 'จำนวน',
+            bold: true, a: pw.TextAlign.right),
+        cell(cw['unitPrice']!, isEnglish ? 'Unit Price' : 'ราคา/หน่วย',
+            bold: true, a: pw.TextAlign.right),
+        cell(cw['total']!, isEnglish ? 'Total' : 'ราคารวม',
+            bold: true, a: pw.TextAlign.right),
       ]),
     );
 
@@ -171,17 +207,39 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
       header: (ctx) => pw.Column(children: [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
           pw.Expanded(flex: 3, child: pw.Text(companyName, style: tN(11))),
-          pw.Expanded(flex: 6, child: pw.Text(reportTitle, textAlign: pw.TextAlign.center, style: tB(15))),
-          pw.Expanded(flex: 3, child: pw.Text(isEnglish ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}' : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}', textAlign: pw.TextAlign.right, style: tN(10))),
+          pw.Expanded(
+              flex: 6,
+              child: pw.Text(reportTitle,
+                  textAlign: pw.TextAlign.center, style: tB(15))),
+          pw.Expanded(
+              flex: 3,
+              child: pw.Text(
+                  isEnglish
+                      ? 'Page ${ctx.pageNumber}/${ctx.pagesCount}'
+                      : 'หน้า ${ctx.pageNumber}/${ctx.pagesCount}',
+                  textAlign: pw.TextAlign.right,
+                  style: tN(10))),
         ]),
         pw.SizedBox(height: 3),
         pw.Row(children: [
           pw.Expanded(flex: 9, child: pw.SizedBox()),
-          pw.Expanded(flex: 3, child: pw.Text(isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName', textAlign: pw.TextAlign.right, style: tN(10))),
+          pw.Expanded(
+              flex: 3,
+              child: pw.Text(
+                  isEnglish ? 'Printed by $userName' : 'พิมพ์โดย $userName',
+                  textAlign: pw.TextAlign.right,
+                  style: tN(10))),
         ]),
         pw.Row(children: [
           pw.Expanded(flex: 9, child: pw.SizedBox()),
-          pw.Expanded(flex: 3, child: pw.Text(isEnglish ? 'Printed $printDateStr' : 'พิมพ์เมื่อ $printDateStr', textAlign: pw.TextAlign.right, style: tN(10))),
+          pw.Expanded(
+              flex: 3,
+              child: pw.Text(
+                  isEnglish
+                      ? 'Printed $printDateStr'
+                      : 'พิมพ์เมื่อ $printDateStr',
+                  textAlign: pw.TextAlign.right,
+                  style: tN(10))),
         ]),
         pw.SizedBox(height: 4),
         tableHeader,
@@ -203,21 +261,36 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
         } else {
           overdueText = isEnglish ? 'In ${-days}' : 'อีก ${-days} วัน';
         }
-        final vendorName = isEnglish && (r.vendorNameEn ?? '').isNotEmpty ? r.vendorNameEn! : (r.vendorNameTh ?? '');
-        final warehouseName = isEnglish && (r.warehouseNameEn ?? '').isNotEmpty ? r.warehouseNameEn! : (r.warehouseNameTh ?? '');
+        final vendorName = isEnglish && (r.vendorNameEn ?? '').isNotEmpty
+            ? r.vendorNameEn!
+            : (r.vendorNameTh ?? '');
+        final warehouseName = isEnglish && (r.warehouseNameEn ?? '').isNotEmpty
+            ? r.warehouseNameEn!
+            : (r.warehouseNameTh ?? '');
         return pw.Container(
-          decoration: pw.BoxDecoration(color: i.isEven ? PdfColors.white : const PdfColor(0.98, 0.98, 0.98)),
+          decoration: pw.BoxDecoration(
+              color: i.isEven
+                  ? PdfColors.white
+                  : const PdfColor(0.98, 0.98, 0.98)),
           child: pw.Row(children: [
-            cell(cw['dueDate']!, r.dueDate != null ? _dateFmt.format(r.dueDate!) : '-'),
-            cell(cw['overdue']!, overdueText, a: pw.TextAlign.right, color: overdueColor, bold: overdueColor != null),
+            cell(cw['dueDate']!,
+                r.dueDate != null ? _dateFmt.format(r.dueDate!) : '-'),
+            cell(cw['overdue']!, overdueText,
+                a: pw.TextAlign.right,
+                color: overdueColor,
+                bold: overdueColor != null),
             cell(cw['poNo']!, r.poDocNo),
-            cell(cw['poDate']!, r.poDocDate != null ? _dateFmt.format(r.poDocDate!) : '-'),
+            cell(cw['poDate']!,
+                r.poDocDate != null ? _dateFmt.format(r.poDocDate!) : '-'),
             cell(cw['item']!, '${r.itemCode ?? ''} ${r.itemName ?? ''}'),
             cell(cw['vendor']!, '${r.vendorCode ?? ''} $vendorName'),
             cell(cw['warehouse']!, '${r.warehouseCode ?? ''} $warehouseName'),
-            cell(cw['qty']!, _fmtQty.format(r.qtyOutstanding), a: pw.TextAlign.right),
-            cell(cw['unitPrice']!, _fmtValue.format(r.unitPriceFc), a: pw.TextAlign.right),
-            cell(cw['total']!, _fmtValue.format(r.totalAmountLc), a: pw.TextAlign.right, bold: true),
+            cell(cw['qty']!, _fmtQty.format(r.qtyOutstanding),
+                a: pw.TextAlign.right),
+            cell(cw['unitPrice']!, _fmtValue.format(r.unitPriceFc),
+                a: pw.TextAlign.right),
+            cell(cw['total']!, _fmtValue.format(r.totalAmountLc),
+                a: pw.TextAlign.right, bold: true),
           ]),
         );
       }).toList(),
@@ -235,7 +308,10 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
     final canPrint = perm?.canPrint ?? true;
     _reportTitle = isEnglish && perm != null && perm.menuNameEn.isNotEmpty
         ? perm.menuNameEn
-        : (perm?.menuName ?? (isEnglish ? 'Pending Receipt Report' : 'รายงานจัดซื้อสินค้าค้างรับ'));
+        : (perm?.menuName ??
+            (isEnglish
+                ? 'Pending Receipt Report'
+                : 'รายงานจัดซื้อสินค้าค้างรับ'));
 
     return Scaffold(
       appBar: AppBar(
@@ -244,7 +320,8 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
         foregroundColor: Colors.white,
       ),
       body: LayoutBuilder(builder: (context, constraints) {
-        final maxFilterWidth = (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
+        final maxFilterWidth =
+            (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -252,14 +329,24 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
               width: 36,
               color: Colors.teal[800],
               child: IconButton(
-                icon: Icon(_isFilterExpanded ? Icons.filter_list_off : Icons.filter_list, color: Colors.white, size: 20),
+                icon: Icon(
+                    _isFilterExpanded
+                        ? Icons.filter_list_off
+                        : Icons.filter_list,
+                    color: Colors.white,
+                    size: 20),
                 padding: EdgeInsets.zero,
-                tooltip: _isFilterExpanded ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข') : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
-                onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
+                tooltip: _isFilterExpanded
+                    ? (isEnglish ? 'Collapse filter' : 'ย่อเงื่อนไข')
+                    : (isEnglish ? 'Expand filter' : 'ขยายเงื่อนไข'),
+                onPressed: () =>
+                    setState(() => _isFilterExpanded = !_isFilterExpanded),
               ),
             ),
             AnimatedContainer(
-              duration: _isDraggingDivider ? Duration.zero : const Duration(milliseconds: 200),
+              duration: _isDraggingDivider
+                  ? Duration.zero
+                  : const Duration(milliseconds: 200),
               width: _isFilterExpanded ? _filterPanelWidth : 0.0,
               child: ClipRect(
                 child: OverflowBox(
@@ -275,65 +362,108 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(isEnglish ? 'Report Conditions' : 'เงื่อนไขรายงาน',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              Text(
+                                  isEnglish
+                                      ? 'Report Conditions'
+                                      : 'เงื่อนไขรายงาน',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16)),
                               const SizedBox(height: 16),
-
-                              Text(isEnglish ? 'Order Date' : 'วันที่สั่งซื้อ', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              Text(isEnglish ? 'Order Date' : 'วันที่สั่งซื้อ',
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.grey)),
                               const SizedBox(height: 4),
                               Row(children: [
-                                Expanded(child: _dateField(isEnglish ? 'From' : 'ตั้งแต่', _poDateFrom, (d) => setState(() => _poDateFrom = d))),
+                                Expanded(
+                                    child: _dateField(
+                                        isEnglish ? 'From' : 'ตั้งแต่',
+                                        _poDateFrom,
+                                        (d) =>
+                                            setState(() => _poDateFrom = d))),
                                 const SizedBox(width: 8),
-                                Expanded(child: _dateField(isEnglish ? 'To' : 'ถึง', _poDateTo, (d) => setState(() => _poDateTo = d))),
+                                Expanded(
+                                    child: _dateField(
+                                        isEnglish ? 'To' : 'ถึง',
+                                        _poDateTo,
+                                        (d) => setState(() => _poDateTo = d))),
                               ]),
                               const SizedBox(height: 12),
-
-                              Text(isEnglish ? 'Due Date' : 'วันที่ครบกำหนด', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              Text(isEnglish ? 'Due Date' : 'วันที่ครบกำหนด',
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.grey)),
                               const SizedBox(height: 4),
                               Row(children: [
-                                Expanded(child: _dateField(isEnglish ? 'From' : 'ตั้งแต่', _dueDateFrom, (d) => setState(() => _dueDateFrom = d))),
+                                Expanded(
+                                    child: _dateField(
+                                        isEnglish ? 'From' : 'ตั้งแต่',
+                                        _dueDateFrom,
+                                        (d) =>
+                                            setState(() => _dueDateFrom = d))),
                                 const SizedBox(width: 8),
-                                Expanded(child: _dateField(isEnglish ? 'To' : 'ถึง', _dueDateTo, (d) => setState(() => _dueDateTo = d))),
+                                Expanded(
+                                    child: _dateField(
+                                        isEnglish ? 'To' : 'ถึง',
+                                        _dueDateTo,
+                                        (d) => setState(() => _dueDateTo = d))),
                               ]),
                               const SizedBox(height: 12),
-
                               SearchMultiPicker<ApVendor>(
                                 items: _vendors,
                                 selectedIds: _selectedVendorIds,
                                 idOf: (v) => v.id!,
-                                labelOf: (v, en) => '${v.vendorCode}  ${en && (v.vendorNameEn ?? '').isNotEmpty ? v.vendorNameEn! : v.vendorNameTh}',
-                                searchTextOf: (v) => '${v.vendorCode} ${v.vendorNameTh} ${v.vendorNameEn ?? ''}',
-                                onChanged: (v) => setState(() => _selectedVendorIds = v),
-                                labelTh: 'ผู้ขาย', labelEn: 'Vendor',
-                                allLabelTh: '— ทุกผู้ขาย —', allLabelEn: '— All vendors —',
+                                labelOf: (v, en) =>
+                                    '${v.vendorCode}  ${en && (v.vendorNameEn ?? '').isNotEmpty ? v.vendorNameEn! : v.vendorNameTh}',
+                                searchTextOf: (v) =>
+                                    '${v.vendorCode} ${v.vendorNameTh} ${v.vendorNameEn ?? ''}',
+                                onChanged: (v) =>
+                                    setState(() => _selectedVendorIds = v),
+                                labelTh: 'ผู้ขาย',
+                                labelEn: 'Vendor',
+                                allLabelTh: '— ทุกผู้ขาย —',
+                                allLabelEn: '— All vendors —',
                               ),
                               const SizedBox(height: 12),
-
                               SearchMultiPicker<ImItem>(
                                 items: _items,
                                 selectedIds: _selectedItemIds,
                                 idOf: (i) => i.id!,
-                                labelOf: (i, en) => '${i.itemCode}  ${en && (i.itemNameEn ?? '').isNotEmpty ? i.itemNameEn! : i.itemNameTh}',
-                                searchTextOf: (i) => '${i.itemCode} ${i.itemNameTh} ${i.itemNameEn ?? ''}',
-                                onChanged: (v) => setState(() => _selectedItemIds = v),
-                                labelTh: 'สินค้า', labelEn: 'Item',
-                                allLabelTh: '— ทุกสินค้า —', allLabelEn: '— All items —',
+                                labelOf: (i, en) =>
+                                    '${i.itemCode}  ${en && (i.itemNameEn ?? '').isNotEmpty ? i.itemNameEn! : i.itemNameTh}',
+                                searchTextOf: (i) =>
+                                    '${i.itemCode} ${i.itemNameTh} ${i.itemNameEn ?? ''}',
+                                onChanged: (v) =>
+                                    setState(() => _selectedItemIds = v),
+                                labelTh: 'สินค้า',
+                                labelEn: 'Item',
+                                allLabelTh: '— ทุกสินค้า —',
+                                allLabelEn: '— All items —',
                               ),
                               const SizedBox(height: 12),
-
                               DropdownButtonFormField<bool>(
                                 value: _sortDueDateAsc,
                                 isExpanded: true,
                                 decoration: InputDecoration(
-                                  labelText: isEnglish ? 'Sort by Due Date' : 'จัดเรียงวันที่ครบกำหนด',
+                                  labelText: isEnglish
+                                      ? 'Sort by Due Date'
+                                      : 'จัดเรียงวันที่ครบกำหนด',
                                   border: const OutlineInputBorder(),
                                   isDense: true,
                                 ),
                                 items: [
-                                  DropdownMenuItem(value: true, child: Text(isEnglish ? 'Nearest → Farthest' : 'ใกล้สุด → ไกลสุด')),
-                                  DropdownMenuItem(value: false, child: Text(isEnglish ? 'Farthest → Nearest' : 'ไกลสุด → ใกล้สุด')),
+                                  DropdownMenuItem(
+                                      value: true,
+                                      child: Text(isEnglish
+                                          ? 'Nearest → Farthest'
+                                          : 'ใกล้สุด → ไกลสุด')),
+                                  DropdownMenuItem(
+                                      value: false,
+                                      child: Text(isEnglish
+                                          ? 'Farthest → Nearest'
+                                          : 'ไกลสุด → ใกล้สุด')),
                                 ],
-                                onChanged: (v) => setState(() => _sortDueDateAsc = v ?? true),
+                                onChanged: (v) =>
+                                    setState(() => _sortDueDateAsc = v ?? true),
                               ),
                             ],
                           ),
@@ -346,8 +476,12 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
                           height: 50,
                           child: ElevatedButton.icon(
                             icon: const Icon(Icons.picture_as_pdf),
-                            label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[800], foregroundColor: Colors.white),
+                            label: Text(isEnglish
+                                ? 'Generate Report'
+                                : 'ประมวลผลรายงาน'),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal[800],
+                                foregroundColor: Colors.white),
                             onPressed: _isLoading ? null : _generate,
                           ),
                         ),
@@ -361,11 +495,14 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
               MouseRegion(
                 cursor: SystemMouseCursors.resizeColumn,
                 child: GestureDetector(
-                  onHorizontalDragStart: (_) => setState(() => _isDraggingDivider = true),
+                  onHorizontalDragStart: (_) =>
+                      setState(() => _isDraggingDivider = true),
                   onHorizontalDragUpdate: (d) => setState(() {
-                    _filterPanelWidth = (_filterPanelWidth + d.delta.dx).clamp(200.0, maxFilterWidth);
+                    _filterPanelWidth = (_filterPanelWidth + d.delta.dx)
+                        .clamp(200.0, maxFilterWidth);
                   }),
-                  onHorizontalDragEnd: (_) => setState(() => _isDraggingDivider = false),
+                  onHorizontalDragEnd: (_) =>
+                      setState(() => _isDraggingDivider = false),
                   child: Container(width: 5, color: Colors.grey[400]),
                 ),
               ),
@@ -374,15 +511,18 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
                 if (_reportData.isNotEmpty)
                   Container(
                     color: Colors.grey[100],
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: Row(children: [
                       Icon(Icons.zoom_out, size: 18, color: Colors.grey[700]),
                       Expanded(
                         child: SliderTheme(
                           data: SliderTheme.of(context).copyWith(
                             trackHeight: 2,
-                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                            thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6),
+                            overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 12),
                           ),
                           child: SizedBox(
                             height: 24,
@@ -399,7 +539,10 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
                       ),
                       Icon(Icons.zoom_in, size: 18, color: Colors.grey[700]),
                       const SizedBox(width: 8),
-                      SizedBox(width: 48, child: Text('${(_zoom * 100).round()}%', style: const TextStyle(fontSize: 12))),
+                      SizedBox(
+                          width: 48,
+                          child: Text('${(_zoom * 100).round()}%',
+                              style: const TextStyle(fontSize: 12))),
                     ]),
                   ),
                 Expanded(
@@ -408,23 +551,28 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
                     child: _isLoading
                         ? const Center(child: CircularProgressIndicator())
                         : _reportData.isEmpty
-                            ? Center(child: Text(
-                                _hasGenerated
-                                    ? (isEnglish ? 'No data found for the selected conditions' : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')
-                                    : (isEnglish ? 'Please select conditions and click Generate' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล')))
-                            : InteractiveViewer(
-                                transformationController: _zoomController,
-                                minScale: 0.5,
-                                maxScale: 2.5,
-                                scaleEnabled: false,
-                                child: PdfPreview(
-                                  key: ValueKey(_pdfKey),
-                                  build: (fmt) => _generatePdf(fmt),
-                                  initialPageFormat: PdfPageFormat.a4.landscape,
-                                  canChangeOrientation: false,
-                                  canDebug: false,
-                                  allowPrinting: canPrint,
-                                  allowSharing: canPrint,
+                            ? Center(
+                                child: Text(_hasGenerated
+                                    ? (isEnglish
+                                        ? 'No data found for the selected conditions'
+                                        : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')
+                                    : (isEnglish
+                                        ? 'Please select conditions and click Generate'
+                                        : 'กรุณาเลือกเงื่อนไขและกดประมวลผล')))
+                            : ClipRect(
+                                child: Transform.scale(
+                                  scale: _zoom,
+                                  alignment: Alignment.topCenter,
+                                  child: PdfPreview(
+                                    key: ValueKey(_pdfKey),
+                                    build: (fmt) => _generatePdf(fmt),
+                                    initialPageFormat:
+                                        PdfPageFormat.a4.landscape,
+                                    canChangeOrientation: false,
+                                    canDebug: false,
+                                    allowPrinting: canPrint,
+                                    allowSharing: canPrint,
+                                  ),
                                 ),
                               ),
                   ),
@@ -437,7 +585,8 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
     );
   }
 
-  Widget _dateField(String label, DateTime? value, ValueChanged<DateTime?> onPicked) {
+  Widget _dateField(
+      String label, DateTime? value, ValueChanged<DateTime?> onPicked) {
     return InputDecorator(
       decoration: InputDecoration(
         labelText: label,
@@ -447,24 +596,41 @@ class _PoPendingReceiptReportScreenState extends State<PoPendingReceiptReportScr
           if (value != null)
             InkWell(
               onTap: () => onPicked(null),
-              child: const Padding(padding: EdgeInsets.symmetric(horizontal: 2), child: Icon(Icons.clear, size: 14, color: Colors.grey)),
+              child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 2),
+                  child: Icon(Icons.clear, size: 14, color: Colors.grey)),
             ),
           InkWell(
             onTap: () async {
-              final picked = await showDatePicker(context: context, initialDate: value ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
+              final picked = await showDatePicker(
+                  context: context,
+                  initialDate: value ?? DateTime.now(),
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100));
               if (picked != null) onPicked(picked);
             },
-            child: const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.calendar_today, size: 14)),
+            child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.calendar_today, size: 14)),
           ),
         ]),
       ),
       child: InkWell(
         onTap: () async {
-          final picked = await showDatePicker(context: context, initialDate: value ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
+          final picked = await showDatePicker(
+              context: context,
+              initialDate: value ?? DateTime.now(),
+              firstDate: DateTime(2000),
+              lastDate: DateTime(2100));
           if (picked != null) onPicked(picked);
         },
-        child: Text(value != null ? _dateFmt.format(value) : (_isEnglish ? '— Any —' : '— ไม่ระบุ —'),
-            style: TextStyle(fontSize: 13, color: value != null ? Colors.black87 : Colors.black38)),
+        child: Text(
+            value != null
+                ? _dateFmt.format(value)
+                : (_isEnglish ? '— Any —' : '— ไม่ระบุ —'),
+            style: TextStyle(
+                fontSize: 13,
+                color: value != null ? Colors.black87 : Colors.black38)),
       ),
     );
   }
