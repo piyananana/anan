@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 import 'package:intl/intl.dart';
 
 import '../models/gl_account.dart';
@@ -43,6 +43,7 @@ class _ChartOfAccountsReportScreenState
   Map<String, GlDimensionType> _dimTypeMap = {};
 
   List<Account> _reportData = [];
+  int _pdfKey = 0;
 
   // Filter States
   Set<String> _selectedAccountTypes = {};
@@ -168,7 +169,10 @@ class _ChartOfAccountsReportScreenState
               : 'ไม่พบบัญชีตามเงื่อนไขที่เลือก')));
     }
 
-    setState(() => _reportData = ordered);
+    setState(() {
+      _reportData = ordered;
+      _pdfKey++;
+    });
   }
 
   // จัดกลุ่มบัญชีที่มี accountType เดียวกันต่อเนื่องกันไว้กลุ่มเดียวกัน (รักษาลำดับผังบัญชีเดิม)
@@ -923,7 +927,8 @@ class _ChartOfAccountsReportScreenState
                   color: Colors.grey[200],
                   child: _reportData.isEmpty
                       ? Center(child: Text(isEnglish ? 'Please select filters and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
-                      : PdfPreview(
+                      : ZoomablePdfPreview(
+                          documentVersion: _pdfKey,
                           build: (format) => _generatePdf(format),
                           initialPageFormat: PdfPageFormat.a4.landscape,
                           canChangeOrientation: false,

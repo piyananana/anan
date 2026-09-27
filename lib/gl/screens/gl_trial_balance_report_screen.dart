@@ -8,7 +8,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 import 'package:intl/intl.dart';
 
 import '../../gl/models/gl_period.dart';
@@ -49,6 +49,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
   List<FiscalYear> _fiscalYears = [];
   List<PostingPeriod> _periods = [];
   List<Map<String, dynamic>> _reportData = [];
+  int _pdfKey = 0;
   List<dynamic> _branchList = [];
   List<UserBranch> _allowedBranches = [];
   int? _selectedBranchId;
@@ -156,6 +157,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 
       setState(() {
         _reportData = data;
+        _pdfKey++;
       });
     } catch (e) {
       if (mounted) {
@@ -1116,7 +1118,8 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
               color: Colors.grey[200],
               child: _reportData.isEmpty
                   ? Center(child: Text(isEnglish ? 'Select filter conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
-                  : PdfPreview(
+                  : ZoomablePdfPreview(
+                      documentVersion: _pdfKey,
                       build: (format) => _generatePdf(format),
                       initialPageFormat: PdfPageFormat.a4.landscape,
                       canChangeOrientation: false,

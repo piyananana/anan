@@ -8,7 +8,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 
 import '../../gl/models/gl_period.dart';
 import '../../gl/models/gl_dimension.dart';
@@ -63,6 +63,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   PostingPeriod? _selectedPeriod;
 
   Map<String, dynamic>? _reportData;
+  int _pdfKey = 0;
   final NumberFormat _currencyFormat = NumberFormat('#,##0.00', 'en_US');
 
   @override
@@ -138,7 +139,10 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         dim4Id: _dimSelections[4],
         dim5Id: _dimSelections[5],
       );
-      setState(() => _reportData = data);
+      setState(() {
+        _reportData = data;
+        _pdfKey++;
+      });
     } catch (e) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
@@ -903,7 +907,8 @@ Widget _buildTableTab() {
   Widget _buildPdfTab() {
     return Container(
       color: Colors.grey[200],
-      child: PdfPreview(
+      child: ZoomablePdfPreview(
+        documentVersion: _pdfKey,
         build: (format) => _generatePdf(format),
         initialPageFormat: PdfPageFormat.a4,
         canChangeOrientation: false,

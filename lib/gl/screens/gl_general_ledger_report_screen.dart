@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 import 'package:intl/intl.dart';
 
 import '../../gl/models/gl_period.dart';
@@ -72,6 +72,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   bool _hideZero = true;
   bool _isLoading = false;
   bool _reportGenerated = false;
+  int _pdfKey = 0;
   bool _isExporting = false;
   bool _isFilterExpanded = true;
   bool _isEnglish = false;
@@ -302,7 +303,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
         return;
       }
 
-      setState(() { _reportGenerated = true; });
+      setState(() { _reportGenerated = true; _pdfKey++; });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
     } finally {
@@ -1120,7 +1121,8 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
               color: Colors.grey[200],
               child: !_reportGenerated
                   ? Center(child: Text(isEnglish ? 'Select conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
-                  : PdfPreview(
+                  : ZoomablePdfPreview(
+                      documentVersion: _pdfKey,
                       build: (format) => _generatePdf(format),
                       initialPageFormat: PdfPageFormat.a4.landscape,
                       canChangeOrientation: false,

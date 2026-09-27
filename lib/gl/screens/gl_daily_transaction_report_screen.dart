@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 
 import '../../gl/models/gl_period.dart';
 import '../../gl/services/gl_period_service.dart';
@@ -81,6 +81,7 @@ class _DailyTransactionReportScreenState
   List<Map<String, dynamic>> _reportData = [];
   bool _isLoading = false;
   bool _reportGenerated = false;
+  int _pdfKey = 0;
   bool _isExporting = false;
   bool _isFilterExpanded = true;
   double _filterPanelWidth = 360.0;
@@ -209,6 +210,7 @@ class _DailyTransactionReportScreenState
       setState(() {
         _reportData = data;
         _reportGenerated = data.isNotEmpty;
+        _pdfKey++;
       });
       if (data.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1114,7 +1116,8 @@ class _DailyTransactionReportScreenState
               child: !_reportGenerated
                   ? Center(
                       child: Text(isEnglish ? 'Select conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
-                  : PdfPreview(
+                  : ZoomablePdfPreview(
+                      documentVersion: _pdfKey,
                       build: (f) => _generatePdf(f),
                       initialPageFormat: PdfPageFormat.a4.landscape,
                       canChangeOrientation: false,

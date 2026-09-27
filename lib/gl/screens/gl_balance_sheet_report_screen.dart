@@ -8,7 +8,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 import 'package:intl/intl.dart';
 
 import 'package:provider/provider.dart';
@@ -40,6 +40,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
   List<FiscalYear> _fiscalYears = [];
   List<PostingPeriod> _periods = [];
   List<Map<String, dynamic>> _reportData = [];
+  int _pdfKey = 0;
   Map<int, int> _accountLevels = {};
 
   FiscalYear? _selectedYear;
@@ -118,7 +119,10 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
         return;
       }
       _calculateAccountLevels(data);
-      setState(() => _reportData = data);
+      setState(() {
+        _reportData = data;
+        _pdfKey++;
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -809,7 +813,8 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
                   : _reportData.isEmpty
                       ? Center(
                           child: Text(isEnglish ? 'Select filter conditions and click Generate Report' : 'กรุณาเลือกเงื่อนไขและกดประมวลผล'))
-                      : PdfPreview(
+                      : ZoomablePdfPreview(
+                          documentVersion: _pdfKey,
                           build: (format) => _generatePdf(format),
                           initialPageFormat: PdfPageFormat.a4,
                           canChangeOrientation: false,
