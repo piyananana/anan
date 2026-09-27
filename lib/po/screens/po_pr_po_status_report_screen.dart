@@ -50,6 +50,23 @@ String _statusLabel(List<_StatusOption> options, String? value, bool isEnglish) 
   return isEnglish ? opt.first.labelEn : opt.first.labelTh;
 }
 
+// ป้ายกำกับสถานะ "หลังอนุมัติ" — ตัดออกจาก dialog เลือกสถานะหลักแล้ว (เหลือแค่ ร่าง/อนุมัติแล้ว/ยกเลิก) จึงต้องมี
+// ป้ายกำกับแยกไว้ใช้เฉพาะคอลัมน์ "สถานะหลังอนุมัติ" ในรายงานเท่านั้น ไม่เกี่ยวกับ dialog กรอง
+const _afterApprovalStatusLabels = {
+  'PartiallyReceived': ('รับสินค้าบางส่วน', 'Partially Received'),
+  'FullyReceived': ('รับสินค้าครบแล้ว', 'Fully Received'),
+  'PartiallyConverted': ('แปลงเป็นใบสั่งซื้อบางส่วน', 'Partially Converted'),
+  'FullyConverted': ('แปลงเป็นใบสั่งซื้อครบแล้ว', 'Fully Converted'),
+  'Closed': ('ปิดแล้ว', 'Closed'),
+};
+
+String _afterApprovalLabel(String? status, bool isEnglish) {
+  if (status == null) return '-';
+  final pair = _afterApprovalStatusLabels[status];
+  if (pair == null) return status;
+  return isEnglish ? pair.$2 : pair.$1;
+}
+
 class PrPoStatusReportScreen extends StatefulWidget {
   const PrPoStatusReportScreen({super.key});
 
@@ -158,6 +175,9 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         isEnglish ? 'Requester' : 'ผู้ขอ', isEnglish ? 'Approver' : 'ผู้อนุมัติ', isEnglish ? 'Order Status' : 'สถานะสั่งซื้อ',
         isEnglish ? 'Approved/Rejected Date' : 'วันที่อนุมัติ/ปฏิเสธ',
         isEnglish ? 'Request to Order (days)' : 'ขอซื้อถึงสั่งซื้อ(วัน)',
+        isEnglish ? 'Status After Approval' : 'สถานะหลังอนุมัติ',
+        isEnglish ? 'Status Date' : 'วันที่สถานะ',
+        isEnglish ? 'Request to Latest Status (days)' : 'ขอซื้อถึงสถานะล่าสุด(วัน)',
       ];
       for (int c = 0; c < headers.length; c++) {
         _xlCell(s, r, c, headers[c], bg: hdrBg, bold: true);
@@ -167,18 +187,24 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
       for (final row in _reportData) {
         final duration = row.durationDays;
         final decided = row.approvalOrRejectionDate;
+        final afterStatus = row.afterApprovalStatus;
+        final afterDate = row.afterApprovalStatusDate;
+        final durationLatest = row.durationToLatestStatusDays;
         _xlCell(s, r, 0, row.prDocNo ?? '-');
         _xlCell(s, r, 1, row.prDocDate != null ? _dateFmt.format(row.prDocDate!) : '-');
         _xlCell(s, r, 2, row.prRequestedByName ?? '-');
         _xlCell(s, r, 3, row.prApproverName ?? '-');
-        _xlCell(s, r, 4, _statusLabel(_prStatusOptions, row.prStatus, isEnglish));
+        _xlCell(s, r, 4, _statusLabel(_prStatusOptions, row.displayPrStatus, isEnglish));
         _xlCell(s, r, 5, row.poDocNo ?? '-');
         _xlCell(s, r, 6, row.poDocDate != null ? _dateFmt.format(row.poDocDate!) : '-');
         _xlCell(s, r, 7, row.poCreatedBy ?? '-');
         _xlCell(s, r, 8, row.poApproverName ?? '-');
-        _xlCell(s, r, 9, _statusLabel(_poStatusOptions, row.poStatus, isEnglish));
+        _xlCell(s, r, 9, _statusLabel(_poStatusOptions, row.displayPoStatus, isEnglish));
         _xlCell(s, r, 10, decided != null ? _dateFmt.format(decided) : '-');
         _xlCell(s, r, 11, duration == null ? '-' : DoubleCellValue(duration.toDouble()), align: HorizontalAlign.Right, bold: true);
+        _xlCell(s, r, 12, _afterApprovalLabel(afterStatus, isEnglish));
+        _xlCell(s, r, 13, afterDate != null ? _dateFmt.format(afterDate) : '-');
+        _xlCell(s, r, 14, durationLatest == null ? '-' : DoubleCellValue(durationLatest.toDouble()), align: HorizontalAlign.Right, bold: true);
         r++;
         if (_showPrItems) {
           for (final it in row.prItems) {
@@ -195,10 +221,7 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
             _xlCell(s, r, 5, '   ${it.itemCode ?? ''} ${it.itemName ?? ''}', bg: detBg);
             _xlCell(s, r, 6, DoubleCellValue(it.qty), bg: detBg, align: HorizontalAlign.Right);
             _xlCell(s, r, 7, DoubleCellValue(it.price), bg: detBg, align: HorizontalAlign.Right);
-            _xlCell(s, r, 8, '', bg: detBg);
-            _xlCell(s, r, 9, '', bg: detBg);
-            _xlCell(s, r, 10, '', bg: detBg);
-            _xlCell(s, r, 11, '', bg: detBg);
+            for (int c = 8; c < headers.length; c++) { _xlCell(s, r, c, '', bg: detBg); }
             r++;
           }
         }
@@ -248,9 +271,10 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
     const cBorder = PdfColors.grey400;
 
     final cw = {
-      'prNo': pageW * 0.10, 'prDate': pageW * 0.06, 'prReq': pageW * 0.085, 'prAppr': pageW * 0.085, 'prStatus': pageW * 0.07,
-      'poNo': pageW * 0.10, 'poDate': pageW * 0.06, 'poReq': pageW * 0.085, 'poAppr': pageW * 0.085, 'poStatus': pageW * 0.07,
-      'decided': pageW * 0.08, 'duration': pageW * 0.06,
+      'prNo': pageW * 0.085, 'prDate': pageW * 0.05, 'prReq': pageW * 0.07, 'prAppr': pageW * 0.07, 'prStatus': pageW * 0.06,
+      'poNo': pageW * 0.085, 'poDate': pageW * 0.05, 'poReq': pageW * 0.07, 'poAppr': pageW * 0.07, 'poStatus': pageW * 0.06,
+      'decided': pageW * 0.065, 'duration': pageW * 0.055,
+      'afterStatus': pageW * 0.075, 'afterDate': pageW * 0.06, 'durationLatest': pageW * 0.06,
     };
     const divider = 4.0;
     final prHalfW = cw['prNo']! + cw['prDate']! + cw['prReq']! + cw['prAppr']! + cw['prStatus']!;
@@ -280,6 +304,9 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         cell(cw['poStatus']!, isEnglish ? 'Order Status' : 'สถานะสั่งซื้อ', bold: true),
         cell(cw['decided']!, isEnglish ? 'Approved/\nRejected Date' : 'วันที่อนุมัติ/\nปฏิเสธ', bold: true, a: pw.TextAlign.right),
         cell(cw['duration']!, isEnglish ? 'Request to\nOrder (days)' : 'ขอซื้อถึง\nสั่งซื้อ(วัน)', bold: true, a: pw.TextAlign.right),
+        cell(cw['afterStatus']!, isEnglish ? 'Status After\nApproval' : 'สถานะ\nหลังอนุมัติ', bold: true),
+        cell(cw['afterDate']!, isEnglish ? 'Status\nDate' : 'วันที่\nสถานะ', bold: true, a: pw.TextAlign.right),
+        cell(cw['durationLatest']!, isEnglish ? 'Request to Latest\nStatus (days)' : 'ขอซื้อถึงสถานะ\nล่าสุด(วัน)', bold: true, a: pw.TextAlign.right),
       ]),
     );
 
@@ -297,6 +324,9 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         cell(cw['poAppr']! + cw['poStatus']!, isEnglish ? 'Price' : 'ราคา', bold: true, a: pw.TextAlign.right),
         cell(cw['decided']!, '', bold: true),
         cell(cw['duration']!, '', bold: true),
+        cell(cw['afterStatus']!, '', bold: true),
+        cell(cw['afterDate']!, '', bold: true),
+        cell(cw['durationLatest']!, '', bold: true),
       ]),
     );
 
@@ -310,6 +340,9 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
             pw.SizedBox(width: poHalfW),
             pw.SizedBox(width: cw['decided']!),
             pw.SizedBox(width: cw['duration']!),
+            pw.SizedBox(width: cw['afterStatus']!),
+            pw.SizedBox(width: cw['afterDate']!),
+            pw.SizedBox(width: cw['durationLatest']!),
           ]),
         );
 
@@ -323,6 +356,9 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
             cell(cw['poAppr']! + cw['poStatus']!, _fmtValue.format(it.price), grey: true, a: pw.TextAlign.right),
             cell(cw['decided']!, ''),
             cell(cw['duration']!, ''),
+            cell(cw['afterStatus']!, ''),
+            cell(cw['afterDate']!, ''),
+            cell(cw['durationLatest']!, ''),
           ]),
         );
 
@@ -355,6 +391,12 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
         final durationText = duration == null ? '-' : (isEnglish ? '$duration d' : '$duration วัน');
         final decided = row.approvalOrRejectionDate;
         final decidedText = decided != null ? _dateFmt.format(decided) : '-';
+        final afterStatus = row.afterApprovalStatus;
+        final afterDate = row.afterApprovalStatusDate;
+        final durationLatest = row.durationToLatestStatusDays;
+        final afterStatusText = _afterApprovalLabel(afterStatus, isEnglish);
+        final afterDateText = afterDate != null ? _dateFmt.format(afterDate) : '-';
+        final durationLatestText = durationLatest == null ? '-' : (isEnglish ? '$durationLatest d' : '$durationLatest วัน');
         final widgets = <pw.Widget>[
           pw.Container(
             decoration: pw.BoxDecoration(color: i.isEven ? PdfColors.white : const PdfColor(0.98, 0.98, 0.98)),
@@ -363,15 +405,18 @@ class _PrPoStatusReportScreenState extends State<PrPoStatusReportScreen> {
               cell(cw['prDate']!, row.prDocDate != null ? _dateFmt.format(row.prDocDate!) : '-'),
               cell(cw['prReq']!, row.prRequestedByName ?? '-'),
               cell(cw['prAppr']!, row.prApproverName ?? '-'),
-              cell(cw['prStatus']!, _statusLabel(_prStatusOptions, row.prStatus, isEnglish)),
+              cell(cw['prStatus']!, _statusLabel(_prStatusOptions, row.displayPrStatus, isEnglish)),
               pw.SizedBox(width: divider),
               cell(cw['poNo']!, row.poDocNo ?? '-'),
               cell(cw['poDate']!, row.poDocDate != null ? _dateFmt.format(row.poDocDate!) : '-'),
               cell(cw['poReq']!, row.poCreatedBy ?? '-'),
               cell(cw['poAppr']!, row.poApproverName ?? '-'),
-              cell(cw['poStatus']!, _statusLabel(_poStatusOptions, row.poStatus, isEnglish)),
+              cell(cw['poStatus']!, _statusLabel(_poStatusOptions, row.displayPoStatus, isEnglish)),
               cell(cw['decided']!, decidedText, a: pw.TextAlign.right),
               cell(cw['duration']!, durationText, bold: true, a: pw.TextAlign.right),
+              cell(cw['afterStatus']!, afterStatusText),
+              cell(cw['afterDate']!, afterDateText, a: pw.TextAlign.right),
+              cell(cw['durationLatest']!, durationLatestText, bold: true, a: pw.TextAlign.right),
             ]),
           ),
         ];
