@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import '../../widgets/zoomable_pdf_preview.dart';
 
 import 'package:provider/provider.dart';
 import '../models/ap_payment_run.dart';
@@ -1085,7 +1085,8 @@ class _DetailPanelState extends State<_DetailPanel> {
               ]),
             ),
             Expanded(
-              child: PdfPreview(
+              child: ZoomablePdfPreview(
+                documentVersion: 0,
                 build: (format) => _buildRaPdf(format),
                 initialPageFormat: PdfPageFormat.a4,
                 canChangeOrientation: false,
