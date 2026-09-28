@@ -21,6 +21,7 @@ class _PoTransactionScreenState extends State<PoTransactionScreen> with SingleTi
   bool _isViewOnly = false;
   bool _shouldRefreshList = false;
   int _detailResetKey = 0;
+  int? _copyFromId;
 
   @override
   void initState() {
@@ -42,11 +43,12 @@ class _PoTransactionScreenState extends State<PoTransactionScreen> with SingleTi
     super.dispose();
   }
 
-  void _openDetailTab({int? id, bool viewOnly = false}) {
+  void _openDetailTab({int? id, bool viewOnly = false, int? copyFromId}) {
     setState(() {
       if (id == null) _detailResetKey++;
       _selectedTransactionId = id;
-      _isViewOnly = viewOnly;
+      _isViewOnly = copyFromId != null ? false : viewOnly;
+      _copyFromId = copyFromId;
       _currentTabIndex = 1;
     });
     _tabController.animateTo(1);
@@ -132,6 +134,8 @@ class _PoTransactionScreenState extends State<PoTransactionScreen> with SingleTi
                     _tabController.animateTo(0);
                   },
                   canDelete: canDelete,
+                  copyFromId: _copyFromId,
+                  onCopyRequested: (id) => _openDetailTab(copyFromId: id),
                 ),
               ],
             ),

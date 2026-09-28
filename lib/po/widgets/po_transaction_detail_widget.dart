@@ -29,6 +29,10 @@ class PoTransactionDetailWidget extends StatefulWidget {
   final VoidCallback onSaveSuccess;
   final VoidCallback onCancel;
   final bool canDelete;
+  // คัดลอกใบสั่งซื้อเดิมเป็นฉบับร่างใหม่ — ใช้ได้เฉพาะตอน transactionId เป็น null (โหมดสร้างใหม่) เท่านั้น
+  // ดู _load()/onCopyRequested สำหรับตรรกะเต็ม
+  final int? copyFromId;
+  final ValueChanged<int>? onCopyRequested;
 
   const PoTransactionDetailWidget({
     super.key,
@@ -38,6 +42,8 @@ class PoTransactionDetailWidget extends StatefulWidget {
     required this.onSaveSuccess,
     required this.onCancel,
     this.canDelete = true,
+    this.copyFromId,
+    this.onCopyRequested,
   });
 
   @override
@@ -145,7 +151,38 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       if (_currencies.isEmpty) {
         _currencies = await _currencyService.fetchActiveRows();
       }
-      if (widget.transactionId == null) {
+      if (widget.transactionId == null && widget.copyFromId != null) {
+        final h = await _service.fetchRow(widget.copyFromId!);
+        _id = null;
+        _docId = h.docId;
+        _docType = _allowedDocTypes.isNotEmpty
+            ? _allowedDocTypes.firstWhere((d) => d.id == h.docId, orElse: () => _allowedDocTypes.first)
+            : null;
+        _docNo = 'AUTO';
+        _docDate = DateTime.now();
+        _dueDate = null;
+        _vendor = ApVendor(id: h.vendorId, vendorCode: h.vendorCode ?? '', vendorNameTh: h.vendorNameTh ?? '');
+        _warehouse = ImWarehouse(id: h.warehouseId, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn);
+        _descCtrl.text = h.description ?? '';
+        _status = 'Draft';
+        _refPrId = null;
+        _refPrDocNoLabel = null;
+        _currency = _currencies.cast<Currency?>().firstWhere(
+            (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
+        _exchangeRate = h.exchangeRate;
+        final items = await Future.wait(h.details.map((d) => _itemService.fetchRow(d.itemId)));
+        _lines = [
+          for (var i = 0; i < h.details.length; i++)
+            _LineForm(
+              item: items[i],
+              qtyOrdered: h.details[i].qtyOrdered,
+              unitPriceFc: h.details[i].unitPriceFc,
+            ),
+        ];
+        // คำนวณวันครบกำหนดใหม่จากเงื่อนไขเครดิตของผู้ขายบน doc_date ใหม่ (วันนี้) — ไม่คัดลอกวันครบกำหนดเดิมมาตรงๆ
+        // เพราะเอกสารที่คัดลอกเป็นธุรกรรมใหม่ที่เกิดขึ้นวันนี้ ไม่ใช่ของเดิมที่ย้อนวันที่ไป
+        if (_vendor != null) _selectVendor(_vendor!);
+      } else if (widget.transactionId == null) {
         _resetForm();
       } else {
         final h = await _service.fetchRow(widget.transactionId!);
@@ -420,6 +457,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     _isEnglish = isEnglish;
     final perm = MenuScope.of(context);
     final canApprove = perm?.canApprove ?? false;
+    final canCreate = perm?.canCreate ?? false;
 
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
@@ -640,6 +678,15 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           TextButton(onPressed: widget.onCancel, child: Text(isEnglish ? 'Close' : 'ปิด')),
           const SizedBox(width: 8),
+          if (_id != null && canCreate) ...[
+            OutlinedButton.icon(
+              onPressed: _isSaving ? null : () => widget.onCopyRequested?.call(_id!),
+              icon: const Icon(Icons.copy, size: 18),
+              label: Text(isEnglish ? 'Copy as New' : 'คัดลอกเป็นใบใหม่'),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.teal[800]),
+            ),
+            const SizedBox(width: 8),
+          ],
           if (_status == 'Draft' && !widget.viewOnly)
             ElevatedButton.icon(
               onPressed: _isSaving ? null : _save,
