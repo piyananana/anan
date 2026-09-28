@@ -132,6 +132,7 @@ import '../../po/screens/po_replenishment_report_screen.dart';
 import '../../po/screens/po_pr_transaction_screen.dart';
 import '../../po/screens/po_pr_po_status_report_screen.dart';
 import '../../po/screens/po_pending_receipt_report_screen.dart';
+import '../../po/screens/po_bulk_close_screen.dart';
 
 import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
@@ -354,6 +355,7 @@ class Menu {
     'PrTransactionScreen': (context) => const PrTransactionScreen(),
     'PrPoStatusReportScreen': (context) => const PrPoStatusReportScreen(),
     'PoPendingReceiptReportScreen': (context) => const PoPendingReceiptReportScreen(),
+    'PoBulkCloseScreen': (context) => const PoBulkCloseScreen(),
 
     'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
     'ApVendorGroupScreen': (context) => const ApVendorGroupScreen(),
