@@ -135,6 +135,9 @@ import '../../so/screens/so_quote_transaction_screen.dart';
 import '../../po/screens/po_pr_po_status_report_screen.dart';
 import '../../po/screens/po_pending_receipt_report_screen.dart';
 import '../../po/screens/po_bulk_close_screen.dart';
+import '../../so/screens/so_quote_so_status_report_screen.dart';
+import '../../so/screens/so_pending_delivery_report_screen.dart';
+import '../../so/screens/so_bulk_close_screen.dart';
 
 import '../../ap/screens/ap_vendor_screen.dart';
 import '../../ap/screens/ap_vendor_group_screen.dart';
@@ -359,6 +362,9 @@ class Menu {
     'QuoteTransactionScreen': (context) => const QuoteTransactionScreen(),
     'PrPoStatusReportScreen': (context) => const PrPoStatusReportScreen(),
     'PoPendingReceiptReportScreen': (context) => const PoPendingReceiptReportScreen(),
+    'QuoteSoStatusReportScreen': (context) => const QuoteSoStatusReportScreen(),
+    'SoPendingDeliveryReportScreen': (context) => const SoPendingDeliveryReportScreen(),
+    'SoBulkCloseScreen': (context) => const SoBulkCloseScreen(),
     'PoBulkCloseScreen': (context) => const PoBulkCloseScreen(),
 
     'ApVendorScreen': (context) => ApVendorScreen(onFieldsChanged: () {}),
