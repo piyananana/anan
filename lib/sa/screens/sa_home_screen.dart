@@ -23,6 +23,7 @@ import '../services/sa_pending_approval_service.dart';
 import '../../ap/screens/ap_payment_run_screen.dart';
 import '../../ap/screens/ap_transaction_screen.dart';
 import '../../po/screens/po_pr_transaction_screen.dart';
+import '../../so/screens/so_quote_transaction_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final PasswordStatus? passwordStatus; // รับสถานะรหัสผ่านจาก LoginScreen
@@ -134,6 +135,9 @@ class HomeScreenState extends State<HomeScreen> {
     switch (item.targetPath) {
       case 'PrTransactionScreen':
         target = PrTransactionScreen(initialDetailId: item.id);
+        break;
+      case 'QuoteTransactionScreen':
+        target = QuoteTransactionScreen(initialDetailId: item.id);
         break;
       case 'ApTransactionScreen':
         target = ApTransactionScreen(initialDetailId: item.id);

@@ -1,41 +1,41 @@
-// lib/so/widgets/so_transaction_detail_widget.dart — แก้ไขรายละเอียดใบสั่งขาย (header+lines)
-// มิเรอร์โครงสร้าง po_transaction_detail_widget.dart ทุกประการ (vendor->customer) — SO ไม่แตะสต็อก/GL เลย —
-// Draft เท่านั้นที่แก้ไขได้ (เหมือน DLN), Approve/Close/Void เป็น action แยกกดทีละปุ่ม ดู soTransactionController.js
-// สำหรับ workflow เต็ม — มีขั้น "ใบเสนอราคา" (Quote) นำหน้าได้เหมือน PR นำหน้า PO (ดู _pickQuoteLines,
-// มิเรอร์ _pickPrLines ใน po_transaction_detail_widget.dart ทุกประการ)
+// lib/so/widgets/so_quote_transaction_detail_widget.dart — แก้ไขรายละเอียดใบเสนอราคา (header+lines) + แผงอนุมัติ
+// มิเรอร์โครงสร้าง po_pr_transaction_detail_widget.dart ทุกประการ (vendor->customer) — customer/warehouse ไม่บังคับ
+// (Quote คือ "เสนอราคาอะไร" ไม่ใช่ "ขายให้ใคร/จากคลังไหน" แน่นอน) และมีขั้นตอน Submit->Approve/Reject ผ่านคิว
+// อนุมัติจริง (sa_module_approver) เหมือน PR ทุกประการ — ต่างจาก PR ตรงที่มี validUntilDate ระดับหัวเอกสาร (ไม่ใช่
+// per-line neededByDate ของ PR) ดู soQuoteTransactionController.js สำหรับ workflow เต็ม
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../ar/models/ar_customer.dart';
 import '../../ar/widgets/ar_customer_list_widget.dart';
 import '../../im/models/im_item.dart';
 import '../../im/models/im_warehouse.dart';
-import '../models/so_transaction.dart';
+import '../models/so_quote_transaction.dart';
 import '../../im/services/im_item_service.dart';
-import '../services/so_transaction_service.dart';
 import '../services/so_quote_transaction_service.dart';
 import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../sa/widgets/sa_attachment_widget.dart';
 
-class SoTransactionDetailWidget extends StatefulWidget {
+class QuoteTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
   final bool viewOnly;
   final int resetKey;
   final VoidCallback onSaveSuccess;
   final VoidCallback onCancel;
   final bool canDelete;
-  // คัดลอกใบสั่งขายเดิมเป็นฉบับร่างใหม่ — ใช้ได้เฉพาะตอน transactionId เป็น null (โหมดสร้างใหม่) เท่านั้น
+  // คัดลอกใบเสนอราคาเดิมเป็นฉบับร่างใหม่ — ใช้ได้เฉพาะตอน transactionId เป็น null (โหมดสร้างใหม่) เท่านั้น
   // ดู _load()/onCopyRequested สำหรับตรรกะเต็ม (มิเรอร์ po_transaction_detail_widget.dart ทุกประการ)
   final int? copyFromId;
   final ValueChanged<int>? onCopyRequested;
 
-  const SoTransactionDetailWidget({
+  const QuoteTransactionDetailWidget({
     super.key,
     required this.transactionId,
     this.viewOnly = false,
@@ -48,23 +48,21 @@ class SoTransactionDetailWidget extends StatefulWidget {
   });
 
   @override
-  State<SoTransactionDetailWidget> createState() => _SoTransactionDetailWidgetState();
+  State<QuoteTransactionDetailWidget> createState() => _QuoteTransactionDetailWidgetState();
 }
 
 class _LineForm {
   int? id;
   ImItem? item;
-  double qtyOrdered;
+  double qtyQuoted;
   double unitPriceFc;
-  double qtyDelivered;
-  int? refQuoteDetailId; // บรรทัดใบเสนอราคา (Quote) ต้นทาง ถ้าเพิ่มมาจาก picker _pickQuoteLines()
-  _LineForm({this.id, this.item, this.qtyOrdered = 0, this.unitPriceFc = 0, this.qtyDelivered = 0, this.refQuoteDetailId});
-  double get totalValueLc => qtyOrdered * unitPriceFc;
+  double qtyConverted;
+  _LineForm({this.id, this.item, this.qtyQuoted = 0, this.unitPriceFc = 0, this.qtyConverted = 0});
+  double get totalValueLc => qtyQuoted * unitPriceFc;
 }
 
-class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
-  final _service = SoTransactionService();
-  final _quoteService = QuoteTransactionService();
+class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWidget> {
+  final _service = QuoteTransactionService();
   final _itemService = ImItemService();
   final _currencyService = CurrencyService();
   final _fmtQty = NumberFormat('#,##0.####');
@@ -78,29 +76,27 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   int? _docId;
   String _docNo = 'AUTO';
   DateTime _docDate = DateTime.now();
-  DateTime? _dueDate;
+  DateTime? _validUntilDate;
   ArCustomer? _customer;
   ImWarehouse? _warehouse;
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
-  int? _refQuoteId; // ใบเสนอราคา (Quote) ต้นทาง ถ้าเพิ่มรายการมาจาก _pickQuoteLines()
-  String? _refQuoteDocNoLabel;
+  List<QuoteTransactionApproval> _approvals = [];
 
-  // รองรับขายสินค้าต่างประเทศเป็นสกุลเงินต่างประเทศ — unit_price_fc ต่อบรรทัดคือราคาในสกุลเงินนี้ (FC),
-  // total_value_lc คำนวณจาก unit_price_fc * exchange_rate เสมอ มิเรอร์ po_transaction_detail_widget.dart ทุกประการ
+  // รองรับเสนอราคาสินค้าต่างประเทศเป็นสกุลเงินต่างประเทศ — มิเรอร์ po_pr_transaction_detail_widget.dart ทุกประการ
   List<Currency> _currencies = [];
   Currency? _currency;
   double _exchangeRate = 1;
 
-  // sys_module='41' มีมากกว่าหนึ่งประเภทเอกสารได้ จึงต้องกรองซ้ำด้วย sys_doc_type '10' คือ SO (ตาม soSysDocType
-  // ใน sa_anan_module.dart) แล้วให้ผู้ใช้เลือกเองเหมือนหน้าจอธุรกรรม AR/AP
-  static const _soSysDocType = '10';
+  // sys_module='41' มีมากกว่าหนึ่งประเภทเอกสารได้ (เช่น SOR ของ SO, SQT ของ Quote) จึงต้องกรองซ้ำด้วย sys_doc_type
+  // '05' คือ Quote (ตาม soSysDocType ใน sa_anan_module.dart)
+  static const _quoteSysDocType = '05';
   List<ModuleDocument> _allowedDocTypes = [];
   ModuleDocument? _docType;
 
   List<_LineForm> _lines = [];
 
-  bool get _isReadOnly => widget.viewOnly || _status != 'Draft';
+  bool get _isReadOnly => widget.viewOnly || !['Draft', 'Rejected'].contains(_status);
 
   @override
   void initState() {
@@ -109,7 +105,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   }
 
   @override
-  void didUpdateWidget(covariant SoTransactionDetailWidget old) {
+  void didUpdateWidget(covariant QuoteTransactionDetailWidget old) {
     super.didUpdateWidget(old);
     if (widget.transactionId != old.transactionId || widget.resetKey != old.resetKey) {
       _load();
@@ -128,14 +124,13 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     _docId = _docType?.id;
     _docNo = 'AUTO';
     _docDate = DateTime.now();
-    _dueDate = null;
+    _validUntilDate = null;
     _customer = null;
     _warehouse = null;
     _descCtrl.clear();
     _status = 'Draft';
-    _refQuoteId = null;
-    _refQuoteDocNoLabel = null;
-    _currency = _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null);
+    _approvals = [];
+    _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
     _exchangeRate = _currency?.baseRate ?? 1;
     _lines = [];
   }
@@ -146,7 +141,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     try {
       if (_allowedDocTypes.isEmpty) {
         final docTypes = await _service.fetchDocTypesByUser();
-        _allowedDocTypes = docTypes.where((d) => d.isDocType && d.sysDocType == _soSysDocType).toList();
+        _allowedDocTypes = docTypes.where((d) => d.isDocType && d.sysDocType == _quoteSysDocType).toList();
       }
       if (_currencies.isEmpty) {
         _currencies = await _currencyService.fetchActiveRows();
@@ -160,13 +155,14 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
             : null;
         _docNo = 'AUTO';
         _docDate = DateTime.now();
-        _dueDate = null;
-        _customer = ArCustomer(id: h.customerId, customerCode: h.customerCode ?? '', customerNameTh: h.customerNameTh ?? '');
-        _warehouse = ImWarehouse(id: h.warehouseId, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn);
+        _validUntilDate = null;
+        _customer = h.customerId != null ? ArCustomer(id: h.customerId, customerCode: h.customerCode ?? '', customerNameTh: h.customerNameTh ?? '') : null;
+        _warehouse = h.warehouseId != null
+            ? ImWarehouse(id: h.warehouseId!, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn)
+            : null;
         _descCtrl.text = h.description ?? '';
         _status = 'Draft';
-        _refQuoteId = null;
-        _refQuoteDocNoLabel = null;
+        _approvals = [];
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
@@ -175,12 +171,10 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
           for (var i = 0; i < h.details.length; i++)
             _LineForm(
               item: items[i],
-              qtyOrdered: h.details[i].qtyOrdered,
+              qtyQuoted: h.details[i].qtyQuoted,
               unitPriceFc: h.details[i].unitPriceFc,
             ),
         ];
-        // คำนวณวันครบกำหนดใหม่จากเงื่อนไขเครดิตของลูกค้าบน doc_date ใหม่ (วันนี้) — ไม่คัดลอกวันครบกำหนดเดิมมาตรงๆ
-        // เพราะเอกสารที่คัดลอกเป็นธุรกรรมใหม่ที่เกิดขึ้นวันนี้ ไม่ใช่ของเดิมที่ย้อนวันที่ไป
         if (_customer != null) _selectCustomer(_customer!);
       } else if (widget.transactionId == null) {
         _resetForm();
@@ -193,28 +187,28 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
             : null;
         _docNo = h.docNo;
         _docDate = h.docDate;
-        _dueDate = h.dueDate;
-        _customer = ArCustomer(id: h.customerId, customerCode: h.customerCode ?? '', customerNameTh: h.customerNameTh ?? '');
-        _warehouse = ImWarehouse(id: h.warehouseId, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn);
+        _validUntilDate = h.validUntilDate;
+        _customer = h.customerId != null ? ArCustomer(id: h.customerId, customerCode: h.customerCode ?? '', customerNameTh: h.customerNameTh ?? '') : null;
+        _warehouse = h.warehouseId != null
+            ? ImWarehouse(id: h.warehouseId!, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn)
+            : null;
         _descCtrl.text = h.description ?? '';
         _status = h.status;
-        _refQuoteId = h.refQuoteId;
-        _refQuoteDocNoLabel = h.refQuoteDocNo;
+        _approvals = h.approvals;
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
-        // ดึง ImItem เต็มจาก itemId เสมอ ไม่ใช้ค่า snapshot (item_code/item_name) ที่บันทึกไว้ตอนสร้างเอกสารมาแสดง
-        // ตรงๆ — มิเรอร์ po_transaction_detail_widget.dart ทุกประการ
+        // ดึง ImItem เต็มจาก itemId เสมอ ไม่ใช้ค่า snapshot ที่บันทึกไว้ตอนสร้างเอกสารมาแสดงตรงๆ — มิเรอร์
+        // po_transaction_detail_widget.dart ทุกประการ (ดู comment เดียวกันที่นั่น)
         final items = await Future.wait(h.details.map((d) => _itemService.fetchRow(d.itemId)));
         _lines = [
           for (var i = 0; i < h.details.length; i++)
             _LineForm(
               id: h.details[i].id,
               item: items[i],
-              qtyOrdered: h.details[i].qtyOrdered,
+              qtyQuoted: h.details[i].qtyQuoted,
               unitPriceFc: h.details[i].unitPriceFc,
-              qtyDelivered: h.details[i].qtyDelivered,
-              refQuoteDetailId: h.details[i].refQuoteDetailId,
+              qtyConverted: h.details[i].qtyConverted,
             ),
         ];
       }
@@ -228,14 +222,6 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   void _selectCustomer(ArCustomer c) {
     setState(() {
       _customer = c;
-      // เงื่อนไขเครดิต: due_date = doc_date + creditTermMonths เดือน + creditTermDays วัน — สูตรเดียวกับ
-      // po_transaction_detail_widget.dart:_selectVendor ทุกประการ ฝั่งลูกค้า
-      if (c.creditTermMonths > 0 || c.creditTermDays > 0) {
-        var base = _docDate;
-        if (c.creditTermMonths > 0) base = DateTime(base.year, base.month + c.creditTermMonths, base.day);
-        if (c.creditTermDays > 0) base = base.add(Duration(days: c.creditTermDays));
-        _dueDate = base;
-      }
       // สกุลเงินหลักของลูกค้า (ar_customer.currency_code)
       if (c.currencyCode.isNotEmpty) {
         final matched = _currencies.cast<Currency?>().firstWhere((cur) => cur!.currencyCode == c.currencyCode, orElse: () => null);
@@ -248,139 +234,30 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   }
 
   Future<void> _addLine() async {
-    final result = await showDialog<ImItem>(context: context, builder: (_) => const _ItemPickerDialog());
+    final result = await showDialog<ImItem>(context: context, builder: (_) => const _QuoteItemPickerDialog());
     if (result == null || !mounted) return;
-    final line = _LineForm(item: result, qtyOrdered: 1, unitPriceFc: 0);
-    setState(() => _lines.add(line));
-    if (_customer != null) {
-      final resolved = await _service.resolvePrice(
-        itemId: result.id!, customerId: _customer!.id!, qty: 1, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
-      );
-      if (resolved['unit_price_fc'] != null && mounted) {
-        setState(() => line.unitPriceFc = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0);
-      }
-    }
-  }
-
-  // ค่า NUMERIC จาก PostgreSQL ผ่าน pg driver มาเป็น String เสมอ (ไม่ใช่ num) — ต้อง parse ด้วย toString() เท่านั้น
-  // ห้ามใช้ `as num?` ตรงๆ (จะ throw runtime TypeError) มิเรอร์ toDouble() ที่ใช้ทั่วทั้ง *_transaction.dart models
-  double _quoteNum(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0;
-
-  // เพิ่มรายการเข้า SO จากบรรทัดที่ยังแปลงได้ของใบเสนอราคา (Quote) ที่อนุมัติแล้ว (multi-select ได้ ข้าม Quote
-  // หลายใบในครั้งเดียว) มิเรอร์ _pickPrLines ใน po_transaction_detail_widget.dart ทุกประการ
-  Future<void> _pickQuoteLines() async {
-    final isEnglish = _isEnglish;
-    List<Map<String, dynamic>> lines;
-    try {
-      lines = await _quoteService.fetchConvertibleLines();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
-      return;
-    }
-    final alreadyPicked = _lines.map((l) => l.refQuoteDetailId).whereType<int>().toSet();
-    final selectable = lines.where((l) => !alreadyPicked.contains(l['detail_id'] as int)).toList();
-    if (selectable.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'No convertible Quote lines left' : 'ไม่มีรายการที่แปลงได้เหลืออยู่')));
-      return;
-    }
-    final qtyCtrls = {for (final l in selectable) l['detail_id'] as int: TextEditingController(text: _fmtQty.format((l['qty_remaining'] as num).toDouble()))};
-    final selected = {for (final l in selectable) l['detail_id'] as int: false};
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) => AlertDialog(
-            title: Text(isEnglish ? 'Select Lines from Sale Quote' : 'เลือกรายการจากใบเสนอราคา'),
-            content: SizedBox(
-              width: 620,
-              height: 420,
-              child: ListView.builder(
-                itemCount: selectable.length,
-                itemBuilder: (_, i) {
-                  final l = selectable[i];
-                  final id = l['detail_id'] as int;
-                  final remaining = (l['qty_remaining'] as num).toDouble();
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(children: [
-                      Checkbox(value: selected[id], onChanged: (v) => setSt(() => selected[id] = v ?? false)),
-                      Expanded(flex: 2, child: Text('${l['doc_no']}', style: const TextStyle(fontSize: 12, color: Colors.grey))),
-                      Expanded(flex: 3, child: Text('${l['item_code'] ?? ''} ${l['item_name'] ?? ''}', overflow: TextOverflow.ellipsis)),
-                      Expanded(
-                        flex: 2,
-                        child: Text(isEnglish ? 'Remaining: ${_fmtQty.format(remaining)}' : 'คงเหลือแปลงได้: ${_fmtQty.format(remaining)}', style: const TextStyle(fontSize: 12)),
-                      ),
-                      // ราคาเสนอของ Quote เป็นสกุลเงินของ Quote เอง ซึ่งอาจไม่ตรงกับสกุลเงินที่เลือกไว้ในใบสั่งขายนี้ —
-                      // แสดงกำกับไว้เป็น hint เท่านั้น ผู้ใช้ต้องตรวจสอบ/แก้ราคาเองหลังเพิ่มรายการ ไม่ auto-convert ให้
-                      Expanded(
-                        flex: 1,
-                        child: Text('@ ${_fmtQty.format(_quoteNum(l['unit_price_fc']))} ${l['currency_code'] ?? ''}'.trim(),
-                            style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                      ),
-                      SizedBox(
-                        width: 100,
-                        child: TextField(
-                          controller: qtyCtrls[id],
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: InputDecoration(isDense: true, border: const OutlineInputBorder(), labelText: isEnglish ? 'Qty' : 'จำนวน'),
-                        ),
-                      ),
-                    ]),
-                  );
-                },
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Add' : 'เพิ่ม')),
-            ],
-          )),
-    );
-    if (confirmed != true || !mounted) return;
-
-    final pickedLines = selectable.where((l) => selected[l['detail_id']] == true && (double.tryParse(qtyCtrls[l['detail_id']]!.text) ?? 0) > 0).toList();
-    if (pickedLines.isEmpty) return;
-    final items = await Future.wait(pickedLines.map((l) => _itemService.fetchRow(l['item_id'] as int)));
-    if (!mounted) return;
-    setState(() {
-      for (var i = 0; i < pickedLines.length; i++) {
-        final l = pickedLines[i];
-        final id = l['detail_id'] as int;
-        final remaining = (l['qty_remaining'] as num).toDouble();
-        final qty = (double.tryParse(qtyCtrls[id]!.text) ?? 0).clamp(0, remaining);
-        _lines.add(_LineForm(
-          item: items[i],
-          qtyOrdered: qty.toDouble(),
-          unitPriceFc: _quoteNum(l['unit_price_fc']),
-          refQuoteDetailId: id,
-        ));
-      }
-      _refQuoteId = pickedLines.first['header_id'] as int;
-      _refQuoteDocNoLabel = pickedLines.first['doc_no'] as String?;
-    });
+    setState(() => _lines.add(_LineForm(item: result, qtyQuoted: 1, unitPriceFc: 0)));
   }
 
   Future<void> _save() async {
     final isEnglish = _isEnglish;
     if (_docType == null) { _warn(isEnglish ? 'Please select a document type' : 'กรุณาเลือกประเภทเอกสาร'); return; }
-    if (_customer == null) { _warn(isEnglish ? 'Please select a customer' : 'กรุณาระบุลูกค้า'); return; }
-    if (_warehouse == null) { _warn(isEnglish ? 'Please select a warehouse' : 'กรุณาระบุคลังต้นทาง'); return; }
-    if (_lines.isEmpty) { _warn(isEnglish ? 'At least 1 line is required' : 'ต้องมีรายการสั่งขายอย่างน้อย 1 รายการ'); return; }
+    if (_lines.isEmpty) { _warn(isEnglish ? 'At least 1 line is required' : 'ต้องมีรายการเสนอราคาอย่างน้อย 1 รายการ'); return; }
     for (final l in _lines) {
-      if (l.item == null || l.qtyOrdered <= 0) { _warn(isEnglish ? 'Please complete every line' : 'กรุณากรอกรายการให้ครบถ้วน'); return; }
+      if (l.item == null || l.qtyQuoted <= 0) { _warn(isEnglish ? 'Please complete every line' : 'กรุณากรอกรายการให้ครบถ้วน'); return; }
     }
     setState(() => _isSaving = true);
     try {
-      final header = SoTransactionHeader(
+      final header = QuoteTransactionHeader(
         id: _id ?? 0, docId: _docId ?? 0, docNo: _docNo, docDate: _docDate,
-        customerId: _customer!.id!, warehouseId: _warehouse!.id, dueDate: _dueDate,
+        customerId: _customer?.id, warehouseId: _warehouse?.id, validUntilDate: _validUntilDate,
         currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? 'THB', exchangeRate: _exchangeRate,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        refQuoteId: _refQuoteId,
       );
       final details = _lines
-          .map((l) => SoTransactionDetail(
+          .map((l) => QuoteTransactionDetail(
                 id: l.id, lineNo: 0, itemId: l.item!.id!, itemCode: l.item!.itemCode, itemName: l.item!.itemNameTh,
-                qtyOrdered: l.qtyOrdered, unitPriceFc: l.unitPriceFc, refQuoteDetailId: l.refQuoteDetailId,
+                qtyQuoted: l.qtyQuoted, unitPriceFc: l.unitPriceFc,
               ))
           .toList();
       if (_id == null) {
@@ -399,7 +276,37 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     }
   }
 
-  Future<void> _confirmAction(String titleTh, String titleEn, String bodyTh, String bodyEn, Future<SoTransactionHeader> Function() action) async {
+  Future<void> _submit() async {
+    final isEnglish = _isEnglish;
+    final menuId = MenuScope.of(context)?.id;
+    if (menuId == null) { _warn(isEnglish ? 'Cannot determine current menu' : 'ไม่สามารถระบุเมนูปัจจุบันได้'); return; }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Confirm Submit for Approval' : 'ยืนยันการส่งอนุมัติ'),
+        content: Text(isEnglish ? 'Submit $_docNo for approval?' : 'ส่งอนุมัติ $_docNo?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Submit' : 'ส่งอนุมัติ')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _isSaving = true);
+    try {
+      await _service.submitTransaction(_id!, menuId: menuId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Submitted for approval successfully' : 'ส่งอนุมัติสำเร็จ')));
+        await _load();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _confirmAction(String titleTh, String titleEn, String bodyTh, String bodyEn, Future<QuoteTransactionHeader> Function() action) async {
     final isEnglish = _isEnglish;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -436,16 +343,23 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   String _currencyLabel(Currency c) => _isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai;
 
   String get _baseCurrencyCode =>
-      _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
+      _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null)?.currencyCode ?? 'THB';
 
-  Widget _fkField({required String label, required bool hasValue, required String displayText, VoidCallback? onSearch}) {
+  Widget _fkField({required String label, required bool hasValue, required String displayText, VoidCallback? onSearch, VoidCallback? onClear}) {
     return InputDecorator(
       decoration: InputDecoration(
         labelText: label, border: const OutlineInputBorder(), isDense: true,
-        suffixIcon: onSearch == null ? null : IconButton(icon: const Icon(Icons.search, size: 18), onPressed: onSearch),
+        suffixIcon: onSearch == null
+            ? null
+            : (hasValue && onClear != null
+                ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: onClear)
+                : IconButton(icon: const Icon(Icons.search, size: 18), onPressed: onSearch)),
       ),
-      child: Text(hasValue ? displayText : (_isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
-          style: TextStyle(fontSize: 13, color: hasValue ? Colors.black87 : Colors.black38)),
+      child: GestureDetector(
+        onTap: onSearch,
+        child: Text(hasValue ? displayText : (_isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
+            style: TextStyle(fontSize: 13, color: hasValue ? Colors.black87 : Colors.black38)),
+      ),
     );
   }
 
@@ -477,18 +391,16 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                           value: d,
                           child: Text('${d.docCode} ${_docTypeLabel(d)}', overflow: TextOverflow.ellipsis),
                         )).toList(),
-                    // เลือกเปลี่ยนได้เฉพาะตอนยังไม่บันทึกครั้งแรก (_id == null) — endpoint update ไม่รองรับการเปลี่ยน
-                    // doc_id ของเอกสารที่มีอยู่แล้ว (เลขที่เอกสาร/ชุดเลขวิ่งผูกกับประเภทเอกสารตอนสร้างเท่านั้น)
                     onChanged: (_isReadOnly || _id != null) ? null : (v) => setState(() { _docType = v; _docId = v?.id; }),
                     validator: (v) => v == null ? (isEnglish ? 'Please select' : 'กรุณาเลือก') : null,
                   ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(child: Text('${isEnglish ? "SO No." : "เลขที่ใบสั่งขาย"}: $_docNo', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                Expanded(child: Text('${isEnglish ? "Quote No." : "เลขที่ใบเสนอราคา"}: $_docNo', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(color: Colors.blueGrey.shade100, borderRadius: BorderRadius.circular(12)),
-                  child: Text(soTransactionStatusLabel(_status, isEnglish), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                  child: Text(quoteTransactionStatusLabel(_status, isEnglish), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
                 ),
               ]),
               const SizedBox(height: 12),
@@ -509,12 +421,12 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                 Expanded(
                   child: InkWell(
                     onTap: _isReadOnly ? null : () async {
-                      final picked = await showDatePicker(context: context, initialDate: _dueDate ?? _docDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
-                      if (picked != null) setState(() => _dueDate = picked);
+                      final picked = await showDatePicker(context: context, initialDate: _validUntilDate ?? _docDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
+                      if (picked != null) setState(() => _validUntilDate = picked);
                     },
                     child: InputDecorator(
-                      decoration: InputDecoration(labelText: isEnglish ? 'Due Date' : 'วันครบกำหนด', border: const OutlineInputBorder(), isDense: true),
-                      child: Text(_dueDate != null ? _dateFmt.format(_dueDate!) : '-'),
+                      decoration: InputDecoration(labelText: isEnglish ? 'Valid Until' : 'ใช้ได้ถึงวันที่', border: const OutlineInputBorder(), isDense: true),
+                      child: Text(_validUntilDate != null ? _dateFmt.format(_validUntilDate!) : '-'),
                     ),
                   ),
                 ),
@@ -524,19 +436,31 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                 Expanded(
                   flex: 2,
                   child: _fkField(
-                    label: isEnglish ? 'Customer *' : 'ลูกค้า *',
+                    label: isEnglish ? 'Customer (optional)' : 'ลูกค้า (ไม่บังคับ)',
                     hasValue: _customer != null,
                     displayText: '${_customer?.customerCode ?? ''}  ${_customer?.customerNameTh ?? ''}',
                     onSearch: _isReadOnly ? null : () => ArCustomerListWidget.search(context, onSelected: _selectCustomer),
+                    onClear: () => setState(() => _customer = null),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: _fkField(
+                    label: isEnglish ? 'Warehouse (optional)' : 'คลังต้นทาง (ไม่บังคับ)',
+                    hasValue: _warehouse != null,
+                    displayText: '${_warehouse?.warehouseCode ?? ''}  ${_warehouse?.warehouseNameTh ?? ''}',
+                    onSearch: _isReadOnly ? null : () => ImWarehouseListWidget.search(context, onSelected: (w) => setState(() => _warehouse = w)),
+                    onClear: () => setState(() => _warehouse = null),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _fkField(
-                    label: isEnglish ? 'Warehouse *' : 'คลังต้นทาง *',
-                    hasValue: _warehouse != null,
-                    displayText: '${_warehouse?.warehouseCode ?? ''}  ${_warehouse?.warehouseNameTh ?? ''}',
-                    onSearch: _isReadOnly ? null : () => ImWarehouseListWidget.search(context, onSelected: (w) => setState(() => _warehouse = w)),
+                  child: TextField(
+                    controller: _descCtrl,
+                    enabled: !_isReadOnly,
+                    decoration: InputDecoration(labelText: isEnglish ? 'Description' : 'คำอธิบาย', border: const OutlineInputBorder(), isDense: true),
                   ),
                 ),
               ]),
@@ -557,7 +481,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextFormField(
-                    key: ValueKey('so_rate_${widget.resetKey}_$_id'),
+                    key: ValueKey('quote_rate_${widget.resetKey}_$_id'),
                     initialValue: _exchangeRate.toStringAsFixed(6),
                     enabled: !_isReadOnly,
                     decoration: InputDecoration(labelText: isEnglish ? 'Exchange Rate' : 'อัตราแลกเปลี่ยน', border: const OutlineInputBorder(), isDense: true),
@@ -565,48 +489,32 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                     onChanged: (v) => setState(() => _exchangeRate = double.tryParse(v) ?? 1),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: _descCtrl,
-                    enabled: !_isReadOnly,
-                    decoration: InputDecoration(labelText: isEnglish ? 'Description' : 'คำอธิบาย', border: const OutlineInputBorder(), isDense: true),
-                  ),
-                ),
               ]),
             ]),
           ),
         ),
+        if (_approvals.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _ApprovalPanel(quoteId: _id!, docNo: _docNo, approvals: _approvals, service: _service, onActionDone: _load),
+        ],
         const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Text(isEnglish ? 'Lines' : 'รายการสั่งขาย', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(isEnglish ? 'Lines' : 'รายการเสนอราคา', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 if (_currency != null && !_currency!.baseCurrencyFlag) ...[
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(color: Colors.orange.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-                    child: Text(isEnglish ? 'Unit price in ${_currency!.currencyCode}' : 'ราคา/หน่วยเป็น ${_currency!.currencyCode}', style: TextStyle(fontSize: 11, color: Colors.orange[800])),
-                  ),
-                ],
-                if (_refQuoteDocNoLabel != null) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.indigo.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                    child: Text(isEnglish ? 'From Quote: $_refQuoteDocNoLabel' : 'อ้างอิงจากใบเสนอราคา: $_refQuoteDocNoLabel', style: TextStyle(fontSize: 11, color: Colors.indigo[700])),
+                    child: Text(isEnglish ? 'Price in ${_currency!.currencyCode}' : 'ราคาเป็น ${_currency!.currencyCode}', style: TextStyle(fontSize: 11, color: Colors.orange[800])),
                   ),
                 ],
                 const Spacer(),
-                if (!_isReadOnly) ...[
-                  OutlinedButton.icon(onPressed: _pickQuoteLines, icon: const Icon(Icons.playlist_add_check, size: 16), label: Text(isEnglish ? 'From Quote' : 'จากใบเสนอราคา')),
-                  const SizedBox(width: 8),
+                if (!_isReadOnly)
                   OutlinedButton.icon(onPressed: _addLine, icon: const Icon(Icons.add, size: 16), label: Text(isEnglish ? 'Add Line' : 'เพิ่มรายการ')),
-                ],
               ]),
               const Divider(),
               ..._lines.asMap().entries.map((entry) {
@@ -619,11 +527,11 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                     SizedBox(
                       width: 90,
                       child: TextFormField(
-                        initialValue: _fmtQty.format(l.qtyOrdered),
+                        initialValue: _fmtQty.format(l.qtyQuoted),
                         enabled: !_isReadOnly,
                         textAlign: TextAlign.right,
                         decoration: InputDecoration(labelText: isEnglish ? 'Qty' : 'จำนวน', isDense: true, border: const OutlineInputBorder()),
-                        onChanged: (v) => setState(() => l.qtyOrdered = double.tryParse(v) ?? 0),
+                        onChanged: (v) => setState(() => l.qtyQuoted = double.tryParse(v) ?? 0),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -642,13 +550,13 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                     ),
                     const SizedBox(width: 8),
                     SizedBox(width: 100, child: Text(_fmtValue.format(l.totalValueLc * _exchangeRate), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                    if (l.qtyDelivered > 0)
+                    if (l.qtyConverted > 0)
                       Padding(
                         padding: const EdgeInsets.only(left: 8),
-                        child: Text(isEnglish ? 'Delivered: ${_fmtQty.format(l.qtyDelivered)}' : 'ส่งแล้ว: ${_fmtQty.format(l.qtyDelivered)}',
+                        child: Text(isEnglish ? 'SO: ${_fmtQty.format(l.qtyConverted)}' : 'สั่งขายแล้ว: ${_fmtQty.format(l.qtyConverted)}',
                             style: TextStyle(fontSize: 11, color: Colors.green.shade700)),
                       ),
-                    AttachmentButton(moduleCode: 'so_transaction_detail', entityId: l.id, readOnly: _isReadOnly),
+                    AttachmentButton(moduleCode: 'quote_transaction_detail', entityId: l.id, readOnly: _isReadOnly),
                     if (!_isReadOnly)
                       IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red), onPressed: () => setState(() => _lines.removeAt(i))),
                   ]),
@@ -660,11 +568,11 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                   if (_currency != null && !_currency!.baseCurrencyFlag)
                     Text(
-                      '${isEnglish ? "Total" : "รวม"}: ${_fmtValue.format(_lines.fold<double>(0, (s, l) => s + l.totalValueLc))} ${_currency!.currencyCode}',
+                      '${isEnglish ? "Quoted Total" : "รวมมูลค่าเสนอราคา"}: ${_fmtValue.format(_lines.fold<double>(0, (s, l) => s + l.totalValueLc))} ${_currency!.currencyCode}',
                       style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   Text(
-                    '${isEnglish ? "Total" : "รวม"} ($_baseCurrencyCode): ${_fmtValue.format(_lines.fold<double>(0, (s, l) => s + l.totalValueLc * _exchangeRate))}',
+                    '${isEnglish ? "Quoted Total" : "รวมมูลค่าเสนอราคา"} ($_baseCurrencyCode): ${_fmtValue.format(_lines.fold<double>(0, (s, l) => s + l.totalValueLc * _exchangeRate))}',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ]),
@@ -685,46 +593,42 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
             ),
             const SizedBox(width: 8),
           ],
-          if (_status == 'Draft' && !widget.viewOnly)
+          if (['Draft', 'Rejected'].contains(_status) && !widget.viewOnly)
             ElevatedButton.icon(
               onPressed: _isSaving ? null : _save,
               icon: const Icon(Icons.save, size: 18),
               label: Text(isEnglish ? 'Save' : 'บันทึก'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[800], foregroundColor: Colors.white),
             ),
-          if (_status == 'Draft' && _id != null && canApprove && !widget.viewOnly) ...[
+          if (['Draft', 'Rejected'].contains(_status) && _id != null && !widget.viewOnly) ...[
             const SizedBox(width: 8),
             ElevatedButton.icon(
-              onPressed: _isSaving ? null : () => _confirmAction(
-                  'ยืนยันอนุมัติใบสั่งขาย', 'Approve Sale Order',
-                  'อนุมัติใบสั่งขายนี้? หลังอนุมัติแล้วใบส่งสินค้า (DLN) จะสามารถอ้างอิงได้ และจะแก้ไขรายการไม่ได้อีก',
-                  'Approve this SO? Once approved, DLN can reference it and lines can no longer be edited.',
-                  () => _service.approveTransaction(_id!)),
-              icon: const Icon(Icons.check_circle_outline, size: 18),
-              label: Text(isEnglish ? 'Approve' : 'อนุมัติ'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white),
+              onPressed: _isSaving ? null : _submit,
+              icon: const Icon(Icons.send, size: 18),
+              label: Text(isEnglish ? 'Submit' : 'ส่งอนุมัติ'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo[600], foregroundColor: Colors.white),
             ),
           ],
-          if (['Approved', 'PartiallyDelivered', 'FullyDelivered'].contains(_status) && canApprove && !widget.viewOnly) ...[
+          if (['Approved', 'PartiallyConverted', 'FullyConverted'].contains(_status) && canApprove && !widget.viewOnly) ...[
             const SizedBox(width: 8),
             ElevatedButton.icon(
               onPressed: _isSaving ? null : () => _confirmAction(
-                  'ยืนยันปิดใบสั่งขาย', 'Close Sale Order',
-                  'ปิดใบสั่งขายนี้? ใช้เมื่อไม่มีการส่งสินค้าเพิ่มแล้ว (แม้ยังส่งไม่ครบ 100%)',
-                  'Close this SO? Use this when no more delivery is expected (even if not 100% delivered).',
+                  'ยืนยันปิดใบเสนอราคา', 'Close Sale Quote',
+                  'ปิดใบเสนอราคานี้? ใช้เมื่อไม่มีการสั่งขายเพิ่มแล้ว (แม้ยังแปลงเป็น SO ไม่ครบ 100%)',
+                  'Close this Quote? Use this when no more SO conversion is expected (even if not 100% converted).',
                   () => _service.closeTransaction(_id!)),
               icon: const Icon(Icons.lock_outline, size: 18),
-              label: Text(isEnglish ? 'Close' : 'ปิดใบสั่งขาย'),
+              label: Text(isEnglish ? 'Close' : 'ปิดใบเสนอราคา'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
             ),
           ],
-          if (['Draft', 'Approved', 'PartiallyDelivered'].contains(_status) && _id != null && canApprove && !widget.viewOnly) ...[
+          if (['Draft', 'Rejected', 'Approved', 'PartiallyConverted'].contains(_status) && _id != null && !widget.viewOnly) ...[
             const SizedBox(width: 8),
             OutlinedButton.icon(
               onPressed: _isSaving ? null : () => _confirmAction(
-                  'ยืนยันยกเลิกใบสั่งขาย', 'Void Sale Order',
-                  'ยกเลิกใบสั่งขายนี้? จะยกเลิกไม่ได้ถ้ามีใบส่งสินค้าอ้างอิงเข้ามาแล้ว',
-                  'Void this SO? This is blocked if any DLN already references it.',
+                  'ยืนยันยกเลิกใบเสนอราคา', 'Void Sale Quote',
+                  'ยกเลิกใบเสนอราคานี้? จะยกเลิกไม่ได้ถ้ามีใบสั่งขายอ้างอิงเข้ามาแล้ว',
+                  'Void this Quote? This is blocked if any SO already references it.',
                   () => _service.voidTransaction(_id!)),
               icon: const Icon(Icons.cancel_outlined, size: 18),
               label: Text(isEnglish ? 'Void' : 'ยกเลิก'),
@@ -738,16 +642,184 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
 }
 
 // ---------------------------------------------------------------------------
-// Item picker dialog — มิเรอร์ po_transaction_detail_widget.dart ทุกประการ
+// Approval panel — มิเรอร์ _ApprovalPanel ใน po_pr_transaction_detail_widget.dart ทุกประการ
 // ---------------------------------------------------------------------------
-class _ItemPickerDialog extends StatefulWidget {
-  const _ItemPickerDialog();
+class _ApprovalPanel extends StatefulWidget {
+  final int quoteId;
+  final String docNo;
+  final List<QuoteTransactionApproval> approvals;
+  final QuoteTransactionService service;
+  final VoidCallback onActionDone;
+
+  const _ApprovalPanel({
+    required this.quoteId,
+    required this.docNo,
+    required this.approvals,
+    required this.service,
+    required this.onActionDone,
+  });
 
   @override
-  State<_ItemPickerDialog> createState() => _ItemPickerDialogState();
+  State<_ApprovalPanel> createState() => _ApprovalPanelState();
 }
 
-class _ItemPickerDialogState extends State<_ItemPickerDialog> {
+class _ApprovalPanelState extends State<_ApprovalPanel> {
+  bool _acting = false;
+
+  Color _approvalColor(String s) {
+    switch (s) {
+      case 'Approved': return Colors.green[700]!;
+      case 'Rejected': return Colors.red[700]!;
+      case 'Skipped':  return Colors.grey;
+      default:         return Colors.orange[700]!;
+    }
+  }
+
+  String _approvalLabel(String s, bool isEnglish) {
+    switch (s) {
+      case 'Approved': return isEnglish ? 'Approved' : 'อนุมัติแล้ว';
+      case 'Rejected': return isEnglish ? 'Rejected' : 'ปฏิเสธ';
+      case 'Skipped':  return isEnglish ? 'Skipped' : 'ข้าม';
+      default:         return isEnglish ? 'Pending' : 'รออนุมัติ';
+    }
+  }
+
+  Future<void> _doAction(bool isApprove) async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    if (!(MenuScope.of(context)?.canApprove ?? true)) return;
+    final currentUserId = Provider.of<AuthService>(context, listen: false).currentUser?.id;
+    final approvals = widget.approvals;
+
+    final myRecord = approvals.where((a) => a.approverUserId == currentUserId && a.status == 'Pending').toList();
+    if (myRecord.isEmpty) return;
+
+    final mySeq = myRecord.first.sequenceNo;
+    final blockedByPrev = approvals.any((a) => a.sequenceNo < mySeq && a.status == 'Pending');
+    if (blockedByPrev) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'Still waiting for approval from a previous sequence' : 'ยังรอการอนุมัติจากลำดับก่อนหน้า')));
+      return;
+    }
+
+    final remarksCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isApprove ? (isEnglish ? 'Confirm Approval' : 'ยืนยันการอนุมัติ') : (isEnglish ? 'Confirm Rejection' : 'ยืนยันการปฏิเสธ')),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(isApprove ? (isEnglish ? 'Approve ${widget.docNo}?' : 'อนุมัติ ${widget.docNo}?') : (isEnglish ? 'Reject ${widget.docNo}?' : 'ปฏิเสธ ${widget.docNo}?')),
+          const SizedBox(height: 12),
+          TextField(
+            controller: remarksCtrl,
+            decoration: InputDecoration(labelText: isEnglish ? 'Remarks (optional)' : 'หมายเหตุ (ถ้ามี)', border: const OutlineInputBorder(), isDense: true),
+            maxLines: 2,
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: isApprove ? Colors.green[700] : Colors.red[700], foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(isApprove ? (isEnglish ? 'Approve' : 'อนุมัติ') : (isEnglish ? 'Reject' : 'ปฏิเสธ'))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _acting = true);
+    try {
+      final remarks = remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim();
+      if (isApprove) {
+        await widget.service.approveTransaction(widget.quoteId, remarks: remarks);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Approved successfully' : 'อนุมัติสำเร็จ')));
+      } else {
+        await widget.service.rejectTransaction(widget.quoteId, remarks: remarks);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Rejected successfully' : 'ปฏิเสธสำเร็จ')));
+      }
+      widget.onActionDone();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final currentUserId = Provider.of<AuthService>(context, listen: false).currentUser?.id;
+    final approvals = widget.approvals;
+
+    final myPending = approvals.firstWhere(
+        (a) => a.approverUserId == currentUserId && a.status == 'Pending',
+        orElse: () => const QuoteTransactionApproval(id: -1, headerId: -1, approverUserId: -1, approverUserName: '', sequenceNo: 0, status: ''));
+    final canAct = myPending.id != -1 && !approvals.any((a) => a.sequenceNo < myPending.sequenceNo && a.status == 'Pending');
+
+    return Container(
+      color: Colors.orange.shade50,
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.approval_outlined, size: 16, color: Colors.orange[800]),
+          const SizedBox(width: 6),
+          Text(isEnglish ? 'Approval Steps' : 'ขั้นตอนการอนุมัติ',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange[800])),
+          const Spacer(),
+          if (_acting) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+          if (!_acting && canAct) ...[
+            ElevatedButton.icon(
+              icon: const Icon(Icons.check_circle_outline, size: 14),
+              label: Text(isEnglish ? 'Approve' : 'อนุมัติ', style: const TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green[600], foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              onPressed: () => _doAction(true),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.cancel_outlined, size: 14),
+              label: Text(isEnglish ? 'Reject' : 'ปฏิเสธ', style: const TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red[600], foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              onPressed: () => _doAction(false),
+            ),
+          ],
+        ]),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          children: approvals.map((a) {
+            return Row(mainAxisSize: MainAxisSize.min, children: [
+              Text('${a.sequenceNo}. ${a.approverUserName}', style: const TextStyle(fontSize: 11)),
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: _approvalColor(a.status).withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+                child: Text(_approvalLabel(a.status, isEnglish), style: TextStyle(fontSize: 10, color: _approvalColor(a.status), fontWeight: FontWeight.w600)),
+              ),
+            ]);
+          }).toList(),
+        ),
+      ]),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Item picker dialog — มิเรอร์ _PrItemPickerDialog ใน po_pr_transaction_detail_widget.dart
+// ---------------------------------------------------------------------------
+class _QuoteItemPickerDialog extends StatefulWidget {
+  const _QuoteItemPickerDialog();
+
+  @override
+  State<_QuoteItemPickerDialog> createState() => _QuoteItemPickerDialogState();
+}
+
+class _QuoteItemPickerDialogState extends State<_QuoteItemPickerDialog> {
   final _ctrl = TextEditingController();
   final _svc = ImItemService();
   List<ImItem> _list = [];

@@ -18,6 +18,7 @@ class PendingApprovalService {
       _fetchApPaymentRun(),
       _fetchApTransaction(),
       _fetchPrTransaction(),
+      _fetchQuoteTransaction(),
     ]);
     final items = results.expand((x) => x).toList();
     items.sort((a, b) => (b.date ?? DateTime(0)).compareTo(a.date ?? DateTime(0)));
@@ -95,6 +96,31 @@ class PendingApprovalService {
           submittedBy: m['submitted_by'],
           amount: _toDouble(m['total_value_lc']),
           targetPath: 'PrTransactionScreen',
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<PendingApprovalItem>> _fetchQuoteTransaction() async {
+    try {
+      final headers = await _auth.getAuthHeader();
+      final resp = await http.get(Uri.parse('${AppConfig.apiSo}/quote_transaction/my_pending'), headers: headers);
+      if (resp.statusCode != 200) return [];
+      return (jsonDecode(resp.body) as List).map((e) {
+        final m = e as Map<String, dynamic>;
+        final docNo = m['doc_no'] ?? '';
+        return PendingApprovalItem(
+          module: 'quote_transaction',
+          id: m['id'],
+          docNo: docNo,
+          date: parseLocalDateNullable(m['doc_date']),
+          titleTh: 'ใบเสนอราคา $docNo',
+          titleEn: 'Sale Quote $docNo',
+          submittedBy: m['submitted_by'],
+          amount: _toDouble(m['total_value_lc']),
+          targetPath: 'QuoteTransactionScreen',
         );
       }).toList();
     } catch (_) {

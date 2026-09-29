@@ -1,55 +1,90 @@
-// lib/so/models/so_transaction.dart — ใบสั่งขาย (Sale Order, sys_module='41') — มิเรอร์ po_transaction.dart ทุกประการ
-// เพียงสลับ vendor->customer เท่านั้น ยังไม่มีขั้น "ใบเสนอราคา" (Sale Quote) นำหน้าเหมือน PR นำหน้า PO
+// lib/so/models/so_quote_transaction.dart — ใบเสนอราคา (Sale Quote, sys_module='41', อยู่ใต้โหนด SO)
+// มิเรอร์ po_pr_transaction.dart ทุกประการ (vendor->customer) — ต่างจาก PR ตรงที่มี validUntilDate ระดับหัวเอกสาร
+// (ไม่ใช่ per-line neededByDate ของ PR เพราะวันหมดอายุใบเสนอราคาเป็นค่าเดียวต่อทั้งใบตามธรรมชาติ)
 import '../../utils/date_utils.dart';
 
-const Map<String, String> soTransactionStatusLabelsTh = {
+const Map<String, String> quoteTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
+  'Submitted': 'รออนุมัติ',
   'Approved': 'อนุมัติแล้ว',
-  'PartiallyDelivered': 'ส่งสินค้าบางส่วน',
-  'FullyDelivered': 'ส่งสินค้าครบแล้ว',
+  'Rejected': 'ถูกปฏิเสธ',
+  'PartiallyConverted': 'แปลงเป็น SO บางส่วน',
+  'FullyConverted': 'แปลงเป็น SO ครบแล้ว',
   'Closed': 'ปิดแล้ว',
   'Void': 'ยกเลิก',
 };
 
-const Map<String, String> soTransactionStatusLabelsEn = {
+const Map<String, String> quoteTransactionStatusLabelsEn = {
   'Draft': 'Draft',
+  'Submitted': 'Submitted',
   'Approved': 'Approved',
-  'PartiallyDelivered': 'Partially Delivered',
-  'FullyDelivered': 'Fully Delivered',
+  'Rejected': 'Rejected',
+  'PartiallyConverted': 'Partially Converted',
+  'FullyConverted': 'Fully Converted',
   'Closed': 'Closed',
   'Void': 'Void',
 };
 
-String soTransactionStatusLabel(String s, bool isEnglish) =>
-    (isEnglish ? soTransactionStatusLabelsEn[s] : soTransactionStatusLabelsTh[s]) ?? s;
+String quoteTransactionStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? quoteTransactionStatusLabelsEn[s] : quoteTransactionStatusLabelsTh[s]) ?? s;
 
-class SoTransactionHeader {
+// มิเรอร์ PrTransactionApproval ทุกประการ
+class QuoteTransactionApproval {
+  final int id;
+  final int headerId;
+  final int approverUserId;
+  final String approverUserName;
+  final int sequenceNo;
+  final String status; // Pending / Approved / Rejected / Skipped
+  final String? remarks;
+
+  const QuoteTransactionApproval({
+    required this.id,
+    required this.headerId,
+    required this.approverUserId,
+    required this.approverUserName,
+    required this.sequenceNo,
+    required this.status,
+    this.remarks,
+  });
+
+  factory QuoteTransactionApproval.fromJson(Map<String, dynamic> json) => QuoteTransactionApproval(
+        id: json['id'] ?? 0,
+        headerId: json['header_id'] ?? 0,
+        approverUserId: json['approver_user_id'] ?? 0,
+        approverUserName: json['approver_user_name'] ?? '',
+        sequenceNo: json['sequence_no'] ?? 1,
+        status: json['status'] ?? 'Pending',
+        remarks: json['remarks'],
+      );
+}
+
+class QuoteTransactionHeader {
   final int id;
   final int docId;
   final String docNo;
   final DateTime docDate;
-  final int customerId;
+  final int? preparedBy;
+  final String? preparedByName;
+  final int? customerId;
   final String? customerCode;
   final String? customerNameTh;
-  final int warehouseId;
+  final int? warehouseId;
   final String? warehouseCode;
   final String? warehouseNameTh;
   final String? warehouseNameEn;
   final int? currencyId;
   final String? currencyCode;
   final double exchangeRate;
-  final DateTime? dueDate;
+  final DateTime? validUntilDate;
   final String status;
+  final String approvalMode;
   final double totalQty;
   final double totalValueLc;
   final String? description;
   final int? branchId;
   final String? branchCode;
   final String? branchNameThai;
-  final DateTime? approvedAt;
-  final String? approvedBy;
-  final int? refQuoteId; // ใบเสนอราคา (Quote) ต้นทาง — สะดวก/แสดงผลเท่านั้น
-  final String? refQuoteDocNo;
   // From join
   final String? docCode;
   final String? docNameThai;
@@ -59,35 +94,35 @@ class SoTransactionHeader {
   final DateTime? updatedAt;
   final String? createdBy;
   final String? updatedBy;
-  final List<SoTransactionDetail> details;
+  final List<QuoteTransactionDetail> details;
+  final List<QuoteTransactionApproval> approvals;
 
-  const SoTransactionHeader({
+  const QuoteTransactionHeader({
     this.id = 0,
     required this.docId,
     this.docNo = 'AUTO',
     required this.docDate,
-    required this.customerId,
+    this.preparedBy,
+    this.preparedByName,
+    this.customerId,
     this.customerCode,
     this.customerNameTh,
-    required this.warehouseId,
+    this.warehouseId,
     this.warehouseCode,
     this.warehouseNameTh,
     this.warehouseNameEn,
     this.currencyId,
     this.currencyCode,
     this.exchangeRate = 1,
-    this.dueDate,
+    this.validUntilDate,
     this.status = 'Draft',
+    this.approvalMode = 'ALL',
     this.totalQty = 0,
     this.totalValueLc = 0,
     this.description,
     this.branchId,
     this.branchCode,
     this.branchNameThai,
-    this.approvedAt,
-    this.approvedBy,
-    this.refQuoteId,
-    this.refQuoteDocNo,
     this.docCode,
     this.docNameThai,
     this.docNameEng,
@@ -97,37 +132,37 @@ class SoTransactionHeader {
     this.createdBy,
     this.updatedBy,
     this.details = const [],
+    this.approvals = const [],
   });
 
-  factory SoTransactionHeader.fromJson(Map<String, dynamic> json) {
+  factory QuoteTransactionHeader.fromJson(Map<String, dynamic> json) {
     double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
-    return SoTransactionHeader(
+    return QuoteTransactionHeader(
       id: json['id'] ?? 0,
       docId: json['doc_id'] ?? 0,
       docNo: json['doc_no'] ?? 'AUTO',
       docDate: parseLocalDate(json['doc_date']),
-      customerId: json['customer_id'] ?? 0,
+      preparedBy: json['prepared_by'],
+      preparedByName: json['prepared_by_name'],
+      customerId: json['customer_id'],
       customerCode: json['customer_code'] ?? json['c_customer_code'],
       customerNameTh: json['customer_name_th'] ?? json['c_customer_name_th'],
-      warehouseId: json['warehouse_id'] ?? 0,
+      warehouseId: json['warehouse_id'],
       warehouseCode: json['warehouse_code'],
       warehouseNameTh: json['warehouse_name_th'],
       warehouseNameEn: json['warehouse_name_en'],
       currencyId: json['currency_id'],
       currencyCode: json['currency_code'],
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
-      dueDate: json['due_date'] != null ? parseLocalDate(json['due_date']) : null,
+      validUntilDate: json['valid_until_date'] != null ? parseLocalDate(json['valid_until_date']) : null,
       status: json['status'] ?? 'Draft',
+      approvalMode: json['approval_mode'] ?? 'ALL',
       totalQty: toDouble(json['total_qty']),
       totalValueLc: toDouble(json['total_value_lc']),
       description: json['description'],
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
-      approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString()) : null,
-      approvedBy: json['approved_by'],
-      refQuoteId: json['ref_quote_id'],
-      refQuoteDocNo: json['ref_quote_doc_no'],
       docCode: json['doc_code'] ?? json['d_doc_code'],
       docNameThai: json['doc_name_thai'],
       docNameEng: json['doc_name_eng'],
@@ -136,7 +171,8 @@ class SoTransactionHeader {
       updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString()) : null,
       createdBy: json['created_by'],
       updatedBy: json['updated_by'],
-      details: (json['details'] as List<dynamic>? ?? []).map((e) => SoTransactionDetail.fromJson(e as Map<String, dynamic>)).toList(),
+      details: (json['details'] as List<dynamic>? ?? []).map((e) => QuoteTransactionDetail.fromJson(e as Map<String, dynamic>)).toList(),
+      approvals: (json['approvals'] as List<dynamic>? ?? []).map((e) => QuoteTransactionApproval.fromJson(e as Map<String, dynamic>)).toList(),
     );
   }
 
@@ -144,21 +180,20 @@ class SoTransactionHeader {
         'doc_id': docId,
         'doc_no': docNo,
         'doc_date': formatLocalDate(docDate),
-        'customer_id': customerId,
-        'warehouse_id': warehouseId,
+        if (customerId != null) 'customer_id': customerId,
+        if (warehouseId != null) 'warehouse_id': warehouseId,
         if (currencyId != null) 'currency_id': currencyId,
         if (currencyCode != null) 'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
-        if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
+        if (validUntilDate != null) 'valid_until_date': formatLocalDate(validUntilDate!),
         if (description != null) 'description': description,
-        if (refQuoteId != null) 'ref_quote_id': refQuoteId,
         if (branchId != null) 'branch_id': branchId,
         if (createdBy != null) 'created_by': createdBy,
         if (updatedBy != null) 'updated_by': updatedBy,
       };
 }
 
-class SoTransactionDetail {
+class QuoteTransactionDetail {
   final int? id;
   final int? headerId;
   final int lineNo;
@@ -167,16 +202,15 @@ class SoTransactionDetail {
   final String? itemName;
   final int? uomId;
   final String? uomCode;
-  final double qtyOrdered;
+  final double qtyQuoted;
   final double unitPriceFc;
   final double totalValueLc;
-  final double qtyDelivered; // computed server-side — จำนวนที่ส่งแล้วผ่าน DLN ที่ Posted/Delivered (ref_so_detail_id)
-  final int? refQuoteDetailId; // บรรทัดใบเสนอราคา (Quote) ต้นทาง ถ้าบรรทัดนี้แปลงมาจาก Quote
+  final double qtyConverted; // computed server-side — จำนวนที่แปลงเป็น SO แล้ว (ref_quote_detail_id, SO ไม่ Void)
   final String? description;
 
-  double get qtyRemaining => qtyOrdered - qtyDelivered;
+  double get qtyRemaining => qtyQuoted - qtyConverted;
 
-  const SoTransactionDetail({
+  const QuoteTransactionDetail({
     this.id,
     this.headerId,
     required this.lineNo,
@@ -185,17 +219,16 @@ class SoTransactionDetail {
     this.itemName,
     this.uomId,
     this.uomCode,
-    this.qtyOrdered = 0,
+    this.qtyQuoted = 0,
     this.unitPriceFc = 0,
     this.totalValueLc = 0,
-    this.qtyDelivered = 0,
-    this.refQuoteDetailId,
+    this.qtyConverted = 0,
     this.description,
   });
 
-  factory SoTransactionDetail.fromJson(Map<String, dynamic> json) {
+  factory QuoteTransactionDetail.fromJson(Map<String, dynamic> json) {
     double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
-    return SoTransactionDetail(
+    return QuoteTransactionDetail(
       id: json['id'],
       headerId: json['header_id'],
       lineNo: json['line_no'] ?? 0,
@@ -204,11 +237,10 @@ class SoTransactionDetail {
       itemName: json['item_name'],
       uomId: json['uom_id'],
       uomCode: json['uom_code'],
-      qtyOrdered: toDouble(json['qty_ordered']),
+      qtyQuoted: toDouble(json['qty_quoted']),
       unitPriceFc: toDouble(json['unit_price_fc']),
       totalValueLc: toDouble(json['total_value_lc']),
-      qtyDelivered: toDouble(json['qty_delivered']),
-      refQuoteDetailId: json['ref_quote_detail_id'],
+      qtyConverted: toDouble(json['qty_converted']),
       description: json['description'],
     );
   }
@@ -220,8 +252,7 @@ class SoTransactionDetail {
         if (itemCode != null) 'item_code': itemCode,
         if (itemName != null) 'item_name': itemName,
         if (uomId != null) 'uom_id': uomId,
-        'qty_ordered': qtyOrdered,
-        if (refQuoteDetailId != null) 'ref_quote_detail_id': refQuoteDetailId,
+        'qty_quoted': qtyQuoted,
         'unit_price_fc': unitPriceFc,
         if (description != null) 'description': description,
       };
