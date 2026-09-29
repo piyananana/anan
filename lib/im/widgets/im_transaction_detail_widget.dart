@@ -7,6 +7,7 @@ import '../models/im_gl_account_setup.dart';
 import '../services/im_transaction_service.dart';
 import '../services/im_item_service.dart';
 import '../../po/services/po_transaction_service.dart';
+import '../../so/services/so_transaction_service.dart';
 import '../widgets/im_item_list_widget.dart';
 import '../widgets/im_warehouse_list_widget.dart';
 import '../widgets/im_location_tree_widget.dart';
@@ -59,6 +60,7 @@ class _CountLine {
   final bool isArDnMode; // '45' (เพิ่มหนี้ลูกหนี้) — ลดสต็อก, AR DN
   final int? refImTransactionDetailId; // '15'/'35' เท่านั้น — บรรทัดต้นฉบับ (GRN/DLN) ที่บรรทัดนี้คืน
   int? refPoDetailId; // '10'/'11'/'12' เท่านั้น — บรรทัด PO ต้นฉบับที่บรรทัดนี้รับตาม (ไม่ final — ผู้ใช้เลือกทีหลังได้ผ่าน picker)
+  int? refSoDetailId; // '30'/'31'/'32' เท่านั้น — บรรทัด SO ต้นฉบับที่บรรทัดนี้ส่งตาม (ไม่ final — ผู้ใช้เลือกทีหลังได้ผ่าน picker)
   // VAT ต่อบรรทัด — ใช้เฉพาะประเภทเอกสารที่สร้าง/อ้างอิงใบกำกับ AP/AR อัตโนมัติ (ดู _isVatMode ใน state) เก็บเป็น
   // field ธรรมดาแทน controller เพราะเป็นค่าที่เลือกจาก dropdown ไม่ใช่กรอกอิสระ (มิเรอร์ ar_transaction_detail_widget.dart)
   String? vatType;
@@ -94,6 +96,7 @@ class _CountLine {
     this.isArDnMode = false,
     this.refImTransactionDetailId,
     this.refPoDetailId,
+    this.refSoDetailId,
     this.vatType,
     this.vatRate = 0,
     this.isFree = false,
@@ -165,6 +168,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   final ImTransactionService _service = ImTransactionService();
   final ImItemService _itemService = ImItemService();
   final PoTransactionService _poService = PoTransactionService();
+  final SoTransactionService _soService = SoTransactionService();
   final PeriodService _periodService = PeriodService();
   final GlEntryService _glEntryService = GlEntryService();
   final VatRateService _vatRateService = VatRateService();
@@ -197,6 +201,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   String? _refImTransactionLabel;
   int? _refPoId; // '10'/'11'/'12' เท่านั้น — PO ที่อ้างอิง (สะดวก/แสดงผล — เก็บจากบรรทัดแรกที่เลือกผ่าน picker เท่านั้น)
   String? _refPoDocNoLabel;
+  int? _refSoId; // '30'/'31'/'32' เท่านั้น — SO ที่อ้างอิง (สะดวก/แสดงผล — เก็บจากบรรทัดแรกที่เลือกผ่าน picker เท่านั้น)
+  String? _refSoDocNoLabel;
   final _refNoCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
@@ -303,6 +309,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refImTransactionLabel = null;
     _refPoId = null;
     _refPoDocNoLabel = null;
+    _refSoId = null;
+    _refSoDocNoLabel = null;
     _refNoCtrl.clear();
     _descCtrl.clear();
     _status = 'Draft';
@@ -373,6 +381,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refImTransactionLabel = h.refImTransactionDocNo;
     _refPoId = h.refPoId;
     _refPoDocNoLabel = h.refPoDocNo;
+    _refSoId = h.refSoId;
+    _refSoDocNoLabel = h.refSoDocNo;
     _refNoCtrl.text = h.refNo ?? '';
     _descCtrl.text = h.description ?? '';
     _status = h.status;
@@ -407,6 +417,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         isArDnMode: _isArDnMode,
         refImTransactionDetailId: d.refImTransactionDetailId,
         refPoDetailId: d.refPoDetailId,
+        refSoDetailId: d.refSoDetailId,
         countedQty: d.countedQty,
         issueQty: isIncrease ? (d.countedQty - d.systemQty) : isDecrease ? (d.systemQty - d.countedQty) : 0,
         // _isApVendorMode: unitCostCtrl แสดงราคาที่กรอกจริงในสกุลเงินของ header (unitCostFc) ไม่ใช่ unitCost (LC) —
@@ -872,6 +883,124 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     });
   }
 
+  // '30'/'31'/'32' — เพิ่มรายการเข้า DLN จากบรรทัดที่ยังส่งได้ของ SO ที่อนุมัติแล้วของลูกค้านี้ (multi-select ได้
+  // ข้าม SO หลายใบในครั้งเดียว) มิเรอร์ _pickPoLines ทุกประการ ฝั่งขาย
+  String _soCurrencyCode(Map<String, dynamic> l) => (l['currency_code'] as String?) ?? 'THB';
+  double _soUnitPriceLc(Map<String, dynamic> l) => _poNum(l['unit_price_fc']) * (_poNum(l['exchange_rate']) == 0 ? 1 : _poNum(l['exchange_rate']));
+
+  Future<void> _pickSoLines() async {
+    final isEnglish = _isEnglish;
+    if (_customerId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a customer first' : 'กรุณาระบุลูกค้าก่อน')));
+      return;
+    }
+    List<Map<String, dynamic>> lines;
+    try {
+      lines = await _soService.fetchDeliverableLines(customerId: _customerId);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
+      return;
+    }
+    final alreadyPicked = _lines.map((l) => l.refSoDetailId).whereType<int>().toSet();
+    final selectable = lines.where((l) => !alreadyPicked.contains(l['detail_id'] as int)).toList();
+    if (selectable.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'No deliverable SO lines left for this customer' : 'ไม่มีรายการที่ส่งได้เหลืออยู่สำหรับลูกค้านี้')));
+      return;
+    }
+    final qtyCtrls = {for (final l in selectable) l['detail_id'] as int: TextEditingController(text: _CountLine._fmtInput((l['qty_remaining'] as num).toDouble()))};
+    final selected = {for (final l in selectable) l['detail_id'] as int: false};
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) => AlertDialog(
+            title: Text(isEnglish ? 'Select Lines from Sale Order' : 'เลือกรายการจากใบสั่งขาย'),
+            content: SizedBox(
+              width: 620,
+              height: 420,
+              child: ListView.builder(
+                itemCount: selectable.length,
+                itemBuilder: (_, i) {
+                  final l = selectable[i];
+                  final id = l['detail_id'] as int;
+                  final remaining = (l['qty_remaining'] as num).toDouble();
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(children: [
+                      Checkbox(value: selected[id], onChanged: (v) => setSt(() => selected[id] = v ?? false)),
+                      Expanded(flex: 2, child: Text('${l['doc_no']}', style: const TextStyle(fontSize: 12, color: Colors.grey))),
+                      Expanded(flex: 3, child: Text('${l['item_code'] ?? ''} ${l['item_name'] ?? ''}', overflow: TextOverflow.ellipsis)),
+                      Expanded(
+                        flex: 2,
+                        child: Text(isEnglish ? 'Remaining: ${_fmtQty.format(remaining)}' : 'คงเหลือส่งได้: ${_fmtQty.format(remaining)}', style: const TextStyle(fontSize: 12)),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          _soCurrencyCode(l) == 'THB'
+                              ? '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))}'
+                              : '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))} ${_soCurrencyCode(l)} (≈${_fmtQty.format(_soUnitPriceLc(l))} THB)',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 100,
+                        child: TextField(
+                          controller: qtyCtrls[id],
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: InputDecoration(isDense: true, border: const OutlineInputBorder(), labelText: isEnglish ? 'Qty' : 'จำนวน'),
+                        ),
+                      ),
+                    ]),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Add' : 'เพิ่ม')),
+            ],
+          )),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final pickedLines = selectable.where((l) => selected[l['detail_id']] == true && _parseNum(qtyCtrls[l['detail_id']]!.text) > 0).toList();
+    if (pickedLines.isEmpty) return;
+    final items = await Future.wait(pickedLines.map((l) => _itemService.fetchRow(l['item_id'] as int)));
+    if (!mounted) return;
+    setState(() {
+      for (var i = 0; i < pickedLines.length; i++) {
+        final l = pickedLines[i];
+        final id = l['detail_id'] as int;
+        final remaining = (l['qty_remaining'] as num).toDouble();
+        final qty = _parseNum(qtyCtrls[id]!.text).clamp(0, remaining);
+        final vatType = _isVatMode ? _safeVatCode(items[i].defaultVatType) : null;
+        final line = _CountLine(
+          item: items[i],
+          uomId: l['uom_id'] as int?, uomCode: l['uom_code'] as String?,
+          isDeliverMode: true,
+          issueQty: qty.toDouble(),
+          // DLN เก็บ unitPriceCtrl เป็นราคาในสกุลเงินของ header (_currency) เสมอ — ตั้ง header ให้ตรงกับ SO ต้นทางไว้
+          // ข้างล่างแล้ว (สกุลเงินเดียวกันทั้งใบ) จึงเติมราคาดิบจาก SO ตรงๆ ได้เลยโดยไม่ต้องแปลงเป็นบาท
+          unitPrice: _poNum(l['unit_price_fc']),
+          refSoDetailId: id,
+          vatType: vatType, vatRate: vatType != null ? _rateForVatCode(vatType) : 0,
+        );
+        _lines.add(line);
+        _refreshSystemQty(line);
+      }
+      _refSoId = pickedLines.first['header_id'] as int;
+      _refSoDocNoLabel = pickedLines.first['doc_no'] as String?;
+      // ส่งตามสกุลเงินของ SO ต้นทางเสมอ (ทุกบรรทัดที่เลือกมาจาก fetchDeliverableLines ของลูกค้าเดียวกัน แต่อาจมาจาก
+      // SO คนละใบ คนละสกุลเงินได้ในทางทฤษฎี — ใช้สกุลเงินของ SO ใบแรกที่เลือกเป็นสกุลเงินของทั้ง DLN นี้)
+      final soCurrencyCode = _soCurrencyCode(pickedLines.first);
+      final matched = _currencies.cast<Currency?>().firstWhere((c) => c?.currencyCode == soCurrencyCode, orElse: () => null);
+      if (matched != null) {
+        _currency = matched;
+        _exchangeRate = _poNum(pickedLines.first['exchange_rate']) > 0 ? _poNum(pickedLines.first['exchange_rate']) : (matched.baseRate > 0 ? matched.baseRate : 1);
+      }
+    });
+  }
+
   void _removeLine(_CountLine line) {
     setState(() => _lines.remove(line));
     line.dispose();
@@ -968,6 +1097,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
         refImTransactionId: _isReturnSourceDocMode ? _refImTransactionId : null,
         refPoId: _isReceiveMode ? _refPoId : null,
+        refSoId: _isDeliverMode ? _refSoId : null,
         currencyId: _isApVendorMode ? _currency?.id : null,
         currencyCode: _isApVendorMode ? (_currency?.currencyCode ?? 'THB') : null,
         exchangeRate: _isApVendorMode ? _exchangeRate : 1,
@@ -996,6 +1126,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             vatRate: _isVatMode ? l.vatRate : null,
             refImTransactionDetailId: l.refImTransactionDetailId,
             refPoDetailId: l.refPoDetailId,
+            refSoDetailId: l.refSoDetailId,
           )).toList();
 
       if (_id == null) {
@@ -1413,6 +1544,29 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   icon: const Icon(Icons.playlist_add, size: 20, color: Colors.teal),
                   tooltip: isEnglish ? 'Add lines from PO' : 'เพิ่มรายการจากใบสั่งซื้อ',
                   onPressed: _pickPoLines,
+                ),
+              ],
+            ]),
+          ),
+        ],
+        if (_isDeliverMode) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: Row(children: [
+              Expanded(
+                child: _fkField(
+                  label: isEnglish ? 'SO Reference' : 'อ้างอิงใบสั่งขาย',
+                  hasValue: _refSoId != null,
+                  displayText: _refSoDocNoLabel ?? '',
+                ),
+              ),
+              if (!_isReadOnly && _customerId != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.playlist_add, size: 20, color: Colors.teal),
+                  tooltip: isEnglish ? 'Add lines from SO' : 'เพิ่มรายการจากใบสั่งขาย',
+                  onPressed: _pickSoLines,
                 ),
               ],
             ]),

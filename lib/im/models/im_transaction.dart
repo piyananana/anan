@@ -48,6 +48,8 @@ class ImTransactionHeader {
   final String? refImTransactionDocNo; // จาก join — เลขที่เอกสารต้นฉบับ ใช้แสดงผลเท่านั้น
   final int? refPoId; // '10'/'11'/'12' เท่านั้น — PO ที่ GRN นี้อ้างอิง (สะดวก/แสดงผล — การตรวจจริงอยู่ระดับบรรทัด)
   final String? refPoDocNo; // จาก join — เลขที่ PO ใช้แสดงผลเท่านั้น
+  final int? refSoId; // '30'/'31'/'32' เท่านั้น — SO ที่ DLN นี้อ้างอิง (สะดวก/แสดงผล — การตรวจจริงอยู่ระดับบรรทัด)
+  final String? refSoDocNo; // จาก join — เลขที่ SO ใช้แสดงผลเท่านั้น
   // สกุลเงินต่างประเทศ (ฝั่งรับจากผู้ขายเท่านั้น — GRN family '10'/'11'/'12'/'13' + คืนสินค้า/AP CN/DN '15'/'20'/'25')
   // unit_cost (LC) ยังคงใช้ตีมูลค่าสต็อก/โพสต์ GL เหมือนเดิมเสมอ — ฟิลด์นี้ควบคุมแค่การแสดงผล/กรอกข้อมูลเท่านั้น
   final int? currencyId;
@@ -108,6 +110,8 @@ class ImTransactionHeader {
     this.refImTransactionDocNo,
     this.refPoId,
     this.refPoDocNo,
+    this.refSoId,
+    this.refSoDocNo,
     this.currencyId,
     this.currencyCode,
     this.exchangeRate = 1,
@@ -160,6 +164,8 @@ class ImTransactionHeader {
       refImTransactionDocNo: json['ref_im_transaction_doc_no'],
       refPoId: json['ref_po_id'],
       refPoDocNo: json['ref_po_doc_no'],
+      refSoId: json['ref_so_id'],
+      refSoDocNo: json['ref_so_doc_no'],
       currencyId: json['currency_id'],
       currencyCode: json['currency_code'],
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
@@ -201,6 +207,7 @@ class ImTransactionHeader {
         if (refDocNo != null) 'ref_doc_no': refDocNo,
         if (refImTransactionId != null) 'ref_im_transaction_id': refImTransactionId,
         if (refPoId != null) 'ref_po_id': refPoId,
+        if (refSoId != null) 'ref_so_id': refSoId,
         if (currencyId != null) 'currency_id': currencyId,
         if (currencyCode != null) 'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
@@ -246,6 +253,7 @@ class ImTransactionDetail {
   final int? refImTransactionDetailId; // '15'/'35' เท่านั้น — บรรทัดต้นฉบับ (GRN/DLN) ที่บรรทัดนี้คืน ใช้ตรวจคงเหลือที่คืนได้
   final int? refPoDetailId; // '10'/'11'/'12' เท่านั้น — บรรทัด PO ต้นฉบับที่บรรทัดนี้รับตาม ใช้ตรวจคงเหลือที่รับได้
   final double qtyReceived; // จาก join — จำนวนที่รับไปแล้วของบรรทัด PO นี้ (จาก po_transaction_detail picker เท่านั้น ไม่ใช่ตัว GRN เอง)
+  final int? refSoDetailId; // '30'/'31'/'32' เท่านั้น — บรรทัด SO ต้นฉบับที่บรรทัดนี้ส่งตาม ใช้ตรวจคงเหลือที่ส่งได้
   final double? totalValueLc;
   final String? description;
 
@@ -278,6 +286,7 @@ class ImTransactionDetail {
     this.refImTransactionDetailId,
     this.refPoDetailId,
     this.qtyReceived = 0,
+    this.refSoDetailId,
     this.totalValueLc,
     this.description,
   });
@@ -316,6 +325,7 @@ class ImTransactionDetail {
       refImTransactionDetailId: json['ref_im_transaction_detail_id'],
       refPoDetailId: json['ref_po_detail_id'],
       qtyReceived: toDouble(json['qty_received']),
+      refSoDetailId: json['ref_so_detail_id'],
       totalValueLc: toDoubleN(json['total_value_lc']),
       description: json['description'],
     );
@@ -344,6 +354,7 @@ class ImTransactionDetail {
         if (vatRate != null) 'vat_rate': vatRate,
         if (refImTransactionDetailId != null) 'ref_im_transaction_detail_id': refImTransactionDetailId,
         if (refPoDetailId != null) 'ref_po_detail_id': refPoDetailId,
+        if (refSoDetailId != null) 'ref_so_detail_id': refSoDetailId,
         if (description != null) 'description': description,
       };
 }

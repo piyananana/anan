@@ -128,6 +128,7 @@ import '../../im/screens/im_stock_balance_by_item_report_screen.dart';
 import '../../im/screens/im_stock_aging_report_screen.dart';
 import '../../im/screens/im_consignment_settlement_screen.dart';
 import '../../po/screens/po_transaction_screen.dart';
+import '../../so/screens/so_transaction_screen.dart';
 import '../../po/screens/po_replenishment_report_screen.dart';
 import '../../po/screens/po_pr_transaction_screen.dart';
 import '../../po/screens/po_pr_po_status_report_screen.dart';
@@ -351,6 +352,7 @@ class Menu {
     'ImStockAgingReportScreen': (context) => const ImStockAgingReportScreen(),
     'ImConsignmentSettlementScreen': (context) => const ImConsignmentSettlementScreen(),
     'PoTransactionScreen': (context) => const PoTransactionScreen(),
+    'SoTransactionScreen': (context) => const SoTransactionScreen(),
     'PoReplenishmentReportScreen': (context) => const PoReplenishmentReportScreen(),
     'PrTransactionScreen': (context) => const PrTransactionScreen(),
     'PrPoStatusReportScreen': (context) => const PrPoStatusReportScreen(),

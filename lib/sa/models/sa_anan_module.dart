@@ -82,6 +82,7 @@ const Map<String, String> imSysDocType = {
 };
 // '41': 'สั่งขาย'
 const Map<String, String> soSysDocType = {
+  '05': 'เสนอราคา - Sale Quote', // sale quote (no GL)
   '10': 'สั่งขาย - Sale Order', // sale order (no GL)
 };
 // '51': 'สั่งซื้อ'
