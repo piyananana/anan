@@ -23,6 +23,10 @@ class ImPriceListDetail {
   final double unitPriceFc;
   final DateTime? effectiveFrom;
   final DateTime? effectiveTo;
+  // audit trail ระดับบรรทัด — เห็นได้เฉพาะบรรทัดที่มาจาก backend แล้ว (id != null) บรรทัดที่เพิ่งเพิ่มในฟอร์ม
+  // ยังไม่มีค่าพวกนี้จนกว่าจะบันทึกแล้วโหลดกลับมา
+  final DateTime? updatedAt;
+  final String? updatedBy;
 
   const ImPriceListDetail({
     this.id,
@@ -39,6 +43,8 @@ class ImPriceListDetail {
     this.unitPriceFc = 0,
     this.effectiveFrom,
     this.effectiveTo,
+    this.updatedAt,
+    this.updatedBy,
   });
 
   factory ImPriceListDetail.fromJson(Map<String, dynamic> json) => ImPriceListDetail(
@@ -56,9 +62,15 @@ class ImPriceListDetail {
         unitPriceFc: double.tryParse(json['unit_price_fc']?.toString() ?? '') ?? 0,
         effectiveFrom: json['effective_from'] != null ? DateTime.tryParse(json['effective_from']) : null,
         effectiveTo: json['effective_to'] != null ? DateTime.tryParse(json['effective_to']) : null,
+        updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString()) : null,
+        updatedBy: json['updated_by'],
       );
 
+  // ต้องส่ง 'id' กลับไปด้วย (ถ้ามี) เพื่อให้ updateRow ฝั่ง backend จับคู่บรรทัดเดิมได้ถูก (diff-based update) —
+  // ถ้าไม่ส่ง id ทุกบรรทัดจะถูกมองว่าเป็นบรรทัดใหม่เสมอ ทำให้ audit trail (updated_by/updated_at ต่อบรรทัด) ใช้
+  // งานไม่ได้จริง
   Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
         'item_id': itemId,
         'uom_id': uomId,
         'min_qty': minQty,

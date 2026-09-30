@@ -3,6 +3,7 @@
 // Draft เท่านั้นที่แก้ไขได้ (เหมือน DLN), Approve/Close/Void เป็น action แยกกดทีละปุ่ม ดู soTransactionController.js
 // สำหรับ workflow เต็ม — มีขั้น "ใบเสนอราคา" (Quote) นำหน้าได้เหมือน PR นำหน้า PO (ดู _pickQuoteLines,
 // มิเรอร์ _pickPrLines ใน po_transaction_detail_widget.dart ทุกประการ)
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -58,6 +59,9 @@ class _LineForm {
   double unitPriceFc;
   double qtyDelivered;
   int? refQuoteDetailId; // บรรทัดใบเสนอราคา (Quote) ต้นทาง ถ้าเพิ่มมาจาก picker _pickQuoteLines()
+  // ราคาล่าสุดที่ระบบ auto-fill ให้จาก im_price_list (ถ้ามี) — ใช้เทียบกับ unitPriceFc ปัจจุบันตอนจำนวนเปลี่ยน
+  // เพื่อรู้ว่าผู้ใช้แก้ราคาเองไปแล้วหรือยัง (ถ้าแก้แล้วจะไม่ auto-fill ทับให้อีก) ดู _maybeReresolvePrice
+  double? lastResolvedPrice;
   _LineForm({this.id, this.item, this.qtyOrdered = 0, this.unitPriceFc = 0, this.qtyDelivered = 0, this.refQuoteDetailId});
   double get totalValueLc => qtyOrdered * unitPriceFc;
 }
@@ -116,9 +120,12 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     }
   }
 
+  Timer? _priceResolveDebounce;
+
   @override
   void dispose() {
     _descCtrl.dispose();
+    _priceResolveDebounce?.cancel();
     super.dispose();
   }
 
@@ -257,9 +264,29 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         itemId: result.id!, customerId: _customer!.id!, qty: 1, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
       );
       if (resolved['unit_price_fc'] != null && mounted) {
-        setState(() => line.unitPriceFc = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0);
+        final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
+        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; });
       }
     }
+  }
+
+  // เรียกซ้ำเมื่อจำนวนในบรรทัดเปลี่ยน เพราะ im_price_list มี tier ตาม min_qty — ถ้าจำนวนที่แก้ใหม่ควรได้ราคาขั้น
+  // ต่างจากเดิม ต้องดึงราคามาใหม่ ไม่ใช่ตรึงราคาที่ resolve ไว้ครั้งเดียวตอนกดเพิ่มรายการ (qty=1 คงที่) เดิม —
+  // debounce ไว้ไม่ยิง request ทุกตัวอักษรที่พิมพ์ และข้ามการ auto-fill ถ้าผู้ใช้แก้ราคาเองไปจากค่าที่ระบบเคย
+  // auto-fill ให้แล้ว (ถือว่าตั้งใจ ไม่ทับราคาที่แก้เอง) — มิเรอร์ po_transaction_detail_widget.dart ทุกประการ
+  void _maybeReresolvePrice(_LineForm line) {
+    _priceResolveDebounce?.cancel();
+    if (_customer == null || line.item == null) return;
+    _priceResolveDebounce = Timer(const Duration(milliseconds: 600), () async {
+      if (!mounted || line.unitPriceFc != line.lastResolvedPrice) return;
+      final resolved = await _service.resolvePrice(
+        itemId: line.item!.id!, customerId: _customer!.id!, qty: line.qtyOrdered, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
+      );
+      if (resolved['unit_price_fc'] != null && mounted && line.unitPriceFc == line.lastResolvedPrice) {
+        final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
+        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; });
+      }
+    });
   }
 
   // ค่า NUMERIC จาก PostgreSQL ผ่าน pg driver มาเป็น String เสมอ (ไม่ใช่ num) — ต้อง parse ด้วย toString() เท่านั้น
@@ -623,7 +650,10 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                         enabled: !_isReadOnly,
                         textAlign: TextAlign.right,
                         decoration: InputDecoration(labelText: isEnglish ? 'Qty' : 'จำนวน', isDense: true, border: const OutlineInputBorder()),
-                        onChanged: (v) => setState(() => l.qtyOrdered = double.tryParse(v) ?? 0),
+                        onChanged: (v) {
+                          setState(() => l.qtyOrdered = double.tryParse(v) ?? 0);
+                          _maybeReresolvePrice(l);
+                        },
                       ),
                     ),
                     const SizedBox(width: 8),

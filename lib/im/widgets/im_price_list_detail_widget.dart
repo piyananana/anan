@@ -459,6 +459,11 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
             final rangeText = (d.effectiveFrom != null || d.effectiveTo != null)
                 ? '  ·  ${d.effectiveFrom != null ? '${d.effectiveFrom!.day}/${d.effectiveFrom!.month}/${d.effectiveFrom!.year}' : '…'} - ${d.effectiveTo != null ? '${d.effectiveTo!.day}/${d.effectiveTo!.month}/${d.effectiveTo!.year}' : '…'}'
                 : '';
+            // audit trail ระดับบรรทัด — แสดงเฉพาะบรรทัดที่มีค่าแล้ว (มาจาก backend หลังบันทึกครั้งแรก) บรรทัดที่
+            // เพิ่งเพิ่มในฟอร์มนี้ยังไม่มี updatedBy/updatedAt จนกว่าจะบันทึกแล้วโหลดกลับมาใหม่
+            final auditText = (d.updatedBy != null && d.updatedAt != null)
+                ? '  ·  ${isEnglish ? 'Updated by' : 'แก้ไขล่าสุดโดย'} ${d.updatedBy} ${d.updatedAt!.day}/${d.updatedAt!.month}/${d.updatedAt!.year}'
+                : '';
             return Card(
               margin: const EdgeInsets.symmetric(vertical: 3),
               child: ListTile(
@@ -467,8 +472,9 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
                 title: Text('${d.itemCode}  $name'),
                 subtitle: Text(
                   isEnglish
-                      ? 'Price: ${d.unitPriceFc} / ${d.uomCode ?? ''}${d.minQty > 0 ? '  ·  Min qty ${d.minQty}' : ''}$rangeText'
-                      : 'ราคา: ${d.unitPriceFc} / ${d.uomCode ?? ''}${d.minQty > 0 ? '  ·  ขั้นต่ำ ${d.minQty}' : ''}$rangeText',
+                      ? 'Price: ${d.unitPriceFc} / ${d.uomCode ?? ''}${d.minQty > 0 ? '  ·  Min qty ${d.minQty}' : ''}$rangeText$auditText'
+                      : 'ราคา: ${d.unitPriceFc} / ${d.uomCode ?? ''}${d.minQty > 0 ? '  ·  ขั้นต่ำ ${d.minQty}' : ''}$rangeText$auditText',
+                  style: const TextStyle(fontSize: 12),
                 ),
                 trailing: _isReadOnly
                     ? null
