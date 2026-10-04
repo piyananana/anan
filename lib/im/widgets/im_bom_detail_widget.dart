@@ -457,6 +457,7 @@ class ImBomDetailWidgetState extends State<ImBomDetailWidget> {
             final i = entry.key;
             final d = entry.value;
             final name = isEnglish && (d.componentItemNameEn ?? '').isNotEmpty ? d.componentItemNameEn : d.componentItemNameTh;
+            final uomName = isEnglish && (d.uomNameEn ?? '').isNotEmpty ? d.uomNameEn : (d.uomNameTh ?? d.uomCode ?? '');
             return Card(
               margin: const EdgeInsets.symmetric(vertical: 3),
               child: ListTile(
@@ -465,8 +466,8 @@ class ImBomDetailWidgetState extends State<ImBomDetailWidget> {
                 title: Text('${d.componentItemCode}  $name'),
                 subtitle: Text(
                   isEnglish
-                      ? 'Qty per unit: ${d.quantityPer} ${d.uomCode ?? ''}${d.scrapPercent > 0 ? '  ·  Scrap ${d.scrapPercent}%' : ''}'
-                      : 'จำนวนต่อหน่วย: ${d.quantityPer} ${d.uomCode ?? ''}${d.scrapPercent > 0 ? '  ·  ของเสีย ${d.scrapPercent}%' : ''}',
+                      ? 'Qty per unit: ${d.quantityPer} $uomName${d.scrapPercent > 0 ? '  ·  Scrap ${d.scrapPercent}%' : ''}'
+                      : 'จำนวนต่อหน่วย: ${d.quantityPer} $uomName${d.scrapPercent > 0 ? '  ·  ของเสีย ${d.scrapPercent}%' : ''}',
                 ),
                 trailing: _isReadOnly
                     ? null

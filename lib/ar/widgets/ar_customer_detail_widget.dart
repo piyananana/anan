@@ -21,6 +21,7 @@ import '../../gl/services/gl_account_service.dart';
 import '../../cd/models/cd_sales_territory.dart';
 import '../../cd/services/cd_sales_territory_service.dart';
 import '../widgets/ar_collector_list_widget.dart';
+import '../../im/widgets/im_price_list_list_widget.dart';
 import '../../sa/services/sa_language_provider.dart';
 
 // ---------------------------------------------------------------------------
@@ -1356,6 +1357,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   int? _collectionCollectorId;
   String? _collectionCollectorCode;
   String? _collectionCollectorNameThai;
+  // รหัสตารางราคา (im_price_list) — ลูกค้ารายนี้ใช้ได้รหัสเดียวเท่านั้น เพื่อเชื่อมไปหาราคาสินค้าใน
+  // im_price_list_detail แยกจาก customerGroupId (นโยบายบัญชี/เครดิต) โดยสิ้นเชิง
+  int? _priceListId;
+  String? _priceListCode;
+  String? _priceListName;
 
   bool _isSaving = false;
   bool _isEnglish = false;
@@ -1501,6 +1507,9 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     _collectionCollectorId        = c?.collectionCollectorId;
     _collectionCollectorCode      = c?.collectionCollectorCode;
     _collectionCollectorNameThai  = c?.collectionCollectorNameThai;
+    _priceListId   = c?.priceListId;
+    _priceListCode = c?.priceListCode;
+    _priceListName = c?.priceListName;
     _requiresBilling    = c?.requiresBilling ?? false;
     _billingConditions  = List.from(c?.billingConditions ?? []);
     _paymentConditions  = List.from(c?.paymentConditions ?? []);
@@ -2306,6 +2315,27 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     });
   }
 
+  // ─── ตารางราคา ───────────────────────────────────────────────────────────────
+  Future<void> _pickPriceList() async {
+    await ImPriceListListWidget.search(context, listType: 'SALES', onSelected: (h) {
+      if (mounted) {
+        setState(() {
+          _priceListId   = h.id;
+          _priceListCode = h.priceListCode;
+          _priceListName = h.priceListName;
+        });
+      }
+    });
+  }
+
+  void _clearPriceList() {
+    setState(() {
+      _priceListId   = null;
+      _priceListCode = null;
+      _priceListName = null;
+    });
+  }
+
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
     final isEnglish = _isEnglish;
@@ -2339,6 +2369,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         salespersonId: _salespersonId,
         billingCollectorId: _billingCollectorId,
         collectionCollectorId: _collectionCollectorId,
+        priceListId: _priceListId,
         addresses:    _addresses,
         contacts:     _contacts,
         bankAccounts: _bankAccounts,
@@ -2632,6 +2663,56 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: _clearGroup,
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+
+        // ---- ตารางราคา (im_price_list — ลูกค้ารายนี้ใช้ได้รหัสเดียวเท่านั้น เพื่อเชื่อมไปหาราคาสินค้า) ----
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Price List' : 'ตารางราคา',
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _priceListId == null
+                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
+                          style: const TextStyle(color: Colors.grey))
+                      : Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '$_priceListCode — $_priceListName',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+                if (!readOnly) ...[
+                  IconButton(
+                    icon: const Icon(Icons.search, color: Colors.blue),
+                    tooltip: isEnglish ? 'Search price list' : 'ค้นหาตารางราคา',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: _pickPriceList,
+                  ),
+                  if (_priceListId != null)
+                    IconButton(
+                      icon: const Icon(Icons.clear, color: Colors.red, size: 18),
+                      tooltip: isEnglish ? 'Clear price list' : 'ล้างตารางราคา',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: _clearPriceList,
                     ),
                 ],
               ],

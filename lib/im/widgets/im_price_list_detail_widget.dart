@@ -10,6 +10,7 @@ import '../models/im_item.dart';
 import '../models/im_uom.dart';
 import '../widgets/im_item_list_widget.dart';
 import '../widgets/im_uom_list_widget.dart';
+import '../widgets/im_price_group_list_widget.dart';
 
 // ---------------------------------------------------------------------------
 // Collapsible section — same look used across the other IM detail widgets
@@ -77,6 +78,7 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
   String? uomName = isEnglish && (existing?.uomNameEn ?? '').isNotEmpty ? existing?.uomNameEn : existing?.uomNameTh;
   DateTime? effectiveFrom = existing?.effectiveFrom;
   DateTime? effectiveTo = existing?.effectiveTo;
+  String priceType = existing?.priceType ?? 'STANDARD';
   final minQtyCtrl = TextEditingController(text: existing != null ? '${existing.minQty}' : '0');
   final priceCtrl = TextEditingController(text: existing != null ? '${existing.unitPriceFc}' : '0');
 
@@ -158,6 +160,14 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
                   decoration: InputDecoration(labelText: isEnglish ? 'Unit Price *' : 'ราคาต่อหน่วย *', border: const OutlineInputBorder()),
                 ),
                 const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: priceType,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: isEnglish ? 'Price Type' : 'ชนิดราคา', border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                  items: imPriceTypes.map((t) => DropdownMenuItem(value: t, child: Text(imPriceTypeLabel(t, isEnglish)))).toList(),
+                  onChanged: (v) => setDlg(() => priceType = v ?? 'STANDARD'),
+                ),
+                const SizedBox(height: 10),
                 Row(children: [
                   Expanded(
                     child: InkWell(
@@ -210,6 +220,7 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
                 uomNameEn: isEnglish ? uomName : null,
                 minQty: double.tryParse(minQtyCtrl.text) ?? 0,
                 unitPriceFc: double.tryParse(priceCtrl.text) ?? 0,
+                priceType: priceType,
                 effectiveFrom: effectiveFrom,
                 effectiveTo: effectiveTo,
               ));
@@ -255,9 +266,15 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
   late TextEditingController _nameCtrl;
 
   bool _isActive = true;
+  // ตั้งเป็นลิสต์ default ของ _listType นี้หรือไม่ — ใบเดียวต่อ list_type เท่านั้น (unique index ฝั่ง backend
+  // บังคับ) และตั้งคู่กับการเจาะจงลูกค้า/ผู้ขายรายตัว (ด้านล่าง) ไม่ได้
+  bool _isDefault = false;
   String _listType = 'SALES';
 
   int? _currencyId; String? _currencyCode; String? _currencyName;
+
+  // กลุ่มราคา (im_price_group) — แค่ป้ายกำกับ/หมวดหมู่ ไม่ใช่ targeting ไม่เกี่ยวกับ _listType เลย ตั้งได้ตามใจ
+  int? _priceGroupId; String? _priceGroupCode; String? _priceGroupName;
 
   List<ImPriceListDetail> _details = [];
 
@@ -294,9 +311,12 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
     _codeCtrl.text = h.priceListCode;
     _nameCtrl.text = h.priceListName;
     _isActive = h.isActive;
+    _isDefault = h.isDefault;
     _listType = h.listType;
     _currencyId = h.currencyId; _currencyCode = h.currencyCode;
     _currencyName = _isEnglish && (h.currencyNameEn ?? '').isNotEmpty ? h.currencyNameEn : h.currencyNameTh;
+    _priceGroupId = h.priceGroupId; _priceGroupCode = h.priceGroupCode;
+    _priceGroupName = _isEnglish && (h.priceGroupNameEn ?? '').isNotEmpty ? h.priceGroupNameEn : h.priceGroupNameTh;
     _details = List.from(h.details);
   }
 
@@ -304,8 +324,10 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
     _codeCtrl.clear();
     _nameCtrl.clear();
     _isActive = true;
+    _isDefault = false;
     _listType = 'SALES';
     _currencyId = null; _currencyCode = null; _currencyName = null;
+    _priceGroupId = null; _priceGroupCode = null; _priceGroupName = null;
     _details = [];
   }
 
@@ -324,6 +346,8 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
         priceListName: _nameCtrl.text.trim(),
         listType: _listType,
         currencyId: _currencyId,
+        priceGroupId: _priceGroupId,
+        isDefault: _isDefault,
         isActive: _isActive,
         details: _details,
       );
@@ -429,6 +453,36 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
         )),
       ]),
       const SizedBox(height: 10),
+      // กลุ่มราคา (im_price_group) — แค่ป้ายกำกับ/หมวดหมู่สำหรับจัดกลุ่มการแสดงผล/รายงาน ไม่เกี่ยวกับการ resolve
+      // ราคาเลย ไม่ขึ้นกับ list_type หรือฟิลด์ targeting ด้านบน ตารางราคาหลายใบแปะป้ายเดียวกันได้ตามปกติ
+      _buildFkField(
+        label: isEnglish ? 'Price Group (category tag)' : 'กลุ่มราคา (ป้ายหมวดหมู่)',
+        hasValue: _priceGroupId != null,
+        displayText: '$_priceGroupCode — $_priceGroupName',
+        onSearch: () => ImPriceGroupListWidget.search(context, onSelected: (g) {
+          setState(() {
+            _priceGroupId = g.id; _priceGroupCode = g.priceGroupCode;
+            _priceGroupName = isEnglish && (g.priceGroupNameEn ?? '').isNotEmpty ? g.priceGroupNameEn : g.priceGroupNameTh;
+          });
+        }),
+        onClear: () => setState(() { _priceGroupId = null; _priceGroupCode = null; _priceGroupName = null; }),
+      ),
+      const SizedBox(height: 10),
+      // ตั้งเป็นลิสต์ default ของ _listType นี้ — ใบเดียวต่อ list_type เท่านั้น (unique index ฝั่ง backend บังคับ)
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        title: Text(isEnglish ? 'Default list for this type' : 'ตั้งเป็นค่าเริ่มต้นของประเภทนี้'),
+        subtitle: Text(
+          isEnglish
+              ? 'Used when a customer/vendor has no list of their own'
+              : 'ใช้เมื่อลูกค้า/ผู้ขายไม่มีตารางราคาเฉพาะของตัวเอง',
+          style: const TextStyle(fontSize: 11),
+        ),
+        value: _isDefault,
+        activeColor: Colors.teal,
+        onChanged: _isReadOnly ? null : (v) => setState(() => _isDefault = v),
+      ),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         dense: true,
@@ -456,6 +510,7 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
             final i = entry.key;
             final d = entry.value;
             final name = isEnglish && (d.itemNameEn ?? '').isNotEmpty ? d.itemNameEn : d.itemNameTh;
+            final uomName = isEnglish && (d.uomNameEn ?? '').isNotEmpty ? d.uomNameEn : (d.uomNameTh ?? d.uomCode ?? '');
             final rangeText = (d.effectiveFrom != null || d.effectiveTo != null)
                 ? '  ·  ${d.effectiveFrom != null ? '${d.effectiveFrom!.day}/${d.effectiveFrom!.month}/${d.effectiveFrom!.year}' : '…'} - ${d.effectiveTo != null ? '${d.effectiveTo!.day}/${d.effectiveTo!.month}/${d.effectiveTo!.year}' : '…'}'
                 : '';
@@ -469,11 +524,20 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
               child: ListTile(
                 dense: true,
                 leading: CircleAvatar(radius: 14, backgroundColor: Colors.teal.shade50, child: Text('${i + 1}', style: const TextStyle(fontSize: 12, color: Colors.teal))),
-                title: Text('${d.itemCode}  $name'),
+                title: Row(children: [
+                  Expanded(child: Text('${d.itemCode}  $name')),
+                  if (d.priceType == 'PROMOTION')
+                    Container(
+                      margin: const EdgeInsets.only(left: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(10)),
+                      child: Text(isEnglish ? 'Promotion' : 'โปรโมชั่น', style: TextStyle(fontSize: 10, color: Colors.orange.shade900)),
+                    ),
+                ]),
                 subtitle: Text(
                   isEnglish
-                      ? 'Price: ${d.unitPriceFc} / ${d.uomCode ?? ''}${d.minQty > 0 ? '  ·  Min qty ${d.minQty}' : ''}$rangeText$auditText'
-                      : 'ราคา: ${d.unitPriceFc} / ${d.uomCode ?? ''}${d.minQty > 0 ? '  ·  ขั้นต่ำ ${d.minQty}' : ''}$rangeText$auditText',
+                      ? 'Price: ${d.unitPriceFc} / $uomName${d.minQty > 0 ? '  ·  Min qty ${d.minQty}' : ''}$rangeText$auditText'
+                      : 'ราคา: ${d.unitPriceFc} / $uomName${d.minQty > 0 ? '  ·  ขั้นต่ำ ${d.minQty}' : ''}$rangeText$auditText',
                   style: const TextStyle(fontSize: 12),
                 ),
                 trailing: _isReadOnly

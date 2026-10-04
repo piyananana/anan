@@ -305,13 +305,14 @@ class _ImStockCountRecordScreenState extends State<ImStockCountRecordScreen> {
 
   Widget _buildDataRow(_RecordLine line) {
     final d = line.detail;
+    final uomName = _isEnglish && (d.uomNameEn ?? '').isNotEmpty ? d.uomNameEn : (d.uomNameTh ?? d.uomCode ?? '');
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(children: [
         Expanded(flex: 2, child: Text(d.warehouseCode ?? '', style: const TextStyle(fontSize: 13))),
         Expanded(flex: 2, child: Text(d.locationCode ?? '', style: const TextStyle(fontSize: 13))),
         Expanded(flex: 4, child: Text('${d.itemCode ?? ''} — ${d.itemName ?? ''}', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
-        Expanded(flex: 1, child: Text(d.uomCode ?? '', style: const TextStyle(fontSize: 13))),
+        Expanded(flex: 1, child: Text(uomName ?? '', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
         Expanded(
           flex: 2,
           child: TextField(

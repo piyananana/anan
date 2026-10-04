@@ -8,6 +8,15 @@ String imPriceListTypeLabel(String type, bool isEnglish) {
   return type;
 }
 
+// ป้ายกำกับบรรทัดราคา — ไม่กระทบการ resolve ราคา (ยังเลือกด้วย effective_from/to เหมือนเดิม) ใช้แค่แยกแยะ
+// ราคาปกติ/ราคาโปรโมชั่นชั่วคราวในมุมมอง UI/รายงาน
+const List<String> imPriceTypes = ['STANDARD', 'PROMOTION'];
+
+String imPriceTypeLabel(String type, bool isEnglish) {
+  if (type == 'PROMOTION') return isEnglish ? 'Promotion' : 'โปรโมชั่น';
+  return isEnglish ? 'Standard' : 'ปกติ';
+}
+
 class ImPriceListDetail {
   final int? id;
   final int? priceListId;
@@ -21,6 +30,8 @@ class ImPriceListDetail {
   final String? uomNameEn;
   final double minQty;
   final double unitPriceFc;
+  // ราคาปกติ/ราคาโปรโมชั่น — ค่าเริ่มต้น 'STANDARD' ดู imPriceTypes ด้านบน
+  final String priceType;
   final DateTime? effectiveFrom;
   final DateTime? effectiveTo;
   // audit trail ระดับบรรทัด — เห็นได้เฉพาะบรรทัดที่มาจาก backend แล้ว (id != null) บรรทัดที่เพิ่งเพิ่มในฟอร์ม
@@ -41,6 +52,7 @@ class ImPriceListDetail {
     this.uomNameEn,
     this.minQty = 0,
     this.unitPriceFc = 0,
+    this.priceType = 'STANDARD',
     this.effectiveFrom,
     this.effectiveTo,
     this.updatedAt,
@@ -60,6 +72,7 @@ class ImPriceListDetail {
         uomNameEn: json['uom_name_en'],
         minQty: double.tryParse(json['min_qty']?.toString() ?? '') ?? 0,
         unitPriceFc: double.tryParse(json['unit_price_fc']?.toString() ?? '') ?? 0,
+        priceType: json['price_type'] ?? 'STANDARD',
         effectiveFrom: json['effective_from'] != null ? DateTime.tryParse(json['effective_from']) : null,
         effectiveTo: json['effective_to'] != null ? DateTime.tryParse(json['effective_to']) : null,
         updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString()) : null,
@@ -75,6 +88,7 @@ class ImPriceListDetail {
         'uom_id': uomId,
         'min_qty': minQty,
         'unit_price_fc': unitPriceFc,
+        'price_type': priceType,
         'effective_from': effectiveFrom?.toIso8601String().substring(0, 10),
         'effective_to': effectiveTo?.toIso8601String().substring(0, 10),
       };
@@ -89,6 +103,8 @@ class ImItemPriceRow {
   final String listType;
   final String? currencyCode;
   final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
   final double minQty;
   final double unitPriceFc;
   final DateTime? effectiveFrom;
@@ -101,6 +117,8 @@ class ImItemPriceRow {
     required this.listType,
     this.currencyCode,
     this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
     this.minQty = 0,
     this.unitPriceFc = 0,
     this.effectiveFrom,
@@ -114,6 +132,8 @@ class ImItemPriceRow {
         listType: json['list_type'] ?? 'SALES',
         currencyCode: json['currency_code'],
         uomCode: json['uom_code'],
+        uomNameTh: json['uom_name_th'],
+        uomNameEn: json['uom_name_en'],
         minQty: double.tryParse(json['min_qty']?.toString() ?? '') ?? 0,
         unitPriceFc: double.tryParse(json['unit_price_fc']?.toString() ?? '') ?? 0,
         effectiveFrom: json['effective_from'] != null ? DateTime.tryParse(json['effective_from']) : null,
@@ -130,6 +150,16 @@ class ImPriceListHeader {
   final String? currencyCode;
   final String? currencyNameTh;
   final String? currencyNameEn;
+  // กลุ่มราคา (im_price_group) — **แค่ป้ายกำกับ/หมวดหมู่ ไม่ใช่ targeting** ไม่มีผลต่อการ resolve ราคาเลย ตาราง
+  // ราคาหลายใบแปะป้ายเดียวกันได้ (เช่น "ค้าส่ง" หลายใบ ราคาต่างกันได้) — ฝั่งที่ลูกค้า/ผู้ขายผูกกับตารางราคาที่จะ
+  // ใช้จริงคือ ar_customer.priceListId/ap_vendor.priceListId (ดูไฟล์นั้น) ไม่ใช่ที่นี่
+  final int? priceGroupId;
+  final String? priceGroupCode;
+  final String? priceGroupNameTh;
+  final String? priceGroupNameEn;
+  // ลิสต์ที่ใช้เป็น fallback ของ list_type นี้เมื่อผู้ขาย/ลูกค้าไม่มีลิสต์เฉพาะราย (ar_customer.priceListId/
+  // ap_vendor.priceListId เป็น null) — ตั้งได้ใบเดียวต่อ list_type (การันตีด้วย unique index ฝั่ง backend)
+  final bool isDefault;
   final bool isActive;
   final int lineCount;
   final List<ImPriceListDetail> details;
@@ -143,6 +173,11 @@ class ImPriceListHeader {
     this.currencyCode,
     this.currencyNameTh,
     this.currencyNameEn,
+    this.priceGroupId,
+    this.priceGroupCode,
+    this.priceGroupNameTh,
+    this.priceGroupNameEn,
+    this.isDefault = false,
     this.isActive = true,
     this.lineCount = 0,
     this.details = const [],
@@ -157,6 +192,11 @@ class ImPriceListHeader {
         currencyCode: json['currency_code'],
         currencyNameTh: json['currency_name_th'],
         currencyNameEn: json['currency_name_en'],
+        priceGroupId: json['price_group_id'],
+        priceGroupCode: json['price_group_code'],
+        priceGroupNameTh: json['price_group_name_th'],
+        priceGroupNameEn: json['price_group_name_en'],
+        isDefault: json['is_default'] ?? false,
         isActive: json['is_active'] ?? true,
         lineCount: int.tryParse(json['line_count']?.toString() ?? '') ?? 0,
         details: (json['details'] as List<dynamic>? ?? []).map((e) => ImPriceListDetail.fromJson(e)).toList(),
@@ -168,6 +208,8 @@ class ImPriceListHeader {
         'price_list_name': priceListName,
         'list_type': listType,
         'currency_id': currencyId,
+        'price_group_id': priceGroupId,
+        'is_default': isDefault,
         'is_active': isActive,
         'details': details.map((e) => e.toJson()).toList(),
       };

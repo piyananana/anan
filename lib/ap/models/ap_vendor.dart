@@ -178,6 +178,11 @@ class ApVendor {
   final int? vendorGroupId;
   final String? vendorGroupCode;
   final String? vendorGroupName;
+  // FK → im_price_list (รหัสตารางราคา — ผู้ขายแต่ละรายใช้ได้รหัสเดียวเท่านั้น แยกจาก vendorGroupId โดยสิ้นเชิง
+  // มิเรอร์ ar_customer.priceListId ทุกประการ)
+  final int? priceListId;
+  final String? priceListCode;
+  final String? priceListName;
   final int? businessTypeId;
   final String? businessTypeCode;
   final String? businessTypeNameThai;
@@ -210,6 +215,9 @@ class ApVendor {
     this.vendorGroupId,
     this.vendorGroupCode,
     this.vendorGroupName,
+    this.priceListId,
+    this.priceListCode,
+    this.priceListName,
     this.businessTypeId,
     this.businessTypeCode,
     this.businessTypeNameThai,
@@ -243,6 +251,9 @@ class ApVendor {
         vendorGroupId: json['vendor_group_id'],
         vendorGroupCode: json['vendor_group_code'],
         vendorGroupName: json['vendor_group_name'],
+        priceListId: json['price_list_id'],
+        priceListCode: json['price_list_code'],
+        priceListName: json['price_list_name'],
         businessTypeId: json['business_type_id'],
         businessTypeCode: json['business_type_code'],
         businessTypeNameThai: json['business_type_name_thai'],
@@ -277,6 +288,7 @@ class ApVendor {
         'vendor_name_en': vendorNameEn,
         'tax_id': taxId,
         'vendor_group_id': vendorGroupId,
+        'price_list_id': priceListId,
         'business_type_id': businessTypeId,
         'credit_term_months': creditTermMonths,
         'credit_term_days': creditTermDays,
@@ -296,6 +308,7 @@ class ApVendor {
     int? id, String? vendorCode, String? oldVendorCode,
     String? vendorNameTh, String? vendorNameEn, String? taxId,
     int? vendorGroupId, String? vendorGroupCode, String? vendorGroupName,
+    int? priceListId, String? priceListCode, String? priceListName,
     int? businessTypeId, String? businessTypeCode, String? businessTypeNameThai,
     int? creditTermMonths, int? creditTermDays,
     double? creditLimit,
@@ -318,6 +331,9 @@ class ApVendor {
         vendorGroupId: vendorGroupId ?? this.vendorGroupId,
         vendorGroupCode: vendorGroupCode ?? this.vendorGroupCode,
         vendorGroupName: vendorGroupName ?? this.vendorGroupName,
+        priceListId: priceListId ?? this.priceListId,
+        priceListCode: priceListCode ?? this.priceListCode,
+        priceListName: priceListName ?? this.priceListName,
         businessTypeId: businessTypeId ?? this.businessTypeId,
         businessTypeCode: businessTypeCode ?? this.businessTypeCode,
         businessTypeNameThai: businessTypeNameThai ?? this.businessTypeNameThai,

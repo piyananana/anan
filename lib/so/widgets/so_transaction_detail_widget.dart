@@ -262,6 +262,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     if (_customer != null) {
       final resolved = await _service.resolvePrice(
         itemId: result.id!, customerId: _customer!.id!, qty: 1, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
+        uomId: result.baseUomId,
       );
       if (resolved['unit_price_fc'] != null && mounted) {
         final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
@@ -281,6 +282,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
       if (!mounted || line.unitPriceFc != line.lastResolvedPrice) return;
       final resolved = await _service.resolvePrice(
         itemId: line.item!.id!, customerId: _customer!.id!, qty: line.qtyOrdered, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
+        uomId: line.item!.baseUomId,
       );
       if (resolved['unit_price_fc'] != null && mounted && line.unitPriceFc == line.lastResolvedPrice) {
         final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;

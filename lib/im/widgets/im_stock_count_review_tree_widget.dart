@@ -101,7 +101,10 @@ class _ImStockCountReviewTreeWidgetState extends State<ImStockCountReviewTreeWid
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Text(d.uomCode ?? '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                  Text(
+                    isEnglish && (d.uomNameEn ?? '').isNotEmpty ? d.uomNameEn! : (d.uomNameTh ?? d.uomCode ?? ''),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
                 ]),
               )),
         ],

@@ -106,6 +106,7 @@ import '../../im/screens/im_uom_screen.dart';
 import '../../im/screens/im_warehouse_screen.dart';
 import '../../im/screens/im_bom_screen.dart';
 import '../../im/screens/im_price_list_screen.dart';
+import '../../im/screens/im_price_group_screen.dart';
 import '../../im/screens/im_gl_account_setup_screen.dart';
 import '../../im/screens/im_accounting_setting_screen.dart';
 import '../../im/screens/im_period_closing_screen.dart';
@@ -334,6 +335,7 @@ class Menu {
     'ImLocationImportScreen': (context) => ImLocationImportScreen(onFieldsChanged: () {}),
     'ImBomScreen': (context) => ImBomScreen(onFieldsChanged: () {}),
     'ImPriceListScreen': (context) => ImPriceListScreen(onFieldsChanged: () {}),
+    'ImPriceGroupScreen': (context) => ImPriceGroupScreen(onFieldsChanged: () {}),
     'ImGlAccountSetupScreen': (context) => const ImGlAccountSetupScreen(),
     'ImAccountingSettingScreen': (context) => const ImAccountingSettingScreen(),
     'ImPeriodClosingScreen': (context) => const ImPeriodClosingScreen(),

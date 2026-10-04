@@ -1008,8 +1008,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
                 title: Text('${c.uomCode}  $name'),
                 subtitle: Text(
                   isEnglish
-                      ? '1 ${c.uomCode} = ${c.conversionFactor} base unit${c.barcode != null ? '  ·  Barcode: ${c.barcode}' : ''}${tags.isNotEmpty ? '  ·  $tags' : ''}'
-                      : '1 ${c.uomCode} = ${c.conversionFactor} หน่วยหลัก${c.barcode != null ? '  ·  บาร์โค้ด: ${c.barcode}' : ''}${tags.isNotEmpty ? '  ·  $tags' : ''}',
+                      ? '1 $name = ${c.conversionFactor} base unit${c.barcode != null ? '  ·  Barcode: ${c.barcode}' : ''}${tags.isNotEmpty ? '  ·  $tags' : ''}'
+                      : '1 $name = ${c.conversionFactor} หน่วยหลัก${c.barcode != null ? '  ·  บาร์โค้ด: ${c.barcode}' : ''}${tags.isNotEmpty ? '  ·  $tags' : ''}',
                 ),
                 trailing: _isReadOnly
                     ? null
@@ -1129,6 +1129,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
           final rangeText = (r.effectiveFrom != null || r.effectiveTo != null)
               ? '  ·  ${r.effectiveFrom != null ? '${r.effectiveFrom!.day}/${r.effectiveFrom!.month}/${r.effectiveFrom!.year}' : '…'} - ${r.effectiveTo != null ? '${r.effectiveTo!.day}/${r.effectiveTo!.month}/${r.effectiveTo!.year}' : '…'}'
               : '';
+          final uomName = isEnglish && (r.uomNameEn ?? '').isNotEmpty ? r.uomNameEn : (r.uomNameTh ?? r.uomCode ?? '');
           return Card(
             margin: const EdgeInsets.symmetric(vertical: 3),
             child: ListTile(
@@ -1137,8 +1138,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
               title: Text('${r.priceListCode}  ${r.priceListName}'),
               subtitle: Text(
                 isEnglish
-                    ? 'Price: ${r.unitPriceFc} ${r.currencyCode ?? ''} / ${r.uomCode ?? ''}${r.minQty > 0 ? '  ·  Min qty ${r.minQty}' : ''}$rangeText'
-                    : 'ราคา: ${r.unitPriceFc} ${r.currencyCode ?? ''} / ${r.uomCode ?? ''}${r.minQty > 0 ? '  ·  ขั้นต่ำ ${r.minQty}' : ''}$rangeText',
+                    ? 'Price: ${r.unitPriceFc} ${r.currencyCode ?? ''} / $uomName${r.minQty > 0 ? '  ·  Min qty ${r.minQty}' : ''}$rangeText'
+                    : 'ราคา: ${r.unitPriceFc} ${r.currencyCode ?? ''} / $uomName${r.minQty > 0 ? '  ·  ขั้นต่ำ ${r.minQty}' : ''}$rangeText',
               ),
             ),
           );

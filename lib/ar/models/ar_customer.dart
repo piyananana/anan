@@ -431,10 +431,16 @@ class ArCustomer {
   final int? businessTypeId;
   final String? businessTypeCode;
   final String? businessTypeNameThai;
-  // FK → ar_customer_group
+  // FK → ar_customer_group (นโยบายบัญชี/เครดิต — ไม่เกี่ยวกับราคา)
   final int? customerGroupId;
   final String? customerGroupCode;
   final String? customerGroupName;
+  // FK → im_price_list (รหัสตารางราคา เช่น WSL1/RTL1 — ลูกค้าแต่ละรายใช้ได้รหัสเดียวเท่านั้น เพื่อเชื่อมไปหาราคา
+  // สินค้าใน im_price_list_detail — แยกจาก customerGroupId โดยสิ้นเชิง (นโยบายบัญชี/เครดิต ไม่เกี่ยวกับราคา) และ
+  // ไม่ใช่ im_price_group (นั่นเป็นแค่หมวดหมู่ของตารางราคา ไม่ใช่สิ่งที่ลูกค้าผูกตรง)
+  final int? priceListId;
+  final String? priceListCode;
+  final String? priceListName;
   // เงื่อนไขเครดิต: due_date = delivery_date + creditTermMonths เดือน + creditTermDays วัน
   final int creditTermMonths;
   final int creditTermDays;
@@ -486,6 +492,9 @@ class ArCustomer {
     this.customerGroupId,
     this.customerGroupCode,
     this.customerGroupName,
+    this.priceListId,
+    this.priceListCode,
+    this.priceListName,
     this.creditTermMonths = 0,
     this.creditTermDays = 30,
     this.creditLimit = 0,
@@ -533,6 +542,9 @@ class ArCustomer {
         customerGroupId: json['customer_group_id'],
         customerGroupCode: json['customer_group_code'],
         customerGroupName: json['customer_group_name'],
+        priceListId: json['price_list_id'],
+        priceListCode: json['price_list_code'],
+        priceListName: json['price_list_name'],
         creditTermMonths: json['credit_term_months'] ?? 0,
         creditTermDays: json['credit_term_days'] ?? 30,
         creditLimit:
@@ -592,6 +604,7 @@ class ArCustomer {
         'tax_id': taxId,
         'business_type_id': businessTypeId,
         'customer_group_id': customerGroupId,
+        'price_list_id': priceListId,
         'credit_term_months': creditTermMonths,
         'credit_term_days': creditTermDays,
         'credit_limit': creditLimit,

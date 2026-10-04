@@ -1,25 +1,23 @@
+// lib/im/widgets/im_price_group_list_widget.dart — มิเรอร์ im_uom_list_widget.dart ทุกประการ
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../models/im_price_list.dart';
-import '../services/im_price_list_service.dart';
+import '../models/im_price_group.dart';
+import '../services/im_price_group_service.dart';
 
-class ImPriceListListWidget extends StatefulWidget {
+class ImPriceGroupListWidget extends StatefulWidget {
   final bool enableAddButton;
   final bool enableEditButton;
   final bool enableViewButton;
   final bool enableDeleteButton;
   final bool enableCardSelect;
   final void Function() onAdd;
-  final Function(ImPriceListHeader) onEdit;
-  final Function(ImPriceListHeader) onView;
-  final Function(ImPriceListHeader) onDelete;
-  final void Function(ImPriceListHeader) onCallback;
-  // กรองตาม list_type (SALES/PURCHASE) — ใช้ตอนเป็น picker จากหน้าจอ ar_customer (SALES)/ap_vendor (PURCHASE)
-  // เพื่อไม่ให้เลือกตารางราคาประเภทผิด null = ไม่กรอง (ใช้ตอนเป็นหน้าจอหลักของตารางราคาเอง)
-  final String? listTypeFilter;
+  final Function(ImPriceGroup) onEdit;
+  final Function(ImPriceGroup) onView;
+  final Function(ImPriceGroup) onDelete;
+  final void Function(ImPriceGroup) onCallback;
 
-  const ImPriceListListWidget({
+  const ImPriceGroupListWidget({
     super.key,
     required this.enableAddButton,
     required this.enableEditButton,
@@ -31,34 +29,32 @@ class ImPriceListListWidget extends StatefulWidget {
     required this.onView,
     required this.onDelete,
     required this.onCallback,
-    this.listTypeFilter,
   });
 
   @override
-  State<ImPriceListListWidget> createState() => ImPriceListListWidgetState();
+  State<ImPriceGroupListWidget> createState() => ImPriceGroupListWidgetState();
 
-  static Future<void> search(BuildContext context, {required void Function(ImPriceListHeader) onSelected, String? listType}) {
+  static Future<void> search(BuildContext context, {required void Function(ImPriceGroup) onSelected}) {
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: Text(isEnglish ? 'Search Price List' : 'ค้นหาตารางราคา', style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? 'Search Price Group' : 'ค้นหากลุ่มราคา', style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Container(
-          width: 460,
+          width: 420,
           height: 520,
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10.0)),
-          child: ImPriceListListWidget(
+          child: ImPriceGroupListWidget(
             enableAddButton: false,
             enableEditButton: false,
             enableViewButton: false,
             enableDeleteButton: false,
             enableCardSelect: true,
-            listTypeFilter: listType,
             onAdd: () {},
-            onEdit: (h) {},
-            onView: (h) {},
-            onDelete: (h) {},
+            onEdit: (g) {},
+            onView: (g) {},
+            onDelete: (g) {},
             onCallback: onSelected,
           ),
         ),
@@ -73,12 +69,12 @@ class ImPriceListListWidget extends StatefulWidget {
   }
 }
 
-class ImPriceListListWidgetState extends State<ImPriceListListWidget> with AutomaticKeepAliveClientMixin {
+class ImPriceGroupListWidgetState extends State<ImPriceGroupListWidget> with AutomaticKeepAliveClientMixin {
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
-  List<ImPriceListHeader> _list = [];
+  List<ImPriceGroup> _list = [];
   bool _isLoading = false;
-  final _svc = ImPriceListService();
+  final _svc = ImPriceGroupService();
 
   @override
   bool get wantKeepAlive => true;
@@ -107,22 +103,24 @@ class ImPriceListListWidgetState extends State<ImPriceListListWidget> with Autom
 
   void refresh() => _fetchList();
 
+  String _groupName(ImPriceGroup item, bool isEnglish) =>
+      isEnglish && (item.priceGroupNameEn ?? '').isNotEmpty ? item.priceGroupNameEn! : item.priceGroupNameTh;
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final q = _searchQuery.trim().toUpperCase();
-    final typeFiltered = widget.listTypeFilter == null ? _list : _list.where((h) => h.listType == widget.listTypeFilter).toList();
     final display = q.isEmpty
-        ? typeFiltered
-        : typeFiltered.where((h) => h.priceListCode.toUpperCase().contains(q) || h.priceListName.toUpperCase().contains(q)).toList();
+        ? _list
+        : _list.where((g) => g.priceGroupCode.toUpperCase().contains(q) || g.priceGroupNameTh.toUpperCase().contains(q) || (g.priceGroupNameEn ?? '').toUpperCase().contains(q)).toList();
 
     return Column(children: [
       Padding(
         padding: const EdgeInsets.all(8),
         child: Row(children: [
           if (widget.enableAddButton)
-            IconButton(icon: const Icon(Icons.add), tooltip: isEnglish ? 'Add new price list' : 'เพิ่มตารางราคาใหม่', onPressed: widget.onAdd),
+            IconButton(icon: const Icon(Icons.add), tooltip: isEnglish ? 'Add new price group' : 'เพิ่มกลุ่มราคาใหม่', onPressed: widget.onAdd),
           Expanded(
             child: TextField(
               controller: _searchCtrl,
@@ -141,7 +139,7 @@ class ImPriceListListWidgetState extends State<ImPriceListListWidget> with Autom
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : display.isEmpty
-                ? Center(child: Text(isEnglish ? 'No price list data found' : 'ไม่พบข้อมูลตารางราคา'))
+                ? Center(child: Text(isEnglish ? 'No price group data found' : 'ไม่พบข้อมูลกลุ่มราคา'))
                 : ListView.builder(
                     itemCount: display.length,
                     itemBuilder: (context, index) {
@@ -151,21 +149,13 @@ class ImPriceListListWidgetState extends State<ImPriceListListWidget> with Autom
                         child: ListTile(
                           leading: CircleAvatar(
                             backgroundColor: item.isActive ? Colors.teal.shade100 : Colors.grey.shade200,
-                            child: Icon(
-                              item.listType == 'PURCHASE' ? Icons.shopping_cart_outlined : Icons.sell_outlined,
-                              color: item.isActive ? Colors.teal.shade700 : Colors.grey,
-                              size: 20,
-                            ),
+                            child: Icon(Icons.sell_outlined, color: item.isActive ? Colors.teal.shade700 : Colors.grey, size: 20),
                           ),
                           title: Text(
-                            '${item.priceListCode}  ${item.priceListName}',
+                            '${item.priceGroupCode}  ${_groupName(item, isEnglish)}',
                             style: TextStyle(fontWeight: FontWeight.bold, color: item.isActive ? null : Colors.grey),
                           ),
-                          subtitle: Text(
-                            '${imPriceListTypeLabel(item.listType, isEnglish)}'
-                            '${item.currencyCode != null ? '  •  ${item.currencyCode}' : ''}'
-                            '  •  ${isEnglish ? '${item.lineCount} items' : '${item.lineCount} รายการ'}',
-                          ),
+                          subtitle: (item.description ?? '').isNotEmpty ? Text(item.description!) : null,
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -184,7 +174,7 @@ class ImPriceListListWidgetState extends State<ImPriceListListWidget> with Autom
                                       Navigator.of(context).pop();
                                     } else {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(isEnglish ? 'Cannot use: this price list is inactive' : 'ไม่สามารถใช้ได้ เนื่องจากตารางราคานี้หยุดใช้งาน'), backgroundColor: Colors.red),
+                                        SnackBar(content: Text(isEnglish ? 'Cannot use: this price group is inactive' : 'ไม่สามารถใช้ได้ เนื่องจากกลุ่มราคานี้หยุดใช้งาน'), backgroundColor: Colors.red),
                                       );
                                     }
                                   },

@@ -109,6 +109,8 @@ class ImStockCountDetail {
   final String? serialNo;
   final int? uomId;
   final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
   final String? warehouseCode;
   final String? warehouseNameTh;
   final String? warehouseNameEn;
@@ -133,6 +135,8 @@ class ImStockCountDetail {
     this.serialNo,
     this.uomId,
     this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
     this.warehouseCode,
     this.warehouseNameTh,
     this.warehouseNameEn,
@@ -163,6 +167,8 @@ class ImStockCountDetail {
       serialNo: json['serial_no'],
       uomId: json['uom_id'],
       uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th'],
+      uomNameEn: json['uom_name_en'],
       warehouseCode: json['warehouse_code'],
       warehouseNameTh: json['warehouse_name_th'],
       warehouseNameEn: json['warehouse_name_en'],

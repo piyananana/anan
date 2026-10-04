@@ -152,12 +152,15 @@ class PoTransactionService {
     throw Exception('Failed to load PO receivable lines: ${response.body}');
   }
 
-  // ราคาแนะนำจาก im_price_list (PURCHASE, ผูกผู้ขายเจาะจงก่อน fallback ราคากลาง) — คืน map ว่างถ้าไม่พบ
+  // ราคาแนะนำจาก im_price_list — ลำดับความเจาะจง 3 ชั้น (PURCHASE): ผู้ขายรายนี้โดยตรง > กลุ่มราคาที่ผู้ขาย
+  // สังกัด > ลิสต์กลาง — ภายในลิสต์ที่เลือกได้ยังกรองด้วย uomId (ถ้าระบุ) และ min_qty tier ตาม qty ด้วย คืน map
+  // ว่างถ้าไม่พบ (ผู้เรียกต้องรองรับการกรอกราคาเองได้เสมอ ไม่ใช่ error)
   Future<Map<String, dynamic>> resolvePrice({
     required int itemId,
     required int vendorId,
     required double qty,
     required String docDate,
+    int? uomId,
   }) async {
     final headers = await authService.getAuthHeader();
     final uri = Uri.parse('${AppConfig.apiIm}/im_price_list/resolve_price').replace(queryParameters: {
@@ -166,6 +169,7 @@ class PoTransactionService {
       'vendor_id': vendorId.toString(),
       'qty': qty.toString(),
       'doc_date': docDate,
+      if (uomId != null) 'uom_id': uomId.toString(),
     });
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {

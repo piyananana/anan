@@ -180,7 +180,10 @@ class _ImStockCountPrintScreenState extends State<ImStockCountPrintScreen> {
                   pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('${rowNo++}', style: const pw.TextStyle(fontSize: 10))),
                   pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(l.itemCode ?? '', style: const pw.TextStyle(fontSize: 10))),
                   pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(l.itemName ?? '', style: const pw.TextStyle(fontSize: 10))),
-                  pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(l.uomCode ?? '', style: const pw.TextStyle(fontSize: 10))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(
+                    isEnglish && (l.uomNameEn ?? '').isNotEmpty ? l.uomNameEn! : (l.uomNameTh ?? l.uomCode ?? ''),
+                    style: const pw.TextStyle(fontSize: 10),
+                  )),
                   pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('')),
                   pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('')),
                 ])),
