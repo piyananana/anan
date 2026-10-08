@@ -7,9 +7,8 @@ import '../../cd/models/cd_currency.dart';
 import '../../cd/widgets/cd_currency_list_widget.dart';
 import '../models/im_price_list.dart';
 import '../models/im_item.dart';
-import '../models/im_uom.dart';
+import '../services/im_item_service.dart';
 import '../widgets/im_item_list_widget.dart';
-import '../widgets/im_uom_list_widget.dart';
 import '../widgets/im_price_group_list_widget.dart';
 
 // ---------------------------------------------------------------------------
@@ -65,6 +64,21 @@ class _SectionState extends State<_Section> {
   }
 }
 
+// หน่วยนับที่เลือกได้สำหรับบรรทัดราคา = หน่วยหลักของสินค้า + หน่วยทางเลือก (uom_conversions) ของสินค้านั้นๆ
+// เท่านั้น ไม่ใช่ค้นหาทุกหน่วยนับในระบบ เพราะบรรทัดราคาผูกกับสินค้าตัวเดียวเสมอ
+List<({int id, String code, String nameTh, String? nameEn})> _allowedUomsFor(ImItem? item) {
+  if (item == null) return [];
+  final list = <({int id, String code, String nameTh, String? nameEn})>[];
+  if (item.baseUomId != null) {
+    list.add((id: item.baseUomId!, code: item.baseUomCode ?? '', nameTh: item.baseUomNameTh ?? '', nameEn: item.baseUomNameEn));
+  }
+  for (final c in item.uomConversions) {
+    if (list.any((o) => o.id == c.uomId)) continue;
+    list.add((id: c.uomId, code: c.uomCode ?? '', nameTh: c.uomNameTh ?? '', nameEn: c.uomNameEn));
+  }
+  return list;
+}
+
 // ---------------------------------------------------------------------------
 // Add/Edit price line dialog
 // ---------------------------------------------------------------------------
@@ -81,6 +95,14 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
   String priceType = existing?.priceType ?? 'STANDARD';
   final minQtyCtrl = TextEditingController(text: existing != null ? '${existing.minQty}' : '0');
   final priceCtrl = TextEditingController(text: existing != null ? '${existing.unitPriceFc}' : '0');
+
+  // โหลดข้อมูลสินค้าแบบเต็ม (รวม uom_conversions) ล่วงหน้า — fetchRows (list picker) ไม่ส่ง uom_conversions มาให้
+  // ต้องใช้ fetchRow(id) เท่านั้นถึงจะได้หน่วยทางเลือกของสินค้านั้นมาจำกัดตัวเลือกหน่วยนับ
+  ImItem? fullItem;
+  if (itemId != null) {
+    try { fullItem = await ImItemService().fetchRow(itemId); } catch (_) {}
+  }
+  if (!context.mounted) return null;
 
   String fmtDate(DateTime? d) => d == null ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —') : '${d.day}/${d.month}/${d.year}';
 
@@ -115,29 +137,65 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
                   label: isEnglish ? 'Item *' : 'สินค้า *',
                   hasValue: itemId != null,
                   displayText: '$itemCode — $itemName',
-                  onSearch: () => ImItemListWidget.search(ctx, onSelected: (ImItem i) {
+                  onSearch: () => ImItemListWidget.search(ctx, onSelected: (ImItem i) async {
+                    // รายการจาก list picker ไม่มี uom_conversions ติดมาด้วย — ต้อง fetchRow(id) ซ้ำเพื่อให้ได้
+                    // หน่วยทางเลือกของสินค้าที่เพิ่งเลือกมาจำกัดตัวเลือกหน่วยนับ
+                    ImItem? full = i;
+                    if (i.id != null) {
+                      try { full = await ImItemService().fetchRow(i.id!); } catch (_) {}
+                    }
                     setDlg(() {
                       itemId = i.id; itemCode = i.itemCode;
                       itemName = isEnglish && (i.itemNameEn ?? '').isNotEmpty ? i.itemNameEn : i.itemNameTh;
-                      if (uomId == null && i.baseUomId != null) {
-                        uomId = i.baseUomId; uomCode = i.baseUomCode;
-                        uomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
+                      fullItem = full;
+                      final allowed = _allowedUomsFor(fullItem);
+                      // เปลี่ยนสินค้าแล้วหน่วยนับเดิมอาจใช้กับสินค้าใหม่ไม่ได้ — reset ไปหน่วยหลักของสินค้าใหม่
+                      if (uomId == null || !allowed.any((o) => o.id == uomId)) {
+                        if (allowed.isNotEmpty) {
+                          uomId = allowed.first.id; uomCode = allowed.first.code;
+                          uomName = isEnglish && (allowed.first.nameEn ?? '').isNotEmpty ? allowed.first.nameEn! : allowed.first.nameTh;
+                        } else {
+                          uomId = null; uomCode = null; uomName = null;
+                        }
                       }
                     });
                   }),
                 ),
                 Row(children: [
                   Expanded(
-                    child: buildFkField(
-                      label: isEnglish ? 'UOM' : 'หน่วยนับ',
-                      hasValue: uomId != null,
-                      displayText: '$uomCode — $uomName',
-                      onSearch: () => ImUomListWidget.search(ctx, onSelected: (ImUom u) {
-                        setDlg(() {
-                          uomId = u.id; uomCode = u.uomCode;
-                          uomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
-                        });
-                      }),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: DropdownButtonFormField<int>(
+                        value: _allowedUomsFor(fullItem).any((o) => o.id == uomId) ? uomId : null,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'UOM' : 'หน่วยนับ',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        hint: Text(
+                          itemId == null
+                              ? (isEnglish ? '— Select item first —' : '— เลือกสินค้าก่อน —')
+                              : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                        items: _allowedUomsFor(fullItem)
+                            .map((o) => DropdownMenuItem(
+                                  value: o.id,
+                                  child: Text(
+                                    '${o.code} — ${isEnglish && (o.nameEn ?? '').isNotEmpty ? o.nameEn! : o.nameTh}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: itemId == null
+                            ? null
+                            : (v) => setDlg(() {
+                                  final sel = _allowedUomsFor(fullItem).firstWhere((o) => o.id == v);
+                                  uomId = sel.id; uomCode = sel.code;
+                                  uomName = isEnglish && (sel.nameEn ?? '').isNotEmpty ? sel.nameEn! : sel.nameTh;
+                                }),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -435,6 +493,7 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
       const SizedBox(height: 10),
       Row(children: [
         Expanded(
+          flex: 1,
           child: DropdownButtonFormField<String>(
             value: _listType,
             isExpanded: true,
@@ -444,29 +503,35 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
           ),
         ),
         const SizedBox(width: 10),
-        Expanded(child: _buildFkField(
-          label: isEnglish ? 'Currency' : 'สกุลเงิน',
-          hasValue: _currencyId != null,
-          displayText: '$_currencyCode — $_currencyName',
-          onSearch: _pickCurrency,
-          onClear: () => setState(() { _currencyId = null; _currencyCode = null; _currencyName = null; }),
-        )),
+        Expanded(
+          flex: 1,
+          child: _buildFkField(
+            label: isEnglish ? 'Currency' : 'สกุลเงิน',
+            hasValue: _currencyId != null,
+            displayText: '$_currencyCode — $_currencyName',
+            onSearch: _pickCurrency,
+            onClear: () => setState(() { _currencyId = null; _currencyCode = null; _currencyName = null; }),
+          ),
+        ),
+        const SizedBox(width: 10),
+        // กลุ่มราคา (im_price_group) — แค่ป้ายกำกับ/หมวดหมู่สำหรับจัดกลุ่มการแสดงผล/รายงาน ไม่เกี่ยวกับการ
+        // resolve ราคาเลย ไม่ขึ้นกับ list_type หรือฟิลด์ targeting ด้านบน ตารางราคาหลายใบแปะป้ายเดียวกันได้ตามปกติ
+        Expanded(
+          flex: 1,
+          child: _buildFkField(
+            label: isEnglish ? 'Price Group (category tag)' : 'กลุ่มราคา (ป้ายหมวดหมู่)',
+            hasValue: _priceGroupId != null,
+            displayText: '$_priceGroupCode — $_priceGroupName',
+            onSearch: () => ImPriceGroupListWidget.search(context, onSelected: (g) {
+              setState(() {
+                _priceGroupId = g.id; _priceGroupCode = g.priceGroupCode;
+                _priceGroupName = isEnglish && (g.priceGroupNameEn ?? '').isNotEmpty ? g.priceGroupNameEn : g.priceGroupNameTh;
+              });
+            }),
+            onClear: () => setState(() { _priceGroupId = null; _priceGroupCode = null; _priceGroupName = null; }),
+          ),
+        ),
       ]),
-      const SizedBox(height: 10),
-      // กลุ่มราคา (im_price_group) — แค่ป้ายกำกับ/หมวดหมู่สำหรับจัดกลุ่มการแสดงผล/รายงาน ไม่เกี่ยวกับการ resolve
-      // ราคาเลย ไม่ขึ้นกับ list_type หรือฟิลด์ targeting ด้านบน ตารางราคาหลายใบแปะป้ายเดียวกันได้ตามปกติ
-      _buildFkField(
-        label: isEnglish ? 'Price Group (category tag)' : 'กลุ่มราคา (ป้ายหมวดหมู่)',
-        hasValue: _priceGroupId != null,
-        displayText: '$_priceGroupCode — $_priceGroupName',
-        onSearch: () => ImPriceGroupListWidget.search(context, onSelected: (g) {
-          setState(() {
-            _priceGroupId = g.id; _priceGroupCode = g.priceGroupCode;
-            _priceGroupName = isEnglish && (g.priceGroupNameEn ?? '').isNotEmpty ? g.priceGroupNameEn : g.priceGroupNameTh;
-          });
-        }),
-        onClear: () => setState(() { _priceGroupId = null; _priceGroupCode = null; _priceGroupName = null; }),
-      ),
       const SizedBox(height: 10),
       // ตั้งเป็นลิสต์ default ของ _listType นี้ — ใบเดียวต่อ list_type เท่านั้น (unique index ฝั่ง backend บังคับ)
       SwitchListTile(
