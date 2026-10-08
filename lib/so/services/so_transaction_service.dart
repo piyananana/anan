@@ -150,9 +150,10 @@ class SoTransactionService {
     throw Exception('Failed to load SO deliverable lines: ${response.body}');
   }
 
-  // ราคาแนะนำจาก im_price_list — ลำดับความเจาะจง 3 ชั้น (SALES): ลูกค้ารายนี้โดยตรง > กลุ่มราคาที่ลูกค้าสังกัด
-  // > ลิสต์กลาง — ภายในลิสต์ที่เลือกได้ยังกรองด้วย uomId (ถ้าระบุ) และ min_qty tier ตาม qty ด้วย คืน map ว่างถ้า
-  // ไม่พบ (ผู้เรียกต้องรองรับการกรอกราคาเองได้เสมอ ไม่ใช่ error)
+  // ราคาแนะนำจาก im_price_list — ลำดับความเจาะจง 2 ชั้น (SALES): ตารางราคาที่ลูกค้ารายนี้ผูกตรง
+  // (ar_customer.price_list_id) > ลิสต์กลาง (is_default=true) — im_price_group เป็นแค่ป้ายกำกับ/หมวดหมู่ของตาราง
+  // ราคา ไม่มีผลต่อการเลือกลิสต์เลย ภายในลิสต์ที่เลือกได้ยังกรองด้วย uomId (ถ้าระบุ) และ min_qty tier ตาม qty ด้วย
+  // คืน map ว่างถ้าไม่พบ (ผู้เรียกต้องรองรับการกรอกราคาเองได้เสมอ ไม่ใช่ error)
   Future<Map<String, dynamic>> resolvePrice({
     required int itemId,
     required int customerId,

@@ -58,9 +58,12 @@ class _LineForm {
   double unitPriceFc;
   double qtyReceived;
   int? refPrDetailId; // บรรทัดใบขอซื้อ (PR) ต้นทาง ถ้าเพิ่มมาจาก picker _pickPrLines()
-  // ราคาล่าสุดที่ระบบ auto-fill ให้จาก im_price_list (ถ้ามี) — ใช้เทียบกับ unitPriceFc ปัจจุบันตอนจำนวนเปลี่ยน
-  // เพื่อรู้ว่าผู้ใช้แก้ราคาเองไปแล้วหรือยัง (ถ้าแก้แล้วจะไม่ auto-fill ทับให้อีก) ดู _maybeReresolvePrice
-  double? lastResolvedPrice;
+  // ราคาล่าสุดที่ระบบ auto-fill ให้จาก im_price_list — ใช้เทียบกับ unitPriceFc ปัจจุบันตอนจำนวน/ผู้ขายเปลี่ยน
+  // เพื่อรู้ว่าผู้ใช้แก้ราคาเองไปแล้วหรือยัง (ถ้าแก้แล้วจะไม่ auto-fill ทับให้อีก) ดู _maybeReresolvePrice — ค่า
+  // เริ่มต้นต้องเป็น 0 (ไม่ใช่ null) ให้ตรงกับ unitPriceFc เริ่มต้นของบรรทัดใหม่ ไม่เช่นนั้นบรรทัดที่เพิ่มก่อนเลือก
+  // ผู้ขาย (unitPriceFc=0 ไม่เคย resolve) จะถูกมองว่า "ผู้ใช้แก้ไปแล้ว" (0 != null) ตั้งแต่แรก ทำให้ไม่มีวัน
+  // auto-fill ย้อนหลังได้เลยแม้จำนวนจะเปลี่ยนก็ตาม
+  double lastResolvedPrice = 0;
   _LineForm({this.id, this.item, this.qtyOrdered = 0, this.unitPriceFc = 0, this.qtyReceived = 0, this.refPrDetailId});
   double get totalValueLc => qtyOrdered * unitPriceFc;
 }
@@ -253,6 +256,28 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         }
       }
     });
+    _reresolveAllLinesForVendor();
+  }
+
+  // เลือก/เปลี่ยนผู้ขายแล้ว ให้ลองดึงราคาใหม่ให้ทุกบรรทัดที่ยังไม่ถูกผู้ใช้แก้ราคาเอง (รวมบรรทัดที่เพิ่มไว้ก่อนเลือก
+  // ผู้ขาย ซึ่งไม่เคย resolve มาก่อนเลย) — ไม่ใช้ debounce Timer ร่วมกับ _maybeReresolvePrice (ตัวนั้นมี Timer เดียว
+  // ใช้ร่วมกันทุกบรรทัด ถ้าเรียกวนหลายบรรทัดจะตัดกันเอง เหลือแค่บรรทัดสุดท้ายที่ resolve จริง) เรียกตรงทันทีแทน
+  // เพราะเป็น action ครั้งเดียวตอนเปลี่ยนผู้ขาย ไม่ใช่การพิมพ์ต่อตัวอักษรที่ต้อง debounce
+  Future<void> _reresolveAllLinesForVendor() async {
+    final vendor = _vendor;
+    if (vendor == null) return;
+    for (final line in _lines) {
+      if (line.item == null || line.unitPriceFc != line.lastResolvedPrice) continue;
+      final resolved = await _service.resolvePrice(
+        itemId: line.item!.id!, vendorId: vendor.id!, qty: line.qtyOrdered,
+        docDate: DateFormat('yyyy-MM-dd').format(_docDate), uomId: line.item!.baseUomId,
+      );
+      if (!mounted || _vendor != vendor) return;
+      if (resolved['unit_price_fc'] != null && line.unitPriceFc == line.lastResolvedPrice) {
+        final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
+        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; });
+      }
+    }
   }
 
   Future<void> _addLine() async {

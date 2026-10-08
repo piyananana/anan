@@ -547,7 +547,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           content: Text(isEnglish ? 'Please select a warehouse first' : 'กรุณาเลือกคลังสินค้าก่อน')));
       return;
     }
-    ImItemListWidget.search(context, itemTypeFilter: 'STOCK', onSelected: (ImItem item) {
+    ImItemListWidget.search(context, itemTypeFilter: 'STOCK', onSelected: (ImItem item) async {
       // รับฝากขาย ('13') บังคับ FIFO/SPECIFIC เท่านั้น — กันปนกับต้นทุนเฉลี่ยของสินค้าของเราเอง (มิเรอร์ validation
       // ฝั่ง backend ใน insertAndPostAdjustment) เช็คที่นี่เพื่อไม่ให้ผู้ใช้เพิ่มบรรทัดที่จะถูก reject ตอน save
       if (_isConsignmentReceiveMode && item.costingMethod != 'FIFO' && item.costingMethod != 'SPECIFIC') {
@@ -566,7 +566,32 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       );
       setState(() => _lines.add(line));
       _refreshSystemQty(line);
+      await _maybeResolveDirectLinePrice(line);
     });
+  }
+
+  // เพิ่มรายการตรง (ไม่ผ่าน picker PO/SO) ให้ GRN/DLN Billing — แนะนำราคาจาก im_price_list เอ็นด์พอยท์เดียวกับที่
+  // PO/SO ใช้ ('11'/'12' ฝั่งซื้อใช้ผู้ขายปัจจุบัน, '31'/'32' ฝั่งขายใช้ลูกค้าปัจจุบัน) เอกสารประเภทอื่นไม่ต้อง
+  // resolve ที่นี่เลย: '10'/'30' ไม่ตั้งหนี้เลยไม่มีช่องราคาให้กรอก (unitPriceCtrl ถูก lock ไว้ที่ 0), ส่วน
+  // Return/DN ('15'/'20'/'25'/'35'/'40'/'45') ใช้ _pickReturnLines เท่านั้น ไม่เรียก _addLine นี้อยู่แล้ว — บรรทัด
+  // ที่มาจาก _pickPoLines/_pickSoLines ก็มีราคาติดมาจากเอกสารต้นทางอยู่แล้ว ไม่ต้อง resolve ซ้ำเช่นกัน
+  Future<void> _maybeResolveDirectLinePrice(_CountLine line) async {
+    final itemId = line.item.id;
+    if (itemId == null) return;
+    final docDate = DateFormat('yyyy-MM-dd').format(_docDate);
+    if ((_isGrnBillingMode || _isGrDeferredMode) && _vendorId != null) {
+      final resolved = await _poService.resolvePrice(
+        itemId: itemId, vendorId: _vendorId!, qty: 1, docDate: docDate, uomId: line.item.baseUomId,
+      );
+      final price = double.tryParse(resolved['unit_price_fc']?.toString() ?? '') ?? 0;
+      if (price > 0 && mounted) setState(() => line.unitCostCtrl.text = _CountLine._fmtInput(price));
+    } else if ((_isDlnBillingMode || _isDlnDeferredMode) && _customerId != null) {
+      final resolved = await _soService.resolvePrice(
+        itemId: itemId, customerId: _customerId!, qty: 1, docDate: docDate, uomId: line.item.baseUomId,
+      );
+      final price = double.tryParse(resolved['unit_price_fc']?.toString() ?? '') ?? 0;
+      if (price > 0 && mounted) setState(() => line.unitPriceCtrl.text = _CountLine._fmtInput(price));
+    }
   }
 
   // '15'/'35' — เลือกเอกสารต้นฉบับ (GRN/DLN) ที่จะคืน ต้องทำก่อนเพิ่มบรรทัด (ดู _pickReturnLines) เปลี่ยนเอกสาร

@@ -168,6 +168,32 @@ class QuoteTransactionService {
     }
   }
 
+  // ราคาแนะนำจาก im_price_list — มิเรอร์ so_transaction_service.dart:resolvePrice ทุกประการ (ตารางราคาที่ลูกค้า
+  // รายนี้ผูกตรง ar_customer.price_list_id > ลิสต์กลาง is_default — price_group เป็นแค่ป้ายกำกับ ไม่มีผลต่อการ
+  // เลือกลิสต์) ใช้ endpoint เดียวกับ SO เพราะ Quote ก็ผูกกับลูกค้าแล้วเหมือนกัน ควรแนะนำราคาแบบเดียวกัน
+  Future<Map<String, dynamic>> resolvePrice({
+    required int itemId,
+    required int customerId,
+    required double qty,
+    required String docDate,
+    int? uomId,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final uri = Uri.parse('${AppConfig.apiIm}/im_price_list/resolve_price').replace(queryParameters: {
+      'item_id': itemId.toString(),
+      'list_type': 'SALES',
+      'customer_id': customerId.toString(),
+      'qty': qty.toString(),
+      'doc_date': docDate,
+      if (uomId != null) 'uom_id': uomId.toString(),
+    });
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    }
+    return {};
+  }
+
   // สำหรับ document picker ในหน้าจอ SO (อ้างอิง Quote)
   Future<List<Map<String, dynamic>>> fetchConvertibleLines({String? search}) async {
     final headers = await authService.getAuthHeader();

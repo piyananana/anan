@@ -3,6 +3,7 @@
 // (Quote คือ "เสนอราคาอะไร" ไม่ใช่ "ขายให้ใคร/จากคลังไหน" แน่นอน) และมีขั้นตอน Submit->Approve/Reject ผ่านคิว
 // อนุมัติจริง (sa_module_approver) เหมือน PR ทุกประการ — ต่างจาก PR ตรงที่มี validUntilDate ระดับหัวเอกสาร (ไม่ใช่
 // per-line neededByDate ของ PR) ดู soQuoteTransactionController.js สำหรับ workflow เต็ม
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -57,6 +58,10 @@ class _LineForm {
   double qtyQuoted;
   double unitPriceFc;
   double qtyConverted;
+  // ราคาล่าสุดที่ระบบ auto-fill ให้จาก im_price_list — ใช้เทียบกับ unitPriceFc ปัจจุบันตอนจำนวน/ลูกค้าเปลี่ยน เพื่อ
+  // รู้ว่าผู้ใช้แก้ราคาเองไปแล้วหรือยัง (ถ้าแก้แล้วจะไม่ auto-fill ทับให้อีก) ค่าเริ่มต้นต้องเป็น 0 (ไม่ใช่ null)
+  // ให้ตรงกับ unitPriceFc เริ่มต้นของบรรทัดใหม่ — มิเรอร์ so_transaction_detail_widget.dart ทุกประการ
+  double lastResolvedPrice = 0;
   _LineForm({this.id, this.item, this.qtyQuoted = 0, this.unitPriceFc = 0, this.qtyConverted = 0});
   double get totalValueLc => qtyQuoted * unitPriceFc;
 }
@@ -95,6 +100,7 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
   ModuleDocument? _docType;
 
   List<_LineForm> _lines = [];
+  Timer? _priceResolveDebounce;
 
   bool get _isReadOnly => widget.viewOnly || !['Draft', 'Rejected'].contains(_status);
 
@@ -115,6 +121,7 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
   @override
   void dispose() {
     _descCtrl.dispose();
+    _priceResolveDebounce?.cancel();
     super.dispose();
   }
 
@@ -231,12 +238,62 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
         }
       }
     });
+    _reresolveAllLinesForCustomer();
+  }
+
+  // เลือก/เปลี่ยนลูกค้าแล้ว ให้ลองดึงราคาใหม่ให้ทุกบรรทัดที่ยังไม่ถูกผู้ใช้แก้ราคาเอง (รวมบรรทัดที่เพิ่มไว้ก่อนเลือก
+  // ลูกค้า ซึ่งไม่เคย resolve มาก่อนเลย) — มิเรอร์ so_transaction_detail_widget.dart:_reresolveAllLinesForCustomer
+  // ทุกประการ (ไม่ใช้ debounce Timer ร่วมกับ _maybeReresolvePrice เพราะเรียกวนหลายบรรทัดจะตัดกันเอง)
+  Future<void> _reresolveAllLinesForCustomer() async {
+    final customer = _customer;
+    if (customer == null) return;
+    for (final line in _lines) {
+      if (line.item == null || line.unitPriceFc != line.lastResolvedPrice) continue;
+      final resolved = await _service.resolvePrice(
+        itemId: line.item!.id!, customerId: customer.id!, qty: line.qtyQuoted,
+        docDate: DateFormat('yyyy-MM-dd').format(_docDate), uomId: line.item!.baseUomId,
+      );
+      if (!mounted || _customer != customer) return;
+      if (resolved['unit_price_fc'] != null && line.unitPriceFc == line.lastResolvedPrice) {
+        final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
+        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; });
+      }
+    }
   }
 
   Future<void> _addLine() async {
     final result = await showDialog<ImItem>(context: context, builder: (_) => const _QuoteItemPickerDialog());
     if (result == null || !mounted) return;
-    setState(() => _lines.add(_LineForm(item: result, qtyQuoted: 1, unitPriceFc: 0)));
+    final line = _LineForm(item: result, qtyQuoted: 1, unitPriceFc: 0);
+    setState(() => _lines.add(line));
+    if (_customer != null) {
+      final resolved = await _service.resolvePrice(
+        itemId: result.id!, customerId: _customer!.id!, qty: 1, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
+        uomId: result.baseUomId,
+      );
+      if (resolved['unit_price_fc'] != null && mounted) {
+        final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
+        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; });
+      }
+    }
+  }
+
+  // เรียกซ้ำเมื่อจำนวนในบรรทัดเปลี่ยน เพราะ im_price_list มี tier ตาม min_qty — มิเรอร์
+  // so_transaction_detail_widget.dart:_maybeReresolvePrice ทุกประการ
+  void _maybeReresolvePrice(_LineForm line) {
+    _priceResolveDebounce?.cancel();
+    if (_customer == null || line.item == null) return;
+    _priceResolveDebounce = Timer(const Duration(milliseconds: 600), () async {
+      if (!mounted || line.unitPriceFc != line.lastResolvedPrice) return;
+      final resolved = await _service.resolvePrice(
+        itemId: line.item!.id!, customerId: _customer!.id!, qty: line.qtyQuoted, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
+        uomId: line.item!.baseUomId,
+      );
+      if (resolved['unit_price_fc'] != null && mounted && line.unitPriceFc == line.lastResolvedPrice) {
+        final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
+        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; });
+      }
+    });
   }
 
   Future<void> _save() async {
@@ -531,7 +588,10 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
                         enabled: !_isReadOnly,
                         textAlign: TextAlign.right,
                         decoration: InputDecoration(labelText: isEnglish ? 'Qty' : 'จำนวน', isDense: true, border: const OutlineInputBorder()),
-                        onChanged: (v) => setState(() => l.qtyQuoted = double.tryParse(v) ?? 0),
+                        onChanged: (v) {
+                          setState(() => l.qtyQuoted = double.tryParse(v) ?? 0);
+                          _maybeReresolvePrice(l);
+                        },
                       ),
                     ),
                     const SizedBox(width: 8),
