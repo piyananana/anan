@@ -20,6 +20,7 @@ class _ImResetScreenState extends State<ImResetScreen> {
 
   // ข้อมูลหลัก (master data) — ปิดไว้เป็นค่าเริ่มต้นเพราะมีผลกว้างกว่าข้อมูลธุรกรรม
   bool _resetBom = false;
+  bool _resetPriceChange = false;
   bool _resetPriceList = false;
   bool _resetItems = false;
   bool _resetItemCategories = false;
@@ -76,6 +77,7 @@ class _ImResetScreenState extends State<ImResetScreen> {
       (_deleteTransactions ||
           _resetDocNumbers ||
           _resetBom ||
+          _resetPriceChange ||
           _resetPriceList ||
           _resetItems ||
           _resetItemCategories ||
@@ -118,6 +120,8 @@ class _ImResetScreenState extends State<ImResetScreen> {
                 _confirmRow(Icons.format_list_numbered, 'Reset เลขที่เอกสาร IM เป็น 1', null),
               if (_resetBom)
                 _confirmRow(Icons.precision_manufacturing, 'สูตรการผลิต (BOM)', _counts?['im_bom_header']),
+              if (_resetPriceChange)
+                _confirmRow(Icons.price_change, 'ธุรกรรมการเปลี่ยนแปลงราคา (Price Change)', _counts?['im_price_change_header']),
               if (_resetPriceList)
                 _confirmRow(Icons.sell, 'ราคาขาย (Price List)', _counts?['im_price_list']),
               if (_resetItems)
@@ -160,6 +164,7 @@ class _ImResetScreenState extends State<ImResetScreen> {
           'deleteTransactions': _deleteTransactions,
           'resetDocNumbers': _resetDocNumbers,
           'resetBom': _resetBom,
+          'resetPriceChange': _resetPriceChange,
           'resetPriceList': _resetPriceList,
           'resetItems': _resetItems,
           'resetItemCategories': _resetItemCategories,
@@ -331,7 +336,7 @@ class _ImResetScreenState extends State<ImResetScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'ฟังก์ชันนี้จะลบข้อมูลธุรกรรม IM และ/หรือข้อมูลหลัก '
-                      '(สินค้า, หมวดหมู่, หน่วยนับ, คลังสินค้า, BOM, ราคาขาย, ตั้งค่าต่างๆ) ตามที่เลือกไว้ด้านล่าง '
+                      '(สินค้า, หมวดหมู่, หน่วยนับ, คลังสินค้า, BOM, ราคาขาย, ธุรกรรมเปลี่ยนแปลงราคา, ตั้งค่าต่างๆ) ตามที่เลือกไว้ด้านล่าง '
                       'ออกจากฐานข้อมูลอย่างถาวร\n'
                       'หมายเหตุ: ใบตั้งหนี้ AP / ใบแจ้งหนี้ AR ที่ IM สร้างให้อัตโนมัติ (GRN/DLN Billing, CN/DN) '
                       'ต้องล้างแยกที่ AP Reset / AR Reset — GL Entries ต้องล้างแยกที่ GL Reset',
@@ -425,6 +430,20 @@ class _ImResetScreenState extends State<ImResetScreen> {
                   detailLines: const [
                     'ลบสูตรการผลิต (BOM) ทั้งหมด รวมรายการวัตถุดิบ',
                     'ต้องลบก่อน "สินค้า" เสมอ — BOM ยังอ้างอิงสินค้าอยู่ ไม่เช่นนั้นจะลบสินค้าไม่ได้',
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                _masterDataCard(
+                  title: 'ธุรกรรมการเปลี่ยนแปลงราคา (Price Change)',
+                  subtitle: 'im_price_change_header (${_counts?['im_price_change_header'] ?? '-'} รายการ)',
+                  value: _resetPriceChange,
+                  color: Colors.deepOrange[400]!,
+                  onChanged: (v) => setState(() => _resetPriceChange = v ?? false),
+                  detailLines: const [
+                    'ลบธุรกรรมการเปลี่ยนแปลงราคาทั้งหมด (Draft/Pending/Approved) รวมรายการราคาที่จะเปลี่ยนในใบ',
+                    'ไม่ลบราคาที่มีผลแล้วใน Price List (im_price_list_detail) — ถ้าต้องการลบด้วย ให้เลือก "ราคาขาย (Price List)" เพิ่ม',
+                    'ควรเลือกข้อนี้ด้วยถ้าจะลบ "ราคาขาย (Price List)" ข้างล่าง และยังมีธุรกรรมเปลี่ยนแปลงราคาอ้างอิงลิสต์นั้นอยู่ ไม่เช่นนั้นจะลบลิสต์นั้นไม่ได้',
                   ],
                 ),
                 const SizedBox(height: 6),

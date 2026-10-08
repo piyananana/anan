@@ -343,8 +343,9 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              'เทมเพลตประกอบด้วย 4 sheet ตามหัวข้อข้อมูลสินค้า ทุก sheet (ยกเว้น "ข้อมูลพื้นฐาน") '
-              'ใช้คอลัมน์ "old_item_code" (รหัสสินค้าเก่า) เป็นตัวเชื่อมข้อมูลกับแถวใน sheet "ข้อมูลพื้นฐาน"\n'
+              'เทมเพลตประกอบด้วย 5 sheet ตามหัวข้อข้อมูลสินค้า (รวม "ตารางราคา" สำหรับตั้งราคาตั้งต้นให้สินค้าที่นำเข้า) '
+              'ทุก sheet (ยกเว้น "ข้อมูลพื้นฐาน") ใช้คอลัมน์ "old_item_code" (รหัสสินค้าเก่า) เป็นตัวเชื่อมข้อมูลกับแถวใน sheet "ข้อมูลพื้นฐาน"\n'
+              '"ตารางราคา" ต้องระบุรหัสตารางราคาที่มีอยู่แล้วในระบบ (ไม่สร้างตารางราคาใหม่) และหน่วยนับ (ถ้าระบุ) ต้องเป็นหน่วยหลักหรือหน่วยทางเลือกของสินค้านั้นเท่านั้น\n'
               '★ = จำเป็นต้องระบุ',
               style: TextStyle(color: Colors.red, fontSize: 12),
             ),
@@ -599,12 +600,23 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
     ['location_code', 'ตำแหน่งจัดเก็บ'],
   ];
 
+  static const _priceListColumns = [
+    ['price_list_code', 'รหัสตารางราคา'],
+    ['uom_code', 'หน่วยนับ'],
+    ['min_qty', 'จำนวนขั้นต่ำ'],
+    ['unit_price_fc', 'ราคาต่อหน่วย'],
+    ['price_type', 'ชนิดราคา'],
+    ['effective_from', 'มีผลตั้งแต่'],
+    ['effective_to', 'มีผลถึง'],
+  ];
+
   void _showItemDetailDialog(Map<String, dynamic> row) {
     const tabLabels = [
       'ข้อมูลพื้นฐาน',
       'หน่วยนับทางเลือก',
       'คลังสินค้า',
       'บัญชี GL',
+      'ตารางราคา',
     ];
 
     showDialog(
@@ -648,6 +660,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
                     _buildListTable(row['uom_conversions'] as List? ?? [], _uomConversionColumns),
                     _buildListTable(row['item_warehouses'] as List? ?? [], _itemWarehouseColumns),
                     _buildGlAccountTab(row),
+                    _buildListTable(row['price_lines'] as List? ?? [], _priceListColumns),
                   ]),
                 ),
               ]),
