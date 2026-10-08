@@ -8,11 +8,12 @@ class ImPriceListService {
   final String baseUrl = AppConfig.apiIm;
   final AuthService authService = AuthService();
 
-  Future<List<ImPriceListHeader>> fetchRows({String? listType}) async {
+  Future<List<ImPriceListHeader>> fetchRows({String? listType, List<int>? priceGroupIds}) async {
     final headers = await authService.getAuthHeader();
     final uri = Uri.parse('$baseUrl/im_price_list').replace(
       queryParameters: {
         if (listType != null) 'list_type': listType,
+        if (priceGroupIds != null && priceGroupIds.isNotEmpty) 'price_group_ids': priceGroupIds.join(','),
       },
     );
     final response = await http.get(uri, headers: headers);

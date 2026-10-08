@@ -79,6 +79,9 @@ const Map<String, String> imSysDocType = {
   '60': 'เบิกสินค้า - Issue Stock', // issue (-stock) for project, ...
   '70': 'โอนสินค้า - Transfer in-out', // transfer between location (=stock)
   '80': 'ปรับยอดสินค้า - Adjust quantity', // adjust (+-stock) for Phys.Count, ...
+  '85': 'เปลี่ยนแปลงราคา - Price Change', // im_price_change — เปลี่ยนราคาขาย/ซื้อใน im_price_list_detail เท่านั้น
+                                          // ไม่กระทบจำนวน/มูลค่าสต็อกเลย อยู่ใต้ IM เพราะใช้ร่วมกันทั้งฝั่งซื้อ
+                                          // (PURCHASE) และขาย (SALES) จะแยกไปอยู่ใต้ PO/SO อย่างเดียวไม่ได้
 };
 // '41': 'สั่งขาย'
 const Map<String, String> soSysDocType = {

@@ -107,6 +107,8 @@ import '../../im/screens/im_warehouse_screen.dart';
 import '../../im/screens/im_bom_screen.dart';
 import '../../im/screens/im_price_list_screen.dart';
 import '../../im/screens/im_price_group_screen.dart';
+import '../../im/screens/im_price_change_screen.dart';
+import '../../im/screens/im_price_change_report_screen.dart';
 import '../../im/screens/im_gl_account_setup_screen.dart';
 import '../../im/screens/im_accounting_setting_screen.dart';
 import '../../im/screens/im_period_closing_screen.dart';
@@ -336,6 +338,8 @@ class Menu {
     'ImBomScreen': (context) => ImBomScreen(onFieldsChanged: () {}),
     'ImPriceListScreen': (context) => ImPriceListScreen(onFieldsChanged: () {}),
     'ImPriceGroupScreen': (context) => ImPriceGroupScreen(onFieldsChanged: () {}),
+    'ImPriceChangeScreen': (context) => ImPriceChangeScreen(onFieldsChanged: () {}),
+    'ImPriceChangeReportScreen': (context) => const ImPriceChangeReportScreen(),
     'ImGlAccountSetupScreen': (context) => const ImGlAccountSetupScreen(),
     'ImAccountingSettingScreen': (context) => const ImAccountingSettingScreen(),
     'ImPeriodClosingScreen': (context) => const ImPeriodClosingScreen(),
