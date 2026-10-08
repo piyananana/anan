@@ -11,9 +11,11 @@ import 'package:provider/provider.dart';
 import '../models/im_item.dart';
 import '../models/im_item_category.dart';
 import '../models/im_warehouse.dart';
+import '../models/im_price_list.dart';
 import '../services/im_item_service.dart';
 import '../services/im_item_category_service.dart';
 import '../services/im_warehouse_service.dart';
+import '../services/im_price_list_service.dart';
 import '../../cd/models/cd_vat_rate.dart';
 import '../../cd/services/cd_vat_rate_service.dart';
 import '../../sa/models/sa_company.dart';
@@ -27,7 +29,7 @@ import '../../utils/file_download.dart';
 // ar_customer_report_screen.dart แต่เปลี่ยนชื่อเป็น _Section เพื่อไม่ชนกับ "หมวดหมู่สินค้า"
 // (ImItemCategory) ที่เป็นทั้งตัวกรองและตัว group-by ของรายงานนี้)
 // ---------------------------------------------------------------------------
-enum _Section { generalInfo, uomInfo, warehouseInfo, glAccount }
+enum _Section { generalInfo, uomInfo, warehouseInfo, glAccount, priceList }
 
 extension _SecLabel on _Section {
   String label(bool isEnglish) {
@@ -36,6 +38,7 @@ extension _SecLabel on _Section {
       case _Section.uomInfo:      return isEnglish ? 'Units of Measure'    : 'หน่วยนับ';
       case _Section.warehouseInfo:return isEnglish ? 'Warehouse Settings' : 'การตั้งค่าคลังสินค้า';
       case _Section.glAccount:    return isEnglish ? 'GL Account Codes'   : 'รหัสบัญชี GL';
+      case _Section.priceList:    return isEnglish ? 'Price List'         : 'ตารางราคา';
     }
   }
 }
@@ -57,6 +60,7 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
   final _categorySvc  = ImItemCategoryService();
   final _warehouseSvc = ImWarehouseService();
   final _vatRateSvc   = VatRateService();
+  final _priceListSvc = ImPriceListService();
 
   bool   _isLoading         = false;
   bool   _isFilterExpanded  = true;
@@ -95,6 +99,8 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
   List<_Section> _selectedSections = [];
 
   List<ImItem> _reportData = [];
+  // ราคาต่อสินค้า — โหลดแยกต่างหากจาก ImItem (คนละ endpoint, คนละ shape) เมื่อเลือกหมวด priceList เท่านั้น
+  Map<int, List<ImItemPriceRow>> _priceRowsByItem = {};
 
   // ─── init ─────────────────────────────────────────────────────────────────
 
@@ -130,9 +136,16 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
         _Section.warehouseInfo,
       }.contains(s));
 
+  // ลำดับแสดงหมวดรายละเอียดต่อสินค้า — ตารางราคาต้องอยู่ล่างสุดเสมอ ไม่ว่าผู้ใช้จะติ๊กเลือกตามลำดับใดก็ตาม
+  // (ค่าอื่นคงลำดับตามที่ผู้ใช้เลือกไว้)
+  List<_Section> get _orderedSections => [
+        ..._selectedSections.where((s) => s != _Section.priceList),
+        if (_selectedSections.contains(_Section.priceList)) _Section.priceList,
+      ];
+
   Future<void> _generateReport() async {
     final isEnglish = _isEnglish;
-    setState(() { _isLoading = true; _reportData = []; });
+    setState(() { _isLoading = true; _reportData = []; _priceRowsByItem = {}; });
     try {
       var list = await _itemSvc.fetchRows();
 
@@ -185,13 +198,24 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
         finalList = await Future.wait(futures);
       }
 
+      Map<int, List<ImItemPriceRow>> priceRowsByItem = {};
+      if (_selectedSections.contains(_Section.priceList) && finalList.isNotEmpty) {
+        final ids = finalList.map((i) => i.id).whereType<int>().toList();
+        final rowsList = await Future.wait(ids.map((id) async {
+          try { return await _priceListSvc.fetchByItem(id); } catch (_) { return <ImItemPriceRow>[]; }
+        }));
+        for (int k = 0; k < ids.length; k++) {
+          priceRowsByItem[ids[k]] = rowsList[k];
+        }
+      }
+
       if (finalList.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(isEnglish
                 ? 'No data found for the selected conditions'
                 : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก')));
       }
-      if (mounted) setState(() { _reportData = finalList; _pdfKey++; });
+      if (mounted) setState(() { _reportData = finalList; _priceRowsByItem = priceRowsByItem; _pdfKey++; });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -229,6 +253,41 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
       if (flags.isNotEmpty) '($flags)',
     ].join('  ');
   }
+
+  // ─── price list row formatters — ใช้ร่วมกันทั้ง PDF table, Excel columns, และ _sectionLines fallback ───
+
+  static String _priceGroupStr(ImItemPriceRow r, bool isEnglish) {
+    final name = isEnglish && (r.priceGroupNameEn ?? '').isNotEmpty ? r.priceGroupNameEn! : (r.priceGroupNameTh ?? '');
+    final code = r.priceGroupCode ?? '';
+    return (code.isEmpty && name.isEmpty) ? '-' : '$code $name'.trim();
+  }
+
+  static String _priceListStr(ImItemPriceRow r) => '${r.priceListCode} ${r.priceListName}'.trim();
+
+  static String _priceDateRangeStr(ImItemPriceRow r) {
+    final f = r.effectiveFrom != null ? DateFormat('dd/MM/yyyy').format(r.effectiveFrom!) : '-';
+    final t = r.effectiveTo   != null ? DateFormat('dd/MM/yyyy').format(r.effectiveTo!)   : '-';
+    return '$f - $t';
+  }
+
+  static String _priceStatusLabel(ImItemPriceRow r, bool isEnglish) =>
+      r.isActiveNow ? (isEnglish ? 'Active' : 'ใช้งาน') : (isEnglish ? 'Inactive' : 'ไม่ใช้งาน');
+
+  static String _priceUomStr(ImItemPriceRow r, bool isEnglish) {
+    final name = isEnglish && (r.uomNameEn ?? '').isNotEmpty ? r.uomNameEn! : (r.uomNameTh ?? '');
+    return '${r.uomCode ?? ''} $name'.trim();
+  }
+
+  static String _priceRowStr(ImItemPriceRow r, bool isEnglish) => [
+        '${isEnglish ? "Price Group" : "กลุ่มราคา"}: ${_priceGroupStr(r, isEnglish)}',
+        '${isEnglish ? "Price List" : "ตารางราคา"}: ${_priceListStr(r)}',
+        '${isEnglish ? "Type" : "ประเภท"}: ${imPriceListTypeLabel(r.listType, isEnglish)}',
+        '${isEnglish ? "Effective" : "มีผล"}: ${_priceDateRangeStr(r)}',
+        '${isEnglish ? "Status" : "สถานะ"}: ${_priceStatusLabel(r, isEnglish)}',
+        '${isEnglish ? "Price" : "ราคา"}: ${NumberFormat("#,##0.00").format(r.unitPriceFc)}',
+        '${isEnglish ? "UOM" : "หน่วยนับ"}: ${_priceUomStr(r, isEnglish)}',
+        '${isEnglish ? "Default" : "ราคาเริ่มต้น"}: ${_yn(r.isDefault, isEnglish)}',
+      ].join('  |  ');
 
   static String _itemWarehouseStr(ImItemWarehouse w, bool isEnglish) {
     final name = isEnglish && (w.warehouseNameEn ?? '').isNotEmpty ? w.warehouseNameEn! : (w.warehouseNameTh ?? '');
@@ -304,6 +363,13 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
           '${isEnglish ? "Expense" : "ค่าใช้จ่าย"}: ${(i.expenseAccountCode ?? '').isEmpty ? (isEnglish ? "(not set)" : "(ยังไม่ตั้งค่า)") : "${i.expenseAccountCode} ${i.expenseAccountName ?? ''}"}',
         ];
         return [p.join('  |  ')];
+
+      // fallback แบบข้อความล้วน — ใช้จริงเฉพาะถ้ามีจุดเรียกไหนไม่ได้ branch ออกไปวาดตารางเอง (ดู
+      // _generatePdf/_exportExcel ซึ่ง branch ออกไปวาดตาราง กลุ่มราคา/ตารางราคา/ประเภท/... โดยตรง)
+      case _Section.priceList:
+        final rows = _priceRowsByItem[i.id] ?? [];
+        if (rows.isEmpty) return [isEnglish ? '(No price data)' : '(ไม่มีข้อมูลราคา)'];
+        return rows.map((r) => _priceRowStr(r, isEnglish)).toList();
     }
   }
 
@@ -392,6 +458,51 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
           ),
         );
 
+    // คอลัมน์ตารางย่อย "ตารางราคา" — กลุ่มราคา/ตารางราคา/ประเภท/วันที่มีผลจาก-ถึง/สถานะ/ราคา/หน่วยนับ/เป็นราคาเริ่มต้น
+    final priceGroupW = pageW * 0.14;
+    final priceListW  = pageW * 0.20;
+    final priceTypeW  = pageW * 0.10;
+    final priceDateW  = pageW * 0.21;
+    final priceStW    = pageW * 0.09;
+    final priceAmtW   = pageW * 0.10;
+    final priceUomW   = pageW * 0.08;
+    final priceDefW   = pageW * 0.08;
+    const cPriceHdr   = PdfColor(0.93, 0.96, 0.98);
+
+    pw.Widget priceTableHeader() => pw.Container(
+          decoration: const pw.BoxDecoration(
+            color: cPriceHdr,
+            border: pw.Border(bottom: pw.BorderSide(color: cBorder, width: 0.5)),
+          ),
+          child: pw.Row(children: [
+            box(priceGroupW, isEnglish ? 'Price Group' : 'กลุ่มราคา', tB(8)),
+            box(priceListW,  isEnglish ? 'Price List'  : 'ตารางราคา', tB(8)),
+            box(priceTypeW,  isEnglish ? 'Type'        : 'ประเภท',    tB(8)),
+            box(priceDateW,  isEnglish ? 'Effective From - To' : 'วันที่มีผลจาก-ถึง', tB(8)),
+            box(priceStW,    isEnglish ? 'Status'      : 'สถานะ',     tB(8)),
+            box(priceAmtW,   isEnglish ? 'Price'        : 'ราคา',      tB(8), align: pw.TextAlign.right),
+            box(priceUomW,   isEnglish ? 'UOM'          : 'หน่วยนับ',  tB(8)),
+            box(priceDefW,   isEnglish ? 'Default'      : 'เป็นราคาเริ่มต้น', tB(8)),
+          ]),
+        );
+
+    pw.Widget priceTableRow(ImItemPriceRow r, bool stripe) => pw.Container(
+          decoration: pw.BoxDecoration(
+            color: stripe ? cStripe : null,
+            border: const pw.Border(bottom: pw.BorderSide(color: cBorder, width: 0.3)),
+          ),
+          child: pw.Row(children: [
+            box(priceGroupW, _priceGroupStr(r, isEnglish), tN(8)),
+            box(priceListW,  _priceListStr(r),             tN(8)),
+            box(priceTypeW,  imPriceListTypeLabel(r.listType, isEnglish), tN(8)),
+            box(priceDateW,  _priceDateRangeStr(r),         tN(8)),
+            box(priceStW,    _priceStatusLabel(r, isEnglish), tN(8)),
+            box(priceAmtW,   NumberFormat('#,##0.00').format(r.unitPriceFc), tN(8), align: pw.TextAlign.right),
+            box(priceUomW,   _priceUomStr(r, isEnglish),    tN(8)),
+            box(priceDefW,   _yn(r.isDefault, isEnglish),   tN(8)),
+          ]),
+        );
+
     final tableHeader = pw.Container(
       decoration: const pw.BoxDecoration(
         color: cGreen,
@@ -469,7 +580,27 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
           ]),
         ));
 
-        for (final sec in _selectedSections) {
+        for (final sec in _orderedSections) {
+          if (sec == _Section.priceList) {
+            final priceRows = _priceRowsByItem[i.id] ?? [];
+            content.add(pw.Padding(
+              padding: const pw.EdgeInsets.fromLTRB(hp, 2, hp, 0),
+              child: pw.Text(sec.label(isEnglish),
+                  style: pw.TextStyle(font: fontBold, fontSize: 8.5, decoration: pw.TextDecoration.underline)),
+            ));
+            if (priceRows.isEmpty) {
+              content.add(pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(horizontal: hp, vertical: 2),
+                child: pw.Text(isEnglish ? '(No price data)' : '(ไม่มีข้อมูลราคา)', style: tN(8.5)),
+              ));
+            } else {
+              content.add(priceTableHeader());
+              for (int pi = 0; pi < priceRows.length; pi++) {
+                content.add(priceTableRow(priceRows[pi], pi.isOdd));
+              }
+            }
+            continue;
+          }
           final lines = _sectionLines(i, sec, isEnglish);
           content.add(pw.Container(
             padding: const pw.EdgeInsets.symmetric(horizontal: hp, vertical: 2),
@@ -566,6 +697,14 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
         _xl(s, 5, 4, isEnglish ? 'Section' : 'หมวด', bg: hdrBg, bold: true);
         _xl(s, 5, 5, isEnglish ? 'Details' : 'รายละเอียด', bg: hdrBg, bold: true);
       }
+      if (_selectedSections.contains(_Section.priceList)) {
+        final priceHdrs = isEnglish
+            ? ['Price Group', 'Price List', 'Type', 'Effective From - To', 'Status', 'Price', 'UOM', 'Default']
+            : ['กลุ่มราคา', 'ตารางราคา', 'ประเภท', 'วันที่มีผลจาก-ถึง', 'สถานะ', 'ราคา', 'หน่วยนับ', 'เป็นราคาเริ่มต้น'];
+        for (int k = 0; k < priceHdrs.length; k++) {
+          _xl(s, 5, 6 + k, priceHdrs[k], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
+        }
+      }
 
       int row = 6;
       for (final i in _reportData) {
@@ -577,16 +716,42 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
           row++;
         } else {
           bool firstSec = true;
-          for (final sec in _selectedSections) {
+          void writeItemCols() {
+            _xl(s, row, 0, i.itemCode);
+            _xl(s, row, 1, i.itemNameTh);
+            _xl(s, row, 2, i.itemNameEn ?? '');
+            _xl(s, row, 3, i.oldItemCode ?? '');
+            firstSec = false;
+          }
+
+          for (final sec in _orderedSections) {
+            if (sec == _Section.priceList) {
+              final priceRows = _priceRowsByItem[i.id] ?? [];
+              if (priceRows.isEmpty) {
+                if (firstSec) writeItemCols();
+                _xl(s, row, 4, sec.label(isEnglish), bg: catBg);
+                _xl(s, row, 5, isEnglish ? '(No price data)' : '(ไม่มีข้อมูลราคา)');
+                row++;
+              } else {
+                for (final r in priceRows) {
+                  if (firstSec) writeItemCols();
+                  _xl(s, row, 4, sec.label(isEnglish), bg: catBg);
+                  _xl(s, row, 6, _priceGroupStr(r, isEnglish));
+                  _xl(s, row, 7, _priceListStr(r));
+                  _xl(s, row, 8, imPriceListTypeLabel(r.listType, isEnglish));
+                  _xl(s, row, 9, _priceDateRangeStr(r));
+                  _xl(s, row, 10, _priceStatusLabel(r, isEnglish));
+                  _xl(s, row, 11, r.unitPriceFc);
+                  _xl(s, row, 12, _priceUomStr(r, isEnglish));
+                  _xl(s, row, 13, _yn(r.isDefault, isEnglish));
+                  row++;
+                }
+              }
+              continue;
+            }
             final lines = _sectionLines(i, sec, isEnglish);
             for (int li = 0; li < lines.length; li++) {
-              if (firstSec && li == 0) {
-                _xl(s, row, 0, i.itemCode);
-                _xl(s, row, 1, i.itemNameTh);
-                _xl(s, row, 2, i.itemNameEn ?? '');
-                _xl(s, row, 3, i.oldItemCode ?? '');
-                firstSec = false;
-              }
+              if (firstSec && li == 0) writeItemCols();
               _xl(s, row, 4, sec.label(isEnglish), bg: catBg);
               _xl(s, row, 5, lines[li]);
               row++;

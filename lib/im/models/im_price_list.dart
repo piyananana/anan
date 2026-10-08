@@ -101,6 +101,13 @@ class ImItemPriceRow {
   final String priceListCode;
   final String priceListName;
   final String listType;
+  // ลิสต์นี้เป็นลิสต์ default ของ list_type นี้หรือไม่ (im_price_list.is_default) — ใช้แสดงคอลัมน์
+  // "เป็นราคาเริ่มต้น" ในรายงาน ไม่เกี่ยวกับ priceType (STANDARD/PROMOTION) ของบรรทัดราคา
+  final bool isDefault;
+  final int? priceGroupId;
+  final String? priceGroupCode;
+  final String? priceGroupNameTh;
+  final String? priceGroupNameEn;
   final String? currencyCode;
   final String? uomCode;
   final String? uomNameTh;
@@ -115,6 +122,11 @@ class ImItemPriceRow {
     required this.priceListCode,
     required this.priceListName,
     required this.listType,
+    this.isDefault = false,
+    this.priceGroupId,
+    this.priceGroupCode,
+    this.priceGroupNameTh,
+    this.priceGroupNameEn,
     this.currencyCode,
     this.uomCode,
     this.uomNameTh,
@@ -125,11 +137,26 @@ class ImItemPriceRow {
     this.effectiveTo,
   });
 
+  // ใช้งาน/ไม่ใช้งาน ณ วันนี้ — เทียบช่วง effective_from/to กับวันปัจจุบัน (ไม่ขึ้นกับ im_price_list.is_active
+  // เพราะ endpoint by_item กรองลิสต์ที่ is_active=false ออกไปแล้วตั้งแต่ชั้น backend)
+  bool get isActiveNow {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (effectiveFrom != null && effectiveFrom!.isAfter(today)) return false;
+    if (effectiveTo != null && effectiveTo!.isBefore(today)) return false;
+    return true;
+  }
+
   factory ImItemPriceRow.fromJson(Map<String, dynamic> json) => ImItemPriceRow(
         detailId: json['id'] as int,
         priceListCode: json['price_list_code'] ?? '',
         priceListName: json['price_list_name'] ?? '',
         listType: json['list_type'] ?? 'SALES',
+        isDefault: json['is_default'] ?? false,
+        priceGroupId: json['price_group_id'],
+        priceGroupCode: json['price_group_code'],
+        priceGroupNameTh: json['price_group_name_th'],
+        priceGroupNameEn: json['price_group_name_en'],
         currencyCode: json['currency_code'],
         uomCode: json['uom_code'],
         uomNameTh: json['uom_name_th'],
