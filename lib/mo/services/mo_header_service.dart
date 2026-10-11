@@ -131,6 +131,34 @@ class MoHeaderService {
     throw Exception(err['message'] ?? 'ยกเลิกใบสั่งผลิตล้มเหลว');
   }
 
+  Future<MoHeader> logOperationTime({
+    required int moId,
+    required int operationId,
+    double laborHours = 0,
+    double machineHours = 0,
+    bool markDone = false,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final body = jsonEncode({
+      'labor_hours': laborHours,
+      'machine_hours': machineHours,
+      'mark_done': markDone,
+    });
+    final response = await http.put(
+      Uri.parse('$baseUrl/mo_header/$moId/operations/$operationId/log_time'),
+      headers: headers,
+      body: body,
+    );
+    if (response.statusCode == 200) {
+      return MoHeader.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    }
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'บันทึกเวลาปฏิบัติงานล้มเหลว');
+  }
+
   Future<void> deleteTransaction(int id) async {
     final headers = await authService.getAuthHeader();
     final response = await http.delete(Uri.parse('$baseUrl/mo_header/$id'), headers: headers);
