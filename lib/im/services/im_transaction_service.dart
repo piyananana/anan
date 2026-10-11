@@ -8,6 +8,7 @@ import '../models/im_transaction.dart';
 import '../models/im_gl_account_setup.dart';
 import '../models/im_gr_billing_report.dart';
 import '../models/im_dln_billing_report.dart';
+import '../../utils/date_utils.dart';
 
 class ImTransactionService {
   final String baseUrl = AppConfig.apiIm;
@@ -177,6 +178,41 @@ class ImTransactionService {
     } else {
       final err = json.decode(response.body);
       throw Exception(err['message'] ?? 'บันทึกข้อมูลล้มเหลว');
+    }
+  }
+
+  // '95' รับสินค้าเข้าคลังจากการผลิต — ไม่ต้องรู้ unit_cost เอง (server คำนวณให้จากนโยบายต้นทุนของ MO เอง ดู
+  // computeMoReceiptUnitCost/createMoReceipt ใน imTransactionController.js) ต่างจาก createTransaction ทั่วไป
+  // ที่ต้องส่ง unit_cost มาเองเสมอ (ใช้กับ GRN/DLN/ISS ที่ unit_cost มาจาก stock ledger เดิมหรือผู้ใช้กรอกตรงๆ)
+  Future<ImTransaction> createMoReceipt({
+    required int moId,
+    required int docId,
+    required DateTime docDate,
+    required List<({int refMoOutputDetailId, double qty})> lines,
+    String? description,
+  }) async {
+    final authHeaders = await authService.getAuthHeader();
+    final body = jsonEncode({
+      'mo_id': moId,
+      'doc_id': docId,
+      'doc_no': 'AUTO',
+      'doc_date': formatLocalDate(docDate),
+      'lines': lines.map((l) => {'ref_mo_output_detail_id': l.refMoOutputDetailId, 'qty': l.qty}).toList(),
+      if (description != null) 'description': description,
+    });
+    final response = await http.post(
+      Uri.parse('$baseUrl/im_transaction/mo_receipt'),
+      headers: authHeaders,
+      body: body,
+    );
+    if (response.statusCode == 201) {
+      return ImTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'รับสินค้าเข้าคลังล้มเหลว');
     }
   }
 

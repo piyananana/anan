@@ -107,6 +107,8 @@ import '../../im/screens/im_warehouse_screen.dart';
 import '../../mo/screens/mo_bom_screen.dart';
 import '../../mo/screens/mo_work_center_screen.dart';
 import '../../mo/screens/mo_header_screen.dart';
+import '../../mo/screens/mo_issue_screen.dart';
+import '../../mo/screens/mo_receipt_screen.dart';
 import '../../im/screens/im_price_list_screen.dart';
 import '../../im/screens/im_price_group_screen.dart';
 import '../../im/screens/im_price_change_screen.dart';
@@ -340,6 +342,8 @@ class Menu {
     'MoBomScreen': (context) => MoBomScreen(onFieldsChanged: () {}),
     'MoWorkCenterScreen': (context) => MoWorkCenterScreen(onFieldsChanged: () {}),
     'MoHeaderScreen': (context) => const MoHeaderScreen(),
+    'MoIssueScreen': (context) => const MoIssueScreen(),
+    'MoReceiptScreen': (context) => const MoReceiptScreen(),
     'ImPriceListScreen': (context) => ImPriceListScreen(onFieldsChanged: () {}),
     'ImPriceGroupScreen': (context) => ImPriceGroupScreen(onFieldsChanged: () {}),
     'ImPriceChangeScreen': (context) => ImPriceChangeScreen(onFieldsChanged: () {}),
