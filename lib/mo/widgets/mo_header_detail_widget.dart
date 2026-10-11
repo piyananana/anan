@@ -943,6 +943,19 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
             ),
           ],
+          if (_status == 'Completed' && _id != null && canApprove && !widget.viewOnly) ...[
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: _isSaving ? null : () => _confirmAction(
+                  'ยืนยันปิดใบสั่งผลิต', 'Close Manufacturing Order',
+                  'ปิดใบสั่งผลิตนี้? ยอดคงเหลือ WIP ที่เหลืออยู่ (ถ้ามี) จะถูกปรับปรุงเข้าบัญชีผลต่างต้นทุนการผลิตให้อัตโนมัติ และจะเบิก/รับ/บันทึกเวลาเพิ่มไม่ได้อีก',
+                  'Close this MO? Any remaining WIP balance will be posted to the manufacturing cost variance account automatically, and no further issue/receipt/time log will be allowed.',
+                  () => _service.closeTransaction(_id!)),
+              icon: const Icon(Icons.lock_outline, size: 18),
+              label: Text(isEnglish ? 'Close MO' : 'ปิดใบสั่งผลิต'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey[700], foregroundColor: Colors.white),
+            ),
+          ],
         ]),
       ]),
     );
