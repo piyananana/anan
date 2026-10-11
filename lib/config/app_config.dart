@@ -15,4 +15,5 @@ class AppConfig {
   // ไม่มี apiPr แยกต่างหากอีกต่อไป
   static const String apiPo = '${baseHost}/api/po';
   static const String apiSo = '${baseHost}/api/so';
+  static const String apiMo = '${baseHost}/api/mo';
 }

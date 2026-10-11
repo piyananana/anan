@@ -1,40 +1,42 @@
+// lib/mo/screens/mo_work_center_screen.dart — มิเรอร์ im_price_group_screen.dart ทุกประการ
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
-import '../models/im_bom.dart';
-import '../services/im_bom_service.dart';
-import '../widgets/im_bom_list_widget.dart';
-import '../widgets/im_bom_detail_widget.dart';
+import '../models/mo_work_center.dart';
+import '../services/mo_work_center_service.dart';
+import '../widgets/mo_work_center_list_widget.dart';
+import '../widgets/mo_work_center_detail_widget.dart';
 
-class ImBomScreen extends StatefulWidget {
+class MoWorkCenterScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
   final VoidCallback? onExit;
 
-  const ImBomScreen({
+  const MoWorkCenterScreen({
     super.key,
     required this.onFieldsChanged,
     this.onExit,
   });
 
   @override
-  State<ImBomScreen> createState() => _ImBomScreenState();
+  State<MoWorkCenterScreen> createState() => _MoWorkCenterScreenState();
 }
 
-class _ImBomScreenState extends State<ImBomScreen> with AutomaticKeepAliveClientMixin {
-  final GlobalKey<ImBomListWidgetState> _listKey = GlobalKey();
-  final GlobalKey<ImBomDetailWidgetState> _detailKey = GlobalKey();
-  final _svc = ImBomService();
+class _MoWorkCenterScreenState extends State<MoWorkCenterScreen> with AutomaticKeepAliveClientMixin {
+  final GlobalKey<MoWorkCenterListWidgetState> _listKey = GlobalKey();
+  final GlobalKey<MoWorkCenterDetailWidgetState> _detailKey = GlobalKey();
+  final _svc = MoWorkCenterService();
 
   Mode _mode = Mode.none;
-  ImBomHeader? _selectedData;
-  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ImBomDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
-  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มสูตรการผลิต" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  MoWorkCenter? _selectedData;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ MoWorkCenterDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
+  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มศูนย์งาน" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
   int _requestSeq = 0;
+  bool _isEnglish = false;
 
   bool _isLeftPanelExpanded = true;
-  double _leftPanelWidth = 380.0;
+  double _leftPanelWidth = 360.0;
   bool _isDraggingDivider = false;
 
   @override
@@ -46,41 +48,27 @@ class _ImBomScreenState extends State<ImBomScreen> with AutomaticKeepAliveClient
         _requestSeq++;
       });
 
-  void _onEdit(ImBomHeader row) {
-    setState(() {
-      _mode = Mode.edit;
-      _selectedData = row;
-      _requestSeq++;
-    });
-    _fetchFull(row);
-  }
+  void _onEdit(MoWorkCenter row) => setState(() {
+        _mode = Mode.edit;
+        _selectedData = row;
+        _requestSeq++;
+      });
 
-  void _onView(ImBomHeader row) {
-    setState(() {
-      _mode = Mode.view;
-      _selectedData = row;
-      _requestSeq++;
-    });
-    _fetchFull(row);
-  }
+  void _onView(MoWorkCenter row) => setState(() {
+        _mode = Mode.view;
+        _selectedData = row;
+        _requestSeq++;
+      });
 
-  Future<void> _fetchFull(ImBomHeader row) async {
-    if (row.id == null) return;
-    try {
-      final full = await _svc.fetchRow(row.id!);
-      if (mounted) setState(() => _selectedData = full);
-    } catch (_) {}
-  }
-
-  Future<void> _onDelete(ImBomHeader row) async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+  Future<void> _onDelete(MoWorkCenter row) async {
+    final isEnglish = _isEnglish;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
         content: Text(isEnglish
-            ? 'Are you sure you want to delete this BOM for "${row.parentItemCode}" (version ${row.bomVersion})?'
-            : 'คุณแน่ใจหรือไม่ที่จะลบสูตรการผลิตของ "${row.parentItemCode}" (เวอร์ชัน ${row.bomVersion})?'),
+            ? 'Are you sure you want to delete work center "${row.workCenterCode} ${row.workCenterNameTh}" ?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบศูนย์งาน "${row.workCenterCode} ${row.workCenterNameTh}" ?'),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           TextButton(onPressed: () => Navigator.of(context).pop(true), child: Text(isEnglish ? 'Delete' : 'ลบ', style: const TextStyle(color: Colors.red))),
@@ -90,7 +78,7 @@ class _ImBomScreenState extends State<ImBomScreen> with AutomaticKeepAliveClient
     if (confirm != true) return;
 
     try {
-      await _svc.deleteRow(row.id!);
+      await _svc.deleteRow(row.id);
       _listKey.currentState?.refresh();
       _onCancel();
       if (mounted) {
@@ -98,35 +86,27 @@ class _ImBomScreenState extends State<ImBomScreen> with AutomaticKeepAliveClient
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEnglish ? 'Error deleting: $e' : 'เกิดข้อผิดพลาดในการลบ: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error deleting: $e' : 'เกิดข้อผิดพลาดในการลบ: $e')));
       }
     }
   }
 
-  Future<void> _onSubmit(ImBomHeader row) async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+  Future<void> _onSubmit(MoWorkCenter row) async {
+    final isEnglish = _isEnglish;
     try {
       if (_mode == Mode.add) {
         await _svc.addRow(row);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
-        }
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
       } else if (_mode == Mode.edit) {
         await _svc.updateRow(row);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
-        }
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
       }
       _listKey.currentState?.refresh();
       _onCancel();
       widget.onFieldsChanged();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
       }
     }
   }
@@ -137,7 +117,7 @@ class _ImBomScreenState extends State<ImBomScreen> with AutomaticKeepAliveClient
         _requestSeq++;
       });
 
-  void _onCallback(ImBomHeader row) => setState(() {
+  void _onCallback(MoWorkCenter row) => setState(() {
         _mode = Mode.none;
         _selectedData = row;
         _requestSeq++;
@@ -146,13 +126,13 @@ class _ImBomScreenState extends State<ImBomScreen> with AutomaticKeepAliveClient
   Widget _buildRightPanel() {
     switch (_mode) {
       case Mode.none:
-        return ImBomDetailWidget(key: _detailKey, mode: Mode.none, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, isPlaceholder: true, requestSeq: _requestSeq);
+        return MoWorkCenterDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, isPlaceholder: true, requestSeq: _requestSeq);
       case Mode.add:
-        return ImBomDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
+        return MoWorkCenterDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
       case Mode.edit:
-        return ImBomDetailWidget(key: _detailKey, mode: Mode.edit, selected: _selectedData, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
+        return MoWorkCenterDetailWidget(key: _detailKey, mode: Mode.edit, selected: _selectedData, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
       case Mode.view:
-        return ImBomDetailWidget(key: _detailKey, mode: Mode.view, selected: _selectedData, onSubmit: (_) async {}, onCancel: _onCancel, requestSeq: _requestSeq);
+        return MoWorkCenterDetailWidget(key: _detailKey, mode: Mode.view, selected: _selectedData, onSubmit: (_) async {}, onCancel: _onCancel, requestSeq: _requestSeq);
       default:
         return const SizedBox.shrink();
     }
@@ -162,10 +142,12 @@ class _ImBomScreenState extends State<ImBomScreen> with AutomaticKeepAliveClient
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
     final perm = MenuScope.of(context);
     final canCreate = perm?.canCreate ?? true;
     final canEdit = perm?.canEdit ?? true;
     final canDelete = perm?.canDelete ?? true;
+
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
@@ -208,7 +190,7 @@ class _ImBomScreenState extends State<ImBomScreen> with AutomaticKeepAliveClient
                     alignment: Alignment.topLeft,
                     child: ColoredBox(
                       color: Colors.blueGrey.shade100,
-                      child: ImBomListWidget(
+                      child: MoWorkCenterListWidget(
                         key: _listKey,
                         enableAddButton: canCreate,
                         enableEditButton: canEdit,

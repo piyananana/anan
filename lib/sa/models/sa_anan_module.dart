@@ -18,6 +18,7 @@ const Map<String, String> sysModules = {
   '31': 'สินค้าคงคลัง - Inventory Management (IM)',
   '41': 'สั่งขาย - Sale Order (SO)',
   '51': 'สั่งซื้อ - Purchase Order (PO)',
+  '61': 'สั่งผลิต - Manufacturing Order (MO)',
   '81': 'เงินสดและเช็ค - Cash & Cheque Management(CM)',
   // '86': 'เงินมัดจำ - Deposit Management (DS)',
   // '91': 'ภาษีซื้อ - VAT Purchase (VP)',
@@ -82,6 +83,8 @@ const Map<String, String> imSysDocType = {
   '85': 'เปลี่ยนแปลงราคา - Price Change', // im_price_change — เปลี่ยนราคาขาย/ซื้อใน im_price_list_detail เท่านั้น
                                           // ไม่กระทบจำนวน/มูลค่าสต็อกเลย อยู่ใต้ IM เพราะใช้ร่วมกันทั้งฝั่งซื้อ
                                           // (PURCHASE) และขาย (SALES) จะแยกไปอยู่ใต้ PO/SO อย่างเดียวไม่ได้
+  '90': 'เบิกวัตถุดิบเข้าผลิต - Manufacturing Issue', // issue (-stock +wip) อ้างอิงใบสั่งผลิต (mo_header, sys_module='61')
+  '95': 'รับสินค้าเข้าคลังจากการผลิต - Manufacturing Receipt', // receive(produce) (+stock -wip) อ้างอิงใบสั่งผลิตเดียวกัน
 };
 // '41': 'สั่งขาย'
 const Map<String, String> soSysDocType = {
@@ -92,6 +95,13 @@ const Map<String, String> soSysDocType = {
 const Map<String, String> poSysDocType = {
   '05': 'ขอซื้อ - Purchase Request', // purchase request (no GL)
   '10': 'สั่งซื้อ - Purchase Order', // purchase order (no GL)
+};
+// '61': 'สั่งผลิต' — ใบสั่งผลิต (mo_header) เป็นเอกสารแผนงาน ไม่แตะ GL/สต็อกเลย (มิเรอร์ PO/SO) ผลกระทบจริงต่อ
+// สต็อก/บัญชีเกิดที่ธุรกรรม IM sys_doc_type '90' (เบิกวัตถุดิบเข้าผลิต) / '95' (รับสินค้าเข้าคลังจากการผลิต)
+// แทน (ไม่ใช่ '20'/'30' ใต้ sys_module นี้แบบที่ร่างไว้ตอนแรก) ดูแผนออกแบบโมดูล MO
+const Map<String, String> moSysDocType = {
+  '10': 'สั่งผลิต - Manufacturing Order', // manufacturing order (no GL)
+  // '40': 'ปรับปรุงสูตร - Manufacturing BOM Change', // ยังไม่ทำเฟสนี้ — workflow อนุมัติการแก้ไขสูตรการผลิต
 };
 // '81': 'เงินสดและเช็ค / Cash & Cheque Management (CM)'
 const Map<String, String> cmSysDocType = {

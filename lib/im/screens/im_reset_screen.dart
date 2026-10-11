@@ -119,7 +119,7 @@ class _ImResetScreenState extends State<ImResetScreen> {
               if (_resetDocNumbers)
                 _confirmRow(Icons.format_list_numbered, 'Reset เลขที่เอกสาร IM เป็น 1', null),
               if (_resetBom)
-                _confirmRow(Icons.precision_manufacturing, 'สูตรการผลิต (BOM)', _counts?['im_bom_header']),
+                _confirmRow(Icons.precision_manufacturing, 'สูตรการผลิต (BOM)', _counts?['mo_bom_header']),
               if (_resetPriceChange)
                 _confirmRow(Icons.price_change, 'ธุรกรรมการเปลี่ยนแปลงราคา (Price Change)', _counts?['im_price_change_header']),
               if (_resetPriceList)
@@ -423,7 +423,7 @@ class _ImResetScreenState extends State<ImResetScreen> {
 
                 _masterDataCard(
                   title: 'สูตรการผลิต (BOM)',
-                  subtitle: 'im_bom_header (${_counts?['im_bom_header'] ?? '-'} รายการ)',
+                  subtitle: 'mo_bom_header (${_counts?['mo_bom_header'] ?? '-'} รายการ)',
                   value: _resetBom,
                   color: Colors.deepPurple[600]!,
                   onChanged: (v) => setState(() => _resetBom = v ?? false),

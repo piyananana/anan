@@ -104,7 +104,9 @@ import '../../im/screens/im_item_category_screen.dart';
 import '../../im/screens/im_item_running_screen.dart';
 import '../../im/screens/im_uom_screen.dart';
 import '../../im/screens/im_warehouse_screen.dart';
-import '../../im/screens/im_bom_screen.dart';
+import '../../mo/screens/mo_bom_screen.dart';
+import '../../mo/screens/mo_work_center_screen.dart';
+import '../../mo/screens/mo_header_screen.dart';
 import '../../im/screens/im_price_list_screen.dart';
 import '../../im/screens/im_price_group_screen.dart';
 import '../../im/screens/im_price_change_screen.dart';
@@ -335,7 +337,9 @@ class Menu {
     'ImWarehouseScreen': (context) => ImWarehouseScreen(onFieldsChanged: () {}),
     'ImLocationScreen': (context) => ImLocationScreen(onFieldsChanged: () {}),
     'ImLocationImportScreen': (context) => ImLocationImportScreen(onFieldsChanged: () {}),
-    'ImBomScreen': (context) => ImBomScreen(onFieldsChanged: () {}),
+    'MoBomScreen': (context) => MoBomScreen(onFieldsChanged: () {}),
+    'MoWorkCenterScreen': (context) => MoWorkCenterScreen(onFieldsChanged: () {}),
+    'MoHeaderScreen': (context) => const MoHeaderScreen(),
     'ImPriceListScreen': (context) => ImPriceListScreen(onFieldsChanged: () {}),
     'ImPriceGroupScreen': (context) => ImPriceGroupScreen(onFieldsChanged: () {}),
     'ImPriceChangeScreen': (context) => ImPriceChangeScreen(onFieldsChanged: () {}),

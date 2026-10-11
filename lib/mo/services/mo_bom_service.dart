@@ -2,22 +2,22 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
-import '../models/im_bom.dart';
+import '../models/mo_bom.dart';
 
-class ImBomService {
-  final String baseUrl = AppConfig.apiIm;
+class MoBomService {
+  final String baseUrl = AppConfig.apiMo;
   final AuthService authService = AuthService();
 
-  Future<List<ImBomHeader>> fetchRows({int? parentItemId}) async {
+  Future<List<MoBomHeader>> fetchRows({int? parentItemId}) async {
     final headers = await authService.getAuthHeader();
-    final uri = Uri.parse('$baseUrl/im_bom').replace(
+    final uri = Uri.parse('$baseUrl/mo_bom').replace(
       queryParameters: {
         if (parentItemId != null) 'parent_item_id': '$parentItemId',
       },
     );
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {
-      return (json.decode(response.body) as List).map((e) => ImBomHeader.fromJson(e)).toList();
+      return (json.decode(response.body) as List).map((e) => MoBomHeader.fromJson(e)).toList();
     } else if (response.statusCode == 401) {
       authService.logout();
       throw Exception('Unauthorized. Please login again.');
@@ -26,11 +26,11 @@ class ImBomService {
     }
   }
 
-  Future<ImBomHeader> fetchRow(int id) async {
+  Future<MoBomHeader> fetchRow(int id) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.get(Uri.parse('$baseUrl/im_bom/$id'), headers: headers);
+    final response = await http.get(Uri.parse('$baseUrl/mo_bom/$id'), headers: headers);
     if (response.statusCode == 200) {
-      return ImBomHeader.fromJson(json.decode(response.body));
+      return MoBomHeader.fromJson(json.decode(response.body));
     } else if (response.statusCode == 401) {
       authService.logout();
       throw Exception('Unauthorized. Please login again.');
@@ -39,15 +39,15 @@ class ImBomService {
     }
   }
 
-  Future<ImBomHeader> addRow(ImBomHeader row) async {
+  Future<MoBomHeader> addRow(MoBomHeader row) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(
-      Uri.parse('$baseUrl/im_bom'),
+      Uri.parse('$baseUrl/mo_bom'),
       headers: headers,
       body: jsonEncode(row.toJson()),
     );
     if (response.statusCode == 201) {
-      return ImBomHeader.fromJson(json.decode(response.body));
+      return MoBomHeader.fromJson(json.decode(response.body));
     } else if (response.statusCode == 401 || response.statusCode == 403) {
       authService.logout();
       throw Exception('Unauthorized to add data.');
@@ -57,15 +57,15 @@ class ImBomService {
     }
   }
 
-  Future<ImBomHeader> updateRow(ImBomHeader row) async {
+  Future<MoBomHeader> updateRow(MoBomHeader row) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
-      Uri.parse('$baseUrl/im_bom/${row.id}'),
+      Uri.parse('$baseUrl/mo_bom/${row.id}'),
       headers: headers,
       body: jsonEncode(row.toJson()),
     );
     if (response.statusCode == 200) {
-      return ImBomHeader.fromJson(json.decode(response.body));
+      return MoBomHeader.fromJson(json.decode(response.body));
     } else if (response.statusCode == 401 || response.statusCode == 403) {
       authService.logout();
       throw Exception('Unauthorized to update data.');
@@ -77,7 +77,7 @@ class ImBomService {
 
   Future<void> deleteRow(int id) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.delete(Uri.parse('$baseUrl/im_bom/$id'), headers: headers);
+    final response = await http.delete(Uri.parse('$baseUrl/mo_bom/$id'), headers: headers);
     if (response.statusCode == 204) return;
     if (response.statusCode == 401 || response.statusCode == 403) {
       authService.logout();
