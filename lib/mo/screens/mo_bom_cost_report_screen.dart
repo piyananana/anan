@@ -242,7 +242,8 @@ class _MoBomCostReportScreenState extends State<MoBomCostReportScreen> {
         ));
         for (final b in row.breakdown) {
           final compName = _itemName(b.componentItemNameTh, b.componentItemNameEn, isEnglish);
-          final label = b.isSubAssembly ? '  ↳ ${b.componentItemCode ?? ''} $compName' : '    ${b.componentItemCode ?? ''} $compName';
+          // ใช้ ">>" แทน "↳" (↳ ไม่มีในฟอนต์ THSarabun → แสดงเป็น X) ดู ar_movement_report_screen.dart
+          final label = b.isSubAssembly ? '  >> ${b.componentItemCode ?? ''} $compName' : '    ${b.componentItemCode ?? ''} $compName';
           content.add(pw.Container(
             decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: cBorder, width: 0.3))),
             child: pw.Row(children: [
