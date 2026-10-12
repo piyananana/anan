@@ -115,6 +115,7 @@ import '../../mo/screens/mo_explode_sub_assembly_screen.dart';
 import '../../mo/screens/mo_status_report_screen.dart';
 import '../../mo/screens/mo_cost_variance_report_screen.dart';
 import '../../mo/screens/mo_wip_valuation_report_screen.dart';
+import '../../mo/screens/mo_bom_cost_report_screen.dart';
 import '../../im/screens/im_price_list_screen.dart';
 import '../../im/screens/im_price_group_screen.dart';
 import '../../im/screens/im_price_change_screen.dart';
@@ -356,6 +357,7 @@ class Menu {
     'MoStatusReportScreen': (context) => const MoStatusReportScreen(),
     'MoCostVarianceReportScreen': (context) => const MoCostVarianceReportScreen(),
     'MoWipValuationReportScreen': (context) => const MoWipValuationReportScreen(),
+    'MoBomCostReportScreen': (context) => const MoBomCostReportScreen(),
     'ImPriceListScreen': (context) => ImPriceListScreen(onFieldsChanged: () {}),
     'ImPriceGroupScreen': (context) => ImPriceGroupScreen(onFieldsChanged: () {}),
     'ImPriceChangeScreen': (context) => ImPriceChangeScreen(onFieldsChanged: () {}),

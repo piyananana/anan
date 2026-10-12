@@ -289,3 +289,147 @@ class MoBomHeader {
         'operations': operations.map((e) => e.toJson()).toList(),
       };
 }
+
+class MoBomCostBreakdownLine {
+  final int componentItemId;
+  final String? componentItemCode;
+  final String? componentItemNameTh;
+  final String? componentItemNameEn;
+  final double quantityPer;
+  final double scrapPercent;
+  final double unitCost;
+  final double lineTotal;
+  final bool isSubAssembly;
+
+  const MoBomCostBreakdownLine({
+    required this.componentItemId,
+    this.componentItemCode,
+    this.componentItemNameTh,
+    this.componentItemNameEn,
+    this.quantityPer = 0,
+    this.scrapPercent = 0,
+    this.unitCost = 0,
+    this.lineTotal = 0,
+    this.isSubAssembly = false,
+  });
+
+  factory MoBomCostBreakdownLine.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    return MoBomCostBreakdownLine(
+      componentItemId: json['component_item_id'] ?? 0,
+      componentItemCode: json['component_item_code'],
+      componentItemNameTh: json['component_item_name_th'],
+      componentItemNameEn: json['component_item_name_en'],
+      quantityPer: toDouble(json['quantity_per']),
+      scrapPercent: toDouble(json['scrap_percent']),
+      unitCost: toDouble(json['unit_cost']),
+      lineTotal: toDouble(json['line_total']),
+      isSubAssembly: json['is_sub_assembly'] ?? false,
+    );
+  }
+}
+
+class MoBomCostRollupRow {
+  final int bomHeaderId;
+  final String? bomVersion;
+  final double bomQty;
+  final int? parentItemId;
+  final String? parentItemCode;
+  final String? parentItemNameTh;
+  final String? parentItemNameEn;
+  final String costingMode;
+  final double overheadPercent;
+  final double materialCost;
+  final double conversionCost;
+  final double totalCost;
+  final double unitCost;
+  final List<MoBomCostBreakdownLine> breakdown;
+  final String? error;
+
+  const MoBomCostRollupRow({
+    required this.bomHeaderId,
+    this.bomVersion,
+    this.bomQty = 0,
+    this.parentItemId,
+    this.parentItemCode,
+    this.parentItemNameTh,
+    this.parentItemNameEn,
+    this.costingMode = 'OVERHEAD_PERCENT',
+    this.overheadPercent = 0,
+    this.materialCost = 0,
+    this.conversionCost = 0,
+    this.totalCost = 0,
+    this.unitCost = 0,
+    this.breakdown = const [],
+    this.error,
+  });
+
+  factory MoBomCostRollupRow.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    return MoBomCostRollupRow(
+      bomHeaderId: json['bomHeaderId'] ?? 0,
+      bomVersion: json['bomVersion'],
+      bomQty: toDouble(json['bomQty']),
+      parentItemId: json['parentItemId'],
+      parentItemCode: json['parentItemCode'],
+      parentItemNameTh: json['parentItemNameTh'],
+      parentItemNameEn: json['parentItemNameEn'],
+      costingMode: json['costingMode'] ?? 'OVERHEAD_PERCENT',
+      overheadPercent: toDouble(json['overheadPercent']),
+      materialCost: toDouble(json['materialCost']),
+      conversionCost: toDouble(json['conversionCost']),
+      totalCost: toDouble(json['totalCost']),
+      unitCost: toDouble(json['unitCost']),
+      breakdown: (json['breakdown'] as List<dynamic>? ?? []).map((e) => MoBomCostBreakdownLine.fromJson(e as Map<String, dynamic>)).toList(),
+      error: json['error'],
+    );
+  }
+}
+
+class MoBomWhereUsedRow {
+  final int componentItemId;
+  final String? componentItemCode;
+  final String? componentItemNameTh;
+  final String? componentItemNameEn;
+  final int bomHeaderId;
+  final String? bomVersion;
+  final bool isActive;
+  final String? parentItemCode;
+  final String? parentItemNameTh;
+  final String? parentItemNameEn;
+  final double quantityPer;
+  final double scrapPercent;
+
+  const MoBomWhereUsedRow({
+    required this.componentItemId,
+    this.componentItemCode,
+    this.componentItemNameTh,
+    this.componentItemNameEn,
+    required this.bomHeaderId,
+    this.bomVersion,
+    this.isActive = true,
+    this.parentItemCode,
+    this.parentItemNameTh,
+    this.parentItemNameEn,
+    this.quantityPer = 0,
+    this.scrapPercent = 0,
+  });
+
+  factory MoBomWhereUsedRow.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    return MoBomWhereUsedRow(
+      componentItemId: json['component_item_id'] ?? 0,
+      componentItemCode: json['component_item_code'],
+      componentItemNameTh: json['component_item_name_th'],
+      componentItemNameEn: json['component_item_name_en'],
+      bomHeaderId: json['bom_header_id'] ?? 0,
+      bomVersion: json['bom_version'],
+      isActive: json['is_active'] ?? true,
+      parentItemCode: json['parent_item_code'],
+      parentItemNameTh: json['parent_item_name_th'],
+      parentItemNameEn: json['parent_item_name_en'],
+      quantityPer: toDouble(json['quantity_per']),
+      scrapPercent: toDouble(json['scrap_percent']),
+    );
+  }
+}

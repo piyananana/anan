@@ -87,4 +87,36 @@ class MoBomService {
       throw Exception(err['message'] ?? 'ลบข้อมูลล้มเหลว');
     }
   }
+
+  Future<List<MoBomCostRollupRow>> fetchCostRollupReport({int? bomHeaderId, String? search}) async {
+    final headers = await authService.getAuthHeader();
+    final params = <String, String>{};
+    if (bomHeaderId != null) params['bom_header_id'] = bomHeaderId.toString();
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    final uri = Uri.parse('$baseUrl/mo_bom/report/cost_rollup').replace(queryParameters: params.isEmpty ? null : params);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List).map((e) => MoBomCostRollupRow.fromJson(e as Map<String, dynamic>)).toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    }
+    throw Exception('Failed to load BOM cost rollup report: ${response.body}');
+  }
+
+  Future<List<MoBomWhereUsedRow>> fetchWhereUsedReport({int? componentItemId, String? search}) async {
+    final headers = await authService.getAuthHeader();
+    final params = <String, String>{};
+    if (componentItemId != null) params['component_item_id'] = componentItemId.toString();
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    final uri = Uri.parse('$baseUrl/mo_bom/report/where_used').replace(queryParameters: params.isEmpty ? null : params);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List).map((e) => MoBomWhereUsedRow.fromJson(e as Map<String, dynamic>)).toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    }
+    throw Exception('Failed to load BOM where-used report: ${response.body}');
+  }
 }
