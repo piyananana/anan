@@ -331,6 +331,78 @@ class MoExplosionCandidate {
   }
 }
 
+class MoStatusReportRow {
+  final int id;
+  final String docNo;
+  final DateTime docDate;
+  final DateTime? dueDate;
+  final String status;
+  final int warehouseId;
+  final String? warehouseCode;
+  final String? warehouseNameTh;
+  final String? warehouseNameEn;
+  final double orderQty;
+  final String? uomCode;
+  final String? bomParentItemCode;
+  final String? bomParentItemNameTh;
+  final String? bomParentItemNameEn;
+  final double componentPlannedQty;
+  final double componentIssuedQty;
+  final double outputPlannedQty;
+  final double outputReceivedQty;
+  final double percentComplete;
+  final double wipBalanceLc;
+
+  const MoStatusReportRow({
+    required this.id,
+    required this.docNo,
+    required this.docDate,
+    this.dueDate,
+    this.status = 'Draft',
+    required this.warehouseId,
+    this.warehouseCode,
+    this.warehouseNameTh,
+    this.warehouseNameEn,
+    this.orderQty = 0,
+    this.uomCode,
+    this.bomParentItemCode,
+    this.bomParentItemNameTh,
+    this.bomParentItemNameEn,
+    this.componentPlannedQty = 0,
+    this.componentIssuedQty = 0,
+    this.outputPlannedQty = 0,
+    this.outputReceivedQty = 0,
+    this.percentComplete = 0,
+    this.wipBalanceLc = 0,
+  });
+
+  factory MoStatusReportRow.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    return MoStatusReportRow(
+      id: json['id'] ?? 0,
+      docNo: json['doc_no'] ?? '',
+      docDate: parseLocalDate(json['doc_date']),
+      dueDate: json['due_date'] != null ? parseLocalDate(json['due_date']) : null,
+      status: json['status'] ?? 'Draft',
+      warehouseId: json['warehouse_id'] ?? 0,
+      warehouseCode: json['warehouse_code'],
+      warehouseNameTh: json['warehouse_name_th'],
+      warehouseNameEn: json['warehouse_name_en'],
+      orderQty: toDouble(json['order_qty']),
+      uomCode: json['uom_code'],
+      bomParentItemCode: json['bom_parent_item_code'],
+      bomParentItemNameTh: json['bom_parent_item_name_th'],
+      bomParentItemNameEn: json['bom_parent_item_name_en'],
+      componentPlannedQty: toDouble(json['component_planned_qty']),
+      componentIssuedQty: toDouble(json['component_issued_qty']),
+      outputPlannedQty: toDouble(json['output_planned_qty']),
+      outputReceivedQty: toDouble(json['output_received_qty']),
+      percentComplete: toDouble(json['percent_complete']),
+      wipBalanceLc: toDouble(json['wip_balance_lc']),
+    );
+  }
+}
+
 class MoHeader {
   final int id;
   final int docId;
