@@ -169,6 +169,16 @@ class MoHeaderService {
     throw Exception(err['message'] ?? 'ปิดใบสั่งผลิตล้มเหลว');
   }
 
+  Future<MoMaterialAvailability> checkMaterialAvailability(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/mo_header/$id/availability'), headers: headers);
+    if (response.statusCode == 200) {
+      return MoMaterialAvailability.fromJson(json.decode(response.body));
+    }
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ตรวจสอบวัตถุดิบพร้อมผลิตล้มเหลว');
+  }
+
   Future<void> deleteTransaction(int id) async {
     final headers = await authService.getAuthHeader();
     final response = await http.delete(Uri.parse('$baseUrl/mo_header/$id'), headers: headers);

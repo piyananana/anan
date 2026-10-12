@@ -213,6 +213,79 @@ class MoOperationDetail {
       };
 }
 
+class MoMaterialAvailabilityLine {
+  final int id;
+  final int componentItemId;
+  final String? itemCode;
+  final String? itemName;
+  final double plannedQty;
+  final double issuedQty;
+  final double remainingQty;
+  final double availableQty;
+  final double shortageQty;
+  final bool isShort;
+  final String? uomCode;
+
+  const MoMaterialAvailabilityLine({
+    required this.id,
+    required this.componentItemId,
+    this.itemCode,
+    this.itemName,
+    this.plannedQty = 0,
+    this.issuedQty = 0,
+    this.remainingQty = 0,
+    this.availableQty = 0,
+    this.shortageQty = 0,
+    this.isShort = false,
+    this.uomCode,
+  });
+
+  factory MoMaterialAvailabilityLine.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    return MoMaterialAvailabilityLine(
+      id: json['id'] ?? 0,
+      componentItemId: json['component_item_id'] ?? 0,
+      itemCode: json['item_code'],
+      itemName: json['item_name'],
+      plannedQty: toDouble(json['planned_qty']),
+      issuedQty: toDouble(json['issued_qty']),
+      remainingQty: toDouble(json['remaining_qty']),
+      availableQty: toDouble(json['available_qty']),
+      shortageQty: toDouble(json['shortage_qty']),
+      isShort: json['is_short'] ?? false,
+      uomCode: json['uom_code'],
+    );
+  }
+}
+
+class MoMaterialAvailability {
+  final int moId;
+  final String docNo;
+  final int warehouseId;
+  final bool hasShortage;
+  final List<MoMaterialAvailabilityLine> lines;
+
+  const MoMaterialAvailability({
+    required this.moId,
+    required this.docNo,
+    required this.warehouseId,
+    this.hasShortage = false,
+    this.lines = const [],
+  });
+
+  factory MoMaterialAvailability.fromJson(Map<String, dynamic> json) {
+    return MoMaterialAvailability(
+      moId: json['mo_id'] ?? 0,
+      docNo: json['doc_no'] ?? '',
+      warehouseId: json['warehouse_id'] ?? 0,
+      hasShortage: json['has_shortage'] ?? false,
+      lines: (json['lines'] as List<dynamic>? ?? [])
+          .map((e) => MoMaterialAvailabilityLine.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
 class MoHeader {
   final int id;
   final int docId;
