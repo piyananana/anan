@@ -44,3 +44,58 @@ class MoWorkCenter {
         'is_active': isActive,
       };
 }
+
+class MoWorkCenterEfficiencyRow {
+  final int id;
+  final String workCenterCode;
+  final String workCenterNameTh;
+  final String? workCenterNameEn;
+  final bool isActive;
+  final int moCount;
+  final int operationCount;
+  final double plannedLaborHours;
+  final double actualLaborHours;
+  final double plannedMachineHours;
+  final double actualMachineHours;
+  final double actualCost;
+  final double laborUtilizationPct;
+  final double machineUtilizationPct;
+
+  const MoWorkCenterEfficiencyRow({
+    required this.id,
+    required this.workCenterCode,
+    required this.workCenterNameTh,
+    this.workCenterNameEn,
+    this.isActive = true,
+    this.moCount = 0,
+    this.operationCount = 0,
+    this.plannedLaborHours = 0,
+    this.actualLaborHours = 0,
+    this.plannedMachineHours = 0,
+    this.actualMachineHours = 0,
+    this.actualCost = 0,
+    this.laborUtilizationPct = 0,
+    this.machineUtilizationPct = 0,
+  });
+
+  factory MoWorkCenterEfficiencyRow.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    int toInt(dynamic v) => int.tryParse(v?.toString() ?? '0') ?? 0;
+    return MoWorkCenterEfficiencyRow(
+      id: json['id'] ?? 0,
+      workCenterCode: json['work_center_code'] ?? '',
+      workCenterNameTh: json['work_center_name_th'] ?? '',
+      workCenterNameEn: json['work_center_name_en'],
+      isActive: json['is_active'] ?? true,
+      moCount: toInt(json['mo_count']),
+      operationCount: toInt(json['operation_count']),
+      plannedLaborHours: toDouble(json['planned_labor_hours']),
+      actualLaborHours: toDouble(json['actual_labor_hours']),
+      plannedMachineHours: toDouble(json['planned_machine_hours']),
+      actualMachineHours: toDouble(json['actual_machine_hours']),
+      actualCost: toDouble(json['actual_cost']),
+      laborUtilizationPct: toDouble(json['labor_utilization_pct']),
+      machineUtilizationPct: toDouble(json['machine_utilization_pct']),
+    );
+  }
+}
