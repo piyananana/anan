@@ -111,6 +111,7 @@ import '../../mo/screens/mo_issue_screen.dart';
 import '../../mo/screens/mo_receipt_screen.dart';
 import '../../mo/screens/mo_operation_time_log_screen.dart';
 import '../../mo/screens/mo_material_availability_screen.dart';
+import '../../mo/screens/mo_explode_sub_assembly_screen.dart';
 import '../../im/screens/im_price_list_screen.dart';
 import '../../im/screens/im_price_group_screen.dart';
 import '../../im/screens/im_price_change_screen.dart';
@@ -348,6 +349,7 @@ class Menu {
     'MoReceiptScreen': (context) => const MoReceiptScreen(),
     'MoOperationTimeLogScreen': (context) => const MoOperationTimeLogScreen(),
     'MoMaterialAvailabilityScreen': (context) => const MoMaterialAvailabilityScreen(),
+    'MoExplodeSubAssemblyScreen': (context) => const MoExplodeSubAssemblyScreen(),
     'ImPriceListScreen': (context) => ImPriceListScreen(onFieldsChanged: () {}),
     'ImPriceGroupScreen': (context) => ImPriceGroupScreen(onFieldsChanged: () {}),
     'ImPriceChangeScreen': (context) => ImPriceChangeScreen(onFieldsChanged: () {}),

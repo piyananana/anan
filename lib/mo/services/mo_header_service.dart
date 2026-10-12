@@ -179,6 +179,33 @@ class MoHeaderService {
     throw Exception(err['message'] ?? 'ตรวจสอบวัตถุดิบพร้อมผลิตล้มเหลว');
   }
 
+  Future<List<MoExplosionCandidate>> fetchExplosionCandidates(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/mo_header/$id/explosion_candidates'), headers: headers);
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return (body['lines'] as List<dynamic>? ?? [])
+          .map((e) => MoExplosionCandidate.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ดึงรายการที่สร้างใบสั่งผลิตย่อยได้ล้มเหลว');
+  }
+
+  Future<MoHeader> explodeSubAssembly({required int moId, required int componentDetailId}) async {
+    final headers = await authService.getAuthHeader();
+    final body = jsonEncode({'component_detail_id': componentDetailId});
+    final response = await http.post(Uri.parse('$baseUrl/mo_header/$moId/explode'), headers: headers, body: body);
+    if (response.statusCode == 201) {
+      return MoHeader.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    }
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'สร้างใบสั่งผลิตย่อยล้มเหลว');
+  }
+
   Future<void> deleteTransaction(int id) async {
     final headers = await authService.getAuthHeader();
     final response = await http.delete(Uri.parse('$baseUrl/mo_header/$id'), headers: headers);

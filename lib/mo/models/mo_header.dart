@@ -286,6 +286,51 @@ class MoMaterialAvailability {
   }
 }
 
+class MoExplosionCandidate {
+  final int componentDetailId;
+  final int componentItemId;
+  final String? itemCode;
+  final String? itemName;
+  final double plannedQty;
+  final double issuedQty;
+  final double remainingQty;
+  final int? candidateBomHeaderId;
+  final String? candidateBomVersion;
+  final bool canExplode;
+  final String? uomCode;
+
+  const MoExplosionCandidate({
+    required this.componentDetailId,
+    required this.componentItemId,
+    this.itemCode,
+    this.itemName,
+    this.plannedQty = 0,
+    this.issuedQty = 0,
+    this.remainingQty = 0,
+    this.candidateBomHeaderId,
+    this.candidateBomVersion,
+    this.canExplode = false,
+    this.uomCode,
+  });
+
+  factory MoExplosionCandidate.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    return MoExplosionCandidate(
+      componentDetailId: json['component_detail_id'] ?? 0,
+      componentItemId: json['component_item_id'] ?? 0,
+      itemCode: json['item_code'],
+      itemName: json['item_name'],
+      plannedQty: toDouble(json['planned_qty']),
+      issuedQty: toDouble(json['issued_qty']),
+      remainingQty: toDouble(json['remaining_qty']),
+      candidateBomHeaderId: json['candidate_bom_header_id'],
+      candidateBomVersion: json['candidate_bom_version'],
+      canExplode: json['can_explode'] ?? false,
+      uomCode: json['uom_code'],
+    );
+  }
+}
+
 class MoHeader {
   final int id;
   final int docId;
