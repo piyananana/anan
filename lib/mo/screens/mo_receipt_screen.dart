@@ -25,6 +25,12 @@ class MoReceiptScreen extends StatefulWidget {
   State<MoReceiptScreen> createState() => _MoReceiptScreenState();
 }
 
+String _uomName(String? code, String? nameTh, String? nameEn, bool isEnglish) {
+  if (isEnglish && (nameEn ?? '').isNotEmpty) return nameEn!;
+  if ((nameTh ?? '').isNotEmpty) return nameTh!;
+  return code ?? '';
+}
+
 class _OutputLine {
   final MoOutputDetail detail;
   final TextEditingController qtyCtrl;
@@ -238,8 +244,8 @@ class _MoReceiptScreenState extends State<MoReceiptScreen> {
                         const SizedBox(height: 6),
                         Text(
                           isEnglish
-                              ? 'Order Qty ${_fmtQty.format(mo.orderQty)} ${mo.uomCode ?? ''} · Warehouse ${mo.warehouseCode ?? ''} · ${moHeaderStatusLabel(mo.status, isEnglish)}'
-                              : 'จำนวนสั่งผลิต ${_fmtQty.format(mo.orderQty)} ${mo.uomCode ?? ''} · คลัง ${mo.warehouseCode ?? ''} · ${moHeaderStatusLabel(mo.status, isEnglish)}',
+                              ? 'Order Qty ${_fmtQty.format(mo.orderQty)} ${_uomName(mo.uomCode, mo.uomNameTh, mo.uomNameEn, isEnglish)} · Warehouse ${mo.warehouseCode ?? ''} · ${moHeaderStatusLabel(mo.status, isEnglish)}'
+                              : 'จำนวนสั่งผลิต ${_fmtQty.format(mo.orderQty)} ${_uomName(mo.uomCode, mo.uomNameTh, mo.uomNameEn, isEnglish)} · คลัง ${mo.warehouseCode ?? ''} · ${moHeaderStatusLabel(mo.status, isEnglish)}',
                           style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
                         ),
                         if (mo.costingMethod != 'ACTUAL')
@@ -293,8 +299,8 @@ class _MoReceiptScreenState extends State<MoReceiptScreen> {
                                     flex: 2,
                                     child: Text(
                                       isEnglish
-                                          ? 'Remaining: ${_fmtQty.format(l.detail.qtyRemaining)} ${l.detail.uomCode ?? ''}'
-                                          : 'คงเหลือ: ${_fmtQty.format(l.detail.qtyRemaining)} ${l.detail.uomCode ?? ''}',
+                                          ? 'Remaining: ${_fmtQty.format(l.detail.qtyRemaining)} ${_uomName(l.detail.uomCode, l.detail.uomNameTh, l.detail.uomNameEn, isEnglish)}'
+                                          : 'คงเหลือ: ${_fmtQty.format(l.detail.qtyRemaining)} ${_uomName(l.detail.uomCode, l.detail.uomNameTh, l.detail.uomNameEn, isEnglish)}',
                                       style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                                     ),
                                   ),

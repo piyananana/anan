@@ -346,6 +346,12 @@ Future<MoOperationDetail?> _showOperationDialog(BuildContext context, MoOperatio
   );
 }
 
+String _uomDisplayName(String? code, String? nameTh, String? nameEn, bool isEnglish) {
+  if (isEnglish && (nameEn ?? '').isNotEmpty) return nameEn!;
+  if ((nameTh ?? '').isNotEmpty) return nameTh!;
+  return code ?? '';
+}
+
 class MoHeaderDetailWidget extends StatefulWidget {
   final int? transactionId;
   final bool viewOnly;
@@ -983,8 +989,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
                 contentPadding: EdgeInsets.zero,
                 title: Text('${c.itemCode}  ${c.itemName ?? ''}'),
                 subtitle: Text(isEnglish
-                    ? 'Planned: ${_fmtQty.format(c.plannedQty)} ${c.uomCode ?? ''}${c.issuedQty > 0 ? '  ·  Issued: ${_fmtQty.format(c.issuedQty)}' : ''}'
-                    : 'ที่วางแผน: ${_fmtQty.format(c.plannedQty)} ${c.uomCode ?? ''}${c.issuedQty > 0 ? '  ·  เบิกแล้ว: ${_fmtQty.format(c.issuedQty)}' : ''}'),
+                    ? 'Planned: ${_fmtQty.format(c.plannedQty)} ${_uomDisplayName(c.uomCode, c.uomNameTh, c.uomNameEn, isEnglish)}${c.issuedQty > 0 ? '  ·  Issued: ${_fmtQty.format(c.issuedQty)}' : ''}'
+                    : 'ที่วางแผน: ${_fmtQty.format(c.plannedQty)} ${_uomDisplayName(c.uomCode, c.uomNameTh, c.uomNameEn, isEnglish)}${c.issuedQty > 0 ? '  ·  เบิกแล้ว: ${_fmtQty.format(c.issuedQty)}' : ''}'),
                 trailing: _isReadOnly
                     ? null
                     : Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1021,8 +1027,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
                 leading: o.isPrimaryOutput ? const Icon(Icons.star, size: 18, color: Colors.amber) : null,
                 title: Text('${o.itemCode}  ${o.itemName ?? ''}'),
                 subtitle: Text(isEnglish
-                    ? 'Planned: ${_fmtQty.format(o.plannedQty)} ${o.uomCode ?? ''}${o.receivedQty > 0 ? '  ·  Received: ${_fmtQty.format(o.receivedQty)}' : ''}'
-                    : 'ที่วางแผน: ${_fmtQty.format(o.plannedQty)} ${o.uomCode ?? ''}${o.receivedQty > 0 ? '  ·  รับแล้ว: ${_fmtQty.format(o.receivedQty)}' : ''}'),
+                    ? 'Planned: ${_fmtQty.format(o.plannedQty)} ${_uomDisplayName(o.uomCode, o.uomNameTh, o.uomNameEn, isEnglish)}${o.receivedQty > 0 ? '  ·  Received: ${_fmtQty.format(o.receivedQty)}' : ''}'
+                    : 'ที่วางแผน: ${_fmtQty.format(o.plannedQty)} ${_uomDisplayName(o.uomCode, o.uomNameTh, o.uomNameEn, isEnglish)}${o.receivedQty > 0 ? '  ·  รับแล้ว: ${_fmtQty.format(o.receivedQty)}' : ''}'),
                 trailing: _isReadOnly
                     ? null
                     : Row(mainAxisSize: MainAxisSize.min, children: [

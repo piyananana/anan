@@ -19,6 +19,12 @@ class MoExplodeSubAssemblyScreen extends StatefulWidget {
   State<MoExplodeSubAssemblyScreen> createState() => _MoExplodeSubAssemblyScreenState();
 }
 
+String _uomName(String? code, String? nameTh, String? nameEn, bool isEnglish) {
+  if (isEnglish && (nameEn ?? '').isNotEmpty) return nameEn!;
+  if ((nameTh ?? '').isNotEmpty) return nameTh!;
+  return code ?? '';
+}
+
 class _MoExplodeSubAssemblyScreenState extends State<MoExplodeSubAssemblyScreen> {
   final _moService = MoHeaderService();
   final _fmtQty = NumberFormat('#,##0.####');
@@ -117,8 +123,8 @@ class _MoExplodeSubAssemblyScreenState extends State<MoExplodeSubAssemblyScreen>
       builder: (ctx) => AlertDialog(
         title: Text(isEnglish ? 'Create Child MO?' : 'สร้างใบสั่งผลิตย่อย?'),
         content: Text(isEnglish
-            ? 'Create a new Draft MO for ${c.itemCode} (${_fmtQty.format(c.remainingQty)} ${c.uomCode ?? ''}), linked to this MO?'
-            : 'สร้างใบสั่งผลิตย่อยสถานะ Draft สำหรับ ${c.itemCode} จำนวน ${_fmtQty.format(c.remainingQty)} ${c.uomCode ?? ''} เชื่อมโยงกับใบสั่งผลิตนี้?'),
+            ? 'Create a new Draft MO for ${c.itemCode} (${_fmtQty.format(c.remainingQty)} ${_uomName(c.uomCode, c.uomNameTh, c.uomNameEn, isEnglish)}), linked to this MO?'
+            : 'สร้างใบสั่งผลิตย่อยสถานะ Draft สำหรับ ${c.itemCode} จำนวน ${_fmtQty.format(c.remainingQty)} ${_uomName(c.uomCode, c.uomNameTh, c.uomNameEn, isEnglish)} เชื่อมโยงกับใบสั่งผลิตนี้?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Create' : 'สร้าง')),
@@ -224,8 +230,8 @@ class _MoExplodeSubAssemblyScreenState extends State<MoExplodeSubAssemblyScreen>
             const SizedBox(height: 2),
             Text(
               isEnglish
-                  ? 'Remaining: ${_fmtQty.format(c.remainingQty)} ${c.uomCode ?? ''}'
-                  : 'คงเหลือที่ยังต้องเบิก: ${_fmtQty.format(c.remainingQty)} ${c.uomCode ?? ''}',
+                  ? 'Remaining: ${_fmtQty.format(c.remainingQty)} ${_uomName(c.uomCode, c.uomNameTh, c.uomNameEn, isEnglish)}'
+                  : 'คงเหลือที่ยังต้องเบิก: ${_fmtQty.format(c.remainingQty)} ${_uomName(c.uomCode, c.uomNameTh, c.uomNameEn, isEnglish)}',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
             ),
           ]),

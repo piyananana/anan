@@ -18,6 +18,12 @@ class MoMaterialAvailabilityScreen extends StatefulWidget {
   State<MoMaterialAvailabilityScreen> createState() => _MoMaterialAvailabilityScreenState();
 }
 
+String _uomName(String? code, String? nameTh, String? nameEn, bool isEnglish) {
+  if (isEnglish && (nameEn ?? '').isNotEmpty) return nameEn!;
+  if ((nameTh ?? '').isNotEmpty) return nameTh!;
+  return code ?? '';
+}
+
 class _MoMaterialAvailabilityScreenState extends State<MoMaterialAvailabilityScreen> {
   final _moService = MoHeaderService();
   final _fmtQty = NumberFormat('#,##0.####');
@@ -195,11 +201,13 @@ class _MoMaterialAvailabilityScreenState extends State<MoMaterialAvailabilityScr
                                 _headerCell(isEnglish ? 'Status' : 'สถานะ', alignEnd: true),
                               ],
                             ),
-                            ...result.lines.map((l) => TableRow(children: [
+                            ...result.lines.map((l) {
+                              final uom = _uomName(l.uomCode, l.uomNameTh, l.uomNameEn, isEnglish);
+                              return TableRow(children: [
                                   _cell('${l.itemCode ?? ''}  ${l.itemName ?? ''}'),
-                                  _cell('${_fmtQty.format(l.remainingQty)} ${l.uomCode ?? ''}', alignEnd: true),
-                                  _cell('${_fmtQty.format(l.availableQty)} ${l.uomCode ?? ''}', alignEnd: true),
-                                  _cell(l.isShort ? '${_fmtQty.format(l.shortageQty)} ${l.uomCode ?? ''}' : '-',
+                                  _cell('${_fmtQty.format(l.remainingQty)} $uom', alignEnd: true),
+                                  _cell('${_fmtQty.format(l.availableQty)} $uom', alignEnd: true),
+                                  _cell(l.isShort ? '${_fmtQty.format(l.shortageQty)} $uom' : '-',
                                       alignEnd: true, color: l.isShort ? Colors.red.shade700 : null),
                                   _cell(
                                     l.isShort ? (isEnglish ? 'Short' : 'ขาด') : (isEnglish ? 'OK' : 'พอ'),
@@ -207,7 +215,8 @@ class _MoMaterialAvailabilityScreenState extends State<MoMaterialAvailabilityScr
                                     color: l.isShort ? Colors.red.shade700 : Colors.green.shade700,
                                     bold: true,
                                   ),
-                                ])),
+                                ]);
+                            }),
                           ],
                         ),
                       ]),

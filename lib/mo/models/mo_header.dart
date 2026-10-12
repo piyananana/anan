@@ -225,6 +225,8 @@ class MoMaterialAvailabilityLine {
   final double shortageQty;
   final bool isShort;
   final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
 
   const MoMaterialAvailabilityLine({
     required this.id,
@@ -238,6 +240,8 @@ class MoMaterialAvailabilityLine {
     this.shortageQty = 0,
     this.isShort = false,
     this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
   });
 
   factory MoMaterialAvailabilityLine.fromJson(Map<String, dynamic> json) {
@@ -254,6 +258,8 @@ class MoMaterialAvailabilityLine {
       shortageQty: toDouble(json['shortage_qty']),
       isShort: json['is_short'] ?? false,
       uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th'],
+      uomNameEn: json['uom_name_en'],
     );
   }
 }
@@ -298,6 +304,8 @@ class MoExplosionCandidate {
   final String? candidateBomVersion;
   final bool canExplode;
   final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
 
   const MoExplosionCandidate({
     required this.componentDetailId,
@@ -311,6 +319,8 @@ class MoExplosionCandidate {
     this.candidateBomVersion,
     this.canExplode = false,
     this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
   });
 
   factory MoExplosionCandidate.fromJson(Map<String, dynamic> json) {
@@ -326,6 +336,8 @@ class MoExplosionCandidate {
       candidateBomHeaderId: json['candidate_bom_header_id'],
       candidateBomVersion: json['candidate_bom_version'],
       canExplode: json['can_explode'] ?? false,
+      uomNameTh: json['uom_name_th'],
+      uomNameEn: json['uom_name_en'],
       uomCode: json['uom_code'],
     );
   }
@@ -343,6 +355,8 @@ class MoStatusReportRow {
   final String? warehouseNameEn;
   final double orderQty;
   final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
   final String? bomParentItemCode;
   final String? bomParentItemNameTh;
   final String? bomParentItemNameEn;
@@ -365,6 +379,8 @@ class MoStatusReportRow {
     this.warehouseNameEn,
     this.orderQty = 0,
     this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
     this.bomParentItemCode,
     this.bomParentItemNameTh,
     this.bomParentItemNameEn,
@@ -390,6 +406,8 @@ class MoStatusReportRow {
       warehouseNameEn: json['warehouse_name_en'],
       orderQty: toDouble(json['order_qty']),
       uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th'],
+      uomNameEn: json['uom_name_en'],
       bomParentItemCode: json['bom_parent_item_code'],
       bomParentItemNameTh: json['bom_parent_item_name_th'],
       bomParentItemNameEn: json['bom_parent_item_name_en'],
@@ -421,6 +439,8 @@ class MoHeader {
   final double orderQty;
   final int? uomId;
   final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
   final String issueMethod;
   final String costingMethod;
   final String costingMode;
@@ -466,6 +486,8 @@ class MoHeader {
     this.orderQty = 0,
     this.uomId,
     this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
     this.issueMethod = 'EXPLICIT',
     this.costingMethod = 'ACTUAL',
     this.costingMode = 'OVERHEAD_PERCENT',
@@ -515,6 +537,8 @@ class MoHeader {
       orderQty: toDouble(json['order_qty']),
       uomId: json['uom_id'],
       uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th'],
+      uomNameEn: json['uom_name_en'],
       issueMethod: json['issue_method'] ?? 'EXPLICIT',
       costingMethod: json['costing_method'] ?? 'ACTUAL',
       costingMode: json['costing_mode'] ?? 'OVERHEAD_PERCENT',
