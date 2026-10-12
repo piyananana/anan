@@ -421,6 +421,90 @@ class MoStatusReportRow {
   }
 }
 
+class MoCostVarianceReportRow {
+  final int id;
+  final String docNo;
+  final DateTime docDate;
+  final String status;
+  final String costingMethod;
+  final String costingMode;
+  final String? warehouseCode;
+  final String? warehouseNameTh;
+  final String? warehouseNameEn;
+  final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
+  final String? bomParentItemCode;
+  final String? bomParentItemNameTh;
+  final String? bomParentItemNameEn;
+  final double materialCost;
+  final double laborCost;
+  final double machineCost;
+  final double overheadCost;
+  final double totalCost;
+  final double outputReceivedQty;
+  final double avgUnitCost;
+  final double variancePosted;
+  final double wipBalanceLc;
+
+  const MoCostVarianceReportRow({
+    required this.id,
+    required this.docNo,
+    required this.docDate,
+    this.status = 'Draft',
+    this.costingMethod = 'ACTUAL',
+    this.costingMode = 'OVERHEAD_PERCENT',
+    this.warehouseCode,
+    this.warehouseNameTh,
+    this.warehouseNameEn,
+    this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
+    this.bomParentItemCode,
+    this.bomParentItemNameTh,
+    this.bomParentItemNameEn,
+    this.materialCost = 0,
+    this.laborCost = 0,
+    this.machineCost = 0,
+    this.overheadCost = 0,
+    this.totalCost = 0,
+    this.outputReceivedQty = 0,
+    this.avgUnitCost = 0,
+    this.variancePosted = 0,
+    this.wipBalanceLc = 0,
+  });
+
+  factory MoCostVarianceReportRow.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    return MoCostVarianceReportRow(
+      id: json['id'] ?? 0,
+      docNo: json['doc_no'] ?? '',
+      docDate: parseLocalDate(json['doc_date']),
+      status: json['status'] ?? 'Draft',
+      costingMethod: json['costing_method'] ?? 'ACTUAL',
+      costingMode: json['costing_mode'] ?? 'OVERHEAD_PERCENT',
+      warehouseCode: json['warehouse_code'],
+      warehouseNameTh: json['warehouse_name_th'],
+      warehouseNameEn: json['warehouse_name_en'],
+      uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th'],
+      uomNameEn: json['uom_name_en'],
+      bomParentItemCode: json['bom_parent_item_code'],
+      bomParentItemNameTh: json['bom_parent_item_name_th'],
+      bomParentItemNameEn: json['bom_parent_item_name_en'],
+      materialCost: toDouble(json['material_cost']),
+      laborCost: toDouble(json['labor_cost']),
+      machineCost: toDouble(json['machine_cost']),
+      overheadCost: toDouble(json['overhead_cost']),
+      totalCost: toDouble(json['total_cost']),
+      outputReceivedQty: toDouble(json['output_received_qty']),
+      avgUnitCost: toDouble(json['avg_unit_cost']),
+      variancePosted: toDouble(json['variance_posted']),
+      wipBalanceLc: toDouble(json['wip_balance_lc']),
+    );
+  }
+}
+
 class MoHeader {
   final int id;
   final int docId;
