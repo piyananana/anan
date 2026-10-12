@@ -484,6 +484,7 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         _warehouse = ImWarehouse(id: h.warehouseId, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn);
         _orderQtyCtrl.text = '${h.orderQty}';
         _uomId = h.uomId; _uomCode = h.uomCode;
+        _uomName = isEnglish && (h.uomNameEn ?? '').isNotEmpty ? h.uomNameEn : h.uomNameTh;
         _issueMethod = h.issueMethod;
         _costingMethod = h.costingMethod;
         _costingMode = h.costingMode;
@@ -591,7 +592,11 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         _costingMethod = bom.costingMethod;
         _costingMode = bom.costingMode;
         _overheadPercentCtrl.text = '${bom.overheadPercent}';
-        if (_uomId == null) { _uomId = bom.outputUomId; _uomCode = bom.outputUomCode; }
+        if (_uomId == null) {
+          _uomId = bom.outputUomId;
+          _uomCode = bom.outputUomCode;
+          _uomName = isEnglish && (bom.outputUomNameEn ?? '').isNotEmpty ? bom.outputUomNameEn : bom.outputUomNameTh;
+        }
       });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Failed to load BOM: $e' : 'โหลดสูตรล้มเหลว: $e')));
@@ -601,8 +606,13 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
   }
 
   Future<void> _pickUom() async {
+    final isEnglish = _isEnglish;
     await ImUomListWidget.search(context, onSelected: (ImUom u) {
-      setState(() { _uomId = u.id; _uomCode = u.uomCode; });
+      setState(() {
+        _uomId = u.id;
+        _uomCode = u.uomCode;
+        _uomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
+      });
     });
   }
 
