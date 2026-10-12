@@ -505,6 +505,82 @@ class MoCostVarianceReportRow {
   }
 }
 
+class MoWipValuationLine {
+  final int id;
+  final String docNo;
+  final DateTime docDate;
+  final String status;
+  final double wipBalanceLc;
+  final String? warehouseCode;
+  final String? warehouseNameTh;
+  final String? warehouseNameEn;
+  final String? bomParentItemCode;
+  final String? bomParentItemNameTh;
+  final String? bomParentItemNameEn;
+
+  const MoWipValuationLine({
+    required this.id,
+    required this.docNo,
+    required this.docDate,
+    this.status = 'Draft',
+    this.wipBalanceLc = 0,
+    this.warehouseCode,
+    this.warehouseNameTh,
+    this.warehouseNameEn,
+    this.bomParentItemCode,
+    this.bomParentItemNameTh,
+    this.bomParentItemNameEn,
+  });
+
+  factory MoWipValuationLine.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    return MoWipValuationLine(
+      id: json['id'] ?? 0,
+      docNo: json['doc_no'] ?? '',
+      docDate: parseLocalDate(json['doc_date']),
+      status: json['status'] ?? 'Draft',
+      wipBalanceLc: toDouble(json['wip_balance_lc']),
+      warehouseCode: json['warehouse_code'],
+      warehouseNameTh: json['warehouse_name_th'],
+      warehouseNameEn: json['warehouse_name_en'],
+      bomParentItemCode: json['bom_parent_item_code'],
+      bomParentItemNameTh: json['bom_parent_item_name_th'],
+      bomParentItemNameEn: json['bom_parent_item_name_en'],
+    );
+  }
+}
+
+class MoWipValuationReport {
+  final List<MoWipValuationLine> lines;
+  final double totalMoWip;
+  final String? wipAccountCode;
+  final String? wipAccountName;
+  final double? glBalance;
+  final double? difference;
+
+  const MoWipValuationReport({
+    this.lines = const [],
+    this.totalMoWip = 0,
+    this.wipAccountCode,
+    this.wipAccountName,
+    this.glBalance,
+    this.difference,
+  });
+
+  factory MoWipValuationReport.fromJson(Map<String, dynamic> json) {
+    double? toDoubleN(dynamic v) => v == null ? null : (double.tryParse(v.toString()) ?? 0);
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    return MoWipValuationReport(
+      lines: (json['lines'] as List<dynamic>? ?? []).map((e) => MoWipValuationLine.fromJson(e as Map<String, dynamic>)).toList(),
+      totalMoWip: toDouble(json['total_mo_wip']),
+      wipAccountCode: json['wip_account_code'],
+      wipAccountName: json['wip_account_name'],
+      glBalance: toDoubleN(json['gl_balance']),
+      difference: toDoubleN(json['difference']),
+    );
+  }
+}
+
 class MoHeader {
   final int id;
   final int docId;

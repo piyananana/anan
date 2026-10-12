@@ -229,6 +229,29 @@ class MoHeaderService {
     throw Exception('Failed to load MO cost/variance report: ${response.body}');
   }
 
+  Future<MoWipValuationReport> fetchWipValuationReport({
+    int? warehouseId,
+    String? dateFrom,
+    String? dateTo,
+    String? search,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final params = <String, String>{};
+    if (warehouseId != null) params['warehouse_id'] = warehouseId.toString();
+    if (dateFrom != null && dateFrom.isNotEmpty) params['date_from'] = dateFrom;
+    if (dateTo != null && dateTo.isNotEmpty) params['date_to'] = dateTo;
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    final uri = Uri.parse('$baseUrl/mo_header/report/wip_valuation').replace(queryParameters: params.isEmpty ? null : params);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return MoWipValuationReport.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    }
+    throw Exception('Failed to load MO WIP valuation report: ${response.body}');
+  }
+
   Future<List<MoExplosionCandidate>> fetchExplosionCandidates(int id) async {
     final headers = await authService.getAuthHeader();
     final response = await http.get(Uri.parse('$baseUrl/mo_header/$id/explosion_candidates'), headers: headers);
