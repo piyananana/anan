@@ -1450,7 +1450,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       final list = await AccountService().fetchRows();
       if (mounted) {
         setState(() {
-          _controlAccounts = list.where((a) => a.isControlAccount && a.isActive).toList();
+          _controlAccounts = list.where((a) => a.isControlAccount && a.isNormalAccount && a.isActive).toList();
           // resolve name from full list (not just filtered) in case the stored account
           // doesn't have isControlAccount=true or isActive=true
           if (_arAccountId != null && _arAccountCode == null) {

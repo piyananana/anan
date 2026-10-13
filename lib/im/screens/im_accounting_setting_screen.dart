@@ -58,7 +58,7 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
         _docSvc.fetchRows(),
       ]);
       final setting = results[0] as ImAccountingSetting?;
-      _accounts = results[1] as List<Account>;
+      _accounts = (results[1] as List<Account>).where((a) => a.isActive && a.isNormalAccount).toList();
       _periods = results[2] as List<PostingPeriod>;
       _glDocs = (results[3] as List<ModuleDocument>).where((d) => d.isDocType && d.sysModule == '01' && d.isActive).toList();
 
@@ -113,6 +113,7 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
   }
 
   Future<void> _pickAccount(String title, void Function(Account) onPicked) async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
     final searchCtrl = TextEditingController();
     List<Account> filtered = List.from(_accounts);
     Account? picked;
@@ -124,7 +125,7 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
             final lq = q.toLowerCase();
             filtered = q.isEmpty
                 ? List.from(_accounts)
-                : _accounts.where((a) => a.accountCode.toLowerCase().contains(lq) || a.accountNameThai.toLowerCase().contains(lq)).toList();
+                : _accounts.where((a) => a.accountCode.toLowerCase().contains(lq) || a.accountNameThai.toLowerCase().contains(lq) || a.accountNameEng.toLowerCase().contains(lq)).toList();
           });
         }
         return AlertDialog(
@@ -135,7 +136,7 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
               TextField(
                 controller: searchCtrl,
                 autofocus: true,
-                decoration: const InputDecoration(hintText: 'ค้นหา รหัส / ชื่อบัญชี', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(hintText: isEnglish ? 'Search code / name' : 'ค้นหา รหัส / ชื่อบัญชี', prefixIcon: const Icon(Icons.search), border: const OutlineInputBorder(), isDense: true),
                 onChanged: doFilter,
               ),
               const SizedBox(height: 8),
@@ -147,7 +148,7 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
                     final a = filtered[i];
                     return ListTile(
                       dense: true,
-                      title: Text('${a.accountCode}  ${a.accountNameThai}', style: const TextStyle(fontSize: 13)),
+                      title: Text('${a.accountCode}  ${isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai}', style: const TextStyle(fontSize: 13)),
                       onTap: () { picked = a; Navigator.of(ctx).pop(); },
                     );
                   },
@@ -155,7 +156,7 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
               ),
             ]),
           ),
-          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก'))],
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'))],
         );
       }),
     );

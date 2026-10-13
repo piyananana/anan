@@ -122,7 +122,7 @@ class VatRateDetailWidgetState extends State<VatRateDetailWidget> {
     List<Account> accounts = [];
     try {
       final all = await svc.fetchRows();
-      accounts = all.where((a) => a.isActive).toList()
+      accounts = all.where((a) => a.isActive && a.isNormalAccount).toList()
         ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
     } catch (_) {}
     if (!mounted) return;

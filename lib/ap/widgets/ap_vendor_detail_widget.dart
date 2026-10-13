@@ -876,7 +876,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
           _businessTypes   = results[0] as List<BusinessType>;
           final allAccounts = results[1] as List<Account>;
           _controlAccounts = allAccounts
-              .where((a) => a.isControlAccount && a.isActive)
+              .where((a) => a.isControlAccount && a.isNormalAccount && a.isActive)
               .toList();
           _isLoading = false;
         });

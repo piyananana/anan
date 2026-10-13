@@ -227,7 +227,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     final l = AppL10n(isEnglish);
     final searchCtrl = TextEditingController();
-    List<Account> filtered = List.from(_accounts);
+    final postable = _accounts.where((a) => a.isActive && a.isNormalAccount).toList();
+    List<Account> filtered = List.from(postable);
     Account? picked;
 
     await showDialog(
@@ -236,10 +237,10 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
         void doFilter(String q) {
           setDlgState(() {
             if (q.isEmpty) {
-              filtered = List.from(_accounts);
+              filtered = List.from(postable);
             } else {
               final lq = q.toLowerCase();
-              filtered = _accounts
+              filtered = postable
                   .where((a) =>
                       a.accountCode.toLowerCase().contains(lq) ||
                       a.accountNameThai.toLowerCase().contains(lq) ||

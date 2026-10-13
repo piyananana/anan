@@ -340,7 +340,8 @@ class _ChartOfAccountsReportScreenState
     final l = AppL10n(context.read<LanguageProvider>().isEnglish);
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     final searchCtrl = TextEditingController();
-    List<Account> filtered = List.from(_accounts)
+    final postable = _accounts.where((a) => a.isNormalAccount).toList();
+    List<Account> filtered = List.from(postable)
       ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
     final current = isFrom ? _accountFrom : _accountTo;
 
@@ -351,11 +352,11 @@ class _ChartOfAccountsReportScreenState
           void doFilter(String q) {
             setDlgState(() {
               if (q.isEmpty) {
-                filtered = List.from(_accounts)
+                filtered = List.from(postable)
                   ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
               } else {
                 final lq = q.toLowerCase();
-                filtered = _accounts
+                filtered = postable
                     .where((a) =>
                         a.accountCode.toLowerCase().contains(lq) ||
                         a.accountNameThai.toLowerCase().contains(lq) ||
