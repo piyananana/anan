@@ -31,6 +31,7 @@ class FinancialReportService {
     int? dim3Id,
     int? dim4Id,
     int? dim5Id,
+    bool isEnglish = false,
   }) async {
     final headers = await authService.getAuthHeader();
     headers['Content-Type'] = 'application/json';
@@ -47,6 +48,7 @@ class FinancialReportService {
         if (dim3Id != null) 'dim3_id': dim3Id,
         if (dim4Id != null) 'dim4_id': dim4Id,
         if (dim5Id != null) 'dim5_id': dim5Id,
+        'lang': isEnglish ? 'en' : 'th',
       }),
     );
 

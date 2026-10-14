@@ -138,6 +138,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         dim3Id: _dimSelections[3],
         dim4Id: _dimSelections[4],
         dim5Id: _dimSelections[5],
+        isEnglish: _isEnglish,
       );
       setState(() {
         _reportData = data;
@@ -371,7 +372,8 @@ String _replaceVars(String text, pw.Context? context) {
       final s = ex['Financial'];
 
       final List<dynamic> allRows = _reportData!['data'] ?? [];
-      final bodyRows = allRows.where((r) => r['row_type'] == 'BODY').toList();
+      // รวมหัวคอลัมน์อัตโนมัติ (จากคอลัมน์ระดับรายงาน) ด้วย เพื่อให้ Excel มีหัวคอลัมน์
+      final bodyRows = allRows.where((r) => r['row_type'] == 'BODY' || r['auto_column_header'] == true).toList();
       final reportName = _reportData?['report_name']?.toString() ?? 'รายงานงบการเงิน';
 
       final _periodLabel = _selectedPeriod?.periodName ?? _selectedYear?.fyCode ?? '';
@@ -822,7 +824,7 @@ String _replaceVars(String text, pw.Context? context) {
 
     String reason(Map e) {
       final d = (e['detail'] as Map?) ?? const {};
-      final ref = d['row'] != null ? '(R${d['row']}, C${d['col']})' : '';
+      final ref = d['row'] != null ? '(R${d['row']}, C${d['col']})' : (d['code'] != null ? '[${d['code']}]' : '');
       switch (e['code']) {
         case 'UNKNOWN_REF':
           return isEnglish ? 'cell $ref not found' : 'ไม่พบช่อง $ref';
