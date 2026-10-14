@@ -669,7 +669,14 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   const SizedBox(height: 10),
                   TextField(
                     controller: formulaCtrl,
-                    decoration: InputDecoration(labelText: isEnglish ? 'formula_text (FORMULA only)' : 'formula_text (FORMULA เท่านั้น)', border: const OutlineInputBorder()),
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'formula_text (FORMULA only)' : 'formula_text (FORMULA เท่านั้น)',
+                      helperText: isEnglish
+                          ? 'e.g. (R100, C20) - (R110, C20)   operators + - * / ( )   functions ABS ROUND MIN MAX'
+                          : 'เช่น (R100, C20) - (R110, C20)   เครื่องหมาย + - * / ( )   ฟังก์ชัน ABS ROUND MIN MAX',
+                      helperMaxLines: 2,
+                      border: const OutlineInputBorder(),
+                    ),
                   ),
                 ],
               ),
@@ -705,6 +712,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   _showSuccess(isEdit
                       ? (isEnglish ? 'Column updated successfully' : 'แก้ไขคอลัมน์เรียบร้อย')
                       : (isEnglish ? 'Column added successfully' : 'เพิ่มคอลัมน์เรียบร้อย'));
+                } on FinReportFormulaException catch (e) {
+                  _showError(isEnglish ? 'Invalid formula: ${e.message}' : 'สูตรคำนวณไม่ถูกต้อง: ${e.message}');
                 } catch (e) {
                   _showError(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e');
                 }

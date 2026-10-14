@@ -71,6 +71,7 @@ class FinancialReportBuilderService {
     final headers = await authService.getAuthHeader();
     final res = await http.post(Uri.parse('$baseUrl/gl_fin_report_column'), headers: headers, body: jsonEncode(data));
     if (res.statusCode == 201) return jsonDecode(res.body);
+    _throwIfFormulaInvalid(res);
     throw Exception('Failed to create column: ${res.body}');
   }
 
@@ -78,7 +79,20 @@ class FinancialReportBuilderService {
     final headers = await authService.getAuthHeader();
     final res = await http.put(Uri.parse('$baseUrl/gl_fin_report_column/$id'), headers: headers, body: jsonEncode(data));
     if (res.statusCode == 200) return jsonDecode(res.body);
+    _throwIfFormulaInvalid(res);
     throw Exception('Failed to update column: ${res.body}');
+  }
+
+  void _throwIfFormulaInvalid(http.Response res) {
+    if (res.statusCode != 400) return;
+    try {
+      final body = jsonDecode(res.body);
+      if (body is Map && body['code'] != null) {
+        throw FinReportFormulaException(body['error']?.toString() ?? '');
+      }
+    } on FormatException {
+      return;
+    }
   }
 
   Future<void> deleteColumn(int id) async {
@@ -86,4 +100,12 @@ class FinancialReportBuilderService {
     final res = await http.delete(Uri.parse('$baseUrl/gl_fin_report_column/$id'), headers: headers);
     if (res.statusCode != 204) throw Exception('Failed to delete column');
   }
+}
+
+/// สูตรคำนวณ (FORMULA) ไม่ผ่านการตรวจ syntax ที่ backend — message เป็นรายละเอียดจาก parser
+class FinReportFormulaException implements Exception {
+  final String message;
+  FinReportFormulaException(this.message);
+  @override
+  String toString() => message;
 }

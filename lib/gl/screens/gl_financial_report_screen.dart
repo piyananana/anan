@@ -318,6 +318,8 @@ String _replaceVars(String text, pw.Context? context) {
           String displayVal = "";
           if (type == 'TEXT') {
             displayVal = _replaceVars(rawValue?.toString() ?? "", context);
+          } else if (col['error'] != null) {
+            displayVal = '#ERR';
           } else {
             // จัดการตัวเลขและการแสดงผลค่าติดลบ
             double val = double.tryParse(rawValue?.toString() ?? '0') ?? 0;
@@ -399,6 +401,8 @@ String _replaceVars(String text, pw.Context? context) {
 
           if (type == 'TEXT') {
             _xlCell(s, r, c, rawValue?.toString() ?? '', bold: bold, align: align);
+          } else if (col['error'] != null) {
+            _xlCell(s, r, c, '#ERR', bold: bold, align: HorizontalAlign.Right);
           } else {
             final double val = double.tryParse(rawValue?.toString() ?? '0') ?? 0;
             _xlCell(s, r, c, val == 0 ? TextCellValue('') : DoubleCellValue(val), bold: bold, align: HorizontalAlign.Right);
@@ -687,6 +691,7 @@ String _replaceVars(String text, pw.Context? context) {
                       color: Colors.white,
                       child: Column(
                         children: [
+                          if (!_isLoading) _buildFormulaErrorBanner(isEnglish),
                           TabBar(
                             labelColor: Colors.deepOrange[900],
                             indicatorColor: Colors.deepOrange[900],
@@ -810,6 +815,61 @@ String _replaceVars(String text, pw.Context? context) {
   //   );
   // }
 
+  // แจ้งสูตรคำนวณที่ผิด (engine คืน formula_errors) — ช่องที่ผิดแสดงเป็น #ERR แทนค่า 0
+  Widget _buildFormulaErrorBanner(bool isEnglish) {
+    final errors = (_reportData?['formula_errors'] as List?) ?? const [];
+    if (errors.isEmpty) return const SizedBox.shrink();
+
+    String reason(Map e) {
+      final d = (e['detail'] as Map?) ?? const {};
+      final ref = d['row'] != null ? '(R${d['row']}, C${d['col']})' : '';
+      switch (e['code']) {
+        case 'UNKNOWN_REF':
+          return isEnglish ? 'cell $ref not found' : 'ไม่พบช่อง $ref';
+        case 'NOT_NUMERIC':
+          return isEnglish ? 'cell $ref is not a number' : 'ช่อง $ref ไม่ใช่ตัวเลข';
+        case 'CIRCULAR':
+          return isEnglish ? 'circular reference' : 'สูตรอ้างอิงวนกัน';
+        case 'REF_ERROR':
+          return isEnglish ? 'referenced cell $ref has an error' : 'ช่องที่อ้างถึง $ref มีข้อผิดพลาด';
+        default:
+          return isEnglish ? 'syntax error: ${e['message']}' : 'รูปแบบสูตรผิด: ${e['message']}';
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxHeight: 140),
+      color: Colors.red.shade50,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.error_outline, color: Colors.red.shade700, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                isEnglish
+                    ? '${errors.length} formula error(s) — shown as #ERR'
+                    : 'พบสูตรคำนวณผิด ${errors.length} ช่อง — แสดงเป็น #ERR',
+                style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            ...errors.map((e) {
+              final m = e as Map;
+              return Text(
+                '(R${m['row_seq_no']}, C${m['column_seq_no']})  ${m['formula_text'] ?? ''}  →  ${reason(m)}',
+                style: TextStyle(fontSize: 12, color: Colors.red.shade900),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
 Widget _buildTableTab() {
     final List<dynamic> rows = _reportData!['data'] ?? [];
     
@@ -861,6 +921,8 @@ Widget _buildTableTab() {
                 String displayVal = "";
                 if (type == 'TEXT') {
                   displayVal = _replaceVars(rawValue?.toString() ?? "", null);
+                } else if (col['error'] != null) {
+                  displayVal = '#ERR';
                 } else {
                   // จัดการตัวเลขและการแสดงผลค่าติดลบ
                   double val = double.tryParse(rawValue?.toString() ?? '0') ?? 0;
