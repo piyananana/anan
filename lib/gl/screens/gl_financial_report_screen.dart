@@ -373,7 +373,10 @@ String _replaceVars(String text, pw.Context? context) {
 
       final List<dynamic> allRows = _reportData!['data'] ?? [];
       // รวมหัวคอลัมน์อัตโนมัติ (จากคอลัมน์ระดับรายงาน) ด้วย เพื่อให้ Excel มีหัวคอลัมน์
-      final bodyRows = allRows.where((r) => r['row_type'] == 'BODY' || r['auto_column_header'] == true).toList();
+      // บรรทัดเส้นใต้ยอดเงิน (line_row) ใช้กับ PDF/หน้าจอ — ไม่ส่งออกเป็นแถวว่างใน Excel
+      final bodyRows = allRows
+          .where((r) => (r['row_type'] == 'BODY' || r['auto_column_header'] == true) && r['line_row'] != true)
+          .toList();
       final reportName = _reportData?['report_name']?.toString() ?? 'รายงานงบการเงิน';
 
       final _periodLabel = _selectedPeriod?.periodName ?? _selectedYear?.fyCode ?? '';
@@ -824,7 +827,9 @@ String _replaceVars(String text, pw.Context? context) {
 
     String reason(Map e) {
       final d = (e['detail'] as Map?) ?? const {};
-      final ref = d['row'] != null ? '(R${d['row']}, C${d['col']})' : (d['code'] != null ? '[${d['code']}]' : '');
+      final ref = d['row_code'] != null
+          ? '${d['row_code']}'
+          : d['row'] != null ? '(R${d['row']}, C${d['col']})' : (d['code'] != null ? '[${d['code']}]' : '');
       switch (e['code']) {
         case 'UNKNOWN_REF':
           return isEnglish ? 'cell $ref not found' : 'ไม่พบช่อง $ref';
@@ -862,7 +867,7 @@ String _replaceVars(String text, pw.Context? context) {
             ...errors.map((e) {
               final m = e as Map;
               return Text(
-                '(R${m['row_seq_no']}, C${m['column_seq_no']})  ${m['formula_text'] ?? ''}  →  ${reason(m)}',
+                '(${m['row_code'] ?? 'R${m['row_seq_no']}'}, C${m['column_seq_no']})  ${m['formula_text'] ?? ''}  →  ${reason(m)}',
                 style: TextStyle(fontSize: 12, color: Colors.red.shade900),
               );
             }),

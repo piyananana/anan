@@ -49,6 +49,7 @@ class FinancialReportBuilderService {
     final headers = await authService.getAuthHeader();
     final res = await http.post(Uri.parse('$baseUrl/gl_fin_report_row'), headers: headers, body: jsonEncode(data));
     if (res.statusCode == 201) return jsonDecode(res.body);
+    _throwIfValidationError(res);
     throw Exception('Failed to create row: ${res.body}');
   }
 
@@ -56,13 +57,16 @@ class FinancialReportBuilderService {
     final headers = await authService.getAuthHeader();
     final res = await http.put(Uri.parse('$baseUrl/gl_fin_report_row/$id'), headers: headers, body: jsonEncode(data));
     if (res.statusCode == 200) return jsonDecode(res.body);
+    _throwIfValidationError(res);
     throw Exception('Failed to update row: ${res.body}');
   }
 
   Future<void> deleteRow(int id) async {
     final headers = await authService.getAuthHeader();
     final res = await http.delete(Uri.parse('$baseUrl/gl_fin_report_row/$id'), headers: headers);
-    if (res.statusCode != 204) throw Exception('Failed to delete row');
+    if (res.statusCode == 204) return;
+    _throwIfValidationError(res);
+    throw Exception('Failed to delete row');
   }
 
   // --- gl_fin_report_column ---
@@ -150,24 +154,39 @@ class FinReportValidationException implements Exception {
   FinReportValidationException(this.code, this.message, this.detail);
 
   /// ข้อความสำหรับผู้ใช้ (ไทย/อังกฤษ) — message จาก backend เป็นภาษาอังกฤษ ใช้เป็นรายละเอียดของ SYNTAX
-  String localized(bool isEnglish) {
-    final ref = detail['code'] != null ? '[${detail['code']}]' : '';
+  /// [forRow] = ข้อผิดพลาดจากการบันทึกบรรทัด (ใช้คำว่า "บรรทัด" แทน "คอลัมน์")
+  String localized(bool isEnglish, {bool forRow = false}) {
+    final isRowRef = detail['row_code'] != null;
+    final ref = isRowRef ? '${detail['row_code']}' : (detail['code'] != null ? '[${detail['code']}]' : '');
+    final what = isRowRef ? (isEnglish ? 'Row' : 'บรรทัด') : (isEnglish ? 'Column' : 'คอลัมน์');
     final usages = (detail['usages'] as List?)?.join(', ') ?? '';
     switch (code) {
       case 'UNKNOWN_REF':
-        return isEnglish ? 'Column $ref not found in this report' : 'ไม่พบคอลัมน์ $ref ในรายงานนี้';
+        return isEnglish ? '$what $ref not found in this report' : 'ไม่พบ$what $ref ในรายงานนี้';
       case 'CIRCULAR':
-        return isEnglish ? 'Column $ref cannot reference itself' : 'คอลัมน์ $ref อ้างอิงตัวเองไม่ได้';
+        return isEnglish ? '$what $ref refers back to itself' : '$what $ref อ้างอิงวนกลับมาที่ตัวเอง';
       case 'INVALID_CODE':
-        return isEnglish
-            ? 'Column code must start with a letter and use only A-Z, 0-9, _ (max 20)'
-            : 'รหัสคอลัมน์ต้องขึ้นต้นด้วยตัวอักษร และใช้ได้เฉพาะ A-Z, 0-9, _ (ไม่เกิน 20 ตัว)';
+        return forRow
+            ? (isEnglish
+                ? 'Row code must start with a letter, use only A-Z, 0-9, _ (max 30) and not be a function name (ABS, ROUND, MIN, MAX)'
+                : 'รหัสบรรทัดต้องขึ้นต้นด้วยตัวอักษร ใช้ได้เฉพาะ A-Z, 0-9, _ (ไม่เกิน 30 ตัว) และห้ามซ้ำชื่อฟังก์ชัน (ABS, ROUND, MIN, MAX)')
+            : (isEnglish
+                ? 'Column code must start with a letter and use only A-Z, 0-9, _ (max 20)'
+                : 'รหัสคอลัมน์ต้องขึ้นต้นด้วยตัวอักษร และใช้ได้เฉพาะ A-Z, 0-9, _ (ไม่เกิน 20 ตัว)');
       case 'INVALID_SEQ':
         return isEnglish ? 'Sequence is required' : 'กรุณาระบุลำดับ';
       case 'DUPLICATE_CODE':
-        return isEnglish ? 'This column code already exists in the report' : 'รหัสคอลัมน์นี้มีอยู่แล้วในรายงาน';
+        return forRow
+            ? (isEnglish ? 'This row code already exists in the report' : 'รหัสบรรทัดนี้มีอยู่แล้วในรายงาน')
+            : (isEnglish ? 'This column code already exists in the report' : 'รหัสคอลัมน์นี้มีอยู่แล้วในรายงาน');
       case 'DUPLICATE_SEQ':
         return isEnglish ? 'This sequence already exists in the report' : 'ลำดับนี้มีอยู่แล้วในรายงาน';
+      case 'DUPLICATE_LABEL':
+        return isEnglish ? 'This report already has a LABEL column' : 'รายงานนี้มีคอลัมน์ชื่อบรรทัด (LABEL) แล้ว';
+      case 'CODE_REQUIRED':
+        return isEnglish
+            ? 'A TOTAL row needs a row code so other rows can be added into it'
+            : 'บรรทัดยอดรวม (TOTAL) ต้องมีรหัสบรรทัด เพื่อให้บรรทัดอื่นเลือกรวมเข้ามาได้';
       case 'REF_IN_USE':
         return isEnglish ? '$ref is used by $usages' : '$ref ถูกใช้อยู่ใน $usages';
       default:

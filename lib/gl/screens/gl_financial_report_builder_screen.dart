@@ -354,11 +354,84 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     return picked;
   }
 
+  // ===== ROW HELPERS (row_kind / ชื่อบรรทัด / เส้น) =====
+  String _rowKindLabel(String kind, bool isEnglish) {
+    switch (kind) {
+      case 'HEADING':
+        return isEnglish ? 'HEADING (label only)' : 'HEADING (หัวข้อ ไม่มียอด)';
+      case 'TOTAL':
+        return isEnglish ? 'TOTAL (sum of rows added into it)' : 'TOTAL (รวมบรรทัดที่เลือกรวมเข้ามา)';
+      case 'FORMULA':
+        return isEnglish ? 'FORMULA (calculated from other rows)' : 'FORMULA (คำนวณจากบรรทัดอื่น)';
+      case 'BLANK':
+        return isEnglish ? 'BLANK (empty line)' : 'BLANK (บรรทัดว่าง)';
+      default:
+        return isEnglish ? 'ACCOUNTS (balance of an account range)' : 'ACCOUNTS (ยอดจากช่วงบัญชี)';
+    }
+  }
+
+  Color _rowKindColor(String kind) {
+    switch (kind) {
+      case 'TOTAL':
+        return Colors.indigo;
+      case 'FORMULA':
+        return Colors.purple;
+      case 'HEADING':
+        return Colors.brown;
+      case 'BLANK':
+        return Colors.grey;
+      default:
+        return Colors.green[800]!;
+    }
+  }
+
+  String _rowLabelOf(Map<String, dynamic> r, bool isEnglish) {
+    final String th = r['label_thai'] ?? '';
+    final String en = r['label_eng'] ?? '';
+    return isEnglish && en.isNotEmpty ? en : (th.isNotEmpty ? th : en);
+  }
+
+  Widget _lineStyleDropdown(String label, String value, bool isEnglish, ValueChanged<String> onChanged) {
+    return DropdownButtonFormField<String>(
+      isExpanded: true,
+      value: value,
+      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      items: [
+        DropdownMenuItem(value: 'NONE', child: Text(isEnglish ? 'None' : 'ไม่มี')),
+        DropdownMenuItem(value: 'SINGLE', child: Text(isEnglish ? 'Single line' : 'เส้นเดี่ยว')),
+        DropdownMenuItem(value: 'DOUBLE', child: Text(isEnglish ? 'Double line' : 'เส้นคู่')),
+      ],
+      onChanged: (v) => onChanged(v!),
+    );
+  }
+
   void _showRowDialog([Map<String, dynamic>? row]) {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     final l = AppL10n(isEnglish);
     final isEdit = row != null;
-    final seqCtrl = TextEditingController(text: isEdit ? (row['row_seq_no'] ?? '').toString() : '');
+    final int nextSeq = _rows.isEmpty
+        ? 10
+        : (_rows.map((r) => (r['row_seq_no'] as int?) ?? 0).reduce((a, b) => a > b ? a : b) + 10);
+    final seqCtrl = TextEditingController(text: (isEdit ? row['row_seq_no'] : nextSeq)?.toString() ?? '');
+    final codeCtrl = TextEditingController(text: row?['row_code'] ?? '');
+    String rowKind = row?['row_kind'] ?? 'ACCOUNTS';
+    final labelThCtrl = TextEditingController(text: row?['label_thai'] ?? '');
+    final labelEnCtrl = TextEditingController(text: row?['label_eng'] ?? '');
+    final indentCtrl = TextEditingController(text: (row?['indent_level'] ?? 0).toString());
+    String? parentCode = row?['parent_row_code'];
+    final rowFormulaCtrl = TextEditingController(text: row?['row_formula'] ?? '');
+    bool isBold = row?['is_bold'] ?? false;
+    bool hideIfZero = row?['hide_if_zero'] ?? false;
+    String lineAbove = row?['line_above'] ?? 'NONE';
+    String lineBelow = row?['line_below'] ?? 'NONE';
+    // บรรทัด TOTAL อื่นที่บรรทัดนี้รวมเข้าได้
+    final totalRows = _rows
+        .where((r) => r['row_kind'] == 'TOTAL' && r['row_code'] != null && r['id'] != row?['id'])
+        .toList();
+    final otherRowCodes = _rows
+        .where((r) => r['row_code'] != null && r['id'] != row?['id'])
+        .map((r) => r['row_code'] as String)
+        .join('  ');
     String rowType = row?['row_type'] ?? 'BODY';
     String printControl = row?['print_control'] ?? 'SHOW';
     final String? initAccFrom = row?['account_from'];
@@ -394,17 +467,92 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
               ? (isEnglish ? 'Edit Row' : 'แก้ไขบรรทัด')
               : (isEnglish ? 'Add New Row' : 'เพิ่มบรรทัดใหม่')),
           content: SizedBox(
-            width: 420,
+            width: 480,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextField(
-                    controller: seqCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(labelText: isEnglish ? 'Row Sequence (row_seq_no)' : 'ลำดับบรรทัด (row_seq_no)', border: const OutlineInputBorder()),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: seqCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(labelText: isEnglish ? 'Row Sequence (R no.)' : 'ลำดับบรรทัด (เลข R)', border: const OutlineInputBorder()),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: codeCtrl,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: InputDecoration(
+                          labelText: isEnglish ? 'Row Code (used in formulas)' : 'รหัสบรรทัด (ใช้ในสูตร)',
+                          hintText: 'REV_TOTAL',
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: rowKind,
+                    decoration: InputDecoration(labelText: isEnglish ? 'Row Kind' : 'ชนิดบรรทัด', border: const OutlineInputBorder()),
+                    items: ['ACCOUNTS', 'HEADING', 'TOTAL', 'FORMULA', 'BLANK']
+                        .map((k) => DropdownMenuItem(value: k, child: Text(_rowKindLabel(k, isEnglish))))
+                        .toList(),
+                    onChanged: (v) => setDialogState(() => rowKind = v!),
                   ),
                   const SizedBox(height: 10),
+                  if (rowKind != 'BLANK') ...[
+                    TextField(controller: labelThCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Row Label (Thai)' : 'ชื่อบรรทัด (ไทย)', border: const OutlineInputBorder())),
+                    const SizedBox(height: 10),
+                    TextField(controller: labelEnCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Row Label (English)' : 'ชื่อบรรทัด (อังกฤษ)', border: const OutlineInputBorder())),
+                    const SizedBox(height: 10),
+                  ],
+                  Row(children: [
+                    SizedBox(
+                      width: 110,
+                      child: TextField(
+                        controller: indentCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(labelText: isEnglish ? 'Indent' : 'ย่อหน้า', border: const OutlineInputBorder()),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<String?>(
+                        isExpanded: true,
+                        value: totalRows.any((r) => r['row_code'] == parentCode) ? parentCode : null,
+                        decoration: InputDecoration(labelText: isEnglish ? 'Add into total row' : 'รวมเข้าบรรทัดยอดรวม', border: const OutlineInputBorder()),
+                        items: [
+                          DropdownMenuItem<String?>(value: null, child: Text(isEnglish ? '— None —' : '— ไม่รวม —')),
+                          ...totalRows.map((r) => DropdownMenuItem<String?>(
+                                value: r['row_code'],
+                                child: Text('${r['row_code']}  ${_rowLabelOf(r, isEnglish)}', overflow: TextOverflow.ellipsis),
+                              )),
+                        ],
+                        onChanged: (v) => setDialogState(() => parentCode = v),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  if (rowKind == 'FORMULA') ...[
+                    TextField(
+                      controller: rowFormulaCtrl,
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'Row formula (every amount column)' : 'สูตรของบรรทัด (คำนวณทุกคอลัมน์ตัวเลข)',
+                        hintText: 'REV_TOTAL - COGS_TOTAL',
+                        helperText: otherRowCodes.isEmpty
+                            ? (isEnglish ? 'Give other rows a row code first' : 'ตั้งรหัสให้บรรทัดอื่นก่อน')
+                            : '${isEnglish ? 'Rows' : 'บรรทัด'}: $otherRowCodes   '
+                              '${isEnglish ? 'specific column' : 'ระบุคอลัมน์'}: REV_TOTAL[CUR]   ABS ROUND MIN MAX',
+                        helperMaxLines: 3,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: rowType,
@@ -427,6 +575,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     ],
                     onChanged: (v) => setDialogState(() => printControl = v!),
                   ),
+                  if (rowKind == 'ACCOUNTS') ...[
                   const SizedBox(height: 10),
                   Row(children: [
                     Expanded(
@@ -536,6 +685,29 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                       );
                     }),
                   ],
+                  ],
+                  if (rowKind != 'BLANK') ...[
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: _lineStyleDropdown(isEnglish ? 'Line above amounts' : 'เส้นเหนือยอดเงิน', lineAbove, isEnglish, (v) => setDialogState(() => lineAbove = v))),
+                      const SizedBox(width: 8),
+                      Expanded(child: _lineStyleDropdown(isEnglish ? 'Line below amounts' : 'เส้นใต้ยอดเงิน', lineBelow, isEnglish, (v) => setDialogState(() => lineBelow = v))),
+                    ]),
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(isEnglish ? 'Bold row' : 'ตัวหนาทั้งบรรทัด'),
+                      value: isBold,
+                      onChanged: (v) => setDialogState(() => isBold = v),
+                    ),
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(isEnglish ? 'Hide row when all amounts are zero' : 'ไม่พิมพ์บรรทัดถ้ายอดทุกคอลัมน์เป็นศูนย์'),
+                      value: hideIfZero,
+                      onChanged: (v) => setDialogState(() => hideIfZero = v),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -548,14 +720,26 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                 final data = {
                   if (!isEdit) 'report_id': _selectedReport!['id'],
                   'row_seq_no': int.tryParse(seqCtrl.text) ?? 0,
+                  'row_code': codeCtrl.text.trim().isEmpty ? null : codeCtrl.text.trim().toUpperCase(),
+                  'row_kind': rowKind,
+                  'label_thai': labelThCtrl.text.trim().isEmpty ? null : labelThCtrl.text.trim(),
+                  'label_eng': labelEnCtrl.text.trim().isEmpty ? null : labelEnCtrl.text.trim(),
+                  'indent_level': int.tryParse(indentCtrl.text.trim()) ?? 0,
+                  'parent_row_code': parentCode,
+                  'row_formula': rowKind == 'FORMULA' ? rowFormulaCtrl.text.trim() : null,
+                  'is_bold': isBold,
+                  'hide_if_zero': hideIfZero,
+                  'line_above': lineAbove,
+                  'line_below': lineBelow,
                   'row_type': rowType,
                   'print_control': printControl,
-                  'account_from': dlgAccFrom?.accountCode,
-                  'account_to': dlgAccTo?.accountCode,
+                  // ช่วงบัญชี/Dimension ใช้เฉพาะบรรทัด ACCOUNTS
+                  'account_from': rowKind == 'ACCOUNTS' ? dlgAccFrom?.accountCode : null,
+                  'account_to': rowKind == 'ACCOUNTS' ? dlgAccTo?.accountCode : null,
                   'normal_sign': normalSign,
                   'branch_id': int.tryParse(branchCtrl.text.trim()),
                   for (final t in _dimTypes)
-                    'dim${t.slotNo}_id': dimPicks[t.slotNo]?.id,
+                    'dim${t.slotNo}_id': rowKind == 'ACCOUNTS' ? dimPicks[t.slotNo]?.id : null,
                 };
                 try {
                   if (isEdit) {
@@ -568,6 +752,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   _showSuccess(isEdit
                       ? (isEnglish ? 'Row updated successfully' : 'แก้ไขบรรทัดเรียบร้อย')
                       : (isEnglish ? 'Row added successfully' : 'เพิ่มบรรทัดเรียบร้อย'));
+                } on FinReportValidationException catch (e) {
+                  _showError(e.localized(isEnglish, forRow: true));
                 } catch (e) {
                   _showError(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e');
                 }
@@ -588,6 +774,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     final seqCtrl = TextEditingController(text: isEdit ? (col['column_seq_no'] ?? '').toString() : '');
     String colType = col?['column_type'] ?? 'TEXT';
     final descCtrl = TextEditingController(text: col?['description_thai'] ?? '');
+    final descEnCtrl = TextEditingController(text: col?['description_eng'] ?? '');
     final dataTypeCtrl = TextEditingController(text: col?['data_type'] ?? '');
     final flexCtrl = TextEditingController(text: (col?['column_flex'] ?? 1).toString());
     final indentCtrl = TextEditingController(text: (col?['indent_level'] ?? 0).toString());
@@ -632,7 +819,12 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   const SizedBox(height: 10),
                   TextField(
                     controller: descCtrl,
-                    decoration: InputDecoration(labelText: isEnglish ? 'Text / Description (description_thai)' : 'ข้อความ / คำอธิบาย (description_thai)', border: const OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Text (Thai)' : 'ข้อความ (ไทย)', border: const OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: descEnCtrl,
+                    decoration: InputDecoration(labelText: isEnglish ? 'Text (English)' : 'ข้อความ (อังกฤษ)', border: const OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -687,8 +879,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     decoration: InputDecoration(
                       labelText: isEnglish ? 'formula_text (FORMULA only)' : 'formula_text (FORMULA เท่านั้น)',
                       helperText: isEnglish
-                          ? 'e.g. (R100, C20) - (R110, C20) or [CUR] * 2   operators + - * / ( )   functions ABS ROUND MIN MAX'
-                          : 'เช่น (R100, C20) - (R110, C20) หรือ [CUR] * 2   เครื่องหมาย + - * / ( )   ฟังก์ชัน ABS ROUND MIN MAX',
+                          ? 'e.g. REV_TOTAL - COGS (row codes), [CUR] * 2, (R100, C20)   operators + - * / ( )   functions ABS ROUND MIN MAX'
+                          : 'เช่น REV_TOTAL - COGS (รหัสบรรทัด), [CUR] * 2, (R100, C20)   เครื่องหมาย + - * / ( )   ฟังก์ชัน ABS ROUND MIN MAX',
                       helperMaxLines: 2,
                       border: const OutlineInputBorder(),
                     ),
@@ -707,6 +899,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   'column_seq_no': int.tryParse(seqCtrl.text) ?? 0,
                   'column_type': colType,
                   'description_thai': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                  'description_eng': descEnCtrl.text.trim().isEmpty ? null : descEnCtrl.text.trim(),
                   'data_type': dataTypeCtrl.text.trim().isEmpty ? null : dataTypeCtrl.text.trim(),
                   'column_flex': int.tryParse(flexCtrl.text) ?? 1,
                   'indent_level': int.tryParse(indentCtrl.text) ?? 0,
@@ -758,6 +951,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   /// ข้อความสั้นอธิบายคอลัมน์ เช่น "YTD -1Y" หรือ "= [CUR] - [PY]"
   String _reportColSummary(Map<String, dynamic> rc) {
     if (rc['col_kind'] == 'CALC') return '= ${rc['formula_text'] ?? ''}';
+    if (rc['col_kind'] == 'LABEL') return _isEnglish ? 'row labels' : 'ชื่อบรรทัด';
     final parts = <String>[rc['period_range'] ?? 'MTD'];
     final int oy = rc['offset_years'] ?? 0;
     final int op = rc['offset_periods'] ?? 0;
@@ -924,10 +1118,18 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     value: kind,
                     decoration: InputDecoration(labelText: isEnglish ? 'Column Kind' : 'ชนิดคอลัมน์', border: const OutlineInputBorder()),
                     items: [
+                      DropdownMenuItem(value: 'LABEL', child: Text(isEnglish ? 'LABEL (row labels)' : 'LABEL (ชื่อบรรทัด)')),
                       DropdownMenuItem(value: 'AMOUNT', child: Text(isEnglish ? 'AMOUNT (balance from GL)' : 'AMOUNT (ยอดจากบัญชี)')),
                       DropdownMenuItem(value: 'CALC', child: Text(isEnglish ? 'CALC (formula from other columns)' : 'CALC (คำนวณจากคอลัมน์อื่น)')),
                     ],
-                    onChanged: (v) => setDialogState(() => kind = v!),
+                    onChanged: (v) => setDialogState(() {
+                      // ชื่อบรรทัดปกติชิดซ้ายและกว้างกว่าคอลัมน์ตัวเลข
+                      if (v == 'LABEL' && kind != 'LABEL' && !isEdit) {
+                        textAlign = 'LEFT';
+                        if (flexCtrl.text.trim() == '1') flexCtrl.text = '4';
+                      }
+                      kind = v!;
+                    }),
                   ),
                   const SizedBox(height: 10),
                   if (kind == 'AMOUNT') ...[
@@ -995,7 +1197,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                       value: excludeClosing,
                       onChanged: (v) => setDialogState(() => excludeClosing = v),
                     ),
-                  ] else ...[
+                  ] else if (kind == 'CALC') ...[
                     TextField(
                       controller: formulaCtrl,
                       decoration: InputDecoration(
@@ -1003,7 +1205,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                         hintText: '[CUR] - [PY]',
                         helperText: otherCodes.isEmpty
                             ? (isEnglish ? 'Add AMOUNT columns first' : 'เพิ่มคอลัมน์ AMOUNT ก่อน')
-                            : '${isEnglish ? 'Columns' : 'คอลัมน์'}: $otherCodes   ABS ROUND MIN MAX',
+                            : '${isEnglish ? 'Columns' : 'คอลัมน์'}: $otherCodes   ABS ROUND MIN MAX\n'
+                              '${isEnglish ? '% of revenue' : '% ของรายได้'}: [CUR] / REV_TOTAL[CUR] * 100',
                         helperMaxLines: 2,
                         border: const OutlineInputBorder(),
                       ),
@@ -1107,7 +1310,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                         return Padding(
                           padding: const EdgeInsets.only(right: 6),
                           child: ActionChip(
-                            backgroundColor: rc['col_kind'] == 'CALC' ? Colors.purple[50] : Colors.blue[50],
+                            backgroundColor: rc['col_kind'] == 'CALC'
+                                ? Colors.purple[50]
+                                : (rc['col_kind'] == 'LABEL' ? Colors.orange[50] : Colors.blue[50]),
                             avatar: hidden ? const Icon(Icons.visibility_off, size: 16) : null,
                             label: Text(
                               'C${rc['col_seq_no']} [${rc['col_code']}]  ${_reportColSummary(rc)}',
@@ -1353,6 +1558,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     final l = AppL10n(isEnglish);
     final List<dynamic> columns = row['columns'] ?? [];
     final String rowType = row['row_type'] ?? 'BODY';
+    final String rowKind = row['row_kind'] ?? 'ACCOUNTS';
     final int seqNo = row['row_seq_no'] ?? 0;
 
     Color badgeColor;
@@ -1403,6 +1609,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     await _service.deleteRow(row['id']);
                     await _loadRows(_selectedReport!['id']);
                     _showSuccess(isEnglish ? 'Row deleted successfully' : 'ลบบรรทัดเรียบร้อย');
+                  } on FinReportValidationException catch (e) {
+                    _showError(e.localized(isEnglish, forRow: true));
                   } catch (e) {
                     _showError(isEnglish ? 'Delete failed: $e' : 'ลบไม่สำเร็จ: $e');
                   }
@@ -1432,10 +1640,39 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
+            // รหัสบรรทัด + ชนิดบรรทัด (+ บรรทัดยอดรวมที่รวมเข้า)
+            Tooltip(
+              message: [
+                _rowKindLabel(rowKind, isEnglish),
+                if (row['parent_row_code'] != null) '${isEnglish ? 'Added into' : 'รวมเข้า'} ${row['parent_row_code']}',
+                if (rowKind == 'FORMULA' && row['row_formula'] != null) '= ${row['row_formula']}',
+                if (row['print_control'] == 'HIDE') isEnglish ? 'Hidden (helper row)' : 'ซ่อน (บรรทัดช่วยคำนวณ)',
+              ].join('\n'),
+              child: SizedBox(
+                width: 96,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      row['row_code'] ?? '—',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: row['row_code'] == null ? Colors.grey : Colors.black87),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      '$rowKind${row['parent_row_code'] != null ? ' > ${row['parent_row_code']}' : ''}',
+                      style: TextStyle(fontSize: 10, color: _rowKindColor(rowKind)),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
             // พื้นที่คอลัมน์
             Expanded(
-              child: columns.isEmpty && _reportCols.isEmpty
+              child: columns.isEmpty && _reportCols.isEmpty && _rowLabelOf(row, isEnglish).isEmpty
                   ? Container(
                       height: 30,
                       decoration: BoxDecoration(
@@ -1462,6 +1699,39 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     );
   }
 
+  /// ช่องชื่อบรรทัดในตัวอย่าง (คลิกแล้วเปิดแก้ไขบรรทัด เพราะชื่อเก็บที่บรรทัด)
+  Widget _labelChip(String label, Map<String, dynamic> row, bool isEnglish, String ref) {
+    final int indent = row['indent_level'] ?? 0;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.orange[200]!),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: indent * 8.0),
+            child: Text(
+              label.isEmpty ? (isEnglish ? '(no label)' : '(ไม่มีชื่อ)') : label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: row['is_bold'] == true ? FontWeight.bold : FontWeight.normal,
+                color: label.isEmpty ? Colors.grey : Colors.black87,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(ref, style: TextStyle(fontSize: 11, color: Colors.grey[500]), overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
   // ===== COLUMNS PREVIEW =====
   Widget _buildColumnsPreview(Map<String, dynamic> row, List<dynamic> columns) {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
@@ -1470,8 +1740,14 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     final rowCols = List<Map<String, dynamic>>.from(columns);
     final overrideSeqs = rowCols.map((c) => c['column_seq_no']).toSet();
     final reportColSeqs = _reportCols.map((rc) => rc['col_seq_no']).toSet();
-    final bool hasAccounts = row['account_from'] != null && row['account_to'] != null;
-    final bool hasOverride = reportColSeqs.any(overrideSeqs.contains);
+    final String rowKind = row['row_kind'] ?? 'ACCOUNTS';
+    final bool hasAccounts = rowKind == 'ACCOUNTS' && row['account_from'] != null && row['account_to'] != null;
+    final bool hasAmounts = hasAccounts || rowKind == 'TOTAL' || rowKind == 'FORMULA';
+    final bool hasOverride = _reportCols.any((rc) => rc['col_kind'] != 'LABEL' && overrideSeqs.contains(rc['col_seq_no']));
+    final String rowLabel = rowKind == 'BLANK' ? '' : _rowLabelOf(row, isEnglish);
+    final String rowRef = row['row_code'] ?? 'R$rowSeqNo';
+    final String amountPrefix = rowKind == 'TOTAL' ? 'Σ ' : (rowKind == 'FORMULA' ? '= ' : '');
+    final bool hasLabelCol = _reportCols.any((rc) => rc['col_kind'] == 'LABEL');
 
     // คอลัมน์ระดับรายงานที่บรรทัดนี้ไม่ได้ override — แสดงเหมือนผลจริง (บรรทัดหัวข้อไม่มีตัวเลข)
     final cells = <Map<String, dynamic>>[
@@ -1479,13 +1755,39 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
       for (final rc in _reportCols)
         if (!overrideSeqs.contains(rc['col_seq_no']) && rc['is_hidden'] != true)
           {'_report_col': rc, 'column_seq_no': rc['col_seq_no'], 'column_flex': rc['column_flex'] ?? 1},
+      // ไม่มีคอลัมน์ LABEL → engine วางชื่อบรรทัดไว้หน้าสุด (seq 0, flex 3)
+      if (!hasLabelCol && rowLabel.isNotEmpty && !overrideSeqs.contains(0))
+        {'_fallback_label': true, 'column_seq_no': 0, 'column_flex': 3},
     ]..sort((a, b) => (a['column_seq_no'] ?? 0).compareTo(b['column_seq_no'] ?? 0));
 
     return Row(
       children: cells.map((col) {
+        if (col['_fallback_label'] == true) {
+          return Expanded(
+            flex: 3,
+            child: Tooltip(
+              message: isEnglish
+                  ? 'Row label — add a LABEL report column to control its position and width'
+                  : 'ชื่อบรรทัด — เพิ่มคอลัมน์ของรายงานชนิด LABEL เพื่อกำหนดตำแหน่งและความกว้าง',
+              child: GestureDetector(
+                onTap: () => _showRowDialog(row),
+                child: _labelChip(rowLabel, row, isEnglish, '$rowRef, C0'),
+              ),
+            ),
+          );
+        }
         final Map<String, dynamic>? rc = col['_report_col'];
+        if (rc != null && rc['col_kind'] == 'LABEL') {
+          return Expanded(
+            flex: rc['column_flex'] ?? 1,
+            child: GestureDetector(
+              onTap: () => _showRowDialog(row),
+              child: _labelChip(rowLabel, row, isEnglish, '$rowRef, C${rc['col_seq_no']}'),
+            ),
+          );
+        }
         if (rc != null) {
-          final bool showsValue = rc['col_kind'] == 'CALC' ? (hasAccounts || hasOverride) : hasAccounts;
+          final bool showsValue = rc['col_kind'] == 'CALC' ? (hasAmounts || hasOverride) : hasAmounts;
           return Expanded(
             flex: rc['column_flex'] ?? 1,
             child: Tooltip(
@@ -1505,12 +1807,17 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        showsValue ? '[${rc['col_code']}]' : '',
-                        style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey[700]),
+                        showsValue ? '${rc['col_kind'] == 'CALC' ? '' : amountPrefix}[${rc['col_code']}]' : '',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          fontWeight: row['is_bold'] == true ? FontWeight.bold : FontWeight.normal,
+                          color: Colors.grey[700],
+                        ),
                         textAlign: TextAlign.right,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Text('R$rowSeqNo, C${rc['col_seq_no']}', style: TextStyle(fontSize: 11, color: Colors.grey[500]), textAlign: TextAlign.right),
+                      Text('$rowRef, C${rc['col_seq_no']}', style: TextStyle(fontSize: 11, color: Colors.grey[500]), textAlign: TextAlign.right, overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
@@ -1569,7 +1876,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
 
           String label;
           if (colType == 'TEXT') {
-            label = desc ?? colType;
+            final String? descEn = col['description_eng'];
+            label = (isEnglish && descEn != null && descEn.isNotEmpty) ? descEn : (desc ?? colType);
           } else if (colType == 'MTD' || colType == 'YTD') {
             label = offset == 0 ? colType : '$colType($offset)';
           } else if (colType == 'FORMULA') {
