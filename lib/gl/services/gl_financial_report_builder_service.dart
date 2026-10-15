@@ -36,6 +36,45 @@ class FinancialReportBuilderService {
     if (res.statusCode != 204) throw Exception('Failed to delete report');
   }
 
+  // --- export / import / แม่แบบ (ย้ายแบบงบข้ามฐานข้อมูล) ---
+
+  /// แบบงบทั้งชุดเป็น JSON (ไม่มี id — สาขา/มิติเป็นรหัส)
+  Future<Map<String, dynamic>> exportReport(int id) async {
+    final headers = await authService.getAuthHeader();
+    final res = await http.get(Uri.parse('$baseUrl/gl_fin_report/$id/export'), headers: headers);
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Failed to export report: ${res.body}');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchTemplates() async {
+    final headers = await authService.getAuthHeader();
+    final res = await http.get(Uri.parse('$baseUrl/gl_fin_report_templates'), headers: headers);
+    if (res.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+    throw Exception('Failed to load templates');
+  }
+
+  /// สร้างงบจากไฟล์ที่ export มา ([data]) หรือจากแม่แบบ ([templateId])
+  /// คืน { report, warnings, empty_account_rows }
+  Future<Map<String, dynamic>> importReport({
+    Map<String, dynamic>? data,
+    String? templateId,
+    required String reportCode,
+    String? reportNameThai,
+    String? reportNameEng,
+  }) async {
+    final headers = await authService.getAuthHeader();
+    final res = await http.post(Uri.parse('$baseUrl/gl_fin_report_import'), headers: headers, body: jsonEncode({
+      if (data != null) 'data': data,
+      if (templateId != null) 'template': templateId,
+      'report_code': reportCode,
+      if (reportNameThai != null && reportNameThai.isNotEmpty) 'report_name_thai': reportNameThai,
+      if (reportNameEng != null && reportNameEng.isNotEmpty) 'report_name_eng': reportNameEng,
+    }));
+    if (res.statusCode == 201) return jsonDecode(res.body);
+    _throwIfValidationError(res);
+    throw Exception('Failed to import report: ${res.body}');
+  }
+
   // --- gl_fin_report_row ---
 
   Future<List<Map<String, dynamic>>> fetchRows(int reportId) async {
@@ -67,6 +106,15 @@ class FinancialReportBuilderService {
     if (res.statusCode == 204) return;
     _throwIfValidationError(res);
     throw Exception('Failed to delete row');
+  }
+
+  /// เรียงบรรทัดใหม่ตาม [rowIds] (ทุกบรรทัดของรายงาน) — คืน { rows, formulas_updated }
+  Future<Map<String, dynamic>> reorderRows(int reportId, List<int> rowIds) async {
+    final headers = await authService.getAuthHeader();
+    final res = await http.put(Uri.parse('$baseUrl/gl_fin_report/$reportId/reorder_rows'),
+        headers: headers, body: jsonEncode({'row_ids': rowIds}));
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Failed to reorder rows: ${res.body}');
   }
 
   /// ตรวจผังบัญชี: บัญชีลงรายการแต่ละบัญชีอยู่ในบรรทัด ACCOUNTS ใดบ้าง (rows ว่าง = ไม่อยู่ในงบ, >1 = นับซ้ำ)

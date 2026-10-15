@@ -32,6 +32,7 @@ class FinancialReportService {
     int? dim4Id,
     int? dim5Id,
     bool isEnglish = false,
+    bool preview = false, // หน้าออกแบบ: แสดงได้แม้รายงานยังไม่เปิดใช้งาน
   }) async {
     final headers = await authService.getAuthHeader();
     headers['Content-Type'] = 'application/json';
@@ -49,6 +50,7 @@ class FinancialReportService {
         if (dim4Id != null) 'dim4_id': dim4Id,
         if (dim5Id != null) 'dim5_id': dim5Id,
         'lang': isEnglish ? 'en' : 'th',
+        if (preview) 'preview': true,
       }),
     );
 

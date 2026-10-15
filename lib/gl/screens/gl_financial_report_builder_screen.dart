@@ -1,4 +1,6 @@
 ﻿import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
@@ -10,6 +12,11 @@ import '../models/gl_dimension.dart';
 import '../services/gl_account_service.dart';
 import '../services/gl_financial_report_builder_service.dart';
 import '../services/gl_dimension_service.dart';
+import '../services/gl_financial_report_service.dart';
+import '../services/gl_period_service.dart';
+import '../models/gl_period.dart';
+import '../widgets/gl_fin_report_table_view.dart';
+import '../../utils/file_download.dart';
 import '../widgets/gl_dimension_picker_field.dart';
 
 class FinancialReportBuilderScreen extends StatefulWidget {
@@ -23,6 +30,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   final FinancialReportBuilderService _service = FinancialReportBuilderService();
   final AccountService _accountService = AccountService();
   final GlDimensionService _dimService = GlDimensionService();
+  final FinancialReportService _reportService = FinancialReportService();
+  final PeriodService _periodService = PeriodService();
 
   List<Account> _accounts = [];
   List<GlDimensionType> _dimTypes = [];
@@ -34,6 +43,17 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   Map<String, dynamic>? _selectedReport;
   bool _isLoadingReports = false;
   bool _isLoadingRows = false;
+
+  // ตัวอย่างงบ (เรียก engine จริงด้วยงวดที่เลือก) — รีเฟรชทุกครั้งที่บันทึกบรรทัด/คอลัมน์
+  bool _showPreview = false;
+  List<FiscalYear> _previewYears = [];
+  List<PostingPeriod> _previewPeriods = [];
+  FiscalYear? _previewYear;
+  PostingPeriod? _previewPeriod;
+  Map<String, dynamic>? _previewData;
+  String? _previewError;
+  bool _previewLoading = false;
+  int _previewSeq = 0; // กันผลของการเรียกเก่าทับผลใหม่
 
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 400.0;
@@ -102,6 +122,145 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     } finally {
       setState(() => _isLoadingRows = false);
     }
+    if (_showPreview) _refreshPreview();
+  }
+
+  // ===== PREVIEW =====
+  Future<void> _togglePreview() async {
+    setState(() => _showPreview = !_showPreview);
+    if (!_showPreview) return;
+    if (_previewYears.isEmpty) {
+      try {
+        final years = (await _periodService.fetchFiscalYears())
+          ..sort((a, b) => b.yearStartDate.compareTo(a.yearStartDate));
+        // ปีปัจจุบันถ้ามี ไม่งั้นปีล่าสุด
+        final now = DateTime.now();
+        final current = years.where((y) => !now.isBefore(y.yearStartDate) && !now.isAfter(y.yearEndDate)).firstOrNull;
+        setState(() => _previewYears = years);
+        final year = current ?? years.firstOrNull;
+        if (year != null) await _selectPreviewYear(year, refresh: false);
+      } catch (e) {
+        setState(() => _previewError = '$e');
+      }
+    }
+    _refreshPreview();
+  }
+
+  Future<void> _selectPreviewYear(FiscalYear year, {bool refresh = true}) async {
+    final periods = (await _periodService.fetchPostingPeriodsByFiscalYearId(year.id))
+      ..sort((a, b) => a.periodNumber.compareTo(b.periodNumber));
+    final now = DateTime.now();
+    setState(() {
+      _previewYear = year;
+      _previewPeriods = periods;
+      // งวดของวันนี้ถ้าอยู่ในปีนี้ ไม่งั้นงวดสุดท้าย
+      _previewPeriod = periods.where((p) => !now.isBefore(p.periodStartDate) && !now.isAfter(p.periodEndDate)).firstOrNull
+          ?? periods.lastOrNull;
+    });
+    if (refresh) _refreshPreview();
+  }
+
+  Future<void> _refreshPreview() async {
+    if (_selectedReport == null || _previewPeriod == null) return;
+    final seq = ++_previewSeq;
+    setState(() => _previewLoading = true);
+    try {
+      final data = await _reportService.generateReport(
+        _selectedReport!['id'], _previewPeriod!.id, isEnglish: _isEnglish, preview: true);
+      if (!mounted || seq != _previewSeq) return;
+      setState(() { _previewData = data; _previewError = null; });
+    } catch (e) {
+      if (!mounted || seq != _previewSeq) return;
+      setState(() { _previewData = null; _previewError = '$e'; });
+    } finally {
+      if (mounted && seq == _previewSeq) setState(() => _previewLoading = false);
+    }
+  }
+
+  /// ตัวแปรในข้อความ — แทนเท่าที่หน้าออกแบบรู้ ที่เหลือแสดงชื่อตัวแปรไว้ให้เห็นว่าจะถูกแทนตอนพิมพ์
+  String _previewText(String text) => text
+      .replaceAll(r'$reportName', _previewData?['report_name']?.toString() ?? '')
+      .replaceAll(r'$periodName', _previewPeriod?.periodName ?? '')
+      .replaceAll(r'$fiscalYear', _previewYear?.fyCode ?? '');
+
+  Widget _buildPreviewPanel() {
+    final isEnglish = _isEnglish;
+    final errors = (_previewData?['formula_errors'] as List?) ?? const [];
+    return Container(
+      decoration: BoxDecoration(border: Border(left: BorderSide(color: Colors.grey.shade400))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            color: Colors.blueGrey.shade50,
+            padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+            child: Row(children: [
+              Text(isEnglish ? 'Preview' : 'ตัวอย่างงบ', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DropdownButton<int>(
+                  isExpanded: true,
+                  isDense: true,
+                  value: _previewYear?.id,
+                  hint: Text(isEnglish ? 'Year' : 'ปี'),
+                  items: _previewYears.map((y) => DropdownMenuItem(value: y.id, child: Text(y.fyCode, style: const TextStyle(fontSize: 13)))).toList(),
+                  onChanged: (id) => _selectPreviewYear(_previewYears.firstWhere((y) => y.id == id)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                flex: 2,
+                child: DropdownButton<int>(
+                  isExpanded: true,
+                  isDense: true,
+                  value: _previewPeriod?.id,
+                  hint: Text(isEnglish ? 'Period' : 'งวด'),
+                  items: _previewPeriods.map((p) => DropdownMenuItem(value: p.id, child: Text(p.periodName, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis))).toList(),
+                  onChanged: (id) {
+                    setState(() => _previewPeriod = _previewPeriods.firstWhere((p) => p.id == id));
+                    _refreshPreview();
+                  },
+                ),
+              ),
+              IconButton(
+                icon: _previewLoading
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh, size: 18),
+                tooltip: isEnglish ? 'Refresh' : 'รีเฟรช',
+                onPressed: _previewLoading ? null : _refreshPreview,
+              ),
+            ]),
+          ),
+          if (errors.isNotEmpty)
+            Container(
+              color: Colors.red.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text(
+                (isEnglish ? '${errors.length} formula error(s): ' : 'สูตรผิด ${errors.length} ช่อง: ') +
+                    errors.take(3).map((e) => '(${e['row_code'] ?? 'R${e['row_seq_no']}'}, C${e['column_seq_no']}) ${e['code']}').join('  '),
+                style: TextStyle(fontSize: 12, color: Colors.red.shade900),
+              ),
+            ),
+          Expanded(
+            child: _previewError != null
+                ? Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(_previewError!, style: const TextStyle(color: Colors.red)),
+                  )
+                : _previewData == null
+                    ? Center(child: Text(
+                        _previewPeriod == null ? (isEnglish ? 'Select a period' : 'เลือกงวด') : '',
+                        style: const TextStyle(color: Colors.grey)))
+                    : FinReportTableView(
+                        reportData: _previewData!,
+                        resolveText: _previewText,
+                        padding: const EdgeInsets.all(8),
+                        fontScale: 0.9,
+                      ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showError(String msg) {
@@ -125,6 +284,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     final isEdit = report != null;
     final codeCtrl = TextEditingController(text: report?['report_code'] ?? '');
     final nameCtrl = TextEditingController(text: report?['report_name_thai'] ?? '');
+    final nameEnCtrl = TextEditingController(text: report?['report_name_eng'] ?? '');
     bool isActive = report?['is_active'] ?? true;
     bool parenthesis = report?['parenthesis_for_minus'] ?? true;
     String orientation = report?['page_orientation'] ?? 'PORTRAIT';
@@ -154,6 +314,11 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   TextField(
                     controller: nameCtrl,
                     decoration: InputDecoration(labelText: isEnglish ? 'Report Name (Thai)' : 'ชื่องบการเงิน (ภาษาไทย)', border: const OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: nameEnCtrl,
+                    decoration: InputDecoration(labelText: isEnglish ? 'Report Name (English)' : 'ชื่องบการเงิน (ภาษาอังกฤษ)', border: const OutlineInputBorder()),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
@@ -203,6 +368,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                 final data = {
                   'report_code': codeCtrl.text.trim(),
                   'report_name_thai': nameCtrl.text.trim(),
+                  'report_name_eng': nameEnCtrl.text.trim(),
                   'is_active': isActive,
                   'parenthesis_for_minus': parenthesis,
                   'page_orientation': orientation,
@@ -233,6 +399,228 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ===== EXPORT / IMPORT / TEMPLATES =====
+  Future<void> _exportReport(Map<String, dynamic> report) async {
+    final isEnglish = _isEnglish;
+    try {
+      final data = await _service.exportReport(report['id']);
+      final bytes = utf8.encode(const JsonEncoder.withIndent('  ').convert(data));
+      final savedPath = await downloadFile(bytes, '${report['report_code']}.json');
+      _showSuccess(isEnglish
+          ? 'Exported ${report['report_code']}.json${savedPath != null ? ' to $savedPath' : ''}'
+          : 'ส่งออก ${report['report_code']}.json แล้ว${savedPath != null ? ' ที่ $savedPath' : ''}');
+    } catch (e) {
+      _showError(isEnglish ? 'Export failed: $e' : 'ส่งออกไม่สำเร็จ: $e');
+    }
+  }
+
+  Future<void> _importFromFile() async {
+    final isEnglish = _isEnglish;
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+      withData: true,
+    );
+    final bytes = picked?.files.firstOrNull?.bytes;
+    if (bytes == null) return;
+    Map<String, dynamic> data;
+    try {
+      data = Map<String, dynamic>.from(jsonDecode(utf8.decode(bytes)));
+    } catch (_) {
+      _showError(isEnglish ? 'The file is not valid JSON' : 'ไฟล์ไม่ใช่ JSON ที่ถูกต้อง');
+      return;
+    }
+    if (data['format'] != 'anan.gl_fin_report') {
+      _showError(isEnglish ? 'This is not an ANAN financial report file' : 'ไฟล์นี้ไม่ใช่แบบงบการเงินของ ANAN');
+      return;
+    }
+    final rep = Map<String, dynamic>.from(data['report'] ?? const {});
+    _showImportDialog(
+      title: isEnglish ? 'Import Report from File' : 'นำเข้าแบบงบจากไฟล์',
+      data: data,
+      code: rep['report_code'] ?? '',
+      nameThai: rep['report_name_thai'] ?? '',
+      nameEng: rep['report_name_eng'] ?? '',
+    );
+  }
+
+  Future<void> _showTemplatePicker() async {
+    final isEnglish = _isEnglish;
+    final l = AppL10n(isEnglish);
+    List<Map<String, dynamic>> templates;
+    try {
+      templates = await _service.fetchTemplates();
+    } catch (e) {
+      _showError(isEnglish ? 'Failed to load templates: $e' : 'โหลดแม่แบบไม่สำเร็จ: $e');
+      return;
+    }
+    if (!mounted) return;
+    String tr(Map t, String key) {
+      final String en = t['${key}_eng'] ?? '';
+      return isEnglish && en.isNotEmpty ? en : (t['${key}_thai'] ?? en);
+    }
+
+    final chosen = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Create from Template' : 'สร้างงบจากแม่แบบ'),
+        content: SizedBox(
+          width: 520,
+          child: templates.isEmpty
+              ? Text(isEnglish ? 'No templates available' : 'ไม่มีแม่แบบ')
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: templates.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final t = templates[i];
+                    return ListTile(
+                      leading: Icon(Icons.article_outlined, color: Colors.deepOrange[900]),
+                      title: Text(tr(t, 'name'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('${tr(t, 'description')}\n'
+                          '${isEnglish ? 'Rows' : 'จำนวนบรรทัด'}: ${t['row_count']}'),
+                      isThreeLine: true,
+                      onTap: () => Navigator.pop(ctx, t),
+                    );
+                  },
+                ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel))],
+      ),
+    );
+    if (chosen == null) return;
+    _showImportDialog(
+      title: '${isEnglish ? 'Create from Template' : 'สร้างงบจากแม่แบบ'}: ${tr(chosen, 'name')}',
+      templateId: chosen['id'],
+      code: chosen['report_code'] ?? '',
+      nameThai: (chosen['name_thai'] ?? '').toString().replaceAll(RegExp(r'\s*\(.*\)$'), ''),
+      nameEng: (chosen['name_eng'] ?? '').toString().replaceAll(RegExp(r'\s*\(.*\)$'), ''),
+    );
+  }
+
+  /// ตั้งรหัส/ชื่องบใหม่ก่อนสร้าง (รหัสงบต้องไม่ซ้ำ)
+  void _showImportDialog({
+    required String title,
+    Map<String, dynamic>? data,
+    String? templateId,
+    required String code,
+    required String nameThai,
+    required String nameEng,
+  }) {
+    final isEnglish = _isEnglish;
+    final l = AppL10n(isEnglish);
+    final codeCtrl = TextEditingController(text: code);
+    final nameThCtrl = TextEditingController(text: nameThai);
+    final nameEnCtrl = TextEditingController(text: nameEng);
+    bool busy = false;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 420,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: codeCtrl, decoration: InputDecoration(labelText: isEnglish ? 'New report code' : 'รหัสงบใหม่', border: const OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: nameThCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Report Name (Thai)' : 'ชื่องบการเงิน (ภาษาไทย)', border: const OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: nameEnCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Report Name (English)' : 'ชื่องบการเงิน (ภาษาอังกฤษ)', border: const OutlineInputBorder())),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: busy ? null : () => Navigator.pop(ctx), child: Text(l.cancel)),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900], foregroundColor: Colors.white),
+              onPressed: busy
+                  ? null
+                  : () async {
+                      if (codeCtrl.text.trim().isEmpty) {
+                        _showError(isEnglish ? 'Please enter a report code' : 'กรุณาระบุรหัสงบ');
+                        return;
+                      }
+                      setDlgState(() => busy = true);
+                      try {
+                        final result = await _service.importReport(
+                          data: data,
+                          templateId: templateId,
+                          reportCode: codeCtrl.text.trim(),
+                          reportNameThai: nameThCtrl.text.trim(),
+                          reportNameEng: nameEnCtrl.text.trim(),
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        await _afterImport(result);
+                      } on FinReportValidationException catch (e) {
+                        setDlgState(() => busy = false);
+                        _showError(switch (e.code) {
+                          'DUPLICATE_CODE' => isEnglish ? 'This report code already exists' : 'รหัสงบนี้มีอยู่แล้ว',
+                          'INVALID_FILE' => isEnglish ? 'The file content is invalid: ${e.message}' : 'ข้อมูลในไฟล์ไม่ถูกต้อง: ${e.message}',
+                          _ => e.localized(isEnglish),
+                        });
+                      } catch (e) {
+                        setDlgState(() => busy = false);
+                        _showError(isEnglish ? 'Import failed: $e' : 'นำเข้าไม่สำเร็จ: $e');
+                      }
+                    },
+              child: Text(isEnglish ? 'Create' : 'สร้างงบ'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// เปิดงบที่สร้างใหม่ แล้วแจ้งสิ่งที่ต้องทำต่อ (บรรทัดที่ยังไม่เลือกบัญชี, รหัสที่ไม่มีในฐานนี้)
+  Future<void> _afterImport(Map<String, dynamic> result) async {
+    final isEnglish = _isEnglish;
+    final report = Map<String, dynamic>.from(result['report']);
+    await _loadReports();
+    setState(() {
+      _selectedReport = report;
+      _rows = [];
+    });
+    await _loadRows(report['id']);
+    final warnings = (result['warnings'] as List?) ?? const [];
+    final emptyRows = (result['empty_account_rows'] as List?) ?? const [];
+    if (warnings.isEmpty && emptyRows.isEmpty) {
+      _showSuccess(isEnglish ? 'Report ${report['report_code']} created' : 'สร้างงบ ${report['report_code']} แล้ว');
+      return;
+    }
+    if (!mounted) return;
+    String warningText(Map w) {
+      final what = switch (w['code']) {
+        'BRANCH_NOT_FOUND' => isEnglish ? 'branch' : 'สาขา',
+        'DIM_NOT_FOUND' => isEnglish ? 'dimension' : 'มิติ',
+        _ => isEnglish ? 'header account' : 'หัวบัญชี',
+      };
+      return '${w['where']}: ${isEnglish ? 'no $what' : 'ไม่มี$what'} ${w['value']} ${isEnglish ? 'in this database (left empty)' : 'ในฐานข้อมูลนี้ (เว้นว่างไว้)'}';
+    }
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Report ${report['report_code']} created — next steps' : 'สร้างงบ ${report['report_code']} แล้ว — สิ่งที่ต้องทำต่อ'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              if (emptyRows.isNotEmpty) ...[
+                Text(isEnglish
+                    ? '${emptyRows.length} rows have no accounts yet — edit each row, or use "Check Chart Mapping" to see which accounts are not in the report:'
+                    : 'มี ${emptyRows.length} บรรทัดที่ยังไม่ได้เลือกบัญชี — แก้ไขทีละบรรทัด หรือกด "ตรวจผังบัญชี" เพื่อดูว่าบัญชีใดยังไม่อยู่ในงบ:'),
+                const SizedBox(height: 4),
+                Text(emptyRows.join(', '), style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                const SizedBox(height: 12),
+              ],
+              ...warnings.map((w) => Text('• ${warningText(w as Map)}', style: TextStyle(fontSize: 13, color: Colors.orange[900]))),
+            ]),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(AppL10n(isEnglish).close))],
       ),
     );
   }
@@ -1720,6 +2108,24 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.deepOrange[900]),
                   onPressed: () => _showReportDialog(),
                 ),
+              if (_canCreate)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white),
+                  tooltip: isEnglish ? 'More ways to create' : 'สร้างงบแบบอื่น',
+                  onSelected: (v) => v == 'template' ? _showTemplatePicker() : _importFromFile(),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(value: 'template', child: ListTile(
+                      leading: const Icon(Icons.article_outlined),
+                      title: Text(isEnglish ? 'Create from template…' : 'สร้างจากแม่แบบ…'),
+                      dense: true,
+                    )),
+                    PopupMenuItem(value: 'import', child: ListTile(
+                      leading: const Icon(Icons.upload_file),
+                      title: Text(isEnglish ? 'Import from JSON file…' : 'นำเข้าจากไฟล์ JSON…'),
+                      dense: true,
+                    )),
+                  ],
+                ),
             ],
           ),
         ),
@@ -1754,6 +2160,11 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                                   tooltip: l.edit,
                                   onPressed: () => _showReportDialog(r),
                                 ),
+                              IconButton(
+                                icon: const Icon(Icons.download, size: 18),
+                                tooltip: isEnglish ? 'Export JSON (to copy to another database)' : 'ส่งออก JSON (ไปใช้ในฐานข้อมูลอื่น)',
+                                onPressed: () => _exportReport(r),
+                              ),
                               IconButton(
                                 icon: Icon(Icons.design_services, size: 18, color: Colors.deepOrange[900]),
                                 tooltip: isEnglish ? 'Design' : 'ออกแบบ',
@@ -1802,6 +2213,15 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                 ),
               ),
               OutlinedButton.icon(
+                icon: Icon(_showPreview ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+                label: Text(_showPreview
+                    ? (isEnglish ? 'Hide Preview' : 'ซ่อนตัวอย่าง')
+                    : (isEnglish ? 'Preview' : 'ตัวอย่างงบ')),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white70)),
+                onPressed: _togglePreview,
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
                 icon: const Icon(Icons.fact_check_outlined, size: 18),
                 label: Text(isEnglish ? 'Check Chart Mapping' : 'ตรวจผังบัญชี'),
                 style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white70)),
@@ -1820,23 +2240,59 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
         ),
         _buildReportColsBar(),
         Expanded(
-          child: _isLoadingRows
-              ? const Center(child: CircularProgressIndicator())
-              : _rows.isEmpty
-                  ? Center(child: Text(isEnglish ? 'No rows yet — click "Add Row" to start' : 'ยังไม่มีบรรทัด กดปุ่ม "เพิ่มบรรทัด" เพื่อเริ่ม', style: const TextStyle(color: Colors.grey)))
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: _rows.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 4),
-                      itemBuilder: (ctx, i) => _buildRowItem(_rows[i]),
-                    ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 5, child: _buildRowsList(isEnglish)),
+              if (_showPreview) Expanded(flex: 4, child: _buildPreviewPanel()),
+            ],
+          ),
         ),
       ],
     );
   }
 
+  Widget _buildRowsList(bool isEnglish) {
+    return _isLoadingRows
+              ? const Center(child: CircularProgressIndicator())
+              : _rows.isEmpty
+                  ? Center(child: Text(isEnglish ? 'No rows yet — click "Add Row" to start' : 'ยังไม่มีบรรทัด กดปุ่ม "เพิ่มบรรทัด" เพื่อเริ่ม', style: const TextStyle(color: Colors.grey)))
+                  : ReorderableListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      buildDefaultDragHandles: false,
+                      itemCount: _rows.length,
+                      onReorder: _onReorderRows,
+                      itemBuilder: (ctx, i) => Padding(
+                        key: ValueKey(_rows[i]['id']),
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: _buildRowItem(_rows[i], i),
+                      ),
+                    );
+  }
+
+  /// ลากวางบรรทัด → backend ตั้งเลขบรรทัดใหม่ 10, 20, 30, ... และแก้ (Rn, Cm) ในสูตรให้ตรง
+  Future<void> _onReorderRows(int oldIndex, int newIndex) async {
+    final isEnglish = _isEnglish;
+    if (newIndex > oldIndex) newIndex--;
+    if (newIndex == oldIndex) return;
+    final reordered = List<Map<String, dynamic>>.from(_rows);
+    reordered.insert(newIndex, reordered.removeAt(oldIndex));
+    setState(() => _rows = reordered);
+    try {
+      final result = await _service.reorderRows(
+          _selectedReport!['id'], reordered.map((r) => r['id'] as int).toList());
+      final int fixed = result['formulas_updated'] ?? 0;
+      _showSuccess(isEnglish
+          ? 'Rows renumbered${fixed > 0 ? ' — $fixed formula(s) updated to the new row numbers' : ''}'
+          : 'เรียงบรรทัดใหม่แล้ว${fixed > 0 ? ' — แก้เลขบรรทัดในสูตร $fixed สูตร' : ''}');
+    } catch (e) {
+      _showError(isEnglish ? 'Reorder failed: $e' : 'เรียงบรรทัดไม่สำเร็จ: $e');
+    }
+    await _loadRows(_selectedReport!['id']);
+  }
+
   // ===== ROW ITEM =====
-  Widget _buildRowItem(Map<String, dynamic> row) {
+  Widget _buildRowItem(Map<String, dynamic> row, int index) {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     final l = AppL10n(isEnglish);
     final List<dynamic> columns = row['columns'] ?? [];
@@ -1862,6 +2318,17 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         child: Row(
           children: [
+            if (_canEdit)
+              ReorderableDragStartListener(
+                index: index,
+                child: Tooltip(
+                  message: isEnglish ? 'Drag to reorder' : 'ลากเพื่อย้ายบรรทัด',
+                  child: const MouseRegion(
+                    cursor: SystemMouseCursors.grab,
+                    child: Icon(Icons.drag_indicator, size: 20, color: Colors.grey),
+                  ),
+                ),
+              ),
             // ปุ่มลบบรรทัด
             if (_canDelete)
               IconButton(
