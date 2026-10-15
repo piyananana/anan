@@ -238,11 +238,12 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
   }
 
   // ===== ROW DIALOG =====
-  Future<Account?> _pickAccountInDialog(BuildContext ctx, Account? current) async {
+  /// [headersOnly] = เลือกหัวบัญชี (ใช้เฉพาะเงื่อนไข "ทั้งกลุ่มใต้หัวบัญชี") — ปกติแสดงเฉพาะบัญชีลงรายการได้
+  Future<Account?> _pickAccountInDialog(BuildContext ctx, Account? current, {bool headersOnly = false}) async {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     final l = AppL10n(isEnglish);
     final searchCtrl = TextEditingController();
-    final postable = _accounts.where((a) => a.isActive && a.isNormalAccount).toList();
+    final postable = _accounts.where((a) => a.isActive && a.isNormalAccount != headersOnly).toList();
     List<Account> filtered = List.from(postable);
     Account? picked;
 
@@ -266,7 +267,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
         }
 
         return AlertDialog(
-          title: Text(isEnglish ? 'Select Account Code' : 'เลือกรหัสบัญชี'),
+          title: Text(headersOnly
+              ? (isEnglish ? 'Select Header Account' : 'เลือกหัวบัญชี')
+              : (isEnglish ? 'Select Account Code' : 'เลือกรหัสบัญชี')),
           content: SizedBox(
             width: 520,
             height: 420,
@@ -405,6 +408,358 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     );
   }
 
+  // ===== ACCOUNT SELECTIONS (gl_fin_report_row_acct) =====
+  static const _acctSelTypes = ['RANGE', 'UNDER_HEADER', 'ACCOUNT_TYPE'];
+
+  String _acctSelTypeLabel(String type, bool isEnglish) {
+    switch (type) {
+      case 'UNDER_HEADER':
+        return isEnglish ? 'Accounts under header' : 'ทั้งกลุ่มใต้หัวบัญชี';
+      case 'ACCOUNT_TYPE':
+        return isEnglish ? 'Account type' : 'ประเภทบัญชี';
+      default:
+        return isEnglish ? 'Account range' : 'ช่วงบัญชี';
+    }
+  }
+
+  String _accountDisplay(String? code, bool isEnglish) {
+    if (code == null || code.isEmpty) return '';
+    final a = _accounts.where((x) => x.accountCode == code).firstOrNull;
+    if (a == null) return code;
+    return '$code — ${isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai}';
+  }
+
+  /// สรุปเงื่อนไขสั้นๆ เช่น "4100..4199", "ใต้ 41", "ยกเว้น 4102..4102"
+  String _acctSelSummary(Map<String, dynamic> s, bool isEnglish) {
+    final prefix = s['is_exclude'] == true ? (isEnglish ? 'except ' : 'ยกเว้น ') : '';
+    switch (s['sel_type']) {
+      case 'UNDER_HEADER':
+        return '$prefix${isEnglish ? 'under' : 'ใต้'} ${s['header_account_code']}';
+      case 'ACCOUNT_TYPE':
+        return '$prefix${accountTypeLabel(s['account_type'] ?? '', isEnglish)}';
+      default:
+        return '$prefix${s['account_from']}..${s['account_to']}';
+    }
+  }
+
+  /// เงื่อนไขของบรรทัด — บรรทัดเก่าที่ยังไม่มีในตารางใหม่ ใช้ช่วงเดิม account_from/account_to
+  List<Map<String, dynamic>> _rowAcctSels(Map<String, dynamic>? row) {
+    final list = [for (final a in (row?['accounts'] as List? ?? const [])) Map<String, dynamic>.from(a)];
+    final String from = row?['account_from'] ?? '';
+    final String to = row?['account_to'] ?? '';
+    if (list.isEmpty && from.isNotEmpty && to.isNotEmpty) {
+      list.add({'sel_type': 'RANGE', 'is_exclude': false, 'account_from': from, 'account_to': to});
+    }
+    return list;
+  }
+
+  /// บัญชีลงรายการที่ตรงเงื่อนไข (ตรรกะเดียวกับ backend utils/finReportAccounts.js)
+  Set<String> _resolveAcctCodes(List<Map<String, dynamic>> sels) {
+    final childrenOf = <int, List<Account>>{};
+    for (final a in _accounts) {
+      if (a.parentId != null) childrenOf.putIfAbsent(a.parentId!, () => []).add(a);
+    }
+    Set<String> match(Map<String, dynamic> s) {
+      switch (s['sel_type']) {
+        case 'UNDER_HEADER':
+          final root = _accounts.where((a) => a.accountCode == s['header_account_code']).firstOrNull;
+          final out = <String>{};
+          final stack = [if (root != null) root];
+          final seen = <int>{};
+          while (stack.isNotEmpty) {
+            final a = stack.removeLast();
+            if (!seen.add(a.id)) continue;
+            out.add(a.accountCode);
+            stack.addAll(childrenOf[a.id] ?? const []);
+          }
+          return out;
+        case 'ACCOUNT_TYPE':
+          return _accounts.where((a) => a.accountType == s['account_type']).map((a) => a.accountCode).toSet();
+        default:
+          final String from = s['account_from'] ?? '';
+          final String to = s['account_to'] ?? '';
+          if (from.isEmpty || to.isEmpty) return {};
+          // account_to รวมบัญชีลูกที่ขึ้นต้นด้วยรหัสนั้นด้วย
+          return _accounts
+              .where((a) => a.accountCode.compareTo(from) >= 0 &&
+                  (a.accountCode.compareTo(to) <= 0 || a.accountCode.startsWith(to)))
+              .map((a) => a.accountCode)
+              .toSet();
+      }
+    }
+
+    final out = <String>{
+      for (final s in sels.where((s) => s['is_exclude'] != true)) ...match(s),
+    };
+    for (final s in sels.where((s) => s['is_exclude'] == true)) {
+      out.removeAll(match(s));
+    }
+    final posting = _accounts.where((a) => a.isNormalAccount).map((a) => a.accountCode).toSet();
+    return out.intersection(posting);
+  }
+
+  Widget _acctPickField(BuildContext ctx, {
+    required String label,
+    required String? code,
+    required bool isEnglish,
+    required ValueChanged<String?> onChanged,
+    bool headersOnly = false,
+  }) {
+    final hasCode = code != null && code.isNotEmpty;
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        isDense: true,
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      ),
+      child: Row(children: [
+        Expanded(
+          child: Text(
+            hasCode ? _accountDisplay(code, isEnglish) : (isEnglish ? '— Select —' : '— เลือก —'),
+            style: TextStyle(fontSize: 13, fontWeight: hasCode ? FontWeight.bold : FontWeight.normal, color: hasCode ? null : Colors.grey),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        IconButton(
+          icon: Icon(Icons.search, color: Colors.deepOrange[900], size: 18),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          onPressed: () async {
+            final current = _accounts.where((a) => a.accountCode == code).firstOrNull;
+            final picked = await _pickAccountInDialog(ctx, current, headersOnly: headersOnly);
+            if (picked != null) onChanged(picked.accountCode);
+          },
+        ),
+      ]),
+    );
+  }
+
+  Widget _acctSelLine(BuildContext ctx, List<Map<String, dynamic>> sels, int i, bool isEnglish, VoidCallback refresh) {
+    final s = sels[i];
+    final String type = s['sel_type'] ?? 'RANGE';
+    final bool exclude = s['is_exclude'] == true;
+    Widget body;
+    if (type == 'UNDER_HEADER') {
+      body = _acctPickField(ctx,
+          label: isEnglish ? 'Header account (includes all accounts under it)' : 'หัวบัญชี (รวมทุกบัญชีที่อยู่ใต้หัวนี้)',
+          code: s['header_account_code'],
+          isEnglish: isEnglish,
+          headersOnly: true,
+          onChanged: (c) { s['header_account_code'] = c; refresh(); });
+    } else if (type == 'ACCOUNT_TYPE') {
+      body = DropdownButtonFormField<String>(
+        isExpanded: true,
+        isDense: true,
+        value: s['account_type'],
+        decoration: InputDecoration(
+          labelText: _acctSelTypeLabel(type, isEnglish),
+          isDense: true,
+          border: const OutlineInputBorder(),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        ),
+        items: accountTypeOptions.keys
+            .map((k) => DropdownMenuItem(value: k, child: Text(accountTypeLabel(k, isEnglish), style: const TextStyle(fontSize: 13))))
+            .toList(),
+        onChanged: (v) { s['account_type'] = v; refresh(); },
+      );
+    } else {
+      body = Row(children: [
+        Expanded(child: _acctPickField(ctx, label: isEnglish ? 'From' : 'ตั้งแต่', code: s['account_from'], isEnglish: isEnglish,
+            onChanged: (c) { s['account_from'] = c; if ((s['account_to'] ?? '').isEmpty) s['account_to'] = c; refresh(); })),
+        const SizedBox(width: 6),
+        Expanded(child: _acctPickField(ctx, label: isEnglish ? 'To' : 'ถึง', code: s['account_to'], isEnglish: isEnglish,
+            onChanged: (c) { s['account_to'] = c; refresh(); })),
+      ]);
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: exclude ? Colors.red[50] : Colors.green[50],
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: exclude ? Colors.red[200]! : Colors.green[200]!),
+      ),
+      child: Row(children: [
+        Tooltip(
+          message: isEnglish ? 'Click to switch include / exclude' : 'คลิกเพื่อสลับ รวม / ยกเว้น',
+          child: InkWell(
+            onTap: () { s['is_exclude'] = !exclude; refresh(); },
+            child: Container(
+              width: 56,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: exclude ? Colors.red[700] : Colors.green[700],
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                exclude ? (isEnglish ? 'Except' : 'ยกเว้น') : (isEnglish ? 'Include' : 'รวม'),
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(child: body),
+        IconButton(
+          icon: const Icon(Icons.close, color: Colors.red, size: 18),
+          tooltip: isEnglish ? 'Remove condition' : 'ลบเงื่อนไข',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 28),
+          onPressed: () { sels.removeAt(i); refresh(); },
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildAcctSelEditor(BuildContext ctx, List<Map<String, dynamic>> sels, bool isEnglish, VoidCallback refresh) {
+    final matched = _resolveAcctCodes(sels);
+    final hasInclude = sels.any((s) => s['is_exclude'] != true);
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: isEnglish ? 'Accounts in this row' : 'บัญชีในบรรทัดนี้',
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.fromLTRB(8, 14, 8, 8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (int i = 0; i < sels.length; i++) _acctSelLine(ctx, sels, i, isEnglish, refresh),
+          Wrap(spacing: 4, children: [
+            for (final t in _acctSelTypes)
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(_acctSelTypeLabel(t, isEnglish), style: const TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(foregroundColor: Colors.deepOrange[900], visualDensity: VisualDensity.compact),
+                onPressed: () {
+                  sels.add({'sel_type': t, 'is_exclude': false, if (t == 'ACCOUNT_TYPE') 'account_type': 'ASSET'});
+                  refresh();
+                },
+              ),
+          ]),
+          Text(
+            !hasInclude
+                ? (isEnglish ? 'Add at least one include condition — exclusions are subtracted from it' : 'เพิ่มเงื่อนไข "รวม" อย่างน้อย 1 เงื่อนไข — เงื่อนไข "ยกเว้น" จะหักออกจากบัญชีที่รวมไว้')
+                : (isEnglish ? '${matched.length} posting accounts selected' : 'ได้บัญชีลงรายการ ${matched.length} บัญชี'),
+            style: TextStyle(fontSize: 12, color: hasInclude && matched.isNotEmpty ? Colors.grey[700] : Colors.red[700]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===== CHECK CHART MAPPING =====
+  /// บัญชีลงรายการที่ไม่อยู่ในบรรทัดใด (ยอดหายจากงบ) และที่อยู่หลายบรรทัด (ยอดนับซ้ำ)
+  Future<void> _showAccountMappingDialog() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+    final reportId = _selectedReport!['id'] as int;
+    List<Map<String, dynamic>> mapping;
+    try {
+      mapping = await _service.fetchAccountMapping(reportId);
+    } catch (e) {
+      _showError(isEnglish ? 'Check failed: $e' : 'ตรวจไม่สำเร็จ: $e');
+      return;
+    }
+    if (!mounted) return;
+    List rowsOf(Map<String, dynamic> a) => a['rows'] as List? ?? const [];
+    // เริ่มจากประเภทบัญชีที่รายงานนี้ใช้อยู่ (งบฐานะการเงินไม่ต้องเห็นรายได้/ค่าใช้จ่ายที่ไม่ได้ใส่)
+    final usedTypes = mapping.where((a) => rowsOf(a).isNotEmpty).map((a) => a['account_type'] as String).toSet();
+    final types = usedTypes.isEmpty ? accountTypeOptions.keys.toSet() : usedTypes;
+
+    String nameOf(Map<String, dynamic> a) {
+      final String en = a['account_name_eng'] ?? '';
+      return isEnglish && en.isNotEmpty ? en : (a['account_name_thai'] ?? '');
+    }
+
+    String rowRef(Map r) {
+      final label = _rowLabelOf(Map<String, dynamic>.from(r), isEnglish);
+      return '${r['row_code'] ?? 'R${r['row_seq_no']}'}${label.isEmpty ? '' : ' $label'}';
+    }
+
+    Widget accountTile(Map<String, dynamic> a, {bool showRows = false}) {
+      final rows = rowsOf(a);
+      final dimNote = rows.any((r) => r['has_dims'] == true);
+      return ListTile(
+        dense: true,
+        title: Row(children: [
+          SizedBox(width: 90, child: Text(a['account_code'], style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange[900]))),
+          Expanded(child: Text(nameOf(a), overflow: TextOverflow.ellipsis)),
+          Text(accountTypeLabel(a['account_type'] ?? '', isEnglish), style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        ]),
+        subtitle: showRows
+            ? Text(
+                '${rows.map((r) => rowRef(r)).join('  |  ')}'
+                '${dimNote ? (isEnglish ? '\n(some rows filter by dimension — may be split on purpose)' : '\n(มีบรรทัดที่กรองมิติ — อาจตั้งใจแยกตามมิติ)') : ''}',
+                style: TextStyle(fontSize: 12, color: dimNote ? Colors.blueGrey : Colors.red[700]),
+              )
+            : null,
+      );
+    }
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        final shown = mapping.where((a) => types.contains(a['account_type'])).toList();
+        final unmapped = shown.where((a) => rowsOf(a).isEmpty).toList();
+        final multi = shown.where((a) => rowsOf(a).length > 1).toList();
+        Widget list(List<Map<String, dynamic>> items, String emptyText, {bool showRows = false}) => items.isEmpty
+            ? Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.check_circle, color: Colors.green[700]),
+                const SizedBox(width: 6),
+                Text(emptyText),
+              ]))
+            : ListView.separated(
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) => accountTile(items[i], showRows: showRows),
+              );
+        return AlertDialog(
+          title: Text(isEnglish ? 'Check Chart Mapping' : 'ตรวจผังบัญชีกับงบ'),
+          content: SizedBox(
+            width: 680,
+            height: 480,
+            child: DefaultTabController(
+              length: 2,
+              child: Column(children: [
+                Wrap(spacing: 6, children: [
+                  for (final t in accountTypeOptions.keys)
+                    FilterChip(
+                      label: Text(accountTypeLabel(t, isEnglish)),
+                      selected: types.contains(t),
+                      onSelected: (v) => setDlgState(() => v ? types.add(t) : types.remove(t)),
+                    ),
+                ]),
+                TabBar(
+                  labelColor: Colors.deepOrange[900],
+                  indicatorColor: Colors.deepOrange[900],
+                  tabs: [
+                    Tab(text: '${isEnglish ? 'Not in any row' : 'ไม่อยู่ในบรรทัดใด'} (${unmapped.length})'),
+                    Tab(text: '${isEnglish ? 'In more than one row' : 'อยู่หลายบรรทัด'} (${multi.length})'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(children: [
+                    list(unmapped, isEnglish ? 'Every account is in the report' : 'ทุกบัญชีอยู่ในงบแล้ว'),
+                    list(multi, isEnglish ? 'No account is counted twice' : 'ไม่มีบัญชีที่นับซ้ำ', showRows: true),
+                  ]),
+                ),
+                Text(
+                  isEnglish
+                      ? 'Active posting accounts only. Balances of accounts not in any row are missing from the report; accounts in several rows are counted more than once.'
+                      : 'ตรวจเฉพาะบัญชีลงรายการที่ใช้งาน — บัญชีที่ไม่อยู่ในบรรทัดใด ยอดจะหายจากงบ ส่วนบัญชีที่อยู่หลายบรรทัด ยอดจะถูกนับซ้ำ',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ]),
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.close))],
+        );
+      }),
+    );
+  }
+
   void _showRowDialog([Map<String, dynamic>? row]) {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     final l = AppL10n(isEnglish);
@@ -434,16 +789,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
         .join('  ');
     String rowType = row?['row_type'] ?? 'BODY';
     String printControl = row?['print_control'] ?? 'SHOW';
-    final String? initAccFrom = row?['account_from'];
-    final String? initAccTo = row?['account_to'];
-    Account? dlgAccFrom = initAccFrom != null
-        ? _accounts.cast<Account?>().firstWhere(
-            (a) => a?.accountCode == initAccFrom, orElse: () => null)
-        : null;
-    Account? dlgAccTo = initAccTo != null
-        ? _accounts.cast<Account?>().firstWhere(
-            (a) => a?.accountCode == initAccTo, orElse: () => null)
-        : null;
+    // เงื่อนไขเลือกบัญชี (หลายช่วง/ยกเว้น/ใต้หัวบัญชี/ประเภทบัญชี) บันทึกพร้อมบรรทัด
+    final List<Map<String, dynamic>> acctSels = _rowAcctSels(row);
     String normalSign = row?['normal_sign'] ?? 'DEBIT';
     // Branch filter (ป้อน id ตรงๆ ยังคงไว้ก่อน เพราะ branch มักไม่ได้ filter ใน report)
     final branchCtrl = TextEditingController(
@@ -467,7 +814,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
               ? (isEnglish ? 'Edit Row' : 'แก้ไขบรรทัด')
               : (isEnglish ? 'Add New Row' : 'เพิ่มบรรทัดใหม่')),
           content: SizedBox(
-            width: 480,
+            width: 560,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -577,77 +924,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   ),
                   if (rowKind == 'ACCOUNTS') ...[
                   const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(
-                      child: InputDecorator(
-                        decoration: InputDecoration(
-                          labelText: isEnglish ? 'Start Account (account_from)' : 'รหัสบัญชีต้น (account_from)',
-                          border: const OutlineInputBorder(),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                        child: Row(children: [
-                          Expanded(
-                            child: dlgAccFrom != null
-                                ? Text('${dlgAccFrom!.accountCode} — ${isEnglish && dlgAccFrom!.accountNameEng.isNotEmpty ? dlgAccFrom!.accountNameEng : dlgAccFrom!.accountNameThai}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold))
-                                : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                                    style: const TextStyle(color: Colors.grey)),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.search, color: Colors.deepOrange[900]),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: () async {
-                              final picked = await _pickAccountInDialog(ctx, dlgAccFrom);
-                              if (picked != null) setDialogState(() => dlgAccFrom = picked);
-                            },
-                          ),
-                          if (dlgAccFrom != null)
-                            IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              onPressed: () => setDialogState(() => dlgAccFrom = null),
-                            ),
-                        ]),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: InputDecorator(
-                        decoration: InputDecoration(
-                          labelText: isEnglish ? 'End Account (account_to)' : 'รหัสบัญชีปลาย (account_to)',
-                          border: const OutlineInputBorder(),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                        child: Row(children: [
-                          Expanded(
-                            child: dlgAccTo != null
-                                ? Text('${dlgAccTo!.accountCode} — ${isEnglish && dlgAccTo!.accountNameEng.isNotEmpty ? dlgAccTo!.accountNameEng : dlgAccTo!.accountNameThai}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold))
-                                : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                                    style: const TextStyle(color: Colors.grey)),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.search, color: Colors.deepOrange[900]),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: () async {
-                              final picked = await _pickAccountInDialog(ctx, dlgAccTo);
-                              if (picked != null) setDialogState(() => dlgAccTo = picked);
-                            },
-                          ),
-                          if (dlgAccTo != null)
-                            IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              onPressed: () => setDialogState(() => dlgAccTo = null),
-                            ),
-                        ]),
-                      ),
-                    ),
-                  ]),
+                  _buildAcctSelEditor(ctx, acctSels, isEnglish, () => setDialogState(() {})),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
@@ -733,9 +1010,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   'line_below': lineBelow,
                   'row_type': rowType,
                   'print_control': printControl,
-                  // ช่วงบัญชี/Dimension ใช้เฉพาะบรรทัด ACCOUNTS
-                  'account_from': rowKind == 'ACCOUNTS' ? dlgAccFrom?.accountCode : null,
-                  'account_to': rowKind == 'ACCOUNTS' ? dlgAccTo?.accountCode : null,
+                  // เงื่อนไขบัญชี/Dimension ใช้เฉพาะบรรทัด ACCOUNTS (backend ล้างช่วงเดิม account_from/to ให้)
+                  'accounts': rowKind == 'ACCOUNTS' ? acctSels : const [],
                   'normal_sign': normalSign,
                   'branch_id': int.tryParse(branchCtrl.text.trim()),
                   for (final t in _dimTypes)
@@ -1525,6 +1801,13 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.fact_check_outlined, size: 18),
+                label: Text(isEnglish ? 'Check Chart Mapping' : 'ตรวจผังบัญชี'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white70)),
+                onPressed: _showAccountMappingDialog,
+              ),
+              const SizedBox(width: 8),
               if (_canCreate)
                 ElevatedButton.icon(
                   icon: const Icon(Icons.add, size: 18),
@@ -1648,6 +1931,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                 if (row['parent_row_code'] != null) '${isEnglish ? 'Added into' : 'รวมเข้า'} ${row['parent_row_code']}',
                 if (rowKind == 'FORMULA' && row['row_formula'] != null) '= ${row['row_formula']}',
                 if (row['print_control'] == 'HIDE') isEnglish ? 'Hidden (helper row)' : 'ซ่อน (บรรทัดช่วยคำนวณ)',
+                if (rowKind == 'ACCOUNTS')
+                  '${isEnglish ? 'Accounts' : 'บัญชี'}: ${_rowAcctSels(row).map((s) => _acctSelSummary(s, isEnglish)).join(', ')}',
               ].join('\n'),
               child: SizedBox(
                 width: 96,
@@ -1741,7 +2026,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     final overrideSeqs = rowCols.map((c) => c['column_seq_no']).toSet();
     final reportColSeqs = _reportCols.map((rc) => rc['col_seq_no']).toSet();
     final String rowKind = row['row_kind'] ?? 'ACCOUNTS';
-    final bool hasAccounts = rowKind == 'ACCOUNTS' && row['account_from'] != null && row['account_to'] != null;
+    final bool hasAccounts = rowKind == 'ACCOUNTS' && _rowAcctSels(row).any((s) => s['is_exclude'] != true);
     final bool hasAmounts = hasAccounts || rowKind == 'TOTAL' || rowKind == 'FORMULA';
     final bool hasOverride = _reportCols.any((rc) => rc['col_kind'] != 'LABEL' && overrideSeqs.contains(rc['col_seq_no']));
     final String rowLabel = rowKind == 'BLANK' ? '' : _rowLabelOf(row, isEnglish);

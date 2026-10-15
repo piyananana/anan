@@ -69,6 +69,14 @@ class FinancialReportBuilderService {
     throw Exception('Failed to delete row');
   }
 
+  /// ตรวจผังบัญชี: บัญชีลงรายการแต่ละบัญชีอยู่ในบรรทัด ACCOUNTS ใดบ้าง (rows ว่าง = ไม่อยู่ในงบ, >1 = นับซ้ำ)
+  Future<List<Map<String, dynamic>>> fetchAccountMapping(int reportId) async {
+    final headers = await authService.getAuthHeader();
+    final res = await http.get(Uri.parse('$baseUrl/gl_fin_report/$reportId/account_mapping'), headers: headers);
+    if (res.statusCode == 200) return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+    throw Exception('Failed to load account mapping');
+  }
+
   // --- gl_fin_report_column ---
 
   Future<Map<String, dynamic>> createColumn(Map<String, dynamic> data) async {
@@ -147,6 +155,7 @@ class FinancialReportBuilderService {
 
 /// ข้อมูลรายงานงบการเงินไม่ผ่านการตรวจที่ backend
 /// code: SYNTAX | UNKNOWN_REF | CIRCULAR | INVALID_CODE | INVALID_SEQ | INVALID_KIND | DUPLICATE_CODE | DUPLICATE_SEQ | REF_IN_USE
+///       | DUPLICATE_LABEL | CODE_REQUIRED | UNKNOWN_ACCOUNT | INVALID_RANGE
 class FinReportValidationException implements Exception {
   final String code;
   final String message;
@@ -187,12 +196,23 @@ class FinReportValidationException implements Exception {
         return isEnglish
             ? 'A TOTAL row needs a row code so other rows can be added into it'
             : 'บรรทัดยอดรวม (TOTAL) ต้องมีรหัสบรรทัด เพื่อให้บรรทัดอื่นเลือกรวมเข้ามาได้';
+      case 'UNKNOWN_ACCOUNT':
+        return isEnglish
+            ? 'Account condition ${_line()}: account ${detail['account_code']} not found'
+            : 'เงื่อนไขบัญชี${_line()}: ไม่พบบัญชี ${detail['account_code']}';
+      case 'INVALID_RANGE':
+        return isEnglish
+            ? 'Account condition ${_line()}: select both From and To, with From not after To'
+            : 'เงื่อนไขบัญชี${_line()}: ต้องเลือกทั้ง "ตั้งแต่" และ "ถึง" และ "ตั้งแต่" ต้องไม่มากกว่า "ถึง"';
       case 'REF_IN_USE':
         return isEnglish ? '$ref is used by $usages' : '$ref ถูกใช้อยู่ใน $usages';
       default:
         return isEnglish ? 'Invalid formula: $message' : 'สูตรคำนวณไม่ถูกต้อง: $message';
     }
   }
+
+  /// ลำดับเงื่อนไขบัญชีที่ผิด (detail.index เริ่ม 0) แสดงเป็น " #1"
+  String _line() => detail['index'] is int ? ' #${(detail['index'] as int) + 1}' : '';
 
   @override
   String toString() => message;
