@@ -42,10 +42,10 @@ class BankBranch {
         bankNameThai: json['bank_name_thai'],
         shortName: json['short_name'],
         createdAt: json['created_at'] != null
-            ? DateTime.parse(json['created_at'])
+            ? DateTime.parse(json['created_at']).toLocal()
             : null,
         updatedAt: json['updated_at'] != null
-            ? DateTime.parse(json['updated_at'])
+            ? DateTime.parse(json['updated_at']).toLocal()
             : null,
         createdBy: json['created_by']?.toString(),
         updatedBy: json['updated_by']?.toString(),

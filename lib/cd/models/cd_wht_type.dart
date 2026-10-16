@@ -59,8 +59,8 @@ class CdWhtType {
       isActive:       j['is_active'] as bool? ?? true,
       effectiveDate:  j['effective_date'] != null ? parseLocalDate(j['effective_date']) : null,
       endDate:        j['end_date'] != null ? parseLocalDate(j['end_date']) : null,
-      createdAt:      j['created_at'] != null ? DateTime.parse(j['created_at']) : null,
-      updatedAt:      j['updated_at'] != null ? DateTime.parse(j['updated_at']) : null,
+      createdAt:      j['created_at'] != null ? DateTime.parse(j['created_at']).toLocal() : null,
+      updatedAt:      j['updated_at'] != null ? DateTime.parse(j['updated_at']).toLocal() : null,
       createdBy:      j['created_by']?.toString(),
       updatedBy:      j['updated_by']?.toString(),
     );

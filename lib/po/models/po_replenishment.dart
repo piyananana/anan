@@ -1,4 +1,6 @@
 // lib/po/models/po_replenishment.dart — ใบแนะนำสั่งซื้อเพื่อเติมสต็อก (อ่านอย่างเดียว)
+import '../../utils/date_utils.dart';
+
 class ReplenishmentSuggestion {
   final int itemId;
   final String itemCode;
@@ -73,7 +75,7 @@ class ReplenishmentSuggestion {
       vendorCode: json['vendor_code'],
       vendorNameTh: json['vendor_name_th'],
       lastPrice: toDoubleN(json['last_price']),
-      lastPurchaseDate: json['last_purchase_date'] != null ? DateTime.tryParse(json['last_purchase_date'].toString()) : null,
+      lastPurchaseDate: parseLocalDateNullable(json['last_purchase_date']),
     );
   }
 }

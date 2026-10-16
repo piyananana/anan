@@ -1,4 +1,6 @@
 // lib/im/models/im_price_list.dart
+import '../../utils/date_utils.dart';
+
 
 const List<String> imPriceListTypes = ['SALES', 'PURCHASE'];
 
@@ -73,9 +75,9 @@ class ImPriceListDetail {
         minQty: double.tryParse(json['min_qty']?.toString() ?? '') ?? 0,
         unitPriceFc: double.tryParse(json['unit_price_fc']?.toString() ?? '') ?? 0,
         priceType: json['price_type'] ?? 'STANDARD',
-        effectiveFrom: json['effective_from'] != null ? DateTime.tryParse(json['effective_from']) : null,
-        effectiveTo: json['effective_to'] != null ? DateTime.tryParse(json['effective_to']) : null,
-        updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString()) : null,
+        effectiveFrom: parseLocalDateNullable(json['effective_from']),
+        effectiveTo: parseLocalDateNullable(json['effective_to']),
+        updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString())?.toLocal() : null,
         updatedBy: json['updated_by'],
       );
 
@@ -163,8 +165,8 @@ class ImItemPriceRow {
         uomNameEn: json['uom_name_en'],
         minQty: double.tryParse(json['min_qty']?.toString() ?? '') ?? 0,
         unitPriceFc: double.tryParse(json['unit_price_fc']?.toString() ?? '') ?? 0,
-        effectiveFrom: json['effective_from'] != null ? DateTime.tryParse(json['effective_from']) : null,
-        effectiveTo: json['effective_to'] != null ? DateTime.tryParse(json['effective_to']) : null,
+        effectiveFrom: parseLocalDateNullable(json['effective_from']),
+        effectiveTo: parseLocalDateNullable(json['effective_to']),
       );
 }
 

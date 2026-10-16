@@ -33,8 +33,8 @@ class ApPaymentRunRunning {
         formatSuffixDate: json['format_suffix_date'] ?? 'YYYYMM',
         runningLength: json['running_length'] ?? 4,
         nextRunningNumber: json['next_running_number'] ?? 1,
-        createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
-        updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
+        createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
+        updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']).toLocal() : null,
         createdBy: json['created_by']?.toString(),
         updatedBy: json['updated_by']?.toString(),
       );

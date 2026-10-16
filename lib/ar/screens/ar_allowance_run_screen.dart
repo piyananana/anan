@@ -6,6 +6,7 @@ import '../../sa/utils/sa_app_l10n.dart';
 import 'package:provider/provider.dart';
 import '../models/ar_year_end.dart';
 import '../services/ar_year_end_service.dart';
+import '../../utils/date_utils.dart';
 
 class ArAllowanceRunScreen extends StatefulWidget {
   const ArAllowanceRunScreen({super.key});
@@ -439,7 +440,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
         DataCell(Text(d['ref_doc_no']?.toString() ?? '',
             style: const TextStyle(fontSize: 12))),
         DataCell(Text(d['due_date'] != null
-            ? _dateFmt.format(DateTime.parse(d['due_date'].toString().substring(0, 10)))
+            ? _dateFmt.format(parseLocalDate(d['due_date']))
             : '-', style: const TextStyle(fontSize: 12))),
         DataCell(Text(d['age_days']?.toString() ?? '0',
             style: const TextStyle(fontSize: 12))),

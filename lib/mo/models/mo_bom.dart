@@ -1,5 +1,6 @@
 // lib/mo/models/mo_bom.dart — ย้ายมาจาก lib/im/models/im_bom.dart (BOM ย้ายจาก IM ไปอยู่ใต้โมดูล MO/สั่งผลิต
 // เพราะเป็น "สูตรการผลิต" ซึ่งเป็นแนวคิดของงานผลิตโดยตรง ไม่ใช่ของคลังสินค้า)
+import '../../utils/date_utils.dart';
 
 const List<String> moIssueMethods = ['BACKFLUSH', 'EXPLICIT'];
 String moIssueMethodLabel(String v, bool isEnglish) {
@@ -259,7 +260,7 @@ class MoBomHeader {
         outputUomNameTh: json['output_uom_name_th'],
         outputUomNameEn: json['output_uom_name_en'],
         isActive: json['is_active'] ?? true,
-        effectiveDate: json['effective_date'] != null ? DateTime.tryParse(json['effective_date']) : null,
+        effectiveDate: parseLocalDateNullable(json['effective_date']),
         componentCount: int.tryParse(json['component_count']?.toString() ?? '') ?? 0,
         outputCount: int.tryParse(json['output_count']?.toString() ?? '') ?? 0,
         operationCount: int.tryParse(json['operation_count']?.toString() ?? '') ?? 0,

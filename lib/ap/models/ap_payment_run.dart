@@ -33,7 +33,7 @@ class ApPaymentRunApproval {
         status: json['status'] ?? 'Pending',
         remarks: json['remarks'],
         approvedAt: json['approved_at'] != null
-            ? DateTime.parse(json['approved_at'])
+            ? DateTime.parse(json['approved_at']).toLocal()
             : null,
       );
 }

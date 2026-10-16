@@ -46,8 +46,8 @@ class Zipcode {
       lockedByUserId: json['locked_by_user_id'],
       createdByUserId: json['created_by_user_id'],
       updatedByUserId: json['updated_by_user_id'],
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']).toLocal() : null,
       lockedByUserName: json['locked_by_user_name'] ?? '',
     );
   }

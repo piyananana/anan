@@ -56,8 +56,8 @@ class User {
       lastName: json['last_name'] ?? json['lastName'],
       userType: json['user_type'] ?? json['userType'],
       status: json['status'] ?? json['status'] ?? 'active',
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']).toLocal() : null,
       email: json['email'],
       isMember: json['is_member'] ?? false,
     );

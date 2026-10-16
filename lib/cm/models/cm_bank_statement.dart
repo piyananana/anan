@@ -58,8 +58,8 @@ class CmBankStatement {
     status:              j['status'] as String? ?? 'Draft',
     fileName:            j['file_name'] as String?,
     notes:               j['notes'] as String?,
-    createdAt:           j['created_at'] != null ? DateTime.tryParse(j['created_at'].toString()) : null,
-    updatedAt:           j['updated_at'] != null ? DateTime.tryParse(j['updated_at'].toString()) : null,
+    createdAt:           j['created_at'] != null ? DateTime.tryParse(j['created_at'].toString())?.toLocal() : null,
+    updatedAt:           j['updated_at'] != null ? DateTime.tryParse(j['updated_at'].toString())?.toLocal() : null,
   );
 }
 

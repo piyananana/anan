@@ -56,8 +56,8 @@ class CmTransactionGlSetup {
     fxGainAccountId: j['fx_gain_account_id'] as int?, fxGainAccountCode: j['fx_gain_account_code'] as String?, fxGainAccountName: j['fx_gain_account_name'] as String?,
     fxLossAccountId: j['fx_loss_account_id'] as int?, fxLossAccountCode: j['fx_loss_account_code'] as String?, fxLossAccountName: j['fx_loss_account_name'] as String?,
     glDocId: j['gl_doc_id'] as int?, glDocCode: j['gl_doc_code'] as String?, glDocName: j['gl_doc_name'] as String?,
-    createdAt: j['created_at'] != null ? DateTime.parse(j['created_at']) : null,
-    updatedAt: j['updated_at'] != null ? DateTime.parse(j['updated_at']) : null,
+    createdAt: j['created_at'] != null ? DateTime.parse(j['created_at']).toLocal() : null,
+    updatedAt: j['updated_at'] != null ? DateTime.parse(j['updated_at']).toLocal() : null,
     createdBy: j['created_by']?.toString(),
     updatedBy: j['updated_by']?.toString(),
   );

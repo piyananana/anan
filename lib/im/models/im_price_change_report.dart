@@ -1,6 +1,7 @@
 // lib/im/models/im_price_change_report.dart
 // รายงานตรวจเช็คการเปลี่ยนแปลงราคา — หนึ่งแถว = หนึ่งบรรทัดสินค้าในธุรกรรมเปลี่ยนแปลงราคาหนึ่งใบ (เฉพาะที่
 // is_selected=true และธุรกรรมไม่ใช่ Void) ราคาเก่า/ใหม่เป็นค่าที่ snapshot ไว้ตอนสร้างธุรกรรม
+import '../../utils/date_utils.dart';
 
 const List<String> imPriceChangeReportStatuses = ['Draft', 'Pending', 'Approved'];
 String imPriceChangeReportStatusLabel(String status, bool isEnglish) {
@@ -100,9 +101,9 @@ class ImPriceChangeReportRow {
         changeNo: json['change_no'],
         changeStatus: json['change_status'] ?? 'Draft',
         changeType: json['change_type'] ?? 'REVISE',
-        effectiveFrom: json['effective_from'] != null ? DateTime.tryParse(json['effective_from']) : null,
-        effectiveTo: json['effective_to'] != null ? DateTime.tryParse(json['effective_to']) : null,
-        approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString()) : null,
+        effectiveFrom: parseLocalDateNullable(json['effective_from']),
+        effectiveTo: parseLocalDateNullable(json['effective_to']),
+        approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString())?.toLocal() : null,
         approvedBy: json['approved_by'],
         detailId: json['detail_id'] as int,
         itemId: json['item_id'] as int,

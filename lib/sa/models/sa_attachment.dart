@@ -32,6 +32,6 @@ class SaAttachment {
         fullUrl: json['full_url'] ?? '',
         fileSize: json['file_size'],
         mimeType: json['mime_type'],
-        createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+        createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString())?.toLocal() : null,
       );
 }

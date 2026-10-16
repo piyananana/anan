@@ -68,8 +68,8 @@ class ApVendorGroup {
         runningLength: json['running_length'] ?? 4,
         runningNextNumber: json['running_next_number'] ?? 1,
         isActive: json['is_active'] ?? true,
-        createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
-        updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
+        createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
+        updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']).toLocal() : null,
         createdBy: json['created_by']?.toString(),
         updatedBy: json['updated_by']?.toString(),
       );

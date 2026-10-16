@@ -193,8 +193,8 @@ class ImTransactionHeader {
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
-      updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString()) : null,
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString())?.toLocal() : null,
+      updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString())?.toLocal() : null,
       createdBy: json['created_by'],
       updatedBy: json['updated_by'],
     );

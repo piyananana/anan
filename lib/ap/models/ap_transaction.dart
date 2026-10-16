@@ -80,7 +80,7 @@ class ApTransactionApproval {
         status: json['status'] ?? 'Pending',
         remarks: json['remarks'],
         approvedAt: json['approved_at'] != null
-            ? DateTime.parse(json['approved_at'])
+            ? DateTime.parse(json['approved_at']).toLocal()
             : null,
       );
 }
@@ -250,8 +250,8 @@ class ApTransactionHeader {
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
       branchNameEng: json['branch_name_eng'],
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
-      updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString()) : null,
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString())?.toLocal() : null,
+      updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString())?.toLocal() : null,
       createdBy: json['created_by'],
       updatedBy: json['updated_by'],
     );

@@ -5,6 +5,7 @@
 // anan_backend/controllers/im/imGrBillingReportController.js for the exact response shape.
 // vendor_name_en is not returned by the backend (known bilingual gap — same pattern as other
 // AP/IM denormalized vendor name snapshots), so we fall back to vendor_name_th for both languages.
+import '../../utils/date_utils.dart';
 
 class ImGrBillingReportDoc {
   final int id;
@@ -38,7 +39,7 @@ class ImGrBillingReportDoc {
   factory ImGrBillingReportDoc.fromJson(Map<String, dynamic> json) => ImGrBillingReportDoc(
         id: json['id'] as int,
         docNo: json['doc_no'] ?? '',
-        docDate: DateTime.parse(json['doc_date'].toString()),
+        docDate: parseLocalDate(json['doc_date']),
         status: json['status'] ?? '',
         warehouseCode: json['warehouse_code'],
         warehouseNameTh: json['warehouse_name_th'],

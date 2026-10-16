@@ -7,6 +7,7 @@
 // AR/IM denormalized customer name snapshots), so we fall back to customer_name_th for both languages.
 // Unlike the GR billing report, there is no "variance" field here — unit_price is a single column,
 // edited in place before Post, so there's no separate before/after value preserved once posted.
+import '../../utils/date_utils.dart';
 
 class ImDlnBillingReportDoc {
   final int id;
@@ -40,7 +41,7 @@ class ImDlnBillingReportDoc {
   factory ImDlnBillingReportDoc.fromJson(Map<String, dynamic> json) => ImDlnBillingReportDoc(
         id: json['id'] as int,
         docNo: json['doc_no'] ?? '',
-        docDate: DateTime.parse(json['doc_date'].toString()),
+        docDate: parseLocalDate(json['doc_date']),
         status: json['status'] ?? '',
         warehouseCode: json['warehouse_code'],
         warehouseNameTh: json['warehouse_name_th'],

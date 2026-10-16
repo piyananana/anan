@@ -50,7 +50,7 @@ class BackupSchedule {
       progressPercent: (double.tryParse(json['progress_percent'].toString()) ?? 0.0),
       message: json['message'] as String?,
       lastBackupTime: json['last_backup_time'] != null
-          ? DateTime.parse(json['last_backup_time'])
+          ? DateTime.parse(json['last_backup_time']).toLocal()
           : null,
       dailyDaysOfWeek: json['daily_days_of_week'] != null
           ? (json['daily_days_of_week'] as String).split(',').map(int.parse).toList()

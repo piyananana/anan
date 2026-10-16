@@ -125,8 +125,8 @@ class CmPayment {
     clearingNote:      j['clearing_note'],
     glEntryId:         j['gl_entry_id'],
     remark:            j['remark'],
-    createdAt:         j['created_at'] != null ? DateTime.tryParse(j['created_at']) : null,
-    updatedAt:         j['updated_at'] != null ? DateTime.tryParse(j['updated_at']) : null,
+    createdAt:         j['created_at'] != null ? DateTime.tryParse(j['created_at'])?.toLocal() : null,
+    updatedAt:         j['updated_at'] != null ? DateTime.tryParse(j['updated_at'])?.toLocal() : null,
   );
 }
 

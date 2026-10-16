@@ -80,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _isLoading = false);
         final confirmToken     = responseData['confirmToken'] as String;
         final sessionStartedAt = responseData['sessionStartedAt'] != null
-            ? DateTime.tryParse(responseData['sessionStartedAt'].toString())
+            ? DateTime.tryParse(responseData['sessionStartedAt'].toString())?.toLocal()
             : null;
 
         final confirmed = await showDialog<bool>(

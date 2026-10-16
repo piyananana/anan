@@ -77,13 +77,13 @@ class ImStockCountHeader {
         printCount: json['print_count'] ?? 0,
         imTransactionId: json['im_transaction_id'],
         imTransactionDocNo: json['im_transaction_doc_no'],
-        createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
-        updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString()) : null,
+        createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString())?.toLocal() : null,
+        updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString())?.toLocal() : null,
         createdBy: json['created_by'],
         updatedBy: json['updated_by'],
-        approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString()) : null,
+        approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString())?.toLocal() : null,
         approvedBy: json['approved_by'],
-        closedAt: json['closed_at'] != null ? DateTime.tryParse(json['closed_at'].toString()) : null,
+        closedAt: json['closed_at'] != null ? DateTime.tryParse(json['closed_at'].toString())?.toLocal() : null,
         closedBy: json['closed_by'],
       );
 
@@ -176,7 +176,7 @@ class ImStockCountDetail {
       countedQty: toDoubleN(json['counted_qty']),
       unitCost: toDoubleN(json['unit_cost']),
       countedBy: json['counted_by'],
-      countedAt: json['counted_at'] != null ? DateTime.tryParse(json['counted_at'].toString()) : null,
+      countedAt: json['counted_at'] != null ? DateTime.tryParse(json['counted_at'].toString())?.toLocal() : null,
       remark: json['remark'],
     );
   }

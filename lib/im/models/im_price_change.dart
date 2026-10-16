@@ -1,6 +1,7 @@
 // lib/im/models/im_price_change.dart
 // ธุรกรรมเปลี่ยนแปลงราคา — พักรายการปรับราคาจำนวนมากไว้ตรวจสอบก่อนมีผลจริง
 // สถานะ: Draft (แก้ไขได้) -> Pending (ส่งขออนุมัติ) -> Approved (เขียนผลจริง) / กลับ Draft (ไม่อนุมัติ) / Void
+import '../../utils/date_utils.dart';
 
 const List<String> imPriceChangeTypes = ['REVISE', 'PROMOTION'];
 String imPriceChangeTypeLabel(String type, bool isEnglish) {
@@ -227,14 +228,14 @@ class ImPriceChangeHeader {
         adjustmentDirection: json['adjustment_direction'] ?? 'INCREASE',
         adjustmentValue: double.tryParse(json['adjustment_value']?.toString() ?? '') ?? 0,
         roundingStep: double.tryParse(json['rounding_step']?.toString() ?? '') ?? 0,
-        effectiveFrom: json['effective_from'] != null ? DateTime.tryParse(json['effective_from']) : null,
-        effectiveTo: json['effective_to'] != null ? DateTime.tryParse(json['effective_to']) : null,
+        effectiveFrom: parseLocalDateNullable(json['effective_from']),
+        effectiveTo: parseLocalDateNullable(json['effective_to']),
         categoryFilter: (json['category_filter'] as List<dynamic>? ?? []).map((e) => e as int).toList(),
         itemCodeFrom: json['item_code_from'],
         itemCodeTo: json['item_code_to'],
         status: json['status'] ?? 'Draft',
         remark: json['remark'],
-        approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString()) : null,
+        approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString())?.toLocal() : null,
         approvedBy: json['approved_by'],
         lineCount: int.tryParse(json['line_count']?.toString() ?? '') ?? 0,
         selectedCount: int.tryParse(json['selected_count']?.toString() ?? '') ?? 0,

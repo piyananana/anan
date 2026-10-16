@@ -534,7 +534,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
                   final isReversed = b['reversed_at'] != null;
                   final id = b['id'] as int;
                   return DataRow(cells: [
-                    DataCell(Text(_dateFmt.format(DateTime.parse(b['import_date'] as String)))),
+                    DataCell(Text(_dateFmt.format(parseLocalDate(b['import_date'])))),
                     DataCell(Text(b['description'] as String? ?? '-')),
                     DataCell(Text('${b['line_count']}')),
                     DataCell(Text(b['created_by'] as String? ?? '-')),

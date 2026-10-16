@@ -169,8 +169,8 @@ class CmBankFxRevaluation {
       lines:               rawLines != null
           ? rawLines.map((e) => CmBankFxRevaluationLine.fromJson(e as Map<String, dynamic>)).toList()
           : const [],
-      createdAt: j['created_at'] != null ? DateTime.tryParse(j['created_at'].toString()) : null,
-      updatedAt: j['updated_at'] != null ? DateTime.tryParse(j['updated_at'].toString()) : null,
+      createdAt: j['created_at'] != null ? DateTime.tryParse(j['created_at'].toString())?.toLocal() : null,
+      updatedAt: j['updated_at'] != null ? DateTime.tryParse(j['updated_at'].toString())?.toLocal() : null,
     );
   }
 }

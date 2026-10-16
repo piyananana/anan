@@ -713,7 +713,7 @@ class MoHeader {
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
-      releasedAt: json['released_at'] != null ? DateTime.tryParse(json['released_at'].toString()) : null,
+      releasedAt: json['released_at'] != null ? DateTime.tryParse(json['released_at'].toString())?.toLocal() : null,
       releasedBy: json['released_by'],
       docCode: json['doc_code'] ?? json['d_doc_code'],
       docNameThai: json['doc_name_thai'],

@@ -48,8 +48,8 @@ class CmCheckbook {
     status:    j['status'] ?? 'Active',
     note:      j['note'],
     createdBy: j['created_by'],
-    createdAt: j['created_at'] != null ? DateTime.tryParse(j['created_at']) : null,
-    updatedAt: j['updated_at'] != null ? DateTime.tryParse(j['updated_at']) : null,
+    createdAt: j['created_at'] != null ? DateTime.tryParse(j['created_at'])?.toLocal() : null,
+    updatedAt: j['updated_at'] != null ? DateTime.tryParse(j['updated_at'])?.toLocal() : null,
   );
 
   Map<String, dynamic> toJson() => {
@@ -155,8 +155,8 @@ class CmCheckPrintConfig {
       stubWidthMm: _d('stub_width_mm'),
       isDefault:   j['is_default'] ?? false,
       createdBy:   j['created_by'],
-      createdAt:   j['created_at'] != null ? DateTime.tryParse(j['created_at']) : null,
-      updatedAt:   j['updated_at'] != null ? DateTime.tryParse(j['updated_at']) : null,
+      createdAt:   j['created_at'] != null ? DateTime.tryParse(j['created_at'])?.toLocal() : null,
+      updatedAt:   j['updated_at'] != null ? DateTime.tryParse(j['updated_at'])?.toLocal() : null,
     );
   }
 
