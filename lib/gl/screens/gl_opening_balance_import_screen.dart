@@ -47,6 +47,8 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
   List<Map<String, dynamic>> _errors = [];
   List<Map<String, dynamic>> _validatedHeaders = [];
   List<Map<String, dynamic>> _validatedDetails = [];
+  // เอกสารยอดยกมาที่ผ่านรายการแล้วในงวดเดียวกับไฟล์ — นำเข้าซ้ำยอดจะเข้าสองเท่า
+  List<Map<String, dynamic>> _existingOpening = [];
 
   bool _isLoading = false;
   bool _isImporting = false;
@@ -116,6 +118,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
       _errors = [];
       _validatedHeaders = [];
       _validatedDetails = [];
+      _existingOpening = [];
     });
   }
 
@@ -159,6 +162,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
           _errors = List<Map<String, dynamic>>.from(data['errors'] ?? []);
           _validatedHeaders = List<Map<String, dynamic>>.from(result['headers'] ?? []);
           _validatedDetails = List<Map<String, dynamic>>.from(result['details'] ?? []);
+          _existingOpening = List<Map<String, dynamic>>.from(data['existingOpening'] ?? []);
         });
       } else {
         final body = jsonDecode(response.body);
@@ -181,9 +185,22 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(isEnglish ? 'Confirm Import' : 'ยืนยันการนำเข้า'),
-        content: Text(isEnglish
-            ? 'Import $_validHeaders opening balance documents (total $_totalDetailRows lines)?'
-            : 'ต้องการนำเข้ายอดยกมา $_validHeaders เอกสาร (รวม $_totalDetailRows บรรทัด) ใช่หรือไม่?'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(isEnglish
+              ? 'Import $_validHeaders opening balance documents (total $_totalDetailRows lines)?'
+              : 'ต้องการนำเข้ายอดยกมา $_validHeaders เอกสาร (รวม $_totalDetailRows บรรทัด) ใช่หรือไม่?'),
+          if (_existingOpening.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              isEnglish
+                  ? 'Warning: ${_existingOpening.length} opening balance documents already exist in the same period. '
+                      'Importing again will ADD to the existing balances.'
+                  : 'คำเตือน: มีเอกสารยอดยกมาในงวดเดียวกันอยู่แล้ว ${_existingOpening.length} เอกสาร '
+                      'ถ้านำเข้าอีก ยอดจะเพิ่มจากยอดเดิม (ไม่ใช่แทนที่)',
+              style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ]),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -208,7 +225,12 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
       final response = await http.post(
         Uri.parse('${AppConfig.apiGl}/gl_opening_balance/import/confirm'),
         headers: headers,
-        body: jsonEncode({'headers': _validatedHeaders, 'details': _validatedDetails}),
+        body: jsonEncode({
+          'headers': _validatedHeaders,
+          'details': _validatedDetails,
+          // ผู้ใช้เห็นคำเตือนและยืนยันแล้ว — ถ้ามีเอกสารเพิ่มขึ้นหลังตรวจสอบ server จะตอบ 409
+          'allow_existing': _existingOpening.isNotEmpty,
+        }),
       );
 
       if (response.statusCode == 200) {
@@ -229,6 +251,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
             _errors = [];
             _validatedHeaders = [];
             _validatedDetails = [];
+            _existingOpening = [];
           });
           widget.onFieldsChanged();
         }
@@ -237,6 +260,10 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
         try {
           final body = jsonDecode(response.body);
           errMsg = body['message'] ?? errMsg;
+          // มีคนนำเข้ายอดยกมาในงวดนี้หลังจากตรวจสอบไฟล์ — แสดงคำเตือนแล้วให้กดยืนยันใหม่
+          if (body['code'] == 'OPENING_EXISTS' && mounted) {
+            setState(() => _existingOpening = List<Map<String, dynamic>>.from(body['existingOpening'] ?? []));
+          }
         } catch (_) {
           if (response.body.isNotEmpty) errMsg = response.body;
         }
@@ -284,6 +311,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
               _errors = [];
               _validatedHeaders = [];
               _validatedDetails = [];
+              _existingOpening = [];
               _isLoading = false;
               _isImporting = false;
             }),
@@ -561,6 +589,49 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
           ]),
         ),
       ),
+
+      // Existing opening balance documents in the same period(s)
+      if (_existingOpening.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Card(
+          color: Colors.red.shade50,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red.shade700),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isEnglish
+                        ? 'Opening balances already exist in the same period — importing again will double the balances'
+                        : 'มียอดยกมาในงวดเดียวกันอยู่แล้ว — ถ้านำเข้าอีก ยอดจะเพิ่มซ้ำ',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade800),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Text(
+                isEnglish
+                    ? 'If you want to replace them, reverse the existing documents in GL Entry first.'
+                    : 'ถ้าต้องการแทนที่ยอดเดิม ให้ถอยรายการเอกสารเดิมที่หน้าบันทึกรายการบัญชีก่อน',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              for (final e in _existingOpening.take(20))
+                Text(
+                  '${e['doc_no'] ?? ''}   ${e['doc_date'] ?? ''}   ${e['period_name'] ?? ''}   '
+                  '${isEnglish ? 'Dr' : 'เดบิต'} ${_amountFormat.format((e['total_debit_lc'] as num?) ?? 0)}',
+                  style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+                ),
+              if (_existingOpening.length > 20)
+                Text(isEnglish
+                    ? '... and ${_existingOpening.length - 20} more'
+                    : '... และอีก ${_existingOpening.length - 20} เอกสาร'),
+            ]),
+          ),
+        ),
+      ],
 
       // Error table
       if (_errors.isNotEmpty) ...[
