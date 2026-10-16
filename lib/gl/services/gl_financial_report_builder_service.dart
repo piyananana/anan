@@ -117,6 +117,16 @@ class FinancialReportBuilderService {
     throw Exception('Failed to reorder rows: ${res.body}');
   }
 
+  /// เรียงคอลัมน์ของรายงานใหม่ตาม [colIds] (ทุกคอลัมน์) — เลข C เดิมถูกแจกใหม่ตามลำดับ
+  /// ช่องแทนค่าย้ายตามคอลัมน์ — คืน { columns, formulas_updated }
+  Future<Map<String, dynamic>> reorderReportCols(int reportId, List<int> colIds) async {
+    final headers = await authService.getAuthHeader();
+    final res = await http.put(Uri.parse('$baseUrl/gl_fin_report/$reportId/reorder_cols'),
+        headers: headers, body: jsonEncode({'col_ids': colIds}));
+    if (res.statusCode == 200) return jsonDecode(res.body);
+    throw Exception('Failed to reorder columns: ${res.body}');
+  }
+
   /// ตรวจผังบัญชี: บัญชีลงรายการแต่ละบัญชีอยู่ในบรรทัด ACCOUNTS ใดบ้าง (rows ว่าง = ไม่อยู่ในงบ, >1 = นับซ้ำ)
   Future<List<Map<String, dynamic>>> fetchAccountMapping(int reportId) async {
     final headers = await authService.getAuthHeader();

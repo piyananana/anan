@@ -16,6 +16,7 @@ import '../../gl/services/gl_period_service.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
 import '../widgets/gl_fin_report_table_view.dart';
+import '../widgets/gl_fin_report_drill_dialog.dart';
 import '../services/gl_financial_report_service.dart';
 import '../../sa/models/sa_company.dart';
 import '../../sa/models/sa_user_branch.dart';
@@ -64,8 +65,9 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   PostingPeriod? _selectedPeriod;
 
   Map<String, dynamic>? _reportData;
+  // ตัวกรองของงบที่แสดงอยู่ — ใช้ตอนแตกยอด (drill-down)
+  ({int reportId, int periodId, int? branchId, Map<int, int?> dims})? _runArgs;
   int _pdfKey = 0;
-  final NumberFormat _currencyFormat = NumberFormat('#,##0.00', 'en_US');
 
   @override
   void initState() {
@@ -143,6 +145,12 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       );
       setState(() {
         _reportData = data;
+        _runArgs = (
+          reportId: _selectedReport!['id'] as int,
+          periodId: _selectedPeriod!.id,
+          branchId: _selectedBranchId,
+          dims: Map<int, int?>.from(_dimSelections),
+        );
         _pdfKey++;
       });
     } catch (e) {
@@ -196,6 +204,8 @@ String _replaceVars(String text, pw.Context? context) {
         .replaceAll(r'$fiscalYear', fiscalYear)
         .replaceAll(r'$userName', userName)
         .replaceAll(r'$printDate', printDateStr);
+    // ตัวแปรที่ engine คำนวณให้ ($periodEndDate, $amountUnit, $branchName, ...)
+    result = finReportApplyVariables(result, _reportData);
 
     if (context != null) {
       try {
@@ -324,15 +334,18 @@ String _replaceVars(String text, pw.Context? context) {
             displayVal = '#ERR';
           } else {
             // จัดการตัวเลขและการแสดงผลค่าติดลบ
+            // จำนวนทศนิยมตามที่ตั้งในงบ — ปัดแล้วเป็นศูนย์แสดง '-'
             double val = double.tryParse(rawValue?.toString() ?? '0') ?? 0;
-            if (val == 0) {
+            final numFmt = FinReportTableView.numberFormat(_reportData);
+            final String absText = numFmt.format(val.abs());
+            if (absText == numFmt.format(0)) {
               displayVal = '-';
             } else if (val < 0 && useParenthesis) {
               // ถ้าค่าน้อยกว่า 0 และตั้งให้ใส่วงเล็บ ให้ใช้ .abs() เอาเครื่องหมายลบออกก่อนแล้วครอบด้วย ()
-              displayVal = '(${_currencyFormat.format(val.abs())})';
+              displayVal = '($absText)';
             } else {
               // กรณีปกติ (ยอดบวก หรือ ยอดติดลบที่ต้องการให้โชว์เครื่องหมายลบ)
-              displayVal = _currencyFormat.format(val);
+              displayVal = val < 0 ? '-$absText' : absText;
             }
           }
 
@@ -384,7 +397,13 @@ String _replaceVars(String text, pw.Context? context) {
       final _ts = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
       _xlCell(s, 0, 0, _company?.displayName(_isEnglish) ?? '', bold: true);
       _xlCell(s, 1, 0, reportName, bold: true);
-      _xlCell(s, 2, 0, '$_periodLabel  |  ${_isEnglish ? 'Printed: $_ts' : 'พิมพ์: $_ts'}');
+      // หน่วยของงบ (พันบาท/ล้านบาท) — ยอดใน Excel เป็นยอดหลังหารหน่วยแล้ว
+      final int unit = (_reportData?['amount_unit'] as num?)?.toInt() ?? 1;
+      final String unitText = unit == 1
+          ? ''
+          : '  |  ${_isEnglish ? 'Unit' : 'หน่วย'}: ${_reportData?['variables']?['amountUnit'] ?? unit}';
+      _xlCell(s, 2, 0, '$_periodLabel$unitText  |  ${_isEnglish ? 'Printed: $_ts' : 'พิมพ์: $_ts'}');
+      final int decimals = (_reportData?['decimal_places'] as num?)?.toInt() ?? 2;
 
       int r = 3;
       for (final rowData in bodyRows) {
@@ -406,11 +425,13 @@ String _replaceVars(String text, pw.Context? context) {
           }
 
           if (type == 'TEXT') {
-            _xlCell(s, r, c, rawValue?.toString() ?? '', bold: bold, align: align);
+            _xlCell(s, r, c, _replaceVars(rawValue?.toString() ?? '', null), bold: bold, align: align);
           } else if (col['error'] != null) {
             _xlCell(s, r, c, '#ERR', bold: bold, align: HorizontalAlign.Right);
           } else {
-            final double val = double.tryParse(rawValue?.toString() ?? '0') ?? 0;
+            // ปัดตามจำนวนทศนิยมของงบ ให้ตรงกับที่พิมพ์
+            final double raw = double.tryParse(rawValue?.toString() ?? '0') ?? 0;
+            final double val = double.parse(raw.toStringAsFixed(decimals));
             _xlCell(s, r, c, val == 0 ? TextCellValue('') : DoubleCellValue(val), bold: bold, align: HorizontalAlign.Right);
           }
           c++;
@@ -882,6 +903,40 @@ Widget _buildTableTab() {
     return FinReportTableView(
       reportData: _reportData!,
       resolveText: (text) => _replaceVars(text, null),
+      onDrill: _openDrill,
+      drillTooltip: _isEnglish ? 'Click to see accounts and ledger entries' : 'คลิกเพื่อดูรายบัญชีและรายการบัญชี',
+    );
+  }
+
+  // แตกยอดของช่อง — ใช้งบ/งวด/สาขา/มิติเดียวกับตอนสั่งพิมพ์ (ไม่ใช่ค่าที่เพิ่งเปลี่ยนในตัวกรอง)
+  void _openDrill(Map<String, dynamic> row, Map<String, dynamic> cell) {
+    final args = _runArgs;
+    if (args == null || row['row_id'] == null) return;
+    final header = ((_reportData?['data'] as List?) ?? const [])
+        .cast<Map<String, dynamic>>()
+        .where((r) => r['auto_column_header'] == true)
+        .expand((r) => (r['columns'] as List).cast<Map<String, dynamic>>())
+        .where((c) => c['seq_no'] == cell['seq_no'])
+        .map((c) => _replaceVars(c['value']?.toString() ?? '', null))
+        .firstOrNull;
+    showFinReportDrillDialog(
+      context,
+      rowId: row['row_id'],
+      colSeqNo: cell['seq_no'],
+      isEnglish: _isEnglish,
+      columnTitle: header,
+      fetch: (drill) => _reportService.generateReport(
+        args.reportId,
+        args.periodId,
+        branchId: args.branchId,
+        dim1Id: args.dims[1],
+        dim2Id: args.dims[2],
+        dim3Id: args.dims[3],
+        dim4Id: args.dims[4],
+        dim5Id: args.dims[5],
+        isEnglish: _isEnglish,
+        drill: drill,
+      ),
     );
   }
 

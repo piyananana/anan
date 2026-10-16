@@ -33,6 +33,8 @@ class FinancialReportService {
     int? dim5Id,
     bool isEnglish = false,
     bool preview = false, // หน้าออกแบบ: แสดงได้แม้รายงานยังไม่เปิดใช้งาน
+    // แตกยอดของช่อง: {row_id, col_seq_no, account_code?} → คืนรายบัญชี / รายการบัญชี แทนทั้งงบ
+    Map<String, dynamic>? drill,
   }) async {
     final headers = await authService.getAuthHeader();
     headers['Content-Type'] = 'application/json';
@@ -51,13 +53,18 @@ class FinancialReportService {
         if (dim5Id != null) 'dim5_id': dim5Id,
         'lang': isEnglish ? 'en' : 'th',
         if (preview) 'preview': true,
+        if (drill != null) 'drill': drill,
       }),
     );
 
     if (res.statusCode == 200) {
       return jsonDecode(res.body);
     } else {
-      throw Exception('Failed to generate report: ${res.body}');
+      String msg = res.body;
+      try {
+        msg = jsonDecode(res.body)['error']?.toString() ?? msg;
+      } catch (_) {}
+      throw Exception(msg);
     }
   }
 }

@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
@@ -16,6 +17,7 @@ import '../services/gl_financial_report_service.dart';
 import '../services/gl_period_service.dart';
 import '../models/gl_period.dart';
 import '../widgets/gl_fin_report_table_view.dart';
+import '../widgets/gl_fin_report_drill_dialog.dart';
 import '../../utils/file_download.dart';
 import '../widgets/gl_dimension_picker_field.dart';
 
@@ -177,11 +179,52 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     }
   }
 
-  /// ตัวแปรในข้อความ — แทนเท่าที่หน้าออกแบบรู้ ที่เหลือแสดงชื่อตัวแปรไว้ให้เห็นว่าจะถูกแทนตอนพิมพ์
-  String _previewText(String text) => text
-      .replaceAll(r'$reportName', _previewData?['report_name']?.toString() ?? '')
-      .replaceAll(r'$periodName', _previewPeriod?.periodName ?? '')
-      .replaceAll(r'$fiscalYear', _previewYear?.fyCode ?? '');
+  /// ตัวแปรในข้อความ — แทนด้วยค่าจริงแบบเดียวกับหน้าดูงบ (ชื่อบริษัท/ผู้พิมพ์/งวด ฯลฯ มาจาก engine)
+  /// ตัวอย่างแสดงหน้าเดียว จึงแทน $pageNumber / $pageCount ด้วย 1
+  String _previewText(String text) {
+    if (!text.contains(r'$')) return text;
+    return finReportApplyVariables(
+        text
+            .replaceAll(r'$reportName', _previewData?['report_name']?.toString() ?? '')
+            .replaceAll(r'$printDate', DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()))
+            .replaceAll(r'$pageNumber', '1')
+            .replaceAll(r'$pageCount', '1'),
+        _previewData);
+  }
+
+  /// ปุ่มท้ายช่องข้อความ — เลือกตัวแปร ($periodEndDate ฯลฯ) แล้วแทรกที่ตำแหน่งเคอร์เซอร์
+  Widget _varsButton(BuildContext ctx, TextEditingController ctrl, {bool columnHeader = false}) {
+    final isEnglish = _isEnglish;
+    return IconButton(
+      icon: const Icon(Icons.data_object, size: 18),
+      tooltip: isEnglish ? 'Insert variable' : 'แทรกตัวแปร',
+      onPressed: () async {
+        final vars = finReportVariableHelp().where((v) => columnHeader || !v.$1.startsWith(r'$col')).toList();
+        final picked = await showDialog<String>(
+          context: ctx,
+          builder: (dctx) => SimpleDialog(
+            title: Text(isEnglish ? 'Insert variable' : 'แทรกตัวแปร'),
+            children: vars.map((v) => SimpleDialogOption(
+              onPressed: () => Navigator.pop(dctx, v.$1.split(' ').first),
+              child: Row(children: [
+                SizedBox(width: 190, child: Text(v.$1, style: const TextStyle(fontFamily: 'monospace', fontSize: 13))),
+                Expanded(child: Text(isEnglish ? v.$3 : v.$2, style: const TextStyle(fontSize: 13))),
+              ]),
+            )).toList(),
+          ),
+        );
+        if (picked == null) return;
+        final text = ctrl.text;
+        final sel = ctrl.selection;
+        final start = sel.isValid ? sel.start : text.length;
+        final end = sel.isValid ? sel.end : text.length;
+        ctrl.value = TextEditingValue(
+          text: text.replaceRange(start, end, picked),
+          selection: TextSelection.collapsed(offset: start + picked.length),
+        );
+      },
+    );
+  }
 
   Widget _buildPreviewPanel() {
     final isEnglish = _isEnglish;
@@ -256,6 +299,20 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                         resolveText: _previewText,
                         padding: const EdgeInsets.all(8),
                         fontScale: 0.9,
+                        drillTooltip: isEnglish ? 'Click to see accounts' : 'คลิกเพื่อดูรายบัญชี',
+                        onDrill: (row, cell) {
+                          final reportId = _selectedReport?['id'];
+                          final period = _previewPeriod;
+                          if (reportId == null || period == null || row['row_id'] == null) return;
+                          showFinReportDrillDialog(
+                            context,
+                            rowId: row['row_id'],
+                            colSeqNo: cell['seq_no'],
+                            isEnglish: _isEnglish,
+                            fetch: (drill) => _reportService.generateReport(
+                                reportId, period.id, isEnglish: _isEnglish, preview: true, drill: drill),
+                          );
+                        },
                       ),
           ),
         ],
@@ -288,6 +345,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     bool isActive = report?['is_active'] ?? true;
     bool parenthesis = report?['parenthesis_for_minus'] ?? true;
     String orientation = report?['page_orientation'] ?? 'PORTRAIT';
+    int amountUnit = report?['amount_unit'] ?? 1;
+    int decimalPlaces = report?['decimal_places'] ?? 2;
     final marginTopCtrl = TextEditingController(text: (report?['margin_top'] ?? 30).toString());
     final marginRightCtrl = TextEditingController(text: (report?['margin_right'] ?? 30).toString());
     final marginBottomCtrl = TextEditingController(text: (report?['margin_bottom'] ?? 30).toString());
@@ -303,6 +362,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
+              // เว้นด้านบนให้ป้ายชื่อช่อง (floating label) ของช่องแรกไม่ถูกตัดตอนคลิก
+              padding: const EdgeInsets.only(top: 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -330,6 +391,47 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                       DropdownMenuItem(value: 'LANDSCAPE', child: Text(isEnglish ? 'LANDSCAPE' : 'LANDSCAPE (แนวนอน)')),
                     ],
                     onChanged: (v) => setDialogState(() => orientation = v!),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      flex: 3,
+                      child: DropdownButtonFormField<int>(
+                        isExpanded: true,
+                        value: amountUnit,
+                        decoration: InputDecoration(labelText: isEnglish ? 'Amount unit' : 'หน่วยจำนวนเงิน', border: const OutlineInputBorder()),
+                        items: [
+                          DropdownMenuItem(value: 1, child: Text(isEnglish ? 'Baht' : 'บาท')),
+                          DropdownMenuItem(value: 1000, child: Text(isEnglish ? 'Thousand Baht' : 'พันบาท')),
+                          DropdownMenuItem(value: 1000000, child: Text(isEnglish ? 'Million Baht' : 'ล้านบาท')),
+                        ],
+                        onChanged: (v) => setDialogState(() {
+                          amountUnit = v!;
+                          // พันบาท/ล้านบาท ปกติแสดงไม่มีทศนิยม
+                          decimalPlaces = v == 1 ? 2 : 0;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<int>(
+                        isExpanded: true,
+                        value: decimalPlaces,
+                        decoration: InputDecoration(labelText: isEnglish ? 'Decimals' : 'ทศนิยม', border: const OutlineInputBorder()),
+                        items: [for (int d = 0; d <= 4; d++) DropdownMenuItem(value: d, child: Text('$d'))],
+                        onChanged: (v) => setDialogState(() => decimalPlaces = v!),
+                      ),
+                    ),
+                  ]),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, left: 4),
+                    child: Text(
+                      isEnglish
+                          ? r'Balances are divided by the unit before formulas run. Show the unit in a header row with $amountUnit'
+                          : r'ยอดบัญชีหารด้วยหน่วยก่อนคำนวณสูตร — แสดงหน่วยในบรรทัดหัวงบด้วยตัวแปร $amountUnit',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Row(children: [
@@ -372,6 +474,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   'is_active': isActive,
                   'parenthesis_for_minus': parenthesis,
                   'page_orientation': orientation,
+                  'amount_unit': amountUnit,
+                  'decimal_places': decimalPlaces,
                   'margin_top': int.tryParse(marginTopCtrl.text) ?? 30,
                   'margin_right': int.tryParse(marginRightCtrl.text) ?? 30,
                   'margin_bottom': int.tryParse(marginBottomCtrl.text) ?? 30,
@@ -1176,6 +1280,12 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
         .map((r) => r['row_code'] as String)
         .join('  ');
     String rowType = row?['row_type'] ?? 'BODY';
+    // บรรทัดหัวงบ/ท้ายงบ = ข้อความเต็มความกว้างบรรทัดเดียว (ไม่มีคอลัมน์/ยอดเงิน) กำหนดขนาด/ตัวหนา/การจัดวางได้
+    bool isHeaderFooter() => rowType == 'HEADER' || rowType == 'FOOTER';
+    int fontSize = (row?['font_size'] as int?) ?? 10;
+    String textAlign = row?['text_align'] ?? 'CENTER';
+    // รวมเข้าบรรทัดยอดรวมได้เฉพาะบรรทัดที่มียอดเงิน
+    bool canAddIntoTotal() => !isHeaderFooter() && const ['ACCOUNTS', 'TOTAL', 'FORMULA'].contains(rowKind);
     String printControl = row?['print_control'] ?? 'SHOW';
     // เงื่อนไขเลือกบัญชี (หลายช่วง/ยกเว้น/ใต้หัวบัญชี/ประเภทบัญชี) บันทึกพร้อมบรรทัด
     final List<Map<String, dynamic>> acctSels = _rowAcctSels(row);
@@ -1204,6 +1314,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           content: SizedBox(
             width: 560,
             child: SingleChildScrollView(
+              // เว้นด้านบนให้ป้ายชื่อช่อง (floating label) ของช่องแรกไม่ถูกตัดตอนคลิก
+              padding: const EdgeInsets.only(top: 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1215,64 +1327,140 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                         decoration: InputDecoration(labelText: isEnglish ? 'Row Sequence (R no.)' : 'ลำดับบรรทัด (เลข R)', border: const OutlineInputBorder()),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: codeCtrl,
-                        textCapitalization: TextCapitalization.characters,
-                        decoration: InputDecoration(
-                          labelText: isEnglish ? 'Row Code (used in formulas)' : 'รหัสบรรทัด (ใช้ในสูตร)',
-                          hintText: 'REV_TOTAL',
-                          border: const OutlineInputBorder(),
+                    if (!isHeaderFooter()) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: codeCtrl,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Row Code (used in formulas)' : 'รหัสบรรทัด (ใช้ในสูตร)',
+                            hintText: 'REV_TOTAL',
+                            border: const OutlineInputBorder(),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ]),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: rowKind,
-                    decoration: InputDecoration(labelText: isEnglish ? 'Row Kind' : 'ชนิดบรรทัด', border: const OutlineInputBorder()),
-                    items: ['ACCOUNTS', 'HEADING', 'TOTAL', 'FORMULA', 'BLANK']
-                        .map((k) => DropdownMenuItem(value: k, child: Text(_rowKindLabel(k, isEnglish))))
-                        .toList(),
-                    onChanged: (v) => setDialogState(() => rowKind = v!),
+                    value: rowType,
+                    decoration: InputDecoration(labelText: isEnglish ? 'Row Type (row_type)' : 'ประเภทบรรทัด (row_type)', border: const OutlineInputBorder()),
+                    items: [
+                      DropdownMenuItem(value: 'HEADER', child: Text(isEnglish ? 'HEADER (report heading text)' : 'HEADER (ข้อความหัวงบ)')),
+                      DropdownMenuItem(value: 'BODY', child: Text(isEnglish ? 'BODY' : 'BODY (เนื้อหา)')),
+                      DropdownMenuItem(value: 'FOOTER', child: Text(isEnglish ? 'FOOTER (report footer text)' : 'FOOTER (ข้อความท้ายงบ)')),
+                    ],
+                    onChanged: (v) => setDialogState(() => rowType = v!),
                   ),
                   const SizedBox(height: 10),
-                  if (rowKind != 'BLANK') ...[
-                    TextField(controller: labelThCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Row Label (Thai)' : 'ชื่อบรรทัด (ไทย)', border: const OutlineInputBorder())),
-                    const SizedBox(height: 10),
-                    TextField(controller: labelEnCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Row Label (English)' : 'ชื่อบรรทัด (อังกฤษ)', border: const OutlineInputBorder())),
+                  if (!isHeaderFooter()) ...[
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: rowKind,
+                      decoration: InputDecoration(labelText: isEnglish ? 'Row Kind' : 'ชนิดบรรทัด', border: const OutlineInputBorder()),
+                      items: ['ACCOUNTS', 'HEADING', 'TOTAL', 'FORMULA', 'BLANK']
+                          .map((k) => DropdownMenuItem(value: k, child: Text(_rowKindLabel(k, isEnglish))))
+                          .toList(),
+                      onChanged: (v) => setDialogState(() => rowKind = v!),
+                    ),
                     const SizedBox(height: 10),
                   ],
-                  Row(children: [
-                    SizedBox(
-                      width: 110,
-                      child: TextField(
-                        controller: indentCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(labelText: isEnglish ? 'Indent' : 'ย่อหน้า', border: const OutlineInputBorder()),
+                  if (isHeaderFooter() || rowKind != 'BLANK') ...[
+                    TextField(controller: labelThCtrl, decoration: InputDecoration(labelText: isHeaderFooter() ? (isEnglish ? 'Text (Thai)' : 'ข้อความ (ไทย)') : (isEnglish ? 'Row Label (Thai)' : 'ชื่อบรรทัด (ไทย)'), border: const OutlineInputBorder(), suffixIcon: _varsButton(ctx, labelThCtrl))),
+                    const SizedBox(height: 10),
+                    TextField(controller: labelEnCtrl, decoration: InputDecoration(labelText: isHeaderFooter() ? (isEnglish ? 'Text (English)' : 'ข้อความ (อังกฤษ)') : (isEnglish ? 'Row Label (English)' : 'ชื่อบรรทัด (อังกฤษ)'), border: const OutlineInputBorder(), suffixIcon: _varsButton(ctx, labelEnCtrl))),
+                    const SizedBox(height: 10),
+                  ],
+                  if (isHeaderFooter()) ...[
+                    Row(children: [
+                      SizedBox(
+                        width: 130,
+                        child: DropdownButtonFormField<int>(
+                          isExpanded: true,
+                          value: fontSize,
+                          decoration: InputDecoration(labelText: isEnglish ? 'Font size' : 'ขนาดตัวอักษร', border: const OutlineInputBorder()),
+                          items: {8, 9, 10, 11, 12, 14, 16, 18, 20, 24, fontSize}
+                              .toList()
+                              .map((s) => DropdownMenuItem(value: s, child: Text('$s')))
+                              .toList()
+                            ..sort((a, b) => a.value!.compareTo(b.value!)),
+                          onChanged: (v) => setDialogState(() => fontSize = v!),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DropdownButtonFormField<String?>(
-                        isExpanded: true,
-                        value: totalRows.any((r) => r['row_code'] == parentCode) ? parentCode : null,
-                        decoration: InputDecoration(labelText: isEnglish ? 'Add into total row' : 'รวมเข้าบรรทัดยอดรวม', border: const OutlineInputBorder()),
-                        items: [
-                          DropdownMenuItem<String?>(value: null, child: Text(isEnglish ? '— None —' : '— ไม่รวม —')),
-                          ...totalRows.map((r) => DropdownMenuItem<String?>(
-                                value: r['row_code'],
-                                child: Text('${r['row_code']}  ${_rowLabelOf(r, isEnglish)}', overflow: TextOverflow.ellipsis),
-                              )),
+                      const SizedBox(width: 12),
+                      FilterChip(
+                        avatar: const Icon(Icons.format_bold, size: 18),
+                        label: Text(isEnglish ? 'Bold' : 'ตัวหนา'),
+                        selected: isBold,
+                        onSelected: (v) => setDialogState(() => isBold = v),
+                      ),
+                      const SizedBox(width: 12),
+                      SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        segments: [
+                          ButtonSegment(value: 'LEFT', icon: const Icon(Icons.format_align_left, size: 18), tooltip: isEnglish ? 'Left' : 'ชิดซ้าย'),
+                          ButtonSegment(value: 'CENTER', icon: const Icon(Icons.format_align_center, size: 18), tooltip: isEnglish ? 'Center' : 'กึ่งกลาง'),
+                          ButtonSegment(value: 'RIGHT', icon: const Icon(Icons.format_align_right, size: 18), tooltip: isEnglish ? 'Right' : 'ชิดขวา'),
                         ],
-                        onChanged: (v) => setDialogState(() => parentCode = v),
+                        selected: {textAlign},
+                        onSelectionChanged: (v) => setDialogState(() => textAlign = v.first),
+                      ),
+                    ]),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 4, bottom: 10),
+                      child: Text(
+                        isEnglish
+                            ? 'Heading/footer rows print as one full-width line of text — report columns are not used.'
+                            : 'บรรทัดหัวงบ/ท้ายงบพิมพ์เป็นข้อความเต็มความกว้างบรรทัดเดียว ไม่ใช้คอลัมน์ของรายงาน',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                       ),
                     ),
-                  ]),
-                  const SizedBox(height: 10),
-                  if (rowKind == 'FORMULA') ...[
+                  ],
+                  if (!isHeaderFooter()) ...[
+                    Row(children: [
+                      SizedBox(
+                        width: 110,
+                        child: TextField(
+                          controller: indentCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(labelText: isEnglish ? 'Indent' : 'ย่อหน้า', border: const OutlineInputBorder()),
+                        ),
+                      ),
+                      if (canAddIntoTotal()) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: totalRows.isEmpty
+                              // ยังไม่มีบรรทัดยอดรวมให้เลือก — บอกวิธีแทนการแสดง dropdown ที่มีแค่ "ไม่รวม"
+                              ? InputDecorator(
+                                  decoration: InputDecoration(labelText: isEnglish ? 'Add into total row' : 'รวมเข้าบรรทัดยอดรวม', border: const OutlineInputBorder()),
+                                  child: Text(
+                                    isEnglish
+                                        ? 'No TOTAL rows yet — add a TOTAL row with a row code first'
+                                        : 'ยังไม่มีบรรทัดยอดรวม — เพิ่มบรรทัดชนิด TOTAL ที่มีรหัสบรรทัดก่อน',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                  ),
+                                )
+                              : DropdownButtonFormField<String?>(
+                                  isExpanded: true,
+                                  value: totalRows.any((r) => r['row_code'] == parentCode) ? parentCode : null,
+                                  decoration: InputDecoration(labelText: isEnglish ? 'Add into total row' : 'รวมเข้าบรรทัดยอดรวม', border: const OutlineInputBorder()),
+                                  items: [
+                                    DropdownMenuItem<String?>(value: null, child: Text(isEnglish ? '— None —' : '— ไม่รวม —')),
+                                    ...totalRows.map((r) => DropdownMenuItem<String?>(
+                                          value: r['row_code'],
+                                          child: Text('${r['row_code']}  ${_rowLabelOf(r, isEnglish)}', overflow: TextOverflow.ellipsis),
+                                        )),
+                                  ],
+                                  onChanged: (v) => setDialogState(() => parentCode = v),
+                                ),
+                        ),
+                      ],
+                    ]),
+                    const SizedBox(height: 10),
+                  ],
+                  if (!isHeaderFooter() && rowKind == 'FORMULA') ...[
                     TextField(
                       controller: rowFormulaCtrl,
                       decoration: InputDecoration(
@@ -1290,18 +1478,6 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   ],
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: rowType,
-                    decoration: InputDecoration(labelText: isEnglish ? 'Row Type (row_type)' : 'ประเภทบรรทัด (row_type)', border: const OutlineInputBorder()),
-                    items: [
-                      DropdownMenuItem(value: 'HEADER', child: Text(isEnglish ? 'HEADER' : 'HEADER (ส่วนหัว)')),
-                      DropdownMenuItem(value: 'BODY', child: Text(isEnglish ? 'BODY' : 'BODY (เนื้อหา)')),
-                      DropdownMenuItem(value: 'FOOTER', child: Text(isEnglish ? 'FOOTER' : 'FOOTER (ส่วนท้าย)')),
-                    ],
-                    onChanged: (v) => setDialogState(() => rowType = v!),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
                     value: printControl,
                     decoration: InputDecoration(labelText: isEnglish ? 'Print Control (print_control)' : 'การแสดงผล (print_control)', border: const OutlineInputBorder()),
                     items: [
@@ -1310,7 +1486,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     ],
                     onChanged: (v) => setDialogState(() => printControl = v!),
                   ),
-                  if (rowKind == 'ACCOUNTS') ...[
+                  if (!isHeaderFooter() && rowKind == 'ACCOUNTS') ...[
                   const SizedBox(height: 10),
                   _buildAcctSelEditor(ctx, acctSels, isEnglish, () => setDialogState(() {})),
                   const SizedBox(height: 10),
@@ -1351,7 +1527,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     }),
                   ],
                   ],
-                  if (rowKind != 'BLANK') ...[
+                  if (!isHeaderFooter() && rowKind != 'BLANK') ...[
                     const SizedBox(height: 10),
                     Row(children: [
                       Expanded(child: _lineStyleDropdown(isEnglish ? 'Line above amounts' : 'เส้นเหนือยอดเงิน', lineAbove, isEnglish, (v) => setDialogState(() => lineAbove = v))),
@@ -1382,6 +1558,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900], foregroundColor: Colors.white),
               onPressed: () async {
+                // บรรทัดหัวงบ/ท้ายงบเป็นข้อความล้วน — backend บังคับ HEADING และล้างบรรทัดยอดรวมเช่นกัน
+                if (isHeaderFooter()) rowKind = 'HEADING';
                 final data = {
                   if (!isEdit) 'report_id': _selectedReport!['id'],
                   'row_seq_no': int.tryParse(seqCtrl.text) ?? 0,
@@ -1389,8 +1567,10 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   'row_kind': rowKind,
                   'label_thai': labelThCtrl.text.trim().isEmpty ? null : labelThCtrl.text.trim(),
                   'label_eng': labelEnCtrl.text.trim().isEmpty ? null : labelEnCtrl.text.trim(),
-                  'indent_level': int.tryParse(indentCtrl.text.trim()) ?? 0,
-                  'parent_row_code': parentCode,
+                  'indent_level': isHeaderFooter() ? 0 : (int.tryParse(indentCtrl.text.trim()) ?? 0),
+                  'parent_row_code': canAddIntoTotal() ? parentCode : null,
+                  'font_size': fontSize,
+                  'text_align': textAlign,
                   'row_formula': rowKind == 'FORMULA' ? rowFormulaCtrl.text.trim() : null,
                   'is_bold': isBold,
                   'hide_if_zero': hideIfZero,
@@ -1458,6 +1638,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           content: SizedBox(
             width: 440,
             child: SingleChildScrollView(
+              // เว้นด้านบนให้ป้ายชื่อช่อง (floating label) ของช่องแรกไม่ถูกตัดตอนคลิก
+              padding: const EdgeInsets.only(top: 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1483,12 +1665,12 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   const SizedBox(height: 10),
                   TextField(
                     controller: descCtrl,
-                    decoration: InputDecoration(labelText: isEnglish ? 'Text (Thai)' : 'ข้อความ (ไทย)', border: const OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Text (Thai)' : 'ข้อความ (ไทย)', border: const OutlineInputBorder(), suffixIcon: _varsButton(ctx, descCtrl)),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: descEnCtrl,
-                    decoration: InputDecoration(labelText: isEnglish ? 'Text (English)' : 'ข้อความ (อังกฤษ)', border: const OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: isEnglish ? 'Text (English)' : 'ข้อความ (อังกฤษ)', border: const OutlineInputBorder(), suffixIcon: _varsButton(ctx, descEnCtrl)),
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -1745,6 +1927,8 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           content: SizedBox(
             width: 480,
             child: SingleChildScrollView(
+              // เว้นด้านบนให้ป้ายชื่อช่อง (floating label) ของช่องแรกไม่ถูกตัดตอนคลิก
+              padding: const EdgeInsets.only(top: 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1764,16 +1948,17 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     ),
                   ]),
                   const SizedBox(height: 10),
-                  TextField(controller: headerThCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Header (Thai)' : 'หัวคอลัมน์ (ไทย)', border: const OutlineInputBorder())),
+                  TextField(controller: headerThCtrl, decoration: InputDecoration(labelText: isEnglish ? 'Header (Thai)' : 'หัวคอลัมน์ (ไทย)', border: const OutlineInputBorder(), suffixIcon: _varsButton(ctx, headerThCtrl, columnHeader: true))),
                   const SizedBox(height: 10),
                   TextField(
                     controller: headerEnCtrl,
                     decoration: InputDecoration(
                       labelText: isEnglish ? 'Header (English)' : 'หัวคอลัมน์ (อังกฤษ)',
                       helperText: isEnglish
-                          ? r'Variables: $colPeriodName  $colFiscalYear (period of this column)'
-                          : r'ตัวแปร: $colPeriodName  $colFiscalYear (งวดของคอลัมน์นี้)',
+                          ? r'Variables: $colPeriodName  $colPeriodEndDate  $colFiscalYear (period of this column)'
+                          : r'ตัวแปร: $colPeriodName  $colPeriodEndDate  $colFiscalYear (งวดของคอลัมน์นี้)',
                       border: const OutlineInputBorder(),
+                      suffixIcon: _varsButton(ctx, headerEnCtrl, columnHeader: true),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -1966,14 +2151,33 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                     isEnglish ? '(none — amounts are defined per row)' : '(ยังไม่มี — กำหนดยอดแยกทีละบรรทัด)',
                     style: const TextStyle(color: Colors.grey, fontSize: 13),
                   )
-                : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _reportCols.map((rc) {
+                : SizedBox(
+                    height: 40,
+                    // ลากที่จุดจับหน้าชิปเพื่อสลับตำแหน่งคอลัมน์ (เหมือนการลากบรรทัด)
+                    child: ReorderableListView(
+                      scrollDirection: Axis.horizontal,
+                      buildDefaultDragHandles: false,
+                      onReorder: _onReorderReportCols,
+                      children: _reportCols.asMap().entries.map((e) {
+                        final int i = e.key;
+                        final rc = e.value;
                         final bool hidden = rc['is_hidden'] == true;
                         return Padding(
+                          key: ValueKey(rc['id']),
                           padding: const EdgeInsets.only(right: 6),
-                          child: ActionChip(
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            if (_canEdit && _reportCols.length > 1)
+                              ReorderableDragStartListener(
+                                index: i,
+                                child: Tooltip(
+                                  message: isEnglish ? 'Drag to move column' : 'ลากเพื่อย้ายคอลัมน์',
+                                  child: const MouseRegion(
+                                    cursor: SystemMouseCursors.grab,
+                                    child: Icon(Icons.drag_indicator, size: 18, color: Colors.grey),
+                                  ),
+                                ),
+                              ),
+                            ActionChip(
                             backgroundColor: rc['col_kind'] == 'CALC'
                                 ? Colors.purple[50]
                                 : (rc['col_kind'] == 'LABEL' ? Colors.orange[50] : Colors.blue[50]),
@@ -1985,6 +2189,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                             tooltip: (isEnglish ? rc['header_eng'] : null) ?? rc['header_thai'] ?? '',
                             onPressed: () => _showReportColDialog(rc),
                           ),
+                          ]),
                         );
                       }).toList(),
                     ),
@@ -2291,6 +2496,27 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     await _loadRows(_selectedReport!['id']);
   }
 
+  /// ลากวางคอลัมน์ของรายงาน → backend แจกเลข C เดิมใหม่ตามลำดับ ย้ายช่องแทนค่าตาม และแก้ (Rn, Cm) ในสูตร
+  Future<void> _onReorderReportCols(int oldIndex, int newIndex) async {
+    final isEnglish = _isEnglish;
+    if (newIndex > oldIndex) newIndex--;
+    if (newIndex == oldIndex) return;
+    final reordered = List<Map<String, dynamic>>.from(_reportCols);
+    reordered.insert(newIndex, reordered.removeAt(oldIndex));
+    setState(() => _reportCols = reordered);
+    try {
+      final result = await _service.reorderReportCols(
+          _selectedReport!['id'], reordered.map((c) => c['id'] as int).toList());
+      final int fixed = result['formulas_updated'] ?? 0;
+      _showSuccess(isEnglish
+          ? 'Columns reordered${fixed > 0 ? ' — $fixed formula(s) updated to the new column numbers' : ''}'
+          : 'สลับตำแหน่งคอลัมน์แล้ว${fixed > 0 ? ' — แก้เลขคอลัมน์ในสูตร $fixed สูตร' : ''}');
+    } catch (e) {
+      _showError(isEnglish ? 'Reorder failed: $e' : 'สลับตำแหน่งคอลัมน์ไม่สำเร็จ: $e');
+    }
+    await _loadRows(_selectedReport!['id']);
+  }
+
   // ===== ROW ITEM =====
   Widget _buildRowItem(Map<String, dynamic> row, int index) {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
@@ -2299,6 +2525,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     final String rowType = row['row_type'] ?? 'BODY';
     final String rowKind = row['row_kind'] ?? 'ACCOUNTS';
     final int seqNo = row['row_seq_no'] ?? 0;
+    final bool isHeaderFooter = rowType == 'HEADER' || rowType == 'FOOTER';
 
     Color badgeColor;
     switch (rowType) {
@@ -2424,7 +2651,13 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             const SizedBox(width: 6),
             // พื้นที่คอลัมน์
             Expanded(
-              child: columns.isEmpty && _reportCols.isEmpty && _rowLabelOf(row, isEnglish).isEmpty
+              child: isHeaderFooter && columns.isEmpty
+                  // หัวงบ/ท้ายงบ: ข้อความเต็มความกว้างบรรทัดเดียว (ไม่มีคอลัมน์)
+                  ? GestureDetector(
+                      onTap: () => _showRowDialog(row),
+                      child: _headerTextChip(row, isEnglish),
+                    )
+                  : columns.isEmpty && _reportCols.isEmpty && _rowLabelOf(row, isEnglish).isEmpty
                   ? Container(
                       height: 30,
                       decoration: BoxDecoration(
@@ -2437,8 +2670,9 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   : _buildColumnsPreview(row, columns),
             ),
             const SizedBox(width: 6),
-            // ปุ่มเพิ่มคอลัมน์
-            IconButton(
+            // ปุ่มเพิ่มคอลัมน์ (หัวงบ/ท้ายงบไม่มีคอลัมน์)
+            if (!isHeaderFooter)
+              IconButton(
               icon: Icon(Icons.add_box_outlined, size: 22, color: Colors.deepOrange[900]),
               tooltip: isEnglish ? 'Add column' : 'เพิ่มคอลัมน์',
               padding: EdgeInsets.zero,
@@ -2447,6 +2681,42 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// ข้อความบรรทัดหัวงบ/ท้ายงบ — แสดงตามขนาด/ตัวหนา/การจัดวางที่ตั้งไว้ (ขนาดย่อลงไม่เกิน 16 ให้พอดีรายการ)
+  Widget _headerTextChip(Map<String, dynamic> row, bool isEnglish) {
+    final String label = _rowLabelOf(row, isEnglish);
+    final String align = row['text_align'] ?? 'CENTER';
+    final int fontSize = row['font_size'] ?? 10;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.blue[100]!),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            label.isEmpty ? (isEnglish ? '(no text)' : '(ไม่มีข้อความ)') : label,
+            textAlign: align == 'LEFT' ? TextAlign.left : (align == 'RIGHT' ? TextAlign.right : TextAlign.center),
+            style: TextStyle(
+              fontSize: (fontSize + 2).clamp(10, 16).toDouble(),
+              fontWeight: row['is_bold'] == true ? FontWeight.bold : FontWeight.normal,
+              color: label.isEmpty ? Colors.grey : Colors.black87,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            '${isEnglish ? 'size' : 'ขนาด'} $fontSize${row['is_bold'] == true ? (isEnglish ? ', bold' : ', ตัวหนา') : ''}',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          ),
+        ],
       ),
     );
   }
@@ -2480,6 +2750,147 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           ),
           Text(ref, style: TextStyle(fontSize: 11, color: Colors.grey[500]), overflow: TextOverflow.ellipsis),
         ],
+      ),
+    );
+  }
+
+  // ===== CELL OVERRIDE (คอลัมน์รายบรรทัดที่ seq ตรงกับคอลัมน์ของรายงาน) =====
+  /// แทนค่าเฉพาะช่อง (บรรทัดนี้ × คอลัมน์ของรายงานนี้) ด้วยสูตร/ตัวเลข หรือข้อความ/ช่องว่าง
+  /// บรรทัดอื่นยังใช้คอลัมน์ของรายงานตามเดิม — engine ใช้ความกว้าง/การจัดวางของคอลัมน์รายงานให้ตรงแนว
+  void _showOverrideDialog(Map<String, dynamic> row, Map<String, dynamic> rc, [Map<String, dynamic>? existing]) {
+    final isEnglish = _isEnglish;
+    final l = AppL10n(isEnglish);
+    final isEdit = existing != null;
+    String mode = existing?['column_type'] == 'TEXT' ? 'TEXT' : 'FORMULA';
+    final formulaCtrl = TextEditingController(text: existing?['formula_text'] ?? '');
+    final textThCtrl = TextEditingController(text: existing?['description_thai'] ?? '');
+    final textEnCtrl = TextEditingController(text: existing?['description_eng'] ?? '');
+    final String cellRef = '${row['row_code'] ?? 'R${row['row_seq_no']}'}[${rc['col_code']}]';
+
+    Future<void> save(BuildContext ctx) async {
+      String? nz(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
+      if (mode == 'FORMULA' && nz(formulaCtrl) == null) {
+        _showError(isEnglish ? 'Enter a number or a formula' : 'กรุณาใส่ตัวเลขหรือสูตร');
+        return;
+      }
+      final data = {
+        if (!isEdit) 'row_id': row['id'],
+        'column_seq_no': rc['col_seq_no'],
+        'column_type': mode,
+        'formula_text': mode == 'FORMULA' ? nz(formulaCtrl) : null,
+        'description_thai': mode == 'TEXT' ? nz(textThCtrl) : null,
+        'description_eng': mode == 'TEXT' ? nz(textEnCtrl) : null,
+        'data_type': null,
+        'column_flex': rc['column_flex'] ?? 1,
+        'indent_level': 0,
+        'font_size': rc['font_size'] ?? 10,
+        'font_weight': rc['font_weight'] ?? 'NORMAL',
+        'text_align': rc['text_align'] ?? 'RIGHT',
+        'period_offset': 0,
+      };
+      try {
+        if (isEdit) {
+          await _service.updateColumn(existing['id'], data);
+        } else {
+          await _service.createColumn(data);
+        }
+        if (ctx.mounted) Navigator.pop(ctx);
+        await _loadRows(_selectedReport!['id']);
+        _showSuccess(isEnglish ? 'Cell override saved' : 'บันทึกการแทนค่าช่องเรียบร้อย');
+      } on FinReportValidationException catch (e) {
+        _showError(e.localized(isEnglish));
+      } catch (e) {
+        _showError(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e');
+      }
+    }
+
+    Future<void> remove(BuildContext ctx) async {
+      try {
+        await _service.deleteColumn(existing!['id']);
+        if (ctx.mounted) Navigator.pop(ctx);
+        await _loadRows(_selectedReport!['id']);
+        _showSuccess(isEnglish ? 'Cell uses the report column again' : 'ช่องนี้กลับไปใช้คอลัมน์ของรายงานแล้ว');
+      } on FinReportValidationException catch (e) {
+        _showError(e.localized(isEnglish));
+      } catch (e) {
+        _showError(isEnglish ? 'Delete failed: $e' : 'ลบไม่สำเร็จ: $e');
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(isEnglish ? 'Override cell $cellRef' : 'แทนค่าเฉพาะช่อง $cellRef'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  isEnglish
+                      ? 'Only this cell changes. Other rows keep using report column [${rc['col_code']}].'
+                      : 'เปลี่ยนเฉพาะช่องนี้ บรรทัดอื่นยังใช้คอลัมน์ของรายงาน [${rc['col_code']}] ตามเดิม',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  segments: [
+                    ButtonSegment(value: 'FORMULA', icon: const Icon(Icons.functions, size: 16), label: Text(isEnglish ? 'Number / formula' : 'ตัวเลข / สูตร')),
+                    ButtonSegment(value: 'TEXT', icon: const Icon(Icons.text_fields, size: 16), label: Text(isEnglish ? 'Text / blank' : 'ข้อความ / ว่าง')),
+                  ],
+                  selected: {mode},
+                  onSelectionChanged: (v) => setDialogState(() => mode = v.first),
+                ),
+                const SizedBox(height: 12),
+                if (mode == 'FORMULA')
+                  TextField(
+                    controller: formulaCtrl,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Number or formula' : 'ตัวเลขหรือสูตร',
+                      helperText: isEnglish
+                          ? 'e.g. 0, 125000, SALES[CUR] * 0.07, [PY] (another column of this row)'
+                          : 'เช่น 0, 125000, SALES[CUR] * 0.07, [PY] (คอลัมน์อื่นของบรรทัดนี้)',
+                      helperMaxLines: 2,
+                      border: const OutlineInputBorder(),
+                    ),
+                  )
+                else ...[
+                  TextField(
+                    controller: textThCtrl,
+                    decoration: InputDecoration(labelText: isEnglish ? 'Text (Thai)' : 'ข้อความ (ไทย)', border: const OutlineInputBorder(), suffixIcon: _varsButton(ctx, textThCtrl)),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: textEnCtrl,
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Text (English)' : 'ข้อความ (อังกฤษ)',
+                      helperText: isEnglish ? 'Leave both empty for a blank cell' : 'เว้นว่างทั้งสองช่อง = ช่องว่าง',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: _varsButton(ctx, textEnCtrl),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            if (isEdit && _canDelete)
+              TextButton(
+                onPressed: () => remove(ctx),
+                child: Text(isEnglish ? 'Remove override' : 'ยกเลิกการแทนค่า', style: const TextStyle(color: Colors.red)),
+              ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel)),
+            if (_canEdit)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900], foregroundColor: Colors.white),
+                onPressed: () => save(ctx),
+                child: Text(l.save),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -2543,9 +2954,26 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           return Expanded(
             flex: rc['column_flex'] ?? 1,
             child: Tooltip(
-              message: isEnglish ? 'Report column (all rows) — click to edit' : 'คอลัมน์ของรายงาน (ทุกบรรทัด) — คลิกเพื่อแก้ไข',
+              message: isEnglish ? 'Report column (all rows) — click for options' : 'คอลัมน์ของรายงาน (ทุกบรรทัด) — คลิกเพื่อเลือก',
               child: GestureDetector(
-                onTap: () => _showReportColDialog(rc),
+                onTapDown: (d) async {
+                  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+                  final choice = await showMenu<String>(
+                    context: context,
+                    position: RelativeRect.fromRect(d.globalPosition & const Size(1, 1), Offset.zero & overlay.size),
+                    items: [
+                      PopupMenuItem(value: 'col', child: Text(isEnglish
+                          ? 'Edit report column [${rc['col_code']}] (all rows)'
+                          : 'แก้ไขคอลัมน์ของรายงาน [${rc['col_code']}] (ทุกบรรทัด)')),
+                      if (_canEdit)
+                        PopupMenuItem(value: 'override', child: Text(isEnglish
+                            ? 'Override this cell only ($rowRef[${rc['col_code']}])'
+                            : 'แทนค่าเฉพาะช่องนี้ ($rowRef[${rc['col_code']}])')),
+                    ],
+                  );
+                  if (choice == 'col') _showReportColDialog(rc);
+                  if (choice == 'override') _showOverrideDialog(row, rc);
+                },
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 1),
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
@@ -2629,7 +3057,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           String label;
           if (colType == 'TEXT') {
             final String? descEn = col['description_eng'];
-            label = (isEnglish && descEn != null && descEn.isNotEmpty) ? descEn : (desc ?? colType);
+            label = (isEnglish && descEn != null && descEn.isNotEmpty) ? descEn : (desc ?? (overridesReportCol ? (isEnglish ? '(blank)' : '(ว่าง)') : colType));
           } else if (colType == 'MTD' || colType == 'YTD') {
             label = offset == 0 ? colType : '$colType($offset)';
           } else if (colType == 'FORMULA') {
@@ -2657,10 +3085,15 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
           );
         }
 
+        final Map<String, dynamic>? overriddenRc = overridesReportCol && (colType == 'FORMULA' || colType == 'TEXT')
+            ? _reportCols.firstWhere((rc) => rc['col_seq_no'] == colSeqNo)
+            : null;
         return Expanded(
           flex: flex,
           child: GestureDetector(
-            onTap: () => _showColumnDialog(rowId, col),
+            onTap: () => overriddenRc != null && overriddenRc['col_kind'] != 'LABEL'
+                ? _showOverrideDialog(row, overriddenRc, col)
+                : _showColumnDialog(rowId, col),
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 1),
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
