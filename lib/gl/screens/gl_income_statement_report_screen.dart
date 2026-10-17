@@ -218,7 +218,7 @@ class _IncomeStatementReportScreenState
 
       double rawBal(Map<String, dynamic> row) {
         final bal = double.tryParse(row['end_balance'].toString()) ?? 0.0;
-        return row['normal_balance'] == 'DEBIT' ? bal : -bal;
+        return row['account_type'] == 'REVENUE' ? -bal : bal;
       }
       double revenueDisplay(Map<String, dynamic> row) => -rawBal(row);
       double expenseDisplay(Map<String, dynamic> row) => rawBal(row);
@@ -335,11 +335,11 @@ class _IncomeStatementReportScreenState
         _reportData.where((r) => r['account_type'] == 'EXPENSE').toList();
 
     // rawBal = debit_amount − credit_amount  (ตรงจากตาราง gl_balance_accum)
-    // backend ส่ง end_balance = DEBIT_normal ? (dr−cr) : −(dr−cr)
-    // ดังนั้น: rawBal = DEBIT ? end_balance : −end_balance
+    // backend ส่ง end_balance ตามหมวด: REVENUE = cr−dr, EXPENSE = dr−cr
+    // ดังนั้น: rawBal = REVENUE ? −end_balance : end_balance
     double rawBal(Map<String, dynamic> row) {
       final bal = double.tryParse(row['end_balance'].toString()) ?? 0.0;
-      return row['normal_balance'] == 'DEBIT' ? bal : -bal;
+      return row['account_type'] == 'REVENUE' ? -bal : bal;
     }
 
     // REVENUE display = −rawBal  (rawBal < 0 → display บวก = รายได้)

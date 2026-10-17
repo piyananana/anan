@@ -159,7 +159,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
 
   /// Returns (shownRows, leafIds):
   /// - shownRows: header accounts + control accounts that have at least one
-  ///              header sibling (same parent)
+  ///              header (or net income) sibling (same parent)
   /// - leafIds: shown accounts that have NO shown children
   ///            → these are the ones that display an amount
   (List<Map<String, dynamic>>, Set<int>) _computeDisplayFilter(
@@ -178,10 +178,11 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
       if (row['is_header'] == true) {
         shownIds.add(id); // always show header accounts
       } else {
-        // Control account: show only if at least one sibling is a header
+        // Control account: show only if at least one sibling is a header,
+        // or is the net income row (always its own line, with its siblings)
         final parentId = row['parent_id'] as int?;
         final siblings = byParent[parentId] ?? [];
-        if (siblings.any((s) => s['is_header'] == true)) {
+        if (siblings.any((s) => s['is_header'] == true || s['is_net_income'] == true)) {
           shownIds.add(id);
         }
       }
@@ -339,9 +340,9 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
     final allEquity =
         _reportData.where((r) => r['account_type'] == 'EQUITY').toList();
 
-    // end_balance จาก backend ถูก sign-adjust ตาม normal_balance แล้ว:
-    //   DEBIT normal  → end_balance = dr−cr (บวกเมื่อมียอด)
-    //   CREDIT normal → end_balance = cr−dr (บวกเมื่อมียอด)
+    // end_balance จาก backend ถูก sign-adjust ตามหมวดแล้ว:
+    //   ASSET            → end_balance = dr−cr (บัญชีหักลด เช่น ค่าเสื่อมราคาสะสม เป็นลบ)
+    //   LIABILITY/EQUITY → end_balance = cr−dr
     // ดังนั้นใช้ end_balance ตรงๆ สำหรับทุกหมวด
     double endBal(Map<String, dynamic> row) =>
         double.tryParse(row['end_balance'].toString()) ?? 0.0;
@@ -355,10 +356,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
     final totalAsset     = sumSection(allAsset);
     final totalLiability = sumSection(allLiability);
     final totalEquity    = sumSection(allEquity);
-    // LIABILITY และ EQUITY เป็น credit-normal: ถ้า sum end_balance ติดลบ
-    // หมายความว่ามียอด credit อยู่ ต้องแสดงเป็นบวก
-    final rawTotalLE = totalLiability + totalEquity;
-    final totalLiabilityEquity = rawTotalLE < 0 ? -rawTotalLE : rawTotalLE;
+    final totalLiabilityEquity = totalLiability + totalEquity;
 
     // Apply display filter per section
     final (assetRows, assetLeafs) = _computeDisplayFilter(allAsset);
