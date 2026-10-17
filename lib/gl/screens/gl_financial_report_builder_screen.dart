@@ -300,6 +300,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                         padding: const EdgeInsets.all(8),
                         fontScale: 0.9,
                         drillTooltip: isEnglish ? 'Click to see accounts' : 'คลิกเพื่อดูรายบัญชี',
+                        pageBreakLabel: isEnglish ? 'New page' : 'ขึ้นหน้าใหม่',
                         onDrill: (row, cell) {
                           final reportId = _selectedReport?['id'];
                           final period = _previewPeriod;
@@ -308,6 +309,7 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                             context,
                             rowId: row['row_id'],
                             colSeqNo: cell['seq_no'],
+                            accountCode: row['account_code'] as String?,
                             isEnglish: _isEnglish,
                             fetch: (drill) => _reportService.generateReport(
                                 reportId, period.id, isEnglish: _isEnglish, preview: true, drill: drill),
@@ -1266,9 +1268,13 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
     final labelEnCtrl = TextEditingController(text: row?['label_eng'] ?? '');
     final indentCtrl = TextEditingController(text: (row?['indent_level'] ?? 0).toString());
     String? parentCode = row?['parent_row_code'];
+    String parentOp = row?['parent_op'] ?? 'ADD';
     final rowFormulaCtrl = TextEditingController(text: row?['row_formula'] ?? '');
     bool isBold = row?['is_bold'] ?? false;
     bool hideIfZero = row?['hide_if_zero'] ?? false;
+    bool pageBreakBefore = row?['page_break_before'] ?? false;
+    // พิมพ์บรรทัดบัญชี: ใช้ชื่อบรรทัด (NONE) หรือแตกเป็นรายบัญชีย่อยพร้อมยอด (DETAIL / DETAIL_TOTAL)
+    String expandMode = row?['expand_mode'] ?? 'NONE';
     String lineAbove = row?['line_above'] ?? 'NONE';
     String lineBelow = row?['line_below'] ?? 'NONE';
     // บรรทัด TOTAL อื่นที่บรรทัดนี้รวมเข้าได้
@@ -1429,6 +1435,23 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                         ),
                       ),
                       if (canAddIntoTotal()) ...[
+                        if (totalRows.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          // รวมเข้า หรือ หักจาก บรรทัดยอดรวม — เลือกอย่างใดอย่างหนึ่ง
+                          SizedBox(
+                            width: 120,
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: parentOp,
+                              decoration: InputDecoration(labelText: isEnglish ? 'Total row' : 'บรรทัดยอดรวม', border: const OutlineInputBorder()),
+                              items: [
+                                DropdownMenuItem(value: 'ADD', child: Text(isEnglish ? 'Add into' : 'รวมเข้า')),
+                                DropdownMenuItem(value: 'SUBTRACT', child: Text(isEnglish ? 'Subtract from' : 'หักจาก')),
+                              ],
+                              onChanged: (v) => setDialogState(() => parentOp = v!),
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         Expanded(
                           child: totalRows.isEmpty
@@ -1445,7 +1468,12 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                               : DropdownButtonFormField<String?>(
                                   isExpanded: true,
                                   value: totalRows.any((r) => r['row_code'] == parentCode) ? parentCode : null,
-                                  decoration: InputDecoration(labelText: isEnglish ? 'Add into total row' : 'รวมเข้าบรรทัดยอดรวม', border: const OutlineInputBorder()),
+                                  decoration: InputDecoration(
+                                    labelText: parentOp == 'SUBTRACT'
+                                        ? (isEnglish ? 'Subtract from total row' : 'หักจากบรรทัดยอดรวม')
+                                        : (isEnglish ? 'Add into total row' : 'รวมเข้าบรรทัดยอดรวม'),
+                                    border: const OutlineInputBorder(),
+                                  ),
                                   items: [
                                     DropdownMenuItem<String?>(value: null, child: Text(isEnglish ? '— None —' : '— ไม่รวม —')),
                                     ...totalRows.map((r) => DropdownMenuItem<String?>(
@@ -1489,6 +1517,25 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   if (!isHeaderFooter() && rowKind == 'ACCOUNTS') ...[
                   const SizedBox(height: 10),
                   _buildAcctSelEditor(ctx, acctSels, isEnglish, () => setDialogState(() {})),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: expandMode,
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Print accounts as' : 'รูปแบบการพิมพ์บัญชี',
+                      helperText: isEnglish
+                          ? 'Accounts with zero in every column are not printed. Formulas/totals still use the row amount.'
+                          : 'บัญชีที่ยอดเป็นศูนย์ทุกคอลัมน์จะไม่พิมพ์ สูตร/บรรทัดยอดรวมยังใช้ยอดรวมของบรรทัดนี้',
+                      helperMaxLines: 2,
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: [
+                      DropdownMenuItem(value: 'NONE', child: Text(isEnglish ? 'Row label only (one line, no breakdown)' : 'ใช้ชื่อบรรทัด (ไม่แตกย่อย)')),
+                      DropdownMenuItem(value: 'DETAIL', child: Text(isEnglish ? 'Break down into accounts with amounts' : 'แตกเป็นชื่อบัญชีย่อยพร้อมยอดเงิน')),
+                      DropdownMenuItem(value: 'DETAIL_TOTAL', child: Text(isEnglish ? 'Break down into accounts + total line' : 'แตกเป็นบัญชีย่อย + บรรทัดรวม')),
+                    ],
+                    onChanged: (v) => setDialogState(() => expandMode = v!),
+                  ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
@@ -1549,6 +1596,15 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                       onChanged: (v) => setDialogState(() => hideIfZero = v),
                     ),
                   ],
+                  if (!isHeaderFooter())
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(isEnglish ? 'Start a new page before this row' : 'ขึ้นหน้าใหม่ก่อนพิมพ์บรรทัดนี้'),
+                      subtitle: Text(isEnglish ? 'Applies to the PDF / printout' : 'มีผลกับ PDF / การพิมพ์', style: const TextStyle(fontSize: 11)),
+                      value: pageBreakBefore,
+                      onChanged: (v) => setDialogState(() => pageBreakBefore = v),
+                    ),
                 ],
               ),
             ),
@@ -1569,11 +1625,14 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   'label_eng': labelEnCtrl.text.trim().isEmpty ? null : labelEnCtrl.text.trim(),
                   'indent_level': isHeaderFooter() ? 0 : (int.tryParse(indentCtrl.text.trim()) ?? 0),
                   'parent_row_code': canAddIntoTotal() ? parentCode : null,
+                  'parent_op': canAddIntoTotal() && parentCode != null ? parentOp : 'ADD',
                   'font_size': fontSize,
                   'text_align': textAlign,
                   'row_formula': rowKind == 'FORMULA' ? rowFormulaCtrl.text.trim() : null,
                   'is_bold': isBold,
                   'hide_if_zero': hideIfZero,
+                  'page_break_before': !isHeaderFooter() && pageBreakBefore,
+                  'expand_mode': rowKind == 'ACCOUNTS' ? expandMode : 'NONE',
                   'line_above': lineAbove,
                   'line_below': lineBelow,
                   'row_type': rowType,
@@ -2622,11 +2681,19 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
             Tooltip(
               message: [
                 _rowKindLabel(rowKind, isEnglish),
-                if (row['parent_row_code'] != null) '${isEnglish ? 'Added into' : 'รวมเข้า'} ${row['parent_row_code']}',
+                if (row['parent_row_code'] != null)
+                  row['parent_op'] == 'SUBTRACT'
+                      ? '${isEnglish ? 'Subtracted from' : 'หักจาก'} ${row['parent_row_code']}'
+                      : '${isEnglish ? 'Added into' : 'รวมเข้า'} ${row['parent_row_code']}',
                 if (rowKind == 'FORMULA' && row['row_formula'] != null) '= ${row['row_formula']}',
                 if (row['print_control'] == 'HIDE') isEnglish ? 'Hidden (helper row)' : 'ซ่อน (บรรทัดช่วยคำนวณ)',
                 if (rowKind == 'ACCOUNTS')
                   '${isEnglish ? 'Accounts' : 'บัญชี'}: ${_rowAcctSels(row).map((s) => _acctSelSummary(s, isEnglish)).join(', ')}',
+                if (rowKind == 'ACCOUNTS' && row['expand_mode'] == 'DETAIL')
+                  isEnglish ? 'Printed as account breakdown' : 'พิมพ์แตกเป็นรายบัญชี',
+                if (rowKind == 'ACCOUNTS' && row['expand_mode'] == 'DETAIL_TOTAL')
+                  isEnglish ? 'Printed as account breakdown + total line' : 'พิมพ์แตกเป็นรายบัญชี + บรรทัดรวม',
+                if (row['page_break_before'] == true) isEnglish ? 'Starts a new page' : 'ขึ้นหน้าใหม่ก่อนบรรทัดนี้',
               ].join('\n'),
               child: SizedBox(
                 width: 96,
@@ -2634,13 +2701,23 @@ class _FinancialReportBuilderScreenState extends State<FinancialReportBuilderScr
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Row(children: [
+                      if (row['page_break_before'] == true)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 2),
+                          child: Icon(Icons.insert_page_break, size: 12, color: Colors.deepOrange.shade700),
+                        ),
+                      Flexible(
+                        child: Text(
+                          row['row_code'] ?? '—',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: row['row_code'] == null ? Colors.grey : Colors.black87),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ]),
                     Text(
-                      row['row_code'] ?? '—',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: row['row_code'] == null ? Colors.grey : Colors.black87),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '$rowKind${row['parent_row_code'] != null ? ' > ${row['parent_row_code']}' : ''}',
+                      '$rowKind${rowKind == 'ACCOUNTS' && (row['expand_mode'] ?? 'NONE') != 'NONE' ? ' (+)' : ''}'
+                      '${row['parent_row_code'] != null ? ' > ${row['parent_op'] == 'SUBTRACT' ? '-' : ''}${row['parent_row_code']}' : ''}',
                       style: TextStyle(fontSize: 10, color: _rowKindColor(rowKind)),
                       overflow: TextOverflow.ellipsis,
                     ),

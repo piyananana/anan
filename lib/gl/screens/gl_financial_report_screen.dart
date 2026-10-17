@@ -495,7 +495,13 @@ String _replaceVars(String text, pw.Context? context) {
         children: footerRows.map((row) => _buildPdfRow(row, context, fontNormal, fontBold, fontItalic)).toList(),
       ),
       build: (context) {
-        return bodyRows.map((row) => _buildPdfRow(row, context, fontNormal, fontBold, fontItalic)).toList();
+        // บรรทัดที่ตั้ง "ขึ้นหน้าใหม่ก่อนพิมพ์" (page_break_before) — ไม่ขึ้นหน้าว่างถ้าเป็นบรรทัดแรก
+        return [
+          for (var i = 0; i < bodyRows.length; i++) ...[
+            if (i > 0 && bodyRows[i]['page_break_before'] == true) pw.NewPage(),
+            _buildPdfRow(bodyRows[i], context, fontNormal, fontBold, fontItalic),
+          ],
+        ];
       },
     ));
 
@@ -723,8 +729,9 @@ String _replaceVars(String text, pw.Context? context) {
                             labelColor: Colors.deepOrange[900],
                             indicatorColor: Colors.deepOrange[900],
                             tabs: [
+                              // ตารางมาก่อน: คลิกยอดเพื่อแตกยอด (drill-down) ได้เหมือนตัวอย่างในหน้าจอสร้างงบ — PDF เป็นภาพ คลิกไม่ได้
+                              Tab(text: isEnglish ? 'Report (click amounts to drill down)' : 'รายงาน (คลิกยอดเพื่อดูรายละเอียด)'),
                               Tab(text: isEnglish ? 'Print Preview (PDF)' : 'ตัวอย่างก่อนพิมพ์ (PDF)'),
-                              Tab(text: isEnglish ? 'Data Table' : 'ตารางข้อมูล'),
                             ],
                           ),
                           Expanded(
@@ -738,8 +745,8 @@ String _replaceVars(String text, pw.Context? context) {
                                             : 'กรุณาเลือกเงื่อนไขและกด "ประมวลผลรายงาน"'))
                                     : TabBarView(
                                         children: [
-                                          _buildPdfTab(),
                                           _buildTableTab(),
+                                          _buildPdfTab(),
                                         ],
                                       ),
                           ),
@@ -905,6 +912,7 @@ Widget _buildTableTab() {
       resolveText: (text) => _replaceVars(text, null),
       onDrill: _openDrill,
       drillTooltip: _isEnglish ? 'Click to see accounts and ledger entries' : 'คลิกเพื่อดูรายบัญชีและรายการบัญชี',
+      pageBreakLabel: _isEnglish ? 'New page' : 'ขึ้นหน้าใหม่',
     );
   }
 
@@ -925,6 +933,7 @@ Widget _buildTableTab() {
       colSeqNo: cell['seq_no'],
       isEnglish: _isEnglish,
       columnTitle: header,
+      accountCode: row['account_code'] as String?,
       fetch: (drill) => _reportService.generateReport(
         args.reportId,
         args.periodId,

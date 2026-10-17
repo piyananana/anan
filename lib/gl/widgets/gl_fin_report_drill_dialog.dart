@@ -4,6 +4,7 @@ import '../../sa/utils/sa_app_l10n.dart';
 
 /// แตกยอดของช่องในงบการเงิน: รายบัญชี → คลิกบัญชี → รายการบัญชีแยกประเภท
 /// [fetch] เรียก engine พร้อม drill = {row_id, col_seq_no, account_code?} (ตัวกรองสาขา/มิติ/งวดเดียวกับงบ)
+/// [accountCode] = คลิกจากบรรทัดรายบัญชี (บรรทัดที่แตกย่อย) → เปิดรายการบัญชีของบัญชีนั้นทันที
 Future<void> showFinReportDrillDialog(
   BuildContext context, {
   required Future<Map<String, dynamic>> Function(Map<String, dynamic> drill) fetch,
@@ -11,11 +12,13 @@ Future<void> showFinReportDrillDialog(
   required int colSeqNo,
   required bool isEnglish,
   String? columnTitle,
+  String? accountCode,
 }) {
   return showDialog(
     context: context,
     builder: (_) => _FinReportDrillDialog(
-      fetch: fetch, rowId: rowId, colSeqNo: colSeqNo, isEnglish: isEnglish, columnTitle: columnTitle),
+      fetch: fetch, rowId: rowId, colSeqNo: colSeqNo, isEnglish: isEnglish, columnTitle: columnTitle,
+      accountCode: accountCode),
   );
 }
 
@@ -25,6 +28,7 @@ class _FinReportDrillDialog extends StatefulWidget {
   final int colSeqNo;
   final bool isEnglish;
   final String? columnTitle;
+  final String? accountCode;
 
   const _FinReportDrillDialog({
     required this.fetch,
@@ -32,6 +36,7 @@ class _FinReportDrillDialog extends StatefulWidget {
     required this.colSeqNo,
     required this.isEnglish,
     this.columnTitle,
+    this.accountCode,
   });
 
   @override
@@ -50,7 +55,8 @@ class _FinReportDrillDialogState extends State<_FinReportDrillDialog> {
   @override
   void initState() {
     super.initState();
-    _load();
+    final code = widget.accountCode;
+    _load(account: code == null ? null : {'row_id': widget.rowId, 'account_code': code});
   }
 
   Future<void> _load({Map<String, dynamic>? account}) async {
@@ -112,7 +118,13 @@ class _FinReportDrillDialogState extends State<_FinReportDrillDialog> {
           IconButton(
             icon: const Icon(Icons.arrow_back),
             tooltip: _en ? 'Back to accounts' : 'กลับไปรายบัญชี',
-            onPressed: _loading ? null : () => setState(() { _lines = null; _error = null; }),
+            onPressed: _loading
+                ? null
+                : () {
+                    setState(() { _lines = null; _error = null; });
+                    // เปิดตรงมาที่รายการบัญชี — ยังไม่ได้โหลดรายบัญชีของบรรทัด
+                    if (_accounts == null) _load();
+                  },
           ),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -129,7 +141,7 @@ class _FinReportDrillDialogState extends State<_FinReportDrillDialog> {
         ),
       ]),
       content: SizedBox(
-        width: showingLines ? 900 : 640,
+        width: showingLines ? 1100 : 640,
         height: 480,
         child: _loading
             ? const Center(child: CircularProgressIndicator())
@@ -222,9 +234,11 @@ class _FinReportDrillDialogState extends State<_FinReportDrillDialog> {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: cells),
         );
-    List<Widget> cols(String date, String doc, String desc, String dr, String cr, TextStyle st) => [
+    List<Widget> cols(String date, String doc, String refNo, String refDate, String desc, String dr, String cr, TextStyle st) => [
           SizedBox(width: 80, child: Text(date, style: st)),
           SizedBox(width: 150, child: Text(doc, style: st, overflow: TextOverflow.ellipsis)),
+          SizedBox(width: 130, child: Text(refNo, style: st, overflow: TextOverflow.ellipsis)),
+          SizedBox(width: 80, child: Text(refDate, style: st)),
           Expanded(child: Text(desc, style: st, overflow: TextOverflow.ellipsis, maxLines: 2)),
           SizedBox(width: 120, child: Text(dr, style: st, textAlign: TextAlign.right)),
           SizedBox(width: 120, child: Text(cr, style: st, textAlign: TextAlign.right)),
@@ -233,7 +247,8 @@ class _FinReportDrillDialogState extends State<_FinReportDrillDialog> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Container(
         color: Colors.grey.shade200,
-        child: line(cols(_en ? 'Date' : 'วันที่', _en ? 'Document' : 'เลขที่เอกสาร', _en ? 'Description' : 'คำอธิบาย',
+        child: line(cols(_en ? 'Date' : 'วันที่', _en ? 'Document' : 'เลขที่เอกสาร',
+            _en ? 'Ref No.' : 'เลขที่อ้างอิง', _en ? 'Ref Date' : 'วันที่อ้างอิง', _en ? 'Description' : 'คำอธิบาย',
             _en ? 'Debit' : 'เดบิต', _en ? 'Credit' : 'เครดิต', hs)),
       ),
       Expanded(
@@ -245,16 +260,17 @@ class _FinReportDrillDialogState extends State<_FinReportDrillDialog> {
                 itemBuilder: (_, i) {
                   final ln = lines[i];
                   final doc = [ln['doc_code'], ln['doc_no']].where((s) => s != null && '$s'.isNotEmpty).join(' ');
+                  final refNo = [ln['ref_doc_code'], ln['ref_doc_no']].where((s) => s != null && '$s'.isNotEmpty).join(' ');
                   final dr = (ln['debit'] as num?)?.toDouble() ?? 0;
                   final cr = (ln['credit'] as num?)?.toDouble() ?? 0;
-                  return line(cols(_date(ln['doc_date']), doc, '${ln['description'] ?? ''}',
+                  return line(cols(_date(ln['doc_date']), doc, refNo, _date(ln['ref_doc_date']), '${ln['description'] ?? ''}',
                       dr == 0 ? '' : _fmt.format(dr), cr == 0 ? '' : _fmt.format(cr), cs));
                 },
               ),
       ),
       const Divider(height: 1),
-      line(cols('', '', _en ? 'Total' : 'รวม', _fmt.format(totalDr), _fmt.format(totalCr), hs)),
-      line(cols('', '', _en ? 'Net (as shown in the report)' : 'สุทธิ (ตามเครื่องหมายในงบ)', '', _amt(net), hs)),
+      line(cols('', '', '', '', _en ? 'Total' : 'รวม', _fmt.format(totalDr), _fmt.format(totalCr), hs)),
+      line(cols('', '', '', '', _en ? 'Net (as shown in the report)' : 'สุทธิ (ตามเครื่องหมายในงบ)', '', _amt(net), hs)),
       if (_lines?['truncated'] == true)
         Text(_en ? 'Showing the first ${lines.length} entries only' : 'แสดงเฉพาะ ${lines.length} รายการแรก',
             style: TextStyle(fontSize: 12, color: Colors.orange.shade900)),

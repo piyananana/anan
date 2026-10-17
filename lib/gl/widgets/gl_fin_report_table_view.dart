@@ -46,6 +46,8 @@ class FinReportTableView extends StatelessWidget {
   /// คลิกช่องตัวเลขที่แตกยอดได้ (cell['drill'] == true) — null = ไม่เปิดให้คลิก
   final void Function(Map<String, dynamic> row, Map<String, dynamic> cell)? onDrill;
   final String drillTooltip;
+  /// ข้อความบนเส้นแบ่งหน้า (บรรทัดที่ตั้งขึ้นหน้าใหม่ก่อนพิมพ์)
+  final String pageBreakLabel;
 
   const FinReportTableView({
     super.key,
@@ -55,6 +57,7 @@ class FinReportTableView extends StatelessWidget {
     this.fontScale = 1.0,
     this.onDrill,
     this.drillTooltip = '',
+    this.pageBreakLabel = 'ขึ้นหน้าใหม่',
   });
 
   /// รูปแบบตัวเลขตามจำนวนทศนิยมของงบ (decimal_places) — ใช้ร่วมกับ PDF/Excel ของหน้าดูงบ
@@ -81,7 +84,7 @@ class FinReportTableView extends StatelessWidget {
         itemBuilder: (context, index) {
           final row = rows[index];
           final List<dynamic> cols = row['columns'] ?? [];
-          return Padding(
+          final rowWidget = Padding(
             padding: const EdgeInsets.symmetric(vertical: 4.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,6 +177,22 @@ class FinReportTableView extends StatelessWidget {
               }).toList().cast<Widget>(),
             ),
           );
+          // บรรทัดที่ขึ้นหน้าใหม่ใน PDF (page_break_before) — แสดงเส้นแบ่งหน้าให้เห็นในตาราง
+          if (index == 0 || row['page_break_before'] != true) return rowWidget;
+          return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(children: [
+                Expanded(child: Divider(color: Colors.grey.shade400, height: 1)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(pageBreakLabel, style: TextStyle(fontSize: 10 * fontScale, color: Colors.grey.shade600)),
+                ),
+                Expanded(child: Divider(color: Colors.grey.shade400, height: 1)),
+              ]),
+            ),
+            rowWidget,
+          ]);
         },
       ),
     );
