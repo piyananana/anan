@@ -60,6 +60,7 @@ class DocReverseHistoryPanel extends StatelessWidget {
   final bool isDeleted;
   final bool isEnglish;
   final EdgeInsetsGeometry margin;
+  final String? title;
 
   const DocReverseHistoryPanel({
     super.key,
@@ -67,6 +68,7 @@ class DocReverseHistoryPanel extends StatelessWidget {
     required this.isDeleted,
     required this.isEnglish,
     this.margin = const EdgeInsets.fromLTRB(8, 0, 8, 4),
+    this.title,
   });
 
   @override
@@ -93,7 +95,7 @@ class DocReverseHistoryPanel extends StatelessWidget {
                   ? (isEnglish
                       ? 'Deleted — kept for audit, cannot be used again'
                       : 'ลบแล้ว — เก็บไว้เพื่อตรวจสอบ นำกลับมาใช้ต่อไม่ได้')
-                  : (isEnglish ? 'Reverse / void history' : 'ประวัติการถอยเป็นร่าง / ยกเลิก'),
+                  : (title ?? (isEnglish ? 'Reverse / void history' : 'ประวัติการถอยเป็นร่าง / ยกเลิก')),
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange[900])),
         ]),
         for (final h in history)
@@ -101,7 +103,7 @@ class DocReverseHistoryPanel extends StatelessWidget {
             padding: const EdgeInsets.only(left: 22, top: 2),
             child: Text(
                 '${fmt(h.createdAt)}  '
-                '${h.isDelete ? (isEnglish ? 'Deleted' : 'ลบ') : h.isVoid ? (isEnglish ? 'Voided' : 'ยกเลิก') : (isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่าง')}'
+                '${h.actionLabel(isEnglish)}'
                 '  ${h.createdByName ?? '-'}  —  ${h.reason}',
                 style: const TextStyle(fontSize: 12)),
           ),

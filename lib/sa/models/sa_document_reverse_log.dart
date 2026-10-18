@@ -2,7 +2,7 @@
 // ใช้ร่วมทุกโมดูล (GL, AP, ...)
 class DocReverseLog {
   final String? fromStatus;
-  final String? toStatus; // Draft = ถอยเป็นร่าง, Deleted = ลบ, Void = ยกเลิก
+  final String? toStatus; // Draft = ถอยเป็นร่าง, Deleted = ลบ, Void = ยกเลิก, Pending/Bounced = CM
   final String reason;
   final String? createdByName;
   final DateTime? createdAt;
@@ -11,6 +11,17 @@ class DocReverseLog {
 
   bool get isDelete => toStatus == 'Deleted';
   bool get isVoid => toStatus == 'Void';
+
+  // ชื่อการกระทำสำหรับแสดงในประวัติ (CM รายการรับ/จ่าย: Pending = ยกเลิกการเคลียร์, Bounced = เช็คคืน)
+  String actionLabel(bool isEnglish) {
+    switch (toStatus) {
+      case 'Deleted': return isEnglish ? 'Deleted' : 'ลบ';
+      case 'Void':    return isEnglish ? 'Voided' : 'ยกเลิก';
+      case 'Pending': return isEnglish ? 'Clearing undone' : 'ยกเลิกการเคลียร์';
+      case 'Bounced': return isEnglish ? 'Bounced check' : 'เช็คคืน';
+      default:        return isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่าง';
+    }
+  }
 
   factory DocReverseLog.fromJson(Map<String, dynamic> json) => DocReverseLog(
         fromStatus: json['from_status'] as String?,

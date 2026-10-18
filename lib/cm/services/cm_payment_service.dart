@@ -61,11 +61,21 @@ class CmPaymentService {
     throw Exception(_err(res.body));
   }
 
-  Future<CmPayment> voidPayment(int id, {String? clearingNote}) async {
+  // ยกเลิกการเคลียร์ (Cleared → Pending) — ต้องมีเหตุผล
+  Future<CmPayment> unclearPayment(int id, String reason) async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.put(Uri.parse('$baseUrl/cm_payment/$id/unclear'),
+        headers: headers, body: jsonEncode({'reason': reason}));
+    if (res.statusCode == 200) return CmPayment.fromJson(jsonDecode(res.body));
+    if (res.statusCode == 401) { _auth.logout(); throw Exception('Unauthorized'); }
+    throw Exception(_err(res.body));
+  }
+
+  Future<CmPayment> voidPayment(int id, String reason) async {
     final headers = await _auth.getAuthHeader();
     final res = await http.put(Uri.parse('$baseUrl/cm_payment/$id/void'),
         headers: headers,
-        body: jsonEncode({'clearing_note': clearingNote}));
+        body: jsonEncode({'reason': reason}));
     if (res.statusCode == 200) return CmPayment.fromJson(jsonDecode(res.body));
     if (res.statusCode == 401) { _auth.logout(); throw Exception('Unauthorized'); }
     throw Exception(_err(res.body));

@@ -52,21 +52,32 @@ class CmReceiptService {
     throw Exception(_err(res.body));
   }
 
-  Future<CmReceipt> bounceReceipt(int id, {String? clearingNote}) async {
+  // ยกเลิกการเคลียร์ (Cleared → Pending) — ต้องมีเหตุผล
+  Future<CmReceipt> unclearReceipt(int id, String reason) async {
     final headers = await _auth.getAuthHeader();
-    final res = await http.put(Uri.parse('$baseUrl/cm_receipt/$id/bounce'),
-        headers: headers,
-        body: jsonEncode({'clearing_note': clearingNote}));
+    final res = await http.put(Uri.parse('$baseUrl/cm_receipt/$id/unclear'),
+        headers: headers, body: jsonEncode({'reason': reason}));
     if (res.statusCode == 200) return CmReceipt.fromJson(jsonDecode(res.body));
     if (res.statusCode == 401) { _auth.logout(); throw Exception('Unauthorized'); }
     throw Exception(_err(res.body));
   }
 
-  Future<CmReceipt> voidReceipt(int id, {String? clearingNote}) async {
+  // เช็คคืน — ยกเลิกใบเสร็จ AR ต้นทางด้วย
+  Future<CmReceipt> bounceReceipt(int id, String reason) async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.put(Uri.parse('$baseUrl/cm_receipt/$id/bounce'),
+        headers: headers,
+        body: jsonEncode({'reason': reason}));
+    if (res.statusCode == 200) return CmReceipt.fromJson(jsonDecode(res.body));
+    if (res.statusCode == 401) { _auth.logout(); throw Exception('Unauthorized'); }
+    throw Exception(_err(res.body));
+  }
+
+  Future<CmReceipt> voidReceipt(int id, String reason) async {
     final headers = await _auth.getAuthHeader();
     final res = await http.put(Uri.parse('$baseUrl/cm_receipt/$id/void'),
         headers: headers,
-        body: jsonEncode({'clearing_note': clearingNote}));
+        body: jsonEncode({'reason': reason}));
     if (res.statusCode == 200) return CmReceipt.fromJson(jsonDecode(res.body));
     if (res.statusCode == 401) { _auth.logout(); throw Exception('Unauthorized'); }
     throw Exception(_err(res.body));

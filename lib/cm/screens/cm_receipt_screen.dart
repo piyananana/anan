@@ -2,6 +2,7 @@
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_receipt.dart';
@@ -98,6 +99,43 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
         SnackBar(content: Text(msg), backgroundColor: _kColor));
   }
 
+  Future<void> _select(CmReceipt r) async {
+    setState(() => _selected = r);
+    try {
+      final full = await _svc.fetchReceipt(r.id!);
+      if (mounted && _selected?.id == r.id) setState(() => _selected = full);
+    } catch (e) { _showErr(e.toString()); }
+  }
+
+  // หลังทำรายการ: โหลดรายการใหม่และแสดงผลล่าสุดในกรอบรายละเอียด
+  Future<void> _afterAction(CmReceipt updated) async {
+    await _loadReceipts();
+    if (mounted) setState(() => _selected = updated);
+  }
+
+  String? _blockMessage(String? code, String? ref) {
+    if (code == null) return null;
+    final isEnglish = _isEnglish;
+    final suffix = (ref == null || ref.isEmpty) ? '' : ' ($ref)';
+    switch (code) {
+      case 'NOT_CLEARED':   return isEnglish ? 'Only cleared items can be un-cleared' : 'ยกเลิกการเคลียร์ได้เฉพาะรายการที่เคลียร์แล้ว';
+      case 'NOT_PENDING':   return isEnglish ? 'Only pending items allowed' : 'ทำได้เฉพาะรายการที่รอเคลียร์';
+      case 'NOT_CHECK':     return isEnglish ? 'Only check receipts can bounce' : 'บันทึกเช็คคืนได้เฉพาะรายการรับเป็นเช็ค';
+      case 'RECONCILED':    return isEnglish
+          ? 'Reconciled with a bank statement — unreconcile first'
+          : 'รายการนี้กระทบยอดกับ Bank Statement แล้ว กรุณายกเลิกการกระทบยอดก่อน';
+      case 'PERIOD_CLOSED': return isEnglish ? 'The CM period of the clearing date is closed' : 'งวด CM ของวันที่เคลียร์ปิดแล้ว';
+      case 'SOURCE_DOC':    return isEnglish
+          ? 'Created by an AR receipt — void the source document instead$suffix'
+          : 'รายการนี้มาจากใบเสร็จ AR กรุณายกเลิกที่เอกสารต้นทาง$suffix';
+      default:              return code;
+    }
+  }
+
+  // ปุ่มที่ล็อกเมื่อทำรายการไม่ได้ — ชี้เมาส์เห็นเหตุผล
+  Widget _lockable(String? blockMsg, Widget Function(VoidCallback? onPressed) build, VoidCallback action) =>
+      blockMsg == null ? build(action) : Tooltip(message: blockMsg, child: build(null));
+
   // ── Status Actions ────────────────────────────────────────────────────────
 
   Future<void> _clear(CmReceipt r) async {
@@ -107,50 +145,65 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
     final dt = parseLocalDate(result['date']);
     if (!await CmPeriodService.canPost(context, dt)) return;
     try {
-      await _svc.clearReceipt(r.id!, clearingDate: result['date'], clearingNote: result['note']);
+      final updated = await _svc.clearReceipt(r.id!, clearingDate: result['date'], clearingNote: result['note']);
       _showOk(isEnglish ? 'Cleared successfully' : 'เคลียร์สำเร็จ');
-      await _loadReceipts();
-      setState(() => _selected = null);
+      await _afterAction(updated);
+    } catch (e) { _showErr(e.toString()); }
+  }
+
+  Future<void> _unclear(CmReceipt r) async {
+    final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Undo Clearing' : 'ยกเลิกการเคลียร์',
+        message: isEnglish
+            ? 'The item goes back to Pending. No accounting entries change.'
+            : 'รายการจะกลับเป็นรอเคลียร์ ไม่กระทบรายการบัญชี',
+        confirmLabel: isEnglish ? 'Undo Clearing' : 'ยกเลิกการเคลียร์',
+        confirmColor: Colors.orange);
+    if (reason == null) return;
+    try {
+      final updated = await _svc.unclearReceipt(r.id!, reason);
+      _showOk(isEnglish ? 'Clearing undone' : 'ยกเลิกการเคลียร์แล้ว');
+      await _afterAction(updated);
     } catch (e) { _showErr(e.toString()); }
   }
 
   Future<void> _bounce(CmReceipt r) async {
     final isEnglish = _isEnglish;
-    final note = await _showNoteDialog(
-        isEnglish ? 'Record Bounced Check' : 'บันทึกเช็คคืน',
-        isEnglish ? 'Note / Reason' : 'หมายเหตุ / เหตุผล');
-    if (note == null) return;
+    final doc = r.arDocNo ?? '-';
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Record Bounced Check' : 'บันทึกเช็คคืน',
+        message: isEnglish
+            ? 'AR receipt $doc will be voided with a reversing entry dated today, and its invoices become '
+              'outstanding again. Other payments on the same receipt are voided too — issue a new receipt '
+              'for the amount actually received.'
+            : 'ใบเสร็จ AR $doc จะถูกยกเลิก (ลงรายการกลับวันนี้) ใบแจ้งหนี้จะกลับมามียอดค้าง '
+              'รายการรับอื่นในใบเสร็จเดียวกันจะถูกยกเลิกด้วย ต้องออกใบเสร็จใหม่สำหรับส่วนที่ได้รับจริง',
+        confirmLabel: isEnglish ? 'Record Bounce' : 'บันทึกเช็คคืน',
+        confirmColor: Colors.orange);
+    if (reason == null) return;
     try {
-      await _svc.bounceReceipt(r.id!, clearingNote: note.isEmpty ? null : note);
+      final updated = await _svc.bounceReceipt(r.id!, reason);
       _showOk(isEnglish ? 'Bounced check recorded' : 'บันทึกเช็คคืนสำเร็จ');
-      await _loadReceipts();
-      setState(() => _selected = null);
+      await _afterAction(updated);
     } catch (e) { _showErr(e.toString()); }
   }
 
   Future<void> _void(CmReceipt r) async {
     final isEnglish = _isEnglish;
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Void' : 'ยืนยัน Void'),
-        content: Text(isEnglish
-            ? 'Confirm void of item ${r.arDocNo ?? r.id}?'
-            : 'ยืนยันการ Void รายการ ${r.arDocNo ?? r.id} ?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Void', style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    ) ?? false;
-    if (!ok) return;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Void Receipt Item' : 'ยกเลิกรายการรับเงิน',
+        message: isEnglish ? 'Void item ${r.arDocNo ?? r.id}?' : 'ยกเลิกรายการ ${r.arDocNo ?? r.id} ?',
+        confirmLabel: 'Void');
+    if (reason == null) return;
     try {
-      await _svc.voidReceipt(r.id!);
+      final updated = await _svc.voidReceipt(r.id!, reason);
       _showOk(isEnglish ? 'Voided successfully' : 'Void สำเร็จ');
-      await _loadReceipts();
-      setState(() => _selected = null);
+      await _afterAction(updated);
     } catch (e) { _showErr(e.toString()); }
   }
 
@@ -195,28 +248,6 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Future<String?> _showNoteDialog(String title, String label) async {
-    final isEnglish = _isEnglish;
-    final ctrl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(controller: ctrl,
-            decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
-            maxLines: 2),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-            onPressed: () => Navigator.pop(ctx, ctrl.text),
-            child: Text(isEnglish ? 'Confirm' : 'ยืนยัน'),
-          ),
-        ],
       ),
     );
   }
@@ -452,7 +483,7 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _kColor)),
               ]),
             ]),
-            onTap: () => setState(() => _selected = sel ? null : r),
+            onTap: () => sel ? setState(() => _selected = null) : _select(r),
           ),
         );
       },
@@ -507,22 +538,40 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
                 onPressed: () => _clear(r),
               ),
               const SizedBox(height: 8),
-              if (r.isCheck)
-                FilledButton.icon(
+              if (r.isCheck) ...[
+                _lockable(r.bounceBlockMessage, (onPressed) => FilledButton.icon(
                   icon: const Icon(Icons.cancel, size: 16),
                   label: Text(isEnglish ? 'Bounced Check' : 'เช็คคืน (Bounced)'),
                   style: FilledButton.styleFrom(backgroundColor: Colors.orange, minimumSize: const Size.fromHeight(36)),
-                  onPressed: () => _bounce(r),
-                ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.block, size: 16, color: Colors.red),
-                label: const Text('Void', style: TextStyle(color: Colors.red)),
-                style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red),
+                  onPressed: onPressed,
+                ), () => _bounce(r)),
+                const SizedBox(height: 8),
+              ],
+              _lockable(_blockMessage(r.voidBlock, r.voidBlockRef), (onPressed) => OutlinedButton.icon(
+                icon: Icon(Icons.block, size: 16, color: onPressed == null ? Colors.grey : Colors.red),
+                label: Text('Void', style: TextStyle(color: onPressed == null ? Colors.grey : Colors.red)),
+                style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: onPressed == null ? Colors.grey.shade400 : Colors.red),
                     minimumSize: const Size.fromHeight(36)),
-                onPressed: () => _void(r),
-              ),
+                onPressed: onPressed,
+              ), () => _void(r)),
             ],
+            if (r.isCleared)
+              _lockable(_blockMessage(r.unclearBlock, null), (onPressed) => OutlinedButton.icon(
+                icon: const Icon(Icons.undo, size: 16),
+                label: Text(isEnglish ? 'Undo Clearing' : 'ยกเลิกการเคลียร์'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.orange.shade800,
+                    minimumSize: const Size.fromHeight(36)),
+                onPressed: onPressed,
+              ), () => _unclear(r)),
+            const SizedBox(height: 12),
+            DocReverseHistoryPanel(
+              history: r.reverseHistory,
+              isDeleted: false,
+              isEnglish: isEnglish,
+              margin: EdgeInsets.zero,
+              title: isEnglish ? 'Status change history' : 'ประวัติการเปลี่ยนสถานะ',
+            ),
           ]),
         ),
       ),

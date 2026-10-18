@@ -1,6 +1,7 @@
 // lib/cm/models/cm_receipt.dart
 
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 class CmReceipt {
   final int?     id;
@@ -31,6 +32,13 @@ class CmReceipt {
   final int?     glEntryId;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  // จาก GET /cm_receipt/:id — เหตุที่ทำรายการไม่ได้ (null = ทำได้) และประวัติ
+  final String?  unclearBlock;
+  final String?  voidBlock;
+  final String?  voidBlockRef;
+  final String?  bounceBlock;
+  final String?  bounceBlockMessage;
+  final List<DocReverseLog> reverseHistory;
 
   const CmReceipt({
     this.id,
@@ -61,6 +69,12 @@ class CmReceipt {
     this.glEntryId,
     this.createdAt,
     this.updatedAt,
+    this.unclearBlock,
+    this.voidBlock,
+    this.voidBlockRef,
+    this.bounceBlock,
+    this.bounceBlockMessage,
+    this.reverseHistory = const [],
   });
 
   bool get isPending  => status == 'Pending';
@@ -99,6 +113,12 @@ class CmReceipt {
     glEntryId:           j['gl_entry_id'],
     createdAt:           j['created_at'] != null ? DateTime.tryParse(j['created_at'])?.toLocal() : null,
     updatedAt:           j['updated_at'] != null ? DateTime.tryParse(j['updated_at'])?.toLocal() : null,
+    unclearBlock:        j['unclear_block'],
+    voidBlock:           j['void_block'],
+    voidBlockRef:        j['void_block_ref'],
+    bounceBlock:         j['bounce_block'],
+    bounceBlockMessage:  j['bounce_block_message'],
+    reverseHistory:      DocReverseLog.listFromJson(j['reverse_history']),
   );
 }
 

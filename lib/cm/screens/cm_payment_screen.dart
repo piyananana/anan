@@ -2,6 +2,7 @@
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -104,6 +105,43 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
         SnackBar(content: Text(msg), backgroundColor: _kColor));
   }
 
+  Future<void> _select(CmPayment p) async {
+    setState(() { _selected = p; _showCreateForm = false; });
+    try {
+      final full = await _svc.fetchPayment(p.id!);
+      if (mounted && _selected?.id == p.id) setState(() => _selected = full);
+    } catch (e) { _showErr(e.toString()); }
+  }
+
+  // หลังทำรายการ: โหลดรายการใหม่และแสดงผลล่าสุดในกรอบรายละเอียด
+  Future<void> _afterAction(CmPayment updated) async {
+    await _loadPayments();
+    if (mounted) setState(() => _selected = updated);
+  }
+
+  String? _blockMessage(String? code, String? ref) {
+    if (code == null) return null;
+    final isEnglish = _isEnglish;
+    final suffix = (ref == null || ref.isEmpty) ? '' : ' ($ref)';
+    switch (code) {
+      case 'NOT_CLEARED':   return isEnglish ? 'Only cleared items can be un-cleared' : 'ยกเลิกการเคลียร์ได้เฉพาะรายการที่เคลียร์แล้ว';
+      case 'NOT_PENDING':   return isEnglish ? 'Only pending items allowed' : 'ทำได้เฉพาะรายการที่รอเคลียร์';
+      case 'NOT_CHECK':     return isEnglish ? 'Only check receipts can bounce' : 'บันทึกเช็คคืนได้เฉพาะรายการรับเป็นเช็ค';
+      case 'RECONCILED':    return isEnglish
+          ? 'Reconciled with a bank statement — unreconcile first'
+          : 'รายการนี้กระทบยอดกับ Bank Statement แล้ว กรุณายกเลิกการกระทบยอดก่อน';
+      case 'PERIOD_CLOSED': return isEnglish ? 'The CM period of the clearing date is closed' : 'งวด CM ของวันที่เคลียร์ปิดแล้ว';
+      case 'SOURCE_DOC':    return isEnglish
+          ? 'Created by an AP document — void the source document instead$suffix'
+          : 'รายการนี้มาจากเอกสาร AP กรุณายกเลิกที่เอกสารต้นทาง$suffix';
+      default:              return code;
+    }
+  }
+
+  // ปุ่มที่ล็อกเมื่อทำรายการไม่ได้ — ชี้เมาส์เห็นเหตุผล
+  Widget _lockable(String? blockMsg, Widget Function(VoidCallback? onPressed) build, VoidCallback action) =>
+      blockMsg == null ? build(action) : Tooltip(message: blockMsg, child: build(null));
+
   // ── Actions ───────────────────────────────────────────────────────────────
 
   Future<void> _clear(CmPayment p) async {
@@ -111,36 +149,43 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
     final result = await _showClearDialog();
     if (result == null) return;
     try {
-      await _svc.clearPayment(p.id!, clearingDate: result['date'], clearingNote: result['note']);
+      final updated = await _svc.clearPayment(p.id!, clearingDate: result['date'], clearingNote: result['note']);
       _showOk(isEnglish ? 'Cleared successfully' : 'เคลียร์สำเร็จ');
-      await _loadPayments();
-      setState(() => _selected = null);
+      await _afterAction(updated);
+    } catch (e) { _showErr(e.toString()); }
+  }
+
+  Future<void> _unclear(CmPayment p) async {
+    final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Undo Clearing' : 'ยกเลิกการเคลียร์',
+        message: isEnglish
+            ? 'The item goes back to Pending. No accounting entries change.'
+            : 'รายการจะกลับเป็นรอเคลียร์ ไม่กระทบรายการบัญชี',
+        confirmLabel: isEnglish ? 'Undo Clearing' : 'ยกเลิกการเคลียร์',
+        confirmColor: Colors.orange);
+    if (reason == null) return;
+    try {
+      final updated = await _svc.unclearPayment(p.id!, reason);
+      _showOk(isEnglish ? 'Clearing undone' : 'ยกเลิกการเคลียร์แล้ว');
+      await _afterAction(updated);
     } catch (e) { _showErr(e.toString()); }
   }
 
   Future<void> _void(CmPayment p) async {
     final isEnglish = _isEnglish;
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Void' : 'ยืนยัน Void'),
-        content: Text(isEnglish
-            ? 'Confirm void of payment ${p.apDocNo ?? p.id}?'
-            : 'ยืนยันการ Void รายการจ่ายเงิน ${p.apDocNo ?? p.id} ?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Void', style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    ) ?? false;
-    if (!ok) return;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Void Payment' : 'ยกเลิกรายการจ่ายเงิน',
+        message: isEnglish ? 'Void payment ${p.apDocNo ?? p.id}?' : 'ยกเลิกรายการจ่ายเงิน ${p.apDocNo ?? p.id} ?',
+        confirmLabel: 'Void');
+    if (reason == null) return;
     try {
-      await _svc.voidPayment(p.id!);
+      final updated = await _svc.voidPayment(p.id!, reason);
       _showOk(isEnglish ? 'Voided successfully' : 'Void สำเร็จ');
-      await _loadPayments();
-      setState(() => _selected = null);
+      await _afterAction(updated);
     } catch (e) { _showErr(e.toString()); }
   }
 
@@ -488,7 +533,7 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _kColor)),
               ]),
             ]),
-            onTap: () => setState(() { _selected = sel ? null : p; _showCreateForm = false; }),
+            onTap: () => sel ? setState(() => _selected = null) : _select(p),
           ),
         );
       },
@@ -547,14 +592,31 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
                 onPressed: () => _clear(p),
               ),
               const SizedBox(height: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.block, size: 16, color: Colors.red),
-                label: const Text('Void', style: TextStyle(color: Colors.red)),
-                style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red),
+              _lockable(_blockMessage(p.voidBlock, p.voidBlockRef), (onPressed) => OutlinedButton.icon(
+                icon: Icon(Icons.block, size: 16, color: onPressed == null ? Colors.grey : Colors.red),
+                label: Text('Void', style: TextStyle(color: onPressed == null ? Colors.grey : Colors.red)),
+                style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: onPressed == null ? Colors.grey.shade400 : Colors.red),
                     minimumSize: const Size.fromHeight(36)),
-                onPressed: () => _void(p),
-              ),
+                onPressed: onPressed,
+              ), () => _void(p)),
             ],
+            if (p.isCleared)
+              _lockable(_blockMessage(p.unclearBlock, null), (onPressed) => OutlinedButton.icon(
+                icon: const Icon(Icons.undo, size: 16),
+                label: Text(isEnglish ? 'Undo Clearing' : 'ยกเลิกการเคลียร์'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.orange.shade800,
+                    minimumSize: const Size.fromHeight(36)),
+                onPressed: onPressed,
+              ), () => _unclear(p)),
+            const SizedBox(height: 12),
+            DocReverseHistoryPanel(
+              history: p.reverseHistory,
+              isDeleted: false,
+              isEnglish: isEnglish,
+              margin: EdgeInsets.zero,
+              title: isEnglish ? 'Status change history' : 'ประวัติการเปลี่ยนสถานะ',
+            ),
           ]),
         ),
       ),

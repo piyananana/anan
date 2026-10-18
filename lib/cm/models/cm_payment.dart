@@ -1,6 +1,7 @@
 // lib/cm/models/cm_payment.dart
 
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 class CmPayment {
   final int?     id;
@@ -14,6 +15,7 @@ class CmPayment {
   final String?  paymentMethodCode;
   final String?  paymentMethodName;
   final int?     apPaymentRunId;
+  final int?     apTransactionId;
   final String?  apDocNo;
   final String   payeeType;
   final int?     payeeId;
@@ -34,6 +36,11 @@ class CmPayment {
   final String?  remark;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  // จาก GET /cm_payment/:id — เหตุที่ทำรายการไม่ได้ (null = ทำได้) และประวัติ
+  final String?  unclearBlock;
+  final String?  voidBlock;
+  final String?  voidBlockRef;
+  final List<DocReverseLog> reverseHistory;
 
   const CmPayment({
     this.id,
@@ -47,6 +54,7 @@ class CmPayment {
     this.paymentMethodCode,
     this.paymentMethodName,
     this.apPaymentRunId,
+    this.apTransactionId,
     this.apDocNo,
     this.payeeType = 'VENDOR',
     this.payeeId,
@@ -67,13 +75,17 @@ class CmPayment {
     this.remark,
     this.createdAt,
     this.updatedAt,
+    this.unclearBlock,
+    this.voidBlock,
+    this.voidBlockRef,
+    this.reverseHistory = const [],
   });
 
   bool get isPending   => status == 'Pending';
   bool get isCleared   => status == 'Cleared';
   bool get isVoided    => status == 'Voided';
   bool get isCheck     => paymentMethodType == 'CHECK';
-  bool get isFromAp    => apPaymentRunId != null;
+  bool get isFromAp    => apTransactionId != null || apPaymentRunId != null || glEntryId != null;
   bool get isFcy       => currencyCode != 'THB';
 
   Map<String, dynamic> toJson() => {
@@ -107,6 +119,7 @@ class CmPayment {
     paymentMethodCode: j['payment_method_code'],
     paymentMethodName: j['payment_method_name'],
     apPaymentRunId:    j['ap_payment_run_id'],
+    apTransactionId:   j['ap_transaction_id'],
     apDocNo:           j['ap_doc_no'],
     payeeType:         j['payee_type'] ?? 'VENDOR',
     payeeId:           j['payee_id'],
@@ -127,6 +140,10 @@ class CmPayment {
     remark:            j['remark'],
     createdAt:         j['created_at'] != null ? DateTime.tryParse(j['created_at'])?.toLocal() : null,
     updatedAt:         j['updated_at'] != null ? DateTime.tryParse(j['updated_at'])?.toLocal() : null,
+    unclearBlock:      j['unclear_block'],
+    voidBlock:         j['void_block'],
+    voidBlockRef:      j['void_block_ref'],
+    reverseHistory:    DocReverseLog.listFromJson(j['reverse_history']),
   );
 }
 
