@@ -15,6 +15,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../models/im_item.dart';
 import '../models/im_item_category.dart';
+import '../models/im_transaction.dart';
 import '../services/im_item_service.dart';
 import '../services/im_item_category_service.dart';
 import '../services/im_item_transaction_report_service.dart';
@@ -70,6 +71,9 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
   DateTime _dateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _dateTo   = DateTime.now();
   List<String> _selectedSysDocTypes = [];
+  // ค่าเริ่มต้นรวม Void — เอกสารที่ยกเลิกแสดง ณ วันที่เดิม + รายการกลับ "(VOID)" ณ วันที่ยกเลิก (ตรงกับรายงาน
+  // ความเคลื่อนไหวสต็อก) ล้างตัวเลือก = ทุกสถานะ
+  List<String> _selectedStatuses = ['Posted', 'Received', 'Delivered', 'Void'];
   List<int>    _selectedCategoryIds = [];
   String? _itemCodeFrom;
   String? _itemCodeTo;
@@ -106,6 +110,7 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
         dateFrom:      DateFormat('yyyy-MM-dd').format(_dateFrom),
         dateTo:        DateFormat('yyyy-MM-dd').format(_dateTo),
         sysDocTypes:   _selectedSysDocTypes,
+        statuses:      _selectedStatuses.isEmpty ? imReportStatuses : _selectedStatuses,
         categoryIds:   _selectedCategoryIds,
         itemCodeFrom:  _itemCodeFrom,
         itemCodeTo:    _itemCodeTo,
@@ -220,6 +225,9 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
       final names = _selectedSysDocTypes.map((sdt) => imSysDocType[sdt] ?? sdt).join(', ');
       conditions.add('${isEnglish ? "Document Types" : "ประเภทเอกสาร"}: $names');
     }
+    conditions.add(_selectedStatuses.isEmpty
+        ? (isEnglish ? 'Status: All' : 'สถานะ: ทั้งหมด')
+        : '${isEnglish ? "Status" : "สถานะ"}: ${_selectedStatuses.map((s) => imTransactionStatusLabel(s, isEnglish)).join(', ')}');
     if (_selectedCategoryIds.isNotEmpty) {
       final names = _categories
           .where((c) => _selectedCategoryIds.contains(c.id))
@@ -379,7 +387,7 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
         child: pw.Row(children: [
           cell(cw['date']!,   _fmtDate(r['doc_date'] as String?)),
           cell(cw['type']!,   '${r['doc_code'] ?? ''}  ${_docTypeName(r, isEnglish)}'),
-          cell(cw['docNo']!,  r['doc_no'] as String? ?? ''),
+          cell(cw['docNo']!,  _docNoLabel(r, isEnglish)),
           cell(cw['party']!,  _partyLabel(r, isEnglish)),
           cell(cw['item']!,   '${r['item_code'] ?? ''}  ${_itemName(r, isEnglish)}${_freeSuffix(r, isEnglish)}'),
           cell(cw['qty']!,    qtyUnit, a: pw.TextAlign.right),
@@ -482,7 +490,7 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
 
         _xl(s, row, 0, _fmtDate(r['doc_date'] as String?));
         _xl(s, row, 1, '${r['doc_code'] ?? ''}  ${_docTypeName(r, isEnglish)}');
-        _xl(s, row, 2, r['doc_no'] as String? ?? '');
+        _xl(s, row, 2, _docNoLabel(r, isEnglish));
         _xl(s, row, 3, _partyLabel(r, isEnglish));
         _xl(s, row, 4, '${r['item_code'] ?? ''}  ${_itemName(r, isEnglish)}${_freeSuffix(r, isEnglish)}');
         _xl(s, row, 5, _num(r['qty']).toDouble(), align: HorizontalAlign.Right);
@@ -533,6 +541,29 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
         child: Text(DateFormat('dd/MM/yyyy').format(date)),
       ),
     );
+  }
+
+  // เลขที่เอกสาร — ร่าง/ลบแล้ว ต่อท้ายด้วยสถานะ (รายการกลับของเอกสารที่ยกเลิกมี "(VOID)" มาจาก backend แล้ว)
+  String _docNoLabel(Map<String, dynamic> r, bool isEnglish) {
+    final no = r['doc_no'] as String? ?? '';
+    final st = r['status'] as String? ?? '';
+    return st == 'Draft' || st == 'Deleted' ? '$no (${imTransactionStatusLabel(st, isEnglish)})' : no;
+  }
+
+  Future<void> _pickStatuses() async {
+    final isEnglish = _isEnglish;
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => _MultiPickerDialog<String>(
+        title: isEnglish ? 'Select Status' : 'เลือกสถานะ',
+        items: imReportStatuses,
+        selected: _selectedStatuses,
+        idOf: (s) => s,
+        labelOf: (s) => imTransactionStatusLabel(s, isEnglish),
+        isEnglish: isEnglish,
+      ),
+    );
+    if (result != null && mounted) setState(() => _selectedStatuses = imReportStatuses.where(result.contains).toList());
   }
 
   Future<void> _pickSysDocTypes() async {
@@ -724,6 +755,28 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
                                   spacing: 4, runSpacing: 2,
                                   children: _selectedSysDocTypes.map((sdt) => Chip(
                                     label: Text(imSysDocType[sdt] ?? sdt, style: const TextStyle(fontSize: 11)),
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                    backgroundColor: Colors.teal[50],
+                                    side: BorderSide(color: Colors.teal[200]!),
+                                  )).toList(),
+                                ),
+                              ],
+
+                              const SizedBox(height: 12),
+                              _buildMultiField(
+                                label: isEnglish ? 'Status' : 'สถานะ',
+                                count: _selectedStatuses.length,
+                                allLabel: isEnglish ? '— All Statuses —' : '— ทุกสถานะ —',
+                                onTap: _pickStatuses,
+                                onClear: () => setState(() => _selectedStatuses = []),
+                              ),
+                              if (_selectedStatuses.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 4, runSpacing: 2,
+                                  children: _selectedStatuses.map((s) => Chip(
+                                    label: Text(imTransactionStatusLabel(s, isEnglish), style: const TextStyle(fontSize: 11)),
                                     padding: EdgeInsets.zero,
                                     visualDensity: VisualDensity.compact,
                                     backgroundColor: Colors.teal[50],

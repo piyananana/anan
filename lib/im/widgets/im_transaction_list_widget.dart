@@ -114,6 +114,8 @@ class _ImTransactionListWidgetState extends State<ImTransactionListWidget>
     try {
       final rows = await _service.fetchRows(
         docCode: _selectedDocCode,
+        // เอกสารที่ลบแล้วซ่อนจากรายการ — ดึงมาเฉพาะเมื่อเลือกสถานะ Deleted
+        status: _selectedStatus == 'Deleted' ? 'Deleted' : null,
         warehouseId: _selectedWarehouseId,
         dateFrom: formatLocalDate(_dateFrom),
         dateTo: formatLocalDate(_dateTo),
@@ -182,6 +184,8 @@ class _ImTransactionListWidgetState extends State<ImTransactionListWidget>
       case 'Draft':  return Colors.orange;
       case 'Posted': return Colors.green;
       case 'Void':   return Colors.red;
+      case 'Received':
+      case 'Delivered': return Colors.blue;
       default:       return Colors.grey;
     }
   }
@@ -278,12 +282,19 @@ class _ImTransactionListWidgetState extends State<ImTransactionListWidget>
                     DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
                     const DropdownMenuItem(value: 'Draft', child: Text('Draft')),
                     const DropdownMenuItem(value: 'Posted', child: Text('Posted')),
+                    const DropdownMenuItem(value: 'Received', child: Text('Received')),
+                    const DropdownMenuItem(value: 'Delivered', child: Text('Delivered')),
                     const DropdownMenuItem(value: 'Void', child: Text('Void')),
+                    const DropdownMenuItem(value: 'Deleted', child: Text('Deleted')),
                   ],
-                  onChanged: (v) => setState(() {
-                    _selectedStatus = v;
-                    _applyFilter();
-                  }),
+                  onChanged: (v) {
+                    final refetch = v == 'Deleted' || _selectedStatus == 'Deleted';
+                    setState(() {
+                      _selectedStatus = v;
+                      _applyFilter();
+                    });
+                    if (refetch) _fetchRows();
+                  },
                 ),
               ),
               const SizedBox(width: 8),

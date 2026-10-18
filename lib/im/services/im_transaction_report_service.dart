@@ -11,6 +11,7 @@ class ImTransactionReportService {
     required String dateFrom,
     required String dateTo,
     List<String>? sysDocTypes,
+    List<String>? statuses, // ไม่ส่ง = ค่าเริ่มต้นของ backend
     String sort = 'asc', // 'asc' | 'desc' — เรียงตามวันที่เอกสาร
   }) async {
     final headers = await _authService.getAuthHeader();
@@ -21,6 +22,9 @@ class ImTransactionReportService {
     };
     if (sysDocTypes != null && sysDocTypes.isNotEmpty) {
       params['sys_doc_types'] = sysDocTypes.join(',');
+    }
+    if (statuses != null && statuses.isNotEmpty) {
+      params['statuses'] = statuses.join(',');
     }
     final uri = Uri.parse('$baseUrl/im_transaction_report').replace(queryParameters: params);
     final response = await http.get(uri, headers: headers);

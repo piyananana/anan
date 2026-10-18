@@ -313,11 +313,12 @@ class ImTransactionService {
     }
   }
 
-  Future<ImTransaction> voidTransaction(int id) async {
+  Future<ImTransaction> voidTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
       Uri.parse('$baseUrl/im_transaction/$id/void'),
       headers: headers,
+      body: jsonEncode({'reason': reason}),
     );
     if (response.statusCode == 200) {
       return ImTransaction.fromJson(json.decode(response.body));
@@ -330,11 +331,12 @@ class ImTransactionService {
     }
   }
 
-  Future<ImTransaction> reverseToDraft(int id) async {
+  Future<ImTransaction> reverseToDraft(int id, String reason) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
       Uri.parse('$baseUrl/im_transaction/$id/reverse_to_draft'),
       headers: headers,
+      body: jsonEncode({'reason': reason}),
     );
     if (response.statusCode == 200) {
       return ImTransaction.fromJson(json.decode(response.body));
@@ -347,13 +349,14 @@ class ImTransactionService {
     }
   }
 
-  Future<void> deleteTransaction(int id) async {
+  Future<void> deleteTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
     final response = await http.delete(
       Uri.parse('$baseUrl/im_transaction/$id'),
       headers: headers,
+      body: jsonEncode({'reason': reason}),
     );
-    if (response.statusCode == 204) return;
+    if (response.statusCode == 200 || response.statusCode == 204) return;
     if (response.statusCode == 401) {
       authService.logout();
       throw Exception('Unauthorized.');

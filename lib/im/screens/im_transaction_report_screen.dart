@@ -13,6 +13,7 @@ import '../../sa/models/sa_anan_module.dart';
 import '../../sa/models/sa_company.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
+import '../models/im_transaction.dart';
 import '../services/im_transaction_report_service.dart';
 import '../../utils/file_download.dart';
 
@@ -62,6 +63,8 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
   DateTime _dateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _dateTo   = DateTime.now();
   List<String> _selectedSysDocTypes = [];
+  // ค่าเริ่มต้น = ธุรกรรมที่มีผลจริง (เหมือนพฤติกรรมเดิม) — ล้างตัวเลือก = ทุกสถานะ
+  List<String> _selectedStatuses = ['Posted', 'Received', 'Delivered'];
   String _sort = 'asc'; // 'asc' | 'desc' — เรียงตามวันที่เอกสาร
   bool   _showDetail = false;
 
@@ -89,6 +92,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
         dateFrom:    DateFormat('yyyy-MM-dd').format(_dateFrom),
         dateTo:      DateFormat('yyyy-MM-dd').format(_dateTo),
         sysDocTypes: _selectedSysDocTypes,
+        statuses:    _selectedStatuses.isEmpty ? imReportStatuses : _selectedStatuses,
         sort:        _sort,
       );
       if (raw.isEmpty && mounted) {
@@ -151,6 +155,13 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
     }
   }
 
+  // เลขที่เอกสาร + สถานะ (แสดงสถานะเฉพาะที่ไม่ใช่ Posted เช่น ร่าง / ยกเลิก / ลบแล้ว)
+  String _docNoLabel(Map<String, dynamic> h, bool isEnglish) {
+    final no = h['doc_no'] as String? ?? '';
+    final st = h['status'] as String? ?? '';
+    return st.isEmpty || st == 'Posted' ? no : '$no (${imTransactionStatusLabel(st, isEnglish)})';
+  }
+
   String _refNo(Map<String, dynamic> h) {
     final r = (h['ref_no'] as String? ?? '').trim();
     if (r.isNotEmpty) return r;
@@ -195,6 +206,9 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
     } else {
       conditions.add(isEnglish ? 'Document Types: All' : 'ประเภทเอกสาร: ทั้งหมด');
     }
+    conditions.add(_selectedStatuses.isEmpty
+        ? (isEnglish ? 'Status: All' : 'สถานะ: ทั้งหมด')
+        : '${isEnglish ? "Status" : "สถานะ"}: ${_selectedStatuses.map((s) => imTransactionStatusLabel(s, isEnglish)).join(', ')}');
     conditions.add(_sort == 'desc'
         ? (isEnglish ? 'Sorted: newest first' : 'เรียง: ล่าสุด-เก่าสุด')
         : (isEnglish ? 'Sorted: oldest first' : 'เรียง: เก่าสุด-ล่าสุด'));
@@ -384,7 +398,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
           pw.Row(children: [
             hBox(hw['date']!,   _fmtDate(h['doc_date'] as String?), pw.TextAlign.left),
             hBox(hw['type']!,   '${h['doc_code'] ?? ''}  ${_docTypeName(h, isEnglish)}', pw.TextAlign.left),
-            hBox(hw['docNo']!,  h['doc_no'] as String? ?? '', pw.TextAlign.left),
+            hBox(hw['docNo']!,  _docNoLabel(h, isEnglish), pw.TextAlign.left),
             hBox(hw['refNo']!,  _refNo(h), pw.TextAlign.left),
             hBox(hw['party']!,  _partyName(h), pw.TextAlign.left),
             hBox(hw['amount']!, fmt.format(amount), pw.TextAlign.right),
@@ -467,7 +481,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
         final amount = _num(h['total_value_lc']).toDouble();
         _xl(s, row, 0, _fmtDate(h['doc_date'] as String?));
         _xl(s, row, 1, '${h['doc_code'] ?? ''}  ${_docTypeName(h, isEnglish)}');
-        _xl(s, row, 2, h['doc_no'] as String? ?? '');
+        _xl(s, row, 2, _docNoLabel(h, isEnglish));
         _xl(s, row, 3, _refNo(h));
         _xl(s, row, 4, _partyName(h));
         _xl(s, row, 5, amount, align: HorizontalAlign.Right);
@@ -548,6 +562,22 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
       ),
     );
     if (result != null && mounted) setState(() => _selectedSysDocTypes = result);
+  }
+
+  Future<void> _pickStatuses() async {
+    final isEnglish = _isEnglish;
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => _MultiPickerDialog<String>(
+        title: isEnglish ? 'Select Status' : 'เลือกสถานะ',
+        items: imReportStatuses,
+        selected: _selectedStatuses,
+        idOf: (s) => s,
+        labelOf: (s) => imTransactionStatusLabel(s, isEnglish),
+        isEnglish: isEnglish,
+      ),
+    );
+    if (result != null && mounted) setState(() => _selectedStatuses = imReportStatuses.where(result.contains).toList());
   }
 
   Widget _buildMultiField({required String label, required int count, required String allLabel, required VoidCallback onTap, required VoidCallback onClear}) {
@@ -660,6 +690,28 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
                                   spacing: 4, runSpacing: 2,
                                   children: _selectedSysDocTypes.map((sdt) => Chip(
                                     label: Text(imSysDocType[sdt] ?? sdt, style: const TextStyle(fontSize: 11)),
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                    backgroundColor: Colors.teal[50],
+                                    side: BorderSide(color: Colors.teal[200]!),
+                                  )).toList(),
+                                ),
+                              ],
+
+                              const SizedBox(height: 12),
+                              _buildMultiField(
+                                label: isEnglish ? 'Status' : 'สถานะ',
+                                count: _selectedStatuses.length,
+                                allLabel: isEnglish ? '— All Statuses —' : '— ทุกสถานะ —',
+                                onTap: _pickStatuses,
+                                onClear: () => setState(() => _selectedStatuses = []),
+                              ),
+                              if (_selectedStatuses.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 4, runSpacing: 2,
+                                  children: _selectedStatuses.map((s) => Chip(
+                                    label: Text(imTransactionStatusLabel(s, isEnglish), style: const TextStyle(fontSize: 11)),
                                     padding: EdgeInsets.zero,
                                     visualDensity: VisualDensity.compact,
                                     backgroundColor: Colors.teal[50],

@@ -24,6 +24,9 @@ class DocReverseLog {
       case 'Holding':
       case 'Deposited':
       case 'Returned': return isEnglish ? 'Status reverted' : 'ถอยสถานะ';
+      // IM รับ/ส่งสินค้ารอตั้งหนี้: ถอยเฉพาะใบตั้งหนี้
+      case 'Received':
+      case 'Delivered': return isEnglish ? 'Billing reversed' : 'ถอยการตั้งหนี้';
       default:        return isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่าง';
     }
   }

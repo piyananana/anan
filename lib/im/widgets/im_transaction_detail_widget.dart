@@ -19,6 +19,7 @@ import '../../gl/services/gl_entry_service.dart';
 import '../../gl/models/gl_entry.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../ap/models/ap_vendor.dart';
 import '../../ap/widgets/ap_vendor_list_widget.dart';
 import '../../ar/models/ar_customer.dart';
@@ -206,6 +207,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   final _refNoCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
+  // เหตุที่ถอย / ยกเลิก / ลบไม่ได้ (null = ทำได้) + สถานะปลายทางของการถอย + ประวัติ — จาก backend ตอนโหลด
+  ImDocBlock? _reverseBlock;
+  String? _reverseTo;
+  ImDocBlock? _voidBlock;
+  ImDocBlock? _deleteBlock;
+  List<DocReverseLog> _reverseHistory = const [];
   int? _glEntryId;
 
   // รองรับรับสินค้าจากผู้ขายต่างประเทศเป็นสกุลเงินต่างประเทศ (เฉพาะ _isApVendorMode) — มิเรอร์
@@ -314,6 +321,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refNoCtrl.clear();
     _descCtrl.clear();
     _status = 'Draft';
+    _reverseBlock = null;
+    _reverseTo = null;
+    _voidBlock = null;
+    _deleteBlock = null;
+    _reverseHistory = const [];
     _glEntryId = null;
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
     _exchangeRate = _currency?.baseRate ?? 1;
@@ -386,6 +398,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refNoCtrl.text = h.refNo ?? '';
     _descCtrl.text = h.description ?? '';
     _status = h.status;
+    _reverseBlock = tx.reverseBlock;
+    _reverseTo = tx.reverseTo;
+    _voidBlock = tx.voidBlock;
+    _deleteBlock = tx.deleteBlock;
+    _reverseHistory = tx.reverseHistory;
     _glEntryId = h.glEntryId;
     _currency = _currencies.cast<Currency?>().firstWhere(
         (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
@@ -1293,26 +1310,22 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
   }
 
+  // ยกเลิก: ใช้เมื่อถอยไม่ได้ (เช่น งวดเดิมปิดแล้ว) — ย้อนสต็อก + ลงรายการบัญชีกลับวันที่ยกเลิก
+  // ใบตั้งหนี้ AP/AR ที่สร้างให้ถูกยกเลิกด้วย (รายการกลับวันที่ยกเลิกเช่นกัน)
   Future<void> _void() async {
     if (_id == null) return;
     final isEnglish = _isEnglish;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Void Document' : 'ยกเลิกเอกสาร'),
-        content: Text(isEnglish
-            ? 'Void this document? Stock and GL impact will be reversed.'
-            : 'ยกเลิกเอกสารนี้? ผลกระทบต่อสต็อกและบัญชีจะถูกย้อนกลับ'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Void' : 'ยืนยัน Void')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Void Document' : 'ยกเลิกเอกสาร',
+        message: isEnglish
+            ? 'Stock movements will be reversed and a reversing journal entry dated today will be posted (including any linked AP/AR invoice). The original stays in its period.'
+            : 'ระบบจะย้อนสต็อก และลงรายการบัญชีกลับในวันนี้ (รวมใบตั้งหนี้ AP/AR ที่สร้างจากเอกสารนี้) เอกสารเดิมยังอยู่ในงวดเดิม',
+        confirmLabel: isEnglish ? 'Void' : 'ยกเลิกเอกสาร');
+    if (reason == null) return;
     setState(() => _isSaving = true);
     try {
-      await _service.voidTransaction(_id!);
+      await _service.voidTransaction(_id!, reason);
       if (mounted) widget.onSaveSuccess();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1322,29 +1335,30 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
   }
 
-  // ถอยเอกสารที่ Posted/Received/Delivered แล้วกลับไปเป็น Draft — มิเรอร์ _void() ทุกประการ (ย้อนสต็อก, Void
-  // AP/AR/GL ที่ผูกไว้) ต่างกันแค่สถานะปลายทางที่ยังแก้ไขแล้ว Post ใหม่ได้ ใช้กรณีกรอกข้อมูลผิดแล้วต้องการแก้ไข
-  // เอกสารเดิม แทนที่จะ Void แล้วสร้างใหม่ (ดู reverseToDraft ใน imTransactionController.js)
+  // ถอย: งวดยังเปิดและไม่มีเอกสารอื่นอ้างอิง — ลบรายการบัญชีและใบตั้งหนี้ AP/AR ที่สร้างให้ (เก็บเลขที่ไว้ใช้ซ้ำ)
+  // '12'/'32' ที่ตั้งหนี้แล้ว ถอยเฉพาะใบตั้งหนี้กลับไปรอตั้งหนี้ก่อน (ดู reverseToDraft ใน imTransactionController.js)
   Future<void> _reverseToDraft() async {
     if (_id == null) return;
     final isEnglish = _isEnglish;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Reverse to Draft' : 'ถอยกลับเป็นฉบับร่าง'),
-        content: Text(isEnglish
-            ? 'Reverse this document back to Draft? Stock and GL impact (including any linked AP/AR document) will be reversed, and you will be able to edit and re-post it.'
-            : 'ถอยเอกสารนี้กลับเป็นฉบับร่าง? ผลกระทบต่อสต็อกและบัญชี (รวมถึงเอกสาร AP/AR ที่ผูกไว้ ถ้ามี) จะถูกย้อนกลับ และจะสามารถแก้ไขแล้ว Post ใหม่ได้'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Reverse' : 'ยืนยันถอยกลับ')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
+    final billOnly = _reverseTo == 'Received' || _reverseTo == 'Delivered';
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: billOnly
+            ? (isEnglish ? 'Reverse Billing' : 'ถอยการตั้งหนี้')
+            : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+        message: billOnly
+            ? (isEnglish
+                ? 'The linked AP/AR invoice and its journal entry will be removed; the document returns to $_reverseTo. The invoice number is kept for re-posting.'
+                : 'ระบบจะลบใบตั้งหนี้ AP/AR และรายการบัญชีของใบนั้น เอกสารกลับไปสถานะรอตั้งหนี้ เลขที่ใบตั้งหนี้เดิมจะใช้ซ้ำตอนโพสต์ใหม่')
+            : (isEnglish
+                ? 'Stock movements will be reversed and the journal entry (plus any linked AP/AR invoice) removed. The document number and journal numbers are kept for re-posting.'
+                : 'ระบบจะย้อนสต็อก และลบรายการบัญชี (รวมใบตั้งหนี้ AP/AR ที่สร้างจากเอกสารนี้) เลขที่เอกสารและเลขที่รายการบัญชีเดิมจะใช้ซ้ำตอนโพสต์ใหม่'),
+        confirmLabel: isEnglish ? 'Reverse' : 'ถอย',
+        confirmColor: Colors.orange.shade800);
+    if (reason == null) return;
     setState(() => _isSaving = true);
     try {
-      await _service.reverseToDraft(_id!);
+      await _service.reverseToDraft(_id!, reason);
       if (mounted) widget.onSaveSuccess();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1354,12 +1368,21 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
   }
 
+  // ลบ: เฉพาะร่าง — เก็บไว้ด้วยสถานะ Deleted เพื่อตรวจสอบ แต่นำกลับมาใช้ไม่ได้
   Future<void> _delete() async {
     if (_id == null) return;
     final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Delete Document' : 'ลบเอกสาร',
+        message: isEnglish
+            ? 'The document will be kept for audit with status Deleted and cannot be used again.'
+            : 'ระบบจะเก็บเอกสารไว้ตรวจสอบด้วยสถานะ Deleted และนำกลับมาใช้ไม่ได้อีก',
+        confirmLabel: isEnglish ? 'Delete' : 'ลบ');
+    if (reason == null) return;
     setState(() => _isSaving = true);
     try {
-      await _service.deleteTransaction(_id!);
+      await _service.deleteTransaction(_id!, reason);
       if (mounted) widget.onSaveSuccess();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1395,6 +1418,15 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 ],
                 const SizedBox(height: 12),
                 _buildTotalsCard(isEnglish),
+                if (_reverseHistory.isNotEmpty || _status == 'Deleted') ...[
+                  const SizedBox(height: 12),
+                  DocReverseHistoryPanel(
+                    history: _reverseHistory,
+                    isDeleted: _status == 'Deleted',
+                    isEnglish: isEnglish,
+                    margin: EdgeInsets.zero,
+                  ),
+                ],
               ],
             ),
           ),
@@ -2263,6 +2295,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     ]);
   }
 
+  // ปุ่มที่ทำไม่ได้: ล็อกไว้ และชี้เมาส์แล้วเห็นเหตุผล
+  Widget _lockable(ImDocBlock? block, Widget Function(VoidCallback? onPressed) build, VoidCallback action) =>
+      block == null
+          ? build(_isSaving ? null : action)
+          : Tooltip(message: block.text(_isEnglish), child: build(null));
+
   Widget _buildActionBar(bool isEnglish) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -2272,11 +2310,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         const SizedBox(width: 8),
         if (_status == 'Draft' && !widget.viewOnly) ...[
           if (_id != null && widget.canDelete)
-            TextButton(
-              onPressed: _isSaving ? null : _delete,
+            _lockable(_deleteBlock, (onPressed) => TextButton(
+              onPressed: onPressed,
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: Text(isEnglish ? 'Delete' : 'ลบ'),
-            ),
+            ), _delete),
           const SizedBox(width: 8),
           OutlinedButton(
             onPressed: _isSaving ? null : () => _save('Draft'),
@@ -2316,19 +2354,21 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           const SizedBox(width: 8),
         ],
         if ((_status == 'Posted' || _status == 'Received' || _status == 'Delivered') && !widget.viewOnly) ...[
-          OutlinedButton(
-            onPressed: _isSaving ? null : _reverseToDraft,
+          _lockable(_reverseBlock, (onPressed) => OutlinedButton(
+            onPressed: onPressed,
             style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
-            child: Text(isEnglish ? 'Reverse to Draft' : 'ถอยกลับเป็นฉบับร่าง'),
-          ),
+            child: Text(_reverseTo == 'Received' || _reverseTo == 'Delivered'
+                ? (isEnglish ? 'Reverse Billing' : 'ถอยการตั้งหนี้')
+                : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง')),
+          ), _reverseToDraft),
           const SizedBox(width: 8),
         ],
         if ((_status == 'Posted' || _status == 'Received' || _status == 'Delivered') && !widget.viewOnly)
-          ElevatedButton(
-            onPressed: _isSaving ? null : _void,
+          _lockable(_voidBlock, (onPressed) => ElevatedButton(
+            onPressed: onPressed,
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
-            child: Text(isEnglish ? 'Void' : 'Void'),
-          ),
+            child: Text(isEnglish ? 'Void' : 'ยกเลิก'),
+          ), _void),
         if (_isSaving) ...[
           const SizedBox(width: 12),
           const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),

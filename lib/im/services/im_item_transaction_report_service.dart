@@ -11,6 +11,7 @@ class ImItemTransactionReportService {
     required String dateFrom,
     required String dateTo,
     List<String>? sysDocTypes,
+    List<String>? statuses, // ไม่ส่ง = ค่าเริ่มต้นของ backend
     List<int>? categoryIds,
     String? itemCodeFrom,
     String? itemCodeTo,
@@ -24,6 +25,9 @@ class ImItemTransactionReportService {
     };
     if (sysDocTypes != null && sysDocTypes.isNotEmpty) {
       params['sys_doc_types'] = sysDocTypes.join(',');
+    }
+    if (statuses != null && statuses.isNotEmpty) {
+      params['statuses'] = statuses.join(',');
     }
     if (categoryIds != null && categoryIds.isNotEmpty) {
       params['category_ids'] = categoryIds.join(',');

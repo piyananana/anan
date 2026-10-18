@@ -1,18 +1,28 @@
 // lib/im/models/im_transaction.dart
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 // ── Status labels (Draft / Posted / Void) ────────────────────────────────────
 const Map<String, String> imTransactionStatusLabels = {
   'Draft':  'ร่าง',
   'Posted': 'Post แล้ว',
+  'Received':  'รับแล้ว รอตั้งหนี้',
+  'Delivered': 'ส่งแล้ว รอตั้งหนี้',
   'Void':   'ยกเลิก',
+  'Deleted': 'ลบแล้ว',
 };
 
 const Map<String, String> imTransactionStatusLabelsEn = {
   'Draft':  'Draft',
   'Posted': 'Posted',
+  'Received':  'Received',
+  'Delivered': 'Delivered',
   'Void':   'Void',
+  'Deleted': 'Deleted',
 };
+
+// สถานะที่เลือกกรองได้ในรายงาน IM (ตรงกับ IM_REPORT_STATUSES ฝั่ง backend)
+const List<String> imReportStatuses = ['Draft', 'Posted', 'Received', 'Delivered', 'Void', 'Deleted'];
 
 String imTransactionStatusLabel(String s, bool isEnglish) =>
     (isEnglish ? imTransactionStatusLabelsEn[s] : imTransactionStatusLabels[s]) ?? s;
@@ -477,17 +487,61 @@ class ImReturnableLine {
   }
 }
 
+// ── เหตุที่ถอย / ยกเลิก / ลบไม่ได้ (backend ส่ง code + ref + ข้อความภาษาไทย) ─────────
+class ImDocBlock {
+  final String code;
+  final String? ref;
+  final String message;
+
+  const ImDocBlock({required this.code, this.ref, required this.message});
+
+  static ImDocBlock? fromJson(dynamic json) => json is Map<String, dynamic>
+      ? ImDocBlock(code: json['code'] ?? '', ref: json['ref'] as String?, message: json['message'] ?? '')
+      : null;
+
+  static const Map<String, String> _en = {
+    'NOT_REVERSIBLE':      'Only posted documents can be reversed',
+    'NOT_POSTED':          'Only posted documents can be voided (delete a draft instead)',
+    'NOT_DRAFT':           'Posted documents cannot be deleted — reverse to draft first',
+    'STOCK_COUNT':         'Created from a stock count sheet — use the stock count screen',
+    'MO_CLOSED':           'The referenced manufacturing order is closed',
+    'PERIOD_CLOSED':       'The accounting period of this document is closed',
+    'RETURNED':            'A return document references this document',
+    'CONSIGNMENT_SETTLED': 'Consignment stock in this document has been settled with the consignor',
+    'STOCK_USED':          'Stock received by this document has already been issued',
+    'INSUFFICIENT_STOCK':  'Current stock balance is not enough to reverse',
+    'AP_LINKED':           'The AP invoice created from this document cannot be reversed or voided',
+    'AR_LINKED':           'The AR invoice created from this document cannot be reversed or voided',
+  };
+
+  String text(bool isEnglish) =>
+      isEnglish ? '${_en[code] ?? code}${ref != null ? ' ($ref)' : ''}' : message;
+}
+
 // ── Wrapper ───────────────────────────────────────────────────────────────
 class ImTransaction {
   final ImTransactionHeader header;
   final List<ImTransactionDetail> details;
+  final ImDocBlock? reverseBlock;
+  final String? reverseTo; // Draft / Received / Delivered
+  final ImDocBlock? voidBlock;
+  final ImDocBlock? deleteBlock;
+  final List<DocReverseLog> reverseHistory;
 
-  const ImTransaction({required this.header, this.details = const []});
+  const ImTransaction({
+    required this.header, this.details = const [],
+    this.reverseBlock, this.reverseTo, this.voidBlock, this.deleteBlock, this.reverseHistory = const [],
+  });
 
   factory ImTransaction.fromJson(Map<String, dynamic> json) => ImTransaction(
         header: ImTransactionHeader.fromJson(json),
         details: (json['details'] as List<dynamic>? ?? [])
             .map((e) => ImTransactionDetail.fromJson(e as Map<String, dynamic>))
             .toList(),
+        reverseBlock: ImDocBlock.fromJson(json['reverse_block']),
+        reverseTo: json['reverse_to'] as String?,
+        voidBlock: ImDocBlock.fromJson(json['void_block']),
+        deleteBlock: ImDocBlock.fromJson(json['delete_block']),
+        reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
       );
 }
