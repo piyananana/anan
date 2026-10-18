@@ -1,5 +1,7 @@
 // File: gl/models/gl_entry.dart
 import '../../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+export '../../sa/models/sa_document_reverse_log.dart';
 
 class GlEntryHeader {
   final int id;
@@ -118,9 +120,7 @@ class GlEntryHeader {
       branchCode: json['branch_code'] as String?,
       branchName: json['branch_name_thai'] as String?,
       reverseBlock: json['reverse_block'] as String?,
-      reverseHistory: (json['reverse_history'] as List? ?? [])
-          .map((e) => DocReverseLog.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
     );
   }
 
@@ -150,25 +150,6 @@ class GlEntryHeader {
       'branch_id': branchId,
     };
   }
-}
-
-// ประวัติการถอยเอกสารกลับเป็นร่าง (sa_document_reverse_log)
-class DocReverseLog {
-  final String? fromStatus;
-  final String? toStatus; // Draft = ถอยเป็นร่าง, Deleted = ลบ
-  final String reason;
-  final String? createdByName;
-  final DateTime? createdAt;
-
-  DocReverseLog({this.fromStatus, this.toStatus, required this.reason, this.createdByName, this.createdAt});
-
-  factory DocReverseLog.fromJson(Map<String, dynamic> json) => DocReverseLog(
-        fromStatus: json['from_status'] as String?,
-        toStatus: json['to_status'] as String?,
-        reason: json['reason'] ?? '',
-        createdByName: json['created_by_name'] as String?,
-        createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '')?.toLocal(),
-      );
 }
 
 class GlEntryDetail {

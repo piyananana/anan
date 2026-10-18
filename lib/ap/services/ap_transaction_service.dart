@@ -342,19 +342,40 @@ class ApTransactionService {
     return null;
   }
 
-  Future<void> deleteTransaction(int id) async {
+  // ลบ (เฉพาะ Draft, ต้องระบุเหตุผล) — backend เก็บแถวไว้ด้วยสถานะ Deleted เพื่อตรวจสอบ
+  Future<void> deleteTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
     final response = await http.delete(
       Uri.parse('$baseUrl/ap_transaction/$id'),
       headers: headers,
+      body: jsonEncode({'reason': reason, 'user_id': authService.currentUser?.id}),
     );
-    if (response.statusCode == 204) return;
+    if (response.statusCode == 200 || response.statusCode == 204) return;
     if (response.statusCode == 401) {
       authService.logout();
       throw Exception('Unauthorized.');
     } else {
       final err = json.decode(response.body);
       throw Exception(err['message'] ?? 'ลบข้อมูลล้มเหลว');
+    }
+  }
+
+  // ถอยเป็นร่าง: Posted → Draft (ลบรายการบัญชี เก็บเลขที่ไว้ใช้ซ้ำ) หรือ Submitted/Approved → Draft (ต้องขออนุมัติใหม่)
+  Future<ApTransaction> reverseTransaction(int id, String reason) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/ap_transaction/$id/reverse'),
+      headers: headers,
+      body: jsonEncode({'reason': reason, 'user_id': authService.currentUser?.id}),
+    );
+    if (response.statusCode == 200) {
+      return ApTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'ถอยเป็นร่างล้มเหลว');
     }
   }
 }

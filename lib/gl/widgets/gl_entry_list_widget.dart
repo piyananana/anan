@@ -13,6 +13,7 @@ import '../services/gl_dimension_service.dart';
 import '../services/gl_entry_service.dart';
 import '../services/gl_period_service.dart';
 import '../widgets/gl_dimension_picker_field.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 
 class GlEntryListWidget extends StatefulWidget {
   final VoidCallback onAddPressed;
@@ -241,47 +242,16 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   Future<void> _deleteEntry(GlEntryHeader item) async {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     final l = AppL10n(isEnglish);
-    final reasonCtrl = TextEditingController();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
-          title: Text(l.confirmDelete),
-          content: SizedBox(
-            width: 420,
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(isEnglish
-                  ? 'Delete entry ${item.docNo}?\nThe entry is kept for audit but cannot be used again.'
-                  : 'ต้องการลบรายการ ${item.docNo} ใช่หรือไม่?\nระบบจะเก็บรายการไว้เพื่อตรวจสอบ แต่นำกลับมาใช้ต่อไม่ได้'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: reasonCtrl,
-                autofocus: true,
-                maxLength: 500,
-                maxLines: 2,
-                onChanged: (_) => setD(() {}),
-                decoration: InputDecoration(
-                  labelText: isEnglish ? 'Reason *' : 'เหตุผล *',
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel)),
-            TextButton(
-              onPressed: reasonCtrl.text.trim().isEmpty
-                  ? null
-                  : () => Navigator.pop(ctx, reasonCtrl.text.trim()),
-              child: Text(l.delete,
-                  style: TextStyle(color: reasonCtrl.text.trim().isEmpty ? Colors.grey : Colors.red)),
-            ),
-          ],
-        ),
-      ),
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: l.confirmDelete,
+      message: isEnglish
+          ? 'Delete entry ${item.docNo}?\nThe entry is kept for audit but cannot be used again.'
+          : 'ต้องการลบรายการ ${item.docNo} ใช่หรือไม่?\nระบบจะเก็บรายการไว้เพื่อตรวจสอบ แต่นำกลับมาใช้ต่อไม่ได้',
+      confirmLabel: l.delete,
     );
-    reasonCtrl.dispose();
-    if (reason == null || reason.isEmpty) return;
+    if (reason == null) return;
     try {
       await _entryService.deleteEntry(item.id, reason);
       _fetchEntries();

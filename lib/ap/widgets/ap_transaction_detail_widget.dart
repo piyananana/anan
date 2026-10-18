@@ -31,6 +31,7 @@ import '../../gl/services/gl_entry_service.dart';
 import '../../gl/models/gl_entry.dart' show GlEntryDetail;
 import '../../cd/models/cd_wht_type.dart';
 import '../../cd/services/cd_wht_type_service.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 
 class ApTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -113,6 +114,10 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
   List<ApTransactionApproval> _approvals = [];
+  // ถอยเป็นร่าง: null = ถอยได้ / รหัสเหตุผลที่ถอยไม่ได้ (จาก backend) + ประวัติการถอย/ลบ
+  String? _reverseBlock;
+  String? _reverseBlockRef;
+  List<DocReverseLog> _reverseHistory = [];
 
   // Detail rows (for PI, CN, DN)
   List<_DetailRow> _detailRows = [];
@@ -303,6 +308,9 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         _descCtrl.text = h.description ?? '';
         _status = h.status;
         _approvals = data.approvals;
+        _reverseBlock = data.reverseBlock;
+        _reverseBlockRef = data.reverseBlockRef;
+        _reverseHistory = data.reverseHistory;
         _isReadOnly = widget.viewOnly || h.status != 'Draft';
 
         _dimSelections = { 1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id };
@@ -397,6 +405,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       _apAccountId = null; _exchangeRate = 1.0;
       _refNoCtrl.clear(); _descCtrl.clear();
       _status = 'Draft'; _approvals = []; _isReadOnly = false;
+      _reverseBlock = null; _reverseBlockRef = null; _reverseHistory = [];
       _selectedDocType = _allowedDocTypes.isNotEmpty ? _allowedDocTypes.first : null;
       _selectedBranch = _authService.defaultBranch;
       _selectedCurrency = _currencies.cast<Currency?>()
@@ -1148,6 +1157,102 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     }
   }
 
+  // เหตุผลที่ถอยเป็นร่างไม่ได้ (ตาม reverse_block จาก backend) — null = ถอยได้
+  String? _reverseBlockMessage(bool isEnglish) {
+    final ref = _reverseBlockRef != null ? ' (${_reverseBlockRef!})' : '';
+    switch (_reverseBlock) {
+      case null:
+        return null;
+      case 'NOT_REVERSIBLE':
+        return isEnglish ? 'Only posted or submitted/approved documents can be reversed' : 'ถอยได้เฉพาะเอกสารที่โพสต์แล้ว หรือรออนุมัติ/อนุมัติแล้ว';
+      case 'IM_SOURCE':
+        return isEnglish ? 'Created by Inventory — reverse it from the source IM document' : 'สร้างจากโมดูลสินค้าคงคลัง กรุณาถอยจากเอกสาร IM ต้นทาง';
+      case 'CONSIGNMENT':
+        return isEnglish ? 'Created by consignment settlement — void it from that screen' : 'สร้างจากการตั้งหนี้สินค้าฝากขาย กรุณายกเลิกจากหน้าจอตั้งหนี้สินค้าฝากขาย';
+      case 'IMPORTED':
+        return isEnglish ? 'Imported opening balance without GL entry' : 'เอกสารยอดยกมาที่นำเข้า ไม่มีรายการบัญชี';
+      case 'PERIOD_CLOSED':
+        return isEnglish ? 'The accounting period of this document is closed' : 'งวดบัญชีของเอกสารนี้ปิดแล้ว';
+      case 'APPLIED':
+        return isEnglish ? 'Referenced by other documents$ref' : 'มีเอกสารอ้างอิงเอกสารนี้อยู่$ref';
+      case 'PAID':
+        return isEnglish ? 'Already paid (bulk payment)' : 'มีการจ่ายชำระแล้ว (จ่ายแบบกลุ่ม)';
+      case 'RA_PAID':
+        return isEnglish ? 'This remittance advice has been paid$ref' : 'ใบแจ้งชำระนี้ถูกนำไปจ่ายชำระแล้ว$ref';
+      case 'PAYMENT_RUN':
+        return isEnglish ? 'Included in an unfinished payment run$ref' : 'อยู่ในชุดจ่ายเงินที่ยังไม่เสร็จ$ref';
+      case 'FX_REVAL':
+        return isEnglish ? 'Included in an FX revaluation$ref' : 'อยู่ในการปรับมูลค่าอัตราแลกเปลี่ยน$ref';
+      case 'CM_CLEARED':
+        return isEnglish ? 'Bank payment already cleared/reconciled$ref' : 'การจ่ายเงินผ่านธนาคารเคลียร์/กระทบยอดแล้ว$ref';
+      default:
+        return _reverseBlock;
+    }
+  }
+
+  Future<void> _reverse() async {
+    final isEnglish = _isEnglish;
+    final isPosted = _status == 'Posted';
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Reverse to Draft' : 'ถอยเอกสารกลับเป็นร่าง',
+      message: isPosted
+          ? (isEnglish
+              ? 'The GL entry is removed and the document returns to Draft.\n'
+                'Edit it and post again with the same document no. $_docNo (and the same GL entry no.)'
+              : 'ระบบจะลบรายการบัญชีออกและเอกสารกลับเป็นร่าง\n'
+                'แก้ไขแล้วโพสต์ใหม่ได้ด้วยเลขที่เดิม $_docNo (เลขที่รายการบัญชีเดิม)')
+          : (isEnglish
+              ? 'The document returns to Draft and approvals are cleared.\nIt must be submitted for approval again.'
+              : 'เอกสารจะกลับเป็นร่างและล้างขั้นตอนอนุมัติ\nต้องส่งขออนุมัติใหม่'),
+      confirmLabel: isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
+      confirmColor: Colors.orange[800]!,
+    );
+    if (reason == null) return;
+    setState(() => _isLoading = true);
+    try {
+      await _service.reverseTransaction(_transactionId, reason);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่างเรียบร้อย')));
+        widget.onSaveSuccess();
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Reverse failed: $msg' : 'ถอยไม่สำเร็จ: $msg'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _delete() async {
+    final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Delete Draft' : 'ลบ Draft',
+      message: isEnglish
+          ? 'Delete document $_docNo?\nThe document is kept for audit but cannot be used again.'
+          : 'ต้องการลบเอกสาร $_docNo ใช่หรือไม่?\nระบบจะเก็บเอกสารไว้เพื่อตรวจสอบ แต่นำกลับมาใช้ต่อไม่ได้',
+      confirmLabel: isEnglish ? 'Delete' : 'ลบ',
+    );
+    if (reason == null) return;
+    try {
+      await _service.deleteTransaction(_transactionId, reason);
+      if (mounted) widget.onSaveSuccess();
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Delete failed: $msg' : 'ลบไม่สำเร็จ: $msg'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
   InputDecoration _fieldDeco(String label, {bool forcedReadOnly = false}) {
     final isRO = _isReadOnly || forcedReadOnly;
     return InputDecoration(
@@ -1169,6 +1274,12 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           padding: const EdgeInsets.all(12),
           child: Column(children: [
             if (_approvals.isNotEmpty && _status != 'Draft') ...[_buildApprovalPanel(), const SizedBox(height: 8)],
+            if (_reverseHistory.isNotEmpty) ...[
+              DocReverseHistoryPanel(
+                  history: _reverseHistory, isDeleted: _status == 'Deleted', isEnglish: isEnglish,
+                  margin: EdgeInsets.zero),
+              const SizedBox(height: 8),
+            ],
             _buildHeaderSection(),
             if (_hasDetailRows) ...[const SizedBox(height: 8), _buildDetailSection()],
             if (_hasApplySection) ...[const SizedBox(height: 8), _buildApplySection()],
@@ -1228,28 +1339,24 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         ],
         if (canEditNow && _transactionId != 0 && widget.canDelete)
           OutlinedButton.icon(
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: Text(isEnglish ? 'Delete Draft' : 'ลบ Draft'),
-                  content: Text(isEnglish ? 'Do you want to delete this Draft document?' : 'ต้องการลบเอกสาร Draft นี้?'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(context, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-                    ElevatedButton(onPressed: () => Navigator.pop(context, true),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: Text(isEnglish ? 'Delete' : 'ลบ')),
-                  ],
-                ),
-              );
-              if (confirm == true) {
-                await _service.deleteTransaction(_transactionId);
-                if (mounted) widget.onSaveSuccess();
-              }
-            },
+            onPressed: _delete,
             icon: const Icon(Icons.delete_outline, size: 16),
             label: Text(isEnglish ? 'Delete' : 'ลบ'),
             style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
           ),
+        if (!widget.viewOnly && widget.canDelete && (isPosted || _status == 'Submitted' || isApproved)) ...[
+          Builder(builder: (_) {
+            final blockMsg = _reverseBlockMessage(isEnglish);
+            final btn = ElevatedButton.icon(
+              onPressed: blockMsg == null ? _reverse : null,
+              icon: Icon(blockMsg == null ? Icons.undo : Icons.lock_outline, size: 16),
+              label: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+            );
+            return blockMsg == null ? btn : Tooltip(message: blockMsg, child: btn);
+          }),
+          const SizedBox(width: 8),
+        ],
         if (isPosted && widget.canDelete)
           ElevatedButton.icon(
             onPressed: _void,

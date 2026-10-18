@@ -1,5 +1,7 @@
 // lib/ap/models/ap_transaction.dart
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+export '../../sa/models/sa_document_reverse_log.dart';
 
 // AP document types (sys_doc_type in sa_module_document, sys_module=12)
 const int apDocTypePurchaseInvoice    = 10;
@@ -602,6 +604,10 @@ class ApTransaction {
   final List<ApTransactionPayment> payments;
   final List<ApTransactionWht> whts;
   final List<ApTransactionApproval> approvals;
+  // การถอยเป็นร่าง: null = ถอยได้ หรือรหัสเหตุผลที่ถอยไม่ได้ (คำนวณที่ backend getApReverseBlock)
+  final String? reverseBlock;
+  final String? reverseBlockRef; // เลขที่เอกสารที่อ้างอิงอยู่ (ถ้ามี)
+  final List<DocReverseLog> reverseHistory;
 
   ApTransaction({
     required this.header,
@@ -610,6 +616,9 @@ class ApTransaction {
     this.payments = const [],
     this.whts = const [],
     this.approvals = const [],
+    this.reverseBlock,
+    this.reverseBlockRef,
+    this.reverseHistory = const [],
   });
 
   factory ApTransaction.fromJson(Map<String, dynamic> json) => ApTransaction(
@@ -624,6 +633,9 @@ class ApTransaction {
             .map((e) => ApTransactionWht.fromJson(e)).toList(),
         approvals: (json['approvals'] as List<dynamic>? ?? [])
             .map((e) => ApTransactionApproval.fromJson(e)).toList(),
+        reverseBlock: json['reverse_block'] as String?,
+        reverseBlockRef: json['reverse_block_ref'] as String?,
+        reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
       );
 }
 

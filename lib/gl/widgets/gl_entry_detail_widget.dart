@@ -18,6 +18,7 @@ import '../services/gl_entry_service.dart';
 import '../services/gl_period_service.dart';
 import 'gl_dimension_picker_field.dart';
 import '../../sa/models/sa_module_document.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 
 class GlEntryDetailWidget extends StatefulWidget {
   final int? entryId;
@@ -370,51 +371,18 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
 
   Future<void> _reverse() async {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
-    final l = AppL10n(isEnglish);
-    final reasonCtrl = TextEditingController();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
-          title: Text(isEnglish ? 'Reverse to Draft' : 'ถอยรายการกลับเป็นร่าง'),
-          content: SizedBox(
-            width: 420,
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(isEnglish
-                  ? 'The entry returns to Draft and is removed from account balances.\n'
-                    'Edit it and post again with the same document no. ${_header.docNo}'
-                  : 'รายการจะกลับเป็นร่างและถูกตัดออกจากยอดบัญชี\n'
-                    'แก้ไขแล้วโพสต์ใหม่ได้ด้วยเลขที่เดิม ${_header.docNo}'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: reasonCtrl,
-                autofocus: true,
-                maxLength: 500,
-                maxLines: 2,
-                onChanged: (_) => setD(() {}),
-                decoration: InputDecoration(
-                  labelText: isEnglish ? 'Reason *' : 'เหตุผล *',
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel)),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              onPressed: reasonCtrl.text.trim().isEmpty
-                  ? null
-                  : () => Navigator.pop(ctx, reasonCtrl.text.trim()),
-              child: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
-                  style: const TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-      ),
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Reverse to Draft' : 'ถอยรายการกลับเป็นร่าง',
+      message: isEnglish
+          ? 'The entry returns to Draft and is removed from account balances.\n'
+            'Edit it and post again with the same document no. ${_header.docNo}'
+          : 'รายการจะกลับเป็นร่างและถูกตัดออกจากยอดบัญชี\n'
+            'แก้ไขแล้วโพสต์ใหม่ได้ด้วยเลขที่เดิม ${_header.docNo}',
+      confirmLabel: isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
     );
-    reasonCtrl.dispose();
-    if (reason == null || reason.isEmpty) return;
+    if (reason == null) return;
     try {
       await _service.reverseEntry(_header.id, reason);
       if (mounted) {
@@ -453,43 +421,6 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       default:
         return block;
     }
-  }
-
-  // ประวัติการถอยเป็นร่าง / การลบ (ล่าสุดก่อน)
-  Widget _buildReverseHistory(bool isEnglish) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    String fmt(DateTime? d) =>
-        d == null ? '' : '${two(d.day)}/${two(d.month)}/${d.year} ${two(d.hour)}:${two(d.minute)}';
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.orange[50],
-        border: Border.all(color: Colors.orange.shade200),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(Icons.history, size: 16, color: Colors.orange[800]),
-          const SizedBox(width: 6),
-          Text(_header.status == 'Deleted'
-                  ? (isEnglish
-                      ? 'Deleted — kept for audit, cannot be used again'
-                      : 'ลบแล้ว — เก็บไว้เพื่อตรวจสอบ นำกลับมาใช้ต่อไม่ได้')
-                  : (isEnglish ? 'Reverse history' : 'ประวัติการถอยเป็นร่าง'),
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange[900])),
-        ]),
-        for (final h in _header.reverseHistory)
-          Padding(
-            padding: const EdgeInsets.only(left: 22, top: 2),
-            child: Text(
-                '${fmt(h.createdAt)}  ${h.toStatus == 'Deleted' ? (isEnglish ? 'Deleted' : 'ลบ') : (isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่าง')}'
-                '  ${h.createdByName ?? '-'}  —  ${h.reason}',
-                style: const TextStyle(fontSize: 12)),
-          ),
-      ]),
-    );
   }
 
   Future<void> _selectDate(BuildContext context, bool isDocDate) async {
@@ -1394,7 +1325,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             padding: const EdgeInsets.all(8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _buildHeaderCard(isEnglish),
-              if (_header.reverseHistory.isNotEmpty) _buildReverseHistory(isEnglish),
+              DocReverseHistoryPanel(
+                  history: _header.reverseHistory, isDeleted: _header.status == 'Deleted', isEnglish: isEnglish),
               const SizedBox(height: 4),
               _buildDetailSection(isEnglish),
             ]),
