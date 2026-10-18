@@ -54,7 +54,7 @@ Future<String?> showDocReasonDialog(
   return (reason == null || reason.isEmpty) ? null : reason;
 }
 
-/// กรอบประวัติการถอยเป็นร่าง / การลบ (ล่าสุดก่อน) — แสดงเมื่อมีประวัติ
+/// กรอบประวัติการถอยเป็นร่าง / การลบ / การยกเลิก (ล่าสุดก่อน) — แสดงเมื่อมีประวัติ
 class DocReverseHistoryPanel extends StatelessWidget {
   final List<DocReverseLog> history;
   final bool isDeleted;
@@ -93,7 +93,7 @@ class DocReverseHistoryPanel extends StatelessWidget {
                   ? (isEnglish
                       ? 'Deleted — kept for audit, cannot be used again'
                       : 'ลบแล้ว — เก็บไว้เพื่อตรวจสอบ นำกลับมาใช้ต่อไม่ได้')
-                  : (isEnglish ? 'Reverse history' : 'ประวัติการถอยเป็นร่าง'),
+                  : (isEnglish ? 'Reverse / void history' : 'ประวัติการถอยเป็นร่าง / ยกเลิก'),
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange[900])),
         ]),
         for (final h in history)
@@ -101,7 +101,7 @@ class DocReverseHistoryPanel extends StatelessWidget {
             padding: const EdgeInsets.only(left: 22, top: 2),
             child: Text(
                 '${fmt(h.createdAt)}  '
-                '${h.isDelete ? (isEnglish ? 'Deleted' : 'ลบ') : (isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่าง')}'
+                '${h.isDelete ? (isEnglish ? 'Deleted' : 'ลบ') : h.isVoid ? (isEnglish ? 'Voided' : 'ยกเลิก') : (isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่าง')}'
                 '  ${h.createdByName ?? '-'}  —  ${h.reason}',
                 style: const TextStyle(fontSize: 12)),
           ),

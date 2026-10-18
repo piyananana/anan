@@ -117,6 +117,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   // ถอยเป็นร่าง: null = ถอยได้ / รหัสเหตุผลที่ถอยไม่ได้ (จาก backend) + ประวัติการถอย/ลบ
   String? _reverseBlock;
   String? _reverseBlockRef;
+  String? _voidBlock;
+  String? _voidBlockRef;
   List<DocReverseLog> _reverseHistory = [];
 
   // Detail rows (for PI, CN, DN)
@@ -310,6 +312,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         _approvals = data.approvals;
         _reverseBlock = data.reverseBlock;
         _reverseBlockRef = data.reverseBlockRef;
+        _voidBlock = data.voidBlock;
+        _voidBlockRef = data.voidBlockRef;
         _reverseHistory = data.reverseHistory;
         _isReadOnly = widget.viewOnly || h.status != 'Draft';
 
@@ -405,7 +409,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       _apAccountId = null; _exchangeRate = 1.0;
       _refNoCtrl.clear(); _descCtrl.clear();
       _status = 'Draft'; _approvals = []; _isReadOnly = false;
-      _reverseBlock = null; _reverseBlockRef = null; _reverseHistory = [];
+      _reverseBlock = null; _reverseBlockRef = null; _voidBlock = null; _voidBlockRef = null; _reverseHistory = [];
       _selectedDocType = _allowedDocTypes.isNotEmpty ? _allowedDocTypes.first : null;
       _selectedBranch = _authService.defaultBranch;
       _selectedCurrency = _currencies.cast<Currency?>()
@@ -1116,8 +1120,12 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                 decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red[200]!)),
                 child: Text(
                     isEnglish
-                        ? 'A voided document cannot be restored.\nThe system will create a Reversing GL Entry to cancel the accounting impact.'
-                        : 'เอกสารที่ยกเลิกแล้วไม่สามารถกู้คืนได้\nระบบจะสร้าง Reversing GL Entry เพื่อยกเลิกผลกระทบทางบัญชี',
+                        ? 'A voided document cannot be restored.\n'
+                          'The original GL entry is kept and a reversing entry is posted today (the period must be open).\n'
+                          'If the original period is still open, consider "Reverse to Draft" instead.'
+                        : 'เอกสารที่ยกเลิกแล้วไม่สามารถกู้คืนได้\n'
+                          'รายการบัญชีเดิมยังอยู่ ระบบจะลงรายการกลับรายการ ณ วันนี้ (งวดต้องเปิดอยู่)\n'
+                          'ถ้างวดของเอกสารยังเปิดอยู่ ควรใช้ "ถอยเป็นร่าง" แทน',
                     style: const TextStyle(fontSize: 13)),
               ),
               const SizedBox(height: 16),
@@ -1148,7 +1156,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     if (voidReason == null) return;
     setState(() => _isLoading = true);
     try {
-      await _service.voidTransaction(_transactionId);
+      await _service.voidTransaction(_transactionId, voidReason);
       if (mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Document voided successfully' : 'ยกเลิกเอกสารเรียบร้อย'))); widget.onSaveSuccess(); }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
@@ -1158,9 +1166,14 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   }
 
   // เหตุผลที่ถอยเป็นร่างไม่ได้ (ตาม reverse_block จาก backend) — null = ถอยได้
-  String? _reverseBlockMessage(bool isEnglish) {
-    final ref = _reverseBlockRef != null ? ' (${_reverseBlockRef!})' : '';
-    switch (_reverseBlock) {
+  String? _reverseBlockMessage(bool isEnglish) => _blockMessage(_reverseBlock, _reverseBlockRef, isEnglish);
+  String? _voidBlockMessage(bool isEnglish) => _blockMessage(_voidBlock, _voidBlockRef, isEnglish);
+
+  String? _blockMessage(String? code, String? blockRef, bool isEnglish) {
+    final ref = blockRef != null ? ' ($blockRef)' : '';
+    switch (code) {
+      case 'NOT_POSTED':
+        return isEnglish ? 'Only posted documents can be voided (delete drafts instead)' : 'ยกเลิกได้เฉพาะเอกสารที่โพสต์แล้ว (เอกสารร่างให้ลบแทน)';
       case null:
         return null;
       case 'NOT_REVERSIBLE':
@@ -1186,7 +1199,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       case 'CM_CLEARED':
         return isEnglish ? 'Bank payment already cleared/reconciled$ref' : 'การจ่ายเงินผ่านธนาคารเคลียร์/กระทบยอดแล้ว$ref';
       default:
-        return _reverseBlock;
+        return code;
     }
   }
 
@@ -1358,12 +1371,16 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           const SizedBox(width: 8),
         ],
         if (isPosted && widget.canDelete)
-          ElevatedButton.icon(
-            onPressed: _void,
-            icon: const Icon(Icons.cancel_outlined, size: 16),
-            label: Text(isEnglish ? 'Void' : 'ยกเลิก (Void)'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
-          ),
+          Builder(builder: (_) {
+            final blockMsg = _voidBlockMessage(isEnglish);
+            final btn = ElevatedButton.icon(
+              onPressed: blockMsg == null ? _void : null,
+              icon: Icon(blockMsg == null ? Icons.cancel_outlined : Icons.lock_outline, size: 16),
+              label: Text(isEnglish ? 'Void' : 'ยกเลิก (Void)'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
+            );
+            return blockMsg == null ? btn : Tooltip(message: blockMsg, child: btn);
+          }),
         const Spacer(),
         TextButton(
           onPressed: widget.onCancel,

@@ -2,7 +2,7 @@
 // ใช้ร่วมทุกโมดูล (GL, AP, ...)
 class DocReverseLog {
   final String? fromStatus;
-  final String? toStatus; // Draft = ถอยเป็นร่าง, Deleted = ลบ
+  final String? toStatus; // Draft = ถอยเป็นร่าง, Deleted = ลบ, Void = ยกเลิก
   final String reason;
   final String? createdByName;
   final DateTime? createdAt;
@@ -10,6 +10,7 @@ class DocReverseLog {
   DocReverseLog({this.fromStatus, this.toStatus, required this.reason, this.createdByName, this.createdAt});
 
   bool get isDelete => toStatus == 'Deleted';
+  bool get isVoid => toStatus == 'Void';
 
   factory DocReverseLog.fromJson(Map<String, dynamic> json) => DocReverseLog(
         fromStatus: json['from_status'] as String?,

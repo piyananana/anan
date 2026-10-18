@@ -246,11 +246,13 @@ class ApTransactionService {
     }
   }
 
-  Future<ApTransaction> voidTransaction(int id) async {
+  // ยกเลิก: ลงรายการบัญชีกลับรายการ ณ วันที่ยกเลิก (รายการเดิมยังอยู่) — ต้องระบุเหตุผล
+  Future<ApTransaction> voidTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
       Uri.parse('$baseUrl/ap_transaction/$id/void'),
       headers: headers,
+      body: jsonEncode({'void_reason': reason, 'user_id': authService.currentUser?.id}),
     );
     if (response.statusCode == 200) {
       return ApTransaction.fromJson(json.decode(response.body));

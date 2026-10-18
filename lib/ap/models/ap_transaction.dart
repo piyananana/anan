@@ -607,6 +607,9 @@ class ApTransaction {
   // การถอยเป็นร่าง: null = ถอยได้ หรือรหัสเหตุผลที่ถอยไม่ได้ (คำนวณที่ backend getApReverseBlock)
   final String? reverseBlock;
   final String? reverseBlockRef; // เลขที่เอกสารที่อ้างอิงอยู่ (ถ้ามี)
+  // การยกเลิก (Void): null = ยกเลิกได้ หรือรหัสเหตุผล (backend getApVoidBlock)
+  final String? voidBlock;
+  final String? voidBlockRef;
   final List<DocReverseLog> reverseHistory;
 
   ApTransaction({
@@ -618,6 +621,8 @@ class ApTransaction {
     this.approvals = const [],
     this.reverseBlock,
     this.reverseBlockRef,
+    this.voidBlock,
+    this.voidBlockRef,
     this.reverseHistory = const [],
   });
 
@@ -635,6 +640,8 @@ class ApTransaction {
             .map((e) => ApTransactionApproval.fromJson(e)).toList(),
         reverseBlock: json['reverse_block'] as String?,
         reverseBlockRef: json['reverse_block_ref'] as String?,
+        voidBlock: json['void_block'] as String?,
+        voidBlockRef: json['void_block_ref'] as String?,
         reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
       );
 }
