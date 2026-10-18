@@ -208,6 +208,8 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
     }
     if (_selectedStatus != null) {
       base = base.where((item) => item.status == _selectedStatus);
+    } else {
+      base = base.where((item) => item.status != 'Deleted');
     }
     if (_selectedBranchFilter != null) {
       base = base.where((item) => item.branchId == _selectedBranchFilter!.branchId);
@@ -236,39 +238,62 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
     }).toList();
   }
 
-  Future<void> _deleteEntry(int id) async {
+  Future<void> _deleteEntry(GlEntryHeader item) async {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     final l = AppL10n(isEnglish);
-    final confirm = await showDialog<bool>(
+    final reasonCtrl = TextEditingController();
+    final reason = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l.confirmDelete),
-        content: Text(isEnglish
-            ? 'Are you sure you want to delete this entry?'
-            : 'ต้องการลบรายการนี้ใช่หรือไม่?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(l.cancel)),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(l.delete, style: const TextStyle(color: Colors.red))),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text(l.confirmDelete),
+          content: SizedBox(
+            width: 420,
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(isEnglish
+                  ? 'Delete entry ${item.docNo}?\nThe entry is kept for audit but cannot be used again.'
+                  : 'ต้องการลบรายการ ${item.docNo} ใช่หรือไม่?\nระบบจะเก็บรายการไว้เพื่อตรวจสอบ แต่นำกลับมาใช้ต่อไม่ได้'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonCtrl,
+                autofocus: true,
+                maxLength: 500,
+                maxLines: 2,
+                onChanged: (_) => setD(() {}),
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Reason *' : 'เหตุผล *',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel)),
+            TextButton(
+              onPressed: reasonCtrl.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx, reasonCtrl.text.trim()),
+              child: Text(l.delete,
+                  style: TextStyle(color: reasonCtrl.text.trim().isEmpty ? Colors.grey : Colors.red)),
+            ),
+          ],
+        ),
       ),
     );
-    if (confirm == true) {
-      try {
-        await _entryService.deleteEntry(id);
-        _fetchEntries();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(isEnglish ? 'Deleted successfully' : 'ลบรายการสำเร็จ')));
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(isEnglish ? 'Delete failed: $e' : 'ลบไม่สำเร็จ: $e')));
-        }
+    reasonCtrl.dispose();
+    if (reason == null || reason.isEmpty) return;
+    try {
+      await _entryService.deleteEntry(item.id, reason);
+      _fetchEntries();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Deleted successfully' : 'ลบรายการสำเร็จ')));
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Delete failed: $msg' : 'ลบไม่สำเร็จ: $msg')));
       }
     }
   }
@@ -395,6 +420,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                     DropdownMenuItem(value: null, child: Text(l.all)),
                     const DropdownMenuItem(value: 'Draft', child: Text('Draft')),
                     const DropdownMenuItem(value: 'Posted', child: Text('Posted')),
+                    const DropdownMenuItem(value: 'Void', child: Text('Void')),
                     const DropdownMenuItem(value: 'Deleted', child: Text('Deleted')),
                   ],
                   onChanged: (v) => setState(() {
@@ -590,7 +616,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
                       IconButton(
                         icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
                         tooltip: isEnglish ? 'Delete' : 'ลบ',
-                        onPressed: () => _deleteEntry(item.id),
+                        onPressed: () => _deleteEntry(item),
                         visualDensity: VisualDensity.compact,
                       ),
                   ])),

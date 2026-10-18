@@ -41,6 +41,11 @@ class GlEntryHeader {
   String? branchCode;
   String? branchName;
 
+  // การถอยเป็นร่าง: null = ถอยได้, หรือรหัสเหตุผลที่ถอยไม่ได้
+  // (NOT_POSTED / MODULE / CLOSING / PERIOD_CLOSED) — คำนวณจาก backend ตอนเปิดดูรายการ
+  String? reverseBlock;
+  List<DocReverseLog> reverseHistory;
+
   GlEntryHeader({
     this.id = 0,
     required this.docId,
@@ -71,6 +76,8 @@ class GlEntryHeader {
     this.branchId,
     this.branchCode,
     this.branchName,
+    this.reverseBlock,
+    this.reverseHistory = const [],
   });
 
   factory GlEntryHeader.fromJson(Map<String, dynamic> json) {
@@ -110,6 +117,10 @@ class GlEntryHeader {
       branchId: json['branch_id'] as int?,
       branchCode: json['branch_code'] as String?,
       branchName: json['branch_name_thai'] as String?,
+      reverseBlock: json['reverse_block'] as String?,
+      reverseHistory: (json['reverse_history'] as List? ?? [])
+          .map((e) => DocReverseLog.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -139,6 +150,25 @@ class GlEntryHeader {
       'branch_id': branchId,
     };
   }
+}
+
+// ประวัติการถอยเอกสารกลับเป็นร่าง (sa_document_reverse_log)
+class DocReverseLog {
+  final String? fromStatus;
+  final String? toStatus; // Draft = ถอยเป็นร่าง, Deleted = ลบ
+  final String reason;
+  final String? createdByName;
+  final DateTime? createdAt;
+
+  DocReverseLog({this.fromStatus, this.toStatus, required this.reason, this.createdByName, this.createdAt});
+
+  factory DocReverseLog.fromJson(Map<String, dynamic> json) => DocReverseLog(
+        fromStatus: json['from_status'] as String?,
+        toStatus: json['to_status'] as String?,
+        reason: json['reason'] ?? '',
+        createdByName: json['created_by_name'] as String?,
+        createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '')?.toLocal(),
+      );
 }
 
 class GlEntryDetail {

@@ -118,24 +118,42 @@ class GlEntryService {
     }
   }
 
-  // ลบ (Soft Delete)
-  Future<void> deleteEntry(int id) async {
+  // ลบ (Soft Delete) — เฉพาะร่าง ต้องระบุเหตุผล; แถวยังเก็บไว้ด้วยสถานะ Deleted เพื่อตรวจสอบ
+  Future<void> deleteEntry(int id, String reason) async {
     final headers = await authService.getAuthHeader();
     final res = await http.delete(
       Uri.parse('$baseUrl/gl_entry/$id'),
-      headers: headers
+      headers: {...headers, 'Content-Type': 'application/json'},
+      body: jsonEncode({'reason': reason, 'user_id': authService.currentUser?.id}),
     );
-    if (res.statusCode != 200) throw Exception('Failed to delete');
+    if (res.statusCode != 200) {
+      String msg;
+      try {
+        msg = (jsonDecode(res.body)['error'] as String?) ?? res.body;
+      } catch (_) {
+        msg = res.body;
+      }
+      throw Exception(msg);
+    }
   }
 
-  // Reverse
-  Future<void> reverseEntry(int id) async {
+  // ถอยกลับเป็นร่าง (ต้องระบุเหตุผล — เก็บประวัติไว้ที่ sa_document_reverse_log)
+  Future<void> reverseEntry(int id, String reason) async {
     final headers = await authService.getAuthHeader();
     final res = await http.post(
       Uri.parse('$baseUrl/gl_entry/reverse/$id'),
-      headers: headers
+      headers: {...headers, 'Content-Type': 'application/json'},
+      body: jsonEncode({'reason': reason, 'user_id': authService.currentUser?.id}),
     );
-    if (res.statusCode != 200) throw Exception('Failed to reverse');
+    if (res.statusCode != 200) {
+      String msg;
+      try {
+        msg = (jsonDecode(res.body)['error'] as String?) ?? res.body;
+      } catch (_) {
+        msg = res.body;
+      }
+      throw Exception(msg);
+    }
   }
 
   // Master Data: Allowed Doc Types

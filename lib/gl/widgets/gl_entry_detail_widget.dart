@@ -371,39 +371,125 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   Future<void> _reverse() async {
     final isEnglish = context.read<LanguageProvider>().isEnglish;
     final l = AppL10n(isEnglish);
-    final confirm = await showDialog<bool>(
+    final reasonCtrl = TextEditingController();
+    final reason = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Reverse Entry' : 'ยืนยันการถอยรายการ'),
-        content: Text(isEnglish
-            ? 'Do you want to create a reversing entry?\nThe system will create a new entry with opposite amounts.'
-            : 'ต้องการสร้างรายการถอย (Reverse) ใช่หรือไม่?\nระบบจะสร้างรายการใหม่ที่มียอดตรงข้ามกัน'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(isEnglish ? 'Confirm Reverse' : 'ยืนยันถอย',
-                style: const TextStyle(color: Colors.white)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text(isEnglish ? 'Reverse to Draft' : 'ถอยรายการกลับเป็นร่าง'),
+          content: SizedBox(
+            width: 420,
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(isEnglish
+                  ? 'The entry returns to Draft and is removed from account balances.\n'
+                    'Edit it and post again with the same document no. ${_header.docNo}'
+                  : 'รายการจะกลับเป็นร่างและถูกตัดออกจากยอดบัญชี\n'
+                    'แก้ไขแล้วโพสต์ใหม่ได้ด้วยเลขที่เดิม ${_header.docNo}'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonCtrl,
+                autofocus: true,
+                maxLength: 500,
+                maxLines: 2,
+                onChanged: (_) => setD(() {}),
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Reason *' : 'เหตุผล *',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ]),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.cancel)),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: reasonCtrl.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx, reasonCtrl.text.trim()),
+              child: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
+                  style: const TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
-    if (confirm == true) {
-      try {
-        await _service.reverseEntry(_header.id);
-        if (mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) widget.onSaveSuccess();
-          });
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(isEnglish ? 'Reverse failed: $e' : 'ถอยไม่สำเร็จ: $e')));
-        }
+    reasonCtrl.dispose();
+    if (reason == null || reason.isEmpty) return;
+    try {
+      await _service.reverseEntry(_header.id, reason);
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.onSaveSuccess();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Reverse failed: $msg' : 'ถอยไม่สำเร็จ: $msg')));
       }
     }
+  }
+
+  // เหตุผลที่ถอยรายการไม่ได้ (ตาม reverse_block จาก backend) — null = ถอยได้
+  String? _reverseBlockMessage(bool isEnglish) {
+    final block = _header.externalSourceId != null ? 'MODULE' : _header.reverseBlock;
+    switch (block) {
+      case null:
+      case 'NOT_POSTED':
+        return null;
+      case 'MODULE':
+        return isEnglish
+            ? 'This entry was created from another module\nPlease reverse/void it from the source document'
+            : 'รายการนี้สร้างจากโมดูลอื่น\nกรุณาถอย/ยกเลิกจากเอกสารต้นทาง';
+      case 'CLOSING':
+        return isEnglish
+            ? 'Year-end closing entry\ncannot be reversed here'
+            : 'รายการปิดบัญชีสิ้นปี\nไม่สามารถถอยจากหน้าจอนี้ได้';
+      case 'PERIOD_CLOSED':
+        return isEnglish
+            ? 'The accounting period of this entry is closed'
+            : 'งวดบัญชีของรายการนี้ปิดแล้ว';
+      default:
+        return block;
+    }
+  }
+
+  // ประวัติการถอยเป็นร่าง / การลบ (ล่าสุดก่อน)
+  Widget _buildReverseHistory(bool isEnglish) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    String fmt(DateTime? d) =>
+        d == null ? '' : '${two(d.day)}/${two(d.month)}/${d.year} ${two(d.hour)}:${two(d.minute)}';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        border: Border.all(color: Colors.orange.shade200),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.history, size: 16, color: Colors.orange[800]),
+          const SizedBox(width: 6),
+          Text(_header.status == 'Deleted'
+                  ? (isEnglish
+                      ? 'Deleted — kept for audit, cannot be used again'
+                      : 'ลบแล้ว — เก็บไว้เพื่อตรวจสอบ นำกลับมาใช้ต่อไม่ได้')
+                  : (isEnglish ? 'Reverse history' : 'ประวัติการถอยเป็นร่าง'),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange[900])),
+        ]),
+        for (final h in _header.reverseHistory)
+          Padding(
+            padding: const EdgeInsets.only(left: 22, top: 2),
+            child: Text(
+                '${fmt(h.createdAt)}  ${h.toStatus == 'Deleted' ? (isEnglish ? 'Deleted' : 'ลบ') : (isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่าง')}'
+                '  ${h.createdByName ?? '-'}  —  ${h.reason}',
+                style: const TextStyle(fontSize: 12)),
+          ),
+      ]),
+    );
   }
 
   Future<void> _selectDate(BuildContext context, bool isDocDate) async {
@@ -1271,11 +1357,9 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             child: Text(isEnglish ? 'Post' : 'โพสต์', style: const TextStyle(color: Colors.white)),
           ),
         ] else if (_header.status == 'Posted') ...[
-          if (_header.externalSourceId != null)
+          if (_reverseBlockMessage(isEnglish) != null)
             Tooltip(
-              message: isEnglish
-                  ? 'This entry was created from another module\nPlease void it from the source module'
-                  : 'รายการนี้สร้างจากโมดูลอื่น\nกรุณายกเลิกจากโมดูลต้นทาง',
+              message: _reverseBlockMessage(isEnglish)!,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[400]),
                 onPressed: null,
@@ -1310,6 +1394,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             padding: const EdgeInsets.all(8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _buildHeaderCard(isEnglish),
+              if (_header.reverseHistory.isNotEmpty) _buildReverseHistory(isEnglish),
               const SizedBox(height: 4),
               _buildDetailSection(isEnglish),
             ]),
