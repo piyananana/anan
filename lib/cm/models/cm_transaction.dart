@@ -1,5 +1,6 @@
 // lib/cm/models/cm_transaction.dart
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 // CM document types (sys_doc_type in sa_module_document, sys_module='81')
 const int cmDocTypeReceipt                = 10; // รายรับ (โดยตรง ไม่ผูกกับ AR)
@@ -37,11 +38,13 @@ const Map<String, String> cmTransactionStatusLabels = {
   'Draft':  'ร่าง',
   'Posted': 'Post แล้ว',
   'Void':   'ยกเลิก',
+  'Deleted': 'ลบแล้ว',
 };
 const Map<String, String> cmTransactionStatusLabelsEn = {
   'Draft':  'Draft',
   'Posted': 'Posted',
   'Void':   'Void',
+  'Deleted': 'Deleted',
 };
 String cmTransactionStatusLabel(String s, bool isEnglish) =>
     (isEnglish ? cmTransactionStatusLabelsEn[s] : cmTransactionStatusLabels[s]) ?? s;
@@ -386,12 +389,23 @@ class CmTransaction {
   final List<CmTransactionDetail> details;
   final List<CmTransactionApply> applies;
   final List<CmTransactionPayment> payments;
+  // ถอยเป็นร่าง / ยกเลิก: null = ทำได้ หรือรหัสเหตุผลที่ทำไม่ได้ (backend getCmReverseBlock / getCmVoidBlock)
+  final String? reverseBlock;
+  final String? reverseBlockRef; // เลขที่เอกสารที่อ้างอิงอยู่ (ถ้ามี)
+  final String? voidBlock;
+  final String? voidBlockRef;
+  final List<DocReverseLog> reverseHistory;
 
   CmTransaction({
     required this.header,
     this.details = const [],
     this.applies = const [],
     this.payments = const [],
+    this.reverseBlock,
+    this.reverseBlockRef,
+    this.voidBlock,
+    this.voidBlockRef,
+    this.reverseHistory = const [],
   });
 
   factory CmTransaction.fromJson(Map<String, dynamic> json) => CmTransaction(
@@ -402,6 +416,11 @@ class CmTransaction {
             .map((e) => CmTransactionApply.fromJson(e)).toList(),
         payments: (json['payments'] as List<dynamic>? ?? [])
             .map((e) => CmTransactionPayment.fromJson(e)).toList(),
+        reverseBlock: json['reverse_block'] as String?,
+        reverseBlockRef: json['reverse_block_ref'] as String?,
+        voidBlock: json['void_block'] as String?,
+        voidBlockRef: json['void_block_ref'] as String?,
+        reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
       );
 }
 

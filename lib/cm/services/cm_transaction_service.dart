@@ -167,9 +167,11 @@ class CmTransactionService {
     }
   }
 
-  Future<CmTransaction> voidTransaction(int id) async {
+  // ยกเลิก: ลงรายการบัญชีกลับรายการ ณ วันที่ยกเลิก (รายการเดิมยังอยู่) — ต้องระบุเหตุผล
+  Future<CmTransaction> voidTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/cm_transaction/$id/void'), headers: headers);
+    final response = await http.put(Uri.parse('$baseUrl/cm_transaction/$id/void'), headers: headers,
+        body: json.encode({'void_reason': reason, 'user_id': authService.currentUser?.id}));
     if (response.statusCode == 200) {
       return CmTransaction.fromJson(json.decode(response.body));
     } else if (response.statusCode == 401) {
@@ -181,16 +183,34 @@ class CmTransactionService {
     }
   }
 
-  Future<void> deleteTransaction(int id) async {
+  // ลบร่าง (ต้องระบุเหตุผล) — เก็บเอกสารไว้ด้วยสถานะ Deleted เพื่อตรวจสอบ
+  Future<void> deleteTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.delete(Uri.parse('$baseUrl/cm_transaction/$id'), headers: headers);
-    if (response.statusCode == 204) return;
+    final response = await http.delete(Uri.parse('$baseUrl/cm_transaction/$id'), headers: headers,
+        body: json.encode({'reason': reason, 'user_id': authService.currentUser?.id}));
+    if (response.statusCode == 200 || response.statusCode == 204) return;
     if (response.statusCode == 401) {
       authService.logout();
       throw Exception('Unauthorized.');
     } else {
       final err = json.decode(response.body);
       throw Exception(err['message'] ?? 'ลบข้อมูลล้มเหลว');
+    }
+  }
+
+  // ถอยเป็นร่าง: Posted → Draft (ลบรายการบัญชี เก็บเลขที่ไว้ใช้ซ้ำ) — ต้องระบุเหตุผล
+  Future<CmTransaction> reverseTransaction(int id, String reason) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(Uri.parse('$baseUrl/cm_transaction/$id/reverse'), headers: headers,
+        body: json.encode({'reason': reason, 'user_id': authService.currentUser?.id}));
+    if (response.statusCode == 200) {
+      return CmTransaction.fromJson(json.decode(response.body));
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      final err = json.decode(response.body);
+      throw Exception(err['message'] ?? 'ถอยเป็นร่างล้มเหลว');
     }
   }
 }

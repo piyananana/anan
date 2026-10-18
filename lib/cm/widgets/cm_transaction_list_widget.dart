@@ -102,6 +102,8 @@ class _CmTransactionListWidgetState extends State<CmTransactionListWidget>
     try {
       final rows = await _service.fetchRows(
         docType: _selectedDocType,
+        // backend ซ่อนเอกสารที่ลบแล้วเมื่อไม่ระบุสถานะ — ดึงเฉพาะเมื่อกรองสถานะ Deleted
+        status: _selectedStatus == 'Deleted' ? 'Deleted' : null,
         dateFrom: formatLocalDate(_dateFrom),
         dateTo: formatLocalDate(_dateTo),
       );
@@ -265,11 +267,16 @@ class _CmTransactionListWidgetState extends State<CmTransactionListWidget>
                     const DropdownMenuItem(value: 'Void', child: Text('Void')),
                     const DropdownMenuItem(value: 'Pending', child: Text('Pending')),
                     const DropdownMenuItem(value: 'Cleared', child: Text('Cleared')),
+                    const DropdownMenuItem(value: 'Deleted', child: Text('Deleted')),
                   ],
-                  onChanged: (v) => setState(() {
-                    _selectedStatus = v;
-                    _applyFilter();
-                  }),
+                  onChanged: (v) {
+                    final refetch = v == 'Deleted' || _selectedStatus == 'Deleted';
+                    setState(() {
+                      _selectedStatus = v;
+                      _applyFilter();
+                    });
+                    if (refetch) _fetchRows();
+                  },
                 ),
               ),
               const SizedBox(width: 8),

@@ -22,6 +22,8 @@ import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 
 class CmTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -225,6 +227,12 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   final _counterpartyCtrl = TextEditingController();
   final _amountCtrl = TextEditingController(text: '0.00'); // Transfer(50) / BankCharge-Interest(70/90)
   String _status = 'Draft';
+  // ถอยเป็นร่าง / ยกเลิก: null = ทำได้ หรือรหัสเหตุผลจาก backend
+  String? _reverseBlock;
+  String? _reverseBlockRef;
+  String? _voidBlock;
+  String? _voidBlockRef;
+  List<DocReverseLog> _reverseHistory = [];
 
   int? _fromBankAccountId;
   int? _toBankAccountId;
@@ -406,6 +414,11 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         _counterpartyCtrl.text = h.counterpartyName ?? '';
         _status = h.status;
         _isReadOnly = widget.viewOnly || h.status != 'Draft';
+        _reverseBlock = data.reverseBlock;
+        _reverseBlockRef = data.reverseBlockRef;
+        _voidBlock = data.voidBlock;
+        _voidBlockRef = data.voidBlockRef;
+        _reverseHistory = data.reverseHistory;
         _fromBankAccountId = h.fromBankAccountId;
         _toBankAccountId = h.toBankAccountId;
         _bankAccountId = h.bankAccountId;
@@ -468,6 +481,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       _status = 'Draft';
       _isReadOnly = false;
       _isReadOnlyView = false;
+      _reverseBlock = null; _reverseBlockRef = null; _voidBlock = null; _voidBlockRef = null; _reverseHistory = [];
       _legacyRow = null;
       _selectedDocType = _allowedDocTypes.isNotEmpty ? _allowedDocTypes.first : null;
       _fromBankAccountId = null;
@@ -665,37 +679,118 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
     }
   }
 
+  // เหตุผลที่ถอยเป็นร่าง / ยกเลิกไม่ได้ (ตามรหัสจาก backend) — null = ทำได้
+  String? _reverseBlockMessage(bool isEnglish) => _blockMessage(_reverseBlock, _reverseBlockRef, isEnglish);
+  String? _voidBlockMessage(bool isEnglish) => _blockMessage(_voidBlock, _voidBlockRef, isEnglish);
+
+  String? _blockMessage(String? code, String? blockRef, bool isEnglish) {
+    final ref = blockRef != null ? ' ($blockRef)' : '';
+    switch (code) {
+      case null:
+        return null;
+      case 'NOT_REVERSIBLE':
+        return isEnglish ? 'Only posted documents can be reversed' : 'ถอยได้เฉพาะเอกสารที่โพสต์แล้ว';
+      case 'NOT_POSTED':
+        return isEnglish ? 'Only posted documents can be voided (delete drafts instead)' : 'ยกเลิกได้เฉพาะเอกสารที่โพสต์แล้ว (เอกสารร่างให้ลบแทน)';
+      case 'PERIOD_CLOSED':
+        return isEnglish ? 'The accounting period of this document is closed' : 'งวดบัญชีของเอกสารนี้ปิดแล้ว';
+      case 'APPLIED':
+        return isEnglish ? 'This voucher has been replenished$ref' : 'ใบเบิกนี้ถูกนำไปเติมเงินสดย่อยแล้ว$ref';
+      default:
+        return code;
+    }
+  }
+
   Future<void> _void() async {
     final isEnglish = _isEnglish;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Void Document' : 'ยืนยันการยกเลิกเอกสาร'),
-        content: Text(isEnglish
-            ? 'A voided document cannot be restored. The system will create a Reversing GL Entry.'
-            : 'เอกสารที่ยกเลิกแล้วไม่สามารถกู้คืนได้ ระบบจะสร้าง Reversing GL Entry เพื่อยกเลิกผลกระทบทางบัญชี'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(isEnglish ? 'Close' : 'ปิด')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
-            child: Text(isEnglish ? 'Confirm Void' : 'ยืนยัน Void'),
-          ),
-        ],
-      ),
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Confirm Void Document' : 'ยืนยันการยกเลิกเอกสาร',
+      message: isEnglish
+          ? 'A voided document cannot be restored.\n'
+            'The original GL entry is kept and a reversing entry is posted today (the period must be open).\n'
+            'If the original period is still open, consider "Reverse to Draft" instead.'
+          : 'เอกสารที่ยกเลิกแล้วไม่สามารถกู้คืนได้\n'
+            'รายการบัญชีเดิมยังอยู่ ระบบจะลงรายการกลับรายการ ณ วันนี้ (งวดต้องเปิดอยู่)\n'
+            'ถ้างวดของเอกสารยังเปิดอยู่ ควรใช้ "ถอยเป็นร่าง" แทน',
+      confirmLabel: isEnglish ? 'Confirm Void' : 'ยืนยัน Void',
+      confirmColor: Colors.red[700]!,
     );
-    if (confirm != true) return;
+    if (reason == null) return;
     setState(() => _isLoading = true);
     try {
-      await _service.voidTransaction(_transactionId);
+      await _service.voidTransaction(_transactionId, reason);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Document voided successfully' : 'ยกเลิกเอกสารเรียบร้อย')));
         widget.onSaveSuccess();
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Void failed: $msg' : 'ยกเลิกไม่สำเร็จ: $msg'), backgroundColor: Colors.red));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _reverse() async {
+    final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Reverse to Draft' : 'ถอยเอกสารกลับเป็นร่าง',
+      message: isEnglish
+          ? 'The GL entry is removed and the document returns to Draft.\n'
+            'Edit it and post again with the same document no. $_docNo (and the same GL entry no.)'
+          : 'ระบบจะลบรายการบัญชีออกและเอกสารกลับเป็นร่าง\n'
+            'แก้ไขแล้วโพสต์ใหม่ได้ด้วยเลขที่เดิม $_docNo (เลขที่รายการบัญชีเดิม)',
+      confirmLabel: isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
+      confirmColor: Colors.orange[800]!,
+    );
+    if (reason == null) return;
+    setState(() => _isLoading = true);
+    try {
+      await _service.reverseTransaction(_transactionId, reason);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่างเรียบร้อย')));
+        widget.onSaveSuccess();
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Reverse failed: $msg' : 'ถอยไม่สำเร็จ: $msg'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _delete() async {
+    final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Delete Draft' : 'ลบ Draft',
+      message: isEnglish
+          ? 'Delete document $_docNo?\nThe document is kept for audit but cannot be used again.'
+          : 'ต้องการลบเอกสาร $_docNo ใช่หรือไม่?\nระบบจะเก็บเอกสารไว้เพื่อตรวจสอบ แต่นำกลับมาใช้ต่อไม่ได้',
+      confirmLabel: isEnglish ? 'Delete' : 'ลบ',
+    );
+    if (reason == null) return;
+    try {
+      await _service.deleteTransaction(_transactionId, reason);
+      if (mounted) widget.onSaveSuccess();
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Delete failed: $msg' : 'ลบไม่สำเร็จ: $msg'), backgroundColor: Colors.red));
+      }
     }
   }
 
@@ -729,6 +824,12 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         Expanded(child: SingleChildScrollView(
           padding: const EdgeInsets.all(12),
           child: Column(children: [
+            if (_reverseHistory.isNotEmpty) ...[
+              DocReverseHistoryPanel(
+                  history: _reverseHistory, isDeleted: _status == 'Deleted', isEnglish: isEnglish,
+                  margin: EdgeInsets.zero),
+              const SizedBox(height: 8),
+            ],
             _buildHeaderSection(),
             if (_hasDetailRows) ...[const SizedBox(height: 8), _buildDetailSection()],
             if (_hasApplySection) ...[const SizedBox(height: 8), _buildApplySection()],
@@ -817,36 +918,36 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
           const SizedBox(width: 8),
           if (_transactionId != 0 && widget.canDelete)
             OutlinedButton.icon(
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: Text(isEnglish ? 'Delete Draft' : 'ลบ Draft'),
-                    content: Text(isEnglish ? 'Do you want to delete this Draft document?' : 'ต้องการลบเอกสาร Draft นี้?'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-                      ElevatedButton(onPressed: () => Navigator.pop(context, true),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: Text(isEnglish ? 'Delete' : 'ลบ')),
-                    ],
-                  ),
-                );
-                if (confirm == true) {
-                  await _service.deleteTransaction(_transactionId);
-                  if (mounted) widget.onSaveSuccess();
-                }
-              },
+              onPressed: _delete,
               icon: const Icon(Icons.delete_outline, size: 16),
               label: Text(isEnglish ? 'Delete' : 'ลบ'),
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
             ),
         ],
+        if (isPosted && widget.canDelete && !widget.viewOnly) ...[
+          Builder(builder: (_) {
+            final blockMsg = _reverseBlockMessage(isEnglish);
+            final btn = ElevatedButton.icon(
+              onPressed: blockMsg == null ? _reverse : null,
+              icon: Icon(blockMsg == null ? Icons.undo : Icons.lock_outline, size: 16),
+              label: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+            );
+            return blockMsg == null ? btn : Tooltip(message: blockMsg, child: btn);
+          }),
+          const SizedBox(width: 8),
+        ],
         if (isPosted && widget.canDelete)
-          ElevatedButton.icon(
-            onPressed: _void,
-            icon: const Icon(Icons.cancel_outlined, size: 16),
-            label: Text(isEnglish ? 'Void' : 'ยกเลิก (Void)'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
-          ),
+          Builder(builder: (_) {
+            final blockMsg = _voidBlockMessage(isEnglish);
+            final btn = ElevatedButton.icon(
+              onPressed: blockMsg == null ? _void : null,
+              icon: Icon(blockMsg == null ? Icons.cancel_outlined : Icons.lock_outline, size: 16),
+              label: Text(isEnglish ? 'Void' : 'ยกเลิก (Void)'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
+            );
+            return blockMsg == null ? btn : Tooltip(message: blockMsg, child: btn);
+          }),
         const Spacer(),
         TextButton(onPressed: widget.onCancel, child: Text(isEnglish ? 'Back' : 'กลับ')),
       ]),
