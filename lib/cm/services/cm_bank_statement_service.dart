@@ -63,6 +63,22 @@ class CmBankStatementService {
     throw Exception(_err(resp.body));
   }
 
+  Future<CmBankStatement> fetchStatement(int id) async {
+    final headers = await _auth.getAuthHeader();
+    final resp = await http.get(Uri.parse('$_base/cm_bank_statement/$id'), headers: headers);
+    if (resp.statusCode == 200) return CmBankStatement.fromJson(json.decode(resp.body));
+    throw Exception(_err(resp.body));
+  }
+
+  // ถอยเป็นร่าง (Confirmed → Draft) — ต้องมีเหตุผล
+  Future<CmBankStatement> reverseStatement(int id, String reason) async {
+    final headers = await _auth.getAuthHeader();
+    final resp = await http.put(Uri.parse('$_base/cm_bank_statement/$id/reverse'),
+        headers: headers, body: json.encode({'reason': reason}));
+    if (resp.statusCode == 200) return CmBankStatement.fromJson(json.decode(resp.body));
+    throw Exception(_err(resp.body));
+  }
+
   Future<CmBankStatement> confirmStatement(int id) async {
     final headers = await _auth.getAuthHeader();
     final resp = await http.put(Uri.parse('$_base/cm_bank_statement/$id/confirm'), headers: headers);
@@ -70,16 +86,19 @@ class CmBankStatementService {
     throw Exception(_err(resp.body));
   }
 
-  Future<CmBankStatement> voidStatement(int id) async {
+  Future<CmBankStatement> voidStatement(int id, String reason) async {
     final headers = await _auth.getAuthHeader();
-    final resp = await http.put(Uri.parse('$_base/cm_bank_statement/$id/void'), headers: headers);
+    final resp = await http.put(Uri.parse('$_base/cm_bank_statement/$id/void'),
+        headers: headers, body: json.encode({'reason': reason}));
     if (resp.statusCode == 200) return CmBankStatement.fromJson(json.decode(resp.body));
     throw Exception(_err(resp.body));
   }
 
-  Future<void> deleteStatement(int id) async {
+  // ลบร่าง — เก็บไว้ด้วยสถานะ Deleted
+  Future<void> deleteStatement(int id, String reason) async {
     final headers = await _auth.getAuthHeader();
-    final resp = await http.delete(Uri.parse('$_base/cm_bank_statement/$id'), headers: headers);
+    final resp = await http.delete(Uri.parse('$_base/cm_bank_statement/$id'),
+        headers: headers, body: json.encode({'reason': reason}));
     if (resp.statusCode != 200) throw Exception(_err(resp.body));
   }
 

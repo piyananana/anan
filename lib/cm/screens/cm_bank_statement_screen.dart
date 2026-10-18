@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import 'package:intl/intl.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_bank_statement.dart';
@@ -135,7 +136,38 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
   void _selectStatement(CmBankStatement s) {
     setState(() { _selectedStatement = s; _lines = []; });
     _loadLines();
+    _refreshSelected();
   }
+
+  Future<void> _refreshSelected() async {
+    final id = _selectedStatement?.id;
+    if (id == null) return;
+    try {
+      final full = await _stmtSvc.fetchStatement(id);
+      if (mounted && _selectedStatement?.id == id) setState(() => _selectedStatement = full);
+    } catch (e) { _showError(e.toString()); }
+  }
+
+  String? _blockMessage(String? code, int reconciledCount) {
+    final isEnglish = _isEnglish;
+    switch (code) {
+      case null: return null;
+      case 'NOT_CONFIRMED': return isEnglish
+          ? 'Only confirmed statements (delete a draft instead)'
+          : 'ทำได้เฉพาะ Statement ที่ยืนยันแล้ว (ร่างให้ลบแทน)';
+      case 'NOT_DRAFT': return isEnglish
+          ? 'Only drafts can be deleted — reverse to draft first'
+          : 'ลบได้เฉพาะร่าง (ที่ยืนยันแล้วให้ถอยเป็นร่างก่อน)';
+      case 'RECONCILED': return isEnglish
+          ? '$reconciledCount line(s) are reconciled — unreconcile them first'
+          : 'มีรายการที่กระทบยอดแล้ว $reconciledCount รายการ กรุณายกเลิกการกระทบยอดก่อน';
+      default: return code;
+    }
+  }
+
+  // ปุ่มที่ล็อกเมื่อทำรายการไม่ได้ — ชี้เมาส์เห็นเหตุผล
+  Widget _lockable(String? blockMsg, Widget Function(VoidCallback? onPressed) build, VoidCallback action) =>
+      blockMsg == null ? build(action) : Tooltip(message: blockMsg, child: build(null));
 
   void _showError(String msg) {
     if (!mounted) return;
@@ -167,6 +199,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
         // Refresh selected statement
         final updated = _statements.where((s) => s.id == existing.id).firstOrNull;
         if (updated != null) setState(() => _selectedStatement = updated);
+        await _refreshSelected();
       }
     }
   }
@@ -177,30 +210,46 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
     try {
       final updated = await _stmtSvc.confirmStatement(_selectedStatement!.id);
       setState(() { _selectedStatement = updated; });
+      await _loadLines();
       await _loadStatements();
       _showSuccess(_isEnglish ? 'Statement confirmed successfully' : 'ยืนยัน Statement สำเร็จ');
     } catch (e) { _showError(e.toString()); }
   }
 
-  Future<void> _voidStatement() async {
-    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+  Future<void> _reverseStatement() async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
     final isEnglish = _isEnglish;
     if (_selectedStatement == null) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Void' : 'ยืนยันการยกเลิก'),
-        content: Text(isEnglish ? 'Void this Bank Statement?' : 'ต้องการยกเลิก Bank Statement นี้ใช่หรือไม่?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: Text(l.confirm)),
-        ],
-      ),
-    );
-    if (ok != true) return;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
+        message: isEnglish
+            ? 'The statement goes back to Draft so it can be edited, then confirmed again.'
+            : 'Statement จะกลับเป็นร่าง แก้ไขได้ แล้วยืนยันใหม่',
+        confirmLabel: isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
+        confirmColor: Colors.orange);
+    if (reason == null) return;
     try {
-      final updated = await _stmtSvc.voidStatement(_selectedStatement!.id);
+      final updated = await _stmtSvc.reverseStatement(_selectedStatement!.id, reason);
+      setState(() { _selectedStatement = updated; });
+      await _loadStatements();
+      await _loadLines();
+      _showSuccess(isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่างแล้ว');
+    } catch (e) { _showError(e.toString()); }
+  }
+
+  Future<void> _voidStatement() async {
+    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
+    final isEnglish = _isEnglish;
+    if (_selectedStatement == null) return;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Void Statement' : 'ยกเลิก Statement',
+        message: isEnglish ? 'Void this Bank Statement?' : 'ต้องการยกเลิก Bank Statement นี้ใช่หรือไม่?',
+        confirmLabel: isEnglish ? 'Void' : 'ยกเลิก');
+    if (reason == null) return;
+    try {
+      final updated = await _stmtSvc.voidStatement(_selectedStatement!.id, reason);
       setState(() { _selectedStatement = updated; });
       await _loadStatements();
       _showSuccess(isEnglish ? 'Statement voided successfully' : 'ยกเลิก Statement สำเร็จ');
@@ -209,25 +258,18 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
 
   Future<void> _deleteStatement() async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
     final isEnglish = _isEnglish;
     if (_selectedStatement == null) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
-        content: Text(isEnglish
-            ? 'Delete this Bank Statement and all its lines?'
-            : 'ต้องการลบ Bank Statement และรายการทั้งหมดใช่หรือไม่?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: Text(l.delete)),
-        ],
-      ),
-    );
-    if (ok != true) return;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Delete Statement' : 'ลบ Statement',
+        message: isEnglish
+            ? 'The statement is kept for audit (status Deleted) and cannot be used again.'
+            : 'Statement จะถูกเก็บไว้เพื่อตรวจสอบ (สถานะ Deleted) และนำกลับมาใช้ต่อไม่ได้',
+        confirmLabel: isEnglish ? 'Delete' : 'ลบ');
+    if (reason == null) return;
     try {
-      await _stmtSvc.deleteStatement(_selectedStatement!.id);
+      await _stmtSvc.deleteStatement(_selectedStatement!.id, reason);
       setState(() { _selectedStatement = null; _lines = []; });
       await _loadStatements();
       _showSuccess(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ');
@@ -527,6 +569,7 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
     switch (s.status) {
       case 'Confirmed': statusColor = Colors.green.shade700; break;
       case 'Voided':    statusColor = Colors.red.shade700;   break;
+      case 'Deleted':   statusColor = Colors.grey.shade700;  break;
       default:          statusColor = Colors.orange.shade700;
     }
     return Card(
@@ -592,6 +635,11 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
             ],
           ),
         ),
+        if (s.reverseHistory.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: DocReverseHistoryPanel(history: s.reverseHistory, isDeleted: s.isDeleted, isEnglish: isEnglish),
+          ),
         const Divider(height: 1),
         // Lines toolbar
         if (canAddLine)
@@ -661,14 +709,22 @@ class _CmBankStatementScreenState extends State<CmBankStatementScreen>
           ),
           const SizedBox(width: 6),
         ],
-        if (!s.isVoided) ...[
-          OutlinedButton(
+        if (s.isConfirmed) ...[
+          _lockable(_blockMessage(s.reverseBlock, s.reconciledCount), (onPressed) => OutlinedButton(
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.orange.shade800,
+                minimumSize: const Size(0, 30), padding: const EdgeInsets.symmetric(horizontal: 10)),
+            onPressed: onPressed,
+            child: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง', style: const TextStyle(fontSize: 12)),
+          ), _reverseStatement),
+          const SizedBox(width: 6),
+        ],
+        if (s.isDraft || s.isConfirmed)
+          _lockable(_blockMessage(canEdit ? s.deleteBlock : s.voidBlock, s.reconciledCount), (onPressed) => OutlinedButton(
             style: OutlinedButton.styleFrom(foregroundColor: Colors.red,
                 minimumSize: const Size(0, 30), padding: const EdgeInsets.symmetric(horizontal: 10)),
-            onPressed: canEdit ? _deleteStatement : _voidStatement,
+            onPressed: onPressed,
             child: Text(canEdit ? (isEnglish ? 'Delete' : 'ลบ') : (isEnglish ? 'Void' : 'ยกเลิก'), style: const TextStyle(fontSize: 12)),
-          ),
-        ],
+          ), canEdit ? _deleteStatement : _voidStatement),
       ],
     );
   }

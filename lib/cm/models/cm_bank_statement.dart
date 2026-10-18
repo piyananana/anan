@@ -1,6 +1,7 @@
 // lib/cm/models/cm_bank_statement.dart
 
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 class CmBankStatement {
   final int id;
@@ -14,11 +15,17 @@ class CmBankStatement {
   final double openingBalance;
   final double closingBalance;
   final String currencyCode;
-  final String status; // Draft / Confirmed / Voided
+  final String status; // Draft / Confirmed / Voided / Deleted
   final String? fileName;
   final String? notes;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  // จาก GET /cm_bank_statement/:id — เหตุที่ทำรายการไม่ได้ (null = ทำได้) และประวัติ
+  final int reconciledCount;
+  final String? reverseBlock;
+  final String? voidBlock;
+  final String? deleteBlock;
+  final List<DocReverseLog> reverseHistory;
 
   const CmBankStatement({
     required this.id,
@@ -37,11 +44,17 @@ class CmBankStatement {
     this.notes,
     this.createdAt,
     this.updatedAt,
+    this.reconciledCount = 0,
+    this.reverseBlock,
+    this.voidBlock,
+    this.deleteBlock,
+    this.reverseHistory = const [],
   });
 
   bool get isDraft     => status == 'Draft';
   bool get isConfirmed => status == 'Confirmed';
   bool get isVoided    => status == 'Voided';
+  bool get isDeleted   => status == 'Deleted';
 
   factory CmBankStatement.fromJson(Map<String, dynamic> j) => CmBankStatement(
     id:                  j['id'] as int,
@@ -60,6 +73,11 @@ class CmBankStatement {
     notes:               j['notes'] as String?,
     createdAt:           j['created_at'] != null ? DateTime.tryParse(j['created_at'].toString())?.toLocal() : null,
     updatedAt:           j['updated_at'] != null ? DateTime.tryParse(j['updated_at'].toString())?.toLocal() : null,
+    reconciledCount:     (j['reconciled_count'] as num?)?.toInt() ?? 0,
+    reverseBlock:        j['reverse_block'] as String?,
+    voidBlock:           j['void_block'] as String?,
+    deleteBlock:         j['delete_block'] as String?,
+    reverseHistory:      DocReverseLog.listFromJson(j['reverse_history']),
   );
 }
 
@@ -67,12 +85,14 @@ const Map<String, String> cmStmtStatusOptions = {
   'Draft':     'ร่าง',
   'Confirmed': 'ยืนยัน',
   'Voided':    'ยกเลิก',
+  'Deleted':   'ลบแล้ว',
 };
 
 const Map<String, String> cmStmtStatusOptionsEng = {
   'Draft':     'Draft',
   'Confirmed': 'Confirmed',
   'Voided':    'Voided',
+  'Deleted':   'Deleted',
 };
 
 String cmStmtStatusLabel(String s, bool isEnglish) =>

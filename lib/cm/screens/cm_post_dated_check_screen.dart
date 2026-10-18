@@ -8,6 +8,8 @@ import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../services/cm_period_service.dart';
 import '../../utils/date_utils.dart';
 
@@ -29,6 +31,7 @@ const Map<String, String> _statusLabels = {
   'Cleared':   'เคลียร์แล้ว',
   'Returned':  'คืนแล้ว',
   'Cancelled': 'ยกเลิก',
+  'Deleted':   'ลบแล้ว',
 };
 const Map<String, String> _statusLabelsEng = {
   'Holding':   'Holding',
@@ -36,6 +39,7 @@ const Map<String, String> _statusLabelsEng = {
   'Cleared':   'Cleared',
   'Returned':  'Returned',
   'Cancelled': 'Cancelled',
+  'Deleted':   'Deleted',
 };
 const Map<String, Color> _statusColors = {
   'Holding':   Colors.blue,
@@ -43,7 +47,11 @@ const Map<String, Color> _statusColors = {
   'Cleared':   Colors.green,
   'Returned':  Colors.purple,
   'Cancelled': Colors.grey,
+  'Deleted':   Colors.blueGrey,
 };
+
+// ยอดเงินจาก backend เป็นข้อความ (NUMERIC) — เดิม cast เป็น num ตรง ๆ ทำให้รายการล่มเมื่อมีข้อมูล
+double _num(dynamic v) => v is num ? v.toDouble() : (double.tryParse(v?.toString() ?? '') ?? 0);
 const Map<String, String> _actionLabelsEng = {
   'present': 'Deposit',
   'clear':   'Clear',
@@ -115,6 +123,17 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
   Future<Map<String, String>> _headers() async =>
       {...await AuthService().getAuthHeader(), 'Content-Type': 'application/json'};
 
+  // ตรวจผลจาก backend — เดิมไม่ตรวจ จึงแจ้งสำเร็จแม้ระบบไม่ยอม
+  Map<String, dynamic>? _check(http.Response r) {
+    if (r.statusCode >= 200 && r.statusCode < 300) {
+      final d = r.body.isEmpty ? null : json.decode(r.body);
+      return d is Map<String, dynamic> ? d : null;
+    }
+    String msg = r.body;
+    try { msg = (json.decode(r.body) as Map)['error']?.toString() ?? r.body; } catch (_) {}
+    throw msg;
+  }
+
   Future<void> _loadBanks() async {
     try {
       final h = await _headers();
@@ -150,10 +169,11 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
       final r = await http.get(
           Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/summary'), headers: h);
       if (r.statusCode == 200) {
-        final d = json.decode(r.body) as Map<String, dynamic>;
+        final rows = (json.decode(r.body) as List).cast<Map<String, dynamic>>()
+            .where((e) => e['status'] == 'Holding');
         setState(() {
-          _sumCount  = (d['total_count'] as num?)?.toInt() ?? 0;
-          _sumAmount = (d['total_amount'] as num?)?.toDouble() ?? 0;
+          _sumCount  = rows.fold<int>(0, (s, e) => s + _num(e['count']).toInt());
+          _sumAmount = rows.fold<double>(0, (s, e) => s + _num(e['total_amount']));
         });
       }
     } catch (_) {}
@@ -194,9 +214,50 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
       _fOurBankId = row['our_bank_account_id'] as int?;
       _checkNoCtrl.text    = row['check_no'] ?? '';
       _payerPayeeCtrl.text = row['payee_payer_name'] ?? '';
-      _amountCtrl.text     = (row['amount'] as num?)?.toStringAsFixed(2) ?? '';
-      _remarkCtrl.text     = row['remark'] ?? '';
+      _amountCtrl.text     = _num(row['amount']).toStringAsFixed(2);
+      _remarkCtrl.text     = row['notes'] ?? '';
     });
+    _refreshSelected();
+  }
+
+  // โหลดรายละเอียด (เหตุที่ถอยสถานะไม่ได้ + ประวัติ)
+  Future<void> _refreshSelected() async {
+    final id = _selected?['id'];
+    if (id == null) return;
+    try {
+      final h = await _headers();
+      final d = _check(await http.get(Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/$id'), headers: h));
+      if (mounted && d != null && _selected?['id'] == id) setState(() => _selected = d);
+    } catch (e) { _showErr('$e'); }
+  }
+
+  Future<void> _afterAction(Map<String, dynamic>? updated) async {
+    await _loadList();
+    await _loadSummary();
+    if (mounted) setState(() => _selected = updated);
+  }
+
+  Future<void> _revert(Map<String, dynamic> row) async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
+    final isEnglish = _isEnglish;
+    final to = row['revert_to'] as String? ?? '';
+    final toLabel = (isEnglish ? _statusLabelsEng[to] : _statusLabels[to]) ?? to;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Revert Status' : 'ถอยสถานะ',
+        message: isEnglish
+            ? 'Check ${row['check_no']} goes back to "$toLabel".'
+            : 'เช็คเลขที่ ${row['check_no']} จะกลับเป็นสถานะ "$toLabel"',
+        confirmLabel: isEnglish ? 'Revert' : 'ถอยสถานะ',
+        confirmColor: Colors.orange);
+    if (reason == null) return;
+    try {
+      final h = await _headers();
+      final d = _check(await http.put(Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/${row['id']}/revert'),
+          headers: h, body: json.encode({'reason': reason})));
+      _showOk(isEnglish ? 'Status reverted' : 'ถอยสถานะแล้ว');
+      await _afterAction(d);
+    } catch (e) { _showErr('$e'); }
   }
 
   Future<void> _save() async {
@@ -225,13 +286,13 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
         'amount':            double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
         'bank_id':           _fBankId,
         'our_bank_account_id': _fOurBankId,
-        'remark':            _remarkCtrl.text.trim().isEmpty ? null : _remarkCtrl.text.trim(),
+        'notes':             _remarkCtrl.text.trim().isEmpty ? null : _remarkCtrl.text.trim(),
       });
       if (_isNew) {
-        await http.post(Uri.parse('${AppConfig.apiCm}/cm_post_dated_check'), headers: h, body: body);
+        _check(await http.post(Uri.parse('${AppConfig.apiCm}/cm_post_dated_check'), headers: h, body: body));
       } else {
-        await http.put(Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/${_selected!['id']}'),
-            headers: h, body: body);
+        _check(await http.put(Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/${_selected!['id']}'),
+            headers: h, body: body));
       }
       _showOk(_isNew
           ? (_isEnglish ? 'Check added successfully' : 'เพิ่มเช็คสำเร็จ')
@@ -255,7 +316,17 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
             'cancel'  => 'ยกเลิก',
             _         => action,
           };
-    final confirm = await showDialog<bool>(
+    String? reason;
+    if (action == 'cancel') {
+      reason = await showDocReasonDialog(context,
+          isEnglish: isEnglish,
+          title: isEnglish ? 'Cancel Check' : 'ยกเลิกเช็ค',
+          message: isEnglish ? 'Cancel check ${row['check_no']}?' : 'ต้องการยกเลิกเช็คเลขที่ ${row['check_no']} ใช่หรือไม่?',
+          confirmLabel: label);
+      if (reason == null) return;
+    }
+    if (!mounted) return;
+    final confirm = reason != null ? true : await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: Text(isEnglish ? 'Confirm $label' : 'ยืนยัน$label'),
@@ -275,8 +346,9 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
     if (confirm != true) return;
     try {
       final h = await _headers();
-      await http.put(
-          Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/${row['id']}/$action'), headers: h);
+      _check(await http.put(
+          Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/${row['id']}/$action'), headers: h,
+          body: json.encode({if (reason != null) 'reason': reason})));
       _showOk(isEnglish ? '$label successful' : '$label สำเร็จ');
       await _loadList();
       await _loadSummary();
@@ -287,26 +359,19 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
   Future<void> _delete(Map<String, dynamic> row) async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final isEnglish = _isEnglish;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันลบ'),
-        content: Text(isEnglish ? 'Delete check ${row['check_no']}?' : 'ต้องการลบเช็คเลขที่ ${row['check_no']}?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(isEnglish ? 'Delete' : 'ลบ'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Delete Check' : 'ลบเช็ค',
+        message: isEnglish
+            ? 'Check ${row['check_no']} is kept for audit (status Deleted) and cannot be used again.'
+            : 'เช็คเลขที่ ${row['check_no']} จะถูกเก็บไว้เพื่อตรวจสอบ (สถานะ Deleted) และนำกลับมาใช้ต่อไม่ได้',
+        confirmLabel: isEnglish ? 'Delete' : 'ลบ');
+    if (reason == null) return;
     try {
       final h = await _headers();
-      await http.delete(
-          Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/${row['id']}'), headers: h);
+      _check(await http.delete(
+          Uri.parse('${AppConfig.apiCm}/cm_post_dated_check/${row['id']}'), headers: h,
+          body: json.encode({'reason': reason})));
       _showOk(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ');
       await _loadList();
       await _loadSummary();
@@ -508,7 +573,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
                                                 mainAxisSize: MainAxisSize.min,
                                                 crossAxisAlignment: CrossAxisAlignment.end,
                                                 children: [
-                                                  Text(_fmt.format((row['amount'] as num?)?.toDouble() ?? 0),
+                                                  Text(_fmt.format(_num(row['amount'])),
                                                       style: const TextStyle(fontWeight: FontWeight.bold)),
                                                   const SizedBox(height: 3),
                                                   Chip(
@@ -555,8 +620,13 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
 
   Widget _buildRight() {
     final isEnglish = _isEnglish;
-    if (_isNew || (_selected != null && _selected!['status'] == 'Holding')) {
-      return _buildForm();
+    if (_isNew) return _buildForm();
+    if (_selected != null && _selected!['status'] == 'Holding') {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Expanded(child: _buildForm()),
+        const Divider(height: 1),
+        Padding(padding: const EdgeInsets.all(12), child: _buildActions(_selected!)),
+      ]);
     }
     if (_selected != null) {
       return _buildDetail(_selected!);
@@ -677,7 +747,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
               chkDate != null ? _dateFmt.format(chkDate) : '')),
           const SizedBox(width: 8),
           Expanded(child: _infoBlock(isEnglish ? 'Amount' : 'จำนวนเงิน',
-              '${_fmt.format((row['amount'] as num?)?.toDouble() ?? 0)} THB')),
+              '${_fmt.format(_num(row['amount']))} THB')),
         ]),
         const SizedBox(height: 12),
         // Row 2: Payee/Payer Name (full width)
@@ -686,13 +756,24 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
         // Row 3: Our Bank Account (full width)
         _infoBlock(isEnglish ? 'Our Bank Account' : 'บัญชีธนาคารของเรา',
             '${row['our_account_code'] ?? ''} ${row['our_account_name'] ?? ''}'.trim()),
-        if (row['remark'] != null && (row['remark'] as String).isNotEmpty) ...[
+        if (row['notes'] != null && (row['notes'] as String).isNotEmpty) ...[
           const SizedBox(height: 12),
-          _infoBlock(isEnglish ? 'Note' : 'หมายเหตุ', row['remark'] as String),
+          _infoBlock(isEnglish ? 'Note' : 'หมายเหตุ', row['notes'] as String),
         ],
         const SizedBox(height: 20),
         const Divider(),
         const SizedBox(height: 12),
+        _buildActions(row),
+      ]),
+    );
+  }
+
+  // ปุ่มเปลี่ยนสถานะ + ประวัติ — แสดงทั้งในหน้ารายละเอียด และใต้ฟอร์มของเช็คที่ถือไว้
+  // (เดิมเช็คที่ถือไว้แสดงแค่ฟอร์ม ปุ่มนำฝาก/ยกเลิก/ลบ จึงไม่ปรากฏ)
+  Widget _buildActions(Map<String, dynamic> row) {
+    final isEnglish = _isEnglish;
+    final status = row['status'] as String? ?? '';
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Wrap(spacing: 8, children: [
           if (status == 'Holding') ...[
             ElevatedButton(
@@ -728,9 +809,40 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
               child: Text(isEnglish ? 'Return' : 'คืน'),
             ),
           ],
+          if (status == 'Returned')
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+              onPressed: () => _action('cancel', row),
+              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
+            ),
+          if (row['revert_to'] != null) _buildRevertButton(row),
         ]),
-      ]),
+        const SizedBox(height: 12),
+        DocReverseHistoryPanel(
+          history: DocReverseLog.listFromJson(row['reverse_history']),
+          isDeleted: status == 'Deleted',
+          isEnglish: isEnglish,
+          margin: EdgeInsets.zero,
+          title: isEnglish ? 'Status change history' : 'ประวัติการเปลี่ยนสถานะ',
+        ),
+    ]);
+  }
+
+  // ถอยสถานะ — ล็อกเมื่องวด CM ของวันที่ของสถานะปัจจุบันปิดแล้ว (ชี้เมาส์เห็นเหตุผล)
+  Widget _buildRevertButton(Map<String, dynamic> row) {
+    final isEnglish = _isEnglish;
+    final blockMsg = row['revert_block'] == null ? null
+        : (row['revert_block_message'] as String? ??
+            (isEnglish ? 'Cannot revert this status' : 'ถอยสถานะนี้ไม่ได้'));
+    final btn = OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(foregroundColor: Colors.orange.shade800,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+      onPressed: blockMsg == null ? () => _revert(row) : null,
+      icon: const Icon(Icons.undo, size: 16),
+      label: Text(isEnglish ? 'Revert Status' : 'ถอยสถานะ'),
     );
+    return blockMsg == null ? btn : Tooltip(message: blockMsg, child: btn);
   }
 
   Widget _infoBlock(String label, String value) => InputDecorator(

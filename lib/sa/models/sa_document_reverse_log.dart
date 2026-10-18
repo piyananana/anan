@@ -12,13 +12,18 @@ class DocReverseLog {
   bool get isDelete => toStatus == 'Deleted';
   bool get isVoid => toStatus == 'Void';
 
-  // ชื่อการกระทำสำหรับแสดงในประวัติ (CM รายการรับ/จ่าย: Pending = ยกเลิกการเคลียร์, Bounced = เช็คคืน)
+  // ชื่อการกระทำสำหรับแสดงในประวัติ (CM รายการรับ/จ่าย: Pending = ยกเลิกการเคลียร์, Bounced = เช็คคืน;
+  // เช็คลงวันที่ล่วงหน้า: Holding/Deposited/Returned = ถอยสถานะ)
   String actionLabel(bool isEnglish) {
     switch (toStatus) {
       case 'Deleted': return isEnglish ? 'Deleted' : 'ลบ';
       case 'Void':    return isEnglish ? 'Voided' : 'ยกเลิก';
       case 'Pending': return isEnglish ? 'Clearing undone' : 'ยกเลิกการเคลียร์';
       case 'Bounced': return isEnglish ? 'Bounced check' : 'เช็คคืน';
+      // เช็คลงวันที่ล่วงหน้า: ถอยกลับไปสถานะก่อนหน้า
+      case 'Holding':
+      case 'Deposited':
+      case 'Returned': return isEnglish ? 'Status reverted' : 'ถอยสถานะ';
       default:        return isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่าง';
     }
   }
