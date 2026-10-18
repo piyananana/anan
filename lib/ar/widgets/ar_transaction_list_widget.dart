@@ -139,6 +139,8 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
     try {
       final rows = await _service.fetchRows(
         docType: _selectedDocType,
+        // backend ซ่อนเอกสารที่ลบแล้วเมื่อไม่ระบุสถานะ — ดึงเฉพาะเมื่อกรองสถานะ Deleted
+        status: _selectedStatus == 'Deleted' ? 'Deleted' : null,
         dateFrom: DateFormat('yyyy-MM-dd').format(_dateFrom),
         dateTo: DateFormat('yyyy-MM-dd').format(_dateTo),
         branchId: _selectedBranchFilter?.branchId,
@@ -321,11 +323,16 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
                     const DropdownMenuItem(value: 'Draft', child: Text('Draft')),
                     const DropdownMenuItem(value: 'Posted', child: Text('Posted')),
                     const DropdownMenuItem(value: 'Void', child: Text('Void')),
+                    const DropdownMenuItem(value: 'Deleted', child: Text('Deleted')),
                   ],
-                  onChanged: (v) => setState(() {
-                    _selectedStatus = v;
-                    _applyFilter(); // client-side เท่านั้น
-                  }),
+                  onChanged: (v) {
+                    final refetch = v == 'Deleted' || _selectedStatus == 'Deleted';
+                    setState(() {
+                      _selectedStatus = v;
+                      _applyFilter();
+                    });
+                    if (refetch) _fetchRows();
+                  },
                 ),
               ),
               if (_allowedBranches.length > 1) ...[

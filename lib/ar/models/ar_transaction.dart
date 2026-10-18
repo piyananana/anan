@@ -1,5 +1,6 @@
 // lib/ar/models/ar_transaction.dart
 import '../../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 // AR document types (sys_doc_type in sa_module_document, sys_module=11)
 const int arDocTypeInvoice            = 10;
@@ -686,6 +687,12 @@ class ArTransaction {
   final List<ArTransactionApply> applies;
   final List<ArTransactionWht> whts;
   final List<ArTransactionPayment> payments;
+  // ถอยเป็นร่าง / ยกเลิก: null = ทำได้ หรือรหัสเหตุผลที่ทำไม่ได้ (backend getArReverseBlock / getArVoidBlock)
+  final String? reverseBlock;
+  final String? reverseBlockRef; // เลขที่เอกสารที่อ้างอิงอยู่ (ถ้ามี)
+  final String? voidBlock;
+  final String? voidBlockRef;
+  final List<DocReverseLog> reverseHistory;
 
   const ArTransaction({
     required this.header,
@@ -693,6 +700,11 @@ class ArTransaction {
     this.applies = const [],
     this.whts = const [],
     this.payments = const [],
+    this.reverseBlock,
+    this.reverseBlockRef,
+    this.voidBlock,
+    this.voidBlockRef,
+    this.reverseHistory = const [],
   });
 
   factory ArTransaction.fromJson(Map<String, dynamic> j) {
@@ -710,6 +722,11 @@ class ArTransaction {
       payments: (j['payments'] as List<dynamic>? ?? [])
           .map((p) => ArTransactionPayment.fromJson(p as Map<String, dynamic>))
           .toList(),
+      reverseBlock: j['reverse_block'] as String?,
+      reverseBlockRef: j['reverse_block_ref'] as String?,
+      voidBlock: j['void_block'] as String?,
+      voidBlockRef: j['void_block_ref'] as String?,
+      reverseHistory: DocReverseLog.listFromJson(j['reverse_history']),
     );
   }
 }

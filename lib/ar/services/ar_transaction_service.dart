@@ -173,12 +173,13 @@ class ArTransactionService {
     throw Exception(_formatApiError(response.body));
   }
 
-  // Void transaction
+  // ยกเลิก: ลงรายการบัญชีกลับรายการ ณ วันที่ยกเลิก (รายการเดิมยังอยู่) — ต้องระบุเหตุผล
   Future<void> voidTransaction(int id, {String? voidReason}) async {
     final authHeaders = await authService.getAuthHeader();
     final body = jsonEncode({
       'void_reason': voidReason ?? '',
       'updated_by': authHeaders['UserName'] ?? '',
+      'user_id': authService.currentUser?.id,
     });
     final response = await http.put(
       Uri.parse('$baseUrl/ar_transaction/$id/void'),
@@ -194,12 +195,13 @@ class ArTransactionService {
     throw Exception(err['error'] ?? 'Failed to void transaction');
   }
 
-  // Delete draft
-  Future<void> deleteTransaction(int id) async {
+  // ลบร่าง (ต้องระบุเหตุผล) — เก็บเอกสารไว้ด้วยสถานะ Deleted เพื่อตรวจสอบ
+  Future<void> deleteTransaction(int id, String reason) async {
     final authHeaders = await authService.getAuthHeader();
     final response = await http.delete(
       Uri.parse('$baseUrl/ar_transaction/$id'),
       headers: authHeaders,
+      body: jsonEncode({'reason': reason, 'user_id': authService.currentUser?.id}),
     );
     if (response.statusCode == 200) return;
     if (response.statusCode == 401) {
@@ -208,6 +210,23 @@ class ArTransactionService {
     }
     final err = jsonDecode(response.body);
     throw Exception(err['error'] ?? 'Failed to delete transaction');
+  }
+
+  // ถอยเป็นร่าง: Posted → Draft (ลบรายการบัญชี เก็บเลขที่ไว้ใช้ซ้ำ) — ต้องระบุเหตุผล
+  Future<void> reverseTransaction(int id, String reason) async {
+    final authHeaders = await authService.getAuthHeader();
+    final response = await http.put(
+      Uri.parse('$baseUrl/ar_transaction/$id/reverse'),
+      headers: authHeaders,
+      body: jsonEncode({'reason': reason, 'user_id': authService.currentUser?.id}),
+    );
+    if (response.statusCode == 200) return;
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized');
+    }
+    final err = jsonDecode(response.body);
+    throw Exception(err['error'] ?? 'Failed to reverse transaction');
   }
 
   // Fetch open advance receipts for a customer (for advance deduction in Receipt)
