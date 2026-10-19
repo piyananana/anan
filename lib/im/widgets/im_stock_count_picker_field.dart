@@ -9,10 +9,12 @@ import '../../sa/services/sa_language_provider.dart';
 
 class ImStockCountPickerField extends StatefulWidget {
   final void Function(ImStockCountHeader) onSelected;
+  // true = รวมใบที่ปิดแล้ว (หน้าสรุปผลใช้ถอยใบที่ปิดแล้ว) — ไม่รวมใบที่ยกเลิก/ลบเสมอ
+  final bool includeClosed;
 
-  const ImStockCountPickerField({super.key, required this.onSelected});
+  const ImStockCountPickerField({super.key, required this.onSelected, this.includeClosed = false});
 
-  static Future<void> search(BuildContext context, {required void Function(ImStockCountHeader) onSelected}) {
+  static Future<void> search(BuildContext context, {required void Function(ImStockCountHeader) onSelected, bool includeClosed = false}) {
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     return showDialog(
       context: context,
@@ -22,7 +24,7 @@ class ImStockCountPickerField extends StatefulWidget {
         content: SizedBox(
           width: 480,
           height: 560,
-          child: ImStockCountPickerField(onSelected: (h) {
+          child: ImStockCountPickerField(includeClosed: includeClosed, onSelected: (h) {
             onSelected(h);
             Navigator.of(ctx).pop();
           }),
@@ -61,7 +63,8 @@ class _ImStockCountPickerFieldState extends State<ImStockCountPickerField> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final rows = await _service.fetchRows(excludeClosedVoid: true);
+      var rows = await _service.fetchRows(excludeClosedVoid: !widget.includeClosed);
+      if (widget.includeClosed) rows = rows.where((r) => r.status != 'Void').toList();
       if (mounted) setState(() { _rows = rows; _filtered = rows; });
     } catch (_) {
       // เงียบไว้ — dialog picker ไม่จำเป็นต้องมี error banner

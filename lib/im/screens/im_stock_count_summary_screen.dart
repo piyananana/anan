@@ -8,6 +8,7 @@ import '../services/im_stock_count_service.dart';
 import '../widgets/im_stock_count_picker_field.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 
 class ImStockCountSummaryScreen extends StatefulWidget {
   const ImStockCountSummaryScreen({super.key});
@@ -27,7 +28,18 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
   bool _isSaving = false;
 
   ImStockCountHeader? _selectedCount;
+  ImStockCount? _selectedFull; // รวมเหตุที่ถอยไม่ได้ (ล็อกปุ่ม)
   ImStockCountCheckResult? _result;
+
+  Future<void> _selectCount(ImStockCountHeader h) async {
+    setState(() { _selectedCount = h; _selectedFull = null; _result = null; });
+    try {
+      final full = await _service.fetchRow(h.id);
+      if (mounted && _selectedCount?.id == h.id) setState(() => _selectedFull = full);
+    } catch (_) {
+      // เงียบไว้ — ปุ่มถอยยังเรียก backend ซึ่งตรวจซ้ำอยู่แล้ว
+    }
+  }
 
   Future<void> _checkResults() async {
     final isEnglish = _isEnglish;
@@ -49,9 +61,8 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
   Future<void> _refreshSelectedCount() async {
     if (_selectedCount == null) return;
     try {
-      final rows = await _service.fetchRows();
-      final updated = rows.where((r) => r.id == _selectedCount!.id);
-      if (updated.isNotEmpty && mounted) setState(() => _selectedCount = updated.first);
+      final full = await _service.fetchRow(_selectedCount!.id);
+      if (mounted) setState(() { _selectedCount = full.header; _selectedFull = full; });
     } catch (_) {
       // เงียบไว้ — ไม่ใช่ operation หลัก
     }
@@ -121,31 +132,22 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
     final isEnglish = _isEnglish;
     if (_selectedCount == null) return;
     final isClosed = _selectedCount!.status == 'Closed';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Reverse to Posted' : 'ถอยกลับเป็น Posted'),
-        content: Text(isEnglish
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Reverse to Posted' : 'ถอยกลับเป็น Posted',
+        message: isEnglish
             ? (isClosed
-                ? 'Reverse this count sheet back to Posted? The posted adjustment (AJS) will be voided and its stock/GL impact reversed, and you will be able to re-record and re-approve it.'
-                : 'Reverse this count sheet back to Posted? The approval will be undone and you will be able to re-approve it.')
+                ? 'The stock adjustment (AJS) is removed and its stock and journal entry are reversed. You can then correct counts and approve again; the same adjustment number is reused.'
+                : 'The approval will be undone and you will be able to re-approve it.')
             : (isClosed
-                ? 'ถอยใบตรวจนับนี้กลับเป็น Posted? ใบปรับยอด (AJS) ที่ Post ไปแล้วจะถูกยกเลิกและย้อนผลกระทบต่อสต็อก/บัญชีกลับ แล้วจะสามารถบันทึกยอดตรวจนับและอนุมัติใหม่ได้'
-                : 'ถอยใบตรวจนับนี้กลับเป็น Posted? การอนุมัติจะถูกยกเลิก แล้วจะสามารถอนุมัติใหม่ได้')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
-            child: Text(isEnglish ? 'Reverse' : 'ยืนยันถอยกลับ'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
+                ? 'ใบปรับยอด (AJS) จะถูกลบ พร้อมย้อนสต็อกและรายการบัญชี แล้วจะแก้ยอดตรวจนับและอนุมัติใหม่ได้ เมื่อบันทึกปรับยอดใหม่จะใช้เลขที่ใบปรับยอดเดิม'
+                : 'การอนุมัติจะถูกยกเลิก แล้วจะสามารถอนุมัติใหม่ได้'),
+        confirmLabel: isEnglish ? 'Reverse' : 'ยืนยันถอยกลับ',
+        confirmColor: Colors.orange[800]!);
+    if (reason == null) return;
     setState(() => _isSaving = true);
     try {
-      await _service.reverseCount(_selectedCount!.id);
+      await _service.reverseCount(_selectedCount!.id, reason);
       await _refreshSelectedCount();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Reversed to Posted' : 'ถอยกลับเป็น Posted สำเร็จ')));
     } catch (e) {
@@ -218,7 +220,7 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
                               icon: const Icon(Icons.search, color: Colors.teal, size: 18),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              onPressed: () => ImStockCountPickerField.search(context, onSelected: (h) => setState(() { _selectedCount = h; _result = null; })),
+                              onPressed: () => ImStockCountPickerField.search(context, includeClosed: true, onSelected: _selectCount),
                             ),
                           ]),
                         ),
@@ -251,12 +253,16 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
                       ],
                       if (canApprove && (isApproved || isClosed)) ...[
                         const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: _isSaving ? null : _reverseToPosted,
-                          icon: const Icon(Icons.undo, size: 18),
-                          label: Text(isEnglish ? 'Reverse to Posted' : 'ถอยกลับเป็น Posted'),
-                          style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
-                        ),
+                        Builder(builder: (_) {
+                          final block = _selectedFull?.reverseBlock;
+                          final button = OutlinedButton.icon(
+                            onPressed: (_isSaving || block != null) ? null : _reverseToPosted,
+                            icon: const Icon(Icons.undo, size: 18),
+                            label: Text(isEnglish ? 'Reverse to Posted' : 'ถอยกลับเป็น Posted'),
+                            style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
+                          );
+                          return block == null ? button : Tooltip(message: block.text(isEnglish), child: button);
+                        }),
                       ],
                     ]),
                     if (_selectedCount != null) ...[
@@ -264,9 +270,16 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
-                        child: Text(_selectedCount!.status, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        child: Text(imStockCountStatusLabel(_selectedCount!.status, isEnglish), style: const TextStyle(fontWeight: FontWeight.w600)),
                       ),
                     ],
+                    if ((_selectedFull?.reverseHistory ?? const []).isNotEmpty)
+                      DocReverseHistoryPanel(
+                        history: _selectedFull!.reverseHistory,
+                        isDeleted: false,
+                        isEnglish: isEnglish,
+                        margin: const EdgeInsets.only(top: 12),
+                      ),
                   ]),
                 ),
               ),

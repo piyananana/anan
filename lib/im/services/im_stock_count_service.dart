@@ -130,9 +130,10 @@ class ImStockCountService {
     }
   }
 
-  Future<ImStockCount> voidCount(int id) async {
+  Future<ImStockCount> voidCount(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/im_stock_count/$id/void'), headers: headers);
+    final response = await http.put(Uri.parse('$baseUrl/im_stock_count/$id/void'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: json.encode({'reason': reason}));
     if (response.statusCode == 200) {
       return ImStockCount.fromJson(json.decode(response.body));
     } else if (response.statusCode == 401) {
@@ -142,6 +143,20 @@ class ImStockCountService {
       final err = json.decode(response.body);
       throw Exception(err['message'] ?? 'ยกเลิกเอกสารล้มเหลว');
     }
+  }
+
+  // ลบได้เฉพาะร่าง — เก็บไว้ด้วยสถานะ Deleted
+  Future<void> deleteCount(int id, String reason) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.delete(Uri.parse('$baseUrl/im_stock_count/$id'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: json.encode({'reason': reason}));
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    }
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ลบเอกสารล้มเหลว');
   }
 
   Future<int> incrementPrintCount(int id) async {
@@ -231,9 +246,10 @@ class ImStockCountService {
     }
   }
 
-  Future<ImStockCount> reverseCount(int id) async {
+  Future<ImStockCount> reverseCount(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/im_stock_count/$id/reverse'), headers: headers);
+    final response = await http.put(Uri.parse('$baseUrl/im_stock_count/$id/reverse'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: json.encode({'reason': reason}));
     if (response.statusCode == 200) {
       return ImStockCount.fromJson(json.decode(response.body));
     } else if (response.statusCode == 401) {

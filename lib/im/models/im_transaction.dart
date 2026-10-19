@@ -512,6 +512,7 @@ class ImDocBlock {
     'INSUFFICIENT_STOCK':  'Current stock balance is not enough to reverse',
     'AP_LINKED':           'The AP invoice created from this document cannot be reversed or voided',
     'AR_LINKED':           'The AR invoice created from this document cannot be reversed or voided',
+    'VOIDED':              'This document has been voided or deleted',
   };
 
   String text(bool isEnglish) =>

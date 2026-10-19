@@ -27,6 +27,11 @@ class DocReverseLog {
       // IM รับ/ส่งสินค้ารอตั้งหนี้: ถอยเฉพาะใบตั้งหนี้
       case 'Received':
       case 'Delivered': return isEnglish ? 'Billing reversed' : 'ถอยการตั้งหนี้';
+      // ใบตรวจนับสต็อก: ถอยจากปิดแล้ว (ลบใบปรับยอด) / อนุมัติแล้ว กลับเป็นบันทึกแล้ว
+      case 'Posted':
+        return fromStatus == 'Closed'
+            ? (isEnglish ? 'Adjustment reversed' : 'ถอยการปรับยอด')
+            : (isEnglish ? 'Approval reversed' : 'ถอยการอนุมัติ');
       default:        return isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่าง';
     }
   }

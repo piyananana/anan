@@ -4,7 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../models/im_stock_count.dart';
+import '../models/im_transaction.dart' show ImDocBlock;
 import '../models/im_warehouse.dart';
 import '../services/im_stock_count_service.dart';
 import '../widgets/im_warehouse_list_widget.dart';
@@ -24,6 +27,7 @@ class _ImStockCountCreateScreenState extends State<ImStockCountCreateScreen> {
   List<ImStockCountHeader> _rows = [];
   bool _isLoading = false;
   bool _sortNewestFirst = true;
+  bool _showDeleted = false; // แสดงเฉพาะใบที่ลบแล้ว (ปกติซ่อน)
 
   int? _selectedId;
   bool _viewOnly = false;
@@ -39,7 +43,7 @@ class _ImStockCountCreateScreenState extends State<ImStockCountCreateScreen> {
   Future<void> _fetchRows() async {
     setState(() => _isLoading = true);
     try {
-      final rows = await _service.fetchRows();
+      final rows = await _service.fetchRows(status: _showDeleted ? 'Deleted' : null);
       rows.sort((a, b) => _sortNewestFirst ? b.countDate.compareTo(a.countDate) : a.countDate.compareTo(b.countDate));
       if (mounted) setState(() => _rows = rows);
     } catch (e) {
@@ -77,6 +81,11 @@ class _ImStockCountCreateScreenState extends State<ImStockCountCreateScreen> {
   void _onSaved() {
     _fetchRows();
     setState(() {}); // ให้ panel ขวารีโหลดสถานะล่าสุดของ id เดิม (ไม่ reset กลับหน้าว่าง)
+  }
+
+  void _onDeleted() {
+    _fetchRows();
+    setState(() => _selectedId = null);
   }
 
   Color _statusColor(String status) {
@@ -122,6 +131,16 @@ class _ImStockCountCreateScreenState extends State<ImStockCountCreateScreen> {
                           : (isEnglish ? 'Oldest first' : 'เก่าสุด-ล่าสุด'),
                       onPressed: _toggleSort,
                     ),
+                    IconButton(
+                      icon: Icon(_showDeleted ? Icons.delete : Icons.delete_outline, color: _showDeleted ? Colors.red[700] : null),
+                      tooltip: _showDeleted
+                          ? (isEnglish ? 'Showing deleted sheets — click to show all' : 'กำลังแสดงใบที่ลบแล้ว — คลิกเพื่อแสดงทั้งหมด')
+                          : (isEnglish ? 'Show deleted sheets' : 'แสดงใบที่ลบแล้ว'),
+                      onPressed: () {
+                        setState(() { _showDeleted = !_showDeleted; _selectedId = null; });
+                        _fetchRows();
+                      },
+                    ),
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: _openNew,
@@ -142,7 +161,7 @@ class _ImStockCountCreateScreenState extends State<ImStockCountCreateScreen> {
                               itemCount: _rows.length,
                               itemBuilder: (context, i) {
                                 final r = _rows[i];
-                                final canEdit = r.status != 'Approved' && r.status != 'Closed' && r.status != 'Void';
+                                final canEdit = r.status != 'Void' && r.status != 'Deleted';
                                 return Card(
                                   margin: const EdgeInsets.symmetric(vertical: 4),
                                   child: Padding(
@@ -153,7 +172,7 @@ class _ImStockCountCreateScreenState extends State<ImStockCountCreateScreen> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(color: _statusColor(r.status).withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-                                          child: Text(r.status, style: TextStyle(color: _statusColor(r.status), fontSize: 11, fontWeight: FontWeight.w600)),
+                                          child: Text(imStockCountStatusLabel(r.status, isEnglish), style: TextStyle(color: _statusColor(r.status), fontSize: 11, fontWeight: FontWeight.w600)),
                                         ),
                                       ]),
                                       const SizedBox(height: 4),
@@ -192,6 +211,7 @@ class _ImStockCountCreateScreenState extends State<ImStockCountCreateScreen> {
               countId: _selectedId,
               viewOnly: _viewOnly,
               onSaved: _onSaved,
+              onDeleted: _onDeleted,
               onBack: () => setState(() => _selectedId = null),
             ),
           ),
@@ -205,9 +225,10 @@ class _CreateDetailPanel extends StatefulWidget {
   final int? countId;
   final bool viewOnly;
   final VoidCallback onSaved;
+  final VoidCallback onDeleted;
   final VoidCallback onBack;
 
-  const _CreateDetailPanel({super.key, this.countId, required this.viewOnly, required this.onSaved, required this.onBack});
+  const _CreateDetailPanel({super.key, this.countId, required this.viewOnly, required this.onSaved, required this.onDeleted, required this.onBack});
 
   @override
   State<_CreateDetailPanel> createState() => _CreateDetailPanelState();
@@ -229,6 +250,11 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
   DateTime _countDate = DateTime.now();
   String _status = 'Draft';
   List<ImStockCountDetail> _lines = [];
+  ImDocBlock? _reverseBlock;
+  String? _reverseTo;
+  ImDocBlock? _voidBlock;
+  ImDocBlock? _deleteBlock;
+  List<DocReverseLog> _history = [];
 
   bool get _isDraft => _status == 'Draft';
   bool get _canEditFields => !widget.viewOnly && (_id == null || _isDraft);
@@ -249,16 +275,7 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
     if (widget.countId == null) return;
     setState(() => _isLoading = true);
     try {
-      final data = await _service.fetchRow(widget.countId!);
-      final h = data.header;
-      _id = h.id;
-      _countNo = h.countNo;
-      _warehouseId = h.warehouseId;
-      _warehouseLabel = '${h.warehouseCode ?? ''} ${h.warehouseNameTh ?? ''}'.trim();
-      _countDate = h.countDate;
-      _descCtrl.text = h.description ?? '';
-      _status = h.status;
-      _lines = data.details;
+      await _hydrate(await _service.fetchRow(widget.countId!));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
     } finally {
@@ -280,6 +297,11 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
     _descCtrl.text = h.description ?? '';
     _status = h.status;
     _lines = data.details;
+    _reverseBlock = data.reverseBlock;
+    _reverseTo = data.reverseTo;
+    _voidBlock = data.voidBlock;
+    _deleteBlock = data.deleteBlock;
+    _history = data.reverseHistory;
   }
 
   // "Draft" — บันทึกข้อมูลเอกสาร (สร้างใหม่ถ้ายังไม่มี id) โดยไม่เปลี่ยนสถานะ
@@ -353,32 +375,95 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
     }
   }
 
+  String get _reverseLabel => _reverseTo == 'Draft'
+      ? (_isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง')
+      : _status == 'Closed'
+          ? (_isEnglish ? 'Reverse Adjustment' : 'ถอยการปรับยอด')
+          : (_isEnglish ? 'Reverse Approval' : 'ถอยการอนุมัติ');
+
+  Future<void> _onReversePressed() async {
+    if (_id == null) return;
+    final isEnglish = _isEnglish;
+    final String msg;
+    if (_reverseTo == 'Draft') {
+      msg = isEnglish
+          ? 'The count sheet goes back to Draft so the location plan can be edited or reloaded. Recorded counts are kept.'
+          : 'ใบตรวจนับจะกลับเป็นร่าง แก้ไขหรือโหลดผังใหม่ได้ ยอดที่บันทึกไว้ยังอยู่';
+    } else if (_status == 'Closed') {
+      msg = isEnglish
+          ? 'The stock adjustment (AJS) is removed and its stock and journal entry are reversed. The sheet goes back to Posted so counts can be corrected and approved again; the same adjustment number is reused.'
+          : 'ใบปรับยอด (AJS) จะถูกลบ พร้อมย้อนสต็อกและรายการบัญชี ใบตรวจนับกลับเป็น "บันทึกใบตรวจนับแล้ว" เพื่อแก้ยอดและอนุมัติใหม่ได้ เมื่อบันทึกปรับยอดใหม่จะใช้เลขที่ใบปรับยอดเดิม';
+    } else {
+      msg = isEnglish
+          ? 'The approval is undone and the sheet goes back to Posted.'
+          : 'ยกเลิกการอนุมัติ ใบตรวจนับกลับเป็น "บันทึกใบตรวจนับแล้ว"';
+    }
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish, title: _reverseLabel, message: msg, confirmLabel: _reverseLabel, confirmColor: Colors.orange[800]!);
+    if (reason == null) return;
+    await _runAction(() => _service.reverseCount(_id!, reason), isEnglish ? 'Reversed' : 'ถอยสำเร็จ');
+  }
+
   Future<void> _onVoidPressed() async {
     if (_id == null) return;
     final isEnglish = _isEnglish;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Void Count Sheet' : 'ยกเลิกใบตรวจนับ'),
-        content: Text(isEnglish ? 'This cannot be undone.' : 'ไม่สามารถย้อนกลับได้'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Back' : 'ย้อนกลับ')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: Text(isEnglish ? 'Void' : 'ยืนยันยกเลิก')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Void Count Sheet' : 'ยกเลิกใบตรวจนับ',
+        message: _status == 'Closed'
+            ? (isEnglish
+                ? 'The stock adjustment (AJS) is voided with a reversing stock movement and journal entry dated today. Use this when the sheet cannot be reversed (e.g. its period is closed).'
+                : 'ใบปรับยอด (AJS) จะถูกยกเลิก โดยย้อนสต็อกและลงรายการบัญชีกลับในวันนี้ ใช้เมื่อถอยไม่ได้ (เช่น งวดเดิมปิดแล้ว)')
+            : (isEnglish ? 'The count sheet will be voided. This cannot be undone.' : 'ใบตรวจนับจะถูกยกเลิก ย้อนกลับไม่ได้'),
+        confirmLabel: isEnglish ? 'Void' : 'ยืนยันยกเลิก');
+    if (reason == null) return;
+    await _runAction(() => _service.voidCount(_id!, reason), isEnglish ? 'Voided' : 'ยกเลิกสำเร็จ');
+  }
+
+  Future<void> _onDeletePressed() async {
+    if (_id == null) return;
+    final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish,
+        title: isEnglish ? 'Delete Count Sheet' : 'ลบใบตรวจนับ',
+        message: isEnglish
+            ? 'The draft is kept for audit with status Deleted and cannot be used again.'
+            : 'ร่างนี้จะถูกเก็บไว้ด้วยสถานะ "ลบแล้ว" เพื่อตรวจสอบ นำกลับมาใช้ต่อไม่ได้',
+        confirmLabel: isEnglish ? 'Delete' : 'ยืนยันลบ');
+    if (reason == null) return;
     setState(() => _isSaving = true);
     try {
-      final result = await _service.voidCount(_id!);
-      await _hydrate(result);
-      widget.onSaved();
-      if (mounted) setState(() {});
+      await _service.deleteCount(_id!, reason);
+      _warn(isEnglish ? 'Deleted' : 'ลบสำเร็จ');
+      widget.onDeleted();
     } catch (e) {
-      _warn(isEnglish ? 'Void failed: $e' : 'ยกเลิกล้มเหลว: $e');
+      _warn(isEnglish ? 'Delete failed: $e' : 'ลบล้มเหลว: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  Future<void> _runAction(Future<ImStockCount> Function() action, String doneMsg) async {
+    setState(() => _isSaving = true);
+    try {
+      await _hydrate(await action());
+      widget.onSaved();
+      if (mounted) {
+        setState(() {});
+        _warn(doneMsg);
+      }
+    } catch (e) {
+      _warn(_isEnglish ? 'Failed: $e' : 'ไม่สำเร็จ: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  // ปุ่มที่ทำไม่ได้: ปิดไว้ และชี้เมาส์เห็นเหตุผล
+  Widget _lockable(ImDocBlock? block, Widget Function(VoidCallback? onPressed) builder, VoidCallback action) {
+    final enabled = !_isSaving && !widget.viewOnly && _id != null && block == null;
+    final button = builder(enabled ? action : null);
+    return block == null ? button : Tooltip(message: block.text(_isEnglish), child: button);
   }
 
   Future<void> _pickDate() async {
@@ -423,7 +508,7 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(color: _statusColor(_status).withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-                child: Text(_status, style: TextStyle(color: _statusColor(_status), fontWeight: FontWeight.w600)),
+                child: Text(imStockCountStatusLabel(_status, isEnglish), style: TextStyle(color: _statusColor(_status), fontWeight: FontWeight.w600)),
               ),
           ]),
         ),
@@ -439,11 +524,26 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
               onPressed: (_isSaving || widget.viewOnly || !_canEditFields) ? null : _onDraftPressed,
               child: Text(isEnglish ? 'Draft' : 'Draft'),
             ),
-            TextButton(
-              onPressed: (_isSaving || widget.viewOnly || _id == null || !(_isDraft || _status == 'Posted')) ? null : _onVoidPressed,
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: Text(isEnglish ? 'Void' : 'Void'),
-            ),
+            if (_id != null && _reverseTo != null)
+              _lockable(_reverseBlock, (onPressed) => OutlinedButton.icon(
+                    onPressed: onPressed,
+                    icon: const Icon(Icons.undo, size: 16),
+                    label: Text(_reverseLabel),
+                    style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
+                  ), _onReversePressed),
+            if (_id != null && !_isDraft && _status != 'Void' && _status != 'Deleted')
+              _lockable(_voidBlock, (onPressed) => TextButton(
+                    onPressed: onPressed,
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    child: Text(isEnglish ? 'Void' : 'ยกเลิก'),
+                  ), _onVoidPressed),
+            if (_id != null && _isDraft)
+              _lockable(_deleteBlock, (onPressed) => TextButton.icon(
+                    onPressed: onPressed,
+                    icon: const Icon(Icons.delete_outline, size: 16),
+                    label: Text(isEnglish ? 'Delete' : 'ลบ'),
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  ), _onDeletePressed),
             ElevatedButton(
               onPressed: (_isSaving || widget.viewOnly || !_canEditFields) ? null : _onPostPressed,
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
@@ -454,6 +554,13 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
           ]),
         ),
         const Divider(height: 1),
+        if (_history.isNotEmpty)
+          DocReverseHistoryPanel(
+            history: _history,
+            isDeleted: _status == 'Deleted',
+            isEnglish: isEnglish,
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          ),
         Padding(
           padding: const EdgeInsets.all(16),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
