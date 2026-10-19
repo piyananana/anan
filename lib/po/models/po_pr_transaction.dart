@@ -2,6 +2,7 @@
 // ย้ายมารวมกับโฟลเดอร์ po (เดิมอยู่ lib/pr/) เพราะ PR เป็นส่วนหนึ่งของ workflow จัดซื้อเดียวกับ PO — ชื่อ
 // class/field ทั้งหมดยังคงเดิมทุกประการ ย้ายแค่ตำแหน่งไฟล์
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 const Map<String, String> prTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
@@ -12,6 +13,7 @@ const Map<String, String> prTransactionStatusLabelsTh = {
   'FullyConverted': 'แปลงเป็น PO ครบแล้ว',
   'Closed': 'ปิดแล้ว',
   'Void': 'ยกเลิก',
+  'Deleted': 'ลบแล้ว',
 };
 
 const Map<String, String> prTransactionStatusLabelsEn = {
@@ -23,6 +25,7 @@ const Map<String, String> prTransactionStatusLabelsEn = {
   'FullyConverted': 'Fully Converted',
   'Closed': 'Closed',
   'Void': 'Void',
+  'Deleted': 'Deleted',
 };
 
 String prTransactionStatusLabel(String s, bool isEnglish) =>
@@ -78,6 +81,9 @@ class PrTransactionHeader {
   final double exchangeRate;
   final String status;
   final String approvalMode;
+  final String? voidReason;
+  // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
+  final DocActions actions;
   final double totalQty;
   final double totalValueLc;
   final String? description;
@@ -115,6 +121,8 @@ class PrTransactionHeader {
     this.exchangeRate = 1,
     this.status = 'Draft',
     this.approvalMode = 'ALL',
+    this.voidReason,
+    this.actions = const DocActions(),
     this.totalQty = 0,
     this.totalValueLc = 0,
     this.description,
@@ -154,6 +162,8 @@ class PrTransactionHeader {
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       status: json['status'] ?? 'Draft',
       approvalMode: json['approval_mode'] ?? 'ALL',
+      voidReason: json['void_reason'],
+      actions: DocActions.fromJson(json),
       totalQty: toDouble(json['total_qty']),
       totalValueLc: toDouble(json['total_value_lc']),
       description: json['description'],

@@ -1,6 +1,7 @@
 // lib/so/models/so_transaction.dart — ใบสั่งขาย (Sale Order, sys_module='41') — มิเรอร์ po_transaction.dart ทุกประการ
 // เพียงสลับ vendor->customer เท่านั้น ยังไม่มีขั้น "ใบเสนอราคา" (Sale Quote) นำหน้าเหมือน PR นำหน้า PO
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 const Map<String, String> soTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
@@ -9,6 +10,7 @@ const Map<String, String> soTransactionStatusLabelsTh = {
   'FullyDelivered': 'ส่งสินค้าครบแล้ว',
   'Closed': 'ปิดแล้ว',
   'Void': 'ยกเลิก',
+  'Deleted': 'ลบแล้ว',
 };
 
 const Map<String, String> soTransactionStatusLabelsEn = {
@@ -18,6 +20,7 @@ const Map<String, String> soTransactionStatusLabelsEn = {
   'FullyDelivered': 'Fully Delivered',
   'Closed': 'Closed',
   'Void': 'Void',
+  'Deleted': 'Deleted',
 };
 
 String soTransactionStatusLabel(String s, bool isEnglish) =>
@@ -48,6 +51,9 @@ class SoTransactionHeader {
   final String? branchNameThai;
   final DateTime? approvedAt;
   final String? approvedBy;
+  final String? voidReason;
+  // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
+  final DocActions actions;
   final int? refQuoteId; // ใบเสนอราคา (Quote) ต้นทาง — สะดวก/แสดงผลเท่านั้น
   final String? refQuoteDocNo;
   // From join
@@ -86,6 +92,8 @@ class SoTransactionHeader {
     this.branchNameThai,
     this.approvedAt,
     this.approvedBy,
+    this.voidReason,
+    this.actions = const DocActions(),
     this.refQuoteId,
     this.refQuoteDocNo,
     this.docCode,
@@ -126,6 +134,8 @@ class SoTransactionHeader {
       branchNameThai: json['branch_name_thai'],
       approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString())?.toLocal() : null,
       approvedBy: json['approved_by'],
+      voidReason: json['void_reason'],
+      actions: DocActions.fromJson(json),
       refQuoteId: json['ref_quote_id'],
       refQuoteDocNo: json['ref_quote_doc_no'],
       docCode: json['doc_code'] ?? json['d_doc_code'],

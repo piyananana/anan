@@ -1,5 +1,6 @@
 // lib/po/models/po_transaction.dart — ใบสั่งซื้อ (Purchase Order, sys_module='51')
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 const Map<String, String> poTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
@@ -8,6 +9,7 @@ const Map<String, String> poTransactionStatusLabelsTh = {
   'FullyReceived': 'รับสินค้าครบแล้ว',
   'Closed': 'ปิดแล้ว',
   'Void': 'ยกเลิก',
+  'Deleted': 'ลบแล้ว',
 };
 
 const Map<String, String> poTransactionStatusLabelsEn = {
@@ -17,6 +19,7 @@ const Map<String, String> poTransactionStatusLabelsEn = {
   'FullyReceived': 'Fully Received',
   'Closed': 'Closed',
   'Void': 'Void',
+  'Deleted': 'Deleted',
 };
 
 String poTransactionStatusLabel(String s, bool isEnglish) =>
@@ -47,6 +50,9 @@ class PoTransactionHeader {
   final String? branchNameThai;
   final DateTime? approvedAt;
   final String? approvedBy;
+  final String? voidReason;
+  // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
+  final DocActions actions;
   final int? refPrId; // ใบขอซื้อ (PR) ต้นทาง — สะดวก/แสดงผลเท่านั้น
   final String? refPrDocNo;
   // From join
@@ -85,6 +91,8 @@ class PoTransactionHeader {
     this.branchNameThai,
     this.approvedAt,
     this.approvedBy,
+    this.voidReason,
+    this.actions = const DocActions(),
     this.refPrId,
     this.refPrDocNo,
     this.docCode,
@@ -125,6 +133,8 @@ class PoTransactionHeader {
       branchNameThai: json['branch_name_thai'],
       approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString())?.toLocal() : null,
       approvedBy: json['approved_by'],
+      voidReason: json['void_reason'],
+      actions: DocActions.fromJson(json),
       refPrId: json['ref_pr_id'],
       refPrDocNo: json['ref_pr_doc_no'],
       docCode: json['doc_code'] ?? json['d_doc_code'],

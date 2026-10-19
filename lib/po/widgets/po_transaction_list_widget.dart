@@ -87,6 +87,7 @@ class _PoTransactionListWidgetState extends State<PoTransactionListWidget> with 
     setState(() => _isLoading = true);
     try {
       final rows = await _service.fetchRows(
+        status: _selectedStatus == 'Deleted' ? 'Deleted' : null, // ใบที่ลบแล้วไม่ส่งมาเว้นแต่ขอ
         vendorId: _selectedVendor?.id,
         dateFrom: formatLocalDate(_dateFrom),
         dateTo: formatLocalDate(_dateTo),
@@ -135,6 +136,7 @@ class _PoTransactionListWidgetState extends State<PoTransactionListWidget> with 
       case 'FullyReceived': return Colors.green;
       case 'Closed': return Colors.grey;
       case 'Void': return Colors.red;
+      case 'Deleted': return Colors.brown;
       default: return Colors.grey;
     }
   }
@@ -198,10 +200,14 @@ class _PoTransactionListWidgetState extends State<PoTransactionListWidget> with 
               decoration: InputDecoration(labelText: isEnglish ? 'Status' : 'สถานะ', isDense: true, border: const OutlineInputBorder()),
               items: [
                 DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
-                ...['Draft', 'Approved', 'PartiallyReceived', 'FullyReceived', 'Closed', 'Void']
+                ...['Draft', 'Approved', 'PartiallyReceived', 'FullyReceived', 'Closed', 'Void', 'Deleted']
                     .map((s) => DropdownMenuItem(value: s, child: Text(poTransactionStatusLabel(s, isEnglish)))),
               ],
-              onChanged: (v) => setState(() { _selectedStatus = v; _applyFilter(); }),
+              onChanged: (v) {
+                final refetch = (v == 'Deleted') != (_selectedStatus == 'Deleted');
+                setState(() { _selectedStatus = v; _applyFilter(); });
+                if (refetch) _fetchRows();
+              },
             ),
           ),
           const SizedBox(width: 8),

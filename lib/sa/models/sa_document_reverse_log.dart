@@ -15,6 +15,10 @@ class DocReverseLog {
   // ชื่อการกระทำสำหรับแสดงในประวัติ (CM รายการรับ/จ่าย: Pending = ยกเลิกการเคลียร์, Bounced = เช็คคืน;
   // เช็คลงวันที่ล่วงหน้า: Holding/Deposited/Returned = ถอยสถานะ)
   String actionLabel(bool isEnglish) {
+    // ใบสั่งซื้อ/ใบสั่งขาย/ใบสั่งผลิต: ถอยจากปิดแล้วกลับเป็นสถานะที่คำนวณจากเอกสารอ้างอิง
+    if (fromStatus == 'Closed' && toStatus != 'Posted' && toStatus != 'Draft' && toStatus != 'Void') {
+      return isEnglish ? 'Closing reversed' : 'ถอยการปิด';
+    }
     switch (toStatus) {
       case 'Deleted': return isEnglish ? 'Deleted' : 'ลบ';
       case 'Void':    return isEnglish ? 'Voided' : 'ยกเลิก';
@@ -72,7 +76,8 @@ class DocBlock {
     'INVOICE_CHANGED': 'A revalued document has changed since revaluation (payment, later revaluation or reversal)',
     'LATER_RUN':       'A later allowance run has been posted (it was calculated from a balance that includes this run)',
     'LATER_REVAL':     'A later revaluation of the same bank account has been posted',
-    'REF_DOCS':        'Issue/receipt documents reference this MO — reverse and delete them first',
+    'REF_DOCS':        'Other documents (issues/receipts/deliveries) reference this document — reverse and delete them first',
+    'NOT_APPROVED':    'A closed document cannot be voided — reopen it first',
     'TIME_LOGGED':     'Operation time has already been logged',
     'CHILD_MO':        'Sub-assembly MOs were created from this MO — cancel or delete them first',
     'NOT_RELEASED':    'Only released MOs that have not started production can be cancelled',

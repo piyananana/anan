@@ -2,6 +2,7 @@
 // มิเรอร์ po_pr_transaction.dart ทุกประการ (vendor->customer) — ต่างจาก PR ตรงที่มี validUntilDate ระดับหัวเอกสาร
 // (ไม่ใช่ per-line neededByDate ของ PR เพราะวันหมดอายุใบเสนอราคาเป็นค่าเดียวต่อทั้งใบตามธรรมชาติ)
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 const Map<String, String> quoteTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
@@ -12,6 +13,7 @@ const Map<String, String> quoteTransactionStatusLabelsTh = {
   'FullyConverted': 'แปลงเป็น SO ครบแล้ว',
   'Closed': 'ปิดแล้ว',
   'Void': 'ยกเลิก',
+  'Deleted': 'ลบแล้ว',
 };
 
 const Map<String, String> quoteTransactionStatusLabelsEn = {
@@ -23,6 +25,7 @@ const Map<String, String> quoteTransactionStatusLabelsEn = {
   'FullyConverted': 'Fully Converted',
   'Closed': 'Closed',
   'Void': 'Void',
+  'Deleted': 'Deleted',
 };
 
 String quoteTransactionStatusLabel(String s, bool isEnglish) =>
@@ -79,6 +82,9 @@ class QuoteTransactionHeader {
   final DateTime? validUntilDate;
   final String status;
   final String approvalMode;
+  final String? voidReason;
+  // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
+  final DocActions actions;
   final double totalQty;
   final double totalValueLc;
   final String? description;
@@ -117,6 +123,8 @@ class QuoteTransactionHeader {
     this.validUntilDate,
     this.status = 'Draft',
     this.approvalMode = 'ALL',
+    this.voidReason,
+    this.actions = const DocActions(),
     this.totalQty = 0,
     this.totalValueLc = 0,
     this.description,
@@ -157,6 +165,8 @@ class QuoteTransactionHeader {
       validUntilDate: json['valid_until_date'] != null ? parseLocalDate(json['valid_until_date']) : null,
       status: json['status'] ?? 'Draft',
       approvalMode: json['approval_mode'] ?? 'ALL',
+      voidReason: json['void_reason'],
+      actions: DocActions.fromJson(json),
       totalQty: toDouble(json['total_qty']),
       totalValueLc: toDouble(json['total_value_lc']),
       description: json['description'],

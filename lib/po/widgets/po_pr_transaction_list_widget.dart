@@ -84,6 +84,7 @@ class _PrTransactionListWidgetState extends State<PrTransactionListWidget> with 
     setState(() => _isLoading = true);
     try {
       final rows = await _service.fetchRows(
+        status: _selectedStatus == 'Deleted' ? 'Deleted' : null, // ใบที่ลบแล้วไม่ส่งมาเว้นแต่ขอ
         dateFrom: formatLocalDate(_dateFrom),
         dateTo: formatLocalDate(_dateTo),
       );
@@ -135,6 +136,7 @@ class _PrTransactionListWidgetState extends State<PrTransactionListWidget> with 
       case 'FullyConverted': return Colors.green;
       case 'Closed': return Colors.grey;
       case 'Void': return Colors.red;
+      case 'Deleted': return Colors.brown;
       default: return Colors.grey;
     }
   }
@@ -179,10 +181,14 @@ class _PrTransactionListWidgetState extends State<PrTransactionListWidget> with 
               decoration: InputDecoration(labelText: isEnglish ? 'Status' : 'สถานะ', isDense: true, border: const OutlineInputBorder()),
               items: [
                 DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
-                ...['Draft', 'Submitted', 'Approved', 'Rejected', 'PartiallyConverted', 'FullyConverted', 'Closed', 'Void']
+                ...['Draft', 'Submitted', 'Approved', 'Rejected', 'PartiallyConverted', 'FullyConverted', 'Closed', 'Void', 'Deleted']
                     .map((s) => DropdownMenuItem(value: s, child: Text(prTransactionStatusLabel(s, isEnglish)))),
               ],
-              onChanged: (v) => setState(() { _selectedStatus = v; _applyFilter(); }),
+              onChanged: (v) {
+                final refetch = (v == 'Deleted') != (_selectedStatus == 'Deleted');
+                setState(() { _selectedStatus = v; _applyFilter(); });
+                if (refetch) _fetchRows();
+              },
             ),
           ),
           const SizedBox(width: 8),

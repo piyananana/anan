@@ -86,6 +86,7 @@ class _SoTransactionListWidgetState extends State<SoTransactionListWidget> with 
     setState(() => _isLoading = true);
     try {
       final rows = await _service.fetchRows(
+        status: _selectedStatus == 'Deleted' ? 'Deleted' : null, // ใบที่ลบแล้วไม่ส่งมาเว้นแต่ขอ
         customerId: _selectedCustomer?.id,
         dateFrom: formatLocalDate(_dateFrom),
         dateTo: formatLocalDate(_dateTo),
@@ -134,6 +135,7 @@ class _SoTransactionListWidgetState extends State<SoTransactionListWidget> with 
       case 'FullyDelivered': return Colors.green;
       case 'Closed': return Colors.grey;
       case 'Void': return Colors.red;
+      case 'Deleted': return Colors.brown;
       default: return Colors.grey;
     }
   }
@@ -197,10 +199,14 @@ class _SoTransactionListWidgetState extends State<SoTransactionListWidget> with 
               decoration: InputDecoration(labelText: isEnglish ? 'Status' : 'สถานะ', isDense: true, border: const OutlineInputBorder()),
               items: [
                 DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
-                ...['Draft', 'Approved', 'PartiallyDelivered', 'FullyDelivered', 'Closed', 'Void']
+                ...['Draft', 'Approved', 'PartiallyDelivered', 'FullyDelivered', 'Closed', 'Void', 'Deleted']
                     .map((s) => DropdownMenuItem(value: s, child: Text(soTransactionStatusLabel(s, isEnglish)))),
               ],
-              onChanged: (v) => setState(() { _selectedStatus = v; _applyFilter(); }),
+              onChanged: (v) {
+                final refetch = (v == 'Deleted') != (_selectedStatus == 'Deleted');
+                setState(() { _selectedStatus = v; _applyFilter(); });
+                if (refetch) _fetchRows();
+              },
             ),
           ),
           const SizedBox(width: 8),

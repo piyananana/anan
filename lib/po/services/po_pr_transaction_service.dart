@@ -153,9 +153,10 @@ class PrTransactionService {
     throw Exception(err['message'] ?? 'ปิดใบขอซื้อล้มเหลว');
   }
 
-  Future<PrTransactionHeader> voidTransaction(int id) async {
+  Future<PrTransactionHeader> voidTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/pr_transaction/$id/void'), headers: headers);
+    final response = await http.put(Uri.parse('$baseUrl/pr_transaction/$id/void'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
     if (response.statusCode == 200) {
       return PrTransactionHeader.fromJson(json.decode(response.body));
     }
@@ -163,13 +164,26 @@ class PrTransactionService {
     throw Exception(err['message'] ?? 'ยกเลิกใบขอซื้อล้มเหลว');
   }
 
-  Future<void> deleteTransaction(int id) async {
+  // ถอย: ส่งอนุมัติ/อนุมัติแล้ว → ร่าง หรือ ปิดแล้ว → เปิดใหม่
+  Future<PrTransactionHeader> reverseTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.delete(Uri.parse('$baseUrl/pr_transaction/$id'), headers: headers);
-    if (response.statusCode != 204) {
-      final err = json.decode(response.body);
-      throw Exception(err['message'] ?? 'ลบใบขอซื้อล้มเหลว');
+    final response = await http.put(Uri.parse('$baseUrl/pr_transaction/$id/reverse'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
+    if (response.statusCode == 200) {
+      return PrTransactionHeader.fromJson(json.decode(response.body));
     }
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ถอยใบขอซื้อล้มเหลว');
+  }
+
+  // ลบร่าง/ใบที่ถูกปฏิเสธ (เก็บไว้ด้วยสถานะ Deleted)
+  Future<void> deleteTransaction(int id, String reason) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.delete(Uri.parse('$baseUrl/pr_transaction/$id'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ลบใบขอซื้อล้มเหลว');
   }
 
   // สำหรับ document picker ในหน้าจอ PO (อ้างอิง PR)

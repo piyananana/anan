@@ -11,6 +11,8 @@ import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/models/sa_module_document.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../ar/models/ar_customer.dart';
 import '../../ar/widgets/ar_customer_list_widget.dart';
 import '../../im/models/im_item.dart';
@@ -90,6 +92,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   ImWarehouse? _warehouse;
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
+  String? _voidReason;
+  DocActions _actions = const DocActions();
   int? _refQuoteId; // ใบเสนอราคา (Quote) ต้นทาง ถ้าเพิ่มรายการมาจาก _pickQuoteLines()
   String? _refQuoteDocNoLabel;
 
@@ -143,6 +147,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     _warehouse = null;
     _descCtrl.clear();
     _status = 'Draft';
+    _voidReason = null;
+    _actions = const DocActions();
     _refQuoteId = null;
     _refQuoteDocNoLabel = null;
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null);
@@ -175,6 +181,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _warehouse = ImWarehouse(id: h.warehouseId, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn);
         _descCtrl.text = h.description ?? '';
         _status = 'Draft';
+        _voidReason = null;
+        _actions = const DocActions();
         _refQuoteId = null;
         _refQuoteDocNoLabel = null;
         _currency = _currencies.cast<Currency?>().firstWhere(
@@ -208,6 +216,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _warehouse = ImWarehouse(id: h.warehouseId, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn);
         _descCtrl.text = h.description ?? '';
         _status = h.status;
+        _voidReason = h.voidReason;
+        _actions = h.actions;
         _refQuoteId = h.refQuoteId;
         _refQuoteDocNoLabel = h.refQuoteDocNo;
         _currency = _currencies.cast<Currency?>().firstWhere(
@@ -480,6 +490,90 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  // ถอย / ยกเลิก / ลบ — ต้องกรอกเหตุผล (บันทึกในประวัติ)
+  Future<void> _reasonAction({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Color color,
+    required Future<void> Function(String reason) action,
+    bool closeAfter = false,
+  }) async {
+    final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish, title: title, message: message, confirmLabel: confirmLabel, confirmColor: color);
+    if (reason == null || !mounted) return;
+    setState(() => _isSaving = true);
+    try {
+      await action(reason);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Done' : 'สำเร็จ')));
+      if (closeAfter) {
+        widget.onSaveSuccess();
+      } else {
+        await _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _reverse() {
+    final isEnglish = _isEnglish;
+    final fromClosed = _status == 'Closed';
+    _reasonAction(
+      title: fromClosed ? (isEnglish ? 'Reopen Sales Order' : 'ถอยการปิดใบสั่งขาย') : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+      message: fromClosed
+          ? (isEnglish
+              ? 'Reopen this SO? Its status will be recalculated from the deliveries that reference it.'
+              : 'ถอยการปิดใบสั่งขายนี้? สถานะจะคำนวณใหม่จากใบส่งสินค้าที่อ้างอิง')
+          : (isEnglish
+              ? 'Reverse this SO to draft? You can edit it and approve it again with the same number.'
+              : 'ถอยใบสั่งขายนี้เป็นร่าง? แก้ไขแล้วอนุมัติใหม่ได้ด้วยเลขที่เดิม'),
+      confirmLabel: fromClosed ? (isEnglish ? 'Reopen' : 'ถอยการปิด') : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+      color: Colors.orange[800]!,
+      action: (r) => _service.reverseTransaction(_id!, r),
+    );
+  }
+
+  void _voidDoc() {
+    final isEnglish = _isEnglish;
+    _reasonAction(
+      title: isEnglish ? 'Void Sales Order' : 'ยกเลิกใบสั่งขาย',
+      message: isEnglish
+          ? 'Void this SO? It will no longer be usable.'
+          : 'ยกเลิกใบสั่งขายนี้? จะนำไปอ้างอิงไม่ได้อีก',
+      confirmLabel: isEnglish ? 'Void' : 'ยกเลิกใบสั่งขาย',
+      color: Colors.red[700]!,
+      action: (r) => _service.voidTransaction(_id!, r),
+    );
+  }
+
+  void _deleteDoc() {
+    final isEnglish = _isEnglish;
+    _reasonAction(
+      title: isEnglish ? 'Delete Draft' : 'ลบร่าง',
+      message: isEnglish
+          ? 'Delete this draft? It will be kept as Deleted for audit and cannot be used again.'
+          : 'ลบร่างใบสั่งขายนี้? ระบบเก็บไว้ด้วยสถานะ "ลบแล้ว" เพื่อตรวจสอบ และนำกลับมาใช้ไม่ได้',
+      confirmLabel: isEnglish ? 'Delete' : 'ลบ',
+      color: Colors.red[700]!,
+      action: (r) => _service.deleteTransaction(_id!, r),
+      closeAfter: true,
+    );
+  }
+
+  // ปุ่มที่ทำไม่ได้: ล็อกและแสดงเหตุผลเมื่อชี้เมาส์
+  Widget _lockable(DocBlock? block, Widget Function(VoidCallback? onPressed) builder, VoidCallback action) {
+    final button = builder(block == null && !_isSaving ? action : null);
+    return block == null ? button : Tooltip(message: block.text(_isEnglish), child: button);
   }
 
   void _warn(String msg) {
@@ -776,20 +870,48 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
             ),
           ],
-          if (['Draft', 'Approved', 'PartiallyDelivered'].contains(_status) && _id != null && canApprove && !widget.viewOnly) ...[
+          if (_status == 'Draft' && _id != null && widget.canDelete && !widget.viewOnly) ...[
             const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: _isSaving ? null : () => _confirmAction(
-                  'ยืนยันยกเลิกใบสั่งขาย', 'Void Sale Order',
-                  'ยกเลิกใบสั่งขายนี้? จะยกเลิกไม่ได้ถ้ามีใบส่งสินค้าอ้างอิงเข้ามาแล้ว',
-                  'Void this SO? This is blocked if any DLN already references it.',
-                  () => _service.voidTransaction(_id!)),
-              icon: const Icon(Icons.cancel_outlined, size: 18),
-              label: Text(isEnglish ? 'Void' : 'ยกเลิก'),
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
-            ),
+            _lockable(_actions.deleteBlock, (onPressed) => OutlinedButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: Text(isEnglish ? 'Delete' : 'ลบ'),
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
+                ), _deleteDoc),
+          ],
+          if (['Approved', 'PartiallyDelivered', 'FullyDelivered', 'Closed'].contains(_status) && _id != null && canApprove && !widget.viewOnly) ...[
+            const SizedBox(width: 8),
+            _lockable(_actions.reverseBlock, (onPressed) => OutlinedButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.undo, size: 18),
+                  label: Text(_status == 'Closed'
+                      ? (isEnglish ? 'Reopen' : 'ถอยการปิด')
+                      : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง')),
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
+                ), _reverse),
+          ],
+          if (['Approved', 'PartiallyDelivered', 'FullyDelivered'].contains(_status) && _id != null && canApprove && !widget.viewOnly) ...[
+            const SizedBox(width: 8),
+            _lockable(_actions.voidBlock, (onPressed) => OutlinedButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.cancel_outlined, size: 18),
+                  label: Text(isEnglish ? 'Void' : 'ยกเลิก'),
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
+                ), _voidDoc),
           ],
         ]),
+        if (_status == 'Void' && (_voidReason ?? '').isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('${isEnglish ? 'Void reason' : 'เหตุผลการยกเลิก'}: $_voidReason',
+              style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.w600)),
+        ],
+        const SizedBox(height: 12),
+        DocReverseHistoryPanel(
+          history: _actions.history,
+          isDeleted: _status == 'Deleted',
+          isEnglish: isEnglish,
+          margin: EdgeInsets.zero,
+        ),
       ]),
     );
   }

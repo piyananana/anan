@@ -149,9 +149,10 @@ class QuoteTransactionService {
     throw Exception(err['message'] ?? 'ปิดใบเสนอราคาล้มเหลว');
   }
 
-  Future<QuoteTransactionHeader> voidTransaction(int id) async {
+  Future<QuoteTransactionHeader> voidTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/quote_transaction/$id/void'), headers: headers);
+    final response = await http.put(Uri.parse('$baseUrl/quote_transaction/$id/void'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
     if (response.statusCode == 200) {
       return QuoteTransactionHeader.fromJson(json.decode(response.body));
     }
@@ -159,13 +160,26 @@ class QuoteTransactionService {
     throw Exception(err['message'] ?? 'ยกเลิกใบเสนอราคาล้มเหลว');
   }
 
-  Future<void> deleteTransaction(int id) async {
+  // ถอย: ส่งอนุมัติ/อนุมัติแล้ว → ร่าง หรือ ปิดแล้ว → เปิดใหม่
+  Future<QuoteTransactionHeader> reverseTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.delete(Uri.parse('$baseUrl/quote_transaction/$id'), headers: headers);
-    if (response.statusCode != 204) {
-      final err = json.decode(response.body);
-      throw Exception(err['message'] ?? 'ลบใบเสนอราคาล้มเหลว');
+    final response = await http.put(Uri.parse('$baseUrl/quote_transaction/$id/reverse'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
+    if (response.statusCode == 200) {
+      return QuoteTransactionHeader.fromJson(json.decode(response.body));
     }
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ถอยใบเสนอราคาล้มเหลว');
+  }
+
+  // ลบร่าง/ใบที่ถูกปฏิเสธ (เก็บไว้ด้วยสถานะ Deleted)
+  Future<void> deleteTransaction(int id, String reason) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.delete(Uri.parse('$baseUrl/quote_transaction/$id'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ลบใบเสนอราคาล้มเหลว');
   }
 
   // ราคาแนะนำจาก im_price_list — มิเรอร์ so_transaction_service.dart:resolvePrice ทุกประการ (ตารางราคาที่ลูกค้า

@@ -117,9 +117,10 @@ class SoTransactionService {
     throw Exception(err['message'] ?? 'ปิดใบสั่งขายล้มเหลว');
   }
 
-  Future<SoTransactionHeader> voidTransaction(int id) async {
+  Future<SoTransactionHeader> voidTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/so_transaction/$id/void'), headers: headers);
+    final response = await http.put(Uri.parse('$baseUrl/so_transaction/$id/void'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
     if (response.statusCode == 200) {
       return SoTransactionHeader.fromJson(json.decode(response.body));
     }
@@ -127,13 +128,26 @@ class SoTransactionService {
     throw Exception(err['message'] ?? 'ยกเลิกใบสั่งขายล้มเหลว');
   }
 
-  Future<void> deleteTransaction(int id) async {
+  // ถอย: อนุมัติแล้ว → ร่าง หรือ ปิดแล้ว → เปิดใหม่
+  Future<SoTransactionHeader> reverseTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.delete(Uri.parse('$baseUrl/so_transaction/$id'), headers: headers);
-    if (response.statusCode != 204) {
-      final err = json.decode(response.body);
-      throw Exception(err['message'] ?? 'ลบใบสั่งขายล้มเหลว');
+    final response = await http.put(Uri.parse('$baseUrl/so_transaction/$id/reverse'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
+    if (response.statusCode == 200) {
+      return SoTransactionHeader.fromJson(json.decode(response.body));
     }
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ถอยใบสั่งขายล้มเหลว');
+  }
+
+  // ลบร่าง (เก็บไว้ด้วยสถานะ Deleted)
+  Future<void> deleteTransaction(int id, String reason) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.delete(Uri.parse('$baseUrl/so_transaction/$id'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ลบใบสั่งขายล้มเหลว');
   }
 
   // สำหรับ document picker ในหน้าจอ DLN (อ้างอิง SO)
