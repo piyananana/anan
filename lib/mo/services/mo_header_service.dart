@@ -121,14 +121,37 @@ class MoHeaderService {
     throw Exception(err['message'] ?? 'ปล่อยใบสั่งผลิตล้มเหลว');
   }
 
-  Future<MoHeader> cancelTransaction(int id) async {
+  Future<MoHeader> cancelTransaction(int id, String reason) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/mo_header/$id/cancel'), headers: headers);
+    final response = await http.put(Uri.parse('$baseUrl/mo_header/$id/cancel'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
     if (response.statusCode == 200) {
       return MoHeader.fromJson(json.decode(response.body));
     }
     final err = json.decode(response.body);
     throw Exception(err['message'] ?? 'ยกเลิกใบสั่งผลิตล้มเหลว');
+  }
+
+  // ถอยสถานะ: ปล่อยแล้ว → ร่าง หรือ ปิดแล้ว → ผลิตครบแล้ว
+  Future<MoHeader> reverseTransaction(int id, String reason) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(Uri.parse('$baseUrl/mo_header/$id/reverse'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
+    if (response.statusCode == 200) {
+      return MoHeader.fromJson(json.decode(response.body));
+    }
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ถอยใบสั่งผลิตล้มเหลว');
+  }
+
+  // ลบร่าง (เก็บไว้ด้วยสถานะ Deleted)
+  Future<void> deleteTransaction(int id, String reason) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.delete(Uri.parse('$baseUrl/mo_header/$id'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
+    if (response.statusCode == 200 || response.statusCode == 204) return;
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ลบใบสั่งผลิตล้มเหลว');
   }
 
   Future<MoHeader> logOperationTime({
@@ -277,14 +300,5 @@ class MoHeaderService {
     }
     final err = json.decode(response.body);
     throw Exception(err['message'] ?? 'สร้างใบสั่งผลิตย่อยล้มเหลว');
-  }
-
-  Future<void> deleteTransaction(int id) async {
-    final headers = await authService.getAuthHeader();
-    final response = await http.delete(Uri.parse('$baseUrl/mo_header/$id'), headers: headers);
-    if (response.statusCode != 204) {
-      final err = json.decode(response.body);
-      throw Exception(err['message'] ?? 'ลบใบสั่งผลิตล้มเหลว');
-    }
   }
 }

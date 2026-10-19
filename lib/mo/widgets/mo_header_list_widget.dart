@@ -55,7 +55,7 @@ class _MoHeaderListWidgetState extends State<MoHeaderListWidget> with AutomaticK
   late DateTime _dateFrom;
   late DateTime _dateTo;
 
-  static const _statuses = ['Draft', 'Released', 'InProgress', 'Completed', 'Closed', 'Cancelled'];
+  static const _statuses = ['Draft', 'Released', 'InProgress', 'Completed', 'Closed', 'Cancelled', 'Deleted'];
 
   @override
   void initState() {
@@ -87,6 +87,7 @@ class _MoHeaderListWidgetState extends State<MoHeaderListWidget> with AutomaticK
     setState(() => _isLoading = true);
     try {
       final rows = await _service.fetchRows(
+        status: _selectedStatus == 'Deleted' ? 'Deleted' : null, // ใบที่ลบแล้วไม่ส่งมาเว้นแต่ขอ
         warehouseId: _selectedWarehouse?.id,
         dateFrom: formatLocalDate(_dateFrom),
         dateTo: formatLocalDate(_dateTo),
@@ -135,6 +136,7 @@ class _MoHeaderListWidgetState extends State<MoHeaderListWidget> with AutomaticK
       case 'Completed': return Colors.green;
       case 'Closed': return Colors.grey;
       case 'Cancelled': return Colors.red;
+      case 'Deleted': return Colors.brown;
       default: return Colors.grey;
     }
   }
@@ -200,7 +202,11 @@ class _MoHeaderListWidgetState extends State<MoHeaderListWidget> with AutomaticK
                 DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
                 ..._statuses.map((s) => DropdownMenuItem(value: s, child: Text(moHeaderStatusLabel(s, isEnglish)))),
               ],
-              onChanged: (v) => setState(() { _selectedStatus = v; _applyFilter(); }),
+              onChanged: (v) {
+                final refetch = (v == 'Deleted') != (_selectedStatus == 'Deleted');
+                setState(() { _selectedStatus = v; _applyFilter(); });
+                if (refetch) _fetchRows();
+              },
             ),
           ),
           const SizedBox(width: 8),

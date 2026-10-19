@@ -9,6 +9,8 @@ import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/models/sa_module_document.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../im/models/im_item.dart';
 import '../../im/models/im_uom.dart';
 import '../../im/models/im_warehouse.dart';
@@ -390,6 +392,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
   DateTime _docDate = DateTime.now();
   DateTime? _dueDate;
   String _status = 'Draft';
+  String? _cancelReason;
+  DocActions _actions = const DocActions();
 
   int? _bomHeaderId; String? _bomVersion; String? _bomParentItemCode; String? _bomParentItemName;
   ImWarehouse? _warehouse;
@@ -443,6 +447,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
     _docDate = DateTime.now();
     _dueDate = null;
     _status = 'Draft';
+    _cancelReason = null;
+    _actions = const DocActions();
     _bomHeaderId = null; _bomVersion = null; _bomParentItemCode = null; _bomParentItemName = null;
     _warehouse = null;
     _orderQtyCtrl.text = '1';
@@ -478,6 +484,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         _docDate = h.docDate;
         _dueDate = h.dueDate;
         _status = h.status;
+        _cancelReason = h.cancelReason;
+        _actions = h.actions;
         _bomHeaderId = h.bomHeaderId; _bomVersion = h.bomVersion;
         _bomParentItemCode = h.bomParentItemCode;
         _bomParentItemName = isEnglish && (h.bomParentItemNameEn ?? '').isNotEmpty ? h.bomParentItemNameEn : h.bomParentItemNameTh;
@@ -713,6 +721,90 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
     }
   }
 
+  // ถอย / ยกเลิก / ลบ — ต้องกรอกเหตุผล (บันทึกในประวัติ)
+  Future<void> _reasonAction({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Color color,
+    required Future<void> Function(String reason) action,
+    bool closeAfter = false,
+  }) async {
+    final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish, title: title, message: message, confirmLabel: confirmLabel, confirmColor: color);
+    if (reason == null || !mounted) return;
+    setState(() => _isSaving = true);
+    try {
+      await action(reason);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Done' : 'สำเร็จ')));
+      if (closeAfter) {
+        widget.onSaveSuccess();
+      } else {
+        await _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _reverse() {
+    final isEnglish = _isEnglish;
+    final fromClosed = _status == 'Closed';
+    _reasonAction(
+      title: fromClosed ? (isEnglish ? 'Reverse MO Closing' : 'ถอยการปิดใบสั่งผลิต') : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+      message: fromClosed
+          ? (isEnglish
+              ? 'Reopen this MO (back to Completed)? The WIP adjustment entry is removed if its period is still open; otherwise a reversing entry is posted today. Issues/receipts can then be reversed again.'
+              : 'ถอยการปิดใบสั่งผลิตนี้ (กลับเป็นผลิตครบแล้ว)? รายการปรับ WIP จะถูกลบถ้างวดยังเปิด ไม่เช่นนั้นระบบลงรายการกลับในวันนี้ หลังถอยแล้วถอยเอกสารเบิก/รับได้อีกครั้ง')
+          : (isEnglish
+              ? 'Reverse this MO to draft? You can edit it and release it again with the same number.'
+              : 'ถอยใบสั่งผลิตนี้เป็นร่าง? แก้ไขแล้วปล่อยใหม่ได้ด้วยเลขที่เดิม'),
+      confirmLabel: fromClosed ? (isEnglish ? 'Reverse Closing' : 'ถอยการปิด') : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+      color: Colors.orange[800]!,
+      action: (r) => _service.reverseTransaction(_id!, r),
+    );
+  }
+
+  void _cancelMo() {
+    final isEnglish = _isEnglish;
+    _reasonAction(
+      title: isEnglish ? 'Cancel Manufacturing Order' : 'ยกเลิกใบสั่งผลิต',
+      message: isEnglish
+          ? 'Cancel this MO? It will no longer be usable for issues/receipts.'
+          : 'ยกเลิกใบสั่งผลิตนี้? จะใช้เบิก/รับไม่ได้อีก',
+      confirmLabel: isEnglish ? 'Cancel MO' : 'ยกเลิกใบสั่งผลิต',
+      color: Colors.red[700]!,
+      action: (r) => _service.cancelTransaction(_id!, r),
+    );
+  }
+
+  void _deleteMo() {
+    final isEnglish = _isEnglish;
+    _reasonAction(
+      title: isEnglish ? 'Delete Draft' : 'ลบร่าง',
+      message: isEnglish
+          ? 'Delete this draft? It will be kept as Deleted for audit and cannot be used again.'
+          : 'ลบร่างใบสั่งผลิตนี้? ระบบเก็บไว้ด้วยสถานะ "ลบแล้ว" เพื่อตรวจสอบ และนำกลับมาใช้ไม่ได้',
+      confirmLabel: isEnglish ? 'Delete' : 'ลบ',
+      color: Colors.red[700]!,
+      action: (r) => _service.deleteTransaction(_id!, r),
+      closeAfter: true,
+    );
+  }
+
+  // ปุ่มที่ทำไม่ได้: ล็อกและแสดงเหตุผลเมื่อชี้เมาส์
+  Widget _lockable(DocBlock? block, Widget Function(VoidCallback? onPressed) builder, VoidCallback action) {
+    final button = builder(block == null && !_isSaving ? action : null);
+    return block == null ? button : Tooltip(message: block.text(_isEnglish), child: button);
+  }
+
   void _warn(String msg) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.orange));
   }
@@ -946,18 +1038,34 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white),
             ),
           ],
-          if (['Draft', 'Released'].contains(_status) && _id != null && canApprove && !widget.viewOnly) ...[
+          if (_status == 'Draft' && _id != null && widget.canDelete && !widget.viewOnly) ...[
             const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: _isSaving ? null : () => _confirmAction(
-                  'ยืนยันยกเลิกใบสั่งผลิต', 'Cancel Manufacturing Order',
-                  'ยกเลิกใบสั่งผลิตนี้? จะยกเลิกไม่ได้ถ้ามีการเบิก/รับใดๆ อ้างอิงเข้ามาแล้ว',
-                  'Cancel this MO? This is blocked if any issue/receipt already references it.',
-                  () => _service.cancelTransaction(_id!)),
-              icon: const Icon(Icons.cancel_outlined, size: 18),
-              label: Text(isEnglish ? 'Cancel MO' : 'ยกเลิกใบสั่งผลิต'),
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
-            ),
+            _lockable(_actions.deleteBlock, (onPressed) => OutlinedButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: Text(isEnglish ? 'Delete' : 'ลบ'),
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
+                ), _deleteMo),
+          ],
+          if (['Released', 'InProgress', 'Completed', 'Closed'].contains(_status) && _id != null && canApprove && !widget.viewOnly) ...[
+            const SizedBox(width: 8),
+            _lockable(_actions.reverseBlock, (onPressed) => OutlinedButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.undo, size: 18),
+                  label: Text(_status == 'Closed'
+                      ? (isEnglish ? 'Reverse Closing' : 'ถอยการปิด')
+                      : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง')),
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
+                ), _reverse),
+          ],
+          if (['Released', 'InProgress', 'Completed'].contains(_status) && _id != null && canApprove && !widget.viewOnly) ...[
+            const SizedBox(width: 8),
+            _lockable(_actions.voidBlock, (onPressed) => OutlinedButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.cancel_outlined, size: 18),
+                  label: Text(isEnglish ? 'Cancel MO' : 'ยกเลิกใบสั่งผลิต'),
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
+                ), _cancelMo),
           ],
           if (_status == 'Completed' && _id != null && canApprove && !widget.viewOnly) ...[
             const SizedBox(width: 8),
@@ -973,6 +1081,18 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
             ),
           ],
         ]),
+        if (_status == 'Cancelled' && (_cancelReason ?? '').isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('${isEnglish ? 'Cancel reason' : 'เหตุผลการยกเลิก'}: $_cancelReason',
+              style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.w600)),
+        ],
+        const SizedBox(height: 12),
+        DocReverseHistoryPanel(
+          history: _actions.history,
+          isDeleted: _status == 'Deleted',
+          isEnglish: isEnglish,
+          margin: EdgeInsets.zero,
+        ),
       ]),
     );
   }

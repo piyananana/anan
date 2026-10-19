@@ -27,6 +27,8 @@ class DocReverseLog {
       // IM รับ/ส่งสินค้ารอตั้งหนี้: ถอยเฉพาะใบตั้งหนี้
       case 'Received':
       case 'Delivered': return isEnglish ? 'Billing reversed' : 'ถอยการตั้งหนี้';
+      // ใบสั่งผลิต: ถอยจากปิดแล้ว (ลบ/กลับรายการปรับ WIP)
+      case 'Completed': return isEnglish ? 'Closing reversed' : 'ถอยการปิด';
       // ใบตรวจนับสต็อก: ถอยจากปิดแล้ว (ลบใบปรับยอด) / อนุมัติแล้ว กลับเป็นบันทึกแล้ว
       case 'Posted':
         return fromStatus == 'Closed'
@@ -70,6 +72,10 @@ class DocBlock {
     'INVOICE_CHANGED': 'A revalued document has changed since revaluation (payment, later revaluation or reversal)',
     'LATER_RUN':       'A later allowance run has been posted (it was calculated from a balance that includes this run)',
     'LATER_REVAL':     'A later revaluation of the same bank account has been posted',
+    'REF_DOCS':        'Issue/receipt documents reference this MO — reverse and delete them first',
+    'TIME_LOGGED':     'Operation time has already been logged',
+    'CHILD_MO':        'Sub-assembly MOs were created from this MO — cancel or delete them first',
+    'NOT_RELEASED':    'Only released MOs that have not started production can be cancelled',
     'VOIDED':          'This document has been voided or deleted',
   };
 

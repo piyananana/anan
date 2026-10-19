@@ -1,5 +1,6 @@
 // lib/mo/models/mo_header.dart — ใบสั่งผลิต (Manufacturing Order, sys_module='61') มิเรอร์ po_transaction.dart
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 const Map<String, String> moHeaderStatusLabelsTh = {
   'Draft': 'ร่าง',
@@ -8,6 +9,7 @@ const Map<String, String> moHeaderStatusLabelsTh = {
   'Completed': 'ผลิตครบแล้ว',
   'Closed': 'ปิดแล้ว',
   'Cancelled': 'ยกเลิก',
+  'Deleted': 'ลบแล้ว',
 };
 
 const Map<String, String> moHeaderStatusLabelsEn = {
@@ -17,6 +19,7 @@ const Map<String, String> moHeaderStatusLabelsEn = {
   'Completed': 'Completed',
   'Closed': 'Closed',
   'Cancelled': 'Cancelled',
+  'Deleted': 'Deleted',
 };
 
 String moHeaderStatusLabel(String s, bool isEnglish) =>
@@ -617,6 +620,11 @@ class MoHeader {
   final String? branchNameThai;
   final DateTime? releasedAt;
   final String? releasedBy;
+  final String? cancelReason;
+  final String? cancelledBy;
+  final DateTime? cancelledAt;
+  // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
+  final DocActions actions;
   // From join
   final String? docCode;
   final String? docNameThai;
@@ -664,6 +672,10 @@ class MoHeader {
     this.branchNameThai,
     this.releasedAt,
     this.releasedBy,
+    this.cancelReason,
+    this.cancelledBy,
+    this.cancelledAt,
+    this.actions = const DocActions(),
     this.docCode,
     this.docNameThai,
     this.docNameEng,
@@ -676,6 +688,7 @@ class MoHeader {
   });
 
   bool get isReadOnly => status != 'Draft';
+  bool get isDeleted => status == 'Deleted';
 
   factory MoHeader.fromJson(Map<String, dynamic> json) {
     double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
@@ -715,6 +728,10 @@ class MoHeader {
       branchNameThai: json['branch_name_thai'],
       releasedAt: json['released_at'] != null ? DateTime.tryParse(json['released_at'].toString())?.toLocal() : null,
       releasedBy: json['released_by'],
+      cancelReason: json['cancel_reason'],
+      cancelledBy: json['cancelled_by'],
+      cancelledAt: json['cancelled_at'] != null ? DateTime.tryParse(json['cancelled_at'].toString())?.toLocal() : null,
+      actions: DocActions.fromJson(json),
       docCode: json['doc_code'] ?? json['d_doc_code'],
       docNameThai: json['doc_name_thai'],
       docNameEng: json['doc_name_eng'],
