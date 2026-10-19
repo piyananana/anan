@@ -513,6 +513,7 @@ class ImDocBlock {
     'AP_LINKED':           'The AP invoice created from this document cannot be reversed or voided',
     'AR_LINKED':           'The AR invoice created from this document cannot be reversed or voided',
     'VOIDED':              'This document has been voided or deleted',
+    'AP_BLOCKED':          'The AP invoice has been paid, applied, or is in a payment run / FX revaluation',
   };
 
   String text(bool isEnglish) =>

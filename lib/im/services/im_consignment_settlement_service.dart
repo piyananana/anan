@@ -54,14 +54,34 @@ class ImConsignmentSettlementService {
     throw Exception('Failed to load consignment settlement history: ${response.body}');
   }
 
-  Future<Map<String, dynamic>> voidSettlement(int id) async {
-    final headers = await _authService.getAuthHeader();
-    final uri = Uri.parse('$baseUrl/im_consignment_settlement/$id/void');
-    final response = await http.put(uri, headers: headers);
+  // ถอยเป็นร่าง / ยกเลิก / ลบ ต้องมีเหตุผล — คืนแถวใบตั้งหนี้ล่าสุด (พร้อม block และประวัติ)
+  Future<Map<String, dynamic>> _send(String method, String path, Map<String, dynamic> body, String fallback) async {
+    final headers = {...await _authService.getAuthHeader(), 'Content-Type': 'application/json'};
+    final uri = Uri.parse('$baseUrl/im_consignment_settlement/$path');
+    final response = method == 'DELETE'
+        ? await http.delete(uri, headers: headers, body: jsonEncode(body))
+        : await http.put(uri, headers: headers, body: jsonEncode(body));
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     }
+    if (response.statusCode == 401) {
+      _authService.logout();
+      throw Exception('Unauthorized.');
+    }
     final err = jsonDecode(response.body);
-    throw Exception(err['message'] ?? 'Void failed');
+    throw Exception(err['message'] ?? fallback);
   }
+
+  Future<Map<String, dynamic>> voidSettlement(int id, String reason) =>
+      _send('PUT', '$id/void', {'reason': reason}, 'Void failed');
+
+  Future<Map<String, dynamic>> reverseSettlement(int id, String reason) =>
+      _send('PUT', '$id/reverse', {'reason': reason}, 'Reverse failed');
+
+  // โพสต์ร่างใหม่ด้วยเลขที่เดิม (เปลี่ยนวันที่ / เลขที่อ้างอิงได้)
+  Future<Map<String, dynamic>> repostSettlement(int id, {required String docDate, String? refNo}) =>
+      _send('PUT', '$id/post', {'doc_date': docDate, 'ref_no': refNo}, 'Post failed');
+
+  Future<Map<String, dynamic>> deleteSettlement(int id, String reason) =>
+      _send('DELETE', '$id', {'reason': reason}, 'Delete failed');
 }
