@@ -54,9 +54,10 @@ class ApYearEndService {
     throw Exception(jsonDecode(res.body)['error'] ?? 'Failed to load outstanding currencies');
   }
 
-  Future<List<ApFxRevaluationHeader>> fetchRevaluations() async {
+  // showDeleted = แสดงเฉพาะรายการที่ลบแล้ว (ปกติซ่อน)
+  Future<List<ApFxRevaluationHeader>> fetchRevaluations({bool showDeleted = false}) async {
     final headers = await _auth.getAuthHeader();
-    final res = await http.get(Uri.parse('$baseUrl/ap_fx_revaluation'), headers: headers);
+    final res = await http.get(Uri.parse('$baseUrl/ap_fx_revaluation${showDeleted ? '?status=Deleted' : ''}'), headers: headers);
     if (res.statusCode == 200) {
       final List j = jsonDecode(res.body);
       return j.map((e) => ApFxRevaluationHeader.fromJson(e as Map<String, dynamic>)).toList();
@@ -116,15 +117,22 @@ class ApYearEndService {
     if (res.statusCode != 200) throw Exception(jsonDecode(res.body)['error'] ?? 'Failed');
   }
 
-  Future<void> voidReval(int id) async {
-    final headers = await _auth.getAuthHeader();
-    final res = await http.post(Uri.parse('$baseUrl/ap_fx_revaluation/$id/void'), headers: headers);
+  // ถอยเป็นร่าง / ยกเลิก / ลบ ต้องมีเหตุผล
+  Future<void> voidReval(int id, String reason) async {
+    final headers = {...await _auth.getAuthHeader(), 'Content-Type': 'application/json'};
+    final res = await http.post(Uri.parse('$baseUrl/ap_fx_revaluation/$id/void'), headers: headers, body: jsonEncode({'reason': reason}));
     if (res.statusCode != 200) throw Exception(jsonDecode(res.body)['error'] ?? 'Failed');
   }
 
-  Future<void> deleteReval(int id) async {
-    final headers = await _auth.getAuthHeader();
-    final res = await http.delete(Uri.parse('$baseUrl/ap_fx_revaluation/$id'), headers: headers);
+  Future<void> reverseReval(int id, String reason) async {
+    final headers = {...await _auth.getAuthHeader(), 'Content-Type': 'application/json'};
+    final res = await http.put(Uri.parse('$baseUrl/ap_fx_revaluation/$id/reverse'), headers: headers, body: jsonEncode({'reason': reason}));
+    if (res.statusCode != 200) throw Exception(jsonDecode(res.body)['error'] ?? 'Failed');
+  }
+
+  Future<void> deleteReval(int id, String reason) async {
+    final headers = {...await _auth.getAuthHeader(), 'Content-Type': 'application/json'};
+    final res = await http.delete(Uri.parse('$baseUrl/ap_fx_revaluation/$id'), headers: headers, body: jsonEncode({'reason': reason}));
     if (res.statusCode != 200) throw Exception(jsonDecode(res.body)['error'] ?? 'Failed');
   }
 }

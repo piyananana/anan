@@ -1,6 +1,7 @@
 // lib/cm/models/cm_bank_fx_revaluation.dart
 
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 class CmBankFxRevaluationLine {
   final int id;
@@ -114,10 +115,13 @@ class CmBankFxRevaluation {
   final String? fxLossAccountCode;
   final String? fxLossAccountName;
   final double totalGainLoss;
-  final String status; // Draft / Posted / Voided
+  final String status; // Draft / Posted / Voided / Deleted
   final int? glEntryId;
-  final String? glDocNo;
+  final String? glDocNo; // ร่างที่ถอยกลับมายังเก็บเลขเดิมไว้ (โพสต์ใหม่ใช้เลขนี้)
   final List<CmBankFxRevaluationLine> lines;
+  final String? voidReason;
+  // ปุ่มถอย / ยกเลิก / ลบ + ประวัติ (มีเฉพาะ GET /:id)
+  final DocActions actions;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -139,6 +143,8 @@ class CmBankFxRevaluation {
     this.glEntryId,
     this.glDocNo,
     this.lines = const [],
+    this.voidReason,
+    this.actions = const DocActions(),
     this.createdAt,
     this.updatedAt,
   });
@@ -146,6 +152,7 @@ class CmBankFxRevaluation {
   bool get isDraft  => status == 'Draft';
   bool get isPosted => status == 'Posted';
   bool get isVoided => status == 'Voided';
+  bool get isDeleted => status == 'Deleted';
 
   factory CmBankFxRevaluation.fromJson(Map<String, dynamic> j) {
     final rawLines = j['lines'] as List?;
@@ -169,6 +176,8 @@ class CmBankFxRevaluation {
       lines:               rawLines != null
           ? rawLines.map((e) => CmBankFxRevaluationLine.fromJson(e as Map<String, dynamic>)).toList()
           : const [],
+      voidReason:          j['void_reason'] as String?,
+      actions:             DocActions.fromJson(j),
       createdAt: j['created_at'] != null ? DateTime.tryParse(j['created_at'].toString())?.toLocal() : null,
       updatedAt: j['updated_at'] != null ? DateTime.tryParse(j['updated_at'].toString())?.toLocal() : null,
     );
@@ -179,12 +188,14 @@ const Map<String, String> cmFxRevalStatusOptions = {
   'Draft':  'ร่าง',
   'Posted': 'บันทึก GL แล้ว',
   'Voided': 'ยกเลิก',
+  'Deleted': 'ลบแล้ว',
 };
 
 const Map<String, String> cmFxRevalStatusOptionsEng = {
   'Draft':  'Draft',
   'Posted': 'Posted to GL',
   'Voided': 'Voided',
+  'Deleted': 'Deleted',
 };
 
 String cmFxRevalStatusLabel(String s, bool isEnglish) =>

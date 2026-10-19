@@ -106,6 +106,7 @@ class ApFxRevaluationHeader {
   final int? reversalGlEntryId;
   final String? reversalDocNo;
   final String? note;
+  final String? voidReason;
 
   const ApFxRevaluationHeader({
     required this.id,
@@ -120,6 +121,7 @@ class ApFxRevaluationHeader {
     this.reversalGlEntryId,
     this.reversalDocNo,
     this.note,
+    this.voidReason,
   });
 
   factory ApFxRevaluationHeader.fromJson(Map<String, dynamic> j) => ApFxRevaluationHeader(
@@ -135,8 +137,10 @@ class ApFxRevaluationHeader {
     reversalGlEntryId:  j['reversal_gl_entry_id'] != null ? _toInt(j['reversal_gl_entry_id']) : null,
     reversalDocNo:      j['reversal_doc_no'],
     note:               j['note'],
+    voidReason:         j['void_reason'],
   );
 }
+
 
 class ApFxRevaluationDetail {
   final int id;

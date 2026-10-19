@@ -13,6 +13,11 @@ import '../models/cm_bank_fx_revaluation.dart';
 import '../services/cm_bank_fx_revaluation_service.dart';
 import '../services/cm_period_service.dart';
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
+
+// ถอยเป็นร่าง (งวดเปิด + ยังไม่มีการปรับมูลค่าครั้งถัดไปของบัญชีเดียวกัน) → แก้ไขแล้วโพสต์ใหม่ด้วยเลขที่เดิม หรือลบ
+// ยกเลิกใช้เมื่อถอยไม่ได้ (ลงรายการกลับวันนี้) ทุกการกระทำต้องมีเหตุผล — ปุ่มที่ทำไม่ได้ล็อกพร้อมเหตุผล
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00',   'en_US');
@@ -44,6 +49,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
 
   List<CmBankFxRevaluation> _history = [];
   CmBankFxRevaluation? _selected;
+  bool _showDeleted = false;
   bool _loadingHistory = false;
 
   // GL meta
@@ -91,7 +97,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
   Future<void> _loadHistory() async {
     setState(() => _loadingHistory = true);
     try {
-      final list = await _svc.fetchRows();
+      final list = await _svc.fetchRows(status: _showDeleted ? 'Deleted' : null);
       if (!mounted) return;
       setState(() { _history = list; _loadingHistory = false; });
     } catch (e) {
@@ -331,60 +337,77 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final l = AppL10n(isEnglish);
     if (_selected == null) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Void' : 'ยืนยันการยกเลิก'),
-        content: Text(isEnglish
-            ? 'Void this FX Revaluation?\nA reversing GL Entry will be created automatically.'
-            : 'ต้องการยกเลิก FX Revaluation นี้ใช่หรือไม่?\nระบบจะสร้าง GL Entry ย้อนกลับโดยอัตโนมัติ'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(isEnglish ? 'Confirm Void' : 'ยืนยันยกเลิก'),
-          ),
-        ],
-      ),
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Void FX Revaluation' : 'ยกเลิก FX Revaluation',
+      message: isEnglish
+          ? 'Void this FX revaluation? A reversing GL entry will be posted today (use this when it cannot be reversed to draft).'
+          : 'ยกเลิก FX Revaluation นี้? ระบบจะลงรายการบัญชีกลับในวันนี้ (ใช้เมื่อถอยเป็นร่างไม่ได้ เช่น งวดปิดแล้ว)',
+      confirmLabel: isEnglish ? 'Void' : 'ยืนยันยกเลิก',
     );
-    if (ok != true) return;
+    if (reason == null) return;
+    await _act(_selected!.id, () => _svc.voidRow(_selected!.id, reason),
+        isEnglish ? 'FX Revaluation voided successfully' : 'ยกเลิก FX Revaluation สำเร็จ');
+  }
+
+  Future<void> _reverseSelected() async {
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
+    final isEnglish = _isEnglish;
+    if (_selected == null) return;
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
+      message: isEnglish
+          ? 'Reverse this FX revaluation to draft? Its GL entry will be removed. You can edit it and post again with the same GL number.'
+          : 'ถอย FX Revaluation นี้เป็นร่าง? รายการบัญชีจะถูกลบ แก้ไขแล้วโพสต์ใหม่ได้ด้วยเลขที่รายการบัญชีเดิม',
+      confirmLabel: isEnglish ? 'Reverse' : 'ถอยเป็นร่าง',
+      confirmColor: Colors.orange.shade800,
+    );
+    if (reason == null) return;
+    await _act(_selected!.id, () => _svc.reverseRow(_selected!.id, reason),
+        isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่างสำเร็จ');
+  }
+
+  // ทำรายการแล้วโหลดรายการและรายละเอียดใหม่ (พร้อมปุ่มที่ทำได้และประวัติ)
+  Future<void> _act(int id, Future<void> Function() action, String doneMsg) async {
     setState(() => _saving = true);
     try {
-      final updated = await _svc.voidRow(_selected!.id);
+      await action();
+      final full = await _svc.fetchRow(id);
       if (!mounted) return;
-      setState(() { _selected = updated; _saving = false; });
+      setState(() { _selected = full; _saving = false; });
       await _loadHistory();
-      _showSuccess(isEnglish ? 'FX Revaluation voided successfully' : 'ยกเลิก FX Revaluation สำเร็จ');
+      _showSuccess(doneMsg);
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      _showError(e.toString());
+      _showError(e.toString().replaceFirst('Exception: ', ''));
     }
+  }
+
+  // ปุ่มที่ทำไม่ได้: ล็อกและแสดงเหตุผลเมื่อชี้เมาส์
+  Widget _lockable(DocBlock? block, Widget Function(VoidCallback? onPressed) builder, VoidCallback action) {
+    final button = builder(block == null && !_saving ? action : null);
+    return block == null ? button : Tooltip(message: block.text(_isEnglish), child: button);
   }
 
   Future<void> _deleteSelected(CmBankFxRevaluation r) async {
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    final l = AppL10n(isEnglish);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
-        content: Text(isEnglish ? 'Delete this item?' : 'ต้องการลบรายการนี้ใช่หรือไม่?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(l.delete),
-          ),
-        ],
-      ),
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Delete Draft' : 'ลบร่าง',
+      message: isEnglish
+          ? 'Delete this draft? It will be kept as Deleted for audit and cannot be used again.'
+          : 'ลบร่างรายการนี้? ระบบเก็บไว้ด้วยสถานะ "ลบแล้ว" เพื่อตรวจสอบ และนำกลับมาใช้ไม่ได้',
+      confirmLabel: isEnglish ? 'Delete' : 'ลบ',
     );
-    if (ok != true) return;
+    if (reason == null) return;
     try {
-      await _svc.deleteRow(r.id);
+      await _svc.deleteRow(r.id, reason);
       if (_selected?.id == r.id) setState(() => _selected = null);
       await _loadHistory();
       _showSuccess(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ');
@@ -404,7 +427,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
   }
 
   Color _statusColor(String s) =>
-      s == 'Posted' ? Colors.green.shade700 : s == 'Voided' ? Colors.red.shade700 : Colors.orange.shade700;
+      s == 'Posted' ? Colors.green.shade700 : (s == 'Voided' || s == 'Deleted') ? Colors.red.shade700 : Colors.orange.shade700;
 
   // ── Account picker ─────────────────────────────────────────────────────────
   Future<Account?> _pickAccount() async {
@@ -491,12 +514,26 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         color: Colors.blue.shade50,
         width: double.infinity,
-        child: FilledButton.icon(
-          icon: const Icon(Icons.add, size: 16),
-          label: Text(isEnglish ? 'Create New' : 'สร้างใหม่'),
-          style: FilledButton.styleFrom(backgroundColor: _kTheme),
-          onPressed: _startCreate,
-        ),
+        child: Row(children: [
+          Expanded(
+            child: FilledButton.icon(
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(isEnglish ? 'Create New' : 'สร้างใหม่'),
+              style: FilledButton.styleFrom(backgroundColor: _kTheme),
+              onPressed: _startCreate,
+            ),
+          ),
+          IconButton(
+            tooltip: _showDeleted
+                ? (isEnglish ? 'Show active entries' : 'แสดงรายการปกติ')
+                : (isEnglish ? 'Show deleted entries' : 'แสดงรายการที่ลบแล้ว'),
+            icon: Icon(_showDeleted ? Icons.delete : Icons.delete_outline, color: _showDeleted ? Colors.red : Colors.grey[700]),
+            onPressed: () {
+              setState(() { _showDeleted = !_showDeleted; _selected = null; });
+              _loadHistory();
+            },
+          ),
+        ]),
       ),
       Expanded(
         child: _loadingHistory
@@ -522,11 +559,9 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
                           dense: true,
                           onTap: () {
                             setState(() { _selected = r; _isCreating = false; _isEditing = false; });
-                            if (r.lines.isEmpty) {
-                              _svc.fetchRow(r.id).then((full) {
-                                if (mounted) setState(() => _selected = full);
-                              }).catchError((Object e) { _showError(e.toString()); return null; });
-                            }
+                            _svc.fetchRow(r.id).then((full) {
+                              if (mounted && _selected?.id == full.id) setState(() => _selected = full);
+                            }).catchError((Object e) { _showError(e.toString()); return null; });
                           },
                           title: Text(_dateFmt.format(r.revaluationDate),
                               style: TextStyle(
@@ -942,8 +977,25 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           color: _kTheme.withOpacity(0.06),
-          child: Text('GL Entry: ${r.glDocNo}', style: const TextStyle(fontSize: 13, color: _kTheme)),
+          child: Text(r.isDraft
+                  ? '${isEnglish ? 'GL number kept for repost' : 'เลขที่รายการบัญชีเดิม (โพสต์ใหม่ใช้เลขนี้)'}: ${r.glDocNo}'
+                  : 'GL Entry: ${r.glDocNo}',
+              style: const TextStyle(fontSize: 13, color: _kTheme)),
         ),
+      if (r.isVoided && (r.voidReason ?? '').isNotEmpty)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          color: Colors.red.shade50,
+          child: Text('${isEnglish ? 'Void reason' : 'เหตุผลการยกเลิก'}: ${r.voidReason}',
+              style: TextStyle(fontSize: 13, color: Colors.red.shade800)),
+        ),
+      DocReverseHistoryPanel(
+        history: r.actions.history,
+        isDeleted: r.isDeleted,
+        isEnglish: isEnglish,
+        margin: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+      ),
       const Divider(height: 1),
       Expanded(
         child: r.lines.isEmpty
@@ -981,13 +1033,28 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
             onPressed: _saving ? null : _postExisting,
             child: const Text('Post GL'),
           ),
+          const SizedBox(width: 8),
+          _lockable(r.actions.deleteBlock, (onPressed) => OutlinedButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: Text(isEnglish ? 'Delete' : 'ลบ'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+              ), () => _deleteSelected(r)),
         ],
-        if (r.isPosted)
-          OutlinedButton(
-            onPressed: _saving ? null : _voidSelected,
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
-            child: Text(isEnglish ? 'Void' : 'ยกเลิก'),
-          ),
+        if (r.isPosted) ...[
+          _lockable(r.actions.reverseBlock, (onPressed) => OutlinedButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.undo, size: 16),
+                label: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
+              ), _reverseSelected),
+          const SizedBox(width: 8),
+          _lockable(r.actions.voidBlock, (onPressed) => OutlinedButton(
+                onPressed: onPressed,
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+                child: Text(isEnglish ? 'Void' : 'ยกเลิก'),
+              ), _voidSelected),
+        ],
       ],
     );
   }

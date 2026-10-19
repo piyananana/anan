@@ -183,6 +183,7 @@ class ArFxRevaluationHeader {
   final int? reversalGlEntryId;
   final String? reversalDocNo;
   final String? note;
+  final String? voidReason;
 
   const ArFxRevaluationHeader({
     required this.id,
@@ -197,6 +198,7 @@ class ArFxRevaluationHeader {
     this.reversalGlEntryId,
     this.reversalDocNo,
     this.note,
+    this.voidReason,
   });
 
   factory ArFxRevaluationHeader.fromJson(Map<String, dynamic> j) => ArFxRevaluationHeader(
@@ -212,6 +214,7 @@ class ArFxRevaluationHeader {
     reversalGlEntryId:  j['reversal_gl_entry_id'] != null ? _toInt(j['reversal_gl_entry_id']) : null,
     reversalDocNo:      j['reversal_doc_no'],
     note:               j['note'],
+    voidReason:         j['void_reason'],
   );
 }
 
@@ -281,6 +284,7 @@ class ArAllowanceRunHeader {
   final int? glEntryId;
   final String? glDocNo;
   final String? note;
+  final String? voidReason;
 
   const ArAllowanceRunHeader({
     required this.id,
@@ -293,6 +297,7 @@ class ArAllowanceRunHeader {
     this.glEntryId,
     this.glDocNo,
     this.note,
+    this.voidReason,
   });
 
   factory ArAllowanceRunHeader.fromJson(Map<String, dynamic> j) => ArAllowanceRunHeader(
@@ -306,6 +311,7 @@ class ArAllowanceRunHeader {
     glEntryId:        j['gl_entry_id'] != null ? _toInt(j['gl_entry_id']) : null,
     glDocNo:          j['gl_doc_no'],
     note:             j['note'],
+    voidReason:       j['void_reason'],
   );
 }
 

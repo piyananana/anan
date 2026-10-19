@@ -102,21 +102,35 @@ class CmBankFxRevaluationService {
     throw Exception(json.decode(resp.body)['error'] ?? resp.body);
   }
 
-  Future<CmBankFxRevaluation> voidRow(int id) async {
-    final headers = await _auth.getAuthHeader();
+  // ถอยเป็นร่าง / ยกเลิก / ลบ ต้องมีเหตุผล
+  Future<CmBankFxRevaluation> voidRow(int id, String reason) async {
+    final headers = {...await _auth.getAuthHeader(), 'Content-Type': 'application/json'};
     final resp = await http.put(
       Uri.parse('$_base/cm_bank_fx_revaluation/$id/void'),
       headers: headers,
+      body: json.encode({'reason': reason}),
     );
     if (resp.statusCode == 200) return CmBankFxRevaluation.fromJson(json.decode(resp.body));
     throw Exception(json.decode(resp.body)['error'] ?? resp.body);
   }
 
-  Future<void> deleteRow(int id) async {
-    final headers = await _auth.getAuthHeader();
+  Future<CmBankFxRevaluation> reverseRow(int id, String reason) async {
+    final headers = {...await _auth.getAuthHeader(), 'Content-Type': 'application/json'};
+    final resp = await http.put(
+      Uri.parse('$_base/cm_bank_fx_revaluation/$id/reverse'),
+      headers: headers,
+      body: json.encode({'reason': reason}),
+    );
+    if (resp.statusCode == 200) return CmBankFxRevaluation.fromJson(json.decode(resp.body));
+    throw Exception(json.decode(resp.body)['error'] ?? resp.body);
+  }
+
+  Future<void> deleteRow(int id, String reason) async {
+    final headers = {...await _auth.getAuthHeader(), 'Content-Type': 'application/json'};
     final resp = await http.delete(
       Uri.parse('$_base/cm_bank_fx_revaluation/$id'),
       headers: headers,
+      body: json.encode({'reason': reason}),
     );
     if (resp.statusCode != 200) throw Exception(json.decode(resp.body)['error'] ?? resp.body);
   }

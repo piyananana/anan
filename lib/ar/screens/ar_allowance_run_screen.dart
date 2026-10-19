@@ -7,6 +7,11 @@ import 'package:provider/provider.dart';
 import '../models/ar_year_end.dart';
 import '../services/ar_year_end_service.dart';
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
+
+// ถอยเป็นร่าง (งวดเปิด + ยังไม่มีการคำนวณครั้งถัดไปที่โพสต์แล้ว) → โพสต์ใหม่ด้วยเลขที่รายการบัญชีเดิม หรือลบ
+// ยกเลิกใช้เมื่อถอยไม่ได้ (ลงรายการกลับวันนี้) ทุกการกระทำต้องมีเหตุผล — ปุ่มที่ทำไม่ได้ล็อกพร้อมเหตุผล
 
 class ArAllowanceRunScreen extends StatefulWidget {
   const ArAllowanceRunScreen({super.key});
@@ -28,7 +33,10 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
 
   ArAllowanceRunHeader?      _selectedRow;
   List<ArAllowanceRunDetail> _details = [];
+  DocActions _actions = const DocActions();
   bool _isDetailLoading = false;
+  bool _showDeleted = false;
+  bool _isActing = false;
 
   // Panel state — matches ar_fx_revaluation_screen pattern
   bool   _isLeftPanelExpanded = true;
@@ -74,7 +82,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
   Future<void> _loadAll() async {
     setState(() => _isLoading = true);
     try {
-      final rows = await _svc.fetchAllowanceRuns();
+      final rows = await _svc.fetchAllowanceRuns(showDeleted: _showDeleted);
       setState(() { _rows = rows; _isLoading = false; });
     } catch (e) {
       setState(() => _isLoading = false);
@@ -88,7 +96,13 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
       final data = await _svc.fetchAllowanceRunDetail(row.id);
       final dtl  = (data['details'] as List)
           .map((e) => ArAllowanceRunDetail.fromJson(e as Map<String, dynamic>)).toList();
-      setState(() { _details = dtl; _isDetailLoading = false; });
+      final header = ArAllowanceRunHeader.fromJson(data['header'] as Map<String, dynamic>);
+      setState(() {
+        _selectedRow = header;
+        _details = dtl;
+        _actions = DocActions.fromJson(data);
+        _isDetailLoading = false;
+      });
     } catch (e) {
       setState(() => _isDetailLoading = false);
       if (mounted) _showError(e.toString());
@@ -130,13 +144,64 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
   Future<void> _deleteDraft(int id) async {
     final isEnglish = _isEnglish;
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final ok = await _confirm(isEnglish ? 'Delete this Draft?' : 'ลบ Draft รายการนี้?');
-    if (!ok) return;
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Delete Draft' : 'ลบร่าง',
+      message: isEnglish
+          ? 'Delete this draft? It will be kept as Deleted for audit and cannot be used again.'
+          : 'ลบร่างรายการนี้? ระบบเก็บไว้ด้วยสถานะ "ลบแล้ว" เพื่อตรวจสอบ และนำกลับมาใช้ไม่ได้',
+      confirmLabel: isEnglish ? 'Delete' : 'ลบ',
+    );
+    if (reason == null) return;
     try {
-      await _svc.deleteAllowanceRun(id);
-      setState(() { _selectedRow = null; _isCreating = false; _details = []; });
+      await _svc.deleteAllowanceRun(id, reason);
+      setState(() { _selectedRow = null; _isCreating = false; _details = []; _actions = const DocActions(); });
       await _loadAll();
     } catch (e) { if (mounted) _showError(e.toString()); }
+  }
+
+  Future<void> _reverse(int id) async {
+    final isEnglish = _isEnglish;
+    if (!(MenuScope.of(context)?.canEdit ?? true)) return;
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
+      message: isEnglish
+          ? 'Reverse this allowance run to draft? Its GL entry will be removed. Post again to reuse the same GL number.'
+          : 'ถอยรายการค่าเผื่อนี้เป็นร่าง? รายการบัญชีจะถูกลบ โพสต์ใหม่ได้ด้วยเลขที่รายการบัญชีเดิม',
+      confirmLabel: isEnglish ? 'Reverse' : 'ถอยเป็นร่าง',
+      confirmColor: Colors.orange.shade800,
+    );
+    if (reason == null) return;
+    await _act(id, () => _svc.reverseAllowanceRun(id, reason));
+  }
+
+  // ทำรายการแล้วโหลดรายการและรายละเอียดใหม่
+  Future<void> _act(int id, Future<void> Function() action) async {
+    setState(() => _isActing = true);
+    try {
+      await action();
+      await _loadAll();
+      final row = _rows.where((r) => r.id == id).firstOrNull;
+      if (row != null) await _selectRow(row);
+    } catch (e) {
+      if (mounted) _showError(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isActing = false);
+    }
+  }
+
+  // ปุ่มที่ทำไม่ได้: ล็อกและแสดงเหตุผลเมื่อชี้เมาส์
+  Widget _lockable(DocBlock? block, Widget Function(VoidCallback? onPressed) builder, VoidCallback action) {
+    final button = builder(block == null && !_isActing ? action : null);
+    return block == null ? button : Tooltip(message: block.text(_isEnglish), child: button);
+  }
+
+  String _statusLabel(String s) {
+    const th = {'Draft': 'ร่าง', 'Posted': 'โพสต์แล้ว', 'Void': 'ยกเลิก', 'Deleted': 'ลบแล้ว'};
+    return _isEnglish ? s : (th[s] ?? s);
   }
 
   Future<void> _post(int id) async {
@@ -153,12 +218,17 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
   Future<void> _void(int id) async {
     final isEnglish = _isEnglish;
     if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    if (!await _confirm(isEnglish ? 'Void this entry? The GL entry will be reversed' : 'ยกเลิกรายการนี้? GL entry จะถูก reverse')) return;
-    try {
-      await _svc.voidAllowanceRun(id);
-      await _loadAll();
-      await _selectRow(_rows.firstWhere((r) => r.id == id));
-    } catch (e) { if (mounted) _showError(e.toString()); }
+    final reason = await showDocReasonDialog(
+      context,
+      isEnglish: isEnglish,
+      title: isEnglish ? 'Void Allowance Run' : 'ยกเลิกรายการค่าเผื่อ',
+      message: isEnglish
+          ? 'Void this allowance run? A reversing GL entry will be posted today (use this when it cannot be reversed to draft).'
+          : 'ยกเลิกรายการนี้? ระบบจะลงรายการบัญชีกลับในวันนี้ (ใช้เมื่อถอยเป็นร่างไม่ได้ เช่น งวดปิดแล้ว)',
+      confirmLabel: isEnglish ? 'Void' : 'ยืนยันยกเลิก',
+    );
+    if (reason == null) return;
+    await _act(id, () => _svc.voidAllowanceRun(id, reason));
   }
 
   Future<bool> _confirm(String msg) async {
@@ -184,7 +254,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
       .showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
 
   Color _statusColor(String s) =>
-      s == 'Posted' ? Colors.teal : s == 'Void' ? Colors.red : Colors.orange;
+      s == 'Posted' ? Colors.teal : (s == 'Void' || s == 'Deleted') ? Colors.red : Colors.orange;
 
   String _customerNameOf(Map<String, dynamic> d) {
     final en = d['customer_name_en']?.toString();
@@ -201,16 +271,30 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         color: Colors.teal[50],
         width: double.infinity,
-        child: FilledButton.icon(
-          icon: const Icon(Icons.add, size: 16),
-          label: Text(isEnglish ? 'New' : 'สร้างใหม่'),
-          style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-          onPressed: () => setState(() {
-            _isCreating = true;
-            _selectedRow = null;
-            _previewDetails = [];
-          }),
-        ),
+        child: Row(children: [
+          Expanded(
+            child: FilledButton.icon(
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(isEnglish ? 'New' : 'สร้างใหม่'),
+              style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+              onPressed: () => setState(() {
+                _isCreating = true;
+                _selectedRow = null;
+                _previewDetails = [];
+              }),
+            ),
+          ),
+          IconButton(
+            tooltip: _showDeleted
+                ? (isEnglish ? 'Show active entries' : 'แสดงรายการปกติ')
+                : (isEnglish ? 'Show deleted entries' : 'แสดงรายการที่ลบแล้ว'),
+            icon: Icon(_showDeleted ? Icons.delete : Icons.delete_outline, color: _showDeleted ? Colors.red : Colors.grey[700]),
+            onPressed: () {
+              setState(() { _showDeleted = !_showDeleted; _selectedRow = null; _details = []; });
+              _loadAll();
+            },
+          ),
+        ]),
       ),
       Expanded(
         child: _rows.isEmpty
@@ -242,7 +326,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
                             color: _statusColor(r.status).withOpacity(0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(r.status,
+                          child: Text(_statusLabel(r.status),
                               style: TextStyle(fontSize: 11, color: _statusColor(r.status))),
                         ),
                         const SizedBox(width: 6),
@@ -516,7 +600,7 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
             color: _statusColor(row.status).withOpacity(0.15),
             borderRadius: BorderRadius.circular(6),
           ),
-          child: Text(row.status,
+          child: Text(_statusLabel(row.status),
               style: TextStyle(color: _statusColor(row.status),
                   fontWeight: FontWeight.bold, fontSize: 14)),
         ),
@@ -524,20 +608,48 @@ class _ArAllowanceRunScreenState extends State<ArAllowanceRunScreen>
         if (row.status == 'Draft') ...[
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-            onPressed: () => _post(row.id),
+            onPressed: _isActing ? null : () => _post(row.id),
             child: const Text('Post'),
           ),
           const SizedBox(width: 8),
+          _lockable(_actions.deleteBlock, (onPressed) => OutlinedButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: Text(isEnglish ? 'Delete' : 'ลบ'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+              ), () => _deleteDraft(row.id)),
         ],
-        if (row.status == 'Posted')
-          OutlinedButton(
-            onPressed: () => _void(row.id),
-            style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
-                side: const BorderSide(color: Colors.red)),
-            child: const Text('Void'),
-          ),
+        if (row.status == 'Posted') ...[
+          _lockable(_actions.reverseBlock, (onPressed) => OutlinedButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.undo, size: 16),
+                label: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
+              ), () => _reverse(row.id)),
+          const SizedBox(width: 8),
+          _lockable(_actions.voidBlock, (onPressed) => OutlinedButton(
+                onPressed: onPressed,
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red)),
+                child: Text(isEnglish ? 'Void' : 'ยกเลิก'),
+              ), () => _void(row.id)),
+        ],
       ]),
+    ),
+    if (row.status == 'Void' && (row.voidReason ?? '').isNotEmpty)
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        color: Colors.red.shade50,
+        child: Text('${isEnglish ? 'Void reason' : 'เหตุผลการยกเลิก'}: ${row.voidReason}',
+            style: TextStyle(fontSize: 13, color: Colors.red.shade800)),
+      ),
+    DocReverseHistoryPanel(
+      history: _actions.history,
+      isDeleted: row.status == 'Deleted',
+      isEnglish: isEnglish,
+      margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
     ),
     // Summary bar
     Container(
