@@ -9,6 +9,7 @@ import '../models/im_gl_account_setup.dart';
 import '../models/im_gr_billing_report.dart';
 import '../models/im_dln_billing_report.dart';
 import '../../utils/date_utils.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
 
 class ImTransactionService {
   final String baseUrl = AppConfig.apiIm;
@@ -158,12 +159,14 @@ class ImTransactionService {
     required ImTransactionHeader header,
     required List<ImTransactionDetail> details,
     required String action,
+    List<DocSalesperson>? salespersons, // null = ไม่ส่ง (เอกสารที่ไม่ใช่ฝั่งขาย)
   }) async {
     final authHeaders = await authService.getAuthHeader();
     final body = jsonEncode({
       'header': header.toJson(),
       'details': details.map((e) => e.toJson()).toList(),
       'action': action,
+      if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
     });
     final response = await http.post(
       Uri.parse('$baseUrl/im_transaction'),
@@ -220,11 +223,13 @@ class ImTransactionService {
     required int id,
     required ImTransactionHeader header,
     required List<ImTransactionDetail> details,
+    List<DocSalesperson>? salespersons,
   }) async {
     final authHeaders = await authService.getAuthHeader();
     final body = jsonEncode({
       'header': header.toJson(),
       'details': details.map((e) => e.toJson()).toList(),
+      if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
     });
     final response = await http.put(
       Uri.parse('$baseUrl/im_transaction/$id'),
@@ -292,6 +297,7 @@ class ImTransactionService {
     required int id,
     required String refNo,
     required List<ImTransactionDetail> details,
+    List<DocSalesperson>? salespersons,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -300,6 +306,7 @@ class ImTransactionService {
       body: jsonEncode({
         'ref_no': refNo,
         'lines': details.map((d) => {'id': d.id, 'unit_price': d.unitPrice, 'vat_type': d.vatType, 'vat_rate': d.vatRate}).toList(),
+        if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
       }),
     );
     if (response.statusCode == 200) {

@@ -25,6 +25,9 @@ import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../sa/widgets/sa_attachment_widget.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
+import '../../cd/widgets/cd_salesperson_split_editor.dart';
+import '../../ar/services/ar_customer_service.dart';
 
 class SoTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -112,6 +115,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   List<_LineForm> _lines = [];
 
   bool get _isReadOnly => widget.viewOnly || _status != 'Draft';
+  // พนักงานขาย — ค่าเริ่มต้นจากลูกค้า หรือจากใบเสนอราคาที่ดึงรายการมา
+  List<DocSalesperson> _salespersons = const [];
 
   @override
   void initState() {
@@ -149,6 +154,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     _status = 'Draft';
     _voidReason = null;
     _actions = const DocActions();
+    _salespersons = const [];
     _refQuoteId = null;
     _refQuoteDocNoLabel = null;
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null);
@@ -183,6 +189,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _status = 'Draft';
         _voidReason = null;
         _actions = const DocActions();
+        _salespersons = const [];
         _refQuoteId = null;
         _refQuoteDocNoLabel = null;
         _currency = _currencies.cast<Currency?>().firstWhere(
@@ -218,6 +225,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _status = h.status;
         _voidReason = h.voidReason;
         _actions = h.actions;
+        _salespersons = h.salespersons;
         _refQuoteId = h.refQuoteId;
         _refQuoteDocNoLabel = h.refQuoteDocNo;
         _currency = _currencies.cast<Currency?>().firstWhere(
@@ -245,7 +253,31 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     }
   }
 
+
+  // พนักงานขายของลูกค้า → ค่าเริ่มต้นของเอกสาร (รายชื่ออย่างเดียว)
+  Future<void> _loadCustomerSalespersons(int customerId) async {
+    try {
+      final c = await ArCustomerService().fetchRow(customerId);
+      if (!mounted || _customer?.id != customerId) return;
+      _applySalespersons(c.salespersons);
+    } catch (_) {}
+  }
+
+  void _applySalespersons(List<DocSalesperson> src) {
+    setState(() => _salespersons = DocSalesperson.namesOnly(src));
+  }
+
+  // ใบเสนอราคาที่ดึงรายการมา → ใช้พนักงานขายของใบเสนอราคา (ถ้ามี)
+  Future<void> _loadQuoteSalespersons(int quoteId) async {
+    try {
+      final q = await _quoteService.fetchRow(quoteId);
+      if (!mounted || q.salespersons.isEmpty) return;
+      _applySalespersons(q.salespersons);
+    } catch (_) {}
+  }
+
   void _selectCustomer(ArCustomer c) {
+    if (!_isReadOnly && c.id != null) _loadCustomerSalespersons(c.id!);
     setState(() {
       _customer = c;
       // เงื่อนไขเครดิต: due_date = doc_date + creditTermMonths เดือน + creditTermDays วัน — สูตรเดียวกับ
@@ -422,6 +454,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
       _refQuoteId = pickedLines.first['header_id'] as int;
       _refQuoteDocNoLabel = pickedLines.first['doc_no'] as String?;
     });
+    _loadQuoteSalespersons(_refQuoteId!);
   }
 
   Future<void> _save() async {
@@ -449,9 +482,9 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
               ))
           .toList();
       if (_id == null) {
-        await _service.createTransaction(header: header, details: details);
+        await _service.createTransaction(header: header, details: details, salespersons: _salespersons);
       } else {
-        await _service.updateTransaction(id: _id!, header: header, details: details);
+        await _service.updateTransaction(id: _id!, header: header, details: details, salespersons: _salespersons);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved' : 'บันทึกสำเร็จ')));
@@ -726,6 +759,13 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
               ]),
             ]),
           ),
+        ),
+        const SizedBox(height: 12),
+        SalespersonSplitEditor(
+          items: _salespersons,
+          isEnglish: isEnglish,
+          readOnly: _isReadOnly,
+          onChanged: (list) => setState(() => _salespersons = list),
         ),
         const SizedBox(height: 12),
         Card(

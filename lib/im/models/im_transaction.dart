@@ -1,6 +1,7 @@
 // lib/im/models/im_transaction.dart
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
 
 // ── Status labels (Draft / Posted / Void) ────────────────────────────────────
 const Map<String, String> imTransactionStatusLabels = {
@@ -529,10 +530,13 @@ class ImTransaction {
   final ImDocBlock? voidBlock;
   final ImDocBlock? deleteBlock;
   final List<DocReverseLog> reverseHistory;
+  // พนักงานขาย + สัดส่วน (เอกสารฝั่งขาย) — คัดลอกไปใบ AR ที่สร้างอัตโนมัติ
+  final List<DocSalesperson> salespersons;
 
   const ImTransaction({
     required this.header, this.details = const [],
     this.reverseBlock, this.reverseTo, this.voidBlock, this.deleteBlock, this.reverseHistory = const [],
+    this.salespersons = const [],
   });
 
   factory ImTransaction.fromJson(Map<String, dynamic> json) => ImTransaction(
@@ -545,5 +549,6 @@ class ImTransaction {
         voidBlock: ImDocBlock.fromJson(json['void_block']),
         deleteBlock: ImDocBlock.fromJson(json['delete_block']),
         reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
+        salespersons: DocSalesperson.listFromJson(json['salespersons']),
       );
 }

@@ -342,7 +342,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              'เทมเพลตประกอบด้วย 8 sheet ตามหัวข้อข้อมูลลูกหนี้ ทุก sheet (ยกเว้น "ข้อมูลทั่วไป") '
+              'เทมเพลตประกอบด้วย 9 sheet ตามหัวข้อข้อมูลลูกหนี้ ทุก sheet (ยกเว้น "ข้อมูลทั่วไป") '
               'ใช้คอลัมน์ "old_customer_code" (รหัสเก่าลูกหนี้) เป็นตัวเชื่อมข้อมูลกับแถวใน sheet "ข้อมูลทั่วไป"\n'
               '★ = จำเป็นต้องระบุ',
               style: TextStyle(color: Colors.red, fontSize: 12),
@@ -650,6 +650,13 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
     ['is_default', 'ที่อยู่หลัก'],
   ];
 
+  static const _salespersonColumns = [
+    ['salesperson_code', 'รหัสพนักงานขาย'],
+    ['is_primary', 'พนักงานขายหลัก'],
+    ['share_percent', 'สัดส่วน %'],
+    ['share_amount', 'จำนวนเงิน'],
+  ];
+
   static const _contactColumns = [
     ['contact_name', 'ชื่อผู้ติดต่อ'],
     ['position', 'ตำแหน่ง'],
@@ -678,6 +685,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
       'ผู้ติดต่อ',
       'บัญชีธนาคาร',
       'รหัสบัญชีลูกหนี้',
+      'พนักงานขาย',
     ];
 
     showDialog(
@@ -727,6 +735,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
                     _buildListTable(row['contacts'] as List? ?? [], _contactColumns),
                     _buildListTable(row['bank_accounts'] as List? ?? [], _bankAccountColumns),
                     _buildArAccountTab(row),
+                    _buildListTable(row['salespersons'] as List? ?? [], _salespersonColumns),
                   ]),
                 ),
               ]),
@@ -745,6 +754,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
       ['ชื่อ (ไทย)', _formatCellValue(row['customer_name_th'])],
       ['ชื่อ (อังกฤษ)', _formatCellValue(row['customer_name_en'])],
       ['เลขประจำตัวผู้เสียภาษี', _formatCellValue(row['tax_id'])],
+      ['รหัสสาขา', _formatCellValue(row['tax_branch_code'])],
       ['ประเภทธุรกิจ', _formatCellValue(row['business_type_code'])],
       ['เครดิต (เดือน)', _formatCellValue(row['credit_term_months'])],
       ['เครดิต (วัน)', _formatCellValue(row['credit_term_days'])],
@@ -761,7 +771,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
   Widget _buildSalesTab(Map<String, dynamic> row) {
     final items = <List<String>>[
       ['เขตการขาย', _formatCellValue(row['sales_territory_code'])],
-      ['พนักงานขาย', _formatCellValue(row['salesperson_code'])],
+      ['พนักงานขายหลัก', _formatCellValue(row['salesperson_code'])],
       ['ผู้วางบิล', _formatCellValue(row['billing_collector_code'])],
       ['ผู้รับชำระ', _formatCellValue(row['collection_collector_code'])],
     ];

@@ -18,6 +18,7 @@ import '../../sa/models/sa_company.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../utils/file_download.dart';
+import '../../cd/widgets/cd_tax_branch_field.dart';
 
 // ---------------------------------------------------------------------------
 // Category enum
@@ -185,7 +186,8 @@ class _ApVendorReportScreenState extends State<ApVendorReportScreen> {
       case _Category.generalInfo:
         final p = <String>[];
         if ((v.taxId ?? '').isNotEmpty) {
-          p.add('${isEnglish ? 'Tax ID: ' : 'เลขผู้เสียภาษี: '}${v.taxId}');
+          final branch = taxBranchLabel(v.taxBranchCode, isEnglish);
+          p.add('${isEnglish ? 'Tax ID: ' : 'เลขผู้เสียภาษี: '}${v.taxId}${branch.isEmpty ? '' : ' $branch'}');
         }
         final vtLabel = v.vendorType == 'individual' ? (isEnglish ? 'Individual' : 'บุคคลธรรมดา')
                       : v.vendorType == 'juristic'   ? (isEnglish ? 'Juristic Person' : 'นิติบุคคล')

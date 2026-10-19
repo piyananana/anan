@@ -31,6 +31,8 @@ import '../../gl/models/gl_dimension.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
+import '../../cd/widgets/cd_salesperson_split_editor.dart';
 
 class ArTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -121,6 +123,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   String? _voidBlock;
   String? _voidBlockRef;
   List<DocReverseLog> _reverseHistory = [];
+  // พนักงานขาย (ใบแจ้งหนี้/เพิ่มหนี้/ลดหนี้) — ค่าเริ่มต้นจากลูกค้า แก้ได้ระหว่างเป็นร่าง
+  List<DocSalesperson> _salespersons = [];
 
   // Detail rows
   List<_DetailRow> _detailRows = [];
@@ -174,6 +178,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   bool get _hasApplySection        => _isReceipt || _isCreditNoteWithBill || _isDebitNoteWithBill || _isBillCollection;
   bool get _hasAdvanceRefundSection => _isAdvanceRefund;
   bool get _isInvoice              => _selectedDocType?.sysDocType == arDocTypeInvoice.toString();
+  // เอกสารขายที่มีพนักงานขาย (ตั้งหนี้ / เพิ่มหนี้ / ลดหนี้)
+  bool get _hasSalespersons        => const ['10', '30', '35', '50', '55'].contains(_selectedDocType?.sysDocType);
 
   bool _headerExpanded  = true;
   bool _detailExpanded  = true;
@@ -305,6 +311,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         _voidBlock = data.voidBlock;
         _voidBlockRef = data.voidBlockRef;
         _reverseHistory = data.reverseHistory;
+        _salespersons = data.salespersons;
 
         // Populate dimension selections from loaded header
         _dimSelections = {
@@ -464,6 +471,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       _status = 'Draft';
       _isReadOnly = false;
       _reverseBlock = null; _reverseBlockRef = null; _voidBlock = null; _voidBlockRef = null; _reverseHistory = [];
+      _salespersons = [];
 
       // reset selections ที่ไม่ได้ clear ก่อนหน้านี้
       _selectedDocType = null;
@@ -670,7 +678,20 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     });
   }
 
+  // พนักงานขายของลูกค้า → ค่าเริ่มต้นของเอกสาร (รายชื่ออย่างเดียว)
+  Future<void> _loadCustomerSalespersons(int customerId) async {
+    try {
+      final c = await _customerService.fetchRow(customerId);
+      if (!mounted || _selectedCustomer?.id != customerId) return;
+      setState(() => _salespersons = DocSalesperson.namesOnly(c.salespersons));
+    } catch (_) {}
+  }
+
   void _onCustomerChanged(ArCustomer? customer) {
+    if (!_isReadOnly) {
+      _salespersons = [];
+      if (customer?.id != null) _loadCustomerSalespersons(customer!.id!);
+    }
     setState(() {
       _selectedCustomer = customer;
       // Default AR account from customer
@@ -1282,10 +1303,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       if (_transactionId == 0) {
         await _service.createTransaction(
           header: header, details: details, applies: applies, payments: payments, action: action,
+          salespersons: _hasSalespersons ? _salespersons : null,
         );
       } else {
         await _service.updateTransaction(
           id: _transactionId, header: header, details: details, applies: applies, payments: payments, action: action,
+          salespersons: _hasSalespersons ? _salespersons : null,
         );
       }
       if (mounted) {
@@ -2119,6 +2142,16 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ),
             ),
           ]),
+          // พนักงานขาย (รายชื่ออย่างเดียว — สัดส่วนอยู่ที่ข้อมูลลูกค้า)
+          if (_hasSalespersons) ...[
+            const SizedBox(height: 12),
+            SalespersonSplitEditor(
+              items: _salespersons,
+              isEnglish: isEnglish,
+              readOnly: _isReadOnly,
+              onChanged: (list) => setState(() => _salespersons = list),
+            ),
+          ],
           // แถววันที่ — แสดงเฉพาะประเภทเอกสารตั้งหนี้ (ต้องเลือกลูกค้าก่อน)
           if (_isInvoice) ...[
             const SizedBox(height: 12),

@@ -3,6 +3,7 @@
 // (ไม่ใช่ per-line neededByDate ของ PR เพราะวันหมดอายุใบเสนอราคาเป็นค่าเดียวต่อทั้งใบตามธรรมชาติ)
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
 
 const Map<String, String> quoteTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
@@ -101,6 +102,8 @@ class QuoteTransactionHeader {
   final String? createdBy;
   final String? updatedBy;
   final List<QuoteTransactionDetail> details;
+  // พนักงานขาย + สัดส่วน (จำนวนเงินจากมูลค่ารวมสกุลท้องถิ่น)
+  final List<DocSalesperson> salespersons;
   final List<QuoteTransactionApproval> approvals;
 
   const QuoteTransactionHeader({
@@ -140,6 +143,7 @@ class QuoteTransactionHeader {
     this.createdBy,
     this.updatedBy,
     this.details = const [],
+    this.salespersons = const [],
     this.approvals = const [],
   });
 
@@ -182,6 +186,7 @@ class QuoteTransactionHeader {
       createdBy: json['created_by'],
       updatedBy: json['updated_by'],
       details: (json['details'] as List<dynamic>? ?? []).map((e) => QuoteTransactionDetail.fromJson(e as Map<String, dynamic>)).toList(),
+      salespersons: DocSalesperson.listFromJson(json['salespersons']),
       approvals: (json['approvals'] as List<dynamic>? ?? []).map((e) => QuoteTransactionApproval.fromJson(e as Map<String, dynamic>)).toList(),
     );
   }

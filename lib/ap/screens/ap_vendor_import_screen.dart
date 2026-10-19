@@ -686,6 +686,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
       ['ชื่อ (ไทย)', _fmt(row['vendor_name_th'])],
       ['ชื่อ (อังกฤษ)', _fmt(row['vendor_name_en'])],
       ['เลขประจำตัวผู้เสียภาษี', _fmt(row['tax_id'])],
+      ['รหัสสาขา', _fmt(row['tax_branch_code'])],
       ['ประเภทธุรกิจ', _fmt(row['business_type_code'])],
       ['ประเภทผู้ขาย', _fmt(row['vendor_type'])],
       ['เครดิต (เดือน)', _fmt(row['credit_term_months'])],

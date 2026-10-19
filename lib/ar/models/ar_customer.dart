@@ -1,3 +1,4 @@
+import '../../cd/models/cd_doc_salesperson.dart';
 class ArCustomerAddress {
   final int? id;
   final int? customerId;
@@ -427,6 +428,8 @@ class ArCustomer {
   final String customerNameTh;
   final String? customerNameEn;
   final String? taxId;
+  // รหัสสาขาตามทะเบียน VAT 5 หลัก ('00000' = สำนักงานใหญ่, null = ไม่ระบุ) — 1 สาขา = 1 รหัสลูกค้า
+  final String? taxBranchCode;
   // FK → cd_business_type
   final int? businessTypeId;
   final String? businessTypeCode;
@@ -478,6 +481,8 @@ class ArCustomer {
   final List<ArCustomerBankAccount> bankAccounts;
   final List<ArCustomerBillingCondition> billingConditions;
   final List<ArCustomerPaymentCondition> paymentConditions;
+  // พนักงานขายหลายคน + สัดส่วน % (salespersonId ข้างบน = คนหลัก)
+  final List<DocSalesperson> salespersons;
 
   ArCustomer({
     this.id,
@@ -486,6 +491,7 @@ class ArCustomer {
     required this.customerNameTh,
     this.customerNameEn,
     this.taxId,
+    this.taxBranchCode,
     this.businessTypeId,
     this.businessTypeCode,
     this.businessTypeNameThai,
@@ -527,6 +533,7 @@ class ArCustomer {
     this.bankAccounts = const [],
     this.billingConditions = const [],
     this.paymentConditions = const [],
+    this.salespersons = const [],
   });
 
   factory ArCustomer.fromJson(Map<String, dynamic> json) => ArCustomer(
@@ -536,6 +543,7 @@ class ArCustomer {
         customerNameTh: json['customer_name_th'] ?? '',
         customerNameEn: json['customer_name_en'],
         taxId: json['tax_id'],
+        taxBranchCode: json['tax_branch_code'] as String?,
         businessTypeId: json['business_type_id'],
         businessTypeCode: json['business_type_code'],
         businessTypeNameThai: json['business_type_name_thai'],
@@ -567,6 +575,7 @@ class ArCustomer {
         salespersonId: json['salesperson_id'] as int?,
         salespersonCode: json['salesperson_code'] as String?,
         salespersonNameThai: json['salesperson_name_thai'] as String?,
+        salespersons: DocSalesperson.listFromJson(json['salespersons']),
         billingCollectorId: json['billing_collector_id'] as int?,
         billingCollectorCode: json['billing_collector_code'] as String?,
         billingCollectorNameThai:
@@ -602,6 +611,7 @@ class ArCustomer {
         'customer_name_th': customerNameTh,
         'customer_name_en': customerNameEn,
         'tax_id': taxId,
+        'tax_branch_code': taxBranchCode,
         'business_type_id': businessTypeId,
         'customer_group_id': customerGroupId,
         'price_list_id': priceListId,
@@ -626,5 +636,6 @@ class ArCustomer {
             billingConditions.map((e) => e.toJson()).toList(),
         'payment_conditions':
             paymentConditions.map((e) => e.toJson()).toList(),
+        'salespersons': salespersons.map((e) => e.toJson()).toList(),
       };
 }

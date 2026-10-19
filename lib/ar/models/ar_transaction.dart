@@ -1,6 +1,7 @@
 // lib/ar/models/ar_transaction.dart
 import '../../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
 
 // AR document types (sys_doc_type in sa_module_document, sys_module=11)
 const int arDocTypeInvoice            = 10;
@@ -693,6 +694,8 @@ class ArTransaction {
   final String? voidBlock;
   final String? voidBlockRef;
   final List<DocReverseLog> reverseHistory;
+  // พนักงานขาย + สัดส่วน (ใบแจ้งหนี้/เพิ่มหนี้/ลดหนี้)
+  final List<DocSalesperson> salespersons;
 
   const ArTransaction({
     required this.header,
@@ -705,6 +708,7 @@ class ArTransaction {
     this.voidBlock,
     this.voidBlockRef,
     this.reverseHistory = const [],
+    this.salespersons = const [],
   });
 
   factory ArTransaction.fromJson(Map<String, dynamic> j) {
@@ -727,6 +731,7 @@ class ArTransaction {
       voidBlock: j['void_block'] as String?,
       voidBlockRef: j['void_block_ref'] as String?,
       reverseHistory: DocReverseLog.listFromJson(j['reverse_history']),
+      salespersons: DocSalesperson.listFromJson(j['salespersons']),
     );
   }
 }

@@ -2,6 +2,7 @@
 // เพียงสลับ vendor->customer เท่านั้น ยังไม่มีขั้น "ใบเสนอราคา" (Sale Quote) นำหน้าเหมือน PR นำหน้า PO
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
 
 const Map<String, String> soTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
@@ -66,6 +67,8 @@ class SoTransactionHeader {
   final String? createdBy;
   final String? updatedBy;
   final List<SoTransactionDetail> details;
+  // พนักงานขาย + สัดส่วน (จำนวนเงินจากมูลค่ารวมสกุลท้องถิ่น)
+  final List<DocSalesperson> salespersons;
 
   const SoTransactionHeader({
     this.id = 0,
@@ -105,6 +108,7 @@ class SoTransactionHeader {
     this.createdBy,
     this.updatedBy,
     this.details = const [],
+    this.salespersons = const [],
   });
 
   factory SoTransactionHeader.fromJson(Map<String, dynamic> json) {
@@ -147,6 +151,7 @@ class SoTransactionHeader {
       createdBy: json['created_by'],
       updatedBy: json['updated_by'],
       details: (json['details'] as List<dynamic>? ?? []).map((e) => SoTransactionDetail.fromJson(e as Map<String, dynamic>)).toList(),
+      salespersons: DocSalesperson.listFromJson(json['salespersons']),
     );
   }
 

@@ -175,6 +175,8 @@ class ApVendor {
   final String vendorNameTh;
   final String? vendorNameEn;
   final String? taxId;
+  // รหัสสาขาตามทะเบียน VAT 5 หลัก ('00000' = สำนักงานใหญ่, null = ไม่ระบุ) — 1 สาขา = 1 รหัสผู้ขาย
+  final String? taxBranchCode;
   final int? vendorGroupId;
   final String? vendorGroupCode;
   final String? vendorGroupName;
@@ -212,6 +214,7 @@ class ApVendor {
     required this.vendorNameTh,
     this.vendorNameEn,
     this.taxId,
+    this.taxBranchCode,
     this.vendorGroupId,
     this.vendorGroupCode,
     this.vendorGroupName,
@@ -248,6 +251,7 @@ class ApVendor {
         vendorNameTh: json['vendor_name_th'] ?? '',
         vendorNameEn: json['vendor_name_en'],
         taxId: json['tax_id'],
+        taxBranchCode: json['tax_branch_code'] as String?,
         vendorGroupId: json['vendor_group_id'],
         vendorGroupCode: json['vendor_group_code'],
         vendorGroupName: json['vendor_group_name'],
@@ -287,6 +291,7 @@ class ApVendor {
         'vendor_name_th': vendorNameTh,
         'vendor_name_en': vendorNameEn,
         'tax_id': taxId,
+        'tax_branch_code': taxBranchCode,
         'vendor_group_id': vendorGroupId,
         'price_list_id': priceListId,
         'business_type_id': businessTypeId,
@@ -306,7 +311,7 @@ class ApVendor {
 
   ApVendor copyWith({
     int? id, String? vendorCode, String? oldVendorCode,
-    String? vendorNameTh, String? vendorNameEn, String? taxId,
+    String? vendorNameTh, String? vendorNameEn, String? taxId, String? taxBranchCode,
     int? vendorGroupId, String? vendorGroupCode, String? vendorGroupName,
     int? priceListId, String? priceListCode, String? priceListName,
     int? businessTypeId, String? businessTypeCode, String? businessTypeNameThai,
@@ -328,6 +333,7 @@ class ApVendor {
         vendorNameTh: vendorNameTh ?? this.vendorNameTh,
         vendorNameEn: vendorNameEn ?? this.vendorNameEn,
         taxId: taxId ?? this.taxId,
+        taxBranchCode: taxBranchCode ?? this.taxBranchCode,
         vendorGroupId: vendorGroupId ?? this.vendorGroupId,
         vendorGroupCode: vendorGroupCode ?? this.vendorGroupCode,
         vendorGroupName: vendorGroupName ?? this.vendorGroupName,

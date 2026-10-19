@@ -4,6 +4,7 @@ import '../../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../models/ar_transaction.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
 
 class BcAlreadyPaidException implements Exception {
   final String receiptDocNo;
@@ -119,6 +120,7 @@ class ArTransactionService {
     required List<ArTransactionApply> applies,
     required String action, // 'Draft' | 'Post'
     List<ArTransactionPayment> payments = const [],
+    List<DocSalesperson>? salespersons, // null = ไม่ส่ง (เอกสารที่ไม่มีพนักงานขาย)
   }) async {
     final headers = await authService.getAuthHeader();
     final body = jsonEncode({
@@ -127,6 +129,7 @@ class ArTransactionService {
       'applies': applies.map((a) => a.toJson()).toList(),
       'payments': payments.map((p) => p.toJson()).toList(),
       'action': action,
+      if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
     });
     final response = await http.post(
       Uri.parse('$baseUrl/ar_transaction'),
@@ -151,6 +154,7 @@ class ArTransactionService {
     required List<ArTransactionApply> applies,
     required String action,
     List<ArTransactionPayment> payments = const [],
+    List<DocSalesperson>? salespersons,
   }) async {
     final authHeaders = await authService.getAuthHeader();
     final body = jsonEncode({
@@ -159,6 +163,7 @@ class ArTransactionService {
       'applies': applies.map((a) => a.toJson()).toList(),
       'payments': payments.map((p) => p.toJson()).toList(),
       'action': action,
+      if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
     });
     final response = await http.put(
       Uri.parse('$baseUrl/ar_transaction/$id'),

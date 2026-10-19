@@ -7,6 +7,7 @@ import '../../cd/models/cd_zipcode.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../cd/widgets/cd_zipcode_list_widget.dart';
+import '../../cd/widgets/cd_tax_branch_field.dart';
 import '../../cd/models/cd_bank.dart';
 import '../../cd/models/cd_bank_branch.dart';
 import '../../cd/services/cd_bank_branch_service.dart';
@@ -745,6 +746,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   late TextEditingController _nameTHCtrl;
   late TextEditingController _nameENCtrl;
   late TextEditingController _taxIdCtrl;
+  late TextEditingController _taxBranchCtrl;
   late TextEditingController _remarkCtrl;
   late TextEditingController _creditMonthsCtrl;
   late TextEditingController _creditDaysCtrl;
@@ -833,6 +835,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _nameTHCtrl       = TextEditingController();
     _nameENCtrl       = TextEditingController();
     _taxIdCtrl        = TextEditingController();
+    _taxBranchCtrl    = TextEditingController();
     _remarkCtrl       = TextEditingController();
     _creditMonthsCtrl = TextEditingController(text: '0');
     _creditDaysCtrl   = TextEditingController(text: '30');
@@ -859,7 +862,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   @override
   void dispose() {
     _codeCtrl.dispose(); _oldCodeCtrl.dispose(); _nameTHCtrl.dispose();
-    _nameENCtrl.dispose(); _taxIdCtrl.dispose(); _remarkCtrl.dispose();
+    _nameENCtrl.dispose(); _taxIdCtrl.dispose(); _taxBranchCtrl.dispose(); _remarkCtrl.dispose();
     _creditMonthsCtrl.dispose(); _creditDaysCtrl.dispose(); _creditLimitCtrl.dispose();
     super.dispose();
   }
@@ -930,6 +933,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _nameTHCtrl.text       = v.vendorNameTh;
     _nameENCtrl.text       = v.vendorNameEn ?? '';
     _taxIdCtrl.text        = v.taxId ?? '';
+    _taxBranchCtrl.text    = v.taxBranchCode ?? '';
     _remarkCtrl.text       = v.remark ?? '';
     _creditMonthsCtrl.text = '${v.creditTermMonths}';
     _creditDaysCtrl.text   = '${v.creditTermDays}';
@@ -966,7 +970,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
 
   void _clear() {
     _codeCtrl.clear(); _oldCodeCtrl.clear(); _nameTHCtrl.clear();
-    _nameENCtrl.clear(); _taxIdCtrl.clear(); _remarkCtrl.clear();
+    _nameENCtrl.clear(); _taxIdCtrl.clear(); _taxBranchCtrl.clear(); _remarkCtrl.clear();
     _creditMonthsCtrl.text = '0'; _creditDaysCtrl.text = '30'; _creditLimitCtrl.text = '0';
     _isActive = true;
     _selectedCurrencyCode = null; _selectedCurrencyNameThai = null;
@@ -993,6 +997,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
         vendorNameTh: _nameTHCtrl.text.trim(),
         vendorNameEn: _nameENCtrl.text.trim().isEmpty ? null : _nameENCtrl.text.trim(),
         taxId: _taxIdCtrl.text.trim().isEmpty ? null : _taxIdCtrl.text.trim(),
+        taxBranchCode: normalizeTaxBranch(_taxBranchCtrl.text),
         vendorGroupId: _vendorGroupId,
         vendorGroupCode: _vendorGroupCode,
         vendorGroupName: _vendorGroupName,
@@ -1547,6 +1552,8 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
             Expanded(child: _buildCodeField()),
             const SizedBox(width: 10),
             Expanded(child: _buildField(isEnglish ? 'Tax ID' : 'เลขผู้เสียภาษี', _taxIdCtrl)),
+            const SizedBox(width: 10),
+            Expanded(child: TaxBranchField(controller: _taxBranchCtrl, isEnglish: isEnglish)),
             const SizedBox(width: 10),
             Expanded(child: _buildField(isEnglish ? 'Old Code' : 'รหัสเก่า', _oldCodeCtrl)),
           ]),

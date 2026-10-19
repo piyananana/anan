@@ -28,6 +28,9 @@ import '../../cd/models/cd_vat_rate.dart';
 import '../../cd/services/cd_vat_rate_service.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
+import '../../cd/widgets/cd_salesperson_split_editor.dart';
+import '../../ar/services/ar_customer_service.dart';
 
 double _parseNum(String s) => double.tryParse(s.trim()) ?? 0;
 
@@ -213,6 +216,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   ImDocBlock? _voidBlock;
   ImDocBlock? _deleteBlock;
   List<DocReverseLog> _reverseHistory = const [];
+  // พนักงานขาย (เอกสารฝั่งขาย) — ค่าเริ่มต้นจากลูกค้า แก้ได้ระหว่างร่าง และตอน '32' รอตั้งหนี้
+  List<DocSalesperson> _salespersons = const [];
   int? _glEntryId;
 
   // รองรับรับสินค้าจากผู้ขายต่างประเทศเป็นสกุลเงินต่างประเทศ (เฉพาะ _isApVendorMode) — มิเรอร์
@@ -326,6 +331,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _voidBlock = null;
     _deleteBlock = null;
     _reverseHistory = const [];
+    _salespersons = const [];
     _glEntryId = null;
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
     _exchangeRate = _currency?.baseRate ?? 1;
@@ -403,6 +409,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _voidBlock = tx.voidBlock;
     _deleteBlock = tx.deleteBlock;
     _reverseHistory = tx.reverseHistory;
+    _salespersons = tx.salespersons;
     _glEntryId = h.glEntryId;
     _currency = _currencies.cast<Currency?>().firstWhere(
         (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
@@ -518,6 +525,25 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       _customerId = c.id;
       _customerLabel = '${c.customerCode} ${c.customerNameTh}';
     });
+    if (c.id != null) _loadCustomerSalespersons(c.id!);
+  }
+
+  // ใบสั่งขายที่ดึงรายการมา → ใช้พนักงานขายของใบสั่งขาย (ถ้ามี) แทนค่าเริ่มต้นของลูกค้า
+  Future<void> _loadSoSalespersons(int soId) async {
+    try {
+      final so = await _soService.fetchRow(soId);
+      if (!mounted || so.salespersons.isEmpty) return;
+      setState(() => _salespersons = DocSalesperson.namesOnly(so.salespersons));
+    } catch (_) {}
+  }
+
+  // พนักงานขายของลูกค้า → ค่าเริ่มต้นของเอกสาร (รายชื่ออย่างเดียว)
+  Future<void> _loadCustomerSalespersons(int customerId) async {
+    try {
+      final c = await ArCustomerService().fetchRow(customerId);
+      if (!mounted || _customerId != customerId) return;
+      setState(() => _salespersons = DocSalesperson.namesOnly(c.salespersons));
+    } catch (_) {}
   }
 
   Future<void> _refreshSystemQty(_CountLine line) async {
@@ -695,6 +721,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       } else {
         _customerId = picked.customerId;
         _customerLabel = '${picked.customerCode ?? ''} ${picked.customerNameTh ?? ''}'.trim();
+        if (picked.customerId != null) _loadCustomerSalespersons(picked.customerId!);
       }
       for (final l in _lines) {
         l.dispose();
@@ -1032,6 +1059,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       }
       _refSoId = pickedLines.first['header_id'] as int;
       _refSoDocNoLabel = pickedLines.first['doc_no'] as String?;
+      _loadSoSalespersons(_refSoId!);
       // ส่งตามสกุลเงินของ SO ต้นทางเสมอ (ทุกบรรทัดที่เลือกมาจาก fetchDeliverableLines ของลูกค้าเดียวกัน แต่อาจมาจาก
       // SO คนละใบ คนละสกุลเงินได้ในทางทฤษฎี — ใช้สกุลเงินของ SO ใบแรกที่เลือกเป็นสกุลเงินของทั้ง DLN นี้)
       final soCurrencyCode = _soCurrencyCode(pickedLines.first);
@@ -1172,11 +1200,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           )).toList();
 
       if (_id == null) {
-        final result = await _service.createTransaction(header: header, details: details, action: action);
+        final result = await _service.createTransaction(header: header, details: details, action: action,
+            salespersons: _isArCustomerMode ? _salespersons : null);
         _id = result.header.id;
       } else {
         if (_status == 'Draft') {
-          await _service.updateTransaction(id: _id!, header: header, details: details);
+          await _service.updateTransaction(id: _id!, header: header, details: details,
+              salespersons: _isArCustomerMode ? _salespersons : null);
         }
         if (action == 'Post') {
           await _service.postTransaction(_id!);
@@ -1271,7 +1301,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             itemId: l.item.id!,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
           )).toList();
-      await _service.updateTransaction(id: _id!, header: header, details: details);
+      await _service.updateTransaction(id: _id!, header: header, details: details, salespersons: _salespersons);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
         await _loadExisting(_id!);
@@ -1298,7 +1328,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
           )).toList();
-      await _service.postBillingDln(id: _id!, refNo: _refNoCtrl.text.trim(), details: details);
+      await _service.postBillingDln(id: _id!, refNo: _refNoCtrl.text.trim(), details: details, salespersons: _salespersons);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Posted successfully' : 'Post สำเร็จ')));
         widget.onSaveSuccess();
@@ -1667,6 +1697,16 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         readOnly: _isReadOnly,
         decoration: InputDecoration(labelText: isEnglish ? 'Description' : 'คำอธิบาย', border: const OutlineInputBorder(), isDense: true),
       ),
+      // พนักงานขาย (รายชื่ออย่างเดียว — สัดส่วนอยู่ที่ข้อมูลลูกค้า)
+      if (_isArCustomerMode) ...[
+        const SizedBox(height: 6),
+        SalespersonSplitEditor(
+          items: _salespersons,
+          isEnglish: isEnglish,
+          readOnly: !_canEditBilling,
+          onChanged: (list) => setState(() => _salespersons = list),
+        ),
+      ],
       const SizedBox(height: 6),
       Row(children: [
         Container(

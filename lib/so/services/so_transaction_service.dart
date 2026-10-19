@@ -5,6 +5,7 @@ import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../models/so_transaction.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
 
 class SoTransactionService {
   final String baseUrl = AppConfig.apiSo;
@@ -65,9 +66,14 @@ class SoTransactionService {
   Future<SoTransactionHeader> createTransaction({
     required SoTransactionHeader header,
     required List<SoTransactionDetail> details,
+    List<DocSalesperson>? salespersons,
   }) async {
     final authHeaders = await authService.getAuthHeader();
-    final body = jsonEncode({'header': header.toJson(), 'details': details.map((e) => e.toJson()).toList()});
+    final body = jsonEncode({
+      'header': header.toJson(),
+      'details': details.map((e) => e.toJson()).toList(),
+      if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
+    });
     final response = await http.post(Uri.parse('$baseUrl/so_transaction'), headers: authHeaders, body: body);
     if (response.statusCode == 201) {
       return SoTransactionHeader.fromJson(json.decode(response.body));
@@ -83,9 +89,14 @@ class SoTransactionService {
     required int id,
     required SoTransactionHeader header,
     required List<SoTransactionDetail> details,
+    List<DocSalesperson>? salespersons,
   }) async {
     final authHeaders = await authService.getAuthHeader();
-    final body = jsonEncode({'header': header.toJson(), 'details': details.map((e) => e.toJson()).toList()});
+    final body = jsonEncode({
+      'header': header.toJson(),
+      'details': details.map((e) => e.toJson()).toList(),
+      if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
+    });
     final response = await http.put(Uri.parse('$baseUrl/so_transaction/$id'), headers: authHeaders, body: body);
     if (response.statusCode == 200) {
       return SoTransactionHeader.fromJson(json.decode(response.body));

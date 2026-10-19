@@ -18,6 +18,7 @@ import '../../sa/models/sa_company.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../cd/widgets/cd_tax_branch_field.dart';
 import '../../utils/file_download.dart';
 
 // ---------------------------------------------------------------------------
@@ -291,7 +292,10 @@ class _ArCustomerReportScreenState extends State<ArCustomerReportScreen> {
     switch (cat) {
       case _Category.generalInfo:
         final p = <String>[];
-        if ((c.taxId ?? '').isNotEmpty) p.add('${isEnglish ? "Tax ID" : "เลขผู้เสียภาษี"}: ${c.taxId}');
+        if ((c.taxId ?? '').isNotEmpty) {
+          final branch = taxBranchLabel(c.taxBranchCode, isEnglish);
+          p.add('${isEnglish ? "Tax ID" : "เลขผู้เสียภาษี"}: ${c.taxId}${branch.isEmpty ? '' : ' $branch'}');
+        }
         if ((c.businessTypeNameThai ?? '').isNotEmpty) p.add('${isEnglish ? "Business Type" : "ประเภทธุรกิจ"}: ${c.businessTypeCode} ${c.businessTypeNameThai}');
         if ((c.customerGroupName ?? '').isNotEmpty)  p.add('${isEnglish ? "Customer Group" : "กลุ่มลูกค้า"}: ${c.customerGroupCode} ${c.customerGroupName}');
         p.add('${isEnglish ? "Currency" : "สกุลเงิน"}: ${c.currencyCode}');

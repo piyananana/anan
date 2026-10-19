@@ -25,6 +25,9 @@ import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../sa/widgets/sa_attachment_widget.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
+import '../../cd/widgets/cd_salesperson_split_editor.dart';
+import '../../ar/services/ar_customer_service.dart';
 
 class QuoteTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -107,6 +110,8 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
   Timer? _priceResolveDebounce;
 
   bool get _isReadOnly => widget.viewOnly || !['Draft', 'Rejected'].contains(_status);
+  // พนักงานขาย — ค่าเริ่มต้นจากลูกค้า
+  List<DocSalesperson> _salespersons = const [];
 
   @override
   void initState() {
@@ -142,6 +147,7 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
     _status = 'Draft';
     _voidReason = null;
     _actions = const DocActions();
+    _salespersons = const [];
     _approvals = [];
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
     _exchangeRate = _currency?.baseRate ?? 1;
@@ -177,6 +183,7 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
         _status = 'Draft';
         _voidReason = null;
         _actions = const DocActions();
+        _salespersons = const [];
         _approvals = [];
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
@@ -211,6 +218,7 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
         _status = h.status;
         _voidReason = h.voidReason;
         _actions = h.actions;
+        _salespersons = h.salespersons;
         _approvals = h.approvals;
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
@@ -236,7 +244,22 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
     }
   }
 
+
+  // พนักงานขายของลูกค้า → ค่าเริ่มต้นของเอกสาร (รายชื่ออย่างเดียว)
+  Future<void> _loadCustomerSalespersons(int customerId) async {
+    try {
+      final c = await ArCustomerService().fetchRow(customerId);
+      if (!mounted || _customer?.id != customerId) return;
+      _applySalespersons(c.salespersons);
+    } catch (_) {}
+  }
+
+  void _applySalespersons(List<DocSalesperson> src) {
+    setState(() => _salespersons = DocSalesperson.namesOnly(src));
+  }
+
   void _selectCustomer(ArCustomer c) {
+    if (!_isReadOnly && c.id != null) _loadCustomerSalespersons(c.id!);
     setState(() {
       _customer = c;
       // สกุลเงินหลักของลูกค้า (ar_customer.currency_code)
@@ -328,9 +351,9 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
               ))
           .toList();
       if (_id == null) {
-        await _service.createTransaction(header: header, details: details);
+        await _service.createTransaction(header: header, details: details, salespersons: _salespersons);
       } else {
-        await _service.updateTransaction(id: _id!, header: header, details: details);
+        await _service.updateTransaction(id: _id!, header: header, details: details, salespersons: _salespersons);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved' : 'บันทึกสำเร็จ')));
@@ -643,6 +666,13 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
               ]),
             ]),
           ),
+        ),
+        const SizedBox(height: 12),
+        SalespersonSplitEditor(
+          items: _salespersons,
+          isEnglish: isEnglish,
+          readOnly: _isReadOnly,
+          onChanged: (list) => setState(() => _salespersons = list),
         ),
         if (_approvals.isNotEmpty) ...[
           const SizedBox(height: 12),

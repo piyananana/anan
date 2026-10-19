@@ -6,6 +6,9 @@ import '../../cd/models/cd_zipcode.dart';
 import '../../cd/models/cd_business_type.dart';
 import '../../cd/services/cd_business_type_service.dart';
 import '../../cd/widgets/cd_zipcode_list_widget.dart';
+import '../../cd/widgets/cd_tax_branch_field.dart';
+import '../../cd/widgets/cd_salesperson_split_editor.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
 import '../models/ar_customer.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
@@ -1272,6 +1275,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   late TextEditingController _nameThCtrl;
   late TextEditingController _nameEnCtrl;
   late TextEditingController _taxIdCtrl;
+  late TextEditingController _taxBranchCtrl;
   late TextEditingController _oldCustomerCodeCtrl;
   late TextEditingController _creditTermMonthsCtrl;
   late TextEditingController _creditTermDaysCtrl;
@@ -1342,13 +1346,10 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   int? _salesTerritoryId;
   String? _salesTerritoryCode;
   String? _salesTerritoryNameThai;
-  // พนักงานขาย
-  int? _salespersonId;
-  String? _salespersonCode;
-  String? _salespersonNameThai;
+  // พนักงานขาย (หลายคน + สัดส่วน %, คนหลักติดดาว)
+  List<DocSalesperson> _salespersons = [];
   // cache รายชื่อพนักงานขายในเขตที่เลือก
   List<TerritoryMember> _territoryMembers = [];
-  bool _loadingMembers = false;
   // ผู้วางบิล
   int? _billingCollectorId;
   String? _billingCollectorCode;
@@ -1470,6 +1471,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     _nameThCtrl      = TextEditingController(text: c?.customerNameTh ?? '');
     _nameEnCtrl      = TextEditingController(text: c?.customerNameEn ?? '');
     _taxIdCtrl           = TextEditingController(text: c?.taxId ?? '');
+    _taxBranchCtrl       = TextEditingController(text: c?.taxBranchCode ?? '');
     _oldCustomerCodeCtrl = TextEditingController(text: c?.oldCustomerCode ?? '');
     _creditTermMonthsCtrl = TextEditingController(text: (c?.creditTermMonths ?? 0).toString());
     _creditTermDaysCtrl   = TextEditingController(text: (c?.creditTermDays ?? 30).toString());
@@ -1496,11 +1498,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     _salesTerritoryId       = c?.salesTerritoryId;
     _salesTerritoryCode     = c?.salesTerritoryCode;
     _salesTerritoryNameThai = c?.salesTerritoryNameThai;
-    _salespersonId       = c?.salespersonId;
-    _salespersonCode     = c?.salespersonCode;
-    _salespersonNameThai = c?.salespersonNameThai;
+    _salespersons        = List.from(c?.salespersons ?? const <DocSalesperson>[]);
     _territoryMembers = [];
-    _loadingMembers   = false;
     _billingCollectorId        = c?.billingCollectorId;
     _billingCollectorCode      = c?.billingCollectorCode;
     _billingCollectorNameThai  = c?.billingCollectorNameThai;
@@ -1535,7 +1534,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   void _disposeControllers() {
     for (final c in [
-      _codeCtrl, _nameThCtrl, _nameEnCtrl, _taxIdCtrl, _oldCustomerCodeCtrl,
+      _codeCtrl, _nameThCtrl, _nameEnCtrl, _taxIdCtrl, _taxBranchCtrl, _oldCustomerCodeCtrl,
       _creditTermMonthsCtrl, _creditTermDaysCtrl,
       _creditLimitCtrl, _discountPercentCtrl,
       _remarkCtrl,
@@ -2068,17 +2067,12 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
 
   // ─── เขตการขาย ────────────────────────────────────────────────────────────
   Future<void> _loadTerritoryMembers(int territoryId) async {
-    setState(() {
-      _territoryMembers = [];
-      _loadingMembers   = true;
-    });
+    setState(() => _territoryMembers = []);
     try {
       final rows = await Provider.of<SalesTerritoryService>(context, listen: false)
           .fetchMembers(territoryId);
-      if (mounted) setState(() { _territoryMembers = rows; _loadingMembers = false; });
-    } catch (_) {
-      if (mounted) setState(() => _loadingMembers = false);
-    }
+      if (mounted) setState(() => _territoryMembers = rows);
+    } catch (_) {}
   }
 
   Future<void> _pickSalesTerritory() async {
@@ -2155,10 +2149,6 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
                                   _salesTerritoryId       = t.id;
                                   _salesTerritoryCode     = t.territoryCode;
                                   _salesTerritoryNameThai = t.territoryNameThai;
-                                  // เคลียร์พนักงานขายเมื่อเปลี่ยนเขต
-                                  _salespersonId       = null;
-                                  _salespersonCode     = null;
-                                  _salespersonNameThai = null;
                                 });
                                 Navigator.of(ctx).pop();
                                 if (_salesTerritoryId != null) {
@@ -2188,88 +2178,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       _salesTerritoryId       = null;
       _salesTerritoryCode     = null;
       _salesTerritoryNameThai = null;
-      _salespersonId       = null;
-      _salespersonCode     = null;
-      _salespersonNameThai = null;
       _territoryMembers    = [];
-    });
-  }
-
-  // ─── พนักงานขาย ───────────────────────────────────────────────────────────
-  Future<void> _pickSalesperson() async {
-    if (_salesTerritoryId == null) return;
-    if (_territoryMembers.isEmpty && !_loadingMembers) {
-      await _loadTerritoryMembers(_salesTerritoryId!);
-    }
-    if (!mounted) return;
-
-    final isEnglish = _isEnglish;
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Select Salesperson' : 'เลือกพนักงานขาย',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
-        content: SizedBox(
-          width: 500,
-          height: 400,
-          child: _loadingMembers
-              ? const Center(child: CircularProgressIndicator())
-              : _territoryMembers.isEmpty
-                  ? Center(
-                      child: Text(isEnglish ? 'No salespersons in this territory' : 'ไม่มีพนักงานขายในเขตนี้',
-                          style: const TextStyle(color: Colors.grey)))
-                  : ListView.builder(
-                      itemCount: _territoryMembers.length,
-                      itemBuilder: (_, i) {
-                        final m = _territoryMembers[i];
-                        final mName = isEnglish && (m.salespersonNameEng?.isNotEmpty ?? false)
-                            ? m.salespersonNameEng!
-                            : m.salespersonNameThai;
-                        return ListTile(
-                          leading: Icon(
-                            m.isPrimary ? Icons.star : Icons.star_border,
-                            color: m.isPrimary ? Colors.amber : Colors.grey,
-                            size: 20,
-                          ),
-                          title: Text('${m.salespersonCode} — $mName'),
-                          subtitle: Text(
-                            m.isPrimary
-                                ? (isEnglish ? 'Primary salesperson' : 'พนักงานขายหลัก')
-                                : (isEnglish ? 'Secondary salesperson' : 'พนักงานขายรอง'),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: m.isPrimary
-                                  ? Colors.amber[700]
-                                  : Colors.grey,
-                            ),
-                          ),
-                          enabled: m.isActive,
-                          onTap: () {
-                            setState(() {
-                              _salespersonId       = m.id;
-                              _salespersonCode     = m.salespersonCode;
-                              _salespersonNameThai = m.salespersonNameThai;
-                            });
-                            Navigator.of(ctx).pop();
-                          },
-                        );
-                      },
-                    ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(isEnglish ? 'Close' : 'ปิด')),
-        ],
-      ),
-    );
-  }
-
-  void _clearSalesperson() {
-    setState(() {
-      _salespersonId       = null;
-      _salespersonCode     = null;
-      _salespersonNameThai = null;
     });
   }
 
@@ -2351,6 +2260,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         customerNameEn:
             _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
         taxId: _taxIdCtrl.text.trim().isEmpty ? null : _taxIdCtrl.text.trim(),
+        taxBranchCode: normalizeTaxBranch(_taxBranchCtrl.text),
         oldCustomerCode: _oldCustomerCodeCtrl.text.trim().isEmpty ? null : _oldCustomerCodeCtrl.text.trim(),
         businessTypeId: _businessTypeId,
         customerGroupId: _customerGroupId,
@@ -2366,7 +2276,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         paymentConditions: List.from(_paymentConditions),
         arAccountId: _arAccountId,
         salesTerritoryId: _salesTerritoryId,
-        salespersonId: _salespersonId,
+        salespersonId: _salespersons.where((e) => e.isPrimary).firstOrNull?.salespersonId,
+        salespersons: List.from(_salespersons),
         billingCollectorId: _billingCollectorId,
         collectionCollectorId: _collectionCollectorId,
         priceListId: _priceListId,
@@ -2522,6 +2433,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
               child: _buildField(
                   isEnglish ? 'Tax ID' : 'เลขประจำตัวผู้เสียภาษี', _taxIdCtrl,
                   readOnly: readOnly),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TaxBranchField(
+                  controller: _taxBranchCtrl, isEnglish: isEnglish, readOnly: readOnly),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -3917,76 +3833,17 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
           ),
         ),
 
-        // ── พนักงานขาย ─────────────────────────────────────────────────────
+        // ── พนักงานขาย (หลายคน) — คนในเขตการขายแสดงก่อนในหน้าต่างเลือก ──────
         Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: isEnglish ? 'Salesperson' : 'พนักงานขาย',
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              helperText: _salesTerritoryId == null && !readOnly
-                  ? (isEnglish ? 'Please select a sales territory first' : 'กรุณาเลือกเขตการขายก่อน')
-                  : null,
-              helperStyle:
-                  const TextStyle(fontSize: 11, color: Colors.orange),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _loadingMembers
-                      ? Row(children: [
-                          const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2)),
-                          const SizedBox(width: 8),
-                          Text(isEnglish ? 'Loading...' : 'กำลังโหลด...',
-                              style: const TextStyle(color: Colors.grey)),
-                        ])
-                      : _salespersonId == null
-                          ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                              style: const TextStyle(color: Colors.grey))
-                          : Row(children: [
-                              const Icon(Icons.person_outline,
-                                  color: Colors.blue, size: 16),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  '${_salespersonCode ?? ''} — ${_salespersonNameThai ?? ''}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ]),
-                ),
-                if (!readOnly) ...[
-                  IconButton(
-                    icon: Icon(Icons.search,
-                        color: _salesTerritoryId != null
-                            ? Colors.blue
-                            : Colors.grey),
-                    tooltip: _salesTerritoryId != null
-                        ? (isEnglish ? 'Search salesperson' : 'ค้นหาพนักงานขาย')
-                        : (isEnglish ? 'Select a sales territory first' : 'เลือกเขตการขายก่อน'),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed:
-                        _salesTerritoryId != null ? _pickSalesperson : null,
-                  ),
-                  if (_salespersonId != null)
-                    IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: Colors.red, size: 18),
-                      tooltip: isEnglish ? 'Clear salesperson' : 'ล้างพนักงานขาย',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: _clearSalesperson,
-                    ),
-                ],
-              ],
-            ),
+          padding: const EdgeInsets.only(bottom: 10),
+          child: SalespersonSplitEditor(
+            items: _salespersons,
+            isEnglish: isEnglish,
+            readOnly: readOnly,
+            showPrimary: true,
+            showShares: true,
+            preferredIds: _territoryMembers.map((m) => m.id).whereType<int>().toSet(),
+            onChanged: (list) => setState(() => _salespersons = list),
           ),
         ),
 

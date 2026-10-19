@@ -5,6 +5,7 @@ import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../models/so_quote_transaction.dart';
+import '../../cd/models/cd_doc_salesperson.dart';
 
 class QuoteTransactionService {
   final String baseUrl = AppConfig.apiSo;
@@ -65,9 +66,14 @@ class QuoteTransactionService {
   Future<QuoteTransactionHeader> createTransaction({
     required QuoteTransactionHeader header,
     required List<QuoteTransactionDetail> details,
+    List<DocSalesperson>? salespersons,
   }) async {
     final authHeaders = await authService.getAuthHeader();
-    final body = jsonEncode({'header': header.toJson(), 'details': details.map((e) => e.toJson()).toList()});
+    final body = jsonEncode({
+      'header': header.toJson(),
+      'details': details.map((e) => e.toJson()).toList(),
+      if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
+    });
     final response = await http.post(Uri.parse('$baseUrl/quote_transaction'), headers: authHeaders, body: body);
     if (response.statusCode == 201) {
       return QuoteTransactionHeader.fromJson(json.decode(response.body));
@@ -83,9 +89,14 @@ class QuoteTransactionService {
     required int id,
     required QuoteTransactionHeader header,
     required List<QuoteTransactionDetail> details,
+    List<DocSalesperson>? salespersons,
   }) async {
     final authHeaders = await authService.getAuthHeader();
-    final body = jsonEncode({'header': header.toJson(), 'details': details.map((e) => e.toJson()).toList()});
+    final body = jsonEncode({
+      'header': header.toJson(),
+      'details': details.map((e) => e.toJson()).toList(),
+      if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
+    });
     final response = await http.put(Uri.parse('$baseUrl/quote_transaction/$id'), headers: authHeaders, body: body);
     if (response.statusCode == 200) {
       return QuoteTransactionHeader.fromJson(json.decode(response.body));
