@@ -43,6 +43,7 @@ class ImPriceChangeListWidgetState extends State<ImPriceChangeListWidget> with A
   List<ImPriceChangeHeader> _list = [];
   bool _isLoading = false;
   final _svc = ImPriceChangeService();
+  bool _showDeleted = false; // ใบที่ลบแล้วแสดงเฉพาะเมื่อเลือก
 
   @override
   bool get wantKeepAlive => true;
@@ -62,7 +63,7 @@ class ImPriceChangeListWidgetState extends State<ImPriceChangeListWidget> with A
   Future<void> _fetchList() async {
     setState(() => _isLoading = true);
     try {
-      final rows = await _svc.fetchRows();
+      final rows = await _svc.fetchRows(status: _showDeleted ? 'Deleted' : null);
       if (mounted) setState(() { _list = rows; _isLoading = false; });
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -100,6 +101,13 @@ class ImPriceChangeListWidgetState extends State<ImPriceChangeListWidget> with A
               ),
               onChanged: (v) => setState(() => _searchQuery = v),
             ),
+          ),
+          IconButton(
+            icon: Icon(_showDeleted ? Icons.delete : Icons.delete_outline, color: _showDeleted ? Colors.brown : null),
+            tooltip: _showDeleted
+                ? (isEnglish ? 'Show active transactions' : 'แสดงรายการปกติ')
+                : (isEnglish ? 'Show deleted transactions' : 'แสดงรายการที่ลบแล้ว'),
+            onPressed: () { setState(() => _showDeleted = !_showDeleted); _fetchList(); },
           ),
         ]),
       ),

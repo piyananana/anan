@@ -12,6 +12,8 @@ import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/models/sa_module_document.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../models/im_item_category.dart';
 import '../models/im_price_change.dart';
 import '../services/im_item_category_service.dart';
@@ -143,6 +145,8 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
   int? _currentId;
   String? _changeNo;
   String _status = 'Draft';
+  String? _voidReason;
+  DocActions _actions = const DocActions();
 
   // ประเภทเอกสาร (sa_module_document, sys_doc_type='85') — ล็อกถาวรหลังบันทึกครั้งแรก (_currentId != null) เพราะ
   // เลขที่เอกสารถูกออกจาก config ของ doc_id นี้ไปแล้ว เปลี่ยนภายหลังจะทำให้เลขที่ไม่ตรงกับประเภทที่เลือกจริง
@@ -251,6 +255,8 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
     _currentId = h.id;
     _changeNo = h.changeNo;
     _status = h.status;
+    _voidReason = h.voidReason;
+    _actions = h.actions;
     _docId = h.docId; _docCode = h.docCode; _docNameThai = h.docNameThai; _docNameEng = h.docNameEng;
     _priceListId = h.priceListId; _priceListCode = h.priceListCode; _priceListName = h.priceListName;
     _changeType = h.changeType;
@@ -270,6 +276,7 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
 
   void _clear() {
     _currentId = null; _changeNo = null; _status = 'Draft';
+    _voidReason = null; _actions = const DocActions();
     _docId = null; _docCode = null; _docNameThai = null; _docNameEng = null;
     _priceListId = null; _priceListCode = null; _priceListName = null;
     _changeType = 'REVISE'; _adjustmentMode = 'PERCENT'; _adjustmentDirection = 'INCREASE'; _roundingStep = 0;
@@ -487,6 +494,90 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  // ถอย / ยกเลิก / ลบ — ต้องกรอกเหตุผล (บันทึกในประวัติ)
+  Future<void> _reasonAction({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Color color,
+    required Future<void> Function(ImPriceChangeService svc, int id, String reason) action,
+    bool closeAfter = false,
+  }) async {
+    if (_currentId == null) return;
+    final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish, title: title, message: message, confirmLabel: confirmLabel, confirmColor: color);
+    if (reason == null || !mounted) return;
+    setState(() => _isSaving = true);
+    try {
+      final svc = ImPriceChangeService();
+      await action(svc, _currentId!, reason);
+      widget.onRefreshList();
+      if (closeAfter) {
+        widget.onCancel();
+      } else {
+        final full = await svc.fetchRow(_currentId!);
+        if (mounted) setState(() => _populate(full));
+      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Done' : 'ดำเนินการสำเร็จ')));
+    } catch (e) {
+      _warn(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _reverse() {
+    final isEnglish = _isEnglish;
+    final fromApproved = _status == 'Approved';
+    _reasonAction(
+      title: isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
+      message: fromApproved
+          ? (isEnglish
+              ? 'Reverse this price change to draft? The prices it wrote are removed from the price list and the previous prices are restored.'
+              : 'ถอยธุรกรรมนี้เป็นร่าง? ราคาที่เขียนลงตารางราคาจะถูกลบ และคืนราคาเดิมให้')
+          : (isEnglish
+              ? 'Withdraw this price change back to draft for editing?'
+              : 'ถอนธุรกรรมนี้กลับเป็นร่างเพื่อแก้ไข?'),
+      confirmLabel: isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง',
+      color: Colors.orange[800]!,
+      action: (svc, id, r) => svc.reverseChange(id, r),
+    );
+  }
+
+  void _voidApproved() {
+    final isEnglish = _isEnglish;
+    _reasonAction(
+      title: isEnglish ? 'Void Price Change' : 'ยกเลิกธุรกรรมเปลี่ยนแปลงราคา',
+      message: isEnglish
+          ? 'Void this price change? The prices it wrote are removed from the price list and the previous prices are restored.'
+          : 'ยกเลิกธุรกรรมนี้? ราคาที่เขียนลงตารางราคาจะถูกลบ และคืนราคาเดิมให้',
+      confirmLabel: isEnglish ? 'Void' : 'ยกเลิก',
+      color: Colors.red[700]!,
+      action: (svc, id, r) => svc.voidChange(id, r),
+    );
+  }
+
+  void _deleteDraft() {
+    final isEnglish = _isEnglish;
+    _reasonAction(
+      title: isEnglish ? 'Delete Draft' : 'ลบร่าง',
+      message: isEnglish
+          ? 'Delete this draft? It will be kept as Deleted for audit and cannot be used again.'
+          : 'ลบร่างธุรกรรมนี้? ระบบเก็บไว้ด้วยสถานะ "ลบแล้ว" เพื่อตรวจสอบ และนำกลับมาใช้ไม่ได้',
+      confirmLabel: isEnglish ? 'Delete' : 'ลบ',
+      color: Colors.red[700]!,
+      action: (svc, id, r) => svc.deleteChange(id, r),
+      closeAfter: true,
+    );
+  }
+
+  // ปุ่มที่ทำไม่ได้: ล็อกและแสดงเหตุผลเมื่อชี้เมาส์
+  Widget _lockable(DocBlock? block, Widget Function(VoidCallback? onPressed) builder, VoidCallback action) {
+    final button = builder(block == null && !_isSaving ? action : null);
+    return block == null ? button : Tooltip(message: block.text(_isEnglish), child: button);
   }
 
   // ── UI helpers ───────────────────────────────────────────────────────────
@@ -927,16 +1018,22 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
         ),
       ]);
     }
-    if (['Draft', 'Pending'].contains(_status)) {
+    Widget textAction(DocBlock? block, String label, Color color, VoidCallback onTap) => _lockable(block,
+        (onPressed) => TextButton(onPressed: onPressed, child: Text(label, style: TextStyle(color: onPressed == null ? Colors.black38 : color))),
+        onTap);
+    final canDelete = MenuScope.of(context)?.canDelete ?? true;
+    if (_status == 'Draft' && _currentId != null && canDelete) {
       actionButtons.add(const SizedBox(width: 8));
-      actionButtons.add(TextButton(
-        onPressed: _isSaving || _currentId == null ? null : () async {
-          if (await _confirm(isEnglish ? 'Void' : 'ยกเลิก', isEnglish ? 'Cancel this transaction?' : 'ต้องการยกเลิกธุรกรรมนี้หรือไม่?')) {
-            _doStatusAction((svc, id) => svc.voidChange(id));
-          }
-        },
-        child: Text(isEnglish ? 'Void' : 'ยกเลิก', style: const TextStyle(color: Colors.red)),
-      ));
+      actionButtons.add(textAction(_actions.deleteBlock, isEnglish ? 'Delete' : 'ลบ', Colors.red, _deleteDraft));
+    }
+    // ถอนใบที่รออนุมัติทำได้ทุกคน ส่วนถอย/ยกเลิกใบที่อนุมัติแล้ว (ย้อนราคา) ต้องมีสิทธิ์อนุมัติ
+    if (_currentId != null && (_status == 'Pending' || (_status == 'Approved' && canApprove))) {
+      actionButtons.add(const SizedBox(width: 8));
+      actionButtons.add(textAction(_actions.reverseBlock, isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง', Colors.orange[900]!, _reverse));
+    }
+    if (_currentId != null && _status == 'Approved' && canApprove) {
+      actionButtons.add(const SizedBox(width: 8));
+      actionButtons.add(textAction(_actions.voidBlock, isEnglish ? 'Void' : 'ยกเลิก', Colors.red, _voidApproved));
     }
 
     return Container(
@@ -984,6 +1081,21 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
     }
     return Column(children: [
       _buildHeaderBar(isEnglish),
+      if (_status == 'Void' && (_voidReason ?? '').isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text('${isEnglish ? 'Void reason' : 'เหตุผลการยกเลิก'}: $_voidReason',
+                style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.w600)),
+          ),
+        ),
+      DocReverseHistoryPanel(
+        history: _actions.history,
+        isDeleted: _status == 'Deleted',
+        isEnglish: isEnglish,
+        margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      ),
       if (_isFilterExpanded) Padding(padding: const EdgeInsets.all(10), child: _buildFilterZone(isEnglish)),
       const Divider(height: 1),
       _buildGridToolbar(isEnglish),

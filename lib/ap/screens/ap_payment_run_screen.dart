@@ -19,6 +19,8 @@ import '../../cm/services/cm_payment_method_service.dart';
 import '../../cm/models/cm_checkbook.dart';
 import '../../cm/services/cm_checkbook_service.dart';
 import '../../sa/models/sa_module_document.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../sa/services/sa_module_document_service.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
@@ -51,6 +53,7 @@ Color _statusColor(String s) {
     case 'Rejected':  return Colors.red[700]!;
     case 'Completed': return Colors.blue[700]!;
     case 'Void':      return Colors.grey[600]!;
+    case 'Deleted':   return Colors.brown;
     default:          return Colors.grey;
   }
 }
@@ -312,7 +315,7 @@ class _StatusFilterBar extends StatelessWidget {
   final ValueChanged<String> onChanged;
   const _StatusFilterBar({required this.selected, required this.onChanged});
 
-  static const _statuses = ['All', 'Draft', 'Submitted', 'Approved', 'Completed', 'Void'];
+  static const _statuses = ['All', 'Draft', 'Submitted', 'Approved', 'Completed', 'Void', 'Deleted'];
 
   @override
   Widget build(BuildContext context) {
@@ -556,45 +559,90 @@ class _DetailPanelState extends State<_DetailPanel> {
     }
   }
 
-  Future<void> _void() async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
-    final isEnglish = l.isEnglish;
-    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l.confirmVoid),
-        content: Text(isEnglish
-            ? 'Void document ${widget.run?.runNumber ?? ''}?'
-            : 'ยกเลิกเอกสาร ${widget.run?.runNumber ?? ''}?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.no)),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(isEnglish ? 'Void Document' : 'ยกเลิกเอกสาร',
-                  style: const TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
+  // ถอย / ยกเลิก / ลบ — ต้องกรอกเหตุผล (บันทึกในประวัติ)
+  Future<void> _reasonAction({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Color color,
+    required Future<void> Function(int id, String reason) action,
+    bool closeAfter = false,
+  }) async {
+    final isEnglish = _isEnglish;
+    final reason = await showDocReasonDialog(context,
+        isEnglish: isEnglish, title: title, message: message, confirmLabel: confirmLabel, confirmColor: color);
+    if (reason == null || !mounted) return;
     setState(() => _saving = true);
     try {
-      await widget.svc.voidRun(widget.run!.id!);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish ? 'Document voided successfully' : 'ยกเลิกเอกสารสำเร็จ')));
-        widget.onRefresh();
+      await action(widget.run!.id!, reason);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Done' : 'สำเร็จ')));
+      widget.onRefresh();
+      if (closeAfter) {
+        widget.onCancel();
+      } else {
         final updated = await widget.svc.fetchRow(widget.run!.id!);
         if (mounted) widget.onSaved(updated);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _reverse() {
+    final isEnglish = _isEnglish;
+    final fromCompleted = widget.run?.status == 'Completed';
+    _reasonAction(
+      title: fromCompleted ? (isEnglish ? 'Reverse Payment Sending' : 'ถอยการส่งชำระ') : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+      message: fromCompleted
+          ? (isEnglish
+              ? 'Return this run to Approved? Its payments must already be voided or deleted in AP. You can send it for payment again.'
+              : 'ถอยใบอนุมัติจ่ายนี้กลับเป็นอนุมัติแล้ว? ใบจ่ายชำระที่สร้างไว้ต้องถูกยกเลิกหรือลบในหน้าจอเจ้าหนี้แล้ว ส่งชำระใหม่ได้')
+          : (isEnglish
+              ? 'Reverse this run to draft? Pending approvals are skipped. You can edit it and submit it again.'
+              : 'ถอยใบอนุมัติจ่ายนี้เป็นร่าง? ผู้อนุมัติที่ยังไม่ตัดสินจะถูกข้าม แก้ไขแล้วส่งอนุมัติใหม่ได้'),
+      confirmLabel: fromCompleted ? (isEnglish ? 'Reverse' : 'ถอยการส่งชำระ') : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+      color: Colors.orange[800]!,
+      action: widget.svc.reverseRun,
+    );
+  }
+
+  void _void() {
+    final isEnglish = _isEnglish;
+    _reasonAction(
+      title: isEnglish ? 'Void Payment Run' : 'ยกเลิกใบอนุมัติจ่าย',
+      message: isEnglish
+          ? 'Void payment run ${widget.run?.runNumber ?? ''}? Its invoices will be released.'
+          : 'ยกเลิกใบอนุมัติจ่าย ${widget.run?.runNumber ?? ''}? ใบแจ้งหนี้ในรอบนี้จะถูกปล่อยให้ใช้ได้อีก',
+      confirmLabel: isEnglish ? 'Void Document' : 'ยกเลิกเอกสาร',
+      color: Colors.red[700]!,
+      action: widget.svc.voidRun,
+    );
+  }
+
+  void _delete() {
+    final isEnglish = _isEnglish;
+    _reasonAction(
+      title: isEnglish ? 'Delete Draft' : 'ลบร่าง',
+      message: isEnglish
+          ? 'Delete this draft? It will be kept as Deleted for audit and cannot be used again.'
+          : 'ลบร่างใบอนุมัติจ่ายนี้? ระบบเก็บไว้ด้วยสถานะ "ลบแล้ว" เพื่อตรวจสอบ และนำกลับมาใช้ไม่ได้',
+      confirmLabel: isEnglish ? 'Delete' : 'ลบ',
+      color: Colors.red[700]!,
+      action: widget.svc.deleteRun,
+      closeAfter: true,
+    );
+  }
+
+  // ปุ่มที่ทำไม่ได้: ล็อกและแสดงเหตุผลเมื่อชี้เมาส์
+  Widget _lockable(DocBlock? block, Widget Function(VoidCallback? onPressed) builder, VoidCallback action) {
+    final button = builder(block == null && !_saving ? action : null);
+    return block == null ? button : Tooltip(message: block.text(_isEnglish), child: button);
   }
 
   // ── Remittance Advice PDF ──────────────────────────────────────────────────
@@ -1401,7 +1449,18 @@ class _DetailPanelState extends State<_DetailPanel> {
     _isEnglish = isEnglish;
     final l = AppL10n(isEnglish);
     final status = widget.run?.status ?? 'Draft';
-    final canVoid = widget.run != null && ['Draft', 'Submitted'].contains(status);
+    final actions = widget.run?.actions ?? const DocActions();
+    final canDelete = MenuScope.of(context)?.canDelete ?? true;
+    final canApprove = MenuScope.of(context)?.canApprove ?? true;
+    Widget headerAction(DocBlock? block, IconData icon, String label, Color color, VoidCallback onTap) => Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: _lockable(block, (onPressed) => TextButton.icon(
+                icon: Icon(icon, size: 16),
+                label: Text(label),
+                style: TextButton.styleFrom(foregroundColor: color, disabledForegroundColor: Colors.white54),
+                onPressed: onPressed,
+              ), onTap),
+        );
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       // ── Header bar ────────────────────────────────────────────────────
@@ -1447,16 +1506,16 @@ class _DetailPanelState extends State<_DetailPanel> {
               onPressed: _submit,
             ),
           ],
-          if (!_saving && canVoid) ...[
-            const SizedBox(width: 8),
-            TextButton.icon(
-              icon: const Icon(Icons.block, size: 16),
-              label: Text(isEnglish ? 'Void Document' : 'ยกเลิกเอกสาร'),
-              style: TextButton.styleFrom(foregroundColor: Colors.red[200]),
-              onPressed: _void,
-            ),
-          ],
-          if (!_saving && !_isDraft && !canVoid) ...[
+          if (!_saving && widget.run != null && status == 'Draft' && canDelete)
+            headerAction(actions.deleteBlock, Icons.delete_outline, isEnglish ? 'Delete' : 'ลบ', Colors.red[100]!, _delete),
+          // ถอนการส่งอนุมัติทำได้ทุกคน ส่วนถอยใบที่อนุมัติ/ส่งชำระแล้วต้องมีสิทธิ์อนุมัติ
+          if (!_saving && ['Submitted', 'Approved', 'Completed'].contains(status) && (status == 'Submitted' || canApprove))
+            headerAction(actions.reverseBlock, Icons.undo,
+                status == 'Completed' ? (isEnglish ? 'Reverse Payment' : 'ถอยการส่งชำระ') : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+                Colors.orange[100]!, _reverse),
+          if (!_saving && status == 'Approved' && canDelete)
+            headerAction(actions.voidBlock, Icons.block, isEnglish ? 'Void Document' : 'ยกเลิกเอกสาร', Colors.red[100]!, _void),
+          if (!_saving && !_isDraft) ...[
             if (status == 'Approved' && widget.run!.lines.isNotEmpty) ...[
               ElevatedButton.icon(
                 icon: const Icon(Icons.send_and_archive, size: 16),
@@ -1730,8 +1789,21 @@ class _DetailPanelState extends State<_DetailPanel> {
                 style: TextStyle(color: Colors.grey[600], fontSize: 12)),
           ]),
         ),
+      if (widget.run?.status == 'Void' && (widget.run?.voidReason ?? '').isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+          child: Text('${isEnglish ? 'Void reason' : 'เหตุผลการยกเลิก'}: ${widget.run!.voidReason}',
+              style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.w600)),
+        ),
+      if (widget.run != null)
+        DocReverseHistoryPanel(
+          history: actions.history,
+          isDeleted: status == 'Deleted',
+          isEnglish: isEnglish,
+          margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+        ),
       // ── Approvals panel (shown for non-Draft/non-Void) ───────────────
-      if (widget.run != null && !['Draft', 'Void'].contains(status))
+      if (widget.run != null && !['Draft', 'Void', 'Deleted'].contains(status))
         _ApprovalPanel(
           run: widget.run!,
           svc: widget.svc,

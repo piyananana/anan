@@ -66,9 +66,26 @@ class ApPaymentRunService {
     if (resp.statusCode != 200) throw Exception(_msg(resp.body));
   }
 
-  Future<void> voidRun(int id) async {
+  Future<void> voidRun(int id, String reason) async {
     final headers = await _auth.getAuthHeader();
-    final resp = await http.put(Uri.parse('$_base/ap_payment_run/$id/void'), headers: headers);
+    final resp = await http.put(Uri.parse('$_base/ap_payment_run/$id/void'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
+    if (resp.statusCode != 200) throw Exception(_msg(resp.body));
+  }
+
+  // ถอย: ส่งอนุมัติ/อนุมัติแล้ว → ร่าง หรือ ส่งชำระแล้ว → อนุมัติแล้ว
+  Future<void> reverseRun(int id, String reason) async {
+    final headers = await _auth.getAuthHeader();
+    final resp = await http.put(Uri.parse('$_base/ap_payment_run/$id/reverse'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
+    if (resp.statusCode != 200) throw Exception(_msg(resp.body));
+  }
+
+  // ลบร่าง (เก็บไว้ด้วยสถานะ Deleted)
+  Future<void> deleteRun(int id, String reason) async {
+    final headers = await _auth.getAuthHeader();
+    final resp = await http.delete(Uri.parse('$_base/ap_payment_run/$id'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: jsonEncode({'reason': reason}));
     if (resp.statusCode != 200) throw Exception(_msg(resp.body));
   }
 

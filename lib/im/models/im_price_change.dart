@@ -2,6 +2,7 @@
 // ธุรกรรมเปลี่ยนแปลงราคา — พักรายการปรับราคาจำนวนมากไว้ตรวจสอบก่อนมีผลจริง
 // สถานะ: Draft (แก้ไขได้) -> Pending (ส่งขออนุมัติ) -> Approved (เขียนผลจริง) / กลับ Draft (ไม่อนุมัติ) / Void
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 const List<String> imPriceChangeTypes = ['REVISE', 'PROMOTION'];
 String imPriceChangeTypeLabel(String type, bool isEnglish) {
@@ -24,12 +25,13 @@ String imPriceChangeDirectionLabel(String dir, bool isEnglish) {
   return isEnglish ? 'Increase' : 'ปรับขึ้น';
 }
 
-const List<String> imPriceChangeStatuses = ['Draft', 'Pending', 'Approved', 'Void'];
+const List<String> imPriceChangeStatuses = ['Draft', 'Pending', 'Approved', 'Void', 'Deleted'];
 String imPriceChangeStatusLabel(String status, bool isEnglish) {
   switch (status) {
     case 'Pending':  return isEnglish ? 'Pending Approval' : 'รออนุมัติ';
     case 'Approved': return isEnglish ? 'Approved' : 'อนุมัติแล้ว';
     case 'Void':      return isEnglish ? 'Void' : 'ยกเลิก';
+    case 'Deleted':   return isEnglish ? 'Deleted' : 'ลบแล้ว';
     default:          return isEnglish ? 'Draft' : 'ร่าง';
   }
 }
@@ -178,6 +180,9 @@ class ImPriceChangeHeader {
   final String? remark;
   final DateTime? approvedAt;
   final String? approvedBy;
+  final String? voidReason;
+  // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
+  final DocActions actions;
   final int lineCount;
   final int selectedCount;
   final List<ImPriceChangeDetail> details;
@@ -207,6 +212,8 @@ class ImPriceChangeHeader {
     this.remark,
     this.approvedAt,
     this.approvedBy,
+    this.voidReason,
+    this.actions = const DocActions(),
     this.lineCount = 0,
     this.selectedCount = 0,
     this.details = const [],
@@ -237,6 +244,8 @@ class ImPriceChangeHeader {
         remark: json['remark'],
         approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString())?.toLocal() : null,
         approvedBy: json['approved_by'],
+        voidReason: json['void_reason'],
+        actions: DocActions.fromJson(json),
         lineCount: int.tryParse(json['line_count']?.toString() ?? '') ?? 0,
         selectedCount: int.tryParse(json['selected_count']?.toString() ?? '') ?? 0,
         details: (json['details'] as List<dynamic>? ?? []).map((e) => ImPriceChangeDetail.fromJson(e)).toList(),

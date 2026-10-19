@@ -1,5 +1,6 @@
 // lib/ap/models/ap_payment_run.dart
 import '../../utils/date_utils.dart';
+import '../../sa/models/sa_document_reverse_log.dart';
 
 // ── Approval record ───────────────────────────────────────────────────────────
 class ApPaymentRunApproval {
@@ -45,6 +46,7 @@ const Map<String, String> apPaymentRunStatusLabels = {
   'Rejected':  'ปฏิเสธ',
   'Completed': 'จ่ายแล้ว',
   'Void':      'ยกเลิก',
+  'Deleted':   'ลบแล้ว',
 };
 
 const Map<String, String> apPaymentRunStatusLabelsEn = {
@@ -54,6 +56,7 @@ const Map<String, String> apPaymentRunStatusLabelsEn = {
   'Rejected':  'Rejected',
   'Completed': 'Paid',
   'Void':      'Cancel',
+  'Deleted':   'Deleted',
 };
 
 String apPaymentRunStatusLabel(String s, bool isEnglish) =>
@@ -246,6 +249,9 @@ class ApPaymentRun {
   final String status;
   final List<ApPaymentRunLine> lines;
   final List<ApPaymentRunApproval> approvals;
+  final String? voidReason;
+  // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
+  final DocActions actions;
   final int? glEntryId;
   final String? glDocNo;
   final String? createdBy;
@@ -270,6 +276,8 @@ class ApPaymentRun {
     this.status = 'Draft',
     this.lines = const [],
     this.approvals = const [],
+    this.voidReason,
+    this.actions = const DocActions(),
     this.glEntryId,
     this.glDocNo,
     this.createdBy,
@@ -299,6 +307,8 @@ class ApPaymentRun {
         approvals: (json['approvals'] as List<dynamic>? ?? [])
             .map((e) => ApPaymentRunApproval.fromJson(e as Map<String, dynamic>))
             .toList(),
+        voidReason: json['void_reason'],
+        actions: DocActions.fromJson(json),
         glEntryId: json['gl_entry_id'],
         glDocNo: json['gl_doc_no'],
         createdBy: json['created_by'],

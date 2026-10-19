@@ -139,5 +139,25 @@ class ImPriceChangeService {
   Future<ImPriceChangeHeader> submit(int id) => _putAction(id, 'submit');
   Future<ImPriceChangeHeader> approve(int id) => _putAction(id, 'approve');
   Future<ImPriceChangeHeader> reject(int id) => _putAction(id, 'reject');
-  Future<ImPriceChangeHeader> voidChange(int id) => _putAction(id, 'void');
+
+  // ถอย / ยกเลิก / ลบ — ต้องมีเหตุผล (ยกเลิกได้เฉพาะใบที่อนุมัติแล้ว ระบบย้อนราคาในตารางราคาให้)
+  Future<void> _reasonAction(String method, String path, String reason) async {
+    final headers = {...await authService.getAuthHeader(), 'Content-Type': 'application/json'};
+    final uri = Uri.parse('$baseUrl/im_price_change/$path');
+    final body = jsonEncode({'reason': reason});
+    final response = method == 'DELETE'
+        ? await http.delete(uri, headers: headers, body: body)
+        : await http.put(uri, headers: headers, body: body);
+    if (response.statusCode == 200) return;
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    }
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'ดำเนินการล้มเหลว');
+  }
+
+  Future<void> voidChange(int id, String reason) => _reasonAction('PUT', '$id/void', reason);
+  Future<void> reverseChange(int id, String reason) => _reasonAction('PUT', '$id/reverse', reason);
+  Future<void> deleteChange(int id, String reason) => _reasonAction('DELETE', '$id', reason);
 }
