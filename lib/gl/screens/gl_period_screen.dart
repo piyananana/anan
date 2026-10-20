@@ -16,11 +16,14 @@ import '../widgets/gl_period_detail_widget.dart';
 class PeriodScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
   final VoidCallback? onExit;
+  // เปิดปีบัญชีนี้ในโหมดแก้ไขทันที (เช่น จากกระดิ่งรายการรออนุมัติปิดงวด — ไอคอนอนุมัติแสดงเฉพาะโหมดแก้ไข)
+  final int? initialFiscalYearId;
 
   const PeriodScreen({
     super.key,
     required this.onFieldsChanged,
     this.onExit,
+    this.initialFiscalYearId,
   });
 
   @override
@@ -43,6 +46,16 @@ class _PeriodScreenState extends State<PeriodScreen>
   @override
   void initState() {
     super.initState();
+    final fyId = widget.initialFiscalYearId;
+    if (fyId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final years = await Provider.of<PeriodService>(context, listen: false).fetchHeaderRows();
+          final fy = years.where((y) => y.id == fyId).toList();
+          if (mounted && fy.isNotEmpty) _onEdit(fy.first);
+        } catch (_) {}
+      });
+    }
   }
 
   @override

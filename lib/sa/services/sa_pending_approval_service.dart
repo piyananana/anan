@@ -26,6 +26,8 @@ class PendingApprovalService {
       _fetchDocQueue(AppConfig.apiIm, 'im_price_change', 'ImPriceChangeScreen', 'เปลี่ยนแปลงราคา', 'Price Change', null, 'price_list_name'),
       _fetchDocQueue(AppConfig.apiIm, 'im_stock_count', 'ImStockCountSummaryScreen', 'ผลการตรวจนับ', 'Stock Count', null, 'warehouse_name_th'),
       _fetchDocQueue(AppConfig.apiMo, 'mo_header', 'MoHeaderScreen', 'ใบสั่งผลิต', 'Manufacturing Order', null, 'item_name_th'),
+      // ขอปิดงวด GL — id = ปีบัญชี, เลขที่ = ชื่องวด
+      _fetchDocQueue(AppConfig.apiGl, 'gl_period_close_request', 'PeriodScreen', 'ขอปิดงวดบัญชี', 'Period Close Request', null, 'fiscal_year_name'),
     ]);
     final items = results.expand((x) => x).toList();
     items.sort((a, b) => (b.date ?? DateTime(0)).compareTo(a.date ?? DateTime(0)));

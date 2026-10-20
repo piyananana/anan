@@ -30,6 +30,7 @@ import '../../so/screens/so_transaction_screen.dart';
 import '../../im/screens/im_price_change_screen.dart';
 import '../../im/screens/im_stock_count_summary_screen.dart';
 import '../../mo/screens/mo_header_screen.dart';
+import '../../gl/screens/gl_period_screen.dart';
 import '../../so/screens/so_quote_transaction_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -157,6 +158,9 @@ class HomeScreenState extends State<HomeScreen> {
         break;
       case 'MoHeaderScreen':
         target = MoHeaderScreen(initialDetailId: item.id);
+        break;
+      case 'PeriodScreen':
+        target = PeriodScreen(onFieldsChanged: () {}, initialFiscalYearId: item.id);
         break;
       case 'QuoteTransactionScreen':
         target = QuoteTransactionScreen(initialDetailId: item.id);
@@ -1187,6 +1191,7 @@ class _PendingApprovalsDialog extends StatelessWidget {
       case 'im_price_change': return Icons.price_change_outlined;
       case 'im_stock_count': return Icons.fact_check_outlined;
       case 'mo_header': return Icons.precision_manufacturing_outlined;
+      case 'gl_period_close_request': return Icons.event_busy_outlined;
       default: return Icons.notifications_outlined;
     }
   }
