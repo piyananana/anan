@@ -33,6 +33,10 @@ import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
 import '../../cd/widgets/cd_salesperson_split_editor.dart';
+import '../../config/app_config.dart';
+import '../../sa/models/sa_credit_approval.dart';
+import '../../sa/services/sa_credit_approval_service.dart';
+import '../../sa/widgets/sa_credit_limit_panel.dart';
 
 class ArTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -125,6 +129,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   List<DocReverseLog> _reverseHistory = [];
   // พนักงานขาย (ใบแจ้งหนี้/เพิ่มหนี้/ลดหนี้) — ค่าเริ่มต้นจากลูกค้า แก้ได้ระหว่างเป็นร่าง
   List<DocSalesperson> _salespersons = [];
+  // วงเงินเครดิต: คำขออนุมัติเกินวงเงินของเอกสารนี้ — รออนุมัติ = แก้เอกสารไม่ได้จนกว่าจะถอนคำขอ
+  DocCreditState _credit = const DocCreditState();
+  final _creditService = CreditApprovalService(AppConfig.apiAr, 'ar_transaction');
+  int? _lastSavedId; // id ของเอกสารที่ _save เพิ่งบันทึก (ใช้ตอนบันทึกร่างแล้วขออนุมัติ)
 
   // Detail rows
   List<_DetailRow> _detailRows = [];
@@ -180,6 +188,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   bool get _isInvoice              => _selectedDocType?.sysDocType == arDocTypeInvoice.toString();
   // เอกสารขายที่มีพนักงานขาย (ตั้งหนี้ / เพิ่มหนี้ / ลดหนี้)
   bool get _hasSalespersons        => const ['10', '30', '35', '50', '55'].contains(_selectedDocType?.sysDocType);
+  // ตรวจวงเงินเครดิต (ตั้งหนี้ / เพิ่มหนี้ / ลดหนี้) — ยอดรวม VAT สกุลท้องถิ่น ใบลดหนี้ติดลบ
+  bool get _hasCreditCheck         => _hasSalespersons;
+  double get _creditAmount =>
+      (const ['50', '55'].contains(_selectedDocType?.sysDocType) ? -1 : 1) * (_totalAmountFc * _exchangeRate * 100).roundToDouble() / 100;
 
   bool _headerExpanded  = true;
   bool _detailExpanded  = true;
@@ -305,7 +317,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         _refNoCtrl.text = h.refNo ?? '';
         _descCtrl.text = h.description ?? '';
         _status = h.status;
-        _isReadOnly = widget.viewOnly || h.status != 'Draft';
+        _credit = data.credit;
+        _isReadOnly = widget.viewOnly || h.status != 'Draft' || data.credit.isPending;
         _reverseBlock = data.reverseBlock;
         _reverseBlockRef = data.reverseBlockRef;
         _voidBlock = data.voidBlock;
@@ -472,6 +485,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       _isReadOnly = false;
       _reverseBlock = null; _reverseBlockRef = null; _voidBlock = null; _voidBlockRef = null; _reverseHistory = [];
       _salespersons = [];
+      _credit = const DocCreditState();
 
       // reset selections ที่ไม่ได้ clear ก่อนหน้านี้
       _selectedDocType = null;
@@ -1135,7 +1149,29 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     if (!_isReadOnly) _rebuildGlRows();
   }
 
-  Future<void> _save(String action) async {
+  // Post: ตรวจวงเงินก่อน — เกินและยังไม่ได้รับอนุมัติ ให้เลือกบันทึกร่างแล้วขออนุมัติ
+  Future<void> _onPost() async {
+    if (_hasCreditCheck && _selectedCustomer?.id != null) {
+      final go = await checkCreditBeforePost(
+        context,
+        service: _creditService,
+        customerId: _selectedCustomer!.id!,
+        docId: _transactionId == 0 ? null : _transactionId,
+        amount: _creditAmount,
+        credit: _credit,
+        saveDraft: () async {
+          await _save('Draft', notify: false);
+          return _lastSavedId;
+        },
+        onRequested: widget.onSaveSuccess,
+      );
+      if (!go) return;
+    }
+    await _save('Post');
+  }
+
+  Future<void> _save(String action, {bool notify = true}) async {
+    _lastSavedId = null;
     if (!_formKey.currentState!.validate()) return;
     if (_selectedDocType == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Please select a document type' : 'กรุณาเลือกประเภทเอกสาร')));
@@ -1301,17 +1337,19 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     setState(() => _isLoading = true);
     try {
       if (_transactionId == 0) {
-        await _service.createTransaction(
+        final created = await _service.createTransaction(
           header: header, details: details, applies: applies, payments: payments, action: action,
           salespersons: _hasSalespersons ? _salespersons : null,
         );
+        _lastSavedId = created['id'] as int?;
       } else {
         await _service.updateTransaction(
           id: _transactionId, header: header, details: details, applies: applies, payments: payments, action: action,
           salespersons: _hasSalespersons ? _salespersons : null,
         );
+        _lastSavedId = _transactionId;
       }
-      if (mounted) {
+      if (mounted && notify) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(action == 'Post'
               ? (_isEnglish ? 'Saved and posted successfully' : 'บันทึกและ Post เรียบร้อย')
@@ -2152,6 +2190,18 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               onChanged: (list) => setState(() => _salespersons = list),
             ),
           ],
+          // วงเงินเครดิตของลูกค้า + ขอ/อนุมัติเกินวงเงิน
+          if (_hasCreditCheck && _selectedCustomer?.id != null && (_status == 'Draft' || _credit.status != null))
+            CreditLimitPanel(
+              service: _creditService,
+              customerId: _selectedCustomer!.id,
+              docId: _transactionId == 0 ? null : _transactionId,
+              docNo: _docNo,
+              amount: _creditAmount,
+              credit: _credit,
+              isDraft: _status == 'Draft' && !widget.viewOnly,
+              onChanged: _loadTransactionData,
+            ),
           // แถววันที่ — แสดงเฉพาะประเภทเอกสารตั้งหนี้ (ต้องเลือกลูกค้าก่อน)
           if (_isInvoice) ...[
             const SizedBox(height: 12),
@@ -3386,7 +3436,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         ),
         const SizedBox(width: 8),
         ElevatedButton.icon(
-          onPressed: () => _save('Post'),
+          onPressed: _onPost,
           icon: const Icon(Icons.check_circle_outline, size: 16),
           label: Text(isEnglish ? 'Post Document' : 'Post เอกสาร'),
           style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700], foregroundColor: Colors.white),

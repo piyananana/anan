@@ -21,6 +21,8 @@ import 'sa_user_menu_screen.dart';
 import '../models/sa_pending_approval.dart';
 import '../services/sa_pending_approval_service.dart';
 import '../../ap/screens/ap_payment_run_screen.dart';
+import '../../ar/screens/ar_transaction_screen.dart';
+import '../../im/screens/im_transaction_screen.dart';
 import '../../ap/screens/ap_transaction_screen.dart';
 import '../../po/screens/po_pr_transaction_screen.dart';
 import '../../so/screens/so_quote_transaction_screen.dart';
@@ -144,6 +146,12 @@ class HomeScreenState extends State<HomeScreen> {
         break;
       case 'ApPaymentRunScreen':
         target = ApPaymentRunScreen(initialRunId: item.id);
+        break;
+      case 'ArTransactionScreen':
+        target = ArTransactionScreen(initialDetailId: item.id);
+        break;
+      case 'ImTransactionScreen':
+        target = ImTransactionScreen(initialDetailId: item.id);
         break;
       default:
         target = menu.builder(context);

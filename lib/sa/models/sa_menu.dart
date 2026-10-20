@@ -208,6 +208,8 @@ class Menu {
   final String? approvalDescriptionEn; // ข้อความอธิบายการอนุมัติ (อังกฤษ)
   final String approvalMode; // 'ALL' = ต้องอนุมัติครบทุกคนตามลำดับ, 'ANY' = คนใดคนหนึ่งอนุมัติก็พอ
   final bool usesDocType; // true = เมนูนี้ครอบคลุมหลายประเภทเอกสาร ต้องตั้งผู้อนุมัติแยกต่อประเภทได้
+  // ไม่มีผู้อนุมัติในคิว: 'ALLOW' = ให้ผ่าน (อนุมัติอัตโนมัติ), 'BLOCK' = ไม่ให้ผ่าน (ใช้กับทุกการอนุมัติที่อิงคิวผู้อนุมัติของเมนู)
+  final String noApproverAction;
   final String? docTypeModule; // sys_module ของประเภทเอกสารที่ใช้ (เช่น '11'=AR, '21'=AP, '01'=GL)
 
   List<Menu> children = [];
@@ -463,6 +465,7 @@ class Menu {
     this.approvalDescriptionEn,
     this.approvalMode = 'ALL',
     this.usesDocType = false,
+    this.noApproverAction = 'ALLOW',
     this.docTypeModule,
   });
 
@@ -496,6 +499,7 @@ class Menu {
         approvalDescriptionEn: json['approval_description_en'] as String?,
         approvalMode: json['approval_mode'] as String? ?? 'ALL',
         usesDocType: json['uses_doc_type'] ?? false,
+        noApproverAction: json['no_approver_action'] == 'BLOCK' ? 'BLOCK' : 'ALLOW',
         docTypeModule: json['doc_type_module'] as String?);
   }
 }

@@ -346,6 +346,7 @@ class MenuService {
     String? approvalDescription,
     String? approvalDescriptionEn,
     required bool usesDocType,
+    String noApproverAction = 'ALLOW',
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -356,6 +357,7 @@ class MenuService {
         'approval_description': approvalDescription,
         'approval_description_en': approvalDescriptionEn,
         'uses_doc_type': usesDocType,
+        'no_approver_action': noApproverAction,
       }),
     );
     if (response.statusCode == 200) {

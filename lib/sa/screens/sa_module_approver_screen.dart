@@ -47,6 +47,7 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
   final _descThCtrl = TextEditingController();
   final _descEnCtrl = TextEditingController();
   bool _usesDocType = false;
+  String _noApproverAction = 'ALLOW';
   bool _settingsDirty = false;
   bool _savingSettings = false;
 
@@ -115,6 +116,7 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
       _descThCtrl.text = menu.approvalDescription ?? '';
       _descEnCtrl.text = menu.approvalDescriptionEn ?? '';
       _usesDocType = menu.usesDocType;
+      _noApproverAction = menu.noApproverAction;
       _settingsDirty = false;
       _selectedDocTypeCard = null;
       _docTypeCards = [];
@@ -188,6 +190,7 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
         approvalDescription: _descThCtrl.text.trim().isEmpty ? null : _descThCtrl.text.trim(),
         approvalDescriptionEn: _descEnCtrl.text.trim().isEmpty ? null : _descEnCtrl.text.trim(),
         usesDocType: _usesDocType,
+        noApproverAction: _noApproverAction,
       );
       if (!mounted) return;
       setState(() {
@@ -508,6 +511,38 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
                 _approvalMode = v!;
                 _settingsDirty = true;
               }),
+            ),
+            const SizedBox(height: 12),
+            // 1.1) ถ้าไม่ได้ตั้งผู้อนุมัติ (คิวว่าง) — ใช้กับทุกการอนุมัติของเมนูนี้
+            Text(isEnglish ? 'When no approver is set' : 'ถ้าไม่ได้ตั้งผู้อนุมัติ',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            RadioListTile<String>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(isEnglish ? 'Allow (auto-approve)' : 'ให้ผ่าน (อนุมัติอัตโนมัติ)'),
+              value: 'ALLOW',
+              groupValue: _noApproverAction,
+              onChanged: (v) => setState(() {
+                _noApproverAction = v!;
+                _settingsDirty = true;
+              }),
+            ),
+            RadioListTile<String>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(isEnglish ? 'Do not allow' : 'ไม่ให้ผ่าน'),
+              value: 'BLOCK',
+              groupValue: _noApproverAction,
+              onChanged: (v) => setState(() {
+                _noApproverAction = v!;
+                _settingsDirty = true;
+              }),
+            ),
+            Text(
+              isEnglish
+                  ? 'Applies to every approval of this menu. For credit-limit approval, the approver Limit caps the amount over the credit limit (0 = unlimited).'
+                  : 'ใช้กับทุกการอนุมัติของเมนูนี้ — สำหรับการขออนุมัติเกินวงเงินเครดิต "วงเงิน" ของผู้อนุมัติจำกัดยอดส่วนที่เกินวงเงินที่อนุมัติได้ (0 = ไม่จำกัด)',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
             ),
             const SizedBox(height: 12),
             // 2) ข้อความอธิบายการอนุมัติ ไทย/อังกฤษ

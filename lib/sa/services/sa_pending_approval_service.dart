@@ -19,10 +19,39 @@ class PendingApprovalService {
       _fetchApTransaction(),
       _fetchPrTransaction(),
       _fetchQuoteTransaction(),
+      _fetchCredit(AppConfig.apiAr, 'ar_transaction', 'ar_credit', 'ArTransactionScreen'),
+      _fetchCredit(AppConfig.apiIm, 'im_transaction', 'im_credit', 'ImTransactionScreen'),
     ]);
     final items = results.expand((x) => x).toList();
     items.sort((a, b) => (b.date ?? DateTime(0)).compareTo(a.date ?? DateTime(0)));
     return items;
+  }
+
+  // ขออนุมัติเกินวงเงินเครดิต (AR / IM) — amount = ยอดเอกสาร
+  Future<List<PendingApprovalItem>> _fetchCredit(String base, String path, String module, String targetPath) async {
+    try {
+      final headers = await _auth.getAuthHeader();
+      final resp = await http.get(Uri.parse('$base/$path/credit_my_pending'), headers: headers);
+      if (resp.statusCode != 200) return [];
+      return (jsonDecode(resp.body) as List).map((e) {
+        final m = e as Map<String, dynamic>;
+        final docNo = (m['doc_no'] ?? '').toString();
+        final customer = (m['customer_name_th'] ?? '').toString();
+        return PendingApprovalItem(
+          module: module,
+          id: m['id'],
+          docNo: docNo,
+          date: parseLocalDateNullable(m['doc_date']),
+          titleTh: 'ขออนุมัติเกินวงเงินเครดิต $docNo${customer.isNotEmpty ? ' — $customer' : ''}',
+          titleEn: 'Credit Limit Approval $docNo',
+          submittedBy: m['credit_requested_by'],
+          amount: _toDouble(m['amount']),
+          targetPath: targetPath,
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<List<PendingApprovalItem>> _fetchApPaymentRun() async {

@@ -2,6 +2,7 @@
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
+import '../../sa/models/sa_credit_approval.dart';
 
 // ── Status labels (Draft / Posted / Void) ────────────────────────────────────
 const Map<String, String> imTransactionStatusLabels = {
@@ -532,11 +533,14 @@ class ImTransaction {
   final List<DocReverseLog> reverseHistory;
   // พนักงานขาย + สัดส่วน (เอกสารฝั่งขาย) — คัดลอกไปใบ AR ที่สร้างอัตโนมัติ
   final List<DocSalesperson> salespersons;
+  // คำขออนุมัติเกินวงเงินเครดิต (เอกสารฝั่งขาย)
+  final DocCreditState credit;
 
   const ImTransaction({
     required this.header, this.details = const [],
     this.reverseBlock, this.reverseTo, this.voidBlock, this.deleteBlock, this.reverseHistory = const [],
     this.salespersons = const [],
+    this.credit = const DocCreditState(),
   });
 
   factory ImTransaction.fromJson(Map<String, dynamic> json) => ImTransaction(
@@ -550,5 +554,6 @@ class ImTransaction {
         deleteBlock: ImDocBlock.fromJson(json['delete_block']),
         reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
         salespersons: DocSalesperson.listFromJson(json['salespersons']),
+        credit: DocCreditState.fromJson(json, json['credit_approvals']),
       );
 }

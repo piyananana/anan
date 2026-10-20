@@ -30,6 +30,10 @@ import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
 import '../../cd/widgets/cd_salesperson_split_editor.dart';
+import '../../config/app_config.dart';
+import '../../sa/models/sa_credit_approval.dart';
+import '../../sa/services/sa_credit_approval_service.dart';
+import '../../sa/widgets/sa_credit_limit_panel.dart';
 import '../../ar/services/ar_customer_service.dart';
 
 double _parseNum(String s) => double.tryParse(s.trim()) ?? 0;
@@ -218,6 +222,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   List<DocReverseLog> _reverseHistory = const [];
   // พนักงานขาย (เอกสารฝั่งขาย) — ค่าเริ่มต้นจากลูกค้า แก้ได้ระหว่างร่าง และตอน '32' รอตั้งหนี้
   List<DocSalesperson> _salespersons = const [];
+  // วงเงินเครดิต: คำขออนุมัติเกินวงเงิน — รออนุมัติ = แก้เอกสารไม่ได้จนกว่าจะถอนคำขอ
+  DocCreditState _credit = const DocCreditState();
+  final _creditService = CreditApprovalService(AppConfig.apiIm, 'im_transaction');
   int? _glEntryId;
 
   // รองรับรับสินค้าจากผู้ขายต่างประเทศเป็นสกุลเงินต่างประเทศ (เฉพาะ _isApVendorMode) — มิเรอร์
@@ -233,7 +240,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   ImGlAccountSetup? _docSetup;
   List<GlEntryDetail>? _postedGlDetails;
 
-  bool get _isReadOnly => widget.viewOnly || _status != 'Draft';
+  bool get _isReadOnly => widget.viewOnly || _status != 'Draft' || _credit.isPending;
   bool get _isIssueMode => _selectedSysDocType == '60'; // ISS — เบิกสินค้า
   bool get _isTransferMode => _selectedSysDocType == '70'; // TRF — โอนสินค้า
   bool get _isReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12' || _selectedSysDocType == '13'; // GRN — รับสินค้า (รวมรับฝากขาย '13')
@@ -271,7 +278,15 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // AR/GL) แก้ได้แค่เลขที่อ้างอิง + billed cost/ราคาขาย — ฟิลด์อื่น (จำนวน/สินค้า/คลัง) ยังคง lock ผ่าน _isReadOnly
   // ตามปกติ เพราะรับของ/ส่งของจริงไปแล้ว
   bool get _canEditBilling => !widget.viewOnly &&
-      (_status == 'Draft' || (_isGrDeferredMode && _status == 'Received') || (_isDlnDeferredMode && _status == 'Delivered'));
+      ((_status == 'Draft' && !_credit.isPending) || (_isGrDeferredMode && _status == 'Received') || (_isDlnDeferredMode && _status == 'Delivered'));
+  // ยอดเอกสารสำหรับตรวจวงเงิน: Σ |จำนวน| × ราคาขาย × (1 + VAT) — รับคืน/ลดหนี้ลูกหนี้ติดลบ
+  double get _creditAmount {
+    final sum = _lines.fold<double>(0, (s, l) {
+      final vat = (l.vatType == null || l.vatType == 'NOVAT') ? 0 : l.vatRate;
+      return s + (l.variance.abs() * _parseNum(l.unitPriceCtrl.text) * (1 + vat / 100) * 100).roundToDouble() / 100;
+    });
+    return _isArReturnCnMode ? -sum : sum;
+  }
 
   @override
   void initState() {
@@ -331,6 +346,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _voidBlock = null;
     _deleteBlock = null;
     _reverseHistory = const [];
+    _credit = const DocCreditState();
     _salespersons = const [];
     _glEntryId = null;
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
@@ -409,6 +425,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _voidBlock = tx.voidBlock;
     _deleteBlock = tx.deleteBlock;
     _reverseHistory = tx.reverseHistory;
+    _credit = tx.credit;
     _salespersons = tx.salespersons;
     _glEntryId = h.glEntryId;
     _currency = _currencies.cast<Currency?>().firstWhere(
@@ -1076,7 +1093,28 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     line.dispose();
   }
 
-  Future<void> _save(String action) async {
+  // Post: ตรวจวงเงินก่อน (เอกสารฝั่งขาย) — เกินและยังไม่ได้รับอนุมัติ ให้เลือกบันทึกร่างแล้วขออนุมัติ
+  Future<void> _onPost() async {
+    if (_isArCustomerMode && _customerId != null) {
+      final go = await checkCreditBeforePost(
+        context,
+        service: _creditService,
+        customerId: _customerId!,
+        docId: _id,
+        amount: _creditAmount,
+        credit: _credit,
+        saveDraft: () async {
+          await _save('Draft', notify: false);
+          return _id;
+        },
+        onRequested: widget.onSaveSuccess,
+      );
+      if (!go) return;
+    }
+    await _save('Post');
+  }
+
+  Future<void> _save(String action, {bool notify = true}) async {
     final isEnglish = _isEnglish;
     void warn(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
@@ -1212,7 +1250,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           await _service.postTransaction(_id!);
         }
       }
-      if (mounted) {
+      if (mounted && notify) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
         widget.onSaveSuccess();
@@ -1706,6 +1744,22 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           readOnly: !_canEditBilling,
           onChanged: (list) => setState(() => _salespersons = list),
         ),
+        // วงเงินเครดิตของลูกค้า + ขอ/อนุมัติเกินวงเงิน
+        if (_customerId != null && (_status == 'Draft' || _credit.status != null))
+          CreditLimitPanel(
+            service: _creditService,
+            customerId: _customerId,
+            docId: _id,
+            docNo: _docNo,
+            amount: _creditAmount,
+            credit: _credit,
+            isDraft: _status == 'Draft' && !widget.viewOnly,
+            onChanged: () async {
+              if (_id == null) return;
+              await _loadExisting(_id!);
+              if (mounted) setState(() {});
+            },
+          ),
       ],
       const SizedBox(height: 6),
       Row(children: [
@@ -2362,7 +2416,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           ),
           const SizedBox(width: 8),
           ElevatedButton(
-            onPressed: _isSaving ? null : () => _save('Post'),
+            onPressed: _isSaving ? null : _onPost,
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
             child: Text((_isGrDeferredMode || _isDlnDeferredMode) ? (isEnglish ? 'Post IM' : 'Post IM') : (isEnglish ? 'Post' : 'Post')),
           ),
