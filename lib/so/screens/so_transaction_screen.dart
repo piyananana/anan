@@ -7,7 +7,9 @@ import '../widgets/so_transaction_list_widget.dart';
 import '../widgets/so_transaction_detail_widget.dart';
 
 class SoTransactionScreen extends StatefulWidget {
-  const SoTransactionScreen({super.key});
+  // เปิดตรงไปที่แท็บรายละเอียดของ id นี้ทันที (เช่น จากกระดิ่งรายการรออนุมัติ)
+  final int? initialDetailId;
+  const SoTransactionScreen({super.key, this.initialDetailId});
 
   @override
   State<SoTransactionScreen> createState() => _SoTransactionScreenState();
@@ -28,6 +30,11 @@ class _SoTransactionScreenState extends State<SoTransactionScreen> with SingleTi
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
+    if (widget.initialDetailId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openDetailTab(id: widget.initialDetailId);
+      });
+    }
   }
 
   void _onTabChanged() {

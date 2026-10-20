@@ -25,6 +25,11 @@ import '../../ar/screens/ar_transaction_screen.dart';
 import '../../im/screens/im_transaction_screen.dart';
 import '../../ap/screens/ap_transaction_screen.dart';
 import '../../po/screens/po_pr_transaction_screen.dart';
+import '../../po/screens/po_transaction_screen.dart';
+import '../../so/screens/so_transaction_screen.dart';
+import '../../im/screens/im_price_change_screen.dart';
+import '../../im/screens/im_stock_count_summary_screen.dart';
+import '../../mo/screens/mo_header_screen.dart';
 import '../../so/screens/so_quote_transaction_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -137,6 +142,21 @@ class HomeScreenState extends State<HomeScreen> {
     switch (item.targetPath) {
       case 'PrTransactionScreen':
         target = PrTransactionScreen(initialDetailId: item.id);
+        break;
+      case 'PoTransactionScreen':
+        target = PoTransactionScreen(initialDetailId: item.id);
+        break;
+      case 'SoTransactionScreen':
+        target = SoTransactionScreen(initialDetailId: item.id);
+        break;
+      case 'ImPriceChangeScreen':
+        target = ImPriceChangeScreen(onFieldsChanged: () {}, initialDetailId: item.id);
+        break;
+      case 'ImStockCountSummaryScreen':
+        target = ImStockCountSummaryScreen(initialCountId: item.id);
+        break;
+      case 'MoHeaderScreen':
+        target = MoHeaderScreen(initialDetailId: item.id);
         break;
       case 'QuoteTransactionScreen':
         target = QuoteTransactionScreen(initialDetailId: item.id);
@@ -1162,6 +1182,11 @@ class _PendingApprovalsDialog extends StatelessWidget {
       case 'ap_payment_run': return Icons.payments_outlined;
       case 'ap_transaction': return Icons.receipt_long_outlined;
       case 'pr_transaction': return Icons.assignment_outlined;
+      case 'po_transaction': return Icons.shopping_cart_outlined;
+      case 'so_transaction': return Icons.point_of_sale_outlined;
+      case 'im_price_change': return Icons.price_change_outlined;
+      case 'im_stock_count': return Icons.fact_check_outlined;
+      case 'mo_header': return Icons.precision_manufacturing_outlined;
       default: return Icons.notifications_outlined;
     }
   }

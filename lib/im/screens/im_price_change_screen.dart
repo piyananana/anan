@@ -11,11 +11,14 @@ import '../widgets/im_price_change_detail_widget.dart';
 class ImPriceChangeScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
   final VoidCallback? onExit;
+  // เปิดใบนี้ทันที (เช่น จากกระดิ่งรายการรออนุมัติ)
+  final int? initialDetailId;
 
   const ImPriceChangeScreen({
     super.key,
     required this.onFieldsChanged,
     this.onExit,
+    this.initialDetailId,
   });
 
   @override
@@ -39,6 +42,20 @@ class _ImPriceChangeScreenState extends State<ImPriceChangeScreen> with Automati
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.initialDetailId;
+    if (id != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final full = await _svc.fetchRow(id);
+          if (mounted) _onCallback(full);
+        } catch (_) {}
+      });
+    }
+  }
 
   void _onAdd() => setState(() {
         _mode = Mode.add;

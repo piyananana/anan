@@ -1,5 +1,6 @@
 // lib/im/screens/im_stock_count_summary_screen.dart — ขั้นตอนที่ 6: สรุปผลการตรวจนับ
-// รูปแบบคล้ายการปิดสิ้นปี AR/AP: เลือกเอกสาร -> ตรวจผล (read-only) -> อนุมัติ (canApprove) -> บันทึกปรับยอด (หลังอนุมัติ)
+// รูปแบบคล้ายการปิดสิ้นปี AR/AP: เลือกเอกสาร -> ตรวจผล (read-only) -> ส่งขออนุมัติ (คิวผู้อนุมัติของเมนู) ->
+// อนุมัติตามคิว (แผงขั้นตอนการอนุมัติ) -> บันทึกปรับยอด (หลังอนุมัติ)
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -9,9 +10,12 @@ import '../widgets/im_stock_count_picker_field.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
+import '../../sa/widgets/sa_doc_approval_panel.dart';
 
 class ImStockCountSummaryScreen extends StatefulWidget {
-  const ImStockCountSummaryScreen({super.key});
+  // เปิดใบตรวจนับนี้ทันที (เช่น จากกระดิ่งรายการรออนุมัติ)
+  final int? initialCountId;
+  const ImStockCountSummaryScreen({super.key, this.initialCountId});
 
   @override
   State<ImStockCountSummaryScreen> createState() => _ImStockCountSummaryScreenState();
@@ -30,6 +34,20 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
   ImStockCountHeader? _selectedCount;
   ImStockCount? _selectedFull; // รวมเหตุที่ถอยไม่ได้ (ล็อกปุ่ม)
   ImStockCountCheckResult? _result;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.initialCountId;
+    if (id != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final full = await _service.fetchRow(id);
+          if (mounted) setState(() { _selectedCount = full.header; _selectedFull = full; });
+        } catch (_) {}
+      });
+    }
+  }
 
   Future<void> _selectCount(ImStockCountHeader h) async {
     setState(() { _selectedCount = h; _selectedFull = null; _result = null; });
@@ -68,28 +86,35 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
     }
   }
 
-  Future<void> _approve() async {
+  // ส่งขออนุมัติผลการตรวจนับ — เข้าคิวผู้อนุมัติของเมนู (ไม่มีผู้อนุมัติ: ตามตัวเลือกของเมนู ให้ผ่าน/ไม่ให้ผ่าน)
+  Future<void> _submit() async {
     final isEnglish = _isEnglish;
-    if (_selectedCount == null) return;
+    final menuId = MenuScope.of(context)?.id;
+    if (_selectedCount == null || menuId == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Approve Count Results' : 'อนุมัติผลการตรวจนับ'),
-        content: Text(isEnglish ? 'Approve the results shown above?' : 'ยืนยันอนุมัติผลการตรวจนับตามที่แสดงด้านบนหรือไม่?'),
+        title: Text(isEnglish ? 'Submit Count Results for Approval' : 'ส่งขออนุมัติผลการตรวจนับ'),
+        content: Text(isEnglish
+            ? 'Submit the results shown above for approval? Counts cannot be changed while waiting.'
+            : 'ส่งขออนุมัติผลการตรวจนับตามที่แสดงด้านบน? ระหว่างรออนุมัติจะแก้ยอดนับไม่ได้'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Approve' : 'อนุมัติ')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Submit' : 'ส่งขออนุมัติ')),
         ],
       ),
     );
     if (confirmed != true) return;
     setState(() => _isSaving = true);
     try {
-      await _service.approveCount(_selectedCount!.id);
+      await _service.submitCount(_selectedCount!.id, menuId: menuId);
       await _refreshSelectedCount();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Approved' : 'อนุมัติสำเร็จ')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Submitted for approval' : 'ส่งขออนุมัติสำเร็จ')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Approve failed: $e' : 'อนุมัติล้มเหลว: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red));
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -186,6 +211,7 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
     final canApprove = perm?.canApprove ?? false;
     final isApproved = _selectedCount?.status == 'Approved';
     final isPosted = _selectedCount?.status == 'Posted';
+    final isSubmitted = _selectedCount?.status == 'Submitted';
     final isClosed = _selectedCount?.status == 'Closed';
 
     return Scaffold(
@@ -235,11 +261,11 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
                       ),
                       const SizedBox(width: 8),
-                      if (canApprove)
+                      if (isPosted)
                         ElevatedButton.icon(
-                          onPressed: (_result == null || !isPosted || _isSaving) ? null : _approve,
-                          icon: const Icon(Icons.verified, size: 18),
-                          label: Text(isEnglish ? 'Approve' : 'อนุมัติ'),
+                          onPressed: (_result == null || _isSaving) ? null : _submit,
+                          icon: const Icon(Icons.send, size: 18),
+                          label: Text(isEnglish ? 'Submit for Approval' : 'ส่งขออนุมัติ'),
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white),
                         ),
                       if (isApproved) ...[
@@ -251,7 +277,8 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
                         ),
                       ],
-                      if (canApprove && (isApproved || isClosed)) ...[
+                      // ถอนคำขอ (Submitted) ทำได้ทุกคน ส่วนถอยใบที่อนุมัติ/ปิดแล้วต้องมีสิทธิ์อนุมัติ
+                      if (isSubmitted || canApprove && (isApproved || isClosed)) ...[
                         const SizedBox(width: 8),
                         Builder(builder: (_) {
                           final block = _selectedFull?.reverseBlock;
@@ -273,6 +300,17 @@ class _ImStockCountSummaryScreenState extends State<ImStockCountSummaryScreen> {
                         child: Text(imStockCountStatusLabel(_selectedCount!.status, isEnglish), style: const TextStyle(fontWeight: FontWeight.w600)),
                       ),
                     ],
+                    if ((_selectedFull?.approvals ?? const []).isNotEmpty)
+                      DocApprovalPanel(
+                        docNo: _selectedCount?.countNo ?? '',
+                        approvals: _selectedFull!.approvals,
+                        approvalMode: _selectedFull!.approvalMode,
+                        awaiting: isSubmitted,
+                        // อนุมัติครบ = Approved (บันทึกปรับยอดได้) / ไม่อนุมัติ = กลับเป็น Posted แก้ยอดนับได้
+                        onApprove: (r) => _service.approveCount(_selectedCount!.id, remarks: r),
+                        onReject: (r) => _service.rejectCount(_selectedCount!.id, remarks: r),
+                        onDone: _refreshSelectedCount,
+                      ),
                     if ((_selectedFull?.reverseHistory ?? const []).isNotEmpty)
                       DocReverseHistoryPanel(
                         history: _selectedFull!.reverseHistory,

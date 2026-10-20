@@ -3,6 +3,7 @@
 // (ไม่ใช่ per-line neededByDate ของ PR เพราะวันหมดอายุใบเสนอราคาเป็นค่าเดียวต่อทั้งใบตามธรรมชาติ)
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/models/sa_doc_approval.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
 
 const Map<String, String> quoteTransactionStatusLabelsTh = {
@@ -31,37 +32,6 @@ const Map<String, String> quoteTransactionStatusLabelsEn = {
 
 String quoteTransactionStatusLabel(String s, bool isEnglish) =>
     (isEnglish ? quoteTransactionStatusLabelsEn[s] : quoteTransactionStatusLabelsTh[s]) ?? s;
-
-// มิเรอร์ PrTransactionApproval ทุกประการ
-class QuoteTransactionApproval {
-  final int id;
-  final int headerId;
-  final int approverUserId;
-  final String approverUserName;
-  final int sequenceNo;
-  final String status; // Pending / Approved / Rejected / Skipped
-  final String? remarks;
-
-  const QuoteTransactionApproval({
-    required this.id,
-    required this.headerId,
-    required this.approverUserId,
-    required this.approverUserName,
-    required this.sequenceNo,
-    required this.status,
-    this.remarks,
-  });
-
-  factory QuoteTransactionApproval.fromJson(Map<String, dynamic> json) => QuoteTransactionApproval(
-        id: json['id'] ?? 0,
-        headerId: json['header_id'] ?? 0,
-        approverUserId: json['approver_user_id'] ?? 0,
-        approverUserName: json['approver_user_name'] ?? '',
-        sequenceNo: json['sequence_no'] ?? 1,
-        status: json['status'] ?? 'Pending',
-        remarks: json['remarks'],
-      );
-}
 
 class QuoteTransactionHeader {
   final int id;
@@ -104,7 +74,7 @@ class QuoteTransactionHeader {
   final List<QuoteTransactionDetail> details;
   // พนักงานขาย + สัดส่วน (จำนวนเงินจากมูลค่ารวมสกุลท้องถิ่น)
   final List<DocSalesperson> salespersons;
-  final List<QuoteTransactionApproval> approvals;
+  final List<DocApprovalStep> approvals; // คิวผู้อนุมัติที่ตารางกลาง doc_approval
 
   const QuoteTransactionHeader({
     this.id = 0,
@@ -187,7 +157,7 @@ class QuoteTransactionHeader {
       updatedBy: json['updated_by'],
       details: (json['details'] as List<dynamic>? ?? []).map((e) => QuoteTransactionDetail.fromJson(e as Map<String, dynamic>)).toList(),
       salespersons: DocSalesperson.listFromJson(json['salespersons']),
-      approvals: (json['approvals'] as List<dynamic>? ?? []).map((e) => QuoteTransactionApproval.fromJson(e as Map<String, dynamic>)).toList(),
+      approvals: DocApprovalStep.listFromJson(json['approvals']),
     );
   }
 

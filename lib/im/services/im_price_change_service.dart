@@ -122,9 +122,9 @@ class ImPriceChangeService {
     }
   }
 
-  Future<ImPriceChangeHeader> _putAction(int id, String action) async {
-    final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/im_price_change/$id/$action'), headers: headers);
+  Future<ImPriceChangeHeader> _putAction(int id, String action, [Map<String, dynamic> body = const {}]) async {
+    final headers = {...await authService.getAuthHeader(), 'Content-Type': 'application/json'};
+    final response = await http.put(Uri.parse('$baseUrl/im_price_change/$id/$action'), headers: headers, body: json.encode(body));
     if (response.statusCode == 200) {
       return ImPriceChangeHeader.fromJson(json.decode(response.body));
     } else if (response.statusCode == 401 || response.statusCode == 403) {
@@ -136,9 +136,10 @@ class ImPriceChangeService {
     }
   }
 
-  Future<ImPriceChangeHeader> submit(int id) => _putAction(id, 'submit');
-  Future<ImPriceChangeHeader> approve(int id) => _putAction(id, 'approve');
-  Future<ImPriceChangeHeader> reject(int id) => _putAction(id, 'reject');
+  // คิวผู้อนุมัติ: ส่งขออนุมัติ (menu_id = เมนูนี้) / อนุมัติ / ไม่อนุมัติ (กลับเป็นร่าง)
+  Future<ImPriceChangeHeader> submit(int id, {required int menuId}) => _putAction(id, 'submit', {'menu_id': menuId});
+  Future<ImPriceChangeHeader> approve(int id, {String? remarks}) => _putAction(id, 'approve', {'remarks': remarks});
+  Future<ImPriceChangeHeader> reject(int id, {String? remarks}) => _putAction(id, 'reject', {'remarks': remarks});
 
   // ถอย / ยกเลิก / ลบ — ต้องมีเหตุผล (ยกเลิกได้เฉพาะใบที่อนุมัติแล้ว ระบบย้อนราคาในตารางราคาให้)
   Future<void> _reasonAction(String method, String path, String reason) async {

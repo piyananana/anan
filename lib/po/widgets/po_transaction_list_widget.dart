@@ -131,6 +131,8 @@ class _PoTransactionListWidgetState extends State<PoTransactionListWidget> with 
   Color _statusColor(String status) {
     switch (status) {
       case 'Draft': return Colors.orange;
+      case 'Submitted': return Colors.amber;
+      case 'Rejected': return Colors.deepOrange;
       case 'Approved': return Colors.blue;
       case 'PartiallyReceived': return Colors.teal;
       case 'FullyReceived': return Colors.green;
@@ -200,7 +202,7 @@ class _PoTransactionListWidgetState extends State<PoTransactionListWidget> with 
               decoration: InputDecoration(labelText: isEnglish ? 'Status' : 'สถานะ', isDense: true, border: const OutlineInputBorder()),
               items: [
                 DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
-                ...['Draft', 'Approved', 'PartiallyReceived', 'FullyReceived', 'Closed', 'Void', 'Deleted']
+                ...['Draft', 'Submitted', 'Rejected', 'Approved', 'PartiallyReceived', 'FullyReceived', 'Closed', 'Void', 'Deleted']
                     .map((s) => DropdownMenuItem(value: s, child: Text(poTransactionStatusLabel(s, isEnglish)))),
               ],
               onChanged: (v) {
@@ -296,7 +298,7 @@ class _PoTransactionListWidgetState extends State<PoTransactionListWidget> with 
               DataColumn(label: Text(isEnglish ? 'Actions' : 'จัดการ', style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
             rows: _filteredRows.map((row) {
-              final isDraft = row.status == 'Draft';
+              final isDraft = row.status == 'Draft' || row.status == 'Rejected'; // Rejected แก้ไขแล้วส่งใหม่ได้
               return DataRow(cells: [
                 DataCell(Text(row.docNo, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                     onTap: () => isDraft ? widget.onEditPressed(row.id) : widget.onViewPressed(row.id)),

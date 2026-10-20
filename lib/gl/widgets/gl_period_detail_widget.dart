@@ -8,6 +8,7 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../models/gl_period.dart';
+import '../../sa/models/sa_doc_approval.dart';
 import '../services/gl_period_service.dart';
 
 class PeriodDetailWidget extends StatefulWidget {
@@ -838,15 +839,12 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     List<Widget> actionIcons = [];
     if (widget.mode != Mode.view) {
       if (module == 'GL' && status == 'PENDING_CLOSE') {
-        // งวด GL ที่รออนุมัติ — ผู้อนุมัติหลายคนแบบมีลำดับ (เหมือน AP Payment Run)
+        // งวด GL ที่รออนุมัติ — คิวผู้อนุมัติของเมนู (ตามลำดับ / คนใดคนหนึ่ง) ที่ตารางกลาง doc_approval
         final myPending = period.closeApprovals
             .where((a) => a.approverUserId == currentUserId && a.status == 'Pending')
             .toList();
-        final blockedByPrev = myPending.isNotEmpty &&
-            period.closeApprovals.any((a) =>
-                a.sequenceNo < myPending.first.sequenceNo && a.status == 'Pending');
         final canReject = widget.canApprove && myPending.isNotEmpty;
-        final canAcceptNow = canReject && !blockedByPrev;
+        final canAcceptNow = canReject && isMyApprovalTurn(period.closeApprovals, currentUserId, period.closeApprovalMode);
         final isRequester = period.closeRequestedBy != null &&
             currentUserId == period.closeRequestedBy;
         if (canAcceptNow) {

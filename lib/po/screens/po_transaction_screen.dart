@@ -7,7 +7,9 @@ import '../widgets/po_transaction_list_widget.dart';
 import '../widgets/po_transaction_detail_widget.dart';
 
 class PoTransactionScreen extends StatefulWidget {
-  const PoTransactionScreen({super.key});
+  // เปิดตรงไปที่แท็บรายละเอียดของ id นี้ทันที (เช่น จากกระดิ่งรายการรออนุมัติ)
+  final int? initialDetailId;
+  const PoTransactionScreen({super.key, this.initialDetailId});
 
   @override
   State<PoTransactionScreen> createState() => _PoTransactionScreenState();
@@ -28,6 +30,11 @@ class _PoTransactionScreenState extends State<PoTransactionScreen> with SingleTi
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
+    if (widget.initialDetailId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openDetailTab(id: widget.initialDetailId);
+      });
+    }
   }
 
   void _onTabChanged() {

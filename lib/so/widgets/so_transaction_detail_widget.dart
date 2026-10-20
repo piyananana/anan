@@ -25,6 +25,8 @@ import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../sa/widgets/sa_attachment_widget.dart';
+import '../../sa/models/sa_doc_approval.dart';
+import '../../sa/widgets/sa_doc_approval_panel.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
 import '../../cd/widgets/cd_salesperson_split_editor.dart';
 import '../../ar/services/ar_customer_service.dart';
@@ -97,6 +99,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   String _status = 'Draft';
   String? _voidReason;
   DocActions _actions = const DocActions();
+  String? _approvalMode;
+  List<DocApprovalStep> _approvals = const [];
   int? _refQuoteId; // ใบเสนอราคา (Quote) ต้นทาง ถ้าเพิ่มรายการมาจาก _pickQuoteLines()
   String? _refQuoteDocNoLabel;
 
@@ -114,7 +118,9 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
 
   List<_LineForm> _lines = [];
 
-  bool get _isReadOnly => widget.viewOnly || _status != 'Draft';
+  // Rejected แก้ไขแล้วส่งอนุมัติใหม่ได้เหมือน Draft
+  bool get _isEditable => ['Draft', 'Rejected'].contains(_status);
+  bool get _isReadOnly => widget.viewOnly || !_isEditable;
   // พนักงานขาย — ค่าเริ่มต้นจากลูกค้า หรือจากใบเสนอราคาที่ดึงรายการมา
   List<DocSalesperson> _salespersons = const [];
 
@@ -225,6 +231,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _status = h.status;
         _voidReason = h.voidReason;
         _actions = h.actions;
+        _approvalMode = h.approvalMode;
+        _approvals = h.approvals;
         _salespersons = h.salespersons;
         _refQuoteId = h.refQuoteId;
         _refQuoteDocNoLabel = h.refQuoteDocNo;
@@ -568,8 +576,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
               ? 'Reopen this SO? Its status will be recalculated from the deliveries that reference it.'
               : 'ถอยการปิดใบสั่งขายนี้? สถานะจะคำนวณใหม่จากใบส่งสินค้าที่อ้างอิง')
           : (isEnglish
-              ? 'Reverse this SO to draft? You can edit it and approve it again with the same number.'
-              : 'ถอยใบสั่งขายนี้เป็นร่าง? แก้ไขแล้วอนุมัติใหม่ได้ด้วยเลขที่เดิม'),
+              ? 'Reverse this SO to draft? Pending approvals are skipped. You can edit it and submit it again with the same number.'
+              : 'ถอยใบสั่งขายนี้เป็นร่าง? ผู้อนุมัติที่ยังไม่ตัดสินจะถูกข้าม แก้ไขแล้วส่งอนุมัติใหม่ได้ด้วยเลขที่เดิม'),
       confirmLabel: fromClosed ? (isEnglish ? 'Reopen' : 'ถอยการปิด') : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
       color: Colors.orange[800]!,
       action: (r) => _service.reverseTransaction(_id!, r),
@@ -877,23 +885,24 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
             ),
             const SizedBox(width: 8),
           ],
-          if (_status == 'Draft' && !widget.viewOnly)
+          if (_isEditable && !widget.viewOnly)
             ElevatedButton.icon(
               onPressed: _isSaving ? null : _save,
               icon: const Icon(Icons.save, size: 18),
               label: Text(isEnglish ? 'Save' : 'บันทึก'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[800], foregroundColor: Colors.white),
             ),
-          if (_status == 'Draft' && _id != null && canApprove && !widget.viewOnly) ...[
+          // ส่งอนุมัติ — เข้าคิวผู้อนุมัติของเมนู (ไม่มีผู้อนุมัติ: ตามตัวเลือกของเมนู ให้ผ่าน/ไม่ให้ผ่าน)
+          if (_isEditable && _id != null && !widget.viewOnly && perm?.id != null) ...[
             const SizedBox(width: 8),
             ElevatedButton.icon(
               onPressed: _isSaving ? null : () => _confirmAction(
-                  'ยืนยันอนุมัติใบสั่งขาย', 'Approve Sale Order',
-                  'อนุมัติใบสั่งขายนี้? หลังอนุมัติแล้วใบส่งสินค้า (DLN) จะสามารถอ้างอิงได้ และจะแก้ไขรายการไม่ได้อีก',
-                  'Approve this SO? Once approved, DLN can reference it and lines can no longer be edited.',
-                  () => _service.approveTransaction(_id!)),
-              icon: const Icon(Icons.check_circle_outline, size: 18),
-              label: Text(isEnglish ? 'Approve' : 'อนุมัติ'),
+                  'ยืนยันการส่งอนุมัติ', 'Confirm Submit for Approval',
+                  'ส่งอนุมัติใบสั่งขาย $_docNo? ระหว่างรออนุมัติจะแก้ไขไม่ได้ หลังอนุมัติแล้วใบส่งสินค้า (DLN) จึงอ้างอิงได้',
+                  'Submit SO $_docNo for approval? It cannot be edited while waiting. DLN can reference it once approved.',
+                  () => _service.submitTransaction(_id!, menuId: perm!.id)),
+              icon: const Icon(Icons.send, size: 18),
+              label: Text(isEnglish ? 'Submit' : 'ส่งอนุมัติ'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white),
             ),
           ],
@@ -910,7 +919,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
             ),
           ],
-          if (_status == 'Draft' && _id != null && widget.canDelete && !widget.viewOnly) ...[
+          if (_isEditable && _id != null && widget.canDelete && !widget.viewOnly) ...[
             const SizedBox(width: 8),
             _lockable(_actions.deleteBlock, (onPressed) => OutlinedButton.icon(
                   onPressed: onPressed,
@@ -919,7 +928,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                   style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
                 ), _deleteDoc),
           ],
-          if (['Approved', 'PartiallyDelivered', 'FullyDelivered', 'Closed'].contains(_status) && _id != null && canApprove && !widget.viewOnly) ...[
+          if ((['Approved', 'PartiallyDelivered', 'FullyDelivered', 'Closed'].contains(_status) && canApprove ||
+                  _status == 'Submitted') && _id != null && !widget.viewOnly) ...[
             const SizedBox(width: 8),
             _lockable(_actions.reverseBlock, (onPressed) => OutlinedButton.icon(
                   onPressed: onPressed,
@@ -940,6 +950,16 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                 ), _voidDoc),
           ],
         ]),
+        if (_id != null && _approvals.isNotEmpty)
+          DocApprovalPanel(
+            docNo: _docNo,
+            approvals: _approvals,
+            approvalMode: _approvalMode,
+            awaiting: _status == 'Submitted' && !widget.viewOnly,
+            onApprove: (r) => _service.approveTransaction(_id!, remarks: r),
+            onReject: (r) => _service.rejectTransaction(_id!, remarks: r),
+            onDone: _load,
+          ),
         if (_status == 'Void' && (_voidReason ?? '').isNotEmpty) ...[
           const SizedBox(height: 12),
           Text('${isEnglish ? 'Void reason' : 'เหตุผลการยกเลิก'}: $_voidReason',

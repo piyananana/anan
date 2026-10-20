@@ -22,13 +22,13 @@ import '../../sa/models/sa_module_document.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../sa/services/sa_module_document_service.dart';
-import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/file_download.dart';
+import '../../sa/widgets/sa_doc_approval_panel.dart';
 
 // ── Column widths ────────────────────────────────────────────────────────────
 const double _wVendor   = 130.0;
@@ -1804,14 +1804,22 @@ class _DetailPanelState extends State<_DetailPanel> {
         ),
       // ── Approvals panel (shown for non-Draft/non-Void) ───────────────
       if (widget.run != null && !['Draft', 'Void', 'Deleted'].contains(status))
-        _ApprovalPanel(
-          run: widget.run!,
-          svc: widget.svc,
-          onActionDone: () async {
-            widget.onRefresh();
-            final updated = await widget.svc.fetchRow(widget.run!.id!);
-            if (mounted) widget.onSaved(updated);
-          },
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          // แผงอนุมัติกลาง (ตามลำดับ / คนใดคนหนึ่ง) — ปฏิเสธ = รอบจ่ายกลับเป็นร่าง
+          child: DocApprovalPanel(
+            docNo: widget.run!.runNumber ?? '',
+            approvals: widget.run!.approvals,
+            approvalMode: widget.run!.approvalMode,
+            awaiting: status == 'Submitted',
+            onApprove: (r) => widget.svc.approveRun(widget.run!.id!, remarks: r),
+            onReject: (r) => widget.svc.rejectRun(widget.run!.id!, remarks: r),
+            onDone: () async {
+              widget.onRefresh();
+              final updated = await widget.svc.fetchRow(widget.run!.id!);
+              if (mounted) widget.onSaved(updated);
+            },
+          ),
         ),
       // ── Lines table ───────────────────────────────────────────────────
       Expanded(
@@ -2314,234 +2322,6 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 12, color: color)),
       );
-}
-
-// ── Approval panel ───────────────────────────────────────────────────────────
-class _ApprovalPanel extends StatefulWidget {
-  final ApPaymentRun run;
-  final ApPaymentRunService svc;
-  final VoidCallback onActionDone;
-
-  const _ApprovalPanel({
-    required this.run,
-    required this.svc,
-    required this.onActionDone,
-  });
-
-  @override
-  State<_ApprovalPanel> createState() => _ApprovalPanelState();
-}
-
-class _ApprovalPanelState extends State<_ApprovalPanel> {
-  bool _acting = false;
-
-  Color _approvalColor(String s) {
-    switch (s) {
-      case 'Approved': return Colors.green[700]!;
-      case 'Rejected': return Colors.red[700]!;
-      default:         return Colors.orange[700]!;
-    }
-  }
-
-  String _approvalLabel(String s, bool isEnglish) {
-    switch (s) {
-      case 'Approved': return isEnglish ? 'Approved' : 'อนุมัติแล้ว';
-      case 'Rejected': return isEnglish ? 'Rejected' : 'ปฏิเสธ';
-      default:         return isEnglish ? 'Pending' : 'รออนุมัติ';
-    }
-  }
-
-  Future<void> _doAction(bool isApprove) async {
-    final l = AppL10n(context.read<LanguageProvider>().isEnglish);
-    final isEnglish = l.isEnglish;
-    if (!(MenuScope.of(context)?.canApprove ?? true)) return;
-    final currentUserId =
-        Provider.of<AuthService>(context, listen: false).currentUser?.id;
-    final approvals = widget.run.approvals;
-
-    // Check if current user has a pending record that's actionable (all prev approved)
-    final myRecord = approvals
-        .where((a) => a.approverUserId == currentUserId && a.status == 'Pending')
-        .toList();
-    if (myRecord.isEmpty) return;
-
-    final mySeq = myRecord.first.sequenceNo;
-    final blockedByPrev = approvals
-        .any((a) => a.sequenceNo < mySeq && a.status == 'Pending');
-    if (blockedByPrev) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(isEnglish
-              ? 'Still waiting for approval from a previous sequence'
-              : 'ยังรอการอนุมัติจากลำดับก่อนหน้า')));
-      return;
-    }
-
-    // Show remarks dialog
-    final remarksCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isApprove
-            ? (isEnglish ? 'Confirm Approval' : 'ยืนยันการอนุมัติ')
-            : (isEnglish ? 'Confirm Rejection' : 'ยืนยันการปฏิเสธ')),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(isApprove
-              ? (isEnglish ? 'Approve ${widget.run.runNumber}?' : 'อนุมัติ ${widget.run.runNumber}?')
-              : (isEnglish ? 'Reject ${widget.run.runNumber}?' : 'ปฏิเสธ ${widget.run.runNumber}?')),
-          const SizedBox(height: 12),
-          TextField(
-            controller: remarksCtrl,
-            decoration: InputDecoration(
-                labelText: isEnglish ? 'Remarks (optional)' : 'หมายเหตุ (ถ้ามี)',
-                border: const OutlineInputBorder(),
-                isDense: true),
-            maxLines: 2,
-          ),
-        ]),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(l.cancel)),
-          ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      isApprove ? Colors.green[700] : Colors.red[700],
-                  foregroundColor: Colors.white),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(isApprove ? l.approve : (isEnglish ? 'Reject' : 'ปฏิเสธ'))),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _acting = true);
-    try {
-      final remarks =
-          remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim();
-      if (isApprove) {
-        await widget.svc.approveRun(widget.run.id!, remarks: remarks);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(isEnglish ? 'Approved successfully' : 'อนุมัติสำเร็จ')));
-        }
-      } else {
-        await widget.svc.rejectRun(widget.run.id!, remarks: remarks);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(isEnglish ? 'Rejected successfully' : 'ปฏิเสธสำเร็จ')));
-        }
-      }
-      widget.onActionDone();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$e'), backgroundColor: Colors.red));
-      }
-    } finally {
-      if (mounted) setState(() => _acting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    final currentUserId =
-        Provider.of<AuthService>(context, listen: false).currentUser?.id;
-    final approvals = widget.run.approvals;
-    if (approvals.isEmpty) return const SizedBox.shrink();
-
-    final myPending = approvals.firstWhere(
-        (a) => a.approverUserId == currentUserId && a.status == 'Pending',
-        orElse: () => const ApPaymentRunApproval(
-            id: -1, runId: -1, approverUserId: -1,
-            approverUserName: '', sequenceNo: 0, status: ''));
-    final canAct = myPending.id != -1 &&
-        !approvals.any(
-            (a) => a.sequenceNo < myPending.sequenceNo && a.status == 'Pending');
-
-    return Container(
-      color: Colors.orange.shade50,
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(Icons.approval_outlined, size: 16, color: Colors.orange[800]),
-          const SizedBox(width: 6),
-          Text(isEnglish ? 'Approval Steps' : 'ขั้นตอนการอนุมัติ',
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: Colors.orange[800])),
-          const Spacer(),
-          if (_acting)
-            const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2)),
-          if (!_acting && canAct) ...[
-            ElevatedButton.icon(
-              icon: const Icon(Icons.check_circle_outline, size: 14),
-              label: Text(isEnglish ? 'Approve' : 'อนุมัติ', style: const TextStyle(fontSize: 12)),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[600],
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              onPressed: () => _doAction(true),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.cancel_outlined, size: 14),
-              label: Text(isEnglish ? 'Reject' : 'ปฏิเสธ', style: const TextStyle(fontSize: 12)),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red[600],
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              onPressed: () => _doAction(false),
-            ),
-          ],
-        ]),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 12,
-          runSpacing: 4,
-          children: approvals.map((a) {
-            return Row(mainAxisSize: MainAxisSize.min, children: [
-              Text('${a.sequenceNo}. ${a.approverUserName}',
-                  style: const TextStyle(fontSize: 11)),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                    color: _approvalColor(a.status).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: _approvalColor(a.status).withOpacity(0.6))),
-                child: Text(_approvalLabel(a.status, isEnglish),
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: _approvalColor(a.status),
-                        fontWeight: FontWeight.w600)),
-              ),
-              if (a.approvedAt != null) ...[
-                const SizedBox(width: 4),
-                Text(_dateFmt.format(a.approvedAt!),
-                    style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-              ],
-              if (a.remarks != null && a.remarks!.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                Text('(${a.remarks!})',
-                    style:
-                        TextStyle(fontSize: 10, color: Colors.grey[600])),
-              ],
-            ]);
-          }).toList(),
-        ),
-      ]),
-    );
-  }
 }
 
 // ── Small date button ─────────────────────────────────────────────────────────

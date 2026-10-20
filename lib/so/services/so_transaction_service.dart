@@ -108,15 +108,26 @@ class SoTransactionService {
     throw Exception(err['message'] ?? 'แก้ไขใบสั่งขายล้มเหลว');
   }
 
-  Future<SoTransactionHeader> approveTransaction(int id) async {
+  // คิวผู้อนุมัติ: ส่งอนุมัติ (menu_id = เมนูนี้) / อนุมัติ / ปฏิเสธ
+  Future<SoTransactionHeader> _approvalPut(int id, String action, Map<String, dynamic> body, String failMsg) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/so_transaction/$id/approve'), headers: headers);
+    final response = await http.put(Uri.parse('$baseUrl/so_transaction/$id/$action'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: json.encode(body));
     if (response.statusCode == 200) {
       return SoTransactionHeader.fromJson(json.decode(response.body));
     }
     final err = json.decode(response.body);
-    throw Exception(err['message'] ?? 'อนุมัติล้มเหลว');
+    throw Exception(err['message'] ?? failMsg);
   }
+
+  Future<SoTransactionHeader> submitTransaction(int id, {required int menuId}) =>
+      _approvalPut(id, 'submit', {'menu_id': menuId}, 'ส่งอนุมัติล้มเหลว');
+
+  Future<SoTransactionHeader> approveTransaction(int id, {String? remarks}) =>
+      _approvalPut(id, 'approve', {'remarks': remarks}, 'อนุมัติล้มเหลว');
+
+  Future<SoTransactionHeader> rejectTransaction(int id, {String? remarks}) =>
+      _approvalPut(id, 'reject', {'remarks': remarks}, 'ปฏิเสธล้มเหลว');
 
   Future<SoTransactionHeader> closeTransaction(int id) async {
     final headers = await authService.getAuthHeader();

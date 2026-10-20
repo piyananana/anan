@@ -39,8 +39,10 @@ const _prStatusOptions = [
 
 const _poStatusOptions = [
   _StatusOption(0, 'Draft', 'ร่าง', 'Draft'),
-  _StatusOption(1, 'Approved', 'อนุมัติแล้ว', 'Approved'),
-  _StatusOption(2, 'Void', 'ยกเลิก', 'Void'),
+  _StatusOption(1, 'Submitted', 'รออนุมัติ', 'Pending Approval'),
+  _StatusOption(2, 'Approved', 'อนุมัติแล้ว', 'Approved'),
+  _StatusOption(3, 'Rejected', 'ถูกปฏิเสธ', 'Rejected'),
+  _StatusOption(4, 'Void', 'ยกเลิก', 'Void'),
 ];
 
 String _statusLabel(List<_StatusOption> options, String? value, bool isEnglish) {

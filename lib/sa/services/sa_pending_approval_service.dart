@@ -21,10 +21,43 @@ class PendingApprovalService {
       _fetchQuoteTransaction(),
       _fetchCredit(AppConfig.apiAr, 'ar_transaction', 'ar_credit', 'ArTransactionScreen'),
       _fetchCredit(AppConfig.apiIm, 'im_transaction', 'im_credit', 'ImTransactionScreen'),
+      _fetchDocQueue(AppConfig.apiPo, 'po_transaction', 'PoTransactionScreen', 'ใบสั่งซื้อ', 'Purchase Order', 'total_value_lc', 'vendor_name_th'),
+      _fetchDocQueue(AppConfig.apiSo, 'so_transaction', 'SoTransactionScreen', 'ใบสั่งขาย', 'Sales Order', 'total_value_lc', 'customer_name_th'),
+      _fetchDocQueue(AppConfig.apiIm, 'im_price_change', 'ImPriceChangeScreen', 'เปลี่ยนแปลงราคา', 'Price Change', null, 'price_list_name'),
+      _fetchDocQueue(AppConfig.apiIm, 'im_stock_count', 'ImStockCountSummaryScreen', 'ผลการตรวจนับ', 'Stock Count', null, 'warehouse_name_th'),
+      _fetchDocQueue(AppConfig.apiMo, 'mo_header', 'MoHeaderScreen', 'ใบสั่งผลิต', 'Manufacturing Order', null, 'item_name_th'),
     ]);
     final items = results.expand((x) => x).toList();
     items.sort((a, b) => (b.date ?? DateTime(0)).compareTo(a.date ?? DateTime(0)));
     return items;
+  }
+
+  // เอกสารที่ใช้คิวอนุมัติกลาง (utils/docApproval.js) — GET <path>/my_pending
+  Future<List<PendingApprovalItem>> _fetchDocQueue(String base, String path, String targetPath, String nameTh, String nameEn,
+      String? amountKey, String? partyKey) async {
+    try {
+      final headers = await _auth.getAuthHeader();
+      final resp = await http.get(Uri.parse('$base/$path/my_pending'), headers: headers);
+      if (resp.statusCode != 200) return [];
+      return (jsonDecode(resp.body) as List).map((e) {
+        final m = e as Map<String, dynamic>;
+        final docNo = (m['doc_no'] ?? '').toString();
+        final party = partyKey == null ? '' : (m[partyKey] ?? '').toString();
+        return PendingApprovalItem(
+          module: path,
+          id: m['id'],
+          docNo: docNo,
+          date: parseLocalDateNullable(m['doc_date']),
+          titleTh: '$nameTh $docNo${party.isNotEmpty ? ' — $party' : ''}',
+          titleEn: '$nameEn $docNo',
+          submittedBy: m['submitted_by'],
+          amount: amountKey == null ? 0 : _toDouble(m[amountKey]),
+          targetPath: targetPath,
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   // ขออนุมัติเกินวงเงินเครดิต (AR / IM) — amount = ยอดเอกสาร

@@ -99,15 +99,26 @@ class PoTransactionService {
     throw Exception(err['message'] ?? 'แก้ไขใบสั่งซื้อล้มเหลว');
   }
 
-  Future<PoTransactionHeader> approveTransaction(int id) async {
+  // คิวผู้อนุมัติ: ส่งอนุมัติ (menu_id = เมนูนี้) / อนุมัติ / ปฏิเสธ
+  Future<PoTransactionHeader> _approvalPut(int id, String action, Map<String, dynamic> body, String failMsg) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/po_transaction/$id/approve'), headers: headers);
+    final response = await http.put(Uri.parse('$baseUrl/po_transaction/$id/$action'),
+        headers: {...headers, 'Content-Type': 'application/json'}, body: json.encode(body));
     if (response.statusCode == 200) {
       return PoTransactionHeader.fromJson(json.decode(response.body));
     }
     final err = json.decode(response.body);
-    throw Exception(err['message'] ?? 'อนุมัติล้มเหลว');
+    throw Exception(err['message'] ?? failMsg);
   }
+
+  Future<PoTransactionHeader> submitTransaction(int id, {required int menuId}) =>
+      _approvalPut(id, 'submit', {'menu_id': menuId}, 'ส่งอนุมัติล้มเหลว');
+
+  Future<PoTransactionHeader> approveTransaction(int id, {String? remarks}) =>
+      _approvalPut(id, 'approve', {'remarks': remarks}, 'อนุมัติล้มเหลว');
+
+  Future<PoTransactionHeader> rejectTransaction(int id, {String? remarks}) =>
+      _approvalPut(id, 'reject', {'remarks': remarks}, 'ปฏิเสธล้มเหลว');
 
   Future<PoTransactionHeader> closeTransaction(int id) async {
     final headers = await authService.getAuthHeader();

@@ -218,9 +218,10 @@ class ImStockCountService {
     }
   }
 
-  Future<ImStockCount> approveCount(int id) async {
-    final headers = await authService.getAuthHeader();
-    final response = await http.put(Uri.parse('$baseUrl/im_stock_count/$id/approve'), headers: headers);
+  // คิวผู้อนุมัติ: ส่งขออนุมัติ (menu_id = เมนูนี้) / อนุมัติ / ไม่อนุมัติ (กลับเป็น Posted)
+  Future<ImStockCount> _approvalPut(int id, String action, Map<String, dynamic> body, String failMsg) async {
+    final headers = {...await authService.getAuthHeader(), 'Content-Type': 'application/json'};
+    final response = await http.put(Uri.parse('$baseUrl/im_stock_count/$id/$action'), headers: headers, body: json.encode(body));
     if (response.statusCode == 200) {
       return ImStockCount.fromJson(json.decode(response.body));
     } else if (response.statusCode == 401) {
@@ -228,9 +229,16 @@ class ImStockCountService {
       throw Exception('Unauthorized.');
     } else {
       final err = json.decode(response.body);
-      throw Exception(err['message'] ?? 'อนุมัติล้มเหลว');
+      throw Exception(err['message'] ?? failMsg);
     }
   }
+
+  Future<ImStockCount> submitCount(int id, {required int menuId}) =>
+      _approvalPut(id, 'submit', {'menu_id': menuId}, 'ส่งขออนุมัติล้มเหลว');
+  Future<ImStockCount> approveCount(int id, {String? remarks}) =>
+      _approvalPut(id, 'approve', {'remarks': remarks}, 'อนุมัติล้มเหลว');
+  Future<ImStockCount> rejectCount(int id, {String? remarks}) =>
+      _approvalPut(id, 'reject', {'remarks': remarks}, 'ไม่อนุมัติล้มเหลว');
 
   Future<ImStockCount> closeCount(int id) async {
     final headers = await authService.getAuthHeader();

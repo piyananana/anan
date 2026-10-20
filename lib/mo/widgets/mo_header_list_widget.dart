@@ -55,7 +55,7 @@ class _MoHeaderListWidgetState extends State<MoHeaderListWidget> with AutomaticK
   late DateTime _dateFrom;
   late DateTime _dateTo;
 
-  static const _statuses = ['Draft', 'Released', 'InProgress', 'Completed', 'Closed', 'Cancelled', 'Deleted'];
+  static const _statuses = ['Draft', 'Submitted', 'Rejected', 'Released', 'InProgress', 'Completed', 'Closed', 'Cancelled', 'Deleted'];
 
   @override
   void initState() {
@@ -131,6 +131,8 @@ class _MoHeaderListWidgetState extends State<MoHeaderListWidget> with AutomaticK
   Color _statusColor(String status) {
     switch (status) {
       case 'Draft': return Colors.orange;
+      case 'Submitted': return Colors.amber;
+      case 'Rejected': return Colors.deepOrange;
       case 'Released': return Colors.blue;
       case 'InProgress': return Colors.teal;
       case 'Completed': return Colors.green;
@@ -294,7 +296,7 @@ class _MoHeaderListWidgetState extends State<MoHeaderListWidget> with AutomaticK
               DataColumn(label: Text(isEnglish ? 'Actions' : 'จัดการ', style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
             rows: _filteredRows.map((row) {
-              final isDraft = row.status == 'Draft';
+              final isDraft = row.status == 'Draft' || row.status == 'Rejected'; // Rejected แก้ไขแล้วส่งใหม่ได้
               return DataRow(cells: [
                 DataCell(Text(row.docNo, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                     onTap: () => isDraft ? widget.onEditPressed(row.id) : widget.onViewPressed(row.id)),

@@ -11,6 +11,8 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
+import '../../sa/models/sa_doc_approval.dart';
+import '../../sa/widgets/sa_doc_approval_panel.dart';
 import '../../im/models/im_item.dart';
 import '../../im/models/im_uom.dart';
 import '../../im/models/im_warehouse.dart';
@@ -394,6 +396,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
   String _status = 'Draft';
   String? _cancelReason;
   DocActions _actions = const DocActions();
+  String? _approvalMode;
+  List<DocApprovalStep> _approvals = const [];
 
   int? _bomHeaderId; String? _bomVersion; String? _bomParentItemCode; String? _bomParentItemName;
   ImWarehouse? _warehouse;
@@ -413,7 +417,9 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
   List<MoOutputDetail> _outputs = [];
   List<MoOperationDetail> _operations = [];
 
-  bool get _isReadOnly => widget.viewOnly || _status != 'Draft';
+  // Rejected แก้ไขแล้วส่งขออนุมัติใหม่ได้เหมือน Draft
+  bool get _isEditable => ['Draft', 'Rejected'].contains(_status);
+  bool get _isReadOnly => widget.viewOnly || !_isEditable;
 
   @override
   void initState() {
@@ -449,6 +455,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
     _status = 'Draft';
     _cancelReason = null;
     _actions = const DocActions();
+    _approvalMode = null;
+    _approvals = const [];
     _bomHeaderId = null; _bomVersion = null; _bomParentItemCode = null; _bomParentItemName = null;
     _warehouse = null;
     _orderQtyCtrl.text = '1';
@@ -486,6 +494,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         _status = h.status;
         _cancelReason = h.cancelReason;
         _actions = h.actions;
+        _approvalMode = h.approvalMode;
+        _approvals = h.approvals;
         _bomHeaderId = h.bomHeaderId; _bomVersion = h.bomVersion;
         _bomParentItemCode = h.bomParentItemCode;
         _bomParentItemName = isEnglish && (h.bomParentItemNameEn ?? '').isNotEmpty ? h.bomParentItemNameEn : h.bomParentItemNameTh;
@@ -764,8 +774,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
               ? 'Reopen this MO (back to Completed)? The WIP adjustment entry is removed if its period is still open; otherwise a reversing entry is posted today. Issues/receipts can then be reversed again.'
               : 'ถอยการปิดใบสั่งผลิตนี้ (กลับเป็นผลิตครบแล้ว)? รายการปรับ WIP จะถูกลบถ้างวดยังเปิด ไม่เช่นนั้นระบบลงรายการกลับในวันนี้ หลังถอยแล้วถอยเอกสารเบิก/รับได้อีกครั้ง')
           : (isEnglish
-              ? 'Reverse this MO to draft? You can edit it and release it again with the same number.'
-              : 'ถอยใบสั่งผลิตนี้เป็นร่าง? แก้ไขแล้วปล่อยใหม่ได้ด้วยเลขที่เดิม'),
+              ? 'Reverse this MO to draft? Pending approvals are skipped. You can edit it and submit it again with the same number.'
+              : 'ถอยใบสั่งผลิตนี้เป็นร่าง? ผู้อนุมัติที่ยังไม่ตัดสินจะถูกข้าม แก้ไขแล้วส่งขออนุมัติใหม่ได้ด้วยเลขที่เดิม'),
       confirmLabel: fromClosed ? (isEnglish ? 'Reverse Closing' : 'ถอยการปิด') : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
       color: Colors.orange[800]!,
       action: (r) => _service.reverseTransaction(_id!, r),
@@ -1018,27 +1028,28 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           TextButton(onPressed: widget.onCancel, child: Text(isEnglish ? 'Close' : 'ปิด')),
           const SizedBox(width: 8),
-          if (_status == 'Draft' && !widget.viewOnly)
+          if (_isEditable && !widget.viewOnly)
             ElevatedButton.icon(
               onPressed: _isSaving ? null : _save,
               icon: const Icon(Icons.save, size: 18),
               label: Text(isEnglish ? 'Save' : 'บันทึก'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[800], foregroundColor: Colors.white),
             ),
-          if (_status == 'Draft' && _id != null && canApprove && !widget.viewOnly) ...[
+          // ส่งขออนุมัติ — อนุมัติครบแล้วจึงปล่อยใบสั่งผลิต (ไม่มีผู้อนุมัติ: ตามตัวเลือกของเมนู ให้ผ่าน/ไม่ให้ผ่าน)
+          if (_isEditable && _id != null && !widget.viewOnly && perm?.id != null) ...[
             const SizedBox(width: 8),
             ElevatedButton.icon(
               onPressed: _isSaving ? null : () => _confirmAction(
-                  'ยืนยันปล่อยใบสั่งผลิต', 'Release Manufacturing Order',
-                  'ปล่อยใบสั่งผลิตนี้? หลังปล่อยแล้วฝ่ายผลิตจะเริ่มเบิก/รับได้ และจะแก้ไขรายการไม่ได้อีก',
-                  'Release this MO? Once released, production can start issuing/receiving and lines can no longer be edited.',
-                  () => _service.releaseTransaction(_id!)),
-              icon: const Icon(Icons.check_circle_outline, size: 18),
-              label: Text(isEnglish ? 'Release' : 'ปล่อยใบสั่งผลิต'),
+                  'ยืนยันการส่งขออนุมัติ', 'Confirm Submit for Approval',
+                  'ส่งขออนุมัติใบสั่งผลิต $_docNo? ระหว่างรออนุมัติจะแก้ไขไม่ได้ อนุมัติครบแล้วจึงปล่อยให้ฝ่ายผลิตเริ่มเบิก/รับได้',
+                  'Submit MO $_docNo for approval? It cannot be edited while waiting. It is released to production once approved.',
+                  () => _service.submitTransaction(_id!, menuId: perm!.id)),
+              icon: const Icon(Icons.send, size: 18),
+              label: Text(isEnglish ? 'Submit' : 'ส่งขออนุมัติ'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white),
             ),
           ],
-          if (_status == 'Draft' && _id != null && widget.canDelete && !widget.viewOnly) ...[
+          if (_isEditable && _id != null && widget.canDelete && !widget.viewOnly) ...[
             const SizedBox(width: 8),
             _lockable(_actions.deleteBlock, (onPressed) => OutlinedButton.icon(
                   onPressed: onPressed,
@@ -1047,7 +1058,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
                   style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
                 ), _deleteMo),
           ],
-          if (['Released', 'InProgress', 'Completed', 'Closed'].contains(_status) && _id != null && canApprove && !widget.viewOnly) ...[
+          if ((['Released', 'InProgress', 'Completed', 'Closed'].contains(_status) && canApprove ||
+                  _status == 'Submitted') && _id != null && !widget.viewOnly) ...[
             const SizedBox(width: 8),
             _lockable(_actions.reverseBlock, (onPressed) => OutlinedButton.icon(
                   onPressed: onPressed,
@@ -1081,6 +1093,17 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
             ),
           ],
         ]),
+        if (_id != null && _approvals.isNotEmpty)
+          DocApprovalPanel(
+            docNo: _docNo,
+            approvals: _approvals,
+            approvalMode: _approvalMode,
+            awaiting: _status == 'Submitted' && !widget.viewOnly,
+            // อนุมัติครบ = ปล่อยใบสั่งผลิต
+            onApprove: (r) => _service.approveTransaction(_id!, remarks: r),
+            onReject: (r) => _service.rejectTransaction(_id!, remarks: r),
+            onDone: _load,
+          ),
         if (_status == 'Cancelled' && (_cancelReason ?? '').isNotEmpty) ...[
           const SizedBox(height: 12),
           Text('${isEnglish ? 'Cancel reason' : 'เหตุผลการยกเลิก'}: $_cancelReason',

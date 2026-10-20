@@ -1,6 +1,7 @@
 // lib/ap/models/ap_transaction.dart
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/models/sa_doc_approval.dart';
 export '../../sa/models/sa_document_reverse_log.dart';
 
 // AP document types (sys_doc_type in sa_module_document, sys_module=12)
@@ -49,43 +50,6 @@ const Map<String, String> apTransactionStatusLabelsEn = {
 
 String apTransactionStatusLabel(String s, bool isEnglish) =>
     (isEnglish ? apTransactionStatusLabelsEn[s] : apTransactionStatusLabels[s]) ?? s;
-
-// ── Approval record (mirrors ApPaymentRunApproval) ──────────────────────────
-class ApTransactionApproval {
-  final int id;
-  final int transactionId;
-  final int approverUserId;
-  final String approverUserName;
-  final int sequenceNo;
-  final String status; // Pending / Approved / Rejected / Skipped
-  final String? remarks;
-  final DateTime? approvedAt;
-
-  const ApTransactionApproval({
-    required this.id,
-    required this.transactionId,
-    required this.approverUserId,
-    required this.approverUserName,
-    required this.sequenceNo,
-    required this.status,
-    this.remarks,
-    this.approvedAt,
-  });
-
-  factory ApTransactionApproval.fromJson(Map<String, dynamic> json) =>
-      ApTransactionApproval(
-        id: json['id'] as int,
-        transactionId: json['transaction_id'] as int,
-        approverUserId: json['approver_user_id'] as int,
-        approverUserName: json['approver_user_name'] ?? '',
-        sequenceNo: json['sequence_no'] ?? 1,
-        status: json['status'] ?? 'Pending',
-        remarks: json['remarks'],
-        approvedAt: json['approved_at'] != null
-            ? DateTime.parse(json['approved_at']).toLocal()
-            : null,
-      );
-}
 
 // ── Header ─────────────────────────────────────────────────────────────────
 class ApTransactionHeader {
@@ -603,7 +567,9 @@ class ApTransaction {
   final List<ApTransactionApply> applies;
   final List<ApTransactionPayment> payments;
   final List<ApTransactionWht> whts;
-  final List<ApTransactionApproval> approvals;
+  // คิวผู้อนุมัติที่ตารางกลาง doc_approval — ALL / ANY + ขั้นตอนแต่ละลำดับ
+  final String? approvalMode;
+  final List<DocApprovalStep> approvals;
   // การถอยเป็นร่าง: null = ถอยได้ หรือรหัสเหตุผลที่ถอยไม่ได้ (คำนวณที่ backend getApReverseBlock)
   final String? reverseBlock;
   final String? reverseBlockRef; // เลขที่เอกสารที่อ้างอิงอยู่ (ถ้ามี)
@@ -618,6 +584,7 @@ class ApTransaction {
     this.applies = const [],
     this.payments = const [],
     this.whts = const [],
+    this.approvalMode,
     this.approvals = const [],
     this.reverseBlock,
     this.reverseBlockRef,
@@ -636,8 +603,8 @@ class ApTransaction {
             .map((e) => ApTransactionPayment.fromJson(e)).toList(),
         whts: (json['whts'] as List<dynamic>? ?? [])
             .map((e) => ApTransactionWht.fromJson(e)).toList(),
-        approvals: (json['approvals'] as List<dynamic>? ?? [])
-            .map((e) => ApTransactionApproval.fromJson(e)).toList(),
+        approvalMode: json['approval_mode'] as String?,
+        approvals: DocApprovalStep.listFromJson(json['approvals']),
         reverseBlock: json['reverse_block'] as String?,
         reverseBlockRef: json['reverse_block_ref'] as String?,
         voidBlock: json['void_block'] as String?,

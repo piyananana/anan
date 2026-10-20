@@ -1,14 +1,13 @@
 // lib/po/widgets/po_pr_transaction_detail_widget.dart — แก้ไขรายละเอียดใบขอซื้อ (header+lines) + แผงอนุมัติ
 // มิเรอร์โครงสร้าง po_transaction_detail_widget.dart แต่ vendor/warehouse ไม่บังคับ (PR คือ "ขอซื้ออะไร" ไม่ใช่
 // "ซื้อจากใคร/ลงคลังไหน") และเพิ่มขั้นตอน Submit->Approve/Reject ผ่านคิวอนุมัติจริง (sa_module_approver) มิเรอร์
-// _ApprovalPanel ของ ap_payment_run_screen.dart — ดู poPrTransactionController.js สำหรับ workflow เต็ม (ย้ายมา
+// แผงอนุมัติกลาง DocApprovalPanel (คิวที่ตาราง doc_approval) — ดู poPrTransactionController.js สำหรับ workflow เต็ม (ย้ายมา
 // รวมกับโฟลเดอร์ po เดิมอยู่ lib/pr/)
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
@@ -24,6 +23,8 @@ import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../sa/widgets/sa_attachment_widget.dart';
+import '../../sa/models/sa_doc_approval.dart';
+import '../../sa/widgets/sa_doc_approval_panel.dart';
 
 class PrTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -85,7 +86,8 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
   String _status = 'Draft';
   String? _voidReason;
   DocActions _actions = const DocActions();
-  List<PrTransactionApproval> _approvals = [];
+  List<DocApprovalStep> _approvals = [];
+  String? _approvalMode;
 
   // รองรับขอซื้อสินค้าต่างประเทศเป็นสกุลเงินต่างประเทศ — มิเรอร์ po_transaction_detail_widget.dart ทุกประการ
   List<Currency> _currencies = [];
@@ -203,6 +205,7 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
         _voidReason = h.voidReason;
         _actions = h.actions;
         _approvals = h.approvals;
+        _approvalMode = h.approvalMode;
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
@@ -575,7 +578,16 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
         ),
         if (_approvals.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _ApprovalPanel(prId: _id!, docNo: _docNo, approvals: _approvals, service: _service, onActionDone: _load),
+          // แผงอนุมัติกลาง (รองรับทั้งตามลำดับ และคนใดคนหนึ่ง)
+          DocApprovalPanel(
+            docNo: _docNo,
+            approvals: _approvals,
+            approvalMode: _approvalMode,
+            awaiting: _status == 'Submitted' && !widget.viewOnly,
+            onApprove: (r) => _service.approveTransaction(_id!, remarks: r),
+            onReject: (r) => _service.rejectTransaction(_id!, remarks: r),
+            onDone: _load,
+          ),
         ],
         const SizedBox(height: 12),
         Card(
@@ -745,174 +757,6 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
           isDeleted: _status == 'Deleted',
           isEnglish: isEnglish,
           margin: EdgeInsets.zero,
-        ),
-      ]),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Approval panel — มิเรอร์ _ApprovalPanel ใน ap_payment_run_screen.dart
-// ---------------------------------------------------------------------------
-class _ApprovalPanel extends StatefulWidget {
-  final int prId;
-  final String docNo;
-  final List<PrTransactionApproval> approvals;
-  final PrTransactionService service;
-  final VoidCallback onActionDone;
-
-  const _ApprovalPanel({
-    required this.prId,
-    required this.docNo,
-    required this.approvals,
-    required this.service,
-    required this.onActionDone,
-  });
-
-  @override
-  State<_ApprovalPanel> createState() => _ApprovalPanelState();
-}
-
-class _ApprovalPanelState extends State<_ApprovalPanel> {
-  bool _acting = false;
-
-  Color _approvalColor(String s) {
-    switch (s) {
-      case 'Approved': return Colors.green[700]!;
-      case 'Rejected': return Colors.red[700]!;
-      case 'Skipped':  return Colors.grey;
-      default:         return Colors.orange[700]!;
-    }
-  }
-
-  String _approvalLabel(String s, bool isEnglish) {
-    switch (s) {
-      case 'Approved': return isEnglish ? 'Approved' : 'อนุมัติแล้ว';
-      case 'Rejected': return isEnglish ? 'Rejected' : 'ปฏิเสธ';
-      case 'Skipped':  return isEnglish ? 'Skipped' : 'ข้าม';
-      default:         return isEnglish ? 'Pending' : 'รออนุมัติ';
-    }
-  }
-
-  Future<void> _doAction(bool isApprove) async {
-    final isEnglish = context.read<LanguageProvider>().isEnglish;
-    if (!(MenuScope.of(context)?.canApprove ?? true)) return;
-    final currentUserId = Provider.of<AuthService>(context, listen: false).currentUser?.id;
-    final approvals = widget.approvals;
-
-    final myRecord = approvals.where((a) => a.approverUserId == currentUserId && a.status == 'Pending').toList();
-    if (myRecord.isEmpty) return;
-
-    final mySeq = myRecord.first.sequenceNo;
-    final blockedByPrev = approvals.any((a) => a.sequenceNo < mySeq && a.status == 'Pending');
-    if (blockedByPrev) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(isEnglish ? 'Still waiting for approval from a previous sequence' : 'ยังรอการอนุมัติจากลำดับก่อนหน้า')));
-      return;
-    }
-
-    final remarksCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isApprove ? (isEnglish ? 'Confirm Approval' : 'ยืนยันการอนุมัติ') : (isEnglish ? 'Confirm Rejection' : 'ยืนยันการปฏิเสธ')),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(isApprove ? (isEnglish ? 'Approve ${widget.docNo}?' : 'อนุมัติ ${widget.docNo}?') : (isEnglish ? 'Reject ${widget.docNo}?' : 'ปฏิเสธ ${widget.docNo}?')),
-          const SizedBox(height: 12),
-          TextField(
-            controller: remarksCtrl,
-            decoration: InputDecoration(labelText: isEnglish ? 'Remarks (optional)' : 'หมายเหตุ (ถ้ามี)', border: const OutlineInputBorder(), isDense: true),
-            maxLines: 2,
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: isApprove ? Colors.green[700] : Colors.red[700], foregroundColor: Colors.white),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(isApprove ? (isEnglish ? 'Approve' : 'อนุมัติ') : (isEnglish ? 'Reject' : 'ปฏิเสธ'))),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _acting = true);
-    try {
-      final remarks = remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim();
-      if (isApprove) {
-        await widget.service.approveTransaction(widget.prId, remarks: remarks);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Approved successfully' : 'อนุมัติสำเร็จ')));
-      } else {
-        await widget.service.rejectTransaction(widget.prId, remarks: remarks);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Rejected successfully' : 'ปฏิเสธสำเร็จ')));
-      }
-      widget.onActionDone();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
-    } finally {
-      if (mounted) setState(() => _acting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    final currentUserId = Provider.of<AuthService>(context, listen: false).currentUser?.id;
-    final approvals = widget.approvals;
-
-    final myPending = approvals.firstWhere(
-        (a) => a.approverUserId == currentUserId && a.status == 'Pending',
-        orElse: () => const PrTransactionApproval(id: -1, headerId: -1, approverUserId: -1, approverUserName: '', sequenceNo: 0, status: ''));
-    final canAct = myPending.id != -1 && !approvals.any((a) => a.sequenceNo < myPending.sequenceNo && a.status == 'Pending');
-
-    return Container(
-      color: Colors.orange.shade50,
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(Icons.approval_outlined, size: 16, color: Colors.orange[800]),
-          const SizedBox(width: 6),
-          Text(isEnglish ? 'Approval Steps' : 'ขั้นตอนการอนุมัติ',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange[800])),
-          const Spacer(),
-          if (_acting) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-          if (!_acting && canAct) ...[
-            ElevatedButton.icon(
-              icon: const Icon(Icons.check_circle_outline, size: 14),
-              label: Text(isEnglish ? 'Approve' : 'อนุมัติ', style: const TextStyle(fontSize: 12)),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[600], foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              onPressed: () => _doAction(true),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.cancel_outlined, size: 14),
-              label: Text(isEnglish ? 'Reject' : 'ปฏิเสธ', style: const TextStyle(fontSize: 12)),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red[600], foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              onPressed: () => _doAction(false),
-            ),
-          ],
-        ]),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 12,
-          runSpacing: 4,
-          children: approvals.map((a) {
-            return Row(mainAxisSize: MainAxisSize.min, children: [
-              Text('${a.sequenceNo}. ${a.approverUserName}', style: const TextStyle(fontSize: 11)),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(color: _approvalColor(a.status).withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
-                child: Text(_approvalLabel(a.status, isEnglish), style: TextStyle(fontSize: 10, color: _approvalColor(a.status), fontWeight: FontWeight.w600)),
-              ),
-            ]);
-          }).toList(),
         ),
       ]),
     );

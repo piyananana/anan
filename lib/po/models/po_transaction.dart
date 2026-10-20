@@ -1,9 +1,12 @@
 // lib/po/models/po_transaction.dart — ใบสั่งซื้อ (Purchase Order, sys_module='51')
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/models/sa_doc_approval.dart';
 
 const Map<String, String> poTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
+  'Submitted': 'รออนุมัติ',
+  'Rejected': 'ถูกปฏิเสธ',
   'Approved': 'อนุมัติแล้ว',
   'PartiallyReceived': 'รับสินค้าบางส่วน',
   'FullyReceived': 'รับสินค้าครบแล้ว',
@@ -14,6 +17,8 @@ const Map<String, String> poTransactionStatusLabelsTh = {
 
 const Map<String, String> poTransactionStatusLabelsEn = {
   'Draft': 'Draft',
+  'Submitted': 'Submitted',
+  'Rejected': 'Rejected',
   'Approved': 'Approved',
   'PartiallyReceived': 'Partially Received',
   'FullyReceived': 'Fully Received',
@@ -51,6 +56,9 @@ class PoTransactionHeader {
   final DateTime? approvedAt;
   final String? approvedBy;
   final String? voidReason;
+  // คิวผู้อนุมัติ (utils/docApproval.js) — ALL / ANY + ขั้นตอนแต่ละลำดับ
+  final String? approvalMode;
+  final List<DocApprovalStep> approvals;
   // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
   final DocActions actions;
   final int? refPrId; // ใบขอซื้อ (PR) ต้นทาง — สะดวก/แสดงผลเท่านั้น
@@ -92,6 +100,8 @@ class PoTransactionHeader {
     this.approvedAt,
     this.approvedBy,
     this.voidReason,
+    this.approvalMode,
+    this.approvals = const [],
     this.actions = const DocActions(),
     this.refPrId,
     this.refPrDocNo,
@@ -134,6 +144,8 @@ class PoTransactionHeader {
       approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString())?.toLocal() : null,
       approvedBy: json['approved_by'],
       voidReason: json['void_reason'],
+      approvalMode: json['approval_mode'],
+      approvals: DocApprovalStep.listFromJson(json['approvals']),
       actions: DocActions.fromJson(json),
       refPrId: json['ref_pr_id'],
       refPrDocNo: json['ref_pr_doc_no'],

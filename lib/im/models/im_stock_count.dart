@@ -1,14 +1,17 @@
 // lib/im/models/im_stock_count.dart
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/models/sa_doc_approval.dart';
 import 'im_transaction.dart' show ImDocBlock;
 
 // Draft (ตรวจสอบผังก่อนบันทึก) -> Posted (บันทึกใบตรวจนับ — ล็อครายการ, system_qty freeze) ->
-// Approved (ตรวจผล+อนุมัติ) -> Closed (บันทึกปรับยอด — สร้าง+โพสต์ im_transaction AJS อัตโนมัติ)
-// ถอยทีละขั้น (Closed/Approved -> Posted -> Draft) ยกเลิกได้เมื่อบันทึกแล้ว ร่างให้ลบ (Deleted)
+// Submitted (ตรวจผลแล้วส่งขออนุมัติ — คิวผู้อนุมัติของเมนู, ไม่อนุมัติ = กลับเป็น Posted) -> Approved ->
+// Closed (บันทึกปรับยอด — สร้าง+โพสต์ im_transaction AJS อัตโนมัติ)
+// ถอยทีละขั้น (Closed/Approved/Submitted -> Posted -> Draft) ยกเลิกได้เมื่อบันทึกแล้ว ร่างให้ลบ (Deleted)
 const Map<String, String> imStockCountStatusLabels = {
   'Draft':    'ร่าง',
   'Posted':   'บันทึกใบตรวจนับแล้ว',
+  'Submitted': 'รออนุมัติ',
   'Approved': 'อนุมัติแล้ว',
   'Closed':   'ปิดแล้ว',
   'Void':     'ยกเลิก',
@@ -18,6 +21,7 @@ const Map<String, String> imStockCountStatusLabels = {
 const Map<String, String> imStockCountStatusLabelsEn = {
   'Draft':    'Draft',
   'Posted':   'Posted',
+  'Submitted': 'Submitted',
   'Approved': 'Approved',
   'Closed':   'Closed',
   'Void':     'Void',
@@ -196,10 +200,15 @@ class ImStockCount {
   final ImDocBlock? voidBlock;
   final ImDocBlock? deleteBlock;
   final List<DocReverseLog> reverseHistory;
+  // คิวผู้อนุมัติ (utils/docApproval.js) — ALL / ANY + ขั้นตอนแต่ละลำดับ
+  final String? approvalMode;
+  final List<DocApprovalStep> approvals;
 
   const ImStockCount({
     required this.header,
     this.details = const [],
+    this.approvalMode,
+    this.approvals = const [],
     this.reverseBlock,
     this.reverseTo,
     this.voidBlock,
@@ -217,6 +226,8 @@ class ImStockCount {
         voidBlock: ImDocBlock.fromJson(json['void_block']),
         deleteBlock: ImDocBlock.fromJson(json['delete_block']),
         reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
+        approvalMode: json['approval_mode'] as String?,
+        approvals: DocApprovalStep.listFromJson(json['approvals']),
       );
 }
 

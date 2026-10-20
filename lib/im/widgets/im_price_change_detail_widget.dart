@@ -14,6 +14,8 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
+import '../../sa/models/sa_doc_approval.dart';
+import '../../sa/widgets/sa_doc_approval_panel.dart';
 import '../models/im_item_category.dart';
 import '../models/im_price_change.dart';
 import '../services/im_item_category_service.dart';
@@ -147,6 +149,8 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
   String _status = 'Draft';
   String? _voidReason;
   DocActions _actions = const DocActions();
+  String? _approvalMode;
+  List<DocApprovalStep> _approvals = const [];
 
   // ประเภทเอกสาร (sa_module_document, sys_doc_type='85') — ล็อกถาวรหลังบันทึกครั้งแรก (_currentId != null) เพราะ
   // เลขที่เอกสารถูกออกจาก config ของ doc_id นี้ไปแล้ว เปลี่ยนภายหลังจะทำให้เลขที่ไม่ตรงกับประเภทที่เลือกจริง
@@ -257,6 +261,8 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
     _status = h.status;
     _voidReason = h.voidReason;
     _actions = h.actions;
+    _approvalMode = h.approvalMode;
+    _approvals = h.approvals;
     _docId = h.docId; _docCode = h.docCode; _docNameThai = h.docNameThai; _docNameEng = h.docNameEng;
     _priceListId = h.priceListId; _priceListCode = h.priceListCode; _priceListName = h.priceListName;
     _changeType = h.changeType;
@@ -276,7 +282,7 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
 
   void _clear() {
     _currentId = null; _changeNo = null; _status = 'Draft';
-    _voidReason = null; _actions = const DocActions();
+    _voidReason = null; _actions = const DocActions(); _approvalMode = null; _approvals = const [];
     _docId = null; _docCode = null; _docNameThai = null; _docNameEng = null;
     _priceListId = null; _priceListCode = null; _priceListName = null;
     _changeType = 'REVISE'; _adjustmentMode = 'PERCENT'; _adjustmentDirection = 'INCREASE'; _roundingStep = 0;
@@ -292,22 +298,6 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
 
   void _warn(String msg) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  Future<bool> _confirm(String title, String content) async {
-    final isEnglish = _isEnglish;
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Confirm' : 'ยืนยัน')),
-        ],
-      ),
-    );
-    return result == true;
   }
 
   // ── ตารางราคาเป้าหมาย ────────────────────────────────────────────────────
@@ -455,6 +445,8 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
 
   Future<void> _submitForApproval() async {
     final isEnglish = _isEnglish;
+    final menuId = MenuScope.of(context)?.id;
+    if (menuId == null) return;
     if (_docId == null) { _warn(isEnglish ? 'Please select a document type' : 'กรุณาเลือกประเภทเอกสาร'); return; }
     if (_priceListId == null) { _warn(isEnglish ? 'Please select a target price list' : 'กรุณาเลือกตารางราคาเป้าหมาย'); return; }
     if (_details.where((d) => d.isSelected).isEmpty) {
@@ -466,31 +458,17 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
       final svc = ImPriceChangeService();
       final header = _buildHeader();
       final saved = _currentId == null ? await svc.addRow(header) : await svc.updateRow(header);
-      final submitted = await svc.submit(saved.id!);
+      final submitted = await svc.submit(saved.id!, menuId: menuId);
       if (mounted) {
-        setState(() { _currentId = submitted.id; _changeNo = submitted.changeNo; _status = submitted.status; });
+        setState(() {
+          _currentId = submitted.id; _changeNo = submitted.changeNo; _status = submitted.status;
+          _approvalMode = submitted.approvalMode; _approvals = submitted.approvals;
+        });
         widget.onRefreshList();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Submitted for approval' : 'ส่งขออนุมัติสำเร็จ')));
       }
     } catch (e) {
       _warn(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e');
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-
-  Future<void> _doStatusAction(Future<ImPriceChangeHeader> Function(ImPriceChangeService, int) action) async {
-    if (_currentId == null) return;
-    setState(() => _isSaving = true);
-    try {
-      final result = await action(ImPriceChangeService(), _currentId!);
-      if (mounted) {
-        setState(() => _populate(result));
-        widget.onRefreshList();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Done' : 'ดำเนินการสำเร็จ')));
-      }
-    } catch (e) {
-      _warn(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -994,30 +972,8 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
           label: Text(isEnglish ? 'Submit' : 'ส่งขออนุมัติ'),
         ),
       ]);
-    } else if (_status == 'Pending' && canApprove) {
-      actionButtons.addAll([
-        ElevatedButton.icon(
-          onPressed: _isSaving ? null : () async {
-            if (await _confirm(isEnglish ? 'Approve' : 'อนุมัติ', isEnglish ? 'Apply these price changes now?' : 'ต้องการอนุมัติและเขียนราคาจริงเลยหรือไม่?')) {
-              _doStatusAction((svc, id) => svc.approve(id));
-            }
-          },
-          icon: const Icon(Icons.check, size: 16),
-          label: Text(isEnglish ? 'Approve' : 'อนุมัติ'),
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
-        ),
-        const SizedBox(width: 8),
-        OutlinedButton.icon(
-          onPressed: _isSaving ? null : () async {
-            if (await _confirm(isEnglish ? 'Reject' : 'ไม่อนุมัติ', isEnglish ? 'Send this back to Draft for editing?' : 'ส่งกลับไปแก้ไขใหม่หรือไม่?')) {
-              _doStatusAction((svc, id) => svc.reject(id));
-            }
-          },
-          icon: const Icon(Icons.close, size: 16),
-          label: Text(isEnglish ? 'Reject' : 'ไม่อนุมัติ'),
-        ),
-      ]);
     }
+    // อนุมัติ / ไม่อนุมัติ อยู่ที่แผงขั้นตอนการอนุมัติ (DocApprovalPanel) ใต้แถบหัว — ตามคิวผู้อนุมัติของเมนู
     Widget textAction(DocBlock? block, String label, Color color, VoidCallback onTap) => _lockable(block,
         (onPressed) => TextButton(onPressed: onPressed, child: Text(label, style: TextStyle(color: onPressed == null ? Colors.black38 : color))),
         onTap);
@@ -1088,6 +1044,24 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
             alignment: Alignment.centerLeft,
             child: Text('${isEnglish ? 'Void reason' : 'เหตุผลการยกเลิก'}: $_voidReason',
                 style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.w600)),
+          ),
+        ),
+      if (_currentId != null && _approvals.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DocApprovalPanel(
+            docNo: _changeNo ?? '',
+            approvals: _approvals,
+            approvalMode: _approvalMode,
+            awaiting: _status == 'Pending',
+            // อนุมัติครบ = เขียนราคาจริงลงตารางราคา / ไม่อนุมัติ = กลับเป็นร่าง
+            onApprove: (r) => ImPriceChangeService().approve(_currentId!, remarks: r),
+            onReject: (r) => ImPriceChangeService().reject(_currentId!, remarks: r),
+            onDone: () async {
+              final full = await ImPriceChangeService().fetchRow(_currentId!);
+              widget.onRefreshList();
+              if (mounted) setState(() => _populate(full));
+            },
           ),
         ),
       DocReverseHistoryPanel(

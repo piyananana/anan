@@ -62,7 +62,7 @@ class _MoStatusReportScreenState extends State<MoStatusReportScreen> {
   DateTime? _dateTo;
   final _searchCtrl = TextEditingController();
 
-  static const _statuses = ['Draft', 'Released', 'InProgress', 'Completed', 'Closed', 'Cancelled'];
+  static const _statuses = ['Draft', 'Submitted', 'Rejected', 'Released', 'InProgress', 'Completed', 'Closed', 'Cancelled'];
 
   @override
   void initState() {

@@ -3,6 +3,7 @@
 // class/field ทั้งหมดยังคงเดิมทุกประการ ย้ายแค่ตำแหน่งไฟล์
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/models/sa_doc_approval.dart';
 
 const Map<String, String> prTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
@@ -32,36 +33,6 @@ String prTransactionStatusLabel(String s, bool isEnglish) =>
     (isEnglish ? prTransactionStatusLabelsEn[s] : prTransactionStatusLabelsTh[s]) ?? s;
 
 // มิเรอร์ ApPaymentRunApproval (lib/ap/models/ap_payment_run.dart) ทุกประการ
-class PrTransactionApproval {
-  final int id;
-  final int headerId;
-  final int approverUserId;
-  final String approverUserName;
-  final int sequenceNo;
-  final String status; // Pending / Approved / Rejected / Skipped
-  final String? remarks;
-
-  const PrTransactionApproval({
-    required this.id,
-    required this.headerId,
-    required this.approverUserId,
-    required this.approverUserName,
-    required this.sequenceNo,
-    required this.status,
-    this.remarks,
-  });
-
-  factory PrTransactionApproval.fromJson(Map<String, dynamic> json) => PrTransactionApproval(
-        id: json['id'] ?? 0,
-        headerId: json['header_id'] ?? 0,
-        approverUserId: json['approver_user_id'] ?? 0,
-        approverUserName: json['approver_user_name'] ?? '',
-        sequenceNo: json['sequence_no'] ?? 1,
-        status: json['status'] ?? 'Pending',
-        remarks: json['remarks'],
-      );
-}
-
 class PrTransactionHeader {
   final int id;
   final int docId;
@@ -100,7 +71,7 @@ class PrTransactionHeader {
   final String? createdBy;
   final String? updatedBy;
   final List<PrTransactionDetail> details;
-  final List<PrTransactionApproval> approvals;
+  final List<DocApprovalStep> approvals; // คิวผู้อนุมัติที่ตารางกลาง doc_approval
 
   const PrTransactionHeader({
     this.id = 0,
@@ -179,7 +150,7 @@ class PrTransactionHeader {
       createdBy: json['created_by'],
       updatedBy: json['updated_by'],
       details: (json['details'] as List<dynamic>? ?? []).map((e) => PrTransactionDetail.fromJson(e as Map<String, dynamic>)).toList(),
-      approvals: (json['approvals'] as List<dynamic>? ?? []).map((e) => PrTransactionApproval.fromJson(e as Map<String, dynamic>)).toList(),
+      approvals: DocApprovalStep.listFromJson(json['approvals']),
     );
   }
 

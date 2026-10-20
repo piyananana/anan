@@ -1,43 +1,7 @@
 // lib/ap/models/ap_payment_run.dart
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
-
-// ── Approval record ───────────────────────────────────────────────────────────
-class ApPaymentRunApproval {
-  final int id;
-  final int runId;
-  final int approverUserId;
-  final String approverUserName;
-  final int sequenceNo;
-  final String status; // Pending / Approved / Rejected
-  final String? remarks;
-  final DateTime? approvedAt;
-
-  const ApPaymentRunApproval({
-    required this.id,
-    required this.runId,
-    required this.approverUserId,
-    required this.approverUserName,
-    required this.sequenceNo,
-    required this.status,
-    this.remarks,
-    this.approvedAt,
-  });
-
-  factory ApPaymentRunApproval.fromJson(Map<String, dynamic> json) =>
-      ApPaymentRunApproval(
-        id: json['id'] as int,
-        runId: json['run_id'] as int,
-        approverUserId: json['approver_user_id'] as int,
-        approverUserName: json['approver_user_name'] ?? '',
-        sequenceNo: json['sequence_no'] ?? 1,
-        status: json['status'] ?? 'Pending',
-        remarks: json['remarks'],
-        approvedAt: json['approved_at'] != null
-            ? DateTime.parse(json['approved_at']).toLocal()
-            : null,
-      );
-}
+import '../../sa/models/sa_doc_approval.dart';
 
 const Map<String, String> apPaymentRunStatusLabels = {
   'Draft':     'ร่าง',
@@ -248,7 +212,9 @@ class ApPaymentRun {
   final double totalAmountLc;
   final String status;
   final List<ApPaymentRunLine> lines;
-  final List<ApPaymentRunApproval> approvals;
+  // คิวผู้อนุมัติที่ตารางกลาง doc_approval — ALL / ANY + ขั้นตอนแต่ละลำดับ
+  final String? approvalMode;
+  final List<DocApprovalStep> approvals;
   final String? voidReason;
   // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
   final DocActions actions;
@@ -275,6 +241,7 @@ class ApPaymentRun {
     this.totalAmountLc = 0,
     this.status = 'Draft',
     this.lines = const [],
+    this.approvalMode,
     this.approvals = const [],
     this.voidReason,
     this.actions = const DocActions(),
@@ -304,9 +271,8 @@ class ApPaymentRun {
         lines: (json['lines'] as List<dynamic>? ?? [])
             .map((e) => ApPaymentRunLine.fromJson(e as Map<String, dynamic>))
             .toList(),
-        approvals: (json['approvals'] as List<dynamic>? ?? [])
-            .map((e) => ApPaymentRunApproval.fromJson(e as Map<String, dynamic>))
-            .toList(),
+        approvalMode: json['approval_mode'] as String?,
+        approvals: DocApprovalStep.listFromJson(json['approvals']),
         voidReason: json['void_reason'],
         actions: DocActions.fromJson(json),
         glEntryId: json['gl_entry_id'],

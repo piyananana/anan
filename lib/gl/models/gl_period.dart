@@ -1,4 +1,6 @@
 ﻿// File: gl/models/gl_period.dart
+import '../../sa/models/sa_doc_approval.dart';
+
 // เพิ่มฟังก์ชัน Helper นี้ไว้นอก Class หรือใน Class ก็ได้
 DateTime _parseDateSecurely(String? dateStr) {
   if (dateStr == null || dateStr.isEmpty) {
@@ -70,28 +72,6 @@ class FiscalYear {
   }
 }
 
-// ผู้อนุมัติแต่ละคนในคิวปิดงวด GL (เรียงตาม sequenceNo)
-class GlCloseApproval {
-  final int approverUserId;
-  final String approverUserName;
-  final int sequenceNo;
-  final String status; // Pending / Approved / Rejected
-
-  GlCloseApproval({
-    required this.approverUserId,
-    required this.approverUserName,
-    required this.sequenceNo,
-    required this.status,
-  });
-
-  factory GlCloseApproval.fromJson(Map<String, dynamic> json) => GlCloseApproval(
-        approverUserId: int.tryParse(json['approver_user_id'].toString()) ?? 0,
-        approverUserName: json['approver_user_name'] as String? ?? '',
-        sequenceNo: int.tryParse(json['sequence_no'].toString()) ?? 0,
-        status: json['status'] as String? ?? 'Pending',
-      );
-}
-
 class PostingPeriod {
   final int id;
   final int fiscalYearId;
@@ -108,7 +88,9 @@ class PostingPeriod {
   final int? closeRequestId;
   final int? closeRequestedBy;
   final String? closeRequestedByName;
-  final List<GlCloseApproval> closeApprovals;
+  // คิวผู้อนุมัติของคำขอ (ตารางกลาง doc_approval) + โหมด ALL / ANY
+  final List<DocApprovalStep> closeApprovals;
+  final String? closeApprovalMode;
 
   PostingPeriod({
     required this.id,
@@ -126,6 +108,7 @@ class PostingPeriod {
     this.closeRequestedBy,
     this.closeRequestedByName,
     this.closeApprovals = const [],
+    this.closeApprovalMode,
   });
 
   factory PostingPeriod.fromJson(Map<String, dynamic> json) {
@@ -148,11 +131,8 @@ class PostingPeriod {
       closeRequestedBy: json['close_requested_by'] == null
           ? null : int.tryParse(json['close_requested_by'].toString()),
       closeRequestedByName: json['close_requested_by_name'] as String?,
-      closeApprovals: json['close_approvals'] == null
-          ? const []
-          : (json['close_approvals'] as List)
-              .map((e) => GlCloseApproval.fromJson(e as Map<String, dynamic>))
-              .toList(),
+      closeApprovals: DocApprovalStep.listFromJson(json['close_approvals']),
+      closeApprovalMode: json['close_approval_mode'] as String?,
     );
   }
 

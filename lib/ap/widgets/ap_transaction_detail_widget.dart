@@ -32,6 +32,8 @@ import '../../gl/models/gl_entry.dart' show GlEntryDetail;
 import '../../cd/models/cd_wht_type.dart';
 import '../../cd/services/cd_wht_type_service.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
+import '../../sa/models/sa_doc_approval.dart';
+import '../../sa/widgets/sa_doc_approval_panel.dart';
 
 class ApTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -113,7 +115,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   final _refNoCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
-  List<ApTransactionApproval> _approvals = [];
+  List<DocApprovalStep> _approvals = [];
+  String? _approvalMode;
   // ถอยเป็นร่าง: null = ถอยได้ / รหัสเหตุผลที่ถอยไม่ได้ (จาก backend) + ประวัติการถอย/ลบ
   String? _reverseBlock;
   String? _reverseBlockRef;
@@ -310,6 +313,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         _descCtrl.text = h.description ?? '';
         _status = h.status;
         _approvals = data.approvals;
+        _approvalMode = data.approvalMode;
         _reverseBlock = data.reverseBlock;
         _reverseBlockRef = data.reverseBlockRef;
         _voidBlock = data.voidBlock;
@@ -1034,76 +1038,6 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     }
   }
 
-  Future<void> _approveOrReject(bool isApprove) async {
-    final isEnglish = _isEnglish;
-    if (!(MenuScope.of(context)?.canApprove ?? true)) return;
-    final currentUserId = _authService.currentUser?.id;
-    final myRecord = _approvals
-        .where((a) => a.approverUserId == currentUserId && a.status == 'Pending')
-        .toList();
-    if (myRecord.isEmpty) return;
-    final mySeq = myRecord.first.sequenceNo;
-    final blockedByPrev = _approvals.any((a) => a.sequenceNo < mySeq && a.status == 'Pending');
-    if (blockedByPrev) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(isEnglish ? 'Still waiting for approval from a previous sequence' : 'ยังรอการอนุมัติจากลำดับก่อนหน้า')));
-      return;
-    }
-
-    final remarksCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isApprove
-            ? (isEnglish ? 'Confirm Approval' : 'ยืนยันการอนุมัติ')
-            : (isEnglish ? 'Confirm Rejection' : 'ยืนยันการปฏิเสธ')),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(isApprove
-              ? (isEnglish ? 'Approve $_docNo?' : 'อนุมัติ $_docNo?')
-              : (isEnglish ? 'Reject $_docNo? The document will revert to Draft.' : 'ปฏิเสธ $_docNo? เอกสารจะย้อนกลับไปเป็นร่าง')),
-          const SizedBox(height: 12),
-          TextField(
-            controller: remarksCtrl,
-            decoration: InputDecoration(
-                labelText: isEnglish ? 'Remarks (optional)' : 'หมายเหตุ (ถ้ามี)',
-                border: const OutlineInputBorder(), isDense: true),
-            maxLines: 2,
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: isApprove ? Colors.green[700] : Colors.red[700],
-                  foregroundColor: Colors.white),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(isApprove ? (isEnglish ? 'Approve' : 'อนุมัติ') : (isEnglish ? 'Reject' : 'ปฏิเสธ'))),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isLoading = true);
-    try {
-      final remarks = remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim();
-      if (isApprove) {
-        await _service.approveTransaction(_transactionId, remarks: remarks);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish ? 'Approved successfully' : 'อนุมัติสำเร็จ')));
-      } else {
-        await _service.rejectTransaction(_transactionId, remarks: remarks);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish ? 'Rejected — reverted to Draft' : 'ปฏิเสธและส่งกลับไปเป็นร่างสำเร็จ')));
-      }
-      await _loadTransactionData();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
   Future<void> _void() async {
     final isEnglish = _isEnglish;
     final reasonCtrl = TextEditingController();
@@ -1286,7 +1220,19 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         Expanded(child: SingleChildScrollView(
           padding: const EdgeInsets.all(12),
           child: Column(children: [
-            if (_approvals.isNotEmpty && _status != 'Draft') ...[_buildApprovalPanel(), const SizedBox(height: 8)],
+            // แผงอนุมัติกลาง (ตามลำดับ / คนใดคนหนึ่ง) — ปฏิเสธ = เอกสารกลับเป็นร่าง
+            if (_approvals.isNotEmpty && _status != 'Draft') ...[
+              DocApprovalPanel(
+                docNo: _docNo,
+                approvals: _approvals,
+                approvalMode: _approvalMode,
+                awaiting: _status == 'Submitted' && !widget.viewOnly,
+                onApprove: (r) => _service.approveTransaction(_transactionId, remarks: r),
+                onReject: (r) => _service.rejectTransaction(_transactionId, remarks: r),
+                onDone: _loadTransactionData,
+              ),
+              const SizedBox(height: 8),
+            ],
             if (_reverseHistory.isNotEmpty) ...[
               DocReverseHistoryPanel(
                   history: _reverseHistory, isDeleted: _status == 'Deleted', isEnglish: isEnglish,
@@ -1398,93 +1344,6 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       case 'Submitted': return Colors.orange;
       default:          return Colors.grey;
     }
-  }
-
-  // แสดงขั้นตอนอนุมัติ + ปุ่มอนุมัติ/ปฏิเสธสำหรับผู้มีคิวอนุมัติที่ยัง Pending อยู่
-  Widget _buildApprovalPanel() {
-    final isEnglish = _isEnglish;
-    final currentUserId = _authService.currentUser?.id;
-    final myPending = _approvals.cast<ApTransactionApproval?>().firstWhere(
-        (a) => a!.approverUserId == currentUserId && a.status == 'Pending',
-        orElse: () => null);
-    final canAct = _status == 'Submitted' && myPending != null &&
-        !_approvals.any((a) => a.sequenceNo < myPending.sequenceNo && a.status == 'Pending');
-
-    Color stepColor(String s) {
-      switch (s) {
-        case 'Approved': return Colors.green[700]!;
-        case 'Rejected': return Colors.red[700]!;
-        case 'Skipped':  return Colors.grey[500]!;
-        default:         return Colors.orange[700]!;
-      }
-    }
-    String stepLabel(String s) {
-      switch (s) {
-        case 'Approved': return isEnglish ? 'Approved' : 'อนุมัติแล้ว';
-        case 'Rejected': return isEnglish ? 'Rejected' : 'ปฏิเสธ';
-        case 'Skipped':  return isEnglish ? 'Skipped' : 'ข้าม';
-        default:         return isEnglish ? 'Pending' : 'รออนุมัติ';
-      }
-    }
-
-    return Card(child: Container(
-      color: Colors.orange.shade50,
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(Icons.approval_outlined, size: 16, color: Colors.orange[800]),
-          const SizedBox(width: 6),
-          Text(isEnglish ? 'Approval Steps' : 'ขั้นตอนการอนุมัติ',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange[800])),
-          const Spacer(),
-          if (canAct) ...[
-            ElevatedButton.icon(
-              icon: const Icon(Icons.check_circle_outline, size: 14),
-              label: Text(isEnglish ? 'Approve' : 'อนุมัติ', style: const TextStyle(fontSize: 12)),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[600], foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              onPressed: () => _approveOrReject(true),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.cancel_outlined, size: 14),
-              label: Text(isEnglish ? 'Reject' : 'ปฏิเสธ', style: const TextStyle(fontSize: 12)),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red[600], foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              onPressed: () => _approveOrReject(false),
-            ),
-          ],
-        ]),
-        const SizedBox(height: 4),
-        Wrap(spacing: 12, runSpacing: 4, children: _approvals.map((a) {
-          return Row(mainAxisSize: MainAxisSize.min, children: [
-            Text('${a.sequenceNo}. ${a.approverUserName}', style: const TextStyle(fontSize: 11)),
-            const SizedBox(width: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                  color: stepColor(a.status).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: stepColor(a.status).withOpacity(0.6))),
-              child: Text(stepLabel(a.status),
-                  style: TextStyle(fontSize: 10, color: stepColor(a.status), fontWeight: FontWeight.w600)),
-            ),
-            if (a.approvedAt != null) ...[
-              const SizedBox(width: 4),
-              Text(_dateFmt.format(a.approvedAt!), style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-            ],
-            if (a.remarks != null && a.remarks!.isNotEmpty) ...[
-              const SizedBox(width: 4),
-              Text('(${a.remarks!})', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-            ],
-          ]);
-        }).toList()),
-      ]),
-    ));
   }
 
   Widget _buildHeaderSection() {

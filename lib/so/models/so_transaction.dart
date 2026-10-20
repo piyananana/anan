@@ -2,10 +2,13 @@
 // เพียงสลับ vendor->customer เท่านั้น ยังไม่มีขั้น "ใบเสนอราคา" (Sale Quote) นำหน้าเหมือน PR นำหน้า PO
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/models/sa_doc_approval.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
 
 const Map<String, String> soTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
+  'Submitted': 'รออนุมัติ',
+  'Rejected': 'ถูกปฏิเสธ',
   'Approved': 'อนุมัติแล้ว',
   'PartiallyDelivered': 'ส่งสินค้าบางส่วน',
   'FullyDelivered': 'ส่งสินค้าครบแล้ว',
@@ -16,6 +19,8 @@ const Map<String, String> soTransactionStatusLabelsTh = {
 
 const Map<String, String> soTransactionStatusLabelsEn = {
   'Draft': 'Draft',
+  'Submitted': 'Submitted',
+  'Rejected': 'Rejected',
   'Approved': 'Approved',
   'PartiallyDelivered': 'Partially Delivered',
   'FullyDelivered': 'Fully Delivered',
@@ -53,6 +58,9 @@ class SoTransactionHeader {
   final DateTime? approvedAt;
   final String? approvedBy;
   final String? voidReason;
+  // คิวผู้อนุมัติ (utils/docApproval.js) — ALL / ANY + ขั้นตอนแต่ละลำดับ
+  final String? approvalMode;
+  final List<DocApprovalStep> approvals;
   // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
   final DocActions actions;
   final int? refQuoteId; // ใบเสนอราคา (Quote) ต้นทาง — สะดวก/แสดงผลเท่านั้น
@@ -96,6 +104,8 @@ class SoTransactionHeader {
     this.approvedAt,
     this.approvedBy,
     this.voidReason,
+    this.approvalMode,
+    this.approvals = const [],
     this.actions = const DocActions(),
     this.refQuoteId,
     this.refQuoteDocNo,
@@ -139,6 +149,8 @@ class SoTransactionHeader {
       approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString())?.toLocal() : null,
       approvedBy: json['approved_by'],
       voidReason: json['void_reason'],
+      approvalMode: json['approval_mode'],
+      approvals: DocApprovalStep.listFromJson(json['approvals']),
       actions: DocActions.fromJson(json),
       refQuoteId: json['ref_quote_id'],
       refQuoteDocNo: json['ref_quote_doc_no'],

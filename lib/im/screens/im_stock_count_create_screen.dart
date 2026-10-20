@@ -92,6 +92,7 @@ class _ImStockCountCreateScreenState extends State<ImStockCountCreateScreen> {
     switch (status) {
       case 'Draft':    return Colors.orange;
       case 'Posted':   return Colors.blue;
+      case 'Submitted': return Colors.amber;
       case 'Approved': return Colors.purple;
       case 'Closed':   return Colors.green;
       case 'Void':     return Colors.red;
@@ -475,6 +476,7 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
     switch (status) {
       case 'Draft':    return Colors.orange;
       case 'Posted':   return Colors.blue;
+      case 'Submitted': return Colors.amber;
       case 'Approved': return Colors.purple;
       case 'Closed':   return Colors.green;
       case 'Void':     return Colors.red;

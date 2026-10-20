@@ -3,6 +3,7 @@
 // สถานะ: Draft (แก้ไขได้) -> Pending (ส่งขออนุมัติ) -> Approved (เขียนผลจริง) / กลับ Draft (ไม่อนุมัติ) / Void
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/models/sa_doc_approval.dart';
 
 const List<String> imPriceChangeTypes = ['REVISE', 'PROMOTION'];
 String imPriceChangeTypeLabel(String type, bool isEnglish) {
@@ -181,6 +182,9 @@ class ImPriceChangeHeader {
   final DateTime? approvedAt;
   final String? approvedBy;
   final String? voidReason;
+  // คิวผู้อนุมัติ (utils/docApproval.js) — ALL / ANY + ขั้นตอนแต่ละลำดับ
+  final String? approvalMode;
+  final List<DocApprovalStep> approvals;
   // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
   final DocActions actions;
   final int lineCount;
@@ -213,6 +217,8 @@ class ImPriceChangeHeader {
     this.approvedAt,
     this.approvedBy,
     this.voidReason,
+    this.approvalMode,
+    this.approvals = const [],
     this.actions = const DocActions(),
     this.lineCount = 0,
     this.selectedCount = 0,
@@ -245,6 +251,8 @@ class ImPriceChangeHeader {
         approvedAt: json['approved_at'] != null ? DateTime.tryParse(json['approved_at'].toString())?.toLocal() : null,
         approvedBy: json['approved_by'],
         voidReason: json['void_reason'],
+        approvalMode: json['approval_mode'],
+        approvals: DocApprovalStep.listFromJson(json['approvals']),
         actions: DocActions.fromJson(json),
         lineCount: int.tryParse(json['line_count']?.toString() ?? '') ?? 0,
         selectedCount: int.tryParse(json['selected_count']?.toString() ?? '') ?? 0,

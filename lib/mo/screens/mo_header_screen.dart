@@ -7,7 +7,9 @@ import '../widgets/mo_header_list_widget.dart';
 import '../widgets/mo_header_detail_widget.dart';
 
 class MoHeaderScreen extends StatefulWidget {
-  const MoHeaderScreen({super.key});
+  // เปิดตรงไปที่แท็บรายละเอียดของ id นี้ทันที (เช่น จากกระดิ่งรายการรออนุมัติ)
+  final int? initialDetailId;
+  const MoHeaderScreen({super.key, this.initialDetailId});
 
   @override
   State<MoHeaderScreen> createState() => _MoHeaderScreenState();
@@ -27,6 +29,11 @@ class _MoHeaderScreenState extends State<MoHeaderScreen> with SingleTickerProvid
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
+    if (widget.initialDetailId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openDetailTab(id: widget.initialDetailId);
+      });
+    }
   }
 
   void _onTabChanged() {

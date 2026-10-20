@@ -1,9 +1,12 @@
 // lib/mo/models/mo_header.dart — ใบสั่งผลิต (Manufacturing Order, sys_module='61') มิเรอร์ po_transaction.dart
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/models/sa_doc_approval.dart';
 
 const Map<String, String> moHeaderStatusLabelsTh = {
   'Draft': 'ร่าง',
+  'Submitted': 'รออนุมัติ',
+  'Rejected': 'ถูกปฏิเสธ',
   'Released': 'ปล่อยแล้ว',
   'InProgress': 'กำลังผลิต',
   'Completed': 'ผลิตครบแล้ว',
@@ -14,6 +17,8 @@ const Map<String, String> moHeaderStatusLabelsTh = {
 
 const Map<String, String> moHeaderStatusLabelsEn = {
   'Draft': 'Draft',
+  'Submitted': 'Submitted',
+  'Rejected': 'Rejected',
   'Released': 'Released',
   'InProgress': 'In Progress',
   'Completed': 'Completed',
@@ -623,6 +628,9 @@ class MoHeader {
   final String? cancelReason;
   final String? cancelledBy;
   final DateTime? cancelledAt;
+  // คิวผู้อนุมัติ (utils/docApproval.js) — ALL / ANY + ขั้นตอนแต่ละลำดับ
+  final String? approvalMode;
+  final List<DocApprovalStep> approvals;
   // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
   final DocActions actions;
   // From join
@@ -675,6 +683,8 @@ class MoHeader {
     this.cancelReason,
     this.cancelledBy,
     this.cancelledAt,
+    this.approvalMode,
+    this.approvals = const [],
     this.actions = const DocActions(),
     this.docCode,
     this.docNameThai,
@@ -687,7 +697,7 @@ class MoHeader {
     this.operations = const [],
   });
 
-  bool get isReadOnly => status != 'Draft';
+  bool get isReadOnly => !['Draft', 'Rejected'].contains(status);
   bool get isDeleted => status == 'Deleted';
 
   factory MoHeader.fromJson(Map<String, dynamic> json) {
@@ -731,6 +741,8 @@ class MoHeader {
       cancelReason: json['cancel_reason'],
       cancelledBy: json['cancelled_by'],
       cancelledAt: json['cancelled_at'] != null ? DateTime.tryParse(json['cancelled_at'].toString())?.toLocal() : null,
+      approvalMode: json['approval_mode'],
+      approvals: DocApprovalStep.listFromJson(json['approvals']),
       actions: DocActions.fromJson(json),
       docCode: json['doc_code'] ?? json['d_doc_code'],
       docNameThai: json['doc_name_thai'],

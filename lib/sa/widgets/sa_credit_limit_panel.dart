@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/sa_credit_approval.dart';
+import '../models/sa_doc_approval.dart';
 import '../services/sa_auth_service.dart';
 import '../services/sa_credit_approval_service.dart';
 import '../services/sa_language_provider.dart';
@@ -221,9 +222,8 @@ class _CreditLimitPanelState extends State<CreditLimitPanel> {
     final userId = Provider.of<AuthService>(context, listen: false).currentUser?.id;
     final canApproveMenu = MenuScope.of(context)?.canApprove ?? true;
     final steps = credit.approvals;
-    final mine = steps.where((a) => a.approverUserId == userId && a.status == 'Pending').toList();
-    final canAct = credit.isPending && canApproveMenu && mine.isNotEmpty &&
-        !steps.any((a) => a.sequenceNo < mine.first.sequenceNo && a.status == 'Pending');
+    // ถึงคิวผู้ใช้นี้ (ตามลำดับ / คนใดคนหนึ่ง)
+    final canAct = credit.isPending && canApproveMenu && isMyApprovalTurn(steps, userId, credit.approvalMode);
     final color = !exceeded ? Colors.green[700]! : covered ? Colors.blue[700]! : Colors.red[700]!;
 
     Widget cell(String label, double v, {Color? c, bool bold = false}) => Padding(
