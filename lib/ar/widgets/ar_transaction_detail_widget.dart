@@ -119,6 +119,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   int? _arAccountId;
   double _exchangeRate = 1.0;
   final _refNoCtrl = TextEditingController();
+  final _poNoCtrl = TextEditingController(); // ใบแจ้งหนี้: เลขที่ใบสั่งซื้อของลูกค้า
+  DateTime? _poDate;
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
   // ถอยเป็นร่าง / ยกเลิก: null = ทำได้ หรือรหัสเหตุผลจาก backend
@@ -220,6 +222,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   @override
   void dispose() {
     _refNoCtrl.dispose();
+    _poNoCtrl.dispose();
     _descCtrl.dispose();
     for (final r in _detailRows) r.dispose();
     for (final c in _applyCtrlMap.values) c.dispose();
@@ -315,6 +318,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         _arAccountId = h.arAccountId;
         _exchangeRate = h.exchangeRate;
         _refNoCtrl.text = h.refNo ?? '';
+        _poNoCtrl.text = h.customerPoNo ?? '';
+        _poDate = h.customerPoDate;
         _descCtrl.text = h.description ?? '';
         _status = h.status;
         _credit = data.credit;
@@ -480,6 +485,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       _arAccountId = null;
       _exchangeRate = 1.0;
       _refNoCtrl.clear();
+      _poNoCtrl.clear();
+      _poDate = null;
       _descCtrl.clear();
       _status = 'Draft';
       _isReadOnly = false;
@@ -1234,6 +1241,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       vatAmountLc: _vatAmountFc * lc,
       totalAmountLc: _totalAmountFc * lc,
       refNo: _refNoCtrl.text.isEmpty ? null : _refNoCtrl.text,
+      customerPoNo: _isInvoice && _poNoCtrl.text.trim().isNotEmpty ? _poNoCtrl.text.trim() : null,
+      customerPoDate: _isInvoice ? _poDate : null,
       description: _descCtrl.text.isEmpty ? null : _descCtrl.text,
       status: _status,
       createdBy: _transactionId == 0 ? userName : null,
@@ -2065,6 +2074,43 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               ),
             ],
           ]),
+          if (_isInvoice) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                flex: 1,
+                child: TextFormField(
+                  controller: _poNoCtrl,
+                  readOnly: _isReadOnly,
+                  maxLength: 50,
+                  decoration: _fieldDeco(isEnglish ? 'Customer PO No.' : 'เลขที่ใบสั่งซื้อลูกค้า').copyWith(counterText: ''),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 1,
+                child: InkWell(
+                  onTap: _isReadOnly
+                      ? null
+                      : () async {
+                          final picked = await showDatePicker(
+                              context: context, initialDate: _poDate ?? _docDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
+                          if (picked != null) setState(() => _poDate = picked);
+                        },
+                  child: InputDecorator(
+                    decoration: _fieldDeco(isEnglish ? 'Customer PO Date' : 'วันที่ใบสั่งซื้อลูกค้า'),
+                    child: Row(children: [
+                      Expanded(child: Text(_poDate != null ? _dateFmt.format(_poDate!) : '-')),
+                      if (!_isReadOnly && _poDate != null)
+                        InkWell(onTap: () => setState(() => _poDate = null), child: const Icon(Icons.clear, size: 14)),
+                      if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
+                    ]),
+                  ),
+                ),
+              ),
+              const Spacer(flex: 2),
+            ]),
+          ],
           if (_headerExpanded) ...[
           const SizedBox(height: 12),
           // Branch + Dimensions row (all flex: 1)

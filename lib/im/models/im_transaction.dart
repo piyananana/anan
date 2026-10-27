@@ -62,6 +62,8 @@ class ImTransactionHeader {
   final String? refPoDocNo; // จาก join — เลขที่ PO ใช้แสดงผลเท่านั้น
   final int? refSoId; // '30'/'31'/'32' เท่านั้น — SO ที่ DLN นี้อ้างอิง (สะดวก/แสดงผล — การตรวจจริงอยู่ระดับบรรทัด)
   final String? refSoDocNo; // จาก join — เลขที่ SO ใช้แสดงผลเท่านั้น
+  final String? customerPoNo; // '30'/'31'/'32' — เลขที่ใบสั่งซื้อของลูกค้า (ค่าเริ่มต้นจาก SO, แก้ได้)
+  final DateTime? customerPoDate;
   final int? refMoId; // '90'/'95' เท่านั้น — ใบสั่งผลิต (MO) ที่ธุรกรรมนี้อ้างอิง (สะดวก/แสดงผล — การตรวจจริงอยู่ระดับบรรทัด)
   final String? refMoDocNo; // จาก join — เลขที่ MO ใช้แสดงผลเท่านั้น
   // สกุลเงินต่างประเทศ (ฝั่งรับจากผู้ขายเท่านั้น — GRN family '10'/'11'/'12'/'13' + คืนสินค้า/AP CN/DN '15'/'20'/'25')
@@ -126,6 +128,8 @@ class ImTransactionHeader {
     this.refPoDocNo,
     this.refSoId,
     this.refSoDocNo,
+    this.customerPoNo,
+    this.customerPoDate,
     this.refMoId,
     this.refMoDocNo,
     this.currencyId,
@@ -182,6 +186,8 @@ class ImTransactionHeader {
       refPoDocNo: json['ref_po_doc_no'],
       refSoId: json['ref_so_id'],
       refSoDocNo: json['ref_so_doc_no'],
+      customerPoNo: json['customer_po_no'],
+      customerPoDate: json['customer_po_date'] != null ? parseLocalDate(json['customer_po_date']) : null,
       refMoId: json['ref_mo_id'],
       refMoDocNo: json['ref_mo_doc_no'],
       currencyId: json['currency_id'],
@@ -226,6 +232,8 @@ class ImTransactionHeader {
         if (refImTransactionId != null) 'ref_im_transaction_id': refImTransactionId,
         if (refPoId != null) 'ref_po_id': refPoId,
         if (refSoId != null) 'ref_so_id': refSoId,
+        if (customerPoNo != null) 'customer_po_no': customerPoNo,
+        if (customerPoDate != null) 'customer_po_date': formatLocalDate(customerPoDate!),
         if (refMoId != null) 'ref_mo_id': refMoId,
         if (currencyId != null) 'currency_id': currencyId,
         if (currencyCode != null) 'currency_code': currencyCode,

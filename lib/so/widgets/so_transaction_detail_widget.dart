@@ -93,6 +93,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   String _docNo = 'AUTO';
   DateTime _docDate = DateTime.now();
   DateTime? _dueDate;
+  final _poNoCtrl = TextEditingController(); // เลขที่ใบสั่งซื้อของลูกค้า
+  DateTime? _poDate;
   ArCustomer? _customer;
   ImWarehouse? _warehouse;
   final _descCtrl = TextEditingController();
@@ -143,6 +145,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   @override
   void dispose() {
     _descCtrl.dispose();
+    _poNoCtrl.dispose();
     _priceResolveDebounce?.cancel();
     super.dispose();
   }
@@ -154,6 +157,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     _docNo = 'AUTO';
     _docDate = DateTime.now();
     _dueDate = null;
+    _poNoCtrl.clear();
+    _poDate = null;
     _customer = null;
     _warehouse = null;
     _descCtrl.clear();
@@ -189,6 +194,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _docNo = 'AUTO';
         _docDate = DateTime.now();
         _dueDate = null;
+        _poNoCtrl.clear();
+        _poDate = null;
         _customer = ArCustomer(id: h.customerId, customerCode: h.customerCode ?? '', customerNameTh: h.customerNameTh ?? '');
         _warehouse = ImWarehouse(id: h.warehouseId, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn);
         _descCtrl.text = h.description ?? '';
@@ -225,6 +232,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _docNo = h.docNo;
         _docDate = h.docDate;
         _dueDate = h.dueDate;
+        _poNoCtrl.text = h.customerPoNo ?? '';
+        _poDate = h.customerPoDate;
         _customer = ArCustomer(id: h.customerId, customerCode: h.customerCode ?? '', customerNameTh: h.customerNameTh ?? '');
         _warehouse = ImWarehouse(id: h.warehouseId, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn);
         _descCtrl.text = h.description ?? '';
@@ -479,6 +488,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
       final header = SoTransactionHeader(
         id: _id ?? 0, docId: _docId ?? 0, docNo: _docNo, docDate: _docDate,
         customerId: _customer!.id!, warehouseId: _warehouse!.id, dueDate: _dueDate,
+        customerPoNo: _poNoCtrl.text.trim().isEmpty ? null : _poNoCtrl.text.trim(), customerPoDate: _poDate,
         currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? 'THB', exchangeRate: _exchangeRate,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         refQuoteId: _refQuoteId,
@@ -705,6 +715,42 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                     child: InputDecorator(
                       decoration: InputDecoration(labelText: isEnglish ? 'Due Date' : 'วันครบกำหนด', border: const OutlineInputBorder(), isDense: true),
                       child: Text(_dueDate != null ? _dateFmt.format(_dueDate!) : '-'),
+                    ),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _poNoCtrl,
+                    enabled: !_isReadOnly,
+                    maxLength: 50,
+                    decoration: InputDecoration(
+                      labelText: isEnglish ? 'Customer PO No.' : 'เลขที่ใบสั่งซื้อลูกค้า',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      counterText: '',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: InkWell(
+                    onTap: _isReadOnly ? null : () async {
+                      final picked = await showDatePicker(context: context, initialDate: _poDate ?? _docDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
+                      if (picked != null) setState(() => _poDate = picked);
+                    },
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'Customer PO Date' : 'วันที่ใบสั่งซื้อลูกค้า',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: (_poDate == null || _isReadOnly)
+                            ? null
+                            : IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () => setState(() => _poDate = null)),
+                      ),
+                      child: Text(_poDate != null ? _dateFmt.format(_poDate!) : '-'),
                     ),
                   ),
                 ),

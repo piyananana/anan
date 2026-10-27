@@ -8,6 +8,7 @@ import '../services/im_transaction_service.dart';
 import '../services/im_item_service.dart';
 import '../../po/services/po_transaction_service.dart';
 import '../../so/services/so_transaction_service.dart';
+import '../../utils/date_utils.dart';
 import '../widgets/im_item_list_widget.dart';
 import '../widgets/im_warehouse_list_widget.dart';
 import '../widgets/im_location_tree_widget.dart';
@@ -212,6 +213,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   int? _refSoId; // '30'/'31'/'32' เท่านั้น — SO ที่อ้างอิง (สะดวก/แสดงผล — เก็บจากบรรทัดแรกที่เลือกผ่าน picker เท่านั้น)
   String? _refSoDocNoLabel;
   final _refNoCtrl = TextEditingController();
+  final _poNoCtrl = TextEditingController(); // '30'/'31'/'32' — เลขที่ใบสั่งซื้อของลูกค้า
+  DateTime? _poDate;
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
   // เหตุที่ถอย / ยกเลิก / ลบไม่ได้ (null = ทำได้) + สถานะปลายทางของการถอย + ประวัติ — จาก backend ตอนโหลด
@@ -305,6 +308,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   @override
   void dispose() {
     _refNoCtrl.dispose();
+    _poNoCtrl.dispose();
     _descCtrl.dispose();
     for (final l in _lines) {
       l.dispose();
@@ -339,6 +343,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refSoId = null;
     _refSoDocNoLabel = null;
     _refNoCtrl.clear();
+    _poNoCtrl.clear();
+    _poDate = null;
     _descCtrl.clear();
     _status = 'Draft';
     _reverseBlock = null;
@@ -418,6 +424,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refSoId = h.refSoId;
     _refSoDocNoLabel = h.refSoDocNo;
     _refNoCtrl.text = h.refNo ?? '';
+    _poNoCtrl.text = h.customerPoNo ?? '';
+    _poDate = h.customerPoDate;
     _descCtrl.text = h.description ?? '';
     _status = h.status;
     _reverseBlock = tx.reverseBlock;
@@ -1076,6 +1084,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       }
       _refSoId = pickedLines.first['header_id'] as int;
       _refSoDocNoLabel = pickedLines.first['doc_no'] as String?;
+      // ใบสั่งซื้อลูกค้า: ค่าเริ่มต้นจากใบสั่งขาย (ไม่ทับค่าที่ผู้ใช้กรอกไว้แล้ว)
+      if (_poNoCtrl.text.trim().isEmpty && _poDate == null) {
+        _poNoCtrl.text = (pickedLines.first['customer_po_no'] as String?) ?? '';
+        final poDate = pickedLines.first['customer_po_date'];
+        _poDate = poDate != null ? parseLocalDate(poDate) : null;
+      }
       _loadSoSalespersons(_refSoId!);
       // ส่งตามสกุลเงินของ SO ต้นทางเสมอ (ทุกบรรทัดที่เลือกมาจาก fetchDeliverableLines ของลูกค้าเดียวกัน แต่อาจมาจาก
       // SO คนละใบ คนละสกุลเงินได้ในทางทฤษฎี — ใช้สกุลเงินของ SO ใบแรกที่เลือกเป็นสกุลเงินของทั้ง DLN นี้)
@@ -1206,6 +1220,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         refImTransactionId: _isReturnSourceDocMode ? _refImTransactionId : null,
         refPoId: _isReceiveMode ? _refPoId : null,
         refSoId: _isDeliverMode ? _refSoId : null,
+        customerPoNo: _isDeliverMode && _poNoCtrl.text.trim().isNotEmpty ? _poNoCtrl.text.trim() : null,
+        customerPoDate: _isDeliverMode ? _poDate : null,
         currencyId: _isApVendorMode ? _currency?.id : null,
         currencyCode: _isApVendorMode ? (_currency?.currencyCode ?? 'THB') : null,
         exchangeRate: _isApVendorMode ? _exchangeRate : 1,
@@ -1333,6 +1349,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       final header = ImTransactionHeader(
         id: _id!, docId: _docId!, docNo: _docNo, docDate: _docDate, warehouseId: _warehouseId!,
         customerId: _customerId, refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
+        customerPoNo: _poNoCtrl.text.trim().isEmpty ? null : _poNoCtrl.text.trim(), customerPoDate: _poDate,
       );
       final details = _lines.map((l) => ImTransactionDetail(
             id: l.id,
@@ -1366,7 +1383,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
           )).toList();
-      await _service.postBillingDln(id: _id!, refNo: _refNoCtrl.text.trim(), details: details, salespersons: _salespersons);
+      await _service.postBillingDln(id: _id!, refNo: _refNoCtrl.text.trim(), details: details, salespersons: _salespersons,
+          customerPoNo: _poNoCtrl.text.trim(), customerPoDate: _poDate);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Posted successfully' : 'Post สำเร็จ')));
         widget.onSaveSuccess();
@@ -1698,6 +1716,50 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           ),
         ],
       ]),
+      if (_isDeliverMode) ...[
+        const SizedBox(height: 6),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            flex: 1,
+            child: TextField(
+              controller: _poNoCtrl,
+              readOnly: !_canEditBilling,
+              maxLength: 50,
+              decoration: InputDecoration(
+                labelText: isEnglish ? 'Customer PO No.' : 'เลขที่ใบสั่งซื้อลูกค้า',
+                border: const OutlineInputBorder(),
+                isDense: true,
+                counterText: '',
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: InkWell(
+              onTap: !_canEditBilling
+                  ? null
+                  : () async {
+                      final picked = await showDatePicker(
+                          context: context, initialDate: _poDate ?? _docDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
+                      if (picked != null) setState(() => _poDate = picked);
+                    },
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Customer PO Date' : 'วันที่ใบสั่งซื้อลูกค้า',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: (_poDate == null || !_canEditBilling)
+                      ? null
+                      : IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () => setState(() => _poDate = null)),
+                ),
+                child: Text(_poDate != null ? _dateFmt.format(_poDate!) : '-'),
+              ),
+            ),
+          ),
+          const Spacer(flex: 2),
+        ]),
+      ],
       if (_isApVendorMode) ...[
         const SizedBox(height: 6),
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

@@ -48,6 +48,8 @@ class SoTransactionHeader {
   final String? currencyCode;
   final double exchangeRate;
   final DateTime? dueDate;
+  final String? customerPoNo; // เลขที่ใบสั่งซื้อของลูกค้า
+  final DateTime? customerPoDate;
   final String status;
   final double totalQty;
   final double totalValueLc;
@@ -94,6 +96,8 @@ class SoTransactionHeader {
     this.currencyCode,
     this.exchangeRate = 1,
     this.dueDate,
+    this.customerPoNo,
+    this.customerPoDate,
     this.status = 'Draft',
     this.totalQty = 0,
     this.totalValueLc = 0,
@@ -139,6 +143,8 @@ class SoTransactionHeader {
       currencyCode: json['currency_code'],
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       dueDate: json['due_date'] != null ? parseLocalDate(json['due_date']) : null,
+      customerPoNo: json['customer_po_no'],
+      customerPoDate: json['customer_po_date'] != null ? parseLocalDate(json['customer_po_date']) : null,
       status: json['status'] ?? 'Draft',
       totalQty: toDouble(json['total_qty']),
       totalValueLc: toDouble(json['total_value_lc']),
@@ -177,6 +183,8 @@ class SoTransactionHeader {
         if (currencyCode != null) 'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
         if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
+        'customer_po_no': customerPoNo,
+        'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate!) : null,
         if (description != null) 'description': description,
         if (refQuoteId != null) 'ref_quote_id': refQuoteId,
         if (branchId != null) 'branch_id': branchId,

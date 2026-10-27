@@ -43,6 +43,8 @@ class ArTransactionHeader {
   final DateTime? dueDate;
   final DateTime? billingDate;
   final DateTime? expectedPaymentDate;
+  final String? customerPoNo; // ใบแจ้งหนี้: เลขที่ใบสั่งซื้อของลูกค้า
+  final DateTime? customerPoDate;
   final int periodId;
   final int customerId;
   final String? customerCode;
@@ -112,6 +114,8 @@ class ArTransactionHeader {
     this.dueDate,
     this.billingDate,
     this.expectedPaymentDate,
+    this.customerPoNo,
+    this.customerPoDate,
     this.periodId = 0,
     required this.customerId,
     this.customerCode,
@@ -174,6 +178,8 @@ class ArTransactionHeader {
       dueDate: parseLocalDateNullable(j['due_date']),
       billingDate: parseLocalDateNullable(j['billing_date']),
       expectedPaymentDate: parseLocalDateNullable(j['expected_payment_date']),
+      customerPoNo: j['customer_po_no'] as String?,
+      customerPoDate: parseLocalDateNullable(j['customer_po_date']),
       periodId: j['period_id'] as int? ?? 0,
       customerId: j['customer_id'] as int? ?? 0,
       customerCode: j['customer_code'],
@@ -236,6 +242,8 @@ class ArTransactionHeader {
         'due_date': dueDate != null ? formatLocalDate(dueDate!) : null,
         'billing_date': billingDate != null ? formatLocalDate(billingDate!) : null,
         'expected_payment_date': expectedPaymentDate != null ? formatLocalDate(expectedPaymentDate!) : null,
+        'customer_po_no': customerPoNo,
+        'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate!) : null,
         'period_id': periodId,
         'customer_id': customerId,
         'customer_code': customerCode,

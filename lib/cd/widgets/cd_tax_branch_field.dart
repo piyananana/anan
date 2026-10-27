@@ -49,10 +49,8 @@ class TaxBranchField extends StatelessWidget {
             ],
             decoration: InputDecoration(
               labelText: isEnglish ? 'Tax Branch No.' : 'รหัสสาขา (ภาษี)',
-              hintText: '00000',
-              helperText: label.isEmpty
-                  ? (isEnglish ? 'Blank = not specified' : 'ว่าง = ไม่ระบุ')
-                  : label,
+              hintText: isEnglish ? '00000 (blank = not specified)' : '00000 (ว่าง = ไม่ระบุ)',
+              helperText: label.isEmpty ? null : label,
               border: const OutlineInputBorder(),
               suffixIcon: readOnly
                   ? null

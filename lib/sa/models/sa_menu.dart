@@ -99,6 +99,8 @@ import '../../cm/screens/cm_post_dated_check_screen.dart';
 import '../../im/screens/im_item_screen.dart';
 import '../../im/screens/im_item_import_screen.dart';
 import '../../im/screens/im_location_screen.dart';
+import '../../im/screens/im_print_form_designer_screen.dart';
+import '../../im/screens/im_print_form_print_screen.dart';
 import '../../im/screens/im_location_import_screen.dart';
 import '../../im/screens/im_item_category_screen.dart';
 import '../../im/screens/im_item_running_screen.dart';
@@ -233,6 +235,9 @@ class Menu {
     'DocNumberBranchSetupScreen': (context) => const DocNumberBranchSetupScreen(),
     'DocNumberResetScreen': (context) => const DocNumberResetScreen(),
     'SaModuleApproverScreen': (context) => const SaModuleApproverScreen(),
+    // แบบฟอร์มพิมพ์กลาง — หน้าจอพิมพ์ลงทะเบียนแยกต่อแหล่งข้อมูล (utils/printDataSources.js ฝั่ง backend)
+    'ImPrintFormDesignerScreen': (context) => const ImPrintFormDesignerScreen(),
+    'ImPrintSalesInvoiceScreen': (context) => const ImPrintFormPrintScreen(dataSource: 'SALES_INVOICE'),
     'UserDocumentScreen': (context) => const UserDocumentScreen(),
     'UserMenuScreen': (context) => const UserMenuScreen(),
     'UserScreen': (context) => const UserScreen(),
