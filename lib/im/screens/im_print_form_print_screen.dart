@@ -547,7 +547,7 @@ class _ImPrintFormPrintScreenState extends State<ImPrintFormPrintScreen> {
                         _cell(r.docNo, 140),
                         _cell(formatPrintDate(r.docDate, 'dmy_be'), 90),
                         Expanded(child: Text('${r.customerCode}  ${r.customerName}', overflow: TextOverflow.ellipsis)),
-                        _cell(formatPrintNumber(r.totalAmount, 'money', ''), 110, right: true),
+                        _cell(formatPrintNumber(r.totalAmount, 'money', '') + (r.isBaseCurrency ? '' : ' ${r.currencyCode}'), 110, right: true),
                         SizedBox(
                           width: 90,
                           child: Align(

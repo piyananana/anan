@@ -425,6 +425,9 @@ class PrintDocRow {
   final String customerCode;
   final String customerName;
   final double totalAmount;
+  // สกุลเงินของเอกสาร — สกุลเงินหลักไม่ต้องแสดงรหัสต่อท้ายยอด
+  final String currencyCode;
+  final bool isBaseCurrency;
   final int printCount;
 
   const PrintDocRow({
@@ -436,6 +439,8 @@ class PrintDocRow {
     required this.customerCode,
     required this.customerName,
     required this.totalAmount,
+    this.currencyCode = '',
+    this.isBaseCurrency = true,
     required this.printCount,
   });
 
@@ -448,6 +453,8 @@ class PrintDocRow {
         customerCode: j['customer_code'] ?? '',
         customerName: j['customer_name'] ?? '',
         totalAmount: _d(j['total_amount']),
+        currencyCode: j['currency_code'] ?? '',
+        isBaseCurrency: j['is_base_currency'] != false,
         printCount: (j['print_count'] as num?)?.toInt() ?? 0,
       );
 }
