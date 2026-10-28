@@ -282,6 +282,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // สถานะ Received ('12' ที่ Post IM แล้วแต่ยังไม่ Post AP/GL) หรือ Delivered ('32' ที่ Post IM แล้วแต่ยังไม่ Post
   // AR/GL) แก้ได้แค่เลขที่อ้างอิง + billed cost/ราคาขาย — ฟิลด์อื่น (จำนวน/สินค้า/คลัง) ยังคง lock ผ่าน _isReadOnly
   // ตามปกติ เพราะรับของ/ส่งของจริงไปแล้ว
+  // เอกสารสกุลเงินต่างประเทศ (ไม่ใช่สกุลเงินหลัก) — ใช้ตัดสินว่าแก้อัตราตอนตั้งหนี้ '32' ได้ และแสดงรหัสสกุลเงินที่ช่องราคา
+  bool get _isForeignCurrency => _currency != null && !_currency!.baseCurrencyFlag;
   bool get _canEditBilling => !widget.viewOnly &&
       ((_status == 'Draft' && !_credit.isPending) || (_isGrDeferredMode && _status == 'Received') || (_isDlnDeferredMode && _status == 'Delivered'));
   // ยอดเอกสารสำหรับตรวจวงเงิน: Σ |จำนวน| × ราคาขาย × (1 + VAT) — รับคืน/ลดหนี้ลูกหนี้ติดลบ
@@ -555,6 +557,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     setState(() {
       _customerId = c.id;
       _customerLabel = '${c.customerCode} ${c.customerNameTh}';
+      // สกุลเงินหลักของลูกค้า (ar_customer.currency_code) — มิเรอร์ _selectVendor
+      if (c.currencyCode.isNotEmpty) {
+        final matched = _currencies.cast<Currency?>().firstWhere((x) => x?.currencyCode == c.currencyCode, orElse: () => null);
+        if (matched != null) {
+          _currency = matched;
+          _exchangeRate = matched.baseRate > 0 ? matched.baseRate : 1;
+        }
+      }
     });
     if (c.id != null) _loadCustomerSalespersons(c.id!);
   }
@@ -762,6 +772,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _customerId = picked.customerId;
         _customerLabel = '${picked.customerCode ?? ''} ${picked.customerNameTh ?? ''}'.trim();
         if (picked.customerId != null) _loadCustomerSalespersons(picked.customerId!);
+        // รับคืนตามสกุลเงินของใบส่งสินค้าต้นฉบับ — ราคาขายที่ดึงมาอยู่ในสกุลเงินนั้น
+        final matched = _currencies.cast<Currency?>().firstWhere(
+            (c) => c?.currencyCode == (picked.currencyCode ?? 'THB'), orElse: () => null);
+        if (matched != null) {
+          _currency = matched;
+          _exchangeRate = picked.exchangeRate;
+        }
       }
       for (final l in _lines) {
         l.dispose();
@@ -963,6 +980,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
     final pickedLines = selectable.where((l) => selected[l['detail_id']] == true && _parseNum(qtyCtrls[l['detail_id']]!.text) > 0).toList();
     if (pickedLines.isEmpty) return;
+    if (!_checkPickedCurrency(pickedLines.map(_poCurrencyCode).toSet())) return;
     final items = await Future.wait(pickedLines.map((l) => _itemService.fetchRow(l['item_id'] as int)));
     if (!mounted) return;
     setState(() {
@@ -1001,6 +1019,25 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
   // '30'/'31'/'32' — เพิ่มรายการเข้า DLN จากบรรทัดที่ยังส่งได้ของ SO ที่อนุมัติแล้วของลูกค้านี้ (multi-select ได้
   // ข้าม SO หลายใบในครั้งเดียว) มิเรอร์ _pickPoLines ทุกประการ ฝั่งขาย
+  // บรรทัด PO/SO ที่เลือกต้องเป็นสกุลเงินเดียวกันทั้งหมด และตรงกับบรรทัดที่มีอยู่แล้วในเอกสาร (ราคาทุกบรรทัดอยู่ใน
+  // สกุลเงินของหัวเอกสารเดียว) — ไม่ตรงให้เตือนและไม่เพิ่ม
+  bool _checkPickedCurrency(Set<String> codes) {
+    final isEnglish = _isEnglish;
+    String? msg;
+    if (codes.length > 1) {
+      msg = isEnglish
+          ? 'The selected lines are in different currencies (${codes.join(', ')}) — select lines of one currency per document.'
+          : 'บรรทัดที่เลือกมีหลายสกุลเงิน (${codes.join(', ')}) — กรุณาเลือกบรรทัดสกุลเงินเดียวกันต่อเอกสาร';
+    } else if (_lines.isNotEmpty && _currency != null && codes.isNotEmpty && codes.first != _currency!.currencyCode) {
+      msg = isEnglish
+          ? 'The selected lines are in ${codes.first} but this document is in ${_currency!.currencyCode} — select lines of the same currency.'
+          : 'บรรทัดที่เลือกเป็นสกุลเงิน ${codes.first} แต่เอกสารนี้เป็น ${_currency!.currencyCode} — กรุณาเลือกบรรทัดสกุลเงินเดียวกัน';
+    }
+    if (msg == null) return true;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.orange.shade800));
+    return false;
+  }
+
   String _soCurrencyCode(Map<String, dynamic> l) => (l['currency_code'] as String?) ?? 'THB';
   double _soUnitPriceLc(Map<String, dynamic> l) => _poNum(l['unit_price_fc']) * (_poNum(l['exchange_rate']) == 0 ? 1 : _poNum(l['exchange_rate']));
 
@@ -1081,6 +1118,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
     final pickedLines = selectable.where((l) => selected[l['detail_id']] == true && _parseNum(qtyCtrls[l['detail_id']]!.text) > 0).toList();
     if (pickedLines.isEmpty) return;
+    if (!_checkPickedCurrency(pickedLines.map(_soCurrencyCode).toSet())) return;
     final items = await Future.wait(pickedLines.map((l) => _itemService.fetchRow(l['item_id'] as int)));
     if (!mounted) return;
     setState(() {
@@ -1306,9 +1344,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         refSoId: _isDeliverMode ? _refSoId : null,
         customerPoNo: _isDeliverMode && _poNoCtrl.text.trim().isNotEmpty ? _poNoCtrl.text.trim() : null,
         customerPoDate: _isDeliverMode ? _poDate : null,
-        currencyId: _isApVendorMode ? _currency?.id : null,
-        currencyCode: _isApVendorMode ? (_currency?.currencyCode ?? 'THB') : null,
-        exchangeRate: _isApVendorMode ? _exchangeRate : 1,
+        currencyId: (_isApVendorMode || _isArCustomerMode) ? _currency?.id : null,
+        currencyCode: (_isApVendorMode || _isArCustomerMode) ? (_currency?.currencyCode ?? 'THB') : null,
+        exchangeRate: (_isApVendorMode || _isArCustomerMode) ? _exchangeRate : 1,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       );
       final details = _lines.map((l) => ImTransactionDetail(
@@ -1468,7 +1506,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             vatRate: _isVatMode ? l.vatRate : null,
           )).toList();
       await _service.postBillingDln(id: _id!, refNo: _refNoCtrl.text.trim(), details: details, salespersons: _salespersons,
-          customerPoNo: _poNoCtrl.text.trim(), customerPoDate: _poDate);
+          customerPoNo: _poNoCtrl.text.trim(), customerPoDate: _poDate, exchangeRate: _isForeignCurrency ? _exchangeRate : null);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Posted successfully' : 'Post สำเร็จ')));
         widget.onSaveSuccess();
@@ -1844,7 +1882,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           const Spacer(flex: 2),
         ]),
       ],
-      if (_isApVendorMode) ...[
+      if (_isApVendorMode || _isArCustomerMode) ...[
         const SizedBox(height: 6),
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
@@ -1866,7 +1904,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             child: TextFormField(
               key: ValueKey('im_rate_${widget.resetKey}_$_id'),
               initialValue: _exchangeRate.toStringAsFixed(6),
-              enabled: !_isReadOnly,
+              // '32' สถานะ Delivered: สกุลเงินคงเดิม แก้ได้แค่อัตรา ณ วันออกใบแจ้งหนี้
+              enabled: !_isReadOnly || (_isDlnDeferredMode && _status == 'Delivered' && _canEditBilling && _isForeignCurrency),
               decoration: InputDecoration(labelText: isEnglish ? 'Exchange Rate' : 'อัตราแลกเปลี่ยน', border: const OutlineInputBorder(), isDense: true),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               onChanged: (v) => setState(() => _exchangeRate = double.tryParse(v) ?? 1),
@@ -2187,7 +2226,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   readOnly: !_canEditBilling || line.isFree,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
-                      labelText: isEnglish ? 'Unit Price' : 'ราคาขาย/หน่วย',
+                      labelText: (isEnglish ? 'Unit Price' : 'ราคาขาย/หน่วย') + (_isForeignCurrency ? ' (${_currency!.currencyCode})' : ''),
                       border: const OutlineInputBorder(), isDense: true),
                 ),
               ),
@@ -2498,9 +2537,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // ทิศทาง Dr/Cr) หรือใบเพิ่มหนี้ ('45', ทิศทางเดียวกับใบแจ้งหนี้ปกติ) — ดูเหตุผลการแยกการ์ดนี้จาก _buildGlCard ที่
   // comment ของฟังก์ชันนี้ด้านบน (2 journal entry แยกกันตามหลักบัญชีคู่)
   Widget _buildArPreviewCard(bool isEnglish) {
+    // ราคาขายอยู่ในสกุลเงินของเอกสาร — แปลงเป็นบาทด้วยอัตราแลกเปลี่ยน ภาษีขายคิดจากฐานเงินบาท (มิเรอร์ backend)
     double subtotal = 0, vat = 0;
     for (final l in _lines) {
-      final lineSubtotal = l.variance.abs() * _parseNum(l.unitPriceCtrl.text);
+      final lineSubtotal = l.variance.abs() * _parseNum(l.unitPriceCtrl.text) * _exchangeRate;
       subtotal += lineSubtotal;
       if (l.vatType != null && l.vatType != 'NOVAT') vat += lineSubtotal * l.vatRate / 100;
     }

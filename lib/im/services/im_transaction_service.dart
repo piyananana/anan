@@ -300,6 +300,7 @@ class ImTransactionService {
     List<DocSalesperson>? salespersons,
     String? customerPoNo,
     DateTime? customerPoDate,
+    double? exchangeRate,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -307,6 +308,7 @@ class ImTransactionService {
       headers: headers,
       body: jsonEncode({
         'ref_no': refNo,
+        if (exchangeRate != null) 'exchange_rate': exchangeRate,
         'customer_po_no': customerPoNo,
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate) : null,
         'lines': details.map((d) => {'id': d.id, 'unit_price': d.unitPrice, 'vat_type': d.vatType, 'vat_rate': d.vatRate}).toList(),
