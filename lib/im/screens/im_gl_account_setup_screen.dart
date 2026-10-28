@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/widgets/sa_sys_doc_type_guide.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
 import '../../sa/models/sa_module_document.dart';
@@ -100,6 +101,12 @@ class _ImGlAccountSetupScreenState extends State<ImGlAccountSetupScreen> with Au
         backgroundColor: Colors.teal.shade700,
         foregroundColor: Colors.white,
         actions: [
+          SysDocTypeGuideButton(
+            module: 'IM',
+            isEnglish: isEnglish,
+            docCodesBySdt: SysDocTypeGuideButton.groupDocCodes(_rows, (r) => r.sysDocType, (r) => r.docCode),
+            currentSdt: _selected?.sysDocType,
+          ),
           IconButton(icon: const Icon(Icons.refresh, color: Colors.white), tooltip: isEnglish ? 'Reload' : 'โหลดใหม่', onPressed: _loadAll),
         ],
       ),
