@@ -436,14 +436,14 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
   bool get _posts          => !['70', '35', '55'].contains(_sdt);               // 70 แจ้งชำระไม่ลงบัญชี, 35/55 ยังไม่รองรับการลงบัญชี
   bool get _showAp         => _isExpense || _sdt == '80';
   bool get _showExpense    => _isExpense;
-  bool get _showVat        => _isExpense || ['60', '65'].contains(_sdt);        // จ่ายชำระ (80) ไม่ลงภาษีซื้อ
+  bool get _showVat        => _isExpense || ['60', '65', '80'].contains(_sdt);  // จ่ายชำระ: รับรู้ VAT รอตัดเป็นภาษีซื้อ
+  bool get _showVatPending => _isExpense || _sdt == '80';                       // ตั้งหนี้บรรทัด VAT รอตัด / รับรู้ตอนจ่ายชำระ
   bool get _showDiscount   => _isExpense;                                       // ลดหนี้ใช้ส่วนลดด้วย (กลับทิศ)
   bool get _showAdvance    => ['60', '65', '80'].contains(_sdt);
   bool get _showBank       => ['60', '65', '80'].contains(_sdt);
   bool get _showPayMethod  => ['60', '80'].contains(_sdt);                      // รับคืนมัดจำใช้บัญชี Cash/Bank บัญชีเดียว
   bool get _showWht        => _sdt == '80';
   bool get _showFx         => _sdt == '80';
-  // ภาษีซื้อรอตัดบัญชี (vat_pending_input_account_id) — การลงบัญชี AP ยังไม่ใช้ จึงไม่แสดง (ค่าเดิมที่บันทึกไว้คงอยู่)
 
   // ── Bilingual account name resolver — prefer live lookup by id over the stored name ──
   String _acctName(int? id, String? storedName) {
@@ -520,6 +520,7 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
       case '10': // PI — Purchase Invoice
         if (_expenseAccountId != null) lines.add(_JournalLine('Dr', _expenseAccountCode!, '${nm(_expenseAccountId, _expenseAccountName)} ${isEnglish ? '(per line)' : '(ต่อ line)'}'));
         if (_vatInputAccountId != null) lines.add(_JournalLine('Dr', _vatInputAccountCode!, nm(_vatInputAccountId, _vatInputAccountName)));
+        if (_vatPendingInputAccountId != null) lines.add(_JournalLine('Dr', _vatPendingInputAccountCode!, '${nm(_vatPendingInputAccountId, _vatPendingInputAccountName)} ${isEnglish ? '(deferred VAT lines)' : '(รายการ VAT รอตัด)'}'));
         if (_apAccountId != null) lines.add(_JournalLine('  Cr', _apAccountCode!, nm(_apAccountId, _apAccountName)));
         break;
       case '30': // CN from vendor
@@ -527,10 +528,12 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
         if (_discountAccountId != null) lines.add(_JournalLine('Dr', _discountAccountCode!, '${nm(_discountAccountId, _discountAccountName)} ${isEnglish ? '(if discount applies)' : '(ถ้ามีส่วนลด)'}'));
         if (_expenseAccountId != null) lines.add(_JournalLine('  Cr', _expenseAccountCode!, '${nm(_expenseAccountId, _expenseAccountName)} ${isEnglish ? '(per line)' : '(ต่อ line)'}'));
         if (_vatInputAccountId != null) lines.add(_JournalLine('  Cr', _vatInputAccountCode!, nm(_vatInputAccountId, _vatInputAccountName)));
+        if (_vatPendingInputAccountId != null) lines.add(_JournalLine('  Cr', _vatPendingInputAccountCode!, '${nm(_vatPendingInputAccountId, _vatPendingInputAccountName)} ${isEnglish ? '(deferred VAT lines)' : '(รายการ VAT รอตัด)'}'));
         break;
       case '50': // DN — Debit Note
         if (_expenseAccountId != null) lines.add(_JournalLine('Dr', _expenseAccountCode!, '${nm(_expenseAccountId, _expenseAccountName)} ${isEnglish ? '(per line)' : '(ต่อ line)'}'));
         if (_vatInputAccountId != null) lines.add(_JournalLine('Dr', _vatInputAccountCode!, nm(_vatInputAccountId, _vatInputAccountName)));
+        if (_vatPendingInputAccountId != null) lines.add(_JournalLine('Dr', _vatPendingInputAccountCode!, '${nm(_vatPendingInputAccountId, _vatPendingInputAccountName)} ${isEnglish ? '(deferred VAT lines)' : '(รายการ VAT รอตัด)'}'));
         if (_apAccountId != null) lines.add(_JournalLine('  Cr', _apAccountCode!, nm(_apAccountId, _apAccountName)));
         break;
       case '60': // Advance Payment
@@ -552,6 +555,8 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
         if (_cashAccountId != null) lines.add(_JournalLine('  Cr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
         if (_whtPayableAccountId != null) lines.add(_JournalLine('  Cr', _whtPayableAccountCode!, '${nm(_whtPayableAccountId, _whtPayableAccountName)} ${isEnglish ? '(WHT payable)' : '(WHT ค้างจ่าย)'}'));
         if (_fxGainAccountId != null) lines.add(_JournalLine('  Cr', _fxGainAccountCode!, '${nm(_fxGainAccountId, _fxGainAccountName)} ${isEnglish ? '(FX gain)' : '(กำไร FX)'}'));
+        if (_vatInputAccountId != null) lines.add(_JournalLine('Dr', _vatInputAccountCode!, '${nm(_vatInputAccountId, _vatInputAccountName)} ${isEnglish ? '(recognize deferred VAT)' : '(รับรู้ VAT รอตัด)'}'));
+        if (_vatPendingInputAccountId != null) lines.add(_JournalLine('  Cr', _vatPendingInputAccountCode!, '${nm(_vatPendingInputAccountId, _vatPendingInputAccountName)} ${isEnglish ? '(deferred VAT recognized)' : '(VAT รอตัดที่รับรู้)'}'));
         break;
     }
     if (lines.isEmpty) {
@@ -757,6 +762,13 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
             accountId: _vatInputAccountId, accountCode: _vatInputAccountCode, accountName: _vatInputAccountName,
             onPick: (a) { _vatInputAccountId = a.id; _vatInputAccountCode = a.accountCode; _vatInputAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _vatInputAccountId = null; _vatInputAccountCode = null; _vatInputAccountName = null; }),
+          ),
+        if (_showVatPending)
+          _accountField(
+            label: isEnglish ? 'Deferred VAT Input' : 'ภาษีซื้อรอตัดบัญชี (Deferred VAT Input)',
+            accountId: _vatPendingInputAccountId, accountCode: _vatPendingInputAccountCode, accountName: _vatPendingInputAccountName,
+            onPick: (a) { _vatPendingInputAccountId = a.id; _vatPendingInputAccountCode = a.accountCode; _vatPendingInputAccountName = a.accountNameThai; },
+            onClear: () => _clearAccount(() { _vatPendingInputAccountId = null; _vatPendingInputAccountCode = null; _vatPendingInputAccountName = null; }),
           ),
 
         if (_showDiscount)

@@ -629,12 +629,16 @@ class ApOpenInvoice {
   final double exchangeRate;
   final String? docCode;
   final int? sysDocType;
+  // VAT รอตัดบัญชีของใบแจ้งหนี้ — รับรู้เป็นภาษีซื้อตามสัดส่วนที่จ่าย (ตัวอย่างรายการบัญชีของการจ่ายชำระ)
+  final double deferredVatAmountLc;
+  final double deferredVatAmountFc;
 
   ApOpenInvoice({
     required this.id, required this.docNo,
     this.docDate, this.dueDate,
     this.totalAmountLc = 0, this.balanceAmountLc = 0,
     this.totalAmountFc = 0, this.vatAmountFc = 0, this.vatAmountLc = 0,
+    this.deferredVatAmountLc = 0, this.deferredVatAmountFc = 0,
     this.currencyCode = 'THB', this.exchangeRate = 1,
     this.docCode, this.sysDocType,
   });
@@ -655,6 +659,8 @@ class ApOpenInvoice {
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       docCode: json['doc_code'],
       sysDocType: json['sys_doc_type'] != null ? int.tryParse(json['sys_doc_type'].toString()) : null,
+      deferredVatAmountLc: toDouble(json['deferred_vat_amount_lc']),
+      deferredVatAmountFc: toDouble(json['deferred_vat_amount_fc']),
     );
   }
 }

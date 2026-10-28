@@ -2782,6 +2782,21 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       if (totalAdv > 0) {
         lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), isEnglish ? 'Advance Deducted' : 'หักมัดจำ', 0, totalAdv * lc, 0, isFcDoc ? totalAdv : 0));
       }
+      // รับรู้ VAT รอตัดบัญชีของใบแจ้งหนี้ตามสัดส่วนที่จ่าย — Dr ภาษีซื้อ / Cr ภาษีซื้อรอตัด (มิเรอร์ backend)
+      double deferredVatLc = 0, deferredVatFc = 0;
+      for (final a in _applyRows) {
+        final inv = _openInvoices.where((i) => i.id == a.appliedToId).firstOrNull;
+        if (inv == null || inv.totalAmountFc == 0 || inv.deferredVatAmountLc == 0) continue;
+        final ratio = a.appliedAmountLc / inv.totalAmountFc;
+        deferredVatLc += inv.deferredVatAmountLc * ratio;
+        deferredVatFc += inv.deferredVatAmountFc * ratio;
+      }
+      if (deferredVatLc > 0.005) {
+        lines.add(_GlLine(setup.vatInputAccountCode ?? '—', acctName(setup.vatInputAccountId, setup.vatInputAccountName ?? 'VAT Input'),
+            isEnglish ? 'Recognize Deferred VAT' : 'รับรู้ VAT รอตัดบัญชี', deferredVatLc, 0, isFcDoc ? deferredVatFc : 0, 0));
+        lines.add(_GlLine(setup.vatPendingInputAccountCode ?? '—', acctName(setup.vatPendingInputAccountId, setup.vatPendingInputAccountName ?? 'Deferred VAT'),
+            isEnglish ? 'Deferred VAT Recognized' : 'VAT รอตัดบัญชีที่รับรู้', 0, deferredVatLc, 0, isFcDoc ? deferredVatFc : 0));
+      }
       if (_paymentRows.isEmpty) {
         final netCash = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc) - totalAdv - totalWht;
         if (netCash > 0.005) lines.add(_GlLine(setup.cashAccountCode ?? '—', acctName(setup.cashAccountId, setup.cashAccountName ?? cashFallback), payTransactionDesc, 0, netCash * lc, 0, isFcDoc ? netCash : 0));
