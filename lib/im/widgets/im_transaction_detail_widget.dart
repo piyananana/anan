@@ -287,10 +287,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   bool get _canEditBilling => !widget.viewOnly &&
       ((_status == 'Draft' && !_credit.isPending) || (_isGrDeferredMode && _status == 'Received') || (_isDlnDeferredMode && _status == 'Delivered'));
   // ยอดเอกสารสำหรับตรวจวงเงิน: Σ |จำนวน| × ราคาขาย × (1 + VAT) — รับคืน/ลดหนี้ลูกหนี้ติดลบ
+  // วงเงินเครดิตเป็นบาท — ราคาขาย × อัตราแลกเปลี่ยน แล้วคิด VAT จากยอดบาท (มิเรอร์ backend imDocAmount)
   double get _creditAmount {
+    double r2(double v) => (v * 100).roundToDouble() / 100;
     final sum = _lines.fold<double>(0, (s, l) {
       final vat = (l.vatType == null || l.vatType == 'NOVAT') ? 0 : l.vatRate;
-      return s + (l.variance.abs() * _parseNum(l.unitPriceCtrl.text) * (1 + vat / 100) * 100).roundToDouble() / 100;
+      final lc = r2(l.variance.abs() * _parseNum(l.unitPriceCtrl.text) * _exchangeRate);
+      return s + lc + r2(lc * vat / 100);
     });
     return _isArReturnCnMode ? -sum : sum;
   }
