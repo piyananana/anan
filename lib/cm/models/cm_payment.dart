@@ -2,6 +2,7 @@
 
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 class CmPayment {
   final int?     id;
@@ -86,7 +87,7 @@ class CmPayment {
   bool get isVoided    => status == 'Voided';
   bool get isCheck     => paymentMethodType == 'CHECK';
   bool get isFromAp    => apTransactionId != null || apPaymentRunId != null || glEntryId != null;
-  bool get isFcy       => currencyCode != 'THB';
+  bool get isFcy       => currencyCode != CurrencyService.baseCode;
 
   Map<String, dynamic> toJson() => {
     'payment_date':       formatLocalDate(paymentDate),

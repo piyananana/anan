@@ -1,3 +1,4 @@
+import '../../cd/services/cd_currency_service.dart';
 // lib/cm/models/cm_bank_account.dart
 class CmBankAccount {
   final int? id;
@@ -96,7 +97,7 @@ class CmBankAccount {
   }
 
   bool get isPettyCash => cmType == 'PETTY_CASH';
-  bool get isFcy       => currencyCode != 'THB';
+  bool get isFcy       => currencyCode != CurrencyService.baseCode;
 
   String get displayName => '$accountCode — $accountNameTh';
   String get cmTypeLabel => cmCmTypeOptions[cmType] ?? cmType;

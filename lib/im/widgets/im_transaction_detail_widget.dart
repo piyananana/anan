@@ -766,7 +766,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _vendorLabel = '${picked.vendorCode ?? ''} ${picked.vendorNameTh ?? ''}'.trim();
         // คืนตามสกุลเงินของใบรับสินค้าต้นฉบับ — ราคาที่ดึงมา (returnPriceFc) อยู่ในสกุลเงินนั้น
         final matched = _currencies.cast<Currency?>().firstWhere(
-            (c) => c?.currencyCode == (picked.currencyCode ?? 'THB'), orElse: () => null);
+            (c) => c?.currencyCode == (picked.currencyCode ?? CurrencyService.baseCode), orElse: () => null);
         if (matched != null) {
           _currency = matched;
           _exchangeRate = picked.exchangeRate;
@@ -777,7 +777,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         if (picked.customerId != null) _loadCustomerSalespersons(picked.customerId!);
         // รับคืนตามสกุลเงินของใบส่งสินค้าต้นฉบับ — ราคาขายที่ดึงมาอยู่ในสกุลเงินนั้น
         final matched = _currencies.cast<Currency?>().firstWhere(
-            (c) => c?.currencyCode == (picked.currencyCode ?? 'THB'), orElse: () => null);
+            (c) => c?.currencyCode == (picked.currencyCode ?? CurrencyService.baseCode), orElse: () => null);
         if (matched != null) {
           _currency = matched;
           _exchangeRate = picked.exchangeRate;
@@ -900,7 +900,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // ค่า NUMERIC จาก PostgreSQL ผ่าน pg driver มาเป็น String เสมอ (ไม่ใช่ num) — ต้อง parse ด้วย toString() เท่านั้น
   // ห้ามใช้ `as num?` ตรงๆ (จะ throw runtime TypeError) มิเรอร์ toDouble() ที่ใช้ทั่วทั้ง *_transaction.dart models
   double _poNum(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0;
-  String _poCurrencyCode(Map<String, dynamic> l) => (l['currency_code'] as String?) ?? 'THB';
+  String _poCurrencyCode(Map<String, dynamic> l) => (l['currency_code'] as String?) ?? CurrencyService.baseCode;
   double _poUnitCostLc(Map<String, dynamic> l) => _poNum(l['unit_price_fc']) * (_poNum(l['exchange_rate']) == 0 ? 1 : _poNum(l['exchange_rate']));
 
   Future<void> _pickPoLines() async {
@@ -954,9 +954,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       Expanded(
                         flex: 2,
                         child: Text(
-                          _poCurrencyCode(l) == 'THB'
+                          _poCurrencyCode(l) == CurrencyService.baseCode
                               ? '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))}'
-                              : '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))} ${_poCurrencyCode(l)} (≈${_fmtQty.format(_poUnitCostLc(l))} THB)',
+                              : '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))} ${_poCurrencyCode(l)} (≈${_fmtQty.format(_poUnitCostLc(l))} ${CurrencyService.baseCode})',
                           style: const TextStyle(fontSize: 11, color: Colors.grey),
                         ),
                       ),
@@ -1041,7 +1041,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     return false;
   }
 
-  String _soCurrencyCode(Map<String, dynamic> l) => (l['currency_code'] as String?) ?? 'THB';
+  String _soCurrencyCode(Map<String, dynamic> l) => (l['currency_code'] as String?) ?? CurrencyService.baseCode;
   double _soUnitPriceLc(Map<String, dynamic> l) => _poNum(l['unit_price_fc']) * (_poNum(l['exchange_rate']) == 0 ? 1 : _poNum(l['exchange_rate']));
 
   Future<void> _pickSoLines() async {
@@ -1092,9 +1092,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       Expanded(
                         flex: 2,
                         child: Text(
-                          _soCurrencyCode(l) == 'THB'
+                          _soCurrencyCode(l) == CurrencyService.baseCode
                               ? '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))}'
-                              : '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))} ${_soCurrencyCode(l)} (≈${_fmtQty.format(_soUnitPriceLc(l))} THB)',
+                              : '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))} ${_soCurrencyCode(l)} (≈${_fmtQty.format(_soUnitPriceLc(l))} ${CurrencyService.baseCode})',
                           style: const TextStyle(fontSize: 11, color: Colors.grey),
                         ),
                       ),
@@ -1348,7 +1348,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         customerPoNo: _isDeliverMode && _poNoCtrl.text.trim().isNotEmpty ? _poNoCtrl.text.trim() : null,
         customerPoDate: _isDeliverMode ? _poDate : null,
         currencyId: (_isApVendorMode || _isArCustomerMode) ? _currency?.id : null,
-        currencyCode: (_isApVendorMode || _isArCustomerMode) ? (_currency?.currencyCode ?? 'THB') : null,
+        currencyCode: (_isApVendorMode || _isArCustomerMode) ? (_currency?.currencyCode ?? CurrencyService.baseCode) : null,
         exchangeRate: (_isApVendorMode || _isArCustomerMode) ? _exchangeRate : 1,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       );

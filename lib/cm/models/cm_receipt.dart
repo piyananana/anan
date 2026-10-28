@@ -2,6 +2,7 @@
 
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 class CmReceipt {
   final int?     id;
@@ -82,7 +83,7 @@ class CmReceipt {
   bool get isBounced  => status == 'Bounced';
   bool get isVoided   => status == 'Voided';
   bool get isCheck    => paymentMethodType == 'CHECK';
-  bool get isFcy      => currencyCode != 'THB';
+  bool get isFcy      => currencyCode != CurrencyService.baseCode;
 
   factory CmReceipt.fromJson(Map<String, dynamic> j) => CmReceipt(
     id:                  j['id'],

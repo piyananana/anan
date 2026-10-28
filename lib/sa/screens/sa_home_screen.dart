@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/sa_menu.dart';
+import '../../cd/services/cd_currency_service.dart';
 import '../models/sa_password_status.dart';
 import '../models/sa_user.dart';
 import '../services/sa_menu_service.dart';
@@ -84,6 +85,9 @@ class HomeScreenState extends State<HomeScreen> {
     // _allMenus = authService.userMenus;
 
     _loadUserAndMenus();
+    // สกุลเงินหลักของฐานข้อมูลที่เข้าใช้งาน (CurrencyService.baseCode) — ล้างของฐานข้อมูลก่อนหน้าแล้วโหลดใหม่
+    final currencyService = CurrencyService()..clearBaseCurrencyCache();
+    currencyService.getBaseCurrencyCode();
   }
 
   @override

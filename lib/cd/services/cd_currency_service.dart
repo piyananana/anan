@@ -17,8 +17,12 @@ class CurrencyService {
   final String baseUrl = AppConfig.apiCd;
   final AuthService authService = AuthService();
 
-  // Cache สกุลเงินหลัก (base currency) — โหลดครั้งเดียว
-  String? _cachedBaseCurrencyCode;
+  // Cache สกุลเงินหลัก (base currency) — โหลดครั้งเดียวต่อการเข้าสู่ระบบ (HomeScreen ล้างและโหลดใหม่ทุกครั้ง
+  // เพราะเปลี่ยนฐานข้อมูลได้) เก็บเป็น static ให้โมเดล/ที่ที่ไม่มี async ใช้ผ่าน baseCode ได้
+  static String? _cachedBaseCurrencyCode;
+
+  /// รหัสสกุลเงินหลักแบบ sync — ยังโหลดไม่เสร็จ/โหลดไม่ได้ = THB
+  static String get baseCode => _cachedBaseCurrencyCode ?? 'THB';
 
   /// คืนรหัสสกุลเงินหลัก (baseCurrencyFlag = true) พร้อม cache
   Future<String> getBaseCurrencyCode() async {
