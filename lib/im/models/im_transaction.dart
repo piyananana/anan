@@ -58,6 +58,8 @@ class ImTransactionHeader {
   final String? refDocNo;
   final int? refImTransactionId; // '15'/'35' (คืนสินค้าผู้ขาย/รับคืนจากลูกค้า) เท่านั้น — เอกสาร GRN/DLN ต้นฉบับที่จะคืน
   final String? refImTransactionDocNo; // จาก join — เลขที่เอกสารต้นฉบับ ใช้แสดงผลเท่านั้น
+  final String? refImTransactionStatus; // จาก join — สถานะเอกสารต้นฉบับ ('15' เตือนผลกระทบก่อน Post)
+  final String? refImSysDocType;
   final int? refPoId; // '10'/'11'/'12' เท่านั้น — PO ที่ GRN นี้อ้างอิง (สะดวก/แสดงผล — การตรวจจริงอยู่ระดับบรรทัด)
   final String? refPoDocNo; // จาก join — เลขที่ PO ใช้แสดงผลเท่านั้น
   final int? refSoId; // '30'/'31'/'32' เท่านั้น — SO ที่ DLN นี้อ้างอิง (สะดวก/แสดงผล — การตรวจจริงอยู่ระดับบรรทัด)
@@ -124,6 +126,8 @@ class ImTransactionHeader {
     this.refDocNo,
     this.refImTransactionId,
     this.refImTransactionDocNo,
+    this.refImTransactionStatus,
+    this.refImSysDocType,
     this.refPoId,
     this.refPoDocNo,
     this.refSoId,
@@ -182,6 +186,8 @@ class ImTransactionHeader {
       refDocNo: json['ref_doc_no'],
       refImTransactionId: json['ref_im_transaction_id'],
       refImTransactionDocNo: json['ref_im_transaction_doc_no'],
+      refImTransactionStatus: json['ref_im_transaction_status'],
+      refImSysDocType: json['ref_im_sys_doc_type']?.toString(),
       refPoId: json['ref_po_id'],
       refPoDocNo: json['ref_po_doc_no'],
       refSoId: json['ref_so_id'],
@@ -409,6 +415,8 @@ class ImReturnableDoc {
   final String? customerNameTh;
   final String docCode;
   final String sysDocType;
+  final String? currencyCode; // '15' คืนตามสกุลเงิน/อัตราแลกเปลี่ยนของใบรับสินค้าต้นฉบับ
+  final double exchangeRate;
 
   const ImReturnableDoc({
     required this.id,
@@ -423,6 +431,8 @@ class ImReturnableDoc {
     this.customerNameTh,
     required this.docCode,
     required this.sysDocType,
+    this.currencyCode,
+    this.exchangeRate = 1,
   });
 
   factory ImReturnableDoc.fromJson(Map<String, dynamic> json) => ImReturnableDoc(
@@ -438,6 +448,10 @@ class ImReturnableDoc {
         customerNameTh: json['customer_name_th'],
         docCode: json['doc_code'] ?? '',
         sysDocType: json['sys_doc_type']?.toString() ?? '',
+        currencyCode: json['currency_code'],
+        exchangeRate: (double.tryParse(json['exchange_rate']?.toString() ?? '') ?? 0) > 0
+            ? double.parse(json['exchange_rate'].toString())
+            : 1,
       );
 }
 
@@ -457,6 +471,10 @@ class ImReturnableLine {
   final double originalQty;
   final double remainingQty;
   final double? unitCost;
+  final double? unitPrice; // ราคาขายของบรรทัดใบส่งสินค้าต้นฉบับ ('35' ใช้เป็นราคาเริ่มต้นของใบลดหนี้)
+  final String? vatType;
+  final double? vatRate; // อัตรา VAT ณ ตอนขาย — ใบลดหนี้ควรกลับรายการด้วยอัตราเดียวกัน
+  final double? returnPriceFc; // ราคาซื้อในสกุลเงินของใบรับสินค้าต้นฉบับ ('15' ใช้เป็นราคาเริ่มต้นของใบลดหนี้ AP)
 
   const ImReturnableLine({
     required this.id,
@@ -473,6 +491,10 @@ class ImReturnableLine {
     required this.originalQty,
     required this.remainingQty,
     this.unitCost,
+    this.unitPrice,
+    this.vatType,
+    this.vatRate,
+    this.returnPriceFc,
   });
 
   factory ImReturnableLine.fromJson(Map<String, dynamic> json) {
@@ -493,6 +515,10 @@ class ImReturnableLine {
       originalQty: toDouble(json['original_qty']),
       remainingQty: toDouble(json['remaining_qty']),
       unitCost: toDoubleN(json['unit_cost']),
+      unitPrice: toDoubleN(json['unit_price']),
+      vatType: json['vat_type'],
+      vatRate: toDoubleN(json['vat_rate']),
+      returnPriceFc: toDoubleN(json['return_price_fc']),
     );
   }
 }

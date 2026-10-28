@@ -502,7 +502,11 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         return [
           _JournalSection(
             title: isEnglish ? 'Perpetual mode' : 'โหมด Perpetual',
-            lines: [_JournalLine('Dr', inv), _JournalLine('  Cr', grir)],
+            lines: [
+              _JournalLine('Dr', inv),
+              _JournalLine('Dr/Cr', isEnglish ? '$variance (purchase price - standard cost, STANDARD items)' : '$variance (ราคาซื้อ - ต้นทุนมาตรฐาน สินค้า STANDARD)'),
+              _JournalLine('  Cr', isEnglish ? '$grir (at purchase price)' : '$grir (ตามราคาซื้อ)'),
+            ],
           ),
           _JournalSection(
             title: isEnglish ? 'Periodic mode' : 'โหมด Periodic',
@@ -522,10 +526,19 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           ),
         ];
       case '11': // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ — ไม่ Post ที่นี่ สร้าง ap_transaction แล้วโพสต์ที่นั่นแทน
-      case '12': // GR รอตั้งหนี้ — Stage 1 (Post IM) ไม่ Post บัญชีเลย, Stage 2 (Post AP/GL) เหมือน '11' ทุกประการ
         return [
           _JournalSection(lines: [
             _JournalLine('Dr', isEnglish ? '$inv / $purchases (auto, on the AP bill)' : '$inv / $purchases (อัตโนมัติ บนใบตั้งหนี้ AP)'),
+            _JournalLine('Dr/Cr', isEnglish ? '$variance (purchase price - standard cost, STANDARD items, Perpetual only)' : '$variance (ราคาซื้อ - ต้นทุนมาตรฐาน สินค้า STANDARD เฉพาะ Perpetual)'),
+            _JournalLine('Dr', isEnglish ? '$vatIn (if VAT selected on a line)' : '$vatIn (ถ้าบรรทัดใดเลือก VAT)'),
+            _JournalLine('  Cr', ap),
+          ]),
+        ];
+      case '12': // GR รอตั้งหนี้ — Stage 1 (Post IM) ไม่ Post บัญชีเลย, Stage 2 (Post AP/GL) สินค้าคงคลังตามต้นทุนตอนรับ + ผลต่าง
+        return [
+          _JournalSection(lines: [
+            _JournalLine('Dr', isEnglish ? '$inv (at received cost) / $purchases (auto, on the AP bill)' : '$inv (ตามต้นทุนตอนรับ) / $purchases (อัตโนมัติ บนใบตั้งหนี้ AP)'),
+            _JournalLine('Dr/Cr', isEnglish ? '$variance (billed price - received cost, Perpetual only)' : '$variance (ราคาใบกำกับ - ต้นทุนตอนรับ เฉพาะ Perpetual)'),
             _JournalLine('Dr', isEnglish ? '$vatIn (if VAT selected on a line)' : '$vatIn (ถ้าบรรทัดใดเลือก VAT)'),
             _JournalLine('  Cr', ap),
           ]),
@@ -535,6 +548,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           _JournalSection(lines: [
             _JournalLine('Dr', inv),
             _JournalLine('Dr', isEnglish ? '$vatIn (if VAT selected on a line)' : '$vatIn (ถ้าบรรทัดใดเลือก VAT)'),
+            _JournalLine('Dr/Cr', isEnglish ? '$variance (if the price differs from stock cost)' : '$variance (ถ้าราคาต่างจากต้นทุนสต็อก)'),
             _JournalLine('  Cr', ap),
           ]),
         ];
@@ -543,8 +557,9 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         return [
           _JournalSection(lines: [
             _JournalLine('Dr', ap),
-            _JournalLine('  Cr', inv),
+            _JournalLine('  Cr', isEnglish ? '$inv (at actual stock cost)' : '$inv (ตามต้นทุนสต็อกจริง)'),
             _JournalLine('  Cr', isEnglish ? '$vatIn (reversed, if VAT selected on a line)' : '$vatIn (กลับรายการ ถ้าบรรทัดใดเลือก VAT)'),
+            _JournalLine('Dr/Cr', isEnglish ? '$variance (price on the credit note - stock cost)' : '$variance (ราคาบนใบลดหนี้ - ต้นทุนสต็อก)'),
           ]),
         ];
       case '30': // DLN — ส่งสินค้า (ขาย)

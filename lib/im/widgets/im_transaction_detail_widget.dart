@@ -208,6 +208,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   int? _linkedArTransactionId;
   int? _refImTransactionId; // '15'/'35' เท่านั้น — เอกสาร GRN/DLN ต้นฉบับที่จะคืน
   String? _refImTransactionLabel;
+  String? _refImSourceSysDocType; // '15' — ประเภท/สถานะของใบรับสินค้าต้นฉบับ ใช้เตือนผลกระทบก่อน Post
+  String? _refImSourceStatus;
   int? _refPoId; // '10'/'11'/'12' เท่านั้น — PO ที่อ้างอิง (สะดวก/แสดงผล — เก็บจากบรรทัดแรกที่เลือกผ่าน picker เท่านั้น)
   String? _refPoDocNoLabel;
   int? _refSoId; // '30'/'31'/'32' เท่านั้น — SO ที่อ้างอิง (สะดวก/แสดงผล — เก็บจากบรรทัดแรกที่เลือกผ่าน picker เท่านั้น)
@@ -338,6 +340,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _linkedArTransactionId = null;
     _refImTransactionId = null;
     _refImTransactionLabel = null;
+    _refImSourceSysDocType = null;
+    _refImSourceStatus = null;
     _refPoId = null;
     _refPoDocNoLabel = null;
     _refSoId = null;
@@ -419,6 +423,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _linkedArTransactionId = h.linkedArTransactionId;
     _refImTransactionId = h.refImTransactionId;
     _refImTransactionLabel = h.refImTransactionDocNo;
+    _refImSourceSysDocType = h.refImSysDocType;
+    _refImSourceStatus = h.refImTransactionStatus;
     _refPoId = h.refPoId;
     _refPoDocNoLabel = h.refPoDocNo;
     _refSoId = h.refSoId;
@@ -640,9 +646,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
   // เพิ่มรายการตรง (ไม่ผ่าน picker PO/SO) ให้ GRN/DLN Billing — แนะนำราคาจาก im_price_list เอ็นด์พอยท์เดียวกับที่
   // PO/SO ใช้ ('11'/'12' ฝั่งซื้อใช้ผู้ขายปัจจุบัน, '31'/'32' ฝั่งขายใช้ลูกค้าปัจจุบัน) เอกสารประเภทอื่นไม่ต้อง
-  // resolve ที่นี่เลย: '10'/'30' ไม่ตั้งหนี้เลยไม่มีช่องราคาให้กรอก (unitPriceCtrl ถูก lock ไว้ที่ 0), ส่วน
-  // Return/DN ('15'/'20'/'25'/'35'/'40'/'45') ใช้ _pickReturnLines เท่านั้น ไม่เรียก _addLine นี้อยู่แล้ว — บรรทัด
-  // ที่มาจาก _pickPoLines/_pickSoLines ก็มีราคาติดมาจากเอกสารต้นทางอยู่แล้ว ไม่ต้อง resolve ซ้ำเช่นกัน
+  // resolve ที่นี่เลย: '10'/'30' ไม่ตั้งหนี้เลยไม่มีช่องราคาให้กรอก (unitPriceCtrl ถูก lock ไว้ที่ 0), '15'/'35'
+  // เพิ่มบรรทัดผ่าน _pickReturnLines ซึ่งมีต้นทุน/ราคาติดมาจากเอกสารต้นฉบับแล้ว ส่วน '20'/'25'/'40'/'45' (เอกสาร
+  // อิสระ) เพิ่มผ่าน _addLine นี้แต่ผู้ใช้กรอกราคาเอง — บรรทัดจาก _pickPoLines/_pickSoLines ก็มีราคาติดมาแล้วเช่นกัน
   Future<void> _maybeResolveDirectLinePrice(_CountLine line) async {
     final itemId = line.item.id;
     if (itemId == null) return;
@@ -740,9 +746,18 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     setState(() {
       _refImTransactionId = picked.id;
       _refImTransactionLabel = picked.docNo;
+      _refImSourceSysDocType = picked.sysDocType;
+      _refImSourceStatus = picked.status;
       if (_isReturnToSupplierMode) {
         _vendorId = picked.vendorId;
         _vendorLabel = '${picked.vendorCode ?? ''} ${picked.vendorNameTh ?? ''}'.trim();
+        // คืนตามสกุลเงินของใบรับสินค้าต้นฉบับ — ราคาที่ดึงมา (returnPriceFc) อยู่ในสกุลเงินนั้น
+        final matched = _currencies.cast<Currency?>().firstWhere(
+            (c) => c?.currencyCode == (picked.currencyCode ?? 'THB'), orElse: () => null);
+        if (matched != null) {
+          _currency = matched;
+          _exchangeRate = picked.exchangeRate;
+        }
       } else {
         _customerId = picked.customerId;
         _customerLabel = '${picked.customerCode ?? ''} ${picked.customerNameTh ?? ''}'.trim();
@@ -832,7 +847,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       for (var i = 0; i < pickedLines.length; i++) {
         final l = pickedLines[i];
         final qty = _parseNum(qtyCtrls[l.id]!.text).clamp(0, l.remainingQty);
-        final vatType = _isVatMode ? _safeVatCode(items[i].defaultVatType) : null;
+        // '15'/'35' ใช้ราคา + VAT ของบรรทัดเอกสารต้นฉบับเป็นค่าเริ่มต้น (อัตรา ณ ตอนซื้อ/ขาย) ผู้ใช้แก้ได้ภายหลัง
+        final origVat = l.vatType != null && l.vatType!.isNotEmpty ? l.vatType : null;
+        final vatType = _isVatMode ? _safeVatCode(origVat ?? items[i].defaultVatType) : null;
+        final vatRate = vatType == null
+            ? 0.0
+            : (origVat == vatType && l.vatRate != null ? l.vatRate! : _rateForVatCode(vatType));
         final line = _CountLine(
           item: items[i],
           locationId: l.locationId, locationCode: l.locationCode,
@@ -840,11 +860,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           isApReturnCnMode: _isApReturnCnMode, isApDnMode: _isApDnMode,
           isArReturnCnMode: _isArReturnCnMode, isArDnMode: _isArDnMode,
           issueQty: qty.toDouble(),
-          unitCost: l.unitCost,
+          // '15': ช่องต้นทุนในโหมดผู้ขายคือราคาในสกุลเงินของเอกสาร (ตั้งตามใบรับสินค้าแล้ว) = ยอดใบลดหนี้ AP
+          unitCost: _isApReturnCnMode ? (l.returnPriceFc ?? l.unitCost) : l.unitCost,
+          unitPrice: _isArReturnCnMode ? l.unitPrice : null,
           lotNo: l.lotNo ?? '',
           serialNo: l.serialNo ?? '',
           refImTransactionDetailId: l.id,
-          vatType: vatType, vatRate: vatType != null ? _rateForVatCode(vatType) : 0,
+          vatType: vatType, vatRate: vatRate,
         );
         _lines.add(line);
         _refreshSystemQty(line);
@@ -1107,8 +1129,59 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     line.dispose();
   }
 
+  // '15' อ้างอิงใบรับสินค้าที่อาจยังไม่ได้ตั้งหนี้ AP — '10' (ตั้งหนี้แยกเองที่ AP, ระบบไม่รู้ว่าตั้งแล้วหรือยัง) และ
+  // '12' ที่ยังเป็น Received (ยังไม่ได้ Post AP/GL) — เตือนผลกระทบแล้วให้ผู้ใช้เลือกหยุดหรือทำต่อ
+  Future<bool> _confirmReturnSourceImpact() async {
+    final isEnglish = _isEnglish;
+    final src = _refImTransactionLabel ?? '';
+    String? msg;
+    if (_refImSourceSysDocType == '10') {
+      msg = isEnglish
+          ? 'Source document $src is a goods receipt without auto billing (GR/IR). When it was received, the system credited the GR/IR clearing account, not Accounts Payable.\n\n'
+              'Posting this return creates an AP credit note (Dr AP). If the vendor invoice for $src has NOT been recorded in AP yet:\n'
+              '• the vendor\'s AP balance will become negative (debit balance)\n'
+              '• the GR/IR clearing account will keep an open balance for the returned goods\n\n'
+              'Recommended: record the vendor invoice in AP first, then post this return.'
+          : 'เอกสารต้นฉบับ $src เป็นใบรับสินค้าแบบไม่ตั้งหนี้อัตโนมัติ (GR/IR) — ตอนรับสินค้าระบบลง Cr บัญชีพักรับสินค้า (GR/IR) ไม่ใช่เจ้าหนี้\n\n'
+              'การ Post เอกสารคืนสินค้านี้จะสร้างใบลดหนี้ AP (Dr เจ้าหนี้) หากยังไม่ได้ตั้งหนี้ใบกำกับของ $src ที่ระบบ AP:\n'
+              '• ยอดเจ้าหนี้ของผู้ขายรายนี้จะติดลบ (ยอดคงเหลือด้านเดบิต)\n'
+              '• บัญชีพักรับสินค้า (GR/IR) จะค้างยอดของสินค้าที่คืน\n\n'
+              'แนะนำ: ตั้งหนี้ใบกำกับของผู้ขายที่ AP ให้เรียบร้อยก่อน แล้วจึง Post เอกสารคืนสินค้านี้';
+    } else if (_refImSourceSysDocType == '12' && _refImSourceStatus == 'Received') {
+      msg = isEnglish
+          ? 'Source document $src has been received but NOT billed yet (no AP invoice / GL entry).\n\n'
+              'Posting this return now creates an AP credit note against an invoice that does not exist yet:\n'
+              '• the vendor\'s AP balance will become negative until $src is billed\n'
+              '• when $src is billed later, it will still be billed at the full received quantity\n\n'
+              'Recommended: post the billing of $src first, then post this return.'
+          : 'เอกสารต้นฉบับ $src รับสินค้าแล้วแต่ยังไม่ได้ตั้งหนี้ (ยังไม่มีใบตั้งหนี้ AP / รายการบัญชี)\n\n'
+              'การ Post เอกสารคืนสินค้าตอนนี้จะสร้างใบลดหนี้ AP ทั้งที่ยังไม่มีใบตั้งหนี้:\n'
+              '• ยอดเจ้าหนี้ของผู้ขายรายนี้จะติดลบจนกว่าจะตั้งหนี้ $src\n'
+              '• เมื่อตั้งหนี้ $src ภายหลัง จะยังตั้งหนี้เต็มจำนวนที่รับมา\n\n'
+              'แนะนำ: Post ตั้งหนี้ของ $src ให้เรียบร้อยก่อน แล้วจึง Post เอกสารคืนสินค้านี้';
+    }
+    if (msg == null) return true;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+          const SizedBox(width: 8),
+          Expanded(child: Text(isEnglish ? 'Impact of this return' : 'ผลกระทบของการคืนสินค้านี้')),
+        ]),
+        content: SizedBox(width: 520, child: SingleChildScrollView(child: Text(msg!))),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Stop' : 'หยุด')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Continue posting' : 'ทำต่อ (Post)')),
+        ],
+      ),
+    );
+    return go == true;
+  }
+
   // Post: ตรวจวงเงินก่อน (เอกสารฝั่งขาย) — เกินและยังไม่ได้รับอนุมัติ ให้เลือกบันทึกร่างแล้วขออนุมัติ
   Future<void> _onPost() async {
+    if (_isReturnToSupplierMode && !await _confirmReturnSourceImpact()) return;
     if (_isArCustomerMode && _customerId != null) {
       final go = await checkCreditBeforePost(
         context,
@@ -1194,8 +1267,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           return;
         }
         // ของแถม (l.isFree) ยกเว้นการบังคับต้นทุนต่อหน่วย — ปล่อยเป็น 0 ได้ตามที่ออกแบบไว้ (ดูหมายเหตุที่ isFree)
-        if (!l.isFree && l.variance > 0 && l.item.costingMethod != 'STANDARD' && _parseNum(l.unitCostCtrl.text) <= 0) {
+        if (!l.isFree && l.variance > 0 && (l.item.costingMethod != 'STANDARD' || _isPoReceiveMode) &&
+            _parseNum(l.unitCostCtrl.text) <= 0) {
           warn('${l.item.itemCode}: ${isEnglish ? 'Unit cost is required' : 'กรุณาระบุต้นทุนต่อหน่วย'}');
+          return;
+        }
+        // '15'/'20': ราคาบนใบลดหนี้ AP — ไม่มีราคา = ใบลดหนี้ยอด 0
+        if (!l.isFree && l.isApReturnCnMode && _parseNum(l.unitCostCtrl.text) <= 0) {
+          warn('${l.item.itemCode}: ${isEnglish ? 'Unit price for the AP credit note is required' : 'กรุณาระบุราคาต่อหน่วยสำหรับใบลดหนี้ AP'}');
           return;
         }
         if (_isVatMode && (l.vatType == null || l.vatType!.isEmpty)) {
@@ -1908,7 +1987,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     final varianceColor = variance > 0 ? Colors.green.shade700 : (variance < 0 ? Colors.red.shade700 : Colors.black87);
     final showLot = line.item.isLotTracked;
     final showSerial = line.item.isSerialTracked || line.item.costingMethod == 'SPECIFIC';
-    final canEditUnitCost = variance > 0 && line.item.costingMethod != 'STANDARD';
+    // '15'/'20'/'25': ช่องนี้คือราคาบนใบลดหนี้/เพิ่มหนี้ AP (ไม่ใช่ต้นทุนสต็อก) จึงกรอกได้เสมอแม้เป็นยอดลดสต็อก
+    final isApCreditPrice = line.isApReturnCnMode || line.isApDnMode;
+    // '10'/'11'/'12' สินค้า STANDARD: สต็อกตีมูลค่าที่ต้นทุนมาตรฐาน แต่ช่องนี้คือราคาซื้อที่ใช้ตั้งหนี้ AP / GR/IR จึงต้องกรอกได้
+    final isPurchasePrice = _isPoReceiveMode && line.item.costingMethod == 'STANDARD';
+    final canEditUnitCost = isApCreditPrice || isPurchasePrice || (variance > 0 && line.item.costingMethod != 'STANDARD');
     final unitCostDisplay = line.item.costingMethod == 'STANDARD'
         ? _fmtMoney.format(line.item.standardCost)
         : null;
@@ -2040,7 +2123,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       readOnly: _isReadOnly,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(
-                        labelText: (isEnglish ? 'Unit Cost *' : 'ต้นทุน/หน่วย *') + (_isApVendorMode && _currency != null ? ' (${_currency!.currencyCode})' : ''),
+                        labelText: ((isApCreditPrice || isPurchasePrice)
+                                ? (isEnglish ? 'Unit Price *' : 'ราคา/หน่วย *')
+                                : (isEnglish ? 'Unit Cost *' : 'ต้นทุน/หน่วย *')) +
+                            (_isApVendorMode && _currency != null ? ' (${_currency!.currencyCode})' : ''),
                         border: const OutlineInputBorder(), isDense: true,
                       ),
                     )
@@ -2143,19 +2229,31 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           ),
         ]);
       }
-      double billedValue = 0, vatValue = 0;
+      // ช่องต้นทุน/ต้นทุนตามใบกำกับเป็นสกุลเงินของเอกสาร — แปลงเป็นบาทด้วยอัตราแลกเปลี่ยนของเอกสาร; จำนวนที่รับ
+      // คือ variance (counted คือยอดคงเหลือหลังรับ ไม่ใช่จำนวนที่รับ) — สินค้าคงคลังลงตามมูลค่าสต็อกตอนรับ
+      // ส่วนต่างกับราคาใบกำกับลงบัญชีผลต่างต้นทุน (มิเรอร์ postApBillFromGrn; Periodic ลงบัญชีซื้อเต็มจำนวน)
+      double billedValue = 0, stockValue = 0, vatValue = 0;
       for (final l in _lines) {
-        final billed = l.billedUnitCostCtrl.text.trim().isEmpty ? _parseNum(l.unitCostCtrl.text) : _parseNum(l.billedUnitCostCtrl.text);
-        billedValue += l.counted * billed;
-        if (l.vatType != null && l.vatType != 'NOVAT') vatValue += l.counted * billed * l.vatRate / 100;
+        final qty = l.variance;
+        final received = _parseNum(l.unitCostCtrl.text) * _exchangeRate;
+        final billed = l.billedUnitCostCtrl.text.trim().isEmpty ? received : _parseNum(l.billedUnitCostCtrl.text) * _exchangeRate;
+        billedValue += qty * billed;
+        stockValue += qty * (l.item.costingMethod == 'STANDARD' ? l.item.standardCost : received);
+        if (l.vatType != null && l.vatType != 'NOVAT') vatValue += qty * billed * l.vatRate / 100;
       }
+      final priceVariance = billedValue - stockValue;
+      final hasVariance = priceVariance.abs() >= 0.005;
       final isPostedYet = _status == 'Posted';
       return _card(
         title: isPostedYet
             ? (isEnglish ? 'GL Preview (Posted reference)' : 'ตัวอย่างรายการบัญชี (อ้างอิงยอดที่ Posted แล้ว)')
             : (isEnglish ? 'GL Preview (not posted yet)' : 'ตัวอย่างรายการบัญชี (ยังไม่ได้ Post)'),
         children: [
-          _glLine(_docSetup?.inventoryAccountCode, isEnglish ? 'Inventory (on the AP bill)' : 'สินค้าคงคลัง (บนใบตั้งหนี้ AP)', billedValue, 0),
+          _glLine(_docSetup?.inventoryAccountCode, isEnglish ? 'Inventory (on the AP bill)' : 'สินค้าคงคลัง (บนใบตั้งหนี้ AP)', stockValue, 0),
+          if (hasVariance)
+            _glLine(_docSetup?.varianceAccountCode,
+                isEnglish ? 'Cost variance (billed price vs received cost)' : 'ผลต่างต้นทุน (ราคาใบกำกับ - ต้นทุนตอนรับ)',
+                priceVariance > 0 ? priceVariance : 0, priceVariance < 0 ? -priceVariance : 0),
           if (vatValue > 0)
             _glLine(_docSetup?.vatInputAccountCode, isEnglish ? '${_docSetup?.vatInputAccountName ?? 'VAT Input'} (on the AP bill)' : '${_docSetup?.vatInputAccountName ?? 'VAT ซื้อ'} (บนใบตั้งหนี้ AP)', vatValue, 0),
           _glLine(null, isEnglish ? 'AP payable' : 'เจ้าหนี้การค้า', 0, billedValue + vatValue),
@@ -2216,29 +2314,34 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
 
     if (_isReceiveMode) {
-      double receiveValue = 0;
-      for (final l in _lines) {
-        final qty = _parseNum(l.issueQtyCtrl.text);
-        if (qty <= 0) continue;
-        final cost = l.item.costingMethod == 'STANDARD' ? l.item.standardCost : _parseNum(l.unitCostCtrl.text);
-        receiveValue += qty * cost;
-      }
       if (_isGrnBillingMode) {
-        // '11' GRN Billing — ไม่ Post บัญชีที่นี่เลย สร้าง ap_transaction อัตโนมัติแล้วโพสต์ที่นั่นแทน
-        double vatValue = 0;
+        // '11' GRN Billing — ไม่ Post บัญชีที่นี่เลย สร้าง ap_transaction อัตโนมัติแล้วโพสต์ที่นั่นแทน — ใบตั้งหนี้ใช้ราคาซื้อ
+        // ที่กรอก (สกุลเงินเอกสาร × อัตรา) สินค้าคงคลังใช้มูลค่าสต็อก (STANDARD = ต้นทุนมาตรฐาน) ส่วนต่างลงบัญชีผลต่าง
+        double billValue = 0, vatValue = 0;
         for (final l in _lines) {
           final qty = _parseNum(l.issueQtyCtrl.text);
-          if (qty <= 0 || l.vatType == null || l.vatType == 'NOVAT') continue;
-          final cost = l.item.costingMethod == 'STANDARD' ? l.item.standardCost : _parseNum(l.unitCostCtrl.text);
-          vatValue += qty * cost * l.vatRate / 100;
+          if (qty <= 0) continue;
+          final price = _parseNum(l.unitCostCtrl.text) * _exchangeRate;
+          billValue += qty * price;
+          if (l.vatType != null && l.vatType != 'NOVAT') vatValue += qty * price * l.vatRate / 100;
         }
+        final stockValue = _lines.fold<double>(0, (s, l) {
+          final qty = _parseNum(l.issueQtyCtrl.text);
+          if (qty <= 0) return s;
+          return s + qty * (l.item.costingMethod == 'STANDARD' ? l.item.standardCost : _parseNum(l.unitCostCtrl.text) * _exchangeRate);
+        });
+        final priceVariance = billValue - stockValue;
         return _card(title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
           _glLine(_docSetup!.inventoryAccountCode, isEnglish ? '${_docSetup!.inventoryAccountName ?? ''} (on the AP bill)' : '${_docSetup!.inventoryAccountName ?? ''} (บนใบตั้งหนี้ AP)',
-              receiveValue, 0),
+              stockValue, 0),
+          if (priceVariance.abs() >= 0.005)
+            _glLine(_docSetup!.varianceAccountCode,
+                isEnglish ? 'Cost variance (purchase price vs standard cost)' : 'ผลต่างต้นทุน (ราคาซื้อ - ต้นทุนมาตรฐาน)',
+                priceVariance > 0 ? priceVariance : 0, priceVariance < 0 ? -priceVariance : 0),
           if (vatValue > 0)
             _glLine(_docSetup!.vatInputAccountCode, isEnglish ? '${_docSetup!.vatInputAccountName ?? 'VAT Input'} (on the AP bill)' : '${_docSetup!.vatInputAccountName ?? 'VAT ซื้อ'} (บนใบตั้งหนี้ AP)',
                 vatValue, 0),
-          _glLine(null, isEnglish ? 'AP payable (auto-created)' : 'เจ้าหนี้การค้า (สร้างอัตโนมัติ)', 0, receiveValue + vatValue),
+          _glLine(null, isEnglish ? 'AP payable (auto-created)' : 'เจ้าหนี้การค้า (สร้างอัตโนมัติ)', 0, billValue + vatValue),
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
@@ -2251,16 +2354,31 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         ]);
       }
       // '10' GRN (ไม่มีเลขที่อ้างอิง) — Dr คลัง (Perpetual) หรือ Dr ซื้อสินค้า (Periodic) / Cr พักรอใบกำกับ (GR/IR)
+      // GR/IR ตั้งตามราคาซื้อที่กรอก (สกุลเงินเอกสาร × อัตรา) ให้ล้างกับใบตั้งหนี้ AP ได้พอดี คลังใช้มูลค่าสต็อก
+      // (STANDARD = ต้นทุนมาตรฐาน) ส่วนต่างลงบัญชีผลต่างต้นทุน — มิเรอร์ postGlEntry ฝั่ง backend
+      double grirValue = 0, grirStockValue = 0;
+      for (final l in _lines) {
+        final qty = _parseNum(l.issueQtyCtrl.text);
+        if (qty <= 0 || l.isFree) continue;
+        final price = _parseNum(l.unitCostCtrl.text) * _exchangeRate;
+        grirValue += qty * price;
+        grirStockValue += qty * (l.item.costingMethod == 'STANDARD' ? l.item.standardCost : price);
+      }
+      final grirVariance = grirValue - grirStockValue;
       return _card(title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
         _glLine(_docSetup!.inventoryAccountCode, isEnglish ? '${_docSetup!.inventoryAccountName ?? ''} (Perpetual mode)' : '${_docSetup!.inventoryAccountName ?? ''} (โหมด Perpetual)',
-            receiveValue, 0),
-        _glLine(_docSetup!.grirAccountCode, _docSetup!.grirAccountName, 0, receiveValue),
+            grirStockValue, 0),
+        if (grirVariance.abs() >= 0.005)
+          _glLine(_docSetup!.varianceAccountCode,
+              isEnglish ? 'Cost variance (purchase price vs standard cost)' : 'ผลต่างต้นทุน (ราคาซื้อ - ต้นทุนมาตรฐาน)',
+              grirVariance > 0 ? grirVariance : 0, grirVariance < 0 ? -grirVariance : 0),
+        _glLine(_docSetup!.grirAccountCode, _docSetup!.grirAccountName, 0, grirValue),
         Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
             isEnglish
-                ? 'Under Periodic mode, the debit side lands on the Purchases account instead of Inventory.'
-                : 'ในโหมด Periodic ฝั่ง Dr จะเป็นบัญชีซื้อสินค้าแทนบัญชีสต็อก',
+                ? 'Under Periodic mode, the debit side lands on the Purchases account (at the purchase price, no variance line) instead of Inventory.'
+                : 'ในโหมด Periodic ฝั่ง Dr จะเป็นบัญชีซื้อสินค้า (ตามราคาซื้อ ไม่มีบรรทัดผลต่าง) แทนบัญชีสต็อก',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
           ),
         ),
@@ -2271,11 +2389,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       // '15'/'20'/'25' — มิเรอร์ '11' ทุกประการ (ไม่ Post บัญชีที่นี่เลย สร้าง ap_transaction อัตโนมัติแล้ว Post ที่นั่น
       // แทน) ต่างกันแค่ Dr/Cr กลับด้านสำหรับ CN ('15'/'20') เทียบกับ DN ('25') และยอดฝั่งลดสต็อก ('15'/'20') ยังไม่ทราบ
       // ต้นทุนที่แน่นอนจนกว่าจะ Post (ตัดจาก stock layer จริง) จึงแสดงเป็น undetermined เหมือน AJS/ISS ทั่วไป
+      // ยอดใบลดหนี้/เพิ่มหนี้ = ราคาที่กรอก (สกุลเงินเอกสาร × อัตราแลกเปลี่ยน) ทราบแน่นอนตั้งแต่ Draft — ฝั่งสินค้าคงคลัง
+      // ตัดตามต้นทุนสต็อกจริงตอน Post ส่วนต่างจากราคานี้ลงบัญชีผลต่างต้นทุน (ดู postApCreditDebitNoteFromIm)
       double value = 0, vatValue = 0, undetermined = 0;
       for (final l in _lines) {
         final v = l.variance;
         if (v == 0) continue;
-        final cost = l.item.costingMethod == 'STANDARD' ? l.item.standardCost : (v > 0 ? _parseNum(l.unitCostCtrl.text) : null);
+        final cost = l.unitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.unitCostCtrl.text) * _exchangeRate;
         if (cost == null) {
           undetermined += v.abs();
         } else {
@@ -2302,11 +2422,20 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               isEnglish
-                  ? 'Some lines have decreases whose exact cost is determined at Post time from existing stock — not included above.'
-                  : 'บางรายการเป็นยอดลดที่ยังไม่ทราบต้นทุนที่แน่นอน (ระบบจะคำนวณจากสต็อกจริงตอน Post) — ยังไม่รวมในตัวเลขข้างต้น',
+                  ? 'Some lines have no unit price yet — not included above.'
+                  : 'บางรายการยังไม่ได้ระบุราคาต่อหน่วย — ยังไม่รวมในตัวเลขข้างต้น',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
             ),
           ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            isEnglish
+                ? 'The inventory side is valued at the actual stock cost at Post time; any difference from the price above goes to the cost variance account.'
+                : 'ฝั่งสินค้าคงคลังจะคิดตามต้นทุนสต็อกจริงตอน Post — ส่วนต่างจากราคาข้างต้นลงบัญชีผลต่างต้นทุน',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
