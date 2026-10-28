@@ -647,8 +647,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // เพิ่มรายการตรง (ไม่ผ่าน picker PO/SO) ให้ GRN/DLN Billing — แนะนำราคาจาก im_price_list เอ็นด์พอยท์เดียวกับที่
   // PO/SO ใช้ ('11'/'12' ฝั่งซื้อใช้ผู้ขายปัจจุบัน, '31'/'32' ฝั่งขายใช้ลูกค้าปัจจุบัน) เอกสารประเภทอื่นไม่ต้อง
   // resolve ที่นี่เลย: '10'/'30' ไม่ตั้งหนี้เลยไม่มีช่องราคาให้กรอก (unitPriceCtrl ถูก lock ไว้ที่ 0), '15'/'35'
-  // เพิ่มบรรทัดผ่าน _pickReturnLines ซึ่งมีต้นทุน/ราคาติดมาจากเอกสารต้นฉบับแล้ว ส่วน '20'/'25'/'40'/'45' (เอกสาร
-  // อิสระ) เพิ่มผ่าน _addLine นี้แต่ผู้ใช้กรอกราคาเอง — บรรทัดจาก _pickPoLines/_pickSoLines ก็มีราคาติดมาแล้วเช่นกัน
+  // เพิ่มบรรทัดผ่าน _pickReturnLines ซึ่งมีต้นทุน/ราคาติดมาจากเอกสารต้นฉบับแล้ว '45' (ส่งของเพิ่มให้ลูกค้า) แนะนำ
+  // ราคาขายแบบเดียวกับ '31' ส่วน '20'/'25'/'40' (เอกสารอิสระ) เพิ่มผ่าน _addLine นี้แต่ผู้ใช้กรอกราคาเอง — บรรทัดจาก _pickPoLines/_pickSoLines ก็มีราคาติดมาแล้วเช่นกัน
   Future<void> _maybeResolveDirectLinePrice(_CountLine line) async {
     final itemId = line.item.id;
     if (itemId == null) return;
@@ -659,7 +659,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       );
       final price = double.tryParse(resolved['unit_price_fc']?.toString() ?? '') ?? 0;
       if (price > 0 && mounted) setState(() => line.unitCostCtrl.text = _CountLine._fmtInput(price));
-    } else if ((_isDlnBillingMode || _isDlnDeferredMode) && _customerId != null) {
+    } else if ((_isDlnBillingMode || _isDlnDeferredMode || _isArDnMode) && _customerId != null) {
       final resolved = await _soService.resolvePrice(
         itemId: itemId, customerId: _customerId!, qty: 1, docDate: docDate, uomId: line.item.baseUomId,
       );
@@ -1272,9 +1272,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           warn('${l.item.itemCode}: ${isEnglish ? 'Unit cost is required' : 'กรุณาระบุต้นทุนต่อหน่วย'}');
           return;
         }
-        // '15'/'20': ราคาบนใบลดหนี้ AP — ไม่มีราคา = ใบลดหนี้ยอด 0
-        if (!l.isFree && l.isApReturnCnMode && _parseNum(l.unitCostCtrl.text) <= 0) {
-          warn('${l.item.itemCode}: ${isEnglish ? 'Unit price for the AP credit note is required' : 'กรุณาระบุราคาต่อหน่วยสำหรับใบลดหนี้ AP'}');
+        // '15'/'20'/'25': ราคาบนใบลดหนี้/เพิ่มหนี้ AP — ไม่มีราคา = เอกสารยอด 0 ทั้งที่สต็อกเคลื่อนไหวจริง
+        if (!l.isFree && (l.isApReturnCnMode || l.isApDnMode) && _parseNum(l.unitCostCtrl.text) <= 0) {
+          warn('${l.item.itemCode}: ${isEnglish ? 'Unit price for the AP credit/debit note is required' : 'กรุณาระบุราคาต่อหน่วยสำหรับใบลดหนี้/เพิ่มหนี้ AP'}');
+          return;
+        }
+        // '40'/'45': ราคาขายบนใบลดหนี้/เพิ่มหนี้ AR (เอกสารอิสระ) — '35' ไม่บังคับ เพราะราคามาจากใบส่งสินค้าต้นฉบับ
+        if (!l.isFree && (_selectedSysDocType == '40' || _isArDnMode) && _parseNum(l.unitPriceCtrl.text) <= 0) {
+          warn('${l.item.itemCode}: ${isEnglish ? 'Unit price for the AR credit/debit note is required' : 'กรุณาระบุราคาขายต่อหน่วยสำหรับใบลดหนี้/เพิ่มหนี้ AR'}');
           return;
         }
         if (_isVatMode && (l.vatType == null || l.vatType!.isEmpty)) {
