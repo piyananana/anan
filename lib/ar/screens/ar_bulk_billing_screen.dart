@@ -25,10 +25,11 @@ const double _wCust  = 215.0;  // customer code+name
 const double _wAmt   = 110.0;  // amount columns (total / balance)
 const double _wEdit  = 130.0;  // editable billing amount
 const double _wRef   =  80.0;  // reference
+const double _wCur   =  60.0;  // currency
 
 // Total min width of all columns combined
 const double _totalTableWidth =
-    _wCB + _wDate * 4 + _wType + _wDocNo + _wCust + _wAmt * 2 + _wEdit + _wRef;
+    _wCB + _wDate * 4 + _wType + _wDocNo + _wCust + _wCur + _wAmt * 2 + _wEdit + _wRef;
 
 // ─── Data model ───────────────────────────────────────────────────────────────
 class _InvoiceRow {
@@ -42,8 +43,10 @@ class _InvoiceRow {
   final String expectedPaymentDate;
   final String customerCode;
   final String customerNameTh;
+  // ยอดตามสกุลเงินของใบแจ้งหนี้ (ใบสกุลเงินหลัก = ยอดบาท)
   final double totalAmount;
   final double balance;
+  final String currencyCode;
   final String refNo;
   bool selected;
   final TextEditingController amountCtrl;
@@ -61,6 +64,7 @@ class _InvoiceRow {
     required this.customerNameTh,
     required this.totalAmount,
     required this.balance,
+    required this.currencyCode,
     required this.refNo,
     this.selected = true,
     required this.amountCtrl,
@@ -174,8 +178,8 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
       final rows = <_InvoiceRow>[];
       for (final collector in raw) {
         for (final inv in (collector['invoices'] as List? ?? [])) {
-          final bal   = (inv['balance_amount_lc'] as num?)?.toDouble() ?? 0;
-          final total = (inv['total_amount_lc']   as num?)?.toDouble() ?? 0;
+          final bal   = ((inv['balance_amount_fc'] ?? inv['balance_amount_lc']) as num?)?.toDouble() ?? 0;
+          final total = ((inv['total_amount_fc']   ?? inv['total_amount_lc'])   as num?)?.toDouble() ?? 0;
           rows.add(_InvoiceRow(
             txnId:               inv['txn_id']      as int?    ?? 0,
             customerId:          inv['customer_id'] as int?    ?? 0,
@@ -189,6 +193,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
             customerNameTh:      inv['customer_name_th']       as String? ?? '',
             totalAmount:         total,
             balance:             bal,
+            currencyCode:        inv['currency_code']          as String? ?? '',
             refNo:               inv['ref_no']                 as String? ?? '',
             amountCtrl: TextEditingController(text: _fmt.format(bal)),
           ));
@@ -201,7 +206,10 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                 ? 'No invoices due for billing in the selected period'
                 : 'ไม่พบใบแจ้งหนี้ที่มีกำหนดวางบิลในช่วงที่เลือก')));
       }
+      // ค่าเริ่มต้นเลือกทุกใบ — ลูกค้าเดียวกันแต่ต่างสกุลเงิน ให้เลือกไว้เฉพาะสกุลเงินแรกที่พบ แล้วเตือน
+      final skipped = _selectWithoutConflict(rows, rows);
       setState(() => _rows = rows);
+      if (skipped.isNotEmpty) _warnCurrencyConflict(skipped);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -237,12 +245,94 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
 
   bool get _allSelected  => _rows.isNotEmpty && _rows.every((r) => r.selected);
   bool get _someSelected => _rows.any((r) => r.selected);
-  double get _selectedTotal =>
-      _selectedRows.fold(0, (s, r) => s + r.billingAmount);
+
+  // ยอดรวมแยกตามสกุลเงิน — ต่างลูกค้าต่างสกุลเงินได้ (คนละใบวางบิล) จึงรวมข้ามสกุลเงินไม่ได้
+  Map<String, double> get _selectedTotals {
+    final m = <String, double>{};
+    for (final r in _selectedRows) {
+      m[r.currencyCode] = (m[r.currencyCode] ?? 0) + r.billingAmount;
+    }
+    return m;
+  }
+
+  String get _selectedTotalsText => _selectedTotals.entries
+      .map((e) => '${_fmt.format(e.value)} ${e.key}'.trim())
+      .join(' | ');
+
+  // ใบวางบิล 1 ใบต่อลูกค้าต้องสกุลเงินเดียวกัน — สกุลเงินของใบที่เลือกไว้แล้วของลูกค้าคนนี้ (ไม่นับ row เอง)
+  String? _selectedCurrencyOf(int customerId, _InvoiceRow except) {
+    for (final r in _rows) {
+      if (!identical(r, except) && r.selected && r.customerId == customerId) return r.currencyCode;
+    }
+    return null;
+  }
+
+  // เลือกใบใน targets ทีละใบ ข้ามใบที่สกุลเงินไม่ตรงกับใบที่เลือกไว้แล้วของลูกค้าเดียวกัน — คืนใบที่ข้าม
+  List<_InvoiceRow> _selectWithoutConflict(List<_InvoiceRow> all, Iterable<_InvoiceRow> targets) {
+    final chosen = <int, String>{
+      for (final r in all.where((r) => r.selected && !targets.contains(r))) r.customerId: r.currencyCode,
+    };
+    final skipped = <_InvoiceRow>[];
+    for (final r in targets) {
+      final cur = chosen[r.customerId];
+      if (cur != null && cur != r.currencyCode) {
+        r.selected = false;
+        skipped.add(r);
+      } else {
+        r.selected = true;
+        chosen[r.customerId] = r.currencyCode;
+      }
+    }
+    return skipped;
+  }
+
+  void _warnCurrencyConflict(List<_InvoiceRow> skipped) {
+    final isEnglish = _isEnglish;
+    final list = skipped
+        .map((r) => '• ${r.docNo}  ${r.customerCode}  (${r.currencyCode})')
+        .join('\n');
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(children: [
+          Icon(Icons.warning_amber, color: Colors.orange[800]),
+          const SizedBox(width: 8),
+          Expanded(child: Text(isEnglish ? 'Different currencies' : 'สกุลเงินต่างกัน')),
+        ]),
+        content: Text(isEnglish
+            ? 'One billing document per customer must be in a single currency. '
+                'These invoices were not selected because the customer already has selected invoices in another currency:\n\n$list\n\n'
+                'Bill them separately after creating this batch.'
+            : 'ใบวางบิล 1 ใบต่อลูกค้าต้องเป็นสกุลเงินเดียวกัน '
+                'ใบแจ้งหนี้ต่อไปนี้จึงไม่ถูกเลือก เพราะลูกค้ารายนี้มีใบที่เลือกไว้เป็นสกุลเงินอื่นแล้ว:\n\n$list\n\n'
+                'กรุณาวางบิลแยกอีกรอบหลังสร้างชุดนี้'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(AppL10n(isEnglish).close)),
+        ],
+      ),
+    );
+  }
+
+  void _toggleRow(_InvoiceRow row, bool? v) {
+    if (v == true) {
+      final cur = _selectedCurrencyOf(row.customerId, row);
+      if (cur != null && cur != row.currencyCode) {
+        _warnCurrencyConflict([row]);
+        return;
+      }
+    }
+    setState(() => row.selected = v ?? false);
+  }
 
   void _toggleAll(bool? v) {
+    if (v == true) {
+      late List<_InvoiceRow> skipped;
+      setState(() => skipped = _selectWithoutConflict(_rows, _rows.where((r) => !r.selected).toList()));
+      if (skipped.isNotEmpty) _warnCurrencyConflict(skipped);
+      return;
+    }
     setState(() {
-      for (final r in _rows) { r.selected = v ?? false; }
+      for (final r in _rows) { r.selected = false; }
     });
   }
 
@@ -275,12 +365,12 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
         content: Text(l.isEnglish
             ? 'Will create ${byCustomer.length} billing document(s)\n'
                 'Total ${_selectedRows.length} invoice(s)\n'
-                'Total amount ${_fmt.format(_selectedTotal)} THB\n'
+                'Total amount $_selectedTotalsText\n'
                 'Document date: ${DateFormat('dd/MM/yyyy').format(_bcDocDate)}\n\n'
                 'Do you want to proceed?'
             : 'จะสร้างใบวางบิล ${byCustomer.length} ใบ\n'
                 'รวม ${_selectedRows.length} ใบแจ้งหนี้\n'
-                'ยอดรวม ${_fmt.format(_selectedTotal)} บาท\n'
+                'ยอดรวม $_selectedTotalsText\n'
                 'วันที่เอกสาร: ${DateFormat('dd/MM/yyyy').format(_bcDocDate)}\n\n'
                 'ต้องการดำเนินการหรือไม่?'),
         actions: [
@@ -392,10 +482,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                                     style: const TextStyle(fontSize: 12))),
                             Padding(padding: const EdgeInsets.all(6),
                                 child: Text(
-                                    _fmt.format(
-                                        (c['total_amount'] as num?)
-                                                ?.toDouble() ??
-                                            0),
+                                    '${_fmt.format((c['total_amount'] as num?)?.toDouble() ?? 0)} ${c['currency_code'] ?? ''}'.trim(),
                                     style: const TextStyle(fontSize: 12),
                                     textAlign: TextAlign.right)),
                           ])),
@@ -681,7 +768,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
 
   Widget _buildRightPanel() {
     final byCustomer = _selectedByCustomer;
-    final selTotal   = _selectedTotal;
+    final selTotal   = _selectedTotalsText;
     final selCount   = _selectedRows.length;
 
     return Column(
@@ -708,9 +795,9 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
               Text(
                 _isEnglish
                     ? 'Selected $selCount item(s) | ${byCustomer.length} customer(s) | '
-                        'Total ${_fmt.format(selTotal)}'
+                        'Total $selTotal'
                     : 'เลือก $selCount รายการ | ${byCustomer.length} ลูกค้า | '
-                        'รวม ${_fmt.format(selTotal)} บาท',
+                        'รวม $selTotal',
                 style: TextStyle(
                     fontSize: 13,
                     color: Colors.teal[800],
@@ -794,6 +881,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
         _hCell(_isEnglish ? 'Due Date' : 'วันครบกำหนด',         _wDate),
         _hCell(_isEnglish ? 'Expected Payment' : 'วันชำระ(คาดว่า)',      _wDate),
         _hCell(_isEnglish ? 'Code – Customer Name' : 'รหัส – ชื่อลูกหนี้',   _wCust),
+        _hCell(_isEnglish ? 'Currency' : 'สกุลเงิน',            _wCur),
         _hCell(_isEnglish ? 'Total' : 'ยอดรวม',              _wAmt,  right: true),
         _hCell(_isEnglish ? 'Balance' : 'ยอดคงค้าง',           _wAmt,  right: true),
         _hCell(_isEnglish ? 'Billing Amount' : 'ยอดที่จะวางบิล',      _wEdit, right: true),
@@ -823,7 +911,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
           width: _wCB,
           child: Checkbox(
             value: row.selected,
-            onChanged: (v) => setState(() => row.selected = v ?? false),
+            onChanged: (v) => _toggleRow(row, v),
           ),
         ),
         _dCell(_fmtD(row.billingDate),         _wDate),
@@ -833,6 +921,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
         _dCell(_fmtD(row.dueDate),              _wDate),
         _dCell(_fmtD(row.expectedPaymentDate),  _wDate),
         _dCell('${row.customerCode}  ${row.customerNameTh}', _wCust),
+        _dCell(row.currencyCode,                _wCur, center: true),
         _numCell(row.totalAmount,               _wAmt),
         _numCell(row.balance,                   _wAmt),
         // editable amount
@@ -892,7 +981,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
 
   // ─── footer ───────────────────────────────────────────────────────────────────
 
-  Widget _buildFooter(Map<int, List<_InvoiceRow>> byCustomer, double selTotal,
+  Widget _buildFooter(Map<int, List<_InvoiceRow>> byCustomer, String selTotal,
       int custCount) {
     final hasError =
         _selectedRows.any((r) => r.billingAmount > r.balance + 0.001);
@@ -913,7 +1002,7 @@ class _ArBulkBillingScreenState extends State<ArBulkBillingScreen> {
                     ? '${_selectedRows.length} doc(s)'
                     : '${_selectedRows.length} ใบ',
                 Colors.orange[700]!),
-            _chip(Icons.payments,     _fmt.format(selTotal),          Colors.teal[700]!),
+            _chip(Icons.payments,     selTotal,                       Colors.teal[700]!),
             if (noDocType)
               _chip(
                   Icons.warning_amber,
