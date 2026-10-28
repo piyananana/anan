@@ -14,6 +14,7 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/date_utils.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
 final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -301,7 +302,7 @@ class _ApRemittanceAdviceScreenState extends State<ApRemittanceAdviceScreen>
                 child: pw.Text(
                   '${isEnglish ? 'Total payment' : 'ยอดชำระทั้งสิ้น'}: '
                   '${_fmt.format((payment['amount_lc'] as num?)?.toDouble() ?? 0)}'
-                  '${isEnglish ? '' : ' บาท'}',
+                  ' ${CurrencyService.baseCode}',
                   style: pw.TextStyle(font: fontBold, fontSize: 12),
                 ),
               ),

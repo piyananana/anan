@@ -3,6 +3,7 @@ import '../../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
 import '../../sa/models/sa_credit_approval.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 // AR document types (sys_doc_type in sa_module_document, sys_module=11)
 const int arDocTypeInvoice            = 10;
@@ -189,7 +190,7 @@ class ArTransactionHeader {
       vatAccountId: j['vat_account_id'] as int?,
       glDocId: j['gl_doc_id'] as int?,
       currencyId: j['currency_id'] as int?,
-      currencyCode: j['currency_code'] as String? ?? 'THB',
+      currencyCode: j['currency_code'] as String? ?? CurrencyService.baseCode,
       exchangeRate: _toDouble(j['exchange_rate']) ?? 1.0,
       subtotalFc: _toDouble(j['subtotal_fc']) ?? 0,
       discountAmountFc: _toDouble(j['discount_amount_fc']) ?? 0,

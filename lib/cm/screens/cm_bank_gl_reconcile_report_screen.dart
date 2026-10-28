@@ -18,6 +18,7 @@ import '../widgets/cm_bank_account_list_widget.dart';
 import '../services/cm_report_service.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/file_download.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -242,7 +243,7 @@ class _State extends State<CmBankGlReconcileReportScreen>
         children: [
           dCell('${r['bank_account_code'] ?? ''}  ${_rowAcctName(r)}', tNormal(9)),
           dCell('${r['gl_account_code'] ?? ''}  ${_rowGlName(r)}', tNormal(9)),
-          dCell(r['currency_code'] as String? ?? 'THB', tNormal(9), a: pw.TextAlign.center),
+          dCell(r['currency_code'] as String? ?? CurrencyService.baseCode, tNormal(9), a: pw.TextAlign.center),
           amtCell(_parseD(r['cm_balance']), tNormal(9)),
           amtCell(_parseD(r['gl_balance']), tNormal(9)),
           amtCell(diff, diff == 0 ? tNormal(9) : tBold(9)),
@@ -309,7 +310,7 @@ class _State extends State<CmBankGlReconcileReportScreen>
         final isMatched = r['is_matched'] == true;
         _xlCell(s, row, 0, '${r['bank_account_code'] ?? ''}  ${_rowAcctName(r)}');
         _xlCell(s, row, 1, '${r['gl_account_code'] ?? ''}  ${_rowGlName(r)}');
-        _xlCell(s, row, 2, r['currency_code'] ?? 'THB');
+        _xlCell(s, row, 2, r['currency_code'] ?? CurrencyService.baseCode);
         _xlCell(s, row, 3, _parseD(r['cm_balance']), align: HorizontalAlign.Right);
         _xlCell(s, row, 4, _parseD(r['gl_balance']), align: HorizontalAlign.Right);
         _xlCell(s, row, 5, _parseD(r['difference']), align: HorizontalAlign.Right);
@@ -653,7 +654,7 @@ class _State extends State<CmBankGlReconcileReportScreen>
                   Text(r['gl_account_code'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   Text(_rowGlName(r), style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 ])),
-                DataCell(Text(r['currency_code'] ?? 'THB', style: cStyle)),
+                DataCell(Text(r['currency_code'] ?? CurrencyService.baseCode, style: cStyle)),
                 DataCell(Text(_fmt.format(_parseD(r['cm_balance'])), style: cStyle)),
                 DataCell(Text(_fmt.format(_parseD(r['gl_balance'])), style: cStyle)),
                 DataCell(Text(_fmt.format(diff),

@@ -1,4 +1,5 @@
 import '../../cd/models/cd_doc_salesperson.dart';
+import '../../cd/services/cd_currency_service.dart';
 class ArCustomerAddress {
   final int? id;
   final int? customerId;
@@ -559,7 +560,7 @@ class ArCustomer {
             double.tryParse(json['credit_limit']?.toString() ?? '0') ?? 0,
         discountPercent:
             double.tryParse(json['discount_percent']?.toString() ?? '0') ?? 0,
-        currencyCode: json['currency_code'] ?? 'THB',
+        currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
         isActive: json['is_active'] ?? true,
         remark: json['remark'],
         requiresBilling: json['requires_billing'] ?? false,

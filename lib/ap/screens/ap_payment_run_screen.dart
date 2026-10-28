@@ -29,6 +29,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/file_download.dart';
 import '../../sa/widgets/sa_doc_approval_panel.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 // ── Column widths ────────────────────────────────────────────────────────────
 const double _wVendor   = 130.0;
@@ -1184,8 +1185,8 @@ class _DetailPanelState extends State<_DetailPanel> {
                 style: const TextStyle(fontSize: 13)),
             Text(
               isEnglish
-                  ? 'Total amount: ${_fmt.format(run.totalAmountLc)} THB'
-                  : 'ยอดรวม: ${_fmt.format(run.totalAmountLc)} บาท',
+                  ? 'Total amount: ${_fmt.format(run.totalAmountLc)} ${CurrencyService.baseCode}'
+                  : 'ยอดรวม: ${_fmt.format(run.totalAmountLc)} ${CurrencyService.baseCode}',
               style: const TextStyle(fontSize: 13),
             ),
           ],
@@ -1418,7 +1419,7 @@ class _DetailPanelState extends State<_DetailPanel> {
                         style: TextStyle(fontSize: 12, color: crAccount != null ? null : Colors.orange[800]),
                       ),
                     ),
-                    Text('${_fmt.format(total)} ${isEnglish ? 'THB' : 'บาท'}',
+                    Text('${_fmt.format(total)} ${CurrencyService.baseCode}',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   ]),
                 ),

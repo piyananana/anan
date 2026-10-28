@@ -8,6 +8,7 @@ import '../services/ap_year_end_service.dart';
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 // ถอยเป็นร่าง (งวดเปิด + แบบ realized ใบตั้งหนี้ยังไม่เปลี่ยน) → โพสต์ใหม่ด้วยเลขที่รายการบัญชีเดิม หรือลบ
 // ยกเลิกใช้เมื่อถอยไม่ได้ (ลงรายการกลับวันนี้) ทุกการกระทำต้องมีเหตุผล — ปุ่มที่ทำไม่ได้ล็อกพร้อมเหตุผล
@@ -615,11 +616,11 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
       const SizedBox(height: 4),
       TextFormField(
         controller: _rateCtrl[c['currency_id'] as int],
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           isDense: true,
-          border: OutlineInputBorder(),
-          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          suffixText: 'THB',
+          border: const OutlineInputBorder(),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          suffixText: CurrencyService.baseCode,
           hintText: '0.000000',
         ),
         style: const TextStyle(fontSize: 14),
@@ -655,9 +656,9 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
         DataColumn(label: Text(isEnglish ? 'Currency' : 'สกุลเงิน')),
         DataColumn(label: Text(isEnglish ? 'Balance FC' : 'ยอดค้าง FC'),   numeric: true),
         DataColumn(label: Text(isEnglish ? 'Original Rate' : 'Rate เดิม'),     numeric: true),
-        DataColumn(label: Text(isEnglish ? 'Amount Before THB' : 'ยอดก่อน THB'),  numeric: true),
+        DataColumn(label: Text(isEnglish ? 'Amount Before ${CurrencyService.baseCode}' : 'ยอดก่อน ${CurrencyService.baseCode}'),  numeric: true),
         DataColumn(label: Text(isEnglish ? 'New Rate' : 'Rate ใหม่'),     numeric: true),
-        DataColumn(label: Text(isEnglish ? 'Amount After THB' : 'ยอดหลัง THB'),  numeric: true),
+        DataColumn(label: Text(isEnglish ? 'Amount After ${CurrencyService.baseCode}' : 'ยอดหลัง ${CurrencyService.baseCode}'),  numeric: true),
         const DataColumn(label: Text('FX G/L'),        numeric: true),
       ],
       rows: [
@@ -877,9 +878,9 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
                         DataColumn(label: Text(isEnglish ? 'Currency' : 'สกุลเงิน')),
                         DataColumn(label: Text(isEnglish ? 'Balance FC' : 'ยอดค้าง FC'),    numeric: true),
                         DataColumn(label: Text(isEnglish ? 'Original Rate' : 'Rate เดิม'),      numeric: true),
-                        DataColumn(label: Text(isEnglish ? 'Amount Before THB' : 'ยอดก่อน THB'),   numeric: true),
+                        DataColumn(label: Text(isEnglish ? 'Amount Before ${CurrencyService.baseCode}' : 'ยอดก่อน ${CurrencyService.baseCode}'),   numeric: true),
                         DataColumn(label: Text(isEnglish ? 'New Rate' : 'Rate ใหม่'),      numeric: true),
-                        DataColumn(label: Text(isEnglish ? 'Amount After THB' : 'ยอดหลัง THB'),   numeric: true),
+                        DataColumn(label: Text(isEnglish ? 'Amount After ${CurrencyService.baseCode}' : 'ยอดหลัง ${CurrencyService.baseCode}'),   numeric: true),
                         const DataColumn(label: Text('FX G/L'),         numeric: true),
                       ],
                       rows: [

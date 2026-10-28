@@ -2,6 +2,7 @@
 
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 class CmBankStatement {
   final int id;
@@ -67,7 +68,7 @@ class CmBankStatement {
     statementDateTo:     parseLocalDate(j['statement_date_to']),
     openingBalance:      double.tryParse(j['opening_balance']?.toString() ?? '0') ?? 0,
     closingBalance:      double.tryParse(j['closing_balance']?.toString() ?? '0') ?? 0,
-    currencyCode:        j['currency_code'] as String? ?? 'THB',
+    currencyCode:        j['currency_code'] as String? ?? CurrencyService.baseCode,
     status:              j['status'] as String? ?? 'Draft',
     fileName:            j['file_name'] as String?,
     notes:               j['notes'] as String?,

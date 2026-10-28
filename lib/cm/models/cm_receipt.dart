@@ -103,7 +103,7 @@ class CmReceipt {
     customerNameTh:      j['customer_name_th'],
     amountLc:            double.tryParse(j['amount_lc']?.toString() ?? '0') ?? 0,
     amountFc:            double.tryParse(j['amount_fc']?.toString() ?? '0') ?? 0,
-    currencyCode:        j['currency_code'] ?? 'THB',
+    currencyCode:        j['currency_code'] ?? CurrencyService.baseCode,
     exchangeRate:        double.tryParse(j['exchange_rate']?.toString() ?? '1') ?? 1,
     checkNo:             j['check_no'],
     checkDate:           parseLocalDateNullable(j['check_date']),

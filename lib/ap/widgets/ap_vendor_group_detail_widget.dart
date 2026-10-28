@@ -7,6 +7,8 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
 import '../models/ap_vendor_group.dart';
+import '../../cd/models/cd_currency.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 class _Section extends StatefulWidget {
   final String title;
@@ -78,7 +80,7 @@ class ApVendorGroupDetailWidgetState extends State<ApVendorGroupDetailWidget> {
   late TextEditingController _creditMonthsCtrl;
   late TextEditingController _creditDaysCtrl;
   late bool _isActive;
-  String _currencyCode = 'THB';
+  String _currencyCode = CurrencyService.baseCode;
 
   bool _isAutoNumber = false;
   late TextEditingController _prefixCtrl;
@@ -132,6 +134,16 @@ class ApVendorGroupDetailWidgetState extends State<ApVendorGroupDetailWidget> {
     super.initState();
     _initFromSelected(widget.selected);
     _loadAccounts();
+    _loadCurrencies();
+  }
+
+  // สกุลเงินที่ใช้งานอยู่ (cd_currency) — เดิมเป็นรายการตายตัว 5 สกุล
+  List<String> _currencyCodes = [];
+  Future<void> _loadCurrencies() async {
+    try {
+      final list = (await CurrencyService().fetchActiveRows()).map((Currency c) => c.currencyCode).toList();
+      if (mounted) setState(() => _currencyCodes = list);
+    } catch (_) {}
   }
 
   Future<void> _loadAccounts() async {
@@ -165,7 +177,7 @@ class ApVendorGroupDetailWidgetState extends State<ApVendorGroupDetailWidget> {
     _creditMonthsCtrl = TextEditingController(text: (d?.creditTermMonths ?? 0).toString());
     _creditDaysCtrl  = TextEditingController(text: (d?.creditTermDays ?? 30).toString());
     _isActive        = d?.isActive ?? true;
-    _currencyCode    = d?.currencyCode ?? 'THB';
+    _currencyCode    = d?.currencyCode ?? CurrencyService.baseCode;
     _isAutoNumber    = d?.isAutoNumber ?? false;
     _prefixCtrl      = TextEditingController(text: d?.runningPrefix ?? 'VEND');
     _separatorCtrl   = TextEditingController(text: d?.runningSeparator ?? '-');
@@ -190,7 +202,7 @@ class ApVendorGroupDetailWidgetState extends State<ApVendorGroupDetailWidget> {
       _creditMonthsCtrl.text = (d?.creditTermMonths ?? 0).toString();
       _creditDaysCtrl.text   = (d?.creditTermDays ?? 30).toString();
       _isActive        = d?.isActive ?? true;
-      _currencyCode    = d?.currencyCode ?? 'THB';
+      _currencyCode    = d?.currencyCode ?? CurrencyService.baseCode;
       _isAutoNumber    = d?.isAutoNumber ?? false;
       _prefixCtrl.text    = d?.runningPrefix ?? 'VEND';
       _separatorCtrl.text = d?.runningSeparator ?? '-';
@@ -204,7 +216,7 @@ class ApVendorGroupDetailWidgetState extends State<ApVendorGroupDetailWidget> {
     } else if (widget.mode == Mode.add && old.mode != Mode.add) {
       _codeCtrl.clear(); _nameThaCtrl.clear(); _nameEngCtrl.clear(); _descCtrl.clear();
       _creditMonthsCtrl.text = '0'; _creditDaysCtrl.text = '30';
-      _isActive = true; _currencyCode = 'THB'; _isAutoNumber = false;
+      _isActive = true; _currencyCode = CurrencyService.baseCode; _isAutoNumber = false;
       _prefixCtrl.text = 'VEND'; _separatorCtrl.text = '-'; _suffixDate = '';
       _lengthCtrl.text = '4'; _nextNumCtrl.text = '1';
       _apAccountId = null; _apAccountCode = null; _apAccountNameThai = null; _apAccountNameEng = null;
@@ -394,14 +406,11 @@ class ApVendorGroupDetailWidgetState extends State<ApVendorGroupDetailWidget> {
             : DropdownButtonFormField<String>(
                 value: _currencyCode,
                 decoration: InputDecoration(labelText: isEnglish ? 'Currency' : 'สกุลเงิน', border: const OutlineInputBorder()),
-                items: const [
-                  DropdownMenuItem(value: 'THB', child: Text('THB')),
-                  DropdownMenuItem(value: 'USD', child: Text('USD')),
-                  DropdownMenuItem(value: 'EUR', child: Text('EUR')),
-                  DropdownMenuItem(value: 'JPY', child: Text('JPY')),
-                  DropdownMenuItem(value: 'CNY', child: Text('CNY')),
-                ],
-                onChanged: (v) => setState(() => _currencyCode = v ?? 'THB'),
+                // รหัสปัจจุบันของกลุ่มต้องอยู่ในรายการเสมอ (ยังโหลดไม่เสร็จ/สกุลเงินถูกปิดใช้งานแล้ว)
+                items: {..._currencyCodes, _currencyCode}
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) => setState(() => _currencyCode = v ?? CurrencyService.baseCode),
               ),
         )),
       ]),

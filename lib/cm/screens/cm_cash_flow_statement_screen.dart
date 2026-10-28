@@ -18,6 +18,7 @@ import '../widgets/cm_bank_account_list_widget.dart';
 import '../services/cm_report_service.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/file_download.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -236,7 +237,7 @@ class _State extends State<CmCashFlowStatementScreen> with AutomaticKeepAliveCli
       final closing = _parseD(r['closing']);
       tableRows.add(pw.TableRow(children: [
         dCell('${r['bank_account_code'] ?? ''}  ${_rowAcctName(r)}', tNormal(9)),
-        dCell(r['currency_code'] as String? ?? 'THB', tNormal(9), a: pw.TextAlign.center),
+        dCell(r['currency_code'] as String? ?? CurrencyService.baseCode, tNormal(9), a: pw.TextAlign.center),
         amtCell(_parseD(r['opening']), tNormal(9)),
         amtCell(_parseD(r['receipts']), tNormal(9)),
         amtCell(_parseD(r['payments']), tNormal(9)),
@@ -312,7 +313,7 @@ class _State extends State<CmCashFlowStatementScreen> with AutomaticKeepAliveCli
       int row = 4;
       for (final r in _rows) {
         _xlCell(s, row, 0, '${r['bank_account_code'] ?? ''}  ${_rowAcctName(r)}');
-        _xlCell(s, row, 1, r['currency_code'] ?? 'THB');
+        _xlCell(s, row, 1, r['currency_code'] ?? CurrencyService.baseCode);
         _xlCell(s, row, 2, _parseD(r['opening']), align: HorizontalAlign.Right);
         _xlCell(s, row, 3, _parseD(r['receipts']), align: HorizontalAlign.Right);
         _xlCell(s, row, 4, _parseD(r['payments']), align: HorizontalAlign.Right);
@@ -659,7 +660,7 @@ class _State extends State<CmCashFlowStatementScreen> with AutomaticKeepAliveCli
                   Text('${_rowAcctName(r)} (${r['bank_short_name'] ?? ''})',
                       style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 ])),
-                DataCell(Text(r['currency_code'] ?? 'THB', style: const TextStyle(fontSize: 12))),
+                DataCell(Text(r['currency_code'] ?? CurrencyService.baseCode, style: const TextStyle(fontSize: 12))),
                 DataCell(Text(_fmt.format(_parseD(r['opening'])),      style: const TextStyle(fontSize: 12))),
                 DataCell(Text(_fmt.format(_parseD(r['receipts'])),     style: TextStyle(fontSize: 12, color: Colors.green.shade700))),
                 DataCell(Text(_fmt.format(_parseD(r['payments'])),     style: TextStyle(fontSize: 12, color: Colors.red.shade700))),

@@ -48,7 +48,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
 
   String _accountType = 'SAVING';
   String _cmType      = 'BANK';
-  String _currencyCode = 'THB';
+  String _currencyCode = CurrencyService.baseCode;
   bool   _isCheckAccount = false;
   int? _bankId;
   String? _bankDisplay;
@@ -72,7 +72,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
     _remarkCtrl = TextEditingController(text: d?.remark ?? '');
     _accountType    = d?.accountType    ?? 'SAVING';
     _cmType         = d?.cmType         ?? 'BANK';
-    _currencyCode   = d?.currencyCode   ?? 'THB';
+    _currencyCode   = d?.currencyCode   ?? CurrencyService.baseCode;
     _isCheckAccount = d?.isCheckAccount ?? false;
     _bankId      = d?.bankId;
     _bankDisplay = d?.bankDisplay.isNotEmpty == true ? d!.bankDisplay : null;
@@ -95,7 +95,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
       _remarkCtrl.text = widget.selected?.remark ?? '';
       _accountType    = widget.selected?.accountType    ?? 'SAVING';
       _cmType         = widget.selected?.cmType         ?? 'BANK';
-      _currencyCode   = widget.selected?.currencyCode   ?? 'THB';
+      _currencyCode   = widget.selected?.currencyCode   ?? CurrencyService.baseCode;
       _isCheckAccount = widget.selected?.isCheckAccount ?? false;
       _bankId      = widget.selected?.bankId;
       _bankDisplay = widget.selected?.bankDisplay.isNotEmpty == true

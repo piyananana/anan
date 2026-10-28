@@ -16,6 +16,7 @@ import '../services/cm_checkbook_service.dart';
 import '../services/cm_payment_service.dart';
 import '../services/cm_period_service.dart';
 import '../../utils/date_utils.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 class CmPaymentScreen extends StatefulWidget {
   const CmPaymentScreen({super.key});
@@ -567,7 +568,7 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
               _detailRow(isEnglish ? 'Check No.' : 'เลขที่เช็ค', p.checkNo ?? '—'),
               _detailRow(isEnglish ? 'Check Date' : 'วันที่เช็ค', p.checkDate != null ? _dateFmt.format(p.checkDate!) : '—'),
             ],
-            _detailRow(isEnglish ? 'Amount (THB)' : 'จำนวนเงิน (THB)', _amtFmt.format(p.amountLc)),
+            _detailRow(isEnglish ? 'Amount (${CurrencyService.baseCode})' : 'จำนวนเงิน (${CurrencyService.baseCode})', _amtFmt.format(p.amountLc)),
             if (p.isFcy) _detailRow(isEnglish ? 'Amount (FC)' : 'จำนวนเงิน (FC)', '${_amtFmt.format(p.amountFc)} ${p.currencyCode}'),
             if (p.remark != null && p.remark!.isNotEmpty) _detailRow(isEnglish ? 'Note' : 'หมายเหตุ', p.remark!),
             const Divider(),
@@ -816,7 +817,7 @@ class _CreatePaymentFormState extends State<_CreatePaymentForm> {
               TextFormField(
                 controller: _amtCtrl,
                 decoration: InputDecoration(
-                    labelText: isEnglish ? 'Amount (THB) *' : 'จำนวนเงิน (THB) *',
+                    labelText: isEnglish ? 'Amount (${CurrencyService.baseCode}) *' : 'จำนวนเงิน (${CurrencyService.baseCode}) *',
                     border: const OutlineInputBorder(), isDense: true),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 textAlign: TextAlign.right,

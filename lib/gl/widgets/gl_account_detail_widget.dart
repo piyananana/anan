@@ -78,7 +78,7 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
         .firstWhere((c) => c.baseCurrencyFlag,
             orElse: () => Currency(
                 id: 0,
-                currencyCode: 'THB',
+                currencyCode: CurrencyService.baseCode,
                 currencyNameThai: 'ไม่พบสกุลเงินหลัก',
                 currencyNameEng: '',
                 baseRate: 1.0,

@@ -70,7 +70,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   List<Account> _accounts = [];
   List<Branch> _branches = [];
   List<Currency> _currencies = [];
-  String _baseCurrency = 'THB';
+  String _baseCurrency = CurrencyService.baseCode;
 
   List<GlDimensionType> _dimTypes = [];
   final Map<String, List<GlDimensionValue>> _dimValues = {};
@@ -244,7 +244,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
         orElse: () => _currencies.isNotEmpty
             ? _currencies.first
             : Currency(
-                id: 1, currencyCode: 'THB', currencyNameThai: '',
+                id: 1, currencyCode: CurrencyService.baseCode, currencyNameThai: '',
                 currencyNameEng: '', baseRate: 1, baseCurrencyFlag: true,
                 numOfDecimal: 2, isActive: true));
 
@@ -458,7 +458,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   String _getBaseCurrency() {
     final item = _currencies.firstWhere((e) => e.baseCurrencyFlag == true,
         orElse: () => Currency(
-            id: 0, isActive: true, currencyCode: 'THB', currencyNameThai: '',
+            id: 0, isActive: true, currencyCode: CurrencyService.baseCode, currencyNameThai: '',
             currencyNameEng: '', baseRate: 1, baseCurrencyFlag: true, numOfDecimal: 2));
     return item.currencyCode;
   }

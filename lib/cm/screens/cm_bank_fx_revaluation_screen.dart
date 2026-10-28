@@ -15,6 +15,7 @@ import '../services/cm_period_service.dart';
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 // ถอยเป็นร่าง (งวดเปิด + ยังไม่มีการปรับมูลค่าครั้งถัดไปของบัญชีเดียวกัน) → แก้ไขแล้วโพสต์ใหม่ด้วยเลขที่เดิม หรือลบ
 // ยกเลิกใช้เมื่อถอยไม่ได้ (ลงรายการกลับวันนี้) ทุกการกระทำต้องมีเหตุผล — ปุ่มที่ทำไม่ได้ล็อกพร้อมเหตุผล
@@ -815,11 +816,11 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
         const SizedBox(height: 4),
         TextFormField(
           controller: _rateCtrl[code],
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             isDense: true,
-            border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            suffixText: 'THB',
+            border: const OutlineInputBorder(),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            suffixText: CurrencyService.baseCode,
             hintText: '0.0000',
           ),
           style: const TextStyle(fontSize: 14),

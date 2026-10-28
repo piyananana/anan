@@ -61,7 +61,7 @@ class CmBankAccount {
         accountNumber: json['account_number'],
         accountType: json['account_type'] ?? 'SAVING',
         cmType: json['cm_type'] ?? 'BANK',
-        currencyCode: json['currency_code'] ?? 'THB',
+        currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
         isCheckAccount: json['is_check_account'] ?? false,
         glAccountId: json['gl_account_id'],
         glAccountCode: json['gl_account_code'],

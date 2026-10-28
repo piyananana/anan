@@ -2,6 +2,7 @@
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/models/sa_doc_approval.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 const Map<String, String> apPaymentRunStatusLabels = {
   'Draft':     'ร่าง',
@@ -78,7 +79,7 @@ class ApOpenInvoice {
         vendorNameEn: json['vendor_name_en'],
         totalAmountLc: (json['total_amount_lc'] as num).toDouble(),
         balanceAmountLc: (json['balance_amount_lc'] as num).toDouble(),
-        currencyCode: json['currency_code'] ?? 'THB',
+        currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
         exchangeRate: (json['exchange_rate'] as num?)?.toDouble() ?? 1.0,
         bankName: json['bank_name'],
         bankBranchName: json['bank_branch_name'],
@@ -145,7 +146,7 @@ class ApPaymentRunLine {
         dueDate: parseLocalDateNullable(json['due_date']),
         invoiceAmountLc: (json['invoice_amount_lc'] as num).toDouble(),
         paymentAmountLc: (json['payment_amount_lc'] as num).toDouble(),
-        currencyCode: json['currency_code'] ?? 'THB',
+        currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
         exchangeRate: (json['exchange_rate'] as num?)?.toDouble() ?? 1.0,
         sortOrder: json['sort_order'] ?? 0,
       );

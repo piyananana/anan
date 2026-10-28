@@ -1,3 +1,4 @@
+import '../../cd/services/cd_currency_service.dart';
 // lib/ap/models/ap_vendor_group.dart
 
 class ApVendorGroup {
@@ -57,7 +58,7 @@ class ApVendorGroup {
         description: json['description'],
         creditTermMonths: json['credit_term_months'] ?? 0,
         creditTermDays: json['credit_term_days'] ?? 30,
-        currencyCode: json['currency_code'] ?? 'THB',
+        currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
         apAccountId: json['ap_account_id'],
         apAccountCode: json['ap_account_code']?.toString(),
         apAccountNameThai: json['ap_account_name_thai']?.toString(),

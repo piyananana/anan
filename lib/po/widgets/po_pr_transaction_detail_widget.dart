@@ -263,7 +263,7 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
       final header = PrTransactionHeader(
         id: _id ?? 0, docId: _docId ?? 0, docNo: _docNo, docDate: _docDate,
         vendorId: _vendor?.id, warehouseId: _warehouse?.id,
-        currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? 'THB', exchangeRate: _exchangeRate,
+        currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? CurrencyService.baseCode, exchangeRate: _exchangeRate,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       );
       final details = _lines
@@ -439,7 +439,7 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
   String _currencyLabel(Currency c) => _isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai;
 
   String get _baseCurrencyCode =>
-      _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null)?.currencyCode ?? 'THB';
+      _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null)?.currencyCode ?? CurrencyService.baseCode;
 
   Widget _fkField({required String label, required bool hasValue, required String displayText, VoidCallback? onSearch, VoidCallback? onClear}) {
     return InputDecorator(

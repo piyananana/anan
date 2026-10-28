@@ -1478,7 +1478,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     _creditLimitCtrl = TextEditingController(text: (c?.creditLimit ?? 0).toStringAsFixed(2));
     _discountPercentCtrl = TextEditingController(text: (c?.discountPercent ?? 0).toStringAsFixed(2));
     _remarkCtrl      = TextEditingController(text: c?.remark ?? '');
-    _selectedCurrencyCode = c?.currencyCode ?? 'THB';
+    _selectedCurrencyCode = c?.currencyCode ?? CurrencyService.baseCode;
     _selectedCurrencyNameThai = null;
     _businessTypeId        = c?.businessTypeId;
     _businessTypeCode      = c?.businessTypeCode;
@@ -2268,7 +2268,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         creditTermDays: int.tryParse(_creditTermDaysCtrl.text) ?? 30,
         creditLimit: double.tryParse(_creditLimitCtrl.text) ?? 0,
         discountPercent: double.tryParse(_discountPercentCtrl.text) ?? 0,
-        currencyCode: _selectedCurrencyCode ?? 'THB',
+        currencyCode: _selectedCurrencyCode ?? CurrencyService.baseCode,
         isActive: _isActive,
         remark: _remarkCtrl.text.trim().isEmpty ? null : _remarkCtrl.text.trim(),
         requiresBilling: _requiresBilling,

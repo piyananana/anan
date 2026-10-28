@@ -447,7 +447,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       final header = PoTransactionHeader(
         id: _id ?? 0, docId: _docId ?? 0, docNo: _docNo, docDate: _docDate,
         vendorId: _vendor!.id!, warehouseId: _warehouse!.id, dueDate: _dueDate,
-        currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? 'THB', exchangeRate: _exchangeRate,
+        currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? CurrencyService.baseCode, exchangeRate: _exchangeRate,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         refPrId: _refPrId,
       );
@@ -594,7 +594,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
   String _currencyLabel(Currency c) => _isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai;
 
   String get _baseCurrencyCode =>
-      _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
+      _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? CurrencyService.baseCode;
 
   Widget _fkField({required String label, required bool hasValue, required String displayText, VoidCallback? onSearch}) {
     return InputDecorator(

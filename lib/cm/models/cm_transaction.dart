@@ -1,6 +1,7 @@
 // lib/cm/models/cm_transaction.dart
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 // CM document types (sys_doc_type in sa_module_document, sys_module='81')
 const int cmDocTypeReceipt                = 10; // รายรับ (โดยตรง ไม่ผูกกับ AR)
@@ -162,7 +163,7 @@ class CmTransactionHeader {
       chargeType: json['charge_type'],
       counterpartyName: json['counterparty_name'],
       currencyId: json['currency_id'],
-      currencyCode: json['currency_code'] ?? 'THB',
+      currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       totalAmountFc: toDouble(json['total_amount_fc']),
       totalAmountLc: toDouble(json['total_amount_lc']),
@@ -451,7 +452,7 @@ class CmOpenVoucher {
       docDate: parseLocalDateNullable(json['doc_date']),
       totalAmountLc: toDouble(json['total_amount_lc']),
       balanceAmountLc: toDouble(json['balance_amount_lc']),
-      currencyCode: json['currency_code'] ?? 'THB',
+      currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       description: json['description'],
     );
@@ -495,7 +496,7 @@ class CmLegacyMirrorRow {
       date: parseLocalDateNullable(isReceipt ? json['receipt_date'] : json['payment_date']),
       status: json['status'] ?? 'Pending',
       amountLc: toDouble(json['amount_lc']),
-      currencyCode: json['currency_code'] ?? 'THB',
+      currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       docNo: isReceipt ? json['ar_doc_no'] : json['ap_doc_no'],
       counterpartyName: isReceipt ? json['customer_name_th'] : json['payee_name_th'],

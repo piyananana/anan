@@ -9,6 +9,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/date_utils.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -480,7 +481,7 @@ class _State extends State<CmYearEndScreen> with AutomaticKeepAliveClientMixin {
               return DataRow(cells: [
                 DataCell(Text(b['bank_account_code'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
                 DataCell(Text(b['bank_account_name'] ?? '', style: const TextStyle(fontSize: 12))),
-                DataCell(Text(b['currency_code'] ?? 'THB', style: const TextStyle(fontSize: 12))),
+                DataCell(Text(b['currency_code'] ?? CurrencyService.baseCode, style: const TextStyle(fontSize: 12))),
                 DataCell(Text(_fmt.format(bal), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
                     color: bal >= 0 ? Colors.black87 : Colors.red.shade700))),
               ]);

@@ -1228,7 +1228,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       vatAccountId: _docSetup?.vatOutputAccountId,
       glDocId: _docSetup?.glDocId,
       currencyId: _selectedCurrency?.id,
-      currencyCode: _selectedCurrency?.currencyCode ?? 'THB',
+      currencyCode: _selectedCurrency?.currencyCode ?? CurrencyService.baseCode,
       exchangeRate: _exchangeRate,
       subtotalFc: _subtotalFc,
       discountAmountFc: _discountAmountFc,
@@ -2506,7 +2506,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             Align(
               alignment: Alignment.centerRight,
               child: Text(
-                '${isEnglish ? 'Net Total' : 'ยอดรวมสุทธิ'}: ${_fmt.format(_totalAmountFc)} ${_selectedCurrency?.currencyCode ?? 'THB'}',
+                '${isEnglish ? 'Net Total' : 'ยอดรวมสุทธิ'}: ${_fmt.format(_totalAmountFc)} ${_selectedCurrency?.currencyCode ?? CurrencyService.baseCode}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -3022,7 +3022,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
   Widget _buildPaymentSection() {
     final isEnglish = _isEnglish;
-    final currency = _selectedCurrency?.currencyCode ?? 'THB';
+    final currency = _selectedCurrency?.currencyCode ?? CurrencyService.baseCode;
     final totalPayments = _paymentRows.fold(0.0, (s, r) => s + (double.tryParse(r.amountCtrl.text) ?? 0));
     final cashExpected = _totalAmountFc;
     final diff = cashExpected - totalPayments;
@@ -3416,13 +3416,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 TableRow(children: [
                   Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(isEnglish ? 'Net Total' : 'ยอดรวมสุทธิ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                   Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(
-                    '${_fmt.format(_totalAmountFc)} ${_selectedCurrency?.currencyCode ?? 'THB'}',
+                    '${_fmt.format(_totalAmountFc)} ${_selectedCurrency?.currencyCode ?? CurrencyService.baseCode}',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     textAlign: TextAlign.right,
                   )),
                 ]),
                 if (_exchangeRate != 1.0)
-                  _totalRow(isEnglish ? 'Total (THB)' : 'ยอดรวม (THB)', _totalAmountFc * _exchangeRate),
+                  _totalRow(isEnglish ? 'Total (${CurrencyService.baseCode})' : 'ยอดรวม (${CurrencyService.baseCode})', _totalAmountFc * _exchangeRate),
               ],
             ),
           ),
@@ -3650,7 +3650,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final isBalanced  = _glEditRows.isEmpty || (totalDebit - totalCredit).abs() < 0.005;
     final hasFc = _glEditRows.any((r) => r.debitFc > 0 || r.creditFc > 0);
     final lcLabel = _currencies.cast<Currency?>()
-        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
+        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? CurrencyService.baseCode;
     final fcLabel = _selectedCurrency?.currencyCode ?? 'FC';
     final activeDims = _dimTypes.where((t) => t.slotNo >= 1 && t.slotNo <= 5).toList();
     final isGlEditable = _status == 'Draft' && !_isReadOnly;
@@ -3947,7 +3947,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final totalCreditFc = hasFc ? lines.fold(0.0, (s, l) => s + l.creditFc) : 0.0;
     final fcLabel = currencyCode.isNotEmpty ? currencyCode : 'FC';
     final lcLabel = _currencies.cast<Currency?>()
-        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
+        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? CurrencyService.baseCode;
 
     Widget cell(String text, {TextAlign align = TextAlign.left, bool bold = false, Color? color}) =>
         Padding(

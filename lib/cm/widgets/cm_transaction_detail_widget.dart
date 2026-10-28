@@ -601,7 +601,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       chargeType: _isBankCharge ? 'BANK_CHARGE' : (_isInterest ? _chargeType : null),
       counterpartyName: _hasCounterparty && _counterpartyCtrl.text.isNotEmpty ? _counterpartyCtrl.text : null,
       currencyId: _selectedCurrency?.id,
-      currencyCode: _selectedCurrency?.currencyCode ?? 'THB',
+      currencyCode: _selectedCurrency?.currencyCode ?? CurrencyService.baseCode,
       exchangeRate: _exchangeRate,
       totalAmountFc: _totalAmountFc,
       totalAmountLc: _totalAmountLc,
@@ -1571,7 +1571,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
     final isBalanced = _glEditRows.isEmpty || (totalDebit - totalCredit).abs() < 0.005;
     final hasFc = _glEditRows.any((r) => r.debitFc > 0 || r.creditFc > 0);
     final lcLabel = _currencies.cast<Currency?>()
-        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
+        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? CurrencyService.baseCode;
     final fcLabel = _selectedCurrency?.currencyCode ?? 'FC';
     final isGlEditable = _status == 'Draft' && !_isReadOnly;
     final activeDims = _dimTypes.where((t) => t.slotNo >= 1 && t.slotNo <= 5).toList();

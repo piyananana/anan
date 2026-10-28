@@ -15,6 +15,7 @@ import '../models/po_closable_row.dart';
 import '../models/po_transaction.dart';
 import '../services/po_closable_service.dart';
 import '../services/po_transaction_service.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 // ─── Column widths (all fixed — no Expanded in horizontal scroll) ─────────────
 const double _wCB = 40.0;
@@ -161,7 +162,7 @@ class _PoBulkCloseScreenState extends State<PoBulkCloseScreen> {
                 'Total value ${_fmt.format(_selectedTotal)}\n\n'
                 'Do you want to proceed?'
             : 'จะปิดใบสั่งซื้อ ${selected.length} ใบ\n'
-                'มูลค่ารวม ${_fmt.format(_selectedTotal)} บาท\n\n'
+                'มูลค่ารวม ${_fmt.format(_selectedTotal)} ${CurrencyService.baseCode}\n\n'
                 'ต้องการดำเนินการหรือไม่?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
@@ -423,7 +424,7 @@ class _PoBulkCloseScreenState extends State<PoBulkCloseScreen> {
               Text(
                 isEnglish
                     ? 'Selected $selCount of ${_rows.length} | Total ${_fmt.format(_selectedTotal)}'
-                    : 'เลือก $selCount จาก ${_rows.length} ใบ | รวม ${_fmt.format(_selectedTotal)} บาท',
+                    : 'เลือก $selCount จาก ${_rows.length} ใบ | รวม ${_fmt.format(_selectedTotal)} ${CurrencyService.baseCode}',
                 style: TextStyle(fontSize: 13, color: Colors.teal[800], fontWeight: FontWeight.w600),
               ),
           ]),

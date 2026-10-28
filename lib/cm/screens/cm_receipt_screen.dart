@@ -10,6 +10,7 @@ import '../services/cm_bank_account_service.dart';
 import '../services/cm_period_service.dart';
 import '../services/cm_receipt_service.dart';
 import '../../utils/date_utils.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 class CmReceiptScreen extends StatefulWidget {
   const CmReceiptScreen({super.key});
@@ -520,7 +521,7 @@ class _CmReceiptScreenState extends State<CmReceiptScreen>
               _detailRow(isEnglish ? 'Check Date' : 'วันที่เช็ค', r.checkDate != null ? _dateFmt.format(r.checkDate!) : '—'),
               _detailRow(isEnglish ? 'Drawer Bank' : 'ธนาคารผู้สั่งจ่าย', r.drawerBank ?? '—'),
             ],
-            _detailRow(isEnglish ? 'Amount (THB)' : 'จำนวนเงิน (THB)', _amtFmt.format(r.amountLc)),
+            _detailRow(isEnglish ? 'Amount (${CurrencyService.baseCode})' : 'จำนวนเงิน (${CurrencyService.baseCode})', _amtFmt.format(r.amountLc)),
             if (r.isFcy) _detailRow(isEnglish ? 'Amount (FC)' : 'จำนวนเงิน (FC)', '${_amtFmt.format(r.amountFc)} ${r.currencyCode}'),
             const Divider(),
             _detailRow(isEnglish ? 'Status' : 'สถานะ', cmReceiptStatusLabel(r.status, isEnglish)),

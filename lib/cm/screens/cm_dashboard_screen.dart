@@ -9,6 +9,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/date_utils.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -107,18 +108,18 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
         children: [
           // ── Summary cards ─────────────────────────────────────────────────
           Wrap(spacing: 16, runSpacing: 16, children: [
-            _summaryCard(isEnglish ? 'Cash Balance (THB)' : 'ยอดเงินคงเหลือ (THB)',
+            _summaryCard(isEnglish ? 'Cash Balance (${CurrencyService.baseCode})' : 'ยอดเงินคงเหลือ (${CurrencyService.baseCode})',
                 _fmt.format(totalBankBalance),
                 Icons.account_balance, Colors.blue.shade700,
                 subtitle: isEnglish ? '${bankBalances.length} accounts' : '${bankBalances.length} บัญชี'),
             _summaryCard(isEnglish ? 'Pending Checks — Received' : 'เช็คค้าง — รับ',
                 isEnglish ? '${checksReceived['count']} checks' : '${checksReceived['count']} ฉบับ',
                 Icons.receipt_long, Colors.orange.shade700,
-                subtitle: '${_fmt.format(_parseD(checksReceived['amount']))} THB'),
+                subtitle: '${_fmt.format(_parseD(checksReceived['amount']))} ${CurrencyService.baseCode}'),
             _summaryCard(isEnglish ? 'Pending Checks — Issued' : 'เช็คค้าง — จ่าย',
                 isEnglish ? '${checksIssued['count']} checks' : '${checksIssued['count']} ฉบับ',
                 Icons.payment, Colors.deepOrange.shade700,
-                subtitle: '${_fmt.format(_parseD(checksIssued['amount']))} THB'),
+                subtitle: '${_fmt.format(_parseD(checksIssued['amount']))} ${CurrencyService.baseCode}'),
             _summaryCard(isEnglish ? 'Alerts' : 'แจ้งเตือน',
                 isEnglish ? '${alerts.length} items' : '${alerts.length} รายการ',
                 alerts.isEmpty ? Icons.check_circle : Icons.warning_amber_rounded,
@@ -245,7 +246,7 @@ class _State extends State<CmDashboardScreen> with AutomaticKeepAliveClientMixin
             DataCell(Text(r['bank_account_code'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
             DataCell(Text(r['bank_account_name'] ?? '', style: const TextStyle(fontSize: 12))),
             DataCell(Text(r['bank_short_name'] ?? '', style: const TextStyle(fontSize: 12))),
-            DataCell(Text(r['currency_code'] ?? 'THB', style: const TextStyle(fontSize: 12))),
+            DataCell(Text(r['currency_code'] ?? CurrencyService.baseCode, style: const TextStyle(fontSize: 12))),
             DataCell(Text(_fmt.format(bal), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
                 color: bal >= 0 ? Colors.black87 : Colors.red.shade700))),
           ]);

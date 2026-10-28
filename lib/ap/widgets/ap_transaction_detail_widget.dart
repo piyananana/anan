@@ -856,7 +856,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       vendorNameTh: _selectedVendor!.vendorNameTh,
       apAccountId: _apAccountId,
       currencyId: _selectedCurrency?.id,
-      currencyCode: _selectedCurrency?.currencyCode ?? 'THB',
+      currencyCode: _selectedCurrency?.currencyCode ?? CurrencyService.baseCode,
       exchangeRate: _exchangeRate,
       subtotalFc: _subtotalFc,
       discountAmountFc: _discountAmountFc,
@@ -1758,7 +1758,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           Align(
             alignment: Alignment.centerRight,
             child: Text(
-              '${isEnglish ? 'Net Total' : 'ยอดรวมสุทธิ'}: ${_fmt.format(_totalAmountFc)} ${_selectedCurrency?.currencyCode ?? 'THB'}',
+              '${isEnglish ? 'Net Total' : 'ยอดรวมสุทธิ'}: ${_fmt.format(_totalAmountFc)} ${_selectedCurrency?.currencyCode ?? CurrencyService.baseCode}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -1775,7 +1775,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         ? (isEnglish ? 'Select Invoices (RA)' : 'เลือกใบแจ้งหนี้ (RA)')
         : (isEnglish ? 'Select Invoices to Pay' : 'เลือกใบแจ้งหนี้ที่ชำระ');
     final totalApplied = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
-    final currency = _selectedCurrency?.currencyCode ?? 'THB';
+    final currency = _selectedCurrency?.currencyCode ?? CurrencyService.baseCode;
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1801,7 +1801,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   Widget _buildAdvanceSection() {
     final isEnglish = _isEnglish;
     final totalAdv = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
-    final currency = _selectedCurrency?.currencyCode ?? 'THB';
+    final currency = _selectedCurrency?.currencyCode ?? CurrencyService.baseCode;
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1822,7 +1822,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   Widget _buildAdvanceRefundSection() {
     final isEnglish = _isEnglish;
     final totalRef = _advanceRefundRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
-    final currency = _selectedCurrency?.currencyCode ?? 'THB';
+    final currency = _selectedCurrency?.currencyCode ?? CurrencyService.baseCode;
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -2010,7 +2010,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           if (_whtRows.isNotEmpty) ...[
             const SizedBox(height: 8),
             Align(alignment: Alignment.centerRight, child: Text(
-              '${isEnglish ? 'Total WHT' : 'รวม WHT'}: ${_fmt.format(_whtRows.fold(0.0, (s, w) => s + (double.tryParse(w.whtCtrl.text) ?? 0)))} ${isEnglish ? 'THB' : 'บาท'}',
+              '${isEnglish ? 'Total WHT' : 'รวม WHT'}: ${_fmt.format(_whtRows.fold(0.0, (s, w) => s + (double.tryParse(w.whtCtrl.text) ?? 0)))} ${CurrencyService.baseCode}',
               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
             )),
           ],
@@ -2074,7 +2074,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                   const SizedBox(width: 8),
                   Expanded(flex: 2, child: TextFormField(
                     controller: r.amountCtrl,
-                    decoration: _fieldDeco(_selectedCurrency?.baseCurrencyFlag == false ? (isEnglish ? 'Amount (FC)' : 'จำนวนเงิน (FC)') : (isEnglish ? 'Amount (THB)' : 'จำนวนเงิน (THB)')),
+                    decoration: _fieldDeco(_selectedCurrency?.baseCurrencyFlag == false ? (isEnglish ? 'Amount (FC)' : 'จำนวนเงิน (FC)') : (isEnglish ? 'Amount (${CurrencyService.baseCode})' : 'จำนวนเงิน (${CurrencyService.baseCode})')),
                     keyboardType: TextInputType.number, textAlign: TextAlign.right,
                     readOnly: _isReadOnly,
                     onChanged: (_) => _recalcTotals(),
@@ -2152,11 +2152,11 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             if (_vatAmountFc > 0) _totalsLine('VAT${isFc ? ' (FC)' : ''}', _vatAmountFc),
           ],
           _totalsLine(
-            isFc ? (isEnglish ? 'Total (FC)' : 'ยอดรวม (FC)') : (isEnglish ? 'Total (THB)' : 'ยอดรวม (THB)'),
+            isFc ? (isEnglish ? 'Total (FC)' : 'ยอดรวม (FC)') : (isEnglish ? 'Total (${CurrencyService.baseCode})' : 'ยอดรวม (${CurrencyService.baseCode})'),
             _totalAmountFc,
             bold: true, color: Colors.blue[800],
           ),
-          if (isFc) _totalsLine(isEnglish ? 'Total (THB)' : 'ยอดรวม (THB)', _totalAmountFc * lc, bold: true, color: Colors.blue[800]),
+          if (isFc) _totalsLine(isEnglish ? 'Total (${CurrencyService.baseCode})' : 'ยอดรวม (${CurrencyService.baseCode})', _totalAmountFc * lc, bold: true, color: Colors.blue[800]),
           if (_hasWhtSection && totalWht > 0) ...[
             const Divider(),
             _totalsLine(isEnglish ? 'Withholding Tax' : 'WHT หัก ณ ที่จ่าย', totalWht, color: Colors.red),
@@ -2164,7 +2164,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           if (_hasPaymentRows && totalPayment > 0) ...[
             const Divider(),
             _totalsLine('${isEnglish ? 'Payment Amount' : 'ยอดชำระ'}${isFc ? ' (FC)' : ''}', totalPayment),
-            if (isFc) _totalsLine(isEnglish ? 'Payment Amount (THB)' : 'ยอดชำระ (THB)', totalPayment * lc),
+            if (isFc) _totalsLine(isEnglish ? 'Payment Amount (${CurrencyService.baseCode})' : 'ยอดชำระ (${CurrencyService.baseCode})', totalPayment * lc),
           ],
         ]),
       ),
@@ -2279,7 +2279,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     final isBalanced  = _glEditRows.isEmpty || (totalDebit - totalCredit).abs() < 0.005;
     final hasFc = _glEditRows.any((r) => r.debitFc > 0 || r.creditFc > 0);
     final lcLabel = _currencies.cast<Currency?>()
-        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? 'THB';
+        .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? CurrencyService.baseCode;
     final fcLabel = _selectedCurrency?.currencyCode ?? 'FC';
     final activeDims = _dimTypes.where((t) => t.slotNo >= 1 && t.slotNo <= 5).toList();
     final isGlEditable = _status == 'Draft' && !_isReadOnly;

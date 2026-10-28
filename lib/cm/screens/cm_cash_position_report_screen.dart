@@ -18,6 +18,7 @@ import '../widgets/cm_bank_account_list_widget.dart';
 import '../services/cm_report_service.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/file_download.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -249,7 +250,7 @@ class _CmCashPositionReportScreenState extends State<CmCashPositionReportScreen>
         dCell(r['bank_account_code'] as String? ?? '', tBold(9)),
         dCell(_acctName(r), tNormal(9)),
         dCell(r['bank_short_name'] as String? ?? '', tNormal(9)),
-        dCell(r['currency_code'] as String? ?? 'THB', tNormal(9)),
+        dCell(r['currency_code'] as String? ?? CurrencyService.baseCode, tNormal(9)),
         amtCell(opening, tNormal(9)),
         amtCell(receipt, tNormal(9)),
         amtCell(payment, tNormal(9)),
@@ -329,7 +330,7 @@ class _CmCashPositionReportScreenState extends State<CmCashPositionReportScreen>
         _xlCell(s, row, 0, r['bank_account_code'] ?? '');
         _xlCell(s, row, 1, _acctName(r));
         _xlCell(s, row, 2, r['bank_short_name'] ?? '');
-        _xlCell(s, row, 3, r['currency_code'] ?? 'THB');
+        _xlCell(s, row, 3, r['currency_code'] ?? CurrencyService.baseCode);
         _xlCell(s, row, 4, opening, align: HorizontalAlign.Right);
         _xlCell(s, row, 5, receipt, align: HorizontalAlign.Right);
         _xlCell(s, row, 6, payment, align: HorizontalAlign.Right);
@@ -666,7 +667,7 @@ class _CmCashPositionReportScreenState extends State<CmCashPositionReportScreen>
               DataCell(Text(r['bank_account_code'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
               DataCell(Text(_acctName(r), style: const TextStyle(fontSize: 12))),
               DataCell(Text(r['bank_short_name'] ?? '', style: cellStyle)),
-              DataCell(Text(r['currency_code'] ?? 'THB', style: cellStyle)),
+              DataCell(Text(r['currency_code'] ?? CurrencyService.baseCode, style: cellStyle)),
               DataCell(Text(_fmt.format(_parseD(r['opening_balance'])), style: cellStyle)),
               DataCell(Text(_fmt.format(_parseD(r['period_receipts'])), style: cellStyle.copyWith(color: Colors.green.shade700))),
               DataCell(Text(_fmt.format(_parseD(r['period_payments'])), style: cellStyle.copyWith(color: Colors.red.shade700))),

@@ -11,6 +11,7 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/services/cm_period_service.dart';
 import '../../utils/date_utils.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
 final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -137,8 +138,8 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
                 ? 'Number of invoices: ${_selected.length}'
                 : 'จำนวนรายการ: ${_selected.length} ใบ'),
             Text(isEnglish
-                ? 'Total amount: ${_fmt.format(_totalSelected)} THB'
-                : 'ยอดรวม: ${_fmt.format(_totalSelected)} บาท'),
+                ? 'Total amount: ${_fmt.format(_totalSelected)} ${CurrencyService.baseCode}'
+                : 'ยอดรวม: ${_fmt.format(_totalSelected)} ${CurrencyService.baseCode}'),
             Text(isEnglish
                 ? 'Payment date: ${_dateFmt.format(_fPaymentDate)}'
                 : 'วันที่ชำระ: ${_dateFmt.format(_fPaymentDate)}'),
@@ -224,7 +225,7 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
               label: Text(
                   isEnglish
                       ? 'Pay ${_selected.length} item(s) | ${_fmt.format(_totalSelected)}'
-                      : 'ชำระ ${_selected.length} รายการ | ${_fmt.format(_totalSelected)} บาท',
+                      : 'ชำระ ${_selected.length} รายการ | ${_fmt.format(_totalSelected)} ${CurrencyService.baseCode}',
                   style: const TextStyle(fontSize: 13)),
             ),
           const SizedBox(width: 8),
@@ -397,7 +398,7 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
                   Text(
                       isEnglish
                           ? 'Selected ${_selected.length} item(s)  |  Total: ${_fmt.format(_totalSelected)}'
-                          : 'เลือกแล้ว ${_selected.length} รายการ  |  ยอดรวม: ${_fmt.format(_totalSelected)} บาท',
+                          : 'เลือกแล้ว ${_selected.length} รายการ  |  ยอดรวม: ${_fmt.format(_totalSelected)} ${CurrencyService.baseCode}',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.blue[800])),
                 ]),
               ),

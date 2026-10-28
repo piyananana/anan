@@ -1,3 +1,4 @@
+import '../../cd/services/cd_currency_service.dart';
 // lib/ap/models/ap_vendor.dart
 
 class ApVendorAddress {
@@ -264,7 +265,7 @@ class ApVendor {
         creditTermMonths: json['credit_term_months'] ?? 0,
         creditTermDays: json['credit_term_days'] ?? 30,
         creditLimit: double.tryParse(json['credit_limit']?.toString() ?? '') ?? 0.0,
-        currencyCode: json['currency_code'] ?? 'THB',
+        currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
         isActive: json['is_active'] ?? true,
         remark: json['remark'],
         apAccountId: json['ap_account_id'],

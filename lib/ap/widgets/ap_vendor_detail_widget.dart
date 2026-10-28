@@ -914,7 +914,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
       }
     } catch (_) {
       if (mounted && _selectedCurrencyCode == null) {
-        setState(() => _selectedCurrencyCode = 'THB');
+        setState(() => _selectedCurrencyCode = CurrencyService.baseCode);
       }
     }
   }
@@ -1009,7 +1009,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
         creditTermMonths: int.tryParse(_creditMonthsCtrl.text) ?? 0,
         creditTermDays: int.tryParse(_creditDaysCtrl.text) ?? 30,
         creditLimit: double.tryParse(_creditLimitCtrl.text) ?? 0,
-        currencyCode: _selectedCurrencyCode ?? 'THB',
+        currencyCode: _selectedCurrencyCode ?? CurrencyService.baseCode,
         isActive: _isActive,
         remark: _remarkCtrl.text.trim().isEmpty ? null : _remarkCtrl.text.trim(),
         apAccountId: _apAccountId,

@@ -12,6 +12,7 @@ import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../services/cm_period_service.dart';
 import '../../utils/date_utils.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 const _kTheme   = Color(0xFF1565C0);
 final _fmt      = NumberFormat('#,##0.00', 'en_US');
@@ -523,8 +524,8 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                           child: Text(
                             isEnglish
-                                ? 'Holding: $_sumCount items | ${_fmt.format(_sumAmount)} THB'
-                                : 'ถือไว้: $_sumCount รายการ | ${_fmt.format(_sumAmount)} บาท',
+                                ? 'Holding: $_sumCount items | ${_fmt.format(_sumAmount)} ${CurrencyService.baseCode}'
+                                : 'ถือไว้: $_sumCount รายการ | ${_fmt.format(_sumAmount)} ${CurrencyService.baseCode}',
                             style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade700, fontWeight: FontWeight.w600),
                           ),
                         ),
@@ -687,7 +688,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
             controller: _amountCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
-                labelText: isEnglish ? 'Amount (THB)' : 'จำนวนเงิน (บาท)',
+                labelText: isEnglish ? 'Amount (${CurrencyService.baseCode})' : 'จำนวนเงิน (${CurrencyService.baseCode})',
                 border: const OutlineInputBorder()),
           )),
           const SizedBox(width: 8),
@@ -747,7 +748,7 @@ class _CmPostDatedCheckScreenState extends State<CmPostDatedCheckScreen>
               chkDate != null ? _dateFmt.format(chkDate) : '')),
           const SizedBox(width: 8),
           Expanded(child: _infoBlock(isEnglish ? 'Amount' : 'จำนวนเงิน',
-              '${_fmt.format(_num(row['amount']))} THB')),
+              '${_fmt.format(_num(row['amount']))} ${CurrencyService.baseCode}')),
         ]),
         const SizedBox(height: 12),
         // Row 2: Payee/Payer Name (full width)

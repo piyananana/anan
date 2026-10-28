@@ -2,6 +2,7 @@
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/models/sa_doc_approval.dart';
+import '../../cd/services/cd_currency_service.dart';
 export '../../sa/models/sa_document_reverse_log.dart';
 
 // AP document types (sys_doc_type in sa_module_document, sys_module=12)
@@ -180,7 +181,7 @@ class ApTransactionHeader {
       vendorTaxId: json['vendor_tax_id'],
       apAccountId: json['ap_account_id'],
       currencyId: json['currency_id'],
-      currencyCode: json['currency_code'] ?? 'THB',
+      currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       subtotalFc: toDouble(json['subtotal_fc']),
       discountAmountFc: toDouble(json['discount_amount_fc']),
@@ -650,7 +651,7 @@ class ApOpenInvoice {
       totalAmountFc: toDouble(json['total_amount_fc']),
       vatAmountFc: toDouble(json['vat_amount_fc']),
       vatAmountLc: toDouble(json['vat_amount_lc']),
-      currencyCode: json['currency_code'] ?? 'THB',
+      currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       docCode: json['doc_code'],
       sysDocType: json['sys_doc_type'] != null ? int.tryParse(json['sys_doc_type'].toString()) : null,

@@ -13,6 +13,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_bank_file_format.dart';
 import '../../utils/date_utils.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -434,8 +435,8 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
           color: _kTheme.withOpacity(0.08),
           child: Row(children: [
             Text(isEnglish
-                ? 'Selected ${_selected.length} items, total ${_fmt.format(totalSel)} THB'
-                : 'เลือก ${_selected.length} รายการ รวม ${_fmt.format(totalSel)} บาท',
+                ? 'Selected ${_selected.length} items, total ${_fmt.format(totalSel)} ${CurrencyService.baseCode}'
+                : 'เลือก ${_selected.length} รายการ รวม ${_fmt.format(totalSel)} ${CurrencyService.baseCode}',
                 style: TextStyle(fontSize: 13, color: _kTheme, fontWeight: FontWeight.w600)),
           ]),
         ),
@@ -478,7 +479,7 @@ class _State extends State<CmBankFileExportScreen> with AutomaticKeepAliveClient
                         style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis))),
                     DataCell(Text(p['payment_method'] ?? '', style: const TextStyle(fontSize: 12))),
                     DataCell(Text(p['check_no'] ?? '', style: const TextStyle(fontSize: 12))),
-                    DataCell(Text(p['currency_code'] ?? 'THB', style: const TextStyle(fontSize: 12))),
+                    DataCell(Text(p['currency_code'] ?? CurrencyService.baseCode, style: const TextStyle(fontSize: 12))),
                     DataCell(Text(_fmt.format(double.tryParse(p['amount_lc']?.toString() ?? '0') ?? 0),
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
                     DataCell(Container(
