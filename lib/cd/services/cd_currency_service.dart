@@ -60,6 +60,14 @@ class CurrencyService {
     }
   }
 
+  /// ข้อมูลประกอบคำเตือนก่อนเปลี่ยนสกุลเงินหลัก (จำนวนเอกสาร/รายการบัญชีที่บันทึกด้วยสกุลเงินหลักเดิม)
+  Future<Map<String, dynamic>> fetchBaseChangeImpact() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/cd_currency/base_change_impact'), headers: headers);
+    if (response.statusCode == 200) return json.decode(response.body) as Map<String, dynamic>;
+    throw Exception('โหลดข้อมูลผลกระทบไม่สำเร็จ: ${response.statusCode}');
+  }
+
   Future<List<Currency>> fetchActiveRows() async {
     final headers = await authService.getAuthHeader();
     final response = await http.get(

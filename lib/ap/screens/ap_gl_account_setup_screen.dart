@@ -431,15 +431,19 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
 
   // AP doc types: 10=PI, 30=CN, 50=DN, 60=Advance Payment, 65=Advance Refund, 70=RA, 80=Payment
   String get _sdt => widget.setup.sysDocType ?? '';
-  bool get _showAp         => !['60', '65', '70'].contains(_sdt);
-  bool get _showExpense    => ['10', '30', '50'].contains(_sdt);
-  bool get _showVat        => ['10', '30', '50', '60', '80'].contains(_sdt);
-  bool get _showVatPending => _showVat;
-  bool get _showDiscount   => ['10', '50'].contains(_sdt);
+  // แสดงเฉพาะบัญชีที่ postGlEntry (apTransactionController) ใช้จริงตาม sys_doc_type
+  bool get _isExpense      => ['10', '30', '50'].contains(_sdt);                 // ตั้งหนี้/ลดหนี้/เพิ่มหนี้ (ลดหนี้กลับทิศ)
+  bool get _posts          => !['70', '35', '55'].contains(_sdt);               // 70 แจ้งชำระไม่ลงบัญชี, 35/55 ยังไม่รองรับการลงบัญชี
+  bool get _showAp         => _isExpense || _sdt == '80';
+  bool get _showExpense    => _isExpense;
+  bool get _showVat        => _isExpense || ['60', '65'].contains(_sdt);        // จ่ายชำระ (80) ไม่ลงภาษีซื้อ
+  bool get _showDiscount   => _isExpense;                                       // ลดหนี้ใช้ส่วนลดด้วย (กลับทิศ)
   bool get _showAdvance    => ['60', '65', '80'].contains(_sdt);
   bool get _showBank       => ['60', '65', '80'].contains(_sdt);
+  bool get _showPayMethod  => ['60', '80'].contains(_sdt);                      // รับคืนมัดจำใช้บัญชี Cash/Bank บัญชีเดียว
   bool get _showWht        => _sdt == '80';
   bool get _showFx         => _sdt == '80';
+  // ภาษีซื้อรอตัดบัญชี (vat_pending_input_account_id) — การลงบัญชี AP ยังไม่ใช้ จึงไม่แสดง (ค่าเดิมที่บันทึกไว้คงอยู่)
 
   // ── Bilingual account name resolver — prefer live lookup by id over the stored name ──
   String _acctName(int? id, String? storedName) {
@@ -520,6 +524,7 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
         break;
       case '30': // CN from vendor
         if (_apAccountId != null) lines.add(_JournalLine('Dr', _apAccountCode!, nm(_apAccountId, _apAccountName)));
+        if (_discountAccountId != null) lines.add(_JournalLine('Dr', _discountAccountCode!, '${nm(_discountAccountId, _discountAccountName)} ${isEnglish ? '(if discount applies)' : '(ถ้ามีส่วนลด)'}'));
         if (_expenseAccountId != null) lines.add(_JournalLine('  Cr', _expenseAccountCode!, '${nm(_expenseAccountId, _expenseAccountName)} ${isEnglish ? '(per line)' : '(ต่อ line)'}'));
         if (_vatInputAccountId != null) lines.add(_JournalLine('  Cr', _vatInputAccountCode!, nm(_vatInputAccountId, _vatInputAccountName)));
         break;
@@ -536,6 +541,7 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
       case '65': // Advance Refund
         if (_cashAccountId != null) lines.add(_JournalLine('Dr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
         if (_advanceAccountId != null) lines.add(_JournalLine('  Cr', _advanceAccountCode!, nm(_advanceAccountId, _advanceAccountName)));
+        if (_vatInputAccountId != null) lines.add(_JournalLine('  Cr', _vatInputAccountCode!, '${nm(_vatInputAccountId, _vatInputAccountName)} ${isEnglish ? '(reverse advance VAT)' : '(กลับรายการ VAT มัดจำ)'}'));
         break;
       case '70': // RA — ไม่มี GL entry
         break;
@@ -543,11 +549,9 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
         if (_apAccountId != null) lines.add(_JournalLine('Dr', _apAccountCode!, nm(_apAccountId, _apAccountName)));
         if (_fxLossAccountId != null) lines.add(_JournalLine('Dr', _fxLossAccountCode!, '${nm(_fxLossAccountId, _fxLossAccountName)} ${isEnglish ? '(FX loss)' : '(ขาดทุน FX)'}'));
         if (_advanceAccountId != null) lines.add(_JournalLine('Dr', _advanceAccountCode!, '${nm(_advanceAccountId, _advanceAccountName)} ${isEnglish ? '(advance applied)' : '(ตัดมัดจำ)'}'));
-        if (_vatPendingInputAccountId != null) lines.add(_JournalLine('Dr', _vatPendingInputAccountCode!, '${nm(_vatPendingInputAccountId, _vatPendingInputAccountName)} ${isEnglish ? '(recognize deferred VAT)' : '(รับรู้ VAT รอตัด)'}'));
         if (_cashAccountId != null) lines.add(_JournalLine('  Cr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
         if (_whtPayableAccountId != null) lines.add(_JournalLine('  Cr', _whtPayableAccountCode!, '${nm(_whtPayableAccountId, _whtPayableAccountName)} ${isEnglish ? '(WHT payable)' : '(WHT ค้างจ่าย)'}'));
         if (_fxGainAccountId != null) lines.add(_JournalLine('  Cr', _fxGainAccountCode!, '${nm(_fxGainAccountId, _fxGainAccountName)} ${isEnglish ? '(FX gain)' : '(กำไร FX)'}'));
-        if (_vatInputAccountId != null) lines.add(_JournalLine('  Cr', _vatInputAccountCode!, '${nm(_vatInputAccountId, _vatInputAccountName)} ${isEnglish ? '(recognize deferred VAT)' : '(รับรู้ VAT รอตัดบัญชี)'}'));
         break;
     }
     if (lines.isEmpty) {
@@ -671,7 +675,23 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
         ]),
         const SizedBox(height: 16),
 
+        if (['35', '55'].contains(_sdt))
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Text(isEnglish
+                ? 'GL posting is not supported for this document type yet — no accounts to set up.'
+                : 'ยังไม่รองรับการลงบัญชีสำหรับเอกสารประเภทนี้ — ไม่ต้องตั้งค่ารหัสบัญชี'),
+          ),
+
         // ── ประเภทเอกสาร GL ────────────────────────────────────────────────
+        if (_posts) ...[
         _SectionHeader(title: isEnglish ? 'GL Document Type (for Posting)' : 'ประเภทเอกสาร GL (สำหรับ Post)'),
         InkWell(
           onTap: () async {
@@ -711,6 +731,7 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
 
         // ── รหัสบัญชี ──────────────────────────────────────────────────────
         _SectionHeader(title: isEnglish ? 'Account Codes' : 'รหัสบัญชี'),
+        ],
 
         if (_showAp)
           _accountField(
@@ -730,21 +751,13 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
             onClear: () => _clearAccount(() { _expenseAccountId = null; _expenseAccountCode = null; _expenseAccountName = null; }),
           ),
 
-        if (_showVat) ...[
+        if (_showVat)
           _accountField(
             label: isEnglish ? 'VAT Input' : 'ภาษีซื้อ (VAT Input)',
             accountId: _vatInputAccountId, accountCode: _vatInputAccountCode, accountName: _vatInputAccountName,
             onPick: (a) { _vatInputAccountId = a.id; _vatInputAccountCode = a.accountCode; _vatInputAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _vatInputAccountId = null; _vatInputAccountCode = null; _vatInputAccountName = null; }),
           ),
-          if (_showVatPending)
-            _accountField(
-              label: isEnglish ? 'Deferred VAT Input' : 'ภาษีซื้อรอตัดบัญชี (Deferred VAT Input)',
-              accountId: _vatPendingInputAccountId, accountCode: _vatPendingInputAccountCode, accountName: _vatPendingInputAccountName,
-              onPick: (a) { _vatPendingInputAccountId = a.id; _vatPendingInputAccountCode = a.accountCode; _vatPendingInputAccountName = a.accountNameThai; },
-              onClear: () => _clearAccount(() { _vatPendingInputAccountId = null; _vatPendingInputAccountCode = null; _vatPendingInputAccountName = null; }),
-            ),
-        ],
 
         if (_showDiscount)
           _accountField(
@@ -769,6 +782,8 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
             onPick: (a) { _cashAccountId = a.id; _cashAccountCode = a.accountCode; _cashAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _cashAccountId = null; _cashAccountCode = null; _cashAccountName = null; }),
           ),
+        ],
+        if (_showPayMethod) ...[
           _SectionHeader(title: isEnglish
               ? 'Payment Accounts by Method (if not specified, the account from the CM module or the Cash/Bank account above will be used)'
               : 'บัญชีจ่ายตามวิธีชำระ (ถ้าไม่ระบุ จะใช้บัญชีจากโมดูล CM หรือบัญชี Cash/Bank ด้านบน)'),

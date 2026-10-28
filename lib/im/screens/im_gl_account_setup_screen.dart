@@ -456,6 +456,22 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   // (ส่วนเกิน = Dr คลัง/Cr ผลต่าง, ส่วนขาด = กลับด้าน) ส่วน sys_doc_type อื่นยังไม่มีการ Post จริงในระบบ
   String get _sdt => widget.setup.sysDocType ?? '';
 
+  // แสดงเฉพาะบัญชีที่ใช้จริงตาม sys_doc_type (imTransactionController: postGlEntry/resolveCounterAccount และ
+  // postApBillFromGrn/postApCreditDebitNoteFromIm/postArBillFromDln/postArCreditDebitNoteFromIm)
+  // '11'/'12'/'15'/'20'/'25' ลงบัญชีผ่านเอกสาร AP เท่านั้น (ใช้ประเภทเอกสาร GL ของ AP) — ใช้บัญชีสินค้า/ผลต่าง/VAT ซื้อของหน้านี้
+  static const _apLinked = ['11', '12', '15', '20', '25'];
+  static const _arLinked = ['31', '32', '35', '40', '45'];
+  bool get _noGl         => _sdt == '85';                                        // เปลี่ยนแปลงราคา ไม่ลงบัญชี
+  bool get _showGlDoc    => !_noGl && !_apLinked.contains(_sdt);                 // postGlEntry ของ IM เอง
+  bool get _showInv      => !_noGl;
+  bool get _showCogs     => ['30', '60', ..._arLinked].contains(_sdt);
+  bool get _showVariance => ['10', '80', '95', ..._apLinked].contains(_sdt);    // 10: ราคาซื้อ-ต้นทุนมาตรฐาน, 80: ผลต่างนับ, 95: มาตรฐาน/จริง
+  bool get _showWip      => ['90', '95'].contains(_sdt);
+  bool get _showGrir     => _sdt == '10';
+  bool get _showConsign  => _sdt == '13';
+  bool get _showVatIn    => _apLinked.contains(_sdt);
+  bool get _showVatOut   => _arLinked.contains(_sdt);
+
   String _acctLabel(int? id, String? code, String? name, bool isEnglish, String placeholder) =>
       id != null ? '$code  ${_acctName(id, name)}' : placeholder;
 
@@ -747,6 +763,23 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         ),
         const SizedBox(height: 16),
 
+        if (_noGl || _apLinked.contains(_sdt))
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Colors.blueGrey.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.blueGrey.shade200)),
+            child: Text(
+              _noGl
+                  ? (isEnglish ? 'This document type does not post to the GL — no accounts to set up.' : 'เอกสารประเภทนี้ไม่ลงบัญชี GL — ไม่ต้องตั้งค่ารหัสบัญชี')
+                  : (isEnglish
+                      ? 'Posted through the linked AP document — the GL document type comes from the AP account setup; only the accounts below are used from here.'
+                      : 'ลงบัญชีผ่านเอกสาร AP ที่สร้างอัตโนมัติ — ประเภทเอกสาร GL ใช้ของการตั้งค่าบัญชี AP ใช้เฉพาะรหัสบัญชีด้านล่างจากหน้านี้'),
+              style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade700),
+            ),
+          ),
+
+        if (_showGlDoc) ...[
         _SectionHeader(title: isEnglish ? 'GL Document Type (for Posting)' : 'ประเภทเอกสาร GL (สำหรับ Post)'),
         InkWell(
           onTap: _pickGlDoc,
@@ -769,44 +802,52 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           ),
         ),
         const SizedBox(height: 16),
+        ],
 
-        _SectionHeader(title: isEnglish ? 'Account Codes' : 'รหัสบัญชี'),
+        if (_showInv) _SectionHeader(title: isEnglish ? 'Account Codes' : 'รหัสบัญชี'),
+        if (_showInv)
         _accountField(
           label: isEnglish ? 'Inventory Account' : 'บัญชีสินค้าคงคลัง',
           accountId: _inventoryAccountId, accountCode: _inventoryAccountCode, accountName: _inventoryAccountName,
           onPick: (a) { _inventoryAccountId = a.id; _inventoryAccountCode = a.accountCode; _inventoryAccountName = a.accountNameThai; },
           onClear: () => setState(() { _inventoryAccountId = null; _inventoryAccountCode = null; _inventoryAccountName = null; }),
         ),
+        if (_showCogs)
         _accountField(
           label: isEnglish ? 'COGS Account' : 'บัญชีต้นทุนขาย',
           accountId: _cogsAccountId, accountCode: _cogsAccountCode, accountName: _cogsAccountName,
           onPick: (a) { _cogsAccountId = a.id; _cogsAccountCode = a.accountCode; _cogsAccountName = a.accountNameThai; },
           onClear: () => setState(() { _cogsAccountId = null; _cogsAccountCode = null; _cogsAccountName = null; }),
         ),
+        if (_showVariance)
         _accountField(
           label: isEnglish ? 'Variance Account' : 'บัญชีผลต่างต้นทุน',
           accountId: _varianceAccountId, accountCode: _varianceAccountCode, accountName: _varianceAccountName,
           onPick: (a) { _varianceAccountId = a.id; _varianceAccountCode = a.accountCode; _varianceAccountName = a.accountNameThai; },
           onClear: () => setState(() { _varianceAccountId = null; _varianceAccountCode = null; _varianceAccountName = null; }),
         ),
+        if (_showWip)
         _accountField(
           label: isEnglish ? 'WIP Account' : 'บัญชีงานระหว่างผลิต (WIP)',
           accountId: _wipAccountId, accountCode: _wipAccountCode, accountName: _wipAccountName,
           onPick: (a) { _wipAccountId = a.id; _wipAccountCode = a.accountCode; _wipAccountName = a.accountNameThai; },
           onClear: () => setState(() { _wipAccountId = null; _wipAccountCode = null; _wipAccountName = null; }),
         ),
+        if (_showGrir)
         _accountField(
           label: isEnglish ? 'GR/IR Clearing Account (used by "10" — GRN with no reference)' : 'บัญชีพักรอใบกำกับ GR/IR (ใช้กับ "10" — รับสินค้าไม่มีเลขที่อ้างอิง)',
           accountId: _grirAccountId, accountCode: _grirAccountCode, accountName: _grirAccountName,
           onPick: (a) { _grirAccountId = a.id; _grirAccountCode = a.accountCode; _grirAccountName = a.accountNameThai; },
           onClear: () => setState(() { _grirAccountId = null; _grirAccountCode = null; _grirAccountName = null; }),
         ),
+        if (_showConsign)
         _accountField(
           label: isEnglish ? 'Consignment Payable Account (used by "13" — Consignment Receipt)' : 'บัญชีเจ้าหนี้ฝากขาย (ใช้กับ "13" — รับฝากขาย)',
           accountId: _consignmentPayableAccountId, accountCode: _consignmentPayableAccountCode, accountName: _consignmentPayableAccountName,
           onPick: (a) { _consignmentPayableAccountId = a.id; _consignmentPayableAccountCode = a.accountCode; _consignmentPayableAccountName = a.accountNameThai; },
           onClear: () => setState(() { _consignmentPayableAccountId = null; _consignmentPayableAccountCode = null; _consignmentPayableAccountName = null; }),
         ),
+        if (_showVatIn)
         _accountField(
           label: isEnglish
               ? 'VAT Input Account (used by "11"/"12"/"15"/"20"/"25" — overrides AP\'s own setup)'
@@ -815,6 +856,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           onPick: (a) { _vatInputAccountId = a.id; _vatInputAccountCode = a.accountCode; _vatInputAccountName = a.accountNameThai; },
           onClear: () => setState(() { _vatInputAccountId = null; _vatInputAccountCode = null; _vatInputAccountName = null; }),
         ),
+        if (_showVatOut)
         _accountField(
           label: isEnglish
               ? 'VAT Output Account (used by "31"/"32"/"35"/"40"/"45" — overrides AR\'s own setup)'

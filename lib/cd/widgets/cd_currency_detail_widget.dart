@@ -5,6 +5,7 @@ import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../models/cd_currency.dart';
+import '../services/cd_currency_service.dart';
 
 class CurrencyDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -97,8 +98,102 @@ class CurrencyDetailWidgetState extends State<CurrencyDetailWidget> {
     super.dispose();
   }
 
+  // เปลี่ยนสกุลเงินหลัก (ตั้งสกุลอื่นเป็นหลัก หรือยกเลิกสกุลหลักปัจจุบัน) — เตือนผลกระทบและให้ยืนยันก่อนบันทึก
+  Future<bool> _confirmBaseChange() async {
+    final wasBase = widget.selected?.baseCurrencyFlag ?? false;
+    if (_baseCurrencyFlag == wasBase) return true;
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    Map<String, dynamic> impact = {};
+    try {
+      impact = await CurrencyService().fetchBaseChangeImpact();
+    } catch (_) {}
+    if (!mounted) return false;
+    int n(String k) => (impact[k] as num?)?.toInt() ?? 0;
+    final oldCode = (impact['base_currency_code'] as String?) ?? CurrencyService.baseCode;
+    final newCode = _currencyCodeController.text.trim().toUpperCase();
+    final turningOff = wasBase && !_baseCurrencyFlag;
+    final title = turningOff
+        ? (isEnglish ? 'Remove base currency $newCode?' : 'ยกเลิกสกุลเงินหลัก $newCode?')
+        : (isEnglish ? 'Change base currency $oldCode → $newCode?' : 'เปลี่ยนสกุลเงินหลัก $oldCode → $newCode?');
+    final target = turningOff ? (isEnglish ? 'no base currency (the system will fall back to THB)' : 'ไม่มีสกุลเงินหลัก (ระบบจะใช้ THB แทน)') : newCode;
+    final items = <String>[
+      isEnglish
+          ? 'Base-currency amounts already recorded stay in $oldCode and are NOT converted: '
+              '${n('gl_entries')} posted GL entries, ${n('ar_documents')} AR / ${n('ap_documents')} AP documents, ${n('im_documents')} IM documents. '
+              'Reports and GL balances will mix $oldCode and the new base currency.'
+          : 'ยอดสกุลเงินหลักที่บันทึกไปแล้วยังเป็น $oldCode และระบบจะไม่แปลงย้อนหลัง: '
+              'รายการบัญชีที่โพสต์แล้ว ${n('gl_entries')} รายการ, เอกสาร AR ${n('ar_documents')} / AP ${n('ap_documents')} ใบ, เอกสาร IM ${n('im_documents')} ใบ '
+              '— รายงานและยอดคงเหลือบัญชีจะรวมยอด $oldCode กับสกุลเงินหลักใหม่ปนกัน',
+      isEnglish
+          ? 'Base exchange rates of the other ${n('other_currencies')} active currencies are quoted against $oldCode — they must all be re-entered against the new base.'
+          : 'อัตราแลกเปลี่ยนพื้นฐานของสกุลเงินอื่นที่ใช้งานอยู่ ${n('other_currencies')} สกุล เทียบกับ $oldCode — ต้องแก้ใหม่ทั้งหมดให้เทียบกับสกุลเงินหลักใหม่',
+      isEnglish
+          ? 'Open receivables ${n('open_ar_documents')} / payables ${n('open_ap_documents')}: FX revaluation and realized gain/loss will be calculated against the wrong base.'
+          : 'ลูกหนี้ค้างชำระ ${n('open_ar_documents')} ใบ / เจ้าหนี้ค้างชำระ ${n('open_ap_documents')} ใบ: การตีราคาและกำไรขาดทุนจากอัตราแลกเปลี่ยนจะคำนวณเทียบกับสกุลเงินหลักที่ผิด',
+      isEnglish
+          ? 'Credit limits of ${n('customers_with_credit_limit')} customers are amounts in $oldCode but will be compared in the new base currency.'
+          : 'วงเงินเครดิตลูกค้า ${n('customers_with_credit_limit')} ราย เป็นยอด $oldCode แต่จะถูกเทียบเป็นสกุลเงินหลักใหม่',
+      isEnglish
+          ? 'New documents without a currency, tax-invoice base amounts and labels will use $target. Other users must log out and back in.'
+          : 'เอกสารใหม่ที่ไม่ระบุสกุลเงิน ยอดสกุลเงินหลักในใบกำกับภาษี และป้ายบนหน้าจอ จะใช้ $target — ผู้ใช้อื่นต้องออกจากระบบแล้วเข้าใหม่',
+    ];
+    bool understood = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Row(children: [
+            Icon(Icons.warning_amber, color: Colors.red[700]),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title)),
+          ]),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(isEnglish
+                    ? 'Changing the base currency should only be done before go-live. Impact on this database:'
+                    : 'การเปลี่ยนสกุลเงินหลักควรทำก่อนเริ่มใช้งานระบบเท่านั้น ผลกระทบกับฐานข้อมูลนี้:',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...items.map((t) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('•  '),
+                        Expanded(child: Text(t)),
+                      ]),
+                    )),
+                if (impact.isEmpty)
+                  Text(isEnglish ? '(Could not load document counts)' : '(โหลดจำนวนเอกสารไม่สำเร็จ)',
+                      style: TextStyle(color: Colors.grey[600])),
+                const Divider(),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: understood,
+                  onChanged: (v) => setD(() => understood = v ?? false),
+                  title: Text(isEnglish ? 'I understand the impact and want to continue' : 'ฉันเข้าใจผลกระทบและต้องการดำเนินการต่อ'),
+                ),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(AppL10n(isEnglish).cancel)),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
+              onPressed: understood ? () => Navigator.pop(ctx, true) : null,
+              child: Text(isEnglish ? 'Confirm change' : 'ยืนยันการเปลี่ยน'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return ok == true;
+  }
+
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
+      if (!await _confirmBaseChange()) return;
       setState(() {
         _isSaving = true;
       });

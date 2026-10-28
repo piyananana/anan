@@ -272,6 +272,9 @@ class _CurrencyScreenState extends State<CurrencyScreen>
           );
         }
       }
+      // สกุลเงินหลักอาจเปลี่ยน — โหลด CurrencyService.baseCode ใหม่ให้ทุกหน้าจอใช้ค่าล่าสุด
+      final currencyService = CurrencyService()..clearBaseCurrencyCache();
+      currencyService.getBaseCurrencyCode();
       _listWidgetKey.currentState?.refresh();
       _onCancel();
     } catch (e) {

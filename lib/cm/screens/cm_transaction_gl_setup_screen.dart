@@ -424,6 +424,8 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
   bool get _showPettyCashPayable => ['30', '40'].contains(_sdt);
   bool get _showFx              => false; // สำรองไว้สำหรับอนาคต (แปลงสกุลเงินต่างประเทศ)
   bool get _isTransfer          => _sdt == '50';
+  // 15/25 = รายการที่สะท้อนมาจาก AR (รับชำระ) / AP (จ่ายชำระ) — ลงบัญชีที่ AR/AP แล้ว CM ไม่ Post เอง
+  bool get _isMirror            => ['15', '25'].contains(_sdt);
 
   String _acctName(int? id, String? storedName) {
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
@@ -556,7 +558,25 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
           ),
 
+        if (_isMirror)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Text(
+                isEnglish
+                    ? 'This document type mirrors AR receipts / AP payments, which are posted by the AR / AP module — no GL setup is needed in CM.'
+                    : 'เอกสารประเภทนี้สะท้อนรายการรับชำระ AR / จ่ายชำระ AP ซึ่งลงบัญชีที่โมดูล AR / AP แล้ว — ไม่ต้องตั้งค่าบัญชีใน CM',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          ),
+
         // ── ประเภทเอกสาร GL ────────────────────────────────────────────────
+        if (!_isMirror) ...[
         _SectionHeader(title: isEnglish ? 'GL Document Type (for Posting)' : 'ประเภทเอกสาร GL (สำหรับ Post)'),
         InkWell(
           onTap: () async {
@@ -591,6 +611,7 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
           ),
         ),
         const SizedBox(height: 16),
+        ],
 
         if (_showRevenue || _showExpense || _showPettyCashPayable) ...[
           _SectionHeader(title: isEnglish ? 'Account Codes' : 'รหัสบัญชี'),

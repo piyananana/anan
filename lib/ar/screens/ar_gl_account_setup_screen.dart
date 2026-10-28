@@ -467,16 +467,20 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
     _glDocId                      = s.glDocId;                      _glDocCode                      = s.glDocCode;                      _glDocName                      = s.glDocName;
   }
 
-  // helper: ตรวจว่า field ควรแสดงตาม sys_doc_type
+  // helper: ตรวจว่า field ควรแสดงตาม sys_doc_type — ตรงกับบัญชีที่ postGlEntry (arTransactionController) ใช้จริง
   String get _sdt => widget.setup.sysDocType ?? '';
-  bool get _showAr       => !['60','65'].contains(_sdt);                      // ทุก doc type ยกเว้น Advance/Refund
-  bool get _showRevenue  => ['10','30','35','50','55'].contains(_sdt);        // Invoice, DN, DN+Bill, CN, CN+Bill
-  bool get _showVat      => _sdt != '';                                       // ทุก doc type
-  bool get _showDiscount => ['10','30','35'].contains(_sdt);                  // Invoice, DN, DN+Bill
-  bool get _showAdvance  => ['60','65','80'].contains(_sdt);                  // Advance, Refund, Receipt
-  bool get _showCash     => ['60','65','80'].contains(_sdt);                  // Advance, Refund, Receipt
-  bool get _showWht      => _sdt == '80';                                     // Receipt เท่านั้น
-  bool get _showFx       => _sdt == '80';                                     // Receipt เท่านั้น
+  bool get _isRevenue      => ['10','30','35','50','55'].contains(_sdt);     // ตั้งหนี้/เพิ่มหนี้/ลดหนี้: Dr ลูกหนี้ Cr รายได้+VAT (ลดหนี้กลับทิศ)
+  bool get _posts          => _sdt != '70';                                  // วางบิล (70) ไม่ลงบัญชี
+  bool get _showAr         => _isRevenue || _sdt == '80';
+  bool get _showRevenue    => _isRevenue;
+  bool get _showVat        => _isRevenue || ['60','65','80'].contains(_sdt); // มัดจำ/คืนมัดจำ: VAT ของมัดจำ, รับชำระ: รับรู้ VAT รอตัด
+  bool get _showVatPending => _isRevenue || _sdt == '80';                    // รายการ VAT รอตัด (บริการ) และรับรู้ตอนรับชำระ
+  bool get _showDiscount   => _isRevenue;                                    // ลดหนี้ใช้ส่วนลดด้วย (กลับทิศ)
+  bool get _showAdvance    => ['60','65','80'].contains(_sdt);               // Advance, Refund, Receipt (ตัดมัดจำ)
+  bool get _showCash       => ['60','65','80'].contains(_sdt);               // Advance, Refund, Receipt
+  bool get _showPayMethod  => ['60','80'].contains(_sdt);                    // คืนมัดจำใช้บัญชี Cash/Bank บัญชีเดียว
+  bool get _showFx         => _sdt == '80';                                  // Receipt เท่านั้น
+  // ภาษีหัก ณ ที่จ่าย (wht_account_id) — การรับชำระ AR ยังไม่ลงบัญชี WHT จึงไม่แสดง (ค่าเดิมที่บันทึกไว้คงอยู่)
 
   // ── Account picker helper ─────────────────────────────────────────────────
   Future<void> _pick(String title, void Function(Account) onPicked) async {
@@ -569,12 +573,15 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
         if (_arAccountId != null)       lines.add(_JournalLine('Dr', _arAccountCode!, nm(_arAccountId, _arAccountName)));
         if (_revenueAccountId != null)  lines.add(_JournalLine('  Cr', _revenueAccountCode!, '${nm(_revenueAccountId, _revenueAccountName)} ${isEnglish ? '(per line)' : '(ต่อ line)'}'));
         if (_vatOutputAccountId != null)lines.add(_JournalLine('  Cr', _vatOutputAccountCode!, nm(_vatOutputAccountId, _vatOutputAccountName)));
+        if (_vatPendingOutputAccountId != null) lines.add(_JournalLine('  Cr', _vatPendingOutputAccountCode!, '${nm(_vatPendingOutputAccountId, _vatPendingOutputAccountName)} ${isEnglish ? '(deferred VAT lines)' : '(รายการ VAT รอตัด)'}'));
         if (_discountAccountId != null) lines.add(_JournalLine('Dr', _discountAccountCode!, '${nm(_discountAccountId, _discountAccountName)} ${isEnglish ? '(if discount applies)' : '(ถ้ามีส่วนลด)'}'));
         break;
       case '50':
       case '55':
         if (_revenueAccountId != null)  lines.add(_JournalLine('Dr', _revenueAccountCode!, nm(_revenueAccountId, _revenueAccountName)));
         if (_vatOutputAccountId != null)lines.add(_JournalLine('Dr', _vatOutputAccountCode!, nm(_vatOutputAccountId, _vatOutputAccountName)));
+        if (_vatPendingOutputAccountId != null) lines.add(_JournalLine('Dr', _vatPendingOutputAccountCode!, '${nm(_vatPendingOutputAccountId, _vatPendingOutputAccountName)} ${isEnglish ? '(deferred VAT lines)' : '(รายการ VAT รอตัด)'}'));
+        if (_discountAccountId != null) lines.add(_JournalLine('  Cr', _discountAccountCode!, '${nm(_discountAccountId, _discountAccountName)} ${isEnglish ? '(if discount applies)' : '(ถ้ามีส่วนลด)'}'));
         if (_arAccountId != null)       lines.add(_JournalLine('  Cr', _arAccountCode!, nm(_arAccountId, _arAccountName)));
         break;
       case '60':
@@ -584,11 +591,11 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
         break;
       case '65':
         if (_advanceAccountId != null)  lines.add(_JournalLine('Dr', _advanceAccountCode!, nm(_advanceAccountId, _advanceAccountName)));
+        if (_vatOutputAccountId != null)lines.add(_JournalLine('Dr', _vatOutputAccountCode!, '${nm(_vatOutputAccountId, _vatOutputAccountName)} ${isEnglish ? '(reverse advance VAT)' : '(กลับรายการ VAT มัดจำ)'}'));
         if (_cashAccountId != null)     lines.add(_JournalLine('  Cr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
         break;
       case '80':
         if (_cashAccountId != null)              lines.add(_JournalLine('Dr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
-        if (_whtAccountId != null)               lines.add(_JournalLine('Dr', _whtAccountCode!, '${nm(_whtAccountId, _whtAccountName)} (WHT)'));
         if (_advanceAccountId != null)           lines.add(_JournalLine('Dr', _advanceAccountCode!, '${nm(_advanceAccountId, _advanceAccountName)} ${isEnglish ? '(offset advance)' : '(ตัดมัดจำ)'}'));
         if (_fxLossAccountId != null)            lines.add(_JournalLine('Dr', _fxLossAccountCode!, '${nm(_fxLossAccountId, _fxLossAccountName)} ${isEnglish ? '(FX loss)' : '(ขาดทุน FX)'}'));
         if (_vatPendingOutputAccountId != null)  lines.add(_JournalLine('Dr', _vatPendingOutputAccountCode!, '${nm(_vatPendingOutputAccountId, _vatPendingOutputAccountName)} ${isEnglish ? '(recognize deferred VAT)' : '(รับรู้ VAT รอตัด)'}'));
@@ -699,7 +706,23 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
         ]),
         const SizedBox(height: 16),
 
+        if (!_posts)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blueGrey.shade50,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.blueGrey.shade200),
+            ),
+            child: Text(isEnglish
+                ? 'This document type does not post to the GL — no accounts to set up.'
+                : 'เอกสารประเภทนี้ไม่ลงบัญชี GL — ไม่ต้องตั้งค่ารหัสบัญชี'),
+          ),
+
         // ── ประเภทเอกสาร GL ──────────────────────────────────────────────
+        if (_posts) ...[
         _SectionHeader(title: isEnglish ? 'GL Document Type (for Posting)' : 'ประเภทเอกสาร GL (สำหรับ Post)'),
         InkWell(
           onTap: () async {
@@ -741,6 +764,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
 
         // ── รหัสบัญชี (แสดงตาม sys_doc_type) ────────────────────────────
         _SectionHeader(title: isEnglish ? 'Account Codes' : 'รหัสบัญชี'),
+        ],
 
         if (_showAr)
           _accountField(
@@ -760,20 +784,20 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
             onClear: () => _clearAccount(() { _revenueAccountId = null; _revenueAccountCode = null; _revenueAccountName = null; }),
           ),
 
-        if (_showVat) ...[
+        if (_showVat)
           _accountField(
             label: isEnglish ? 'Output VAT (VAT Output)' : 'ภาษีขาย (VAT Output)',
             accountId: _vatOutputAccountId, accountCode: _vatOutputAccountCode, accountName: _vatOutputAccountName,
             onPick: (a) { _vatOutputAccountId = a.id; _vatOutputAccountCode = a.accountCode; _vatOutputAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _vatOutputAccountId = null; _vatOutputAccountCode = null; _vatOutputAccountName = null; }),
           ),
+        if (_showVatPending)
           _accountField(
             label: isEnglish ? 'Deferred Output VAT (Deferred VAT Output)' : 'ภาษีขายรอตัดบัญชี (Deferred VAT Output)',
             accountId: _vatPendingOutputAccountId, accountCode: _vatPendingOutputAccountCode, accountName: _vatPendingOutputAccountName,
             onPick: (a) { _vatPendingOutputAccountId = a.id; _vatPendingOutputAccountCode = a.accountCode; _vatPendingOutputAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _vatPendingOutputAccountId = null; _vatPendingOutputAccountCode = null; _vatPendingOutputAccountName = null; }),
           ),
-        ],
 
         if (_showDiscount)
           _accountField(
@@ -799,7 +823,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
             onClear: () => _clearAccount(() { _cashAccountId = null; _cashAccountCode = null; _cashAccountName = null; }),
           ),
 
-        if (_showCash) ...[
+        if (_showPayMethod) ...[
           _SectionHeader(title: isEnglish
               ? 'Receipt accounts by payment method (If not specified, the account from the CM module or the Cash/Bank account above will be used)'
               : 'บัญชีรับชำระตามวิธีชำระ (ถ้าไม่ระบุ จะใช้บัญชีจากโมดูล CM หรือบัญชี Cash/Bank ด้านบน)'),
@@ -825,14 +849,6 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
             onPick: (a) { _billOfExchangeAccountId = a.id; _billOfExchangeAccountCode = a.accountCode; _billOfExchangeAccountName = a.accountNameThai; },
             onClear: () => _clearAccount(() { _billOfExchangeAccountId = null; _billOfExchangeAccountCode = null; _billOfExchangeAccountName = null; })),
         ],
-
-        if (_showWht)
-          _accountField(
-            label: isEnglish ? 'Withholding Tax (WHT — default)' : 'ภาษีหัก ณ ที่จ่าย (WHT — default)',
-            accountId: _whtAccountId, accountCode: _whtAccountCode, accountName: _whtAccountName,
-            onPick: (a) { _whtAccountId = a.id; _whtAccountCode = a.accountCode; _whtAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _whtAccountId = null; _whtAccountCode = null; _whtAccountName = null; }),
-          ),
 
         if (_showFx) ...[
           _accountField(
