@@ -2185,91 +2185,6 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     );
   }
 
-  // ── GL Account search dialog ─────────────────────────────────────────────
-  Future<void> _showGlAccountSearchDialog(_GlEditRow r) async {
-    final isEnglish = _isEnglish;
-    final searchCtrl = TextEditingController();
-    final available = _accounts.where((a) => a.isNormalAccount && a.isActive).toList();
-    List<Account> filtered = List.from(available);
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) {
-          void doFilter(String q) {
-            setDlgState(() {
-              if (q.isEmpty) {
-                filtered = List.from(available);
-              } else {
-                final lq = q.toLowerCase();
-                filtered = available.where((a) =>
-                  a.accountCode.toLowerCase().contains(lq) ||
-                  a.accountNameThai.toLowerCase().contains(lq) ||
-                  a.accountNameEng.toLowerCase().contains(lq)).toList();
-              }
-            });
-          }
-          return AlertDialog(
-            title: Text(isEnglish ? 'Select Account Code' : 'เลือกรหัสบัญชี'),
-            content: SizedBox(
-              width: 520,
-              height: 420,
-              child: Column(children: [
-                TextField(
-                  controller: searchCtrl,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: isEnglish ? 'Search account code / name' : 'ค้นหา รหัส / ชื่อบัญชี',
-                    prefixIcon: const Icon(Icons.search),
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                  onChanged: doFilter,
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: filtered.isEmpty
-                    ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี'))
-                    : ListView.builder(
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) {
-                          final a = filtered[i];
-                          final isSelected = r.acctCodeCtrl.text == a.accountCode;
-                          return ListTile(
-                            dense: true,
-                            selected: isSelected,
-                            selectedTileColor: Colors.indigo.shade50,
-                            leading: isSelected
-                              ? Icon(Icons.check_circle, color: Colors.indigo[700], size: 18)
-                              : const SizedBox(width: 18),
-                            title: Row(children: [
-                              SizedBox(width: 90, child: Text(a.accountCode,
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo[700]))),
-                              Expanded(child: Text(_acctLabel(a), overflow: TextOverflow.ellipsis)),
-                            ]),
-                            onTap: () {
-                              setState(() {
-                                r.acctCodeCtrl.text = a.accountCode;
-                                r.accountName = _acctLabel(a);
-                              });
-                              Navigator.of(ctx).pop();
-                            },
-                          );
-                        },
-                      ),
-                ),
-              ]),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-            ],
-          );
-        },
-      ),
-    );
-    searchCtrl.dispose();
-  }
-
   // ── Inline GL Section ────────────────────────────────────────────────────
   Widget _buildGlSection() {
     final isEnglish = _isEnglish;
@@ -2282,7 +2197,6 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         .firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null)?.currencyCode ?? CurrencyService.baseCode;
     final fcLabel = _selectedCurrency?.currencyCode ?? 'FC';
     final activeDims = _dimTypes.where((t) => t.slotNo >= 1 && t.slotNo <= 5).toList();
-    final isGlEditable = _status == 'Draft' && !_isReadOnly;
 
     // trailing widget for _sectionHeader
     final Widget sectionTrailing = Row(mainAxisSize: MainAxisSize.min, children: [
@@ -2355,34 +2269,14 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           return Container(color: bg, child: Row(children: [
             SizedBox(width: wNo, child: Center(
               child: Text('${i + 1}', style: const TextStyle(fontSize: 12, color: Colors.grey)))),
-            SizedBox(width: wCode, child: isGlEditable
-              ? InkWell(
-                  onTap: () => _showGlAccountSearchDialog(r),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                    child: Row(children: [
-                      Expanded(child: Text(r.acctCodeCtrl.text,
-                        style: TextStyle(fontSize: 12,
-                          color: hasErr ? Colors.red[700] : Colors.indigo[800]),
-                        overflow: TextOverflow.ellipsis)),
-                      Icon(Icons.search, size: 13, color: Colors.grey[400]),
-                    ]),
-                  ))
-              : Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            SizedBox(width: wCode, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   child: Text(r.acctCodeCtrl.text,
                     style: TextStyle(fontSize: 12, color: hasErr ? Colors.red : null),
                     overflow: TextOverflow.ellipsis))),
             SizedBox(width: wName, child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
               child: Text(r.accountName, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis))),
-            SizedBox(width: wDesc, child: isGlEditable
-              ? TextFormField(
-                  controller: r.descCtrl,
-                  style: const TextStyle(fontSize: 12),
-                  decoration: const InputDecoration(isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                    border: InputBorder.none))
-              : Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            SizedBox(width: wDesc, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                   child: Text(r.descCtrl.text, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis))),
             if (hasFc) ...[
               SizedBox(width: wAmt, child: Padding(
@@ -2411,12 +2305,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                   final vals = _dimValues[dt.typeCode] ?? [];
                   try { return vals.firstWhere((v) => v.id == vid); } catch (_) { return null; }
                 }(),
-                readOnly: !isGlEditable, isDense: true,
-                onSelected: (v) => setState(() {
-                  r.dimIds[dt.slotNo]   = v?.id;
-                  r.dimCodes[dt.slotNo] = v?.valueCode;
-                  r.dimNames[dt.slotNo] = v?.valueNameThai;
-                }),
+                readOnly: true, isDense: true,
+                onSelected: (_) {},
               )),
           ]));
         }
@@ -2496,6 +2386,12 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         if (_glSectionExpanded) ...[
           const SizedBox(height: 8),
           tableContent,
+          if (_status != 'Posted' && !_glLoading && _glEditRows.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(isEnglish ? '* Accounts come from the document type\'s GL account setup (revenue/expense accounts can be chosen on each item line) and dimensions follow the header selection — the entry is recalculated on Post' : '* รหัสบัญชีกำหนดจากการตั้งค่ารหัสบัญชีของประเภทเอกสาร (บัญชีรายได้/ค่าใช้จ่ายเลือกได้ที่แต่ละบรรทัดของรายการ) และมิติใช้ตามที่เลือกที่หัวเอกสาร — ระบบคำนวณรายการบัญชีใหม่ตอน Post',
+                  style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.blueGrey.shade600)),
+            ),
         ],
       ]),
     ));
