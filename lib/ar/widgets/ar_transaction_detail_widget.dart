@@ -4173,17 +4173,17 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final deferredVatRecognizeDesc = isEnglish ? 'Recognize Deferred VAT' : 'รับรู้ VAT รอตัดบัญชี';
     final deferredVatRecognizedDesc = isEnglish ? 'Deferred VAT Recognized' : 'VAT รอตัดบัญชีที่รับรู้';
 
-    // AR account: setup → customer group → customer
-    final arAccountId = setup.arAccountId
+    // AR account: customer → customer group → document type setup (เหมือน backend utils/arAccount.js)
+    final arAccountId = _selectedCustomer?.arAccountId
         ?? _selectedCustomer?.groupArAccountId
-        ?? _selectedCustomer?.arAccountId;
-    final arCode = setup.arAccountCode
+        ?? setup.arAccountId;
+    final arCode = _selectedCustomer?.arAccountCode
         ?? _selectedCustomer?.groupArAccountCode
-        ?? _selectedCustomer?.arAccountCode
+        ?? setup.arAccountCode
         ?? acctCode(arAccountId, '—');
-    final arName = acctName(arAccountId, setup.arAccountName
+    final arName = acctName(arAccountId, _selectedCustomer?.arAccountNameThai
         ?? _selectedCustomer?.groupArAccountNameThai
-        ?? _selectedCustomer?.arAccountNameThai
+        ?? setup.arAccountName
         ?? (isEnglish ? 'AR Account' : 'บัญชีลูกหนี้'));
 
     // Resolve payment GL account: per-type setup → CM (p.glAccountId) → cash default
@@ -4373,7 +4373,6 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       final isFcReceipt = _selectedCurrency?.baseCurrencyFlag == false;
       final totalInvoiceApplied = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
       final totalAdvanceDeducted = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
-      final totalCnDeducted = _cnRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
       final totalCashLc = _totalAmountFc * lc;
 
       // Build invoice rate map for FX calculation (keyed by invoice ID)
@@ -4384,15 +4383,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       // Compute AR credit at invoice exchange rate and receipt exchange rate (FC only)
       double totalInvAtInvRate = 0; // FC × invoiceRate → LC needed to zero-out AR
       double totalInvAtRecRate = 0; // FC × receiptRate → LC actually received
-      double totalCnAtInvRate  = 0; // CN FC × looked-up rate
       if (isFcReceipt) {
         for (final a in _applyRows) {
           final invRate = invRateMap[a.appliedToId] ?? lc;
           totalInvAtInvRate += a.appliedAmountLc * invRate;
           totalInvAtRecRate += a.appliedAmountLc * lc;
-        }
-        for (final a in _cnRows) {
-          totalCnAtInvRate += a.appliedAmountLc * (invRateMap[a.appliedToId] ?? lc);
         }
       }
 
@@ -4423,13 +4418,38 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       }
 
       // CR: ลูกหนี้การค้า — FC = applied FC, LC = at invoice rate
-      final arCreditFc = isFcReceipt ? (totalInvoiceApplied - totalCnDeducted) : 0.0;
-      final arCreditLc = isFcReceipt
-          ? (totalInvAtInvRate > 0 ? totalInvAtInvRate - totalCnAtInvRate : totalCashLc)
-          : (totalInvoiceApplied > 0 ? (totalInvoiceApplied - totalCnDeducted) * lc : totalCashLc);
-      if (arCreditLc > 0.005) {
-        lines.add(_GlLine(arCode, arName, settleDebtDesc2, 0, arCreditLc, 0, arCreditFc));
+      // ล้างเข้าบัญชีลูกหนี้ที่ใบแจ้งหนี้/ใบลดหนี้แต่ละใบลงไว้ (เหมือน backend) ไม่มีใบอ้างอิงใช้บัญชีของใบรับชำระ
+      final docArAccount = <int, int?>{
+        for (final d in [..._openInvoices, ..._openCreditNotes]) d.id: d.arAccountId,
+      };
+      final arCredit = <int?, List<double>>{}; // accountId → [lc, fc]
+      void addAr(int? acc, double lcAmt, double fcAmt) {
+        final cur = arCredit.putIfAbsent(acc, () => [0, 0]);
+        cur[0] += lcAmt;
+        cur[1] += fcAmt;
       }
+      final hasInvoiceApplied = isFcReceipt ? totalInvAtInvRate > 0 : totalInvoiceApplied > 0;
+      if (hasInvoiceApplied) {
+        for (final a in _applyRows) {
+          final lcAmt = isFcReceipt ? a.appliedAmountLc * (invRateMap[a.appliedToId] ?? lc) : a.appliedAmountLc * lc;
+          addAr(docArAccount[a.appliedToId] ?? arAccountId, lcAmt, isFcReceipt ? a.appliedAmountLc : 0);
+        }
+        for (final a in _cnRows) {
+          final lcAmt = isFcReceipt ? a.appliedAmountLc * (invRateMap[a.appliedToId] ?? lc) : a.appliedAmountLc * lc;
+          addAr(docArAccount[a.appliedToId] ?? arAccountId, -lcAmt, isFcReceipt ? -a.appliedAmountLc : 0);
+        }
+      } else {
+        addAr(arAccountId, totalCashLc, 0);
+      }
+      arCredit.forEach((acc, v) {
+        if (v[0].abs() <= 0.005) return;
+        final code = acc == arAccountId ? arCode : acctCode(acc, '—');
+        final name = acc == arAccountId ? arName : acctName(acc, arName);
+        // ใบลดหนี้มากกว่าใบแจ้งหนี้ในบัญชีเดียวกัน → เดบิตบัญชีนั้น
+        lines.add(v[0] > 0
+            ? _GlLine(code, name, settleDebtDesc2, 0, v[0], 0, v[1])
+            : _GlLine(code, name, settleDebtDesc2, -v[0], 0, -v[1], 0));
+      });
 
       // FX Gain/Loss: difference between LC at receipt rate vs invoice rate (pure LC — no FC equivalent)
       if (isFcReceipt) {
