@@ -9,6 +9,7 @@ import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../cd/services/cd_currency_service.dart';
+import '../../gl/widgets/gl_journal_preview.dart';
 
 // ถอยเป็นร่าง (งวดเปิด + แบบ realized ใบตั้งหนี้ยังไม่เปลี่ยน) → โพสต์ใหม่ด้วยเลขที่รายการบัญชีเดิม หรือลบ
 // ยกเลิกใช้เมื่อถอยไม่ได้ (ลงรายการกลับวันนี้) ทุกการกระทำต้องมีเหตุผล — ปุ่มที่ทำไม่ได้ล็อกพร้อมเหตุผล
@@ -63,6 +64,13 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
   List<Map<String, dynamic>> _previewDetails = [];
   double _previewTotal = 0;
   bool   _isPreviewing = false;
+  List<GlJournalLine> _previewJournal = [];
+  String? _previewJournalError;
+
+  // รายการบัญชีของรายการที่เลือก (ร่าง = ที่จะเกิดเมื่อโพสต์, โพสต์แล้ว = รายการจริง)
+  List<GlJournalLine> _journal = [];
+  bool    _journalPosted = false;
+  String? _journalError;
   final ScrollController _previewVertCtrl  = ScrollController();
   final ScrollController _previewHorizCtrl = ScrollController();
 
@@ -132,6 +140,9 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
         _selectedRow = header;
         _details = dtlList;
         _actions = DocActions.fromJson(data);
+        _journal = GlJournalLine.listFromJson(data['journal']);
+        _journalPosted = data['journal_posted'] == true;
+        _journalError = data['journal_error']?.toString();
         _isDetailLoading = false;
       });
     } catch (e) {
@@ -159,10 +170,13 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
       final data = await _svc.previewReval(
         revalDate: formatLocalDate(_revalDate),
         yearEndRates: rates,
+        method: _method,
       );
       setState(() {
         _previewDetails = List<Map<String, dynamic>>.from(data['details'] ?? []);
         _previewTotal   = double.tryParse(data['total_fx_gain_loss'].toString()) ?? 0;
+        _previewJournal = GlJournalLine.listFromJson(data['journal']);
+        _previewJournalError = data['journal_error']?.toString();
       });
     } catch (e) { _showError(e.toString()); }
     finally { setState(() => _isPreviewing = false); }
@@ -463,12 +477,12 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
             Wrap(spacing: 32, runSpacing: 12, children: [
               _labelField(isEnglish ? 'Method' : 'วิธีปรับมูลค่า', Row(mainAxisSize: MainAxisSize.min, children: [
                 Radio<String>(value: 'realized', groupValue: _method,
-                    onChanged: (v) => setState(() => _method = v!),
+                    onChanged: (v) => setState(() { _method = v!; _previewDetails = []; _previewJournal = []; }),
                     activeColor: _kIndigo, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
                 const Text('Realized', style: TextStyle(fontSize: 14)),
                 const SizedBox(width: 12),
                 Radio<String>(value: 'reversing', groupValue: _method,
-                    onChanged: (v) => setState(() => _method = v!),
+                    onChanged: (v) => setState(() { _method = v!; _previewDetails = []; _previewJournal = []; }),
                     activeColor: _kIndigo, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
                 const Text('Reversing', style: TextStyle(fontSize: 14)),
               ])),
@@ -598,6 +612,11 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
       if (_previewDetails.isNotEmpty) ...[
         const SizedBox(height: 16),
         SizedBox(height: 360, child: _buildPreviewTable()),
+        const SizedBox(height: 12),
+        GlJournalPreview(
+          lines: _previewJournal, isEnglish: isEnglish, error: _previewJournalError,
+          note: _journalNote(_method, _reversalDate),
+        ),
       ],
     ]),
   );
@@ -858,7 +877,8 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
               child: SingleChildScrollView(
                 controller: _detailVertCtrl,
                 padding: const EdgeInsets.all(12),
-                child: RawScrollbar(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                RawScrollbar(
                   controller: _detailHorizCtrl,
                   thumbVisibility: true,
                   trackVisibility: true,
@@ -942,10 +962,30 @@ class _ApFxRevaluationScreenState extends State<ApFxRevaluationScreen>
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
+                GlJournalPreview(
+                  lines: _journal, isEnglish: isEnglish, posted: _journalPosted, error: _journalError,
+                  note: _journalNote(row.method, row.reversalDate),
+                ),
+                ]),
               ),
             ),
     ),
   ]);
+  }
+
+  // วิธี reversing ลงรายการกลับอัตโนมัติ ณ วันที่กลับรายการ / realized ปรับยอดคงค้างของเอกสารเป็นอัตราใหม่
+  String _journalNote(String method, DateTime? reversalDate) {
+    final isEnglish = _isEnglish;
+    if (method == 'reversing') {
+      final d = reversalDate != null ? _dateFmt.format(reversalDate) : '-';
+      return isEnglish
+          ? '* Unrealized FX accounts — the entry is automatically reversed (debit/credit swapped) on $d'
+          : '* ใช้บัญชีกำไร/ขาดทุนที่ยังไม่เกิดขึ้น — ระบบลงรายการกลับ (สลับเดบิต/เครดิต) อัตโนมัติในวันที่ $d';
+    }
+    return isEnglish
+        ? '* Realized FX accounts — outstanding balances are restated at the new rate (no reversing entry)'
+        : '* ใช้บัญชีกำไร/ขาดทุนจากอัตราแลกเปลี่ยน — ยอดคงค้างของเอกสารปรับเป็นอัตราใหม่ (ไม่มีรายการกลับ)';
   }
 
   Widget _infoChip(String label, String value) =>

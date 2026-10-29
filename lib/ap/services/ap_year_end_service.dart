@@ -75,12 +75,13 @@ class ApYearEndService {
   Future<Map<String, dynamic>> previewReval({
     required String revalDate,
     required Map<String, double> yearEndRates,
+    String? method,
   }) async {
     final headers = await _auth.getAuthHeader();
     final res = await http.post(
       Uri.parse('$baseUrl/ap_fx_revaluation/preview'),
       headers: headers,
-      body: jsonEncode({'reval_date': revalDate, 'year_end_rates': yearEndRates}),
+      body: jsonEncode({'reval_date': revalDate, 'year_end_rates': yearEndRates, 'method': method}),
     );
     if (res.statusCode == 200) return jsonDecode(res.body) as Map<String, dynamic>;
     throw Exception(jsonDecode(res.body)['error'] ?? 'Failed');

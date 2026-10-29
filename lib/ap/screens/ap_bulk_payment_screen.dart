@@ -12,6 +12,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/services/cm_period_service.dart';
 import '../../utils/date_utils.dart';
 import '../../cd/services/cd_currency_service.dart';
+import '../../gl/widgets/gl_journal_preview.dart';
 
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
 final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -126,24 +127,71 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
     if (!await CmPeriodService.canPost(context, _fPaymentDate)) return;
     if (!(MenuScope.of(context)?.canCreate ?? true)) return;
 
+    final items = _invoices
+        .where((inv) => _selected.contains(inv['id'] as int?))
+        .map((inv) => {
+              'ap_document_id': inv['id'],
+              'amount': (inv['remaining_amount'] as num?)?.toDouble() ?? 0,
+            })
+        .toList();
+    final body = json.encode({
+      'bank_account_id': _fBankAccId,
+      'payment_date':    formatLocalDate(_fPaymentDate),
+      'payment_method':  _fPayMethod,
+      'items':           items,
+    });
+
+    // รายการบัญชีที่จะเกิด — คำนวณที่ backend ด้วยฟังก์ชันเดียวกับตอนจ่ายจริง
+    List<GlJournalLine> journal;
+    setState(() => _running = true);
+    try {
+      final r = await http.post(Uri.parse('${AppConfig.apiAp}/ap_bulk_payment/preview'),
+          headers: await _headers(), body: body);
+      if (r.statusCode != 200) {
+        String msg = r.body;
+        try { msg = (json.decode(r.body) as Map<String, dynamic>)['error']?.toString() ?? msg; } catch (_) {}
+        _showErr(isEnglish ? 'Error: $msg' : 'เกิดข้อผิดพลาด: $msg');
+        return;
+      }
+      journal = GlJournalLine.listFromJson((json.decode(r.body) as Map<String, dynamic>)['journal']);
+    } catch (e) {
+      _showErr('$e');
+      return;
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+    if (!mounted) return;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: Text(isEnglish ? 'Confirm Bulk Payment' : 'ยืนยัน Bulk Payment'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(isEnglish
-                ? 'Number of invoices: ${_selected.length}'
-                : 'จำนวนรายการ: ${_selected.length} ใบ'),
-            Text(isEnglish
-                ? 'Total amount: ${_fmt.format(_totalSelected)} ${CurrencyService.baseCode}'
-                : 'ยอดรวม: ${_fmt.format(_totalSelected)} ${CurrencyService.baseCode}'),
-            Text(isEnglish
-                ? 'Payment date: ${_dateFmt.format(_fPaymentDate)}'
-                : 'วันที่ชำระ: ${_dateFmt.format(_fPaymentDate)}'),
-          ],
+        content: SizedBox(
+          width: (MediaQuery.of(context).size.width * 0.8).clamp(320.0, 900.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(isEnglish
+                    ? 'Number of invoices: ${_selected.length}'
+                    : 'จำนวนรายการ: ${_selected.length} ใบ'),
+                Text(isEnglish
+                    ? 'Total amount: ${_fmt.format(_totalSelected)} ${CurrencyService.baseCode}'
+                    : 'ยอดรวม: ${_fmt.format(_totalSelected)} ${CurrencyService.baseCode}'),
+                Text(isEnglish
+                    ? 'Payment date: ${_dateFmt.format(_fPaymentDate)}'
+                    : 'วันที่ชำระ: ${_dateFmt.format(_fPaymentDate)}'),
+                const SizedBox(height: 12),
+                GlJournalPreview(
+                  lines: journal, isEnglish: isEnglish,
+                  note: isEnglish
+                      ? '* AP accounts from the vendor (or the AP payment GL setup), bank account from the selected bank; deferred VAT is recognized pro rata to the amount paid'
+                      : '* บัญชีเจ้าหนี้จากผู้ขาย (หรือการตั้งค่าบัญชีของเอกสารจ่ายชำระ AP) บัญชีธนาคารจากบัญชีที่เลือก และรับรู้ VAT รอตัดบัญชีตามสัดส่วนที่จ่าย',
+                ),
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
@@ -160,19 +208,6 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
     setState(() => _running = true);
     try {
       final h = await _headers();
-      final items = _invoices
-          .where((inv) => _selected.contains(inv['id'] as int?))
-          .map((inv) => {
-                'ap_document_id': inv['id'],
-                'amount': (inv['remaining_amount'] as num?)?.toDouble() ?? 0,
-              })
-          .toList();
-      final body = json.encode({
-        'bank_account_id': _fBankAccId,
-        'payment_date':    formatLocalDate(_fPaymentDate),
-        'payment_method':  _fPayMethod,
-        'items':           items,
-      });
       final r = await http.post(
           Uri.parse('${AppConfig.apiAp}/ap_bulk_payment/run'), headers: h, body: body);
       if (r.statusCode == 200 || r.statusCode == 201) {
