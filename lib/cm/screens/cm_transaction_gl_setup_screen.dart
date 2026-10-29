@@ -426,7 +426,7 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
 
   // CM doc types: 10=Receipt, 20=Payment, 30=Replenishment, 40=Voucher, 50=Transfer, 70=Charge, 90=Interest
   String get _sdt => widget.setup.sysDocType ?? '';
-  bool get _showRevenue         => _sdt == '10';
+  bool get _showRevenue         => ['10', '90'].contains(_sdt);
   bool get _showExpense         => ['20', '70', '90'].contains(_sdt);
   bool get _showPettyCashPayable => ['30', '40'].contains(_sdt);
   bool get _showFx              => false; // สำรองไว้สำหรับอนาคต (แปลงสกุลเงินต่างประเทศ)
@@ -625,7 +625,9 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
 
           if (_showRevenue)
             _accountField(
-              label: isEnglish ? 'Revenue (other side of the receipt)' : 'บัญชีรายได้ (ฝั่งตรงข้ามของรายรับ)',
+              label: _sdt == '90'
+                  ? (isEnglish ? 'Interest income' : 'ดอกเบี้ยรับ')
+                  : (isEnglish ? 'Revenue (other side of the receipt)' : 'บัญชีรายได้ (ฝั่งตรงข้ามของรายรับ)'),
               accountId: _revenueAccountId, accountCode: _revenueAccountCode, accountName: _revenueAccountName,
               onPick: (a) { _revenueAccountId = a.id; _revenueAccountCode = a.accountCode; _revenueAccountName = a.accountNameThai; },
               onClear: () => setState(() { _revenueAccountId = null; _revenueAccountCode = null; _revenueAccountName = null; }),
@@ -634,7 +636,7 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
           if (_showExpense)
             _accountField(
               label: _sdt == '90'
-                  ? (isEnglish ? 'Interest income / expense (default)' : 'ดอกเบี้ยรับ / ดอกเบี้ยจ่าย (default)')
+                  ? (isEnglish ? 'Interest expense' : 'ดอกเบี้ยจ่าย')
                   : (isEnglish ? 'Expense (other side)' : 'บัญชีค่าใช้จ่าย (ฝั่งตรงข้าม)'),
               accountId: _expenseAccountId, accountCode: _expenseAccountCode, accountName: _expenseAccountName,
               onPick: (a) { _expenseAccountId = a.id; _expenseAccountCode = a.accountCode; _expenseAccountName = a.accountNameThai; },
@@ -643,7 +645,9 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
 
           if (_showPettyCashPayable)
             _accountField(
-              label: isEnglish ? 'Petty Cash Payable (clearing account)' : 'บัญชีพักเบิกเงินสดย่อย (บัญชีล้างยอด)',
+              label: isEnglish
+                  ? 'Petty Cash (used when the petty cash fund has no GL account)'
+                  : 'บัญชีเงินสดย่อย (ใช้เมื่อกองเงินสดย่อยไม่ได้ผูกบัญชี GL)',
               accountId: _pettyCashPayableAccountId, accountCode: _pettyCashPayableAccountCode, accountName: _pettyCashPayableAccountName,
               onPick: (a) { _pettyCashPayableAccountId = a.id; _pettyCashPayableAccountCode = a.accountCode; _pettyCashPayableAccountName = a.accountNameThai; },
               onClear: () => setState(() { _pettyCashPayableAccountId = null; _pettyCashPayableAccountCode = null; _pettyCashPayableAccountName = null; }),

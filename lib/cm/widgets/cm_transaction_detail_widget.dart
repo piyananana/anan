@@ -572,6 +572,18 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Source and destination accounts must differ' : 'บัญชีต้นทางและปลายทางต้องไม่ใช่บัญชีเดียวกัน')));
       return;
     }
+    if (_isTransfer) {
+      // ยังไม่รองรับโอนข้ามสกุลเงิน (เหมือน backend)
+      final from = _bankAccounts.where((b) => b.id == _fromBankAccountId);
+      final to = _bankAccounts.where((b) => b.id == _toBankAccountId);
+      if (from.isNotEmpty && to.isNotEmpty && from.first.currencyCode != to.first.currencyCode) {
+        final pair = '${from.first.currencyCode} → ${to.first.currencyCode}';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+            ? 'Transfers between accounts in different currencies are not supported yet ($pair)'
+            : 'ยังไม่รองรับการโอนเงินระหว่างบัญชีต่างสกุลเงิน ($pair)')));
+        return;
+      }
+    }
     if (_hasBankChargeFields && _bankAccountId == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a bank account' : 'กรุณาเลือกบัญชีธนาคาร')));
       return;
@@ -1402,6 +1414,22 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
     return (code: b.glAccountCode ?? '', name: b.glAccountName ?? '');
   }
 
+  // บัญชีของช่องทางรับ/จ่ายเงิน: บัญชี GL ของประเภทการชำระ → บัญชี GL ของบัญชีธนาคาร (เหมือน backend)
+  ({String code, String name}) _paymentAcctCodeName(_PaymentRow p) {
+    final m = _paymentMethods.where((x) => x.id == p.paymentMethodId);
+    if (m.isNotEmpty && m.first.glAccountId != null) return _acctCodeName(m.first.glAccountId);
+    return _bankAcctCodeName(p.cmBankAccountId);
+  }
+
+  // บัญชีเงินสดย่อย (30/40): บัญชี GL ของกองเงินสดย่อยที่เลือก → บัญชีเงินสดย่อยในการตั้งค่า (เหมือน backend)
+  ({String code, String name}) _pettyCashAcctCodeName() {
+    final m = _bankAccounts.where((b) => b.id == _bankAccountId);
+    if (m.isNotEmpty && m.first.glAccountId != null) {
+      return (code: m.first.glAccountCode ?? '', name: m.first.glAccountName ?? '');
+    }
+    return _setupAcctCodeName(_docSetup!.pettyCashPayableAccountId, _docSetup!.pettyCashPayableAccountCode, _docSetup!.pettyCashPayableAccountName);
+  }
+
   ({String code, String name}) _setupAcctCodeName(int? id, String? code, String? name) {
     final isEnglish = _isEnglish;
     if (id == null) return (code: '!', name: isEnglish ? 'Not configured' : 'ยังไม่ตั้งค่า');
@@ -1423,7 +1451,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       for (final p in _paymentRows) {
         final amt = double.tryParse(p.amountCtrl.text) ?? 0;
         if (amt == 0) continue;
-        addLine(_bankAcctCodeName(p.cmBankAccountId), '${isEnglish ? 'Receive' : 'รับเงิน'} ${p.paymentMethodCode ?? ''}', amt, 0);
+        addLine(_paymentAcctCodeName(p), '${isEnglish ? 'Receive' : 'รับเงิน'} ${p.paymentMethodCode ?? ''}', amt, 0);
       }
       final revAcct = _glAccountId != null
           ? _acctCodeName(_glAccountId)
@@ -1437,15 +1465,15 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       for (final p in _paymentRows) {
         final amt = double.tryParse(p.amountCtrl.text) ?? 0;
         if (amt == 0) continue;
-        addLine(_bankAcctCodeName(p.cmBankAccountId), '${isEnglish ? 'Pay' : 'จ่ายเงิน'} ${p.paymentMethodCode ?? ''}', 0, amt);
+        addLine(_paymentAcctCodeName(p), '${isEnglish ? 'Pay' : 'จ่ายเงิน'} ${p.paymentMethodCode ?? ''}', 0, amt);
       }
     } else if (_isReplenishment) {
-      final payableAcct = _setupAcctCodeName(_docSetup!.pettyCashPayableAccountId, _docSetup!.pettyCashPayableAccountCode, _docSetup!.pettyCashPayableAccountName);
+      final payableAcct = _pettyCashAcctCodeName();
       addLine(payableAcct, isEnglish ? 'Petty cash replenishment' : 'เติมเงินสดย่อย', _totalAmountFc, 0);
       for (final p in _paymentRows) {
         final amt = double.tryParse(p.amountCtrl.text) ?? 0;
         if (amt == 0) continue;
-        addLine(_bankAcctCodeName(p.cmBankAccountId), '${isEnglish ? 'Pay' : 'เติมเงินสดย่อย'} ${p.paymentMethodCode ?? ''}', 0, amt);
+        addLine(_paymentAcctCodeName(p), '${isEnglish ? 'Pay' : 'เติมเงินสดย่อย'} ${p.paymentMethodCode ?? ''}', 0, amt);
       }
     } else if (_isVoucher) {
       for (final d in _detailRows) {
@@ -1456,16 +1484,19 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
             : (code: '!', name: isEnglish ? 'Select account' : 'ยังไม่เลือกบัญชี');
         addLine(acct, d.descCtrl.text.isEmpty ? (isEnglish ? 'Petty cash expense' : 'เบิกเงินสดย่อย') : d.descCtrl.text, amt, 0);
       }
-      final payableAcct = _setupAcctCodeName(_docSetup!.pettyCashPayableAccountId, _docSetup!.pettyCashPayableAccountCode, _docSetup!.pettyCashPayableAccountName);
+      final payableAcct = _pettyCashAcctCodeName();
       addLine(payableAcct, isEnglish ? 'Petty cash voucher' : 'เบิกเงินสดย่อย', 0, _totalAmountFc);
     } else if (_isTransfer) {
       addLine(_bankAcctCodeName(_toBankAccountId), isEnglish ? 'Transfer in' : 'รับโอนเข้า', _totalAmountFc, 0);
       addLine(_bankAcctCodeName(_fromBankAccountId), isEnglish ? 'Transfer out' : 'โอนออก', 0, _totalAmountFc);
     } else if (_isBankCharge || _isInterest) {
       final isIncome = _chargeType == 'INTEREST_INCOME';
+      // ดอกเบี้ยรับใช้บัญชีรายได้ ดอกเบี้ยจ่าย/ค่าธรรมเนียมใช้บัญชีค่าใช้จ่าย (เหมือน backend)
       final offsetAcct = _glAccountId != null
           ? _acctCodeName(_glAccountId)
-          : _setupAcctCodeName(_docSetup!.expenseAccountId, _docSetup!.expenseAccountCode, _docSetup!.expenseAccountName);
+          : isIncome
+              ? _setupAcctCodeName(_docSetup!.revenueAccountId, _docSetup!.revenueAccountCode, _docSetup!.revenueAccountName)
+              : _setupAcctCodeName(_docSetup!.expenseAccountId, _docSetup!.expenseAccountCode, _docSetup!.expenseAccountName);
       final bankAcct = _bankAcctCodeName(_bankAccountId);
       final label = _isInterest
           ? (isIncome ? (isEnglish ? 'Interest income' : 'ดอกเบี้ยรับ') : (isEnglish ? 'Interest expense' : 'ดอกเบี้ยจ่าย'))

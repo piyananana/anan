@@ -7,11 +7,11 @@ class CmTransactionGlSetup {
   final String? docNameEng;
   final bool?   docIsActive;
 
-  // รายรับ (10)
+  // รายรับ (10) / ดอกเบี้ยรับ (90)
   final int? revenueAccountId; final String? revenueAccountCode; final String? revenueAccountName;
-  // รายจ่าย (20) / ค่าธรรมเนียมธนาคาร-ดอกเบี้ยจ่าย (70/90)
+  // รายจ่าย (20) / ค่าธรรมเนียมธนาคาร (70) / ดอกเบี้ยจ่าย (90)
   final int? expenseAccountId; final String? expenseAccountCode; final String? expenseAccountName;
-  // เติมเงินสดย่อย (30) / เบิกเงินสดย่อย (40) — บัญชีพักเบิกเงินสดย่อย
+  // เติมเงินสดย่อย (30) / เบิกเงินสดย่อย (40) — ใช้เมื่อกองเงินสดย่อยไม่ได้ผูกบัญชี GL
   final int? pettyCashPayableAccountId; final String? pettyCashPayableAccountCode; final String? pettyCashPayableAccountName;
   // FX Gain / Loss
   final int? fxGainAccountId; final String? fxGainAccountCode; final String? fxGainAccountName;
