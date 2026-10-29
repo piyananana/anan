@@ -632,6 +632,8 @@ class ApOpenInvoice {
   // VAT รอตัดบัญชีของใบแจ้งหนี้ — รับรู้เป็นภาษีซื้อตามสัดส่วนที่จ่าย (ตัวอย่างรายการบัญชีของการจ่ายชำระ)
   final double deferredVatAmountLc;
   final double deferredVatAmountFc;
+  // บัญชีเจ้าหนี้ที่ใบตั้งหนี้ลงไว้ — การจ่ายชำระล้างเข้าบัญชีนี้
+  final int? apAccountId;
 
   ApOpenInvoice({
     required this.id, required this.docNo,
@@ -640,7 +642,7 @@ class ApOpenInvoice {
     this.totalAmountFc = 0, this.vatAmountFc = 0, this.vatAmountLc = 0,
     this.deferredVatAmountLc = 0, this.deferredVatAmountFc = 0,
     this.currencyCode = 'THB', this.exchangeRate = 1,
-    this.docCode, this.sysDocType,
+    this.docCode, this.sysDocType, this.apAccountId,
   });
 
   factory ApOpenInvoice.fromJson(Map<String, dynamic> json) {
@@ -661,6 +663,7 @@ class ApOpenInvoice {
       sysDocType: json['sys_doc_type'] != null ? int.tryParse(json['sys_doc_type'].toString()) : null,
       deferredVatAmountLc: toDouble(json['deferred_vat_amount_lc']),
       deferredVatAmountFc: toDouble(json['deferred_vat_amount_fc']),
+      apAccountId: json['ap_account_id'] as int?,
     );
   }
 }

@@ -2508,8 +2508,17 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       return fallback ?? '';
     }
 
-    final apCode = setup.apAccountCode ?? _selectedVendor?.apAccountCode ?? acctCode(_apAccountId ?? setup.apAccountId, '—');
-    final apName = acctName(_apAccountId ?? setup.apAccountId, setup.apAccountName ?? _selectedVendor?.apAccountNameThai ?? apDesc);
+    // AP account: vendor → vendor group → document type setup (เหมือน backend utils/apAccount.js)
+    final apAccountId = _selectedVendor?.apAccountId
+        ?? _selectedVendor?.groupApAccountId
+        ?? setup.apAccountId;
+    final apCode = acctCode(apAccountId, _selectedVendor?.apAccountCode
+        ?? _selectedVendor?.groupApAccountCode
+        ?? setup.apAccountCode);
+    final apName = acctName(apAccountId, _selectedVendor?.apAccountNameThai
+        ?? _selectedVendor?.groupApAccountNameThai
+        ?? setup.apAccountName
+        ?? apDesc);
 
     String payAcctCode(_PaymentRow p) {
       int? sid; String? sCode;
@@ -2669,8 +2678,13 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     else if (sysType == apDocTypePayment) {
       final totalWht = _whtRows.fold(0.0, (s, w) => s + (double.tryParse(w.whtCtrl.text) ?? 0));
       final totalAdv = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
+      // ล้างเข้าบัญชีเจ้าหนี้ที่ใบตั้งหนี้แต่ละใบลงไว้ (เหมือน backend)
+      final invAccount = <int, int?>{for (final inv in _openInvoices) inv.id: inv.apAccountId};
       for (final a in _applyRows) {
-        lines.add(_GlLine(apCode, apName.isEmpty ? 'AP Account' : apName, '$payDesc ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
+        final acc = invAccount[a.appliedToId] ?? apAccountId;
+        final code = acc == apAccountId ? apCode : acctCode(acc, '—');
+        final name = acc == apAccountId ? apName : acctName(acc, apName);
+        lines.add(_GlLine(code, name.isEmpty ? 'AP Account' : name, '$payDesc ${a.appliedToDocNo}', a.appliedAmountLc * lc, 0, isFcDoc ? a.appliedAmountLc : 0, 0));
       }
       if (totalWht > 0) {
         lines.add(_GlLine(setup.whtPayableAccountCode ?? '—', acctName(setup.whtPayableAccountId, setup.whtPayableAccountName ?? 'WHT Payable'), isEnglish ? 'Withholding Tax' : 'ภาษีหัก ณ ที่จ่าย', 0, totalWht * lc, 0, isFcDoc ? totalWht : 0));

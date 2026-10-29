@@ -198,6 +198,10 @@ class ApVendor {
   final int? apAccountId;
   final String? apAccountCode;
   final String? apAccountNameThai;
+  // บัญชีเจ้าหนี้ของกลุ่มเจ้าหนี้ (อ่านอย่างเดียว) — ลำดับลงบัญชี: เจ้าหนี้ > กลุ่มเจ้าหนี้ > ประเภทเอกสาร
+  final int? groupApAccountId;
+  final String? groupApAccountCode;
+  final String? groupApAccountNameThai;
   final int? paymentMethodId;
   final String? paymentMethodCode;
   final String? paymentMethodNameThai;
@@ -234,6 +238,9 @@ class ApVendor {
     this.apAccountId,
     this.apAccountCode,
     this.apAccountNameThai,
+    this.groupApAccountId,
+    this.groupApAccountCode,
+    this.groupApAccountNameThai,
     this.paymentMethodId,
     this.paymentMethodCode,
     this.paymentMethodNameThai,
@@ -271,6 +278,9 @@ class ApVendor {
         apAccountId: json['ap_account_id'],
         apAccountCode: json['ap_account_code'],
         apAccountNameThai: json['ap_account_name_thai'],
+        groupApAccountId: json['group_ap_account_id'],
+        groupApAccountCode: json['group_ap_account_code'],
+        groupApAccountNameThai: json['group_ap_account_name_thai'],
         paymentMethodId: json['payment_method_id'],
         paymentMethodCode: json['payment_method_code'],
         paymentMethodNameThai: json['payment_method_name_thai'],
@@ -353,6 +363,9 @@ class ApVendor {
         apAccountId: apAccountId ?? this.apAccountId,
         apAccountCode: apAccountCode ?? this.apAccountCode,
         apAccountNameThai: apAccountNameThai ?? this.apAccountNameThai,
+        groupApAccountId: groupApAccountId,
+        groupApAccountCode: groupApAccountCode,
+        groupApAccountNameThai: groupApAccountNameThai,
         paymentMethodId: paymentMethodId ?? this.paymentMethodId,
         paymentMethodCode: paymentMethodCode ?? this.paymentMethodCode,
         paymentMethodNameThai: paymentMethodNameThai ?? this.paymentMethodNameThai,
