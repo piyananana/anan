@@ -1134,9 +1134,10 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
             Expanded(flex: 2, child: DropdownButtonFormField<int?>(
               value: _glAccountId,
               isExpanded: true,
+              // ไม่บังคับ — ว่างไว้จะใช้บัญชีจากการตั้งค่า (ดอกเบี้ยรับ → ช่องดอกเบี้ยรับ, ดอกเบี้ยจ่าย → ช่องดอกเบี้ยจ่าย)
               decoration: _fieldDeco(isEnglish
-                  ? (_isInterest ? 'Interest Income/Expense Account' : 'Expense Account')
-                  : (_isInterest ? 'บัญชีดอกเบี้ยรับ/จ่าย' : 'บัญชีค่าใช้จ่าย')),
+                  ? '${!_isInterest ? 'Expense Account' : _chargeType == 'INTEREST_INCOME' ? 'Interest Income Account' : 'Interest Expense Account'} (blank = setup)'
+                  : '${!_isInterest ? 'บัญชีค่าใช้จ่าย' : _chargeType == 'INTEREST_INCOME' ? 'บัญชีดอกเบี้ยรับ' : 'บัญชีดอกเบี้ยจ่าย'} (ว่าง = ตามการตั้งค่า)'),
               items: _accounts.map((a) => DropdownMenuItem(
                     value: a.id, child: Text('${a.accountCode} ${_acctLabel(a)}', overflow: TextOverflow.ellipsis))).toList(),
               onChanged: _isReadOnly ? null : (v) => setState(() => _glAccountId = v),
