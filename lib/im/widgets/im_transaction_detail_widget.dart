@@ -2349,7 +2349,26 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         ),
       ]);
 
+  // เอกสารที่สร้าง AR/AP อัตโนมัติ ต้องตั้งประเภทเอกสาร AR/AP ในหน้าตั้งค่าบัญชี IM ก่อน Post (resolveTargetDoc ฝั่ง backend)
   Widget _buildGlCard(bool isEnglish) {
+    final card = _buildGlCardInner(isEnglish);
+    final s = _docSetup;
+    if (s == null || !s.targetAuto || s.targetDocId != null || _status == 'Posted') return card;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(
+          isEnglish
+              ? 'The ${s.targetModule} document type created by this document is not set — set it in IM GL Account Setup before posting.'
+              : 'ยังไม่ได้ตั้งประเภทเอกสาร ${s.targetModule} ที่เอกสารนี้สร้างอัตโนมัติ — ตั้งค่าที่หน้าตั้งค่าบัญชี IM ก่อน Post',
+          style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+        ),
+      ),
+      card,
+    ]);
+  }
+
+  Widget _buildGlCardInner(bool isEnglish) {
     _ensureGlAccounts();
     // '32' ที่ Delivered แล้ว: ต้นทุนขาย (COGS) Post ไปแล้วตอน Post IM (gl_entry_id ตั้งค่าจริง) จึงแสดง entry จริง
     // เหมือนสถานะ Posted ทั่วไป ต่างจาก '12' ที่ยังไม่มี GL ใดๆ เลยตอน Received

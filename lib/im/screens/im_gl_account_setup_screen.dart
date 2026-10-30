@@ -26,6 +26,7 @@ class _ImGlAccountSetupScreenState extends State<ImGlAccountSetupScreen> with Au
   List<ImGlAccountSetup> _rows = [];
   List<Account> _accounts = [];
   List<ModuleDocument> _glDocs = [];
+  List<ModuleDocument> _allDocs = [];
 
   bool _isEnglish = false;
   bool _isLoading = true;
@@ -56,7 +57,8 @@ class _ImGlAccountSetupScreenState extends State<ImGlAccountSetupScreen> with Au
         _rows = results[0] as List<ImGlAccountSetup>;
         _accounts = (results[1] as List<Account>).where((a) => a.isActive && a.isNormalAccount).toList()
           ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
-        _glDocs = (results[2] as List<ModuleDocument>).where((d) => d.isDocType && d.sysModule == '01' && d.isActive).toList()
+        _allDocs = results[2] as List<ModuleDocument>;
+        _glDocs = _allDocs.where((d) => d.isDocType && d.sysModule == '01' && d.isActive).toList()
           ..sort((a, b) => a.docCode.compareTo(b.docCode));
         _isLoading = false;
         if (_rows.isNotEmpty && _selectedDocCode.isEmpty) {
@@ -156,6 +158,13 @@ class _ImGlAccountSetupScreenState extends State<ImGlAccountSetupScreen> with Au
                           setup: _selected!,
                           accounts: _accounts,
                           glDocs: _glDocs,
+                          // ประเภทเอกสาร AR/AP ปลายทางที่เลือกได้ — ตรงโมดูลและ sys_doc_type ที่ประเภทเอกสาร IM นี้สร้าง
+                          targetDocs: _selected!.targetAuto
+                              ? (_allDocs.where((d) => d.isDocType && d.isActive
+                                      && d.sysModule == (_selected!.targetModule == 'AP' ? '21' : '11')
+                                      && d.sysDocType == _selected!.targetDocCode).toList()
+                                ..sort((a, b) => a.docCode.compareTo(b.docCode)))
+                              : const [],
                           onSave: _onSave,
                         ),
                 ),
@@ -201,6 +210,7 @@ class _ImGlSetupForm extends StatefulWidget {
   final ImGlAccountSetup setup;
   final List<Account> accounts;
   final List<ModuleDocument> glDocs;
+  final List<ModuleDocument> targetDocs;
   final Future<void> Function(ImGlAccountSetup) onSave;
 
   const _ImGlSetupForm({
@@ -208,6 +218,7 @@ class _ImGlSetupForm extends StatefulWidget {
     required this.setup,
     required this.accounts,
     required this.glDocs,
+    required this.targetDocs,
     required this.onSave,
   });
 
@@ -225,6 +236,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   int? _vatInputAccountId;  String? _vatInputAccountCode;  String? _vatInputAccountName;
   int? _consignmentPayableAccountId; String? _consignmentPayableAccountCode; String? _consignmentPayableAccountName;
   int? _glDocId;            String? _glDocCode;            String? _glDocName;
+  int? _targetDocId;        String? _targetDocCode;        String? _targetDocName;
   bool _isSaving = false;
 
   @override
@@ -251,6 +263,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     _consignmentPayableAccountCode = s.consignmentPayableAccountCode;
     _consignmentPayableAccountName = s.consignmentPayableAccountName;
     _glDocId            = s.glDocId;            _glDocCode            = s.glDocCode;            _glDocName            = s.glDocName;
+    _targetDocId        = s.targetDocId;        _targetDocCode        = s.targetDocCodeSel;     _targetDocName        = s.targetDocNameTh;
   }
 
   String _acctName(int? id, String? storedName) {
@@ -367,15 +380,32 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
 
   Future<void> _pickGlDoc() async {
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final picked = await _pickDoc(widget.glDocs, isEnglish ? 'Select GL Document Type' : 'เลือกประเภทเอกสาร GL');
+    if (picked != null) {
+      setState(() { _glDocId = picked.id; _glDocCode = picked.docCode; _glDocName = picked.docNameThai; });
+    }
+  }
+
+  Future<void> _pickTargetDoc() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final m = widget.setup.targetModule;
+    final picked = await _pickDoc(widget.targetDocs, isEnglish ? 'Select $m Document Type' : 'เลือกประเภทเอกสาร $m');
+    if (picked != null) {
+      setState(() { _targetDocId = picked.id; _targetDocCode = picked.docCode; _targetDocName = picked.docNameThai; });
+    }
+  }
+
+  Future<ModuleDocument?> _pickDoc(List<ModuleDocument> docs, String title) async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final searchCtrl = TextEditingController();
-    List<ModuleDocument> filtered = List.from(widget.glDocs);
+    List<ModuleDocument> filtered = List.from(docs);
     ModuleDocument? picked;
 
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
         return AlertDialog(
-          title: Text(isEnglish ? 'Select GL Document Type' : 'เลือกประเภทเอกสาร GL'),
+          title: Text(title),
           content: SizedBox(
             width: 480, height: 380,
             child: Column(children: [
@@ -392,8 +422,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
                 onChanged: (q) => setDlg(() {
                   final lq = q.toLowerCase();
                   filtered = q.isEmpty
-                      ? List.from(widget.glDocs)
-                      : widget.glDocs.where((d) => d.docCode.toLowerCase().contains(lq) || d.docNameThai.toLowerCase().contains(lq) || d.docNameEng.toLowerCase().contains(lq)).toList();
+                      ? List.from(docs)
+                      : docs.where((d) => d.docCode.toLowerCase().contains(lq) || d.docNameThai.toLowerCase().contains(lq) || d.docNameEng.toLowerCase().contains(lq)).toList();
                 }),
               ),
               const SizedBox(height: 8),
@@ -418,9 +448,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
       }),
     );
     searchCtrl.dispose();
-    if (picked != null) {
-      setState(() { _glDocId = picked!.id; _glDocCode = picked!.docCode; _glDocName = picked!.docNameThai; });
-    }
+    return picked;
   }
 
   Future<void> _submit() async {
@@ -431,6 +459,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         targetModule: widget.setup.targetModule,
         targetDocCode: widget.setup.targetDocCode,
         glDocId: _glDocId, glDocCode: _glDocCode, glDocName: _glDocName,
+        targetAuto: widget.setup.targetAuto,
+        targetDocId: _targetDocId, targetDocCodeSel: _targetDocCode, targetDocNameTh: _targetDocName,
         inventoryAccountId: _inventoryAccountId, inventoryAccountCode: _inventoryAccountCode, inventoryAccountName: _inventoryAccountName,
         cogsAccountId: _cogsAccountId, cogsAccountCode: _cogsAccountCode, cogsAccountName: _cogsAccountName,
         varianceAccountId: _varianceAccountId, varianceAccountCode: _varianceAccountCode, varianceAccountName: _varianceAccountName,
@@ -446,13 +476,29 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     }
   }
 
+  // ชื่อ sys_doc_type ของเอกสารปลายทาง (AP: 10 ตั้งหนี้ 30 ลดหนี้ 50 เพิ่มหนี้ / AR: 10 ตั้งหนี้ 50 ลดหนี้ 30 เพิ่มหนี้)
+  String _targetKind(bool isEnglish) {
+    final s = widget.setup;
+    final t = s.targetDocCode;
+    final isAp = s.targetModule == 'AP';
+    if (t == '10') return isEnglish ? 'billing' : 'ตั้งหนี้';
+    final isCredit = isAp ? t == '30' : t == '50';
+    return isCredit ? (isEnglish ? 'credit note' : 'ลดหนี้') : (isEnglish ? 'debit note' : 'เพิ่มหนี้');
+  }
+
   String _targetLabel(bool isEnglish) {
     final s = widget.setup;
     if (s.targetModule == 'NONE') return isEnglish ? 'Internal only — no AR/AP document is created' : 'ภายในเท่านั้น — ไม่สร้างเอกสาร AR/AP';
     final moduleLabel = s.targetModule == 'AP' ? 'AP' : 'AR';
+    final kind = _targetKind(isEnglish);
+    if (!s.targetAuto) {
+      return isEnglish
+          ? 'No document is created automatically — record the $moduleLabel $kind later in the $moduleLabel module'
+          : 'ไม่สร้างเอกสารอัตโนมัติ — ไปบันทึก$kind ที่โมดูล $moduleLabel ภายหลัง';
+    }
     return isEnglish
-        ? 'Creates $moduleLabel document type "${s.targetDocCode}" when posted'
-        : 'เมื่อ Post จะสร้างเอกสาร $moduleLabel ประเภท "${s.targetDocCode}"';
+        ? 'Creates an $moduleLabel $kind (system type ${s.targetDocCode}) when posted — choose its document type below'
+        : 'เมื่อ Post จะสร้างเอกสาร$kind $moduleLabel (ประเภทระบบ ${s.targetDocCode}) อัตโนมัติ — เลือกประเภทเอกสารด้านล่าง';
   }
 
   // ── Journal preview ───────────────────────────────────────────────────────
@@ -735,6 +781,12 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     );
   }
 
+  String? _targetDocDisplayName(bool isEnglish) {
+    final m = widget.targetDocs.cast<ModuleDocument?>().firstWhere((d) => d?.id == _targetDocId, orElse: () => null);
+    if (m == null) return _targetDocName;
+    return isEnglish && m.docNameEng.isNotEmpty ? m.docNameEng : m.docNameThai;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
@@ -790,6 +842,32 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
               style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade700),
             ),
           ),
+
+        if (s.targetAuto) ...[
+        _SectionHeader(title: isEnglish ? '${s.targetModule} Document Type (created automatically)' : 'ประเภทเอกสาร ${s.targetModule} (สร้างอัตโนมัติ)'),
+        InkWell(
+          onTap: _pickTargetDoc,
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: isEnglish ? '${s.targetModule} ${_targetKind(true)} document type (required)' : 'ประเภทเอกสาร${_targetKind(false)} ${s.targetModule} (ต้องระบุ)',
+              border: const OutlineInputBorder(),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              errorText: _targetDocId == null ? (isEnglish ? 'Required before posting this document type' : 'ต้องตั้งก่อน Post เอกสารประเภทนี้') : null,
+              suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (_targetDocId != null)
+                  IconButton(icon: const Icon(Icons.clear, size: 16), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => setState(() { _targetDocId = null; _targetDocCode = null; _targetDocName = null; })),
+                const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.description_outlined, size: 18)),
+              ]),
+            ),
+            child: Text(
+              _targetDocId != null ? '$_targetDocCode  ${_targetDocDisplayName(isEnglish) ?? ''}' : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
+              style: TextStyle(fontSize: 13, color: _targetDocId != null ? null : Colors.grey.shade500),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        ],
 
         if (_showGlDoc) ...[
         _SectionHeader(title: isEnglish ? 'GL Document Type (for Posting)' : 'ประเภทเอกสาร GL (สำหรับ Post)'),

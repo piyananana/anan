@@ -8,7 +8,12 @@ class ImGlAccountSetup {
   final String? docNameEng;
   final bool? docIsActive;
   final String targetModule; // 'AP' / 'AR' / 'NONE' — derived server-side, not editable
-  final String? targetDocCode; // derived server-side, not editable
+  final String? targetDocCode; // sys_doc_type ของเอกสาร AR/AP ปลายทาง — derived server-side, not editable
+  final bool targetAuto; // true = สร้างเอกสาร AR/AP อัตโนมัติตอน Post (ต้องตั้ง targetDocId ก่อนใช้)
+  final int? targetDocId; // ประเภทเอกสาร AR/AP ปลายทางที่ผู้ใช้ตั้ง
+  final String? targetDocCodeSel;
+  final String? targetDocNameTh;
+  final String? targetDocNameEn;
   final int? glDocId;
   final String? glDocCode;
   final String? glDocName;
@@ -46,6 +51,11 @@ class ImGlAccountSetup {
     this.docIsActive,
     this.targetModule = 'NONE',
     this.targetDocCode,
+    this.targetAuto = false,
+    this.targetDocId,
+    this.targetDocCodeSel,
+    this.targetDocNameTh,
+    this.targetDocNameEn,
     this.glDocId,
     this.glDocCode,
     this.glDocName,
@@ -70,6 +80,11 @@ class ImGlAccountSetup {
         docIsActive: json['doc_is_active'],
         targetModule: json['target_module'] ?? 'NONE',
         targetDocCode: json['target_doc_code'],
+        targetAuto: json['target_auto'] ?? false,
+        targetDocId: json['target_doc_id'],
+        targetDocCodeSel: json['target_doc_code_sel'],
+        targetDocNameTh: json['target_doc_name_th'],
+        targetDocNameEn: json['target_doc_name_en'],
         glDocId: json['gl_doc_id'],
         glDocCode: json['gl_doc_code'],
         glDocName: json['gl_doc_name'],
@@ -109,6 +124,7 @@ class ImGlAccountSetup {
         'vat_input_account_id': vatInputAccountId,
         'consignment_payable_account_id': consignmentPayableAccountId,
         'gl_doc_id': glDocId,
+        'target_doc_id': targetDocId,
       };
 }
 

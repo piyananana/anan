@@ -38,6 +38,9 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
   int? _vendorId;
   String _vendorLabel = '';
   DateTime _docDate = DateTime.now();
+  // ประเภทเอกสาร AP ตั้งหนี้ — ผู้ใช้ต้องเลือกทุกครั้งเพื่อยืนยัน (ล้างค่าหลังสร้างใบตั้งหนี้สำเร็จ)
+  List<Map<String, dynamic>> _apDocTypes = [];
+  int? _apDocId;
   List<Map<String, dynamic>> _rows = [];
   final Set<int> _selected = {};
 
@@ -50,6 +53,16 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadApDocTypes();
+  }
+
+  Future<void> _loadApDocTypes() async {
+    try {
+      final rows = await _svc.fetchApDocTypes();
+      if (mounted) setState(() => _apDocTypes = rows);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    }
   }
 
   @override
@@ -288,11 +301,12 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
 
   Future<void> _settle() async {
     final isEnglish = _isEnglish;
-    if (_vendorId == null || _selected.isEmpty) return;
+    if (_vendorId == null || _selected.isEmpty || _apDocId == null) return;
     setState(() => _isSubmitting = true);
     try {
       final result = await _svc.postSettlement(
         vendorId: _vendorId!,
+        apDocId: _apDocId!,
         consumptionIds: _selected.toList(),
         refNo: _refNoCtrl.text.trim(),
         docDate: DateFormat('yyyy-MM-dd').format(_docDate),
@@ -305,6 +319,7 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
                 : 'สร้างใบตั้งหนี้ ${result['ap_doc_no']} สำเร็จ (${result['line_count']} รายการ ยอดรวม ${NumberFormat('#,##0.00').format(_num(result['total_amount']))})')));
       }
       _refNoCtrl.clear();
+      setState(() => _apDocId = null);
       await _loadPending();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
@@ -419,7 +434,7 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
                 : const Icon(Icons.receipt_long),
             label: Text(isEnglish ? 'Create AP Bill' : 'สร้างใบตั้งหนี้'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[800], foregroundColor: Colors.white),
-            onPressed: (_isSubmitting || _selected.isEmpty) ? null : _settle,
+            onPressed: (_isSubmitting || _selected.isEmpty || _apDocId == null) ? null : _settle,
           ),
         ]),
       ),
@@ -562,6 +577,29 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
                         border: const OutlineInputBorder(), isDense: true, suffixIcon: const Icon(Icons.calendar_today, size: 16)),
                     child: Text(DateFormat('dd/MM/yyyy').format(_docDate)),
                   ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<int>(
+                  value: _apDocId,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: isEnglish ? 'AP Billing Document Type (required)' : 'ประเภทเอกสาร AP ตั้งหนี้ (ต้องเลือก)',
+                    border: const OutlineInputBorder(), isDense: true,
+                  ),
+                  items: [
+                    for (final d in _apDocTypes)
+                      DropdownMenuItem<int>(
+                        value: d['id'] as int,
+                        child: Text(
+                          '${d['doc_code']}  ${isEnglish && ((d['doc_name_eng'] as String?) ?? '').isNotEmpty ? d['doc_name_eng'] : (d['doc_name_thai'] ?? '')}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _apDocId = v),
                 ),
               ),
               const SizedBox(width: 10),

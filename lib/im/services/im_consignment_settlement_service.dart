@@ -19,8 +19,19 @@ class ImConsignmentSettlementService {
     throw Exception('Failed to load pending consignment settlement rows: ${response.body}');
   }
 
+  // ประเภทเอกสาร AP ตั้งหนี้ที่เปิดใช้งาน — ผู้ใช้เลือกทุกครั้งที่สร้างใบตั้งหนี้
+  Future<List<Map<String, dynamic>>> fetchApDocTypes() async {
+    final headers = await _authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/im_consignment_settlement/ap_doc_types'), headers: headers);
+    if (response.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(jsonDecode(response.body) as List);
+    }
+    throw Exception('Failed to load AP document types: ${response.body}');
+  }
+
   Future<Map<String, dynamic>> postSettlement({
     required int vendorId,
+    required int apDocId,
     required List<int> consumptionIds,
     String? refNo,
     String? docDate,
@@ -32,6 +43,7 @@ class ImConsignmentSettlementService {
       headers: headers,
       body: jsonEncode({
         'vendor_id': vendorId,
+        'ap_doc_id': apDocId,
         'consumption_ids': consumptionIds,
         if (refNo != null && refNo.isNotEmpty) 'ref_no': refNo,
         if (docDate != null) 'doc_date': docDate,
