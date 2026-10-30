@@ -33,6 +33,10 @@ class ImItemCategory {
   final int? wipAccountId;
   final String? wipAccountCode;
   final String? wipAccountName;
+  final String? accountingMode; // null = ตามคลัง → ค่าเริ่มต้น
+  final int? purchasesAccountId;
+  final String? purchasesAccountCode;
+  final String? purchasesAccountName;
   final bool isActive;
   final bool isAutoNumber;
   final String runningPrefix;
@@ -55,6 +59,8 @@ class ImItemCategory {
     this.expenseAccountId, this.expenseAccountCode, this.expenseAccountName,
     this.varianceAccountId, this.varianceAccountCode, this.varianceAccountName,
     this.wipAccountId, this.wipAccountCode, this.wipAccountName,
+    this.accountingMode,
+    this.purchasesAccountId, this.purchasesAccountCode, this.purchasesAccountName,
     this.isActive = true,
     this.isAutoNumber = false,
     this.runningPrefix = 'ITEM',
@@ -90,6 +96,10 @@ class ImItemCategory {
         wipAccountId: json['wip_account_id'],
         wipAccountCode: json['wip_account_code'],
         wipAccountName: json['wip_account_name'],
+        accountingMode: json['accounting_mode'],
+        purchasesAccountId: json['purchases_account_id'],
+        purchasesAccountCode: json['purchases_account_code'],
+        purchasesAccountName: json['purchases_account_name'],
         isActive: json['is_active'] ?? true,
         isAutoNumber: json['is_auto_number'] ?? false,
         runningPrefix: json['running_prefix'] ?? 'ITEM',
@@ -112,6 +122,8 @@ class ImItemCategory {
         'expense_account_id': expenseAccountId,
         'variance_account_id': varianceAccountId,
         'wip_account_id': wipAccountId,
+        'accounting_mode': accountingMode,
+        'purchases_account_id': purchasesAccountId,
         'is_active': isActive,
         'is_auto_number': isAutoNumber,
         'running_prefix': runningPrefix,

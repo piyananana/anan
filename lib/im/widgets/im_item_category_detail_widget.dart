@@ -7,6 +7,7 @@ import '../../sa/utils/sa_app_l10n.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
 import '../models/im_item_category.dart';
+import 'im_accounting_mode_field.dart';
 
 class ImItemCategoryDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -55,6 +56,8 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
   int? _revenueAccountId; String? _revenueAccountCode; String? _revenueAccountName;
   int? _expenseAccountId; String? _expenseAccountCode; String? _expenseAccountName;
   int? _varianceAccountId; String? _varianceAccountCode; String? _varianceAccountName;
+  String? _accountingMode;
+  int? _purchasesAccountId; String? _purchasesAccountCode; String? _purchasesAccountName;
   int? _wipAccountId; String? _wipAccountCode; String? _wipAccountName;
 
   List<Account> _accounts = [];
@@ -123,6 +126,8 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
     _expenseAccountId = src?.expenseAccountId; _expenseAccountCode = src?.expenseAccountCode; _expenseAccountName = src?.expenseAccountName;
     _varianceAccountId = src?.varianceAccountId; _varianceAccountCode = src?.varianceAccountCode; _varianceAccountName = src?.varianceAccountName;
     _wipAccountId = src?.wipAccountId; _wipAccountCode = src?.wipAccountCode; _wipAccountName = src?.wipAccountName;
+    _accountingMode = src?.accountingMode;
+    _purchasesAccountId = src?.purchasesAccountId; _purchasesAccountCode = src?.purchasesAccountCode; _purchasesAccountName = src?.purchasesAccountName;
   }
 
   Future<void> _save() async {
@@ -153,6 +158,8 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
         expenseAccountId: _expenseAccountId,
         varianceAccountId: _varianceAccountId,
         wipAccountId: _wipAccountId,
+        accountingMode: _accountingMode,
+        purchasesAccountId: _purchasesAccountId,
       );
       await widget.onSubmit(row);
     } catch (e) {
@@ -413,6 +420,32 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 8),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: ImAccountingModeField(
+                value: _accountingMode,
+                isEnglish: isEnglish,
+                readOnly: _isReadOnly,
+                inheritLabelTh: 'ตามคลัง / ค่าเริ่มต้น',
+                inheritLabelEn: 'Follow warehouse / default',
+                onChanged: (v) => setState(() => _accountingMode = v),
+              )),
+              const SizedBox(width: 10),
+              // บัญชีซื้อสินค้าใช้เฉพาะ Periodic — Perpetual ลง Dr บัญชีสต็อกแทน
+              Expanded(child: ImAccountingModeField.gate(
+                enabled: _accountingMode != 'PERPETUAL',
+                isEnglish: isEnglish,
+                child: _buildFkField(
+                label: isEnglish ? 'Purchases Account (Periodic)' : 'บัญชีซื้อสินค้า (Periodic)',
+                hasValue: _purchasesAccountId != null,
+                displayText: '$_purchasesAccountCode — $_purchasesAccountName',
+                  onSearch: () => _pickAccount(isEnglish ? 'Select Purchases Account' : 'เลือกบัญชีซื้อสินค้า', (a) => setState(() {
+                        _purchasesAccountId = a.id; _purchasesAccountCode = a.accountCode;
+                        _purchasesAccountName = isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
+                      })),
+                  onClear: () => setState(() { _purchasesAccountId = null; _purchasesAccountCode = null; _purchasesAccountName = null; }),
+                ),
+              )),
+            ]),
             Row(children: [
               Expanded(child: _buildFkField(
                 label: isEnglish ? 'Inventory Account' : 'บัญชีสินค้าคงคลัง',
@@ -460,7 +493,10 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
               )),
             ]),
             Row(children: [
-              Expanded(child: _buildFkField(
+              Expanded(child: ImAccountingModeField.gate(
+                enabled: _accountingMode != 'PERIODIC',
+                isEnglish: isEnglish,
+                child: _buildFkField(
                 label: isEnglish ? 'Variance Account' : 'บัญชีผลต่างต้นทุน',
                 hasValue: _varianceAccountId != null,
                 displayText: '$_varianceAccountCode — $_varianceAccountName',
@@ -469,7 +505,7 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
                       _varianceAccountName = isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
                     })),
                 onClear: () => setState(() { _varianceAccountId = null; _varianceAccountCode = null; _varianceAccountName = null; }),
-              )),
+              ))),
               const SizedBox(width: 10),
               Expanded(child: _buildFkField(
                 label: isEnglish ? 'WIP Account' : 'บัญชีงานระหว่างผลิต (WIP)',

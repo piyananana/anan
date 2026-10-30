@@ -19,6 +19,7 @@ import '../services/im_price_list_service.dart';
 import '../widgets/im_item_category_list_tree_widget.dart';
 import '../widgets/im_uom_list_widget.dart';
 import '../widgets/im_warehouse_list_widget.dart';
+import 'im_accounting_mode_field.dart';
 
 // ---------------------------------------------------------------------------
 // Collapsible section — same look as ap_vendor_detail_widget's _Section
@@ -398,6 +399,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
   int? _cogsAccountId; String? _cogsAccountCode; String? _cogsAccountName;
   int? _revenueAccountId; String? _revenueAccountCode; String? _revenueAccountName;
   int? _expenseAccountId; String? _expenseAccountCode; String? _expenseAccountName;
+  String? _accountingMode;
+  int? _purchasesAccountId; String? _purchasesAccountCode; String? _purchasesAccountName;
 
   List<Account> _accounts = [];
   List<ImItemPriceRow> _priceRows = [];
@@ -536,6 +539,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _cogsAccountId = item.cogsAccountId; _cogsAccountCode = item.cogsAccountCode; _cogsAccountName = item.cogsAccountName;
     _revenueAccountId = item.revenueAccountId; _revenueAccountCode = item.revenueAccountCode; _revenueAccountName = item.revenueAccountName;
     _expenseAccountId = item.expenseAccountId; _expenseAccountCode = item.expenseAccountCode; _expenseAccountName = item.expenseAccountName;
+    _accountingMode = item.accountingMode;
+    _purchasesAccountId = item.purchasesAccountId; _purchasesAccountCode = item.purchasesAccountCode; _purchasesAccountName = item.purchasesAccountName;
     _uomConversions = List.from(item.uomConversions);
     _itemWarehouses = List.from(item.itemWarehouses);
   }
@@ -556,6 +561,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _cogsAccountId = null; _cogsAccountCode = null; _cogsAccountName = null;
     _revenueAccountId = null; _revenueAccountCode = null; _revenueAccountName = null;
     _expenseAccountId = null; _expenseAccountCode = null; _expenseAccountName = null;
+    _accountingMode = null;
+    _purchasesAccountId = null; _purchasesAccountCode = null; _purchasesAccountName = null;
     _priceRows = [];
     _uomConversions = [];
     _itemWarehouses = [];
@@ -617,6 +624,8 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
         cogsAccountId: _cogsAccountId,
         revenueAccountId: _revenueAccountId,
         expenseAccountId: _expenseAccountId,
+        accountingMode: _accountingMode,
+        purchasesAccountId: _purchasesAccountId,
         isActive: _isActive,
         uomConversions: _uomConversions,
         itemWarehouses: _itemWarehouses,
@@ -1157,6 +1166,32 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
         style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
       ),
       const SizedBox(height: 8),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: ImAccountingModeField(
+          value: _accountingMode,
+          isEnglish: isEnglish,
+          readOnly: _isReadOnly,
+          inheritLabelTh: 'ตามหมวดสินค้า / คลัง / ค่าเริ่มต้น',
+          inheritLabelEn: 'Follow category / warehouse / default',
+          onChanged: (v) => setState(() => _accountingMode = v),
+        )),
+        const SizedBox(width: 10),
+        // บัญชีซื้อสินค้าใช้เฉพาะ Periodic — Perpetual ลง Dr บัญชีสต็อกแทน
+        Expanded(child: ImAccountingModeField.gate(
+          enabled: _accountingMode != 'PERPETUAL',
+          isEnglish: isEnglish,
+          child: _buildFkField(
+            label: isEnglish ? 'Purchases Account (Periodic)' : 'บัญชีซื้อสินค้า (Periodic)',
+            hasValue: _purchasesAccountId != null,
+            displayText: '$_purchasesAccountCode — $_purchasesAccountName',
+            onSearch: () => _pickAccount(isEnglish ? 'Select Purchases Account' : 'เลือกบัญชีซื้อสินค้า', (a) => setState(() {
+                  _purchasesAccountId = a.id; _purchasesAccountCode = a.accountCode;
+                  _purchasesAccountName = isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
+                })),
+            onClear: () => setState(() { _purchasesAccountId = null; _purchasesAccountCode = null; _purchasesAccountName = null; }),
+          ),
+        )),
+      ]),
       Row(children: [
         Expanded(child: _buildFkField(
           label: isEnglish ? 'Inventory Account' : 'บัญชีสินค้าคงคลัง',

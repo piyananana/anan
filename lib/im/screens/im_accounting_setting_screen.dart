@@ -10,7 +10,8 @@ import '../../sa/services/sa_module_document_service.dart';
 import '../models/im_accounting_setting.dart';
 import '../services/im_accounting_setting_service.dart';
 
-// หน้าตั้งค่าโหมดบัญชีสินค้าระดับบริษัท (PERPETUAL/PERIODIC) — ดู pattern_im_periodic_accounting_mode:
+// หน้าตั้งค่าโหมดบัญชีสินค้าเริ่มต้นของบริษัท (PERPETUAL/PERIODIC) — สินค้า/หมวดสินค้า/คลัง override ได้
+// (ลำดับ สินค้า → หมวดสินค้า → คลัง → ค่าเริ่มต้นนี้, ดู project_im_mixed_accounting_mode) — ดู pattern_im_periodic_accounting_mode:
 // PERPETUAL = ธุรกรรม IM ทุกรายการ Post GL ทันที (ของเดิม), PERIODIC = ไม่ Post GL ต่อธุรกรรมเลย รอปิดงวด
 // ครั้งเดียว (ดูหน้าจอ ImPeriodClosingScreen) — subledger (im_stock_balance/im_stock_layer) อัปเดตแบบเดียวกัน
 // ทุกโหมดเสมอ ไม่ผูกกับการตั้งค่านี้
@@ -242,8 +243,10 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
         const SizedBox(height: 4),
         Text(
           isEnglish
-              ? 'Perpetual: post GL for every transaction (default). Periodic: post GL once at period-end closing only — quantity/cost tracking is unchanged either way.'
-              : 'Perpetual: โพสต์บัญชีทุกธุรกรรมทันที (ค่าเริ่มต้น) ส่วน Periodic: ไม่โพสต์บัญชีต่อธุรกรรมเลย รอโพสต์ครั้งเดียวตอนปิดงวด — การติดตามจำนวน/ต้นทุนสินค้าคงเดิมไม่ว่าโหมดใด',
+              ? 'Perpetual: post GL for every transaction. Periodic: post GL once at period-end closing only — quantity/cost tracking is unchanged either way.\n'
+                'The mode can be set per item, item category and warehouse; the effective mode is item → category → warehouse → the default on this screen.'
+              : 'Perpetual: โพสต์บัญชีทุกธุรกรรมทันที ส่วน Periodic: ไม่โพสต์บัญชีต่อธุรกรรม รอโพสต์ครั้งเดียวตอนปิดงวด — การติดตามจำนวน/ต้นทุนสินค้าคงเดิมไม่ว่าโหมดใด\n'
+                'กำหนดโหมดแยกได้ที่สินค้า หมวดสินค้า และคลัง ลำดับที่มีผล: สินค้า → หมวดสินค้า → คลัง → ค่าเริ่มต้นในหน้านี้',
           style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
         ),
         const SizedBox(height: 16),
@@ -253,7 +256,7 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               DropdownButtonFormField<String>(
                 value: _mode,
-                decoration: InputDecoration(labelText: isEnglish ? 'Mode' : 'โหมด', border: const OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(labelText: isEnglish ? 'Default mode' : 'โหมดเริ่มต้น', border: const OutlineInputBorder(), isDense: true),
                 items: [
                   DropdownMenuItem(value: 'PERPETUAL', child: Text(isEnglish ? 'Perpetual' : 'Perpetual (โพสต์บัญชีทันที)')),
                   DropdownMenuItem(value: 'PERIODIC', child: Text(isEnglish ? 'Periodic' : 'Periodic (ปิดงวดครั้งเดียว)')),
@@ -267,7 +270,13 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
                 onSearch: () => _pickPeriod((p) => setState(() { _effectivePeriodId = p.id; _effectivePeriodLabel = p.periodName; })),
               ),
               const SizedBox(height: 16),
-              Text(isEnglish ? 'Period-end closing accounts (used when Periodic)' : 'บัญชีสำหรับปิดงวด (ใช้เมื่อเลือก Periodic)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(isEnglish ? 'Default accounts (both modes)' : 'บัญชีเริ่มต้น (ใช้ทั้ง 2 โหมด)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(
+                isEnglish
+                    ? 'Last fallback when the warehouse, item, item category and document type have no account; also used by period-end closing.'
+                    : 'ใช้เป็นลำดับสุดท้ายเมื่อคลัง สินค้า หมวดสินค้า และประเภทเอกสารไม่ได้ระบุบัญชี และใช้ตอนปิดงวด',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
               const SizedBox(height: 8),
               _field(
                 label: isEnglish ? 'Inventory Account' : 'บัญชีสินค้าคงเหลือ',
@@ -282,13 +291,23 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
                 onSearch: () => _pickAccount(isEnglish ? 'Select COGS Account' : 'เลือกบัญชีต้นทุนขาย',
                     (a) => setState(() { _cogsAccountId = a.id; _cogsAccountLabel = '${a.accountCode} ${a.accountNameThai}'; })),
               ),
+              const SizedBox(height: 16),
+              Text(isEnglish ? 'Default accounts (Periodic)' : 'บัญชีเริ่มต้น (Periodic)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(
+                isEnglish
+                    ? 'Receipts and AP documents of Periodic stock debit purchases instead of inventory, unless the warehouse, item or item category sets its own purchases account.'
+                    : 'เอกสารรับสินค้าและเอกสาร AP ของสต็อกที่เป็น Periodic ลงบัญชีซื้อสินค้าแทนบัญชีสต็อก ถ้าคลัง สินค้า หรือหมวดสินค้าไม่ได้ระบุบัญชีซื้อของตัวเอง',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
               const SizedBox(height: 8),
               _field(
-                label: isEnglish ? 'Purchases Account (used once GRN posts here)' : 'บัญชีซื้อสินค้า (ใช้เมื่อ GRN โพสต์เข้ามาในอนาคต)',
+                label: isEnglish ? 'Purchases Account' : 'บัญชีซื้อสินค้า',
                 value: _purchasesAccountLabel,
                 onSearch: () => _pickAccount(isEnglish ? 'Select Purchases Account' : 'เลือกบัญชีซื้อสินค้า',
                     (a) => setState(() { _purchasesAccountId = a.id; _purchasesAccountLabel = '${a.accountCode} ${a.accountNameThai}'; })),
               ),
+              const SizedBox(height: 16),
+              Text(isEnglish ? 'Period-end closing' : 'ปิดงวด', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
               _field(
                 label: isEnglish ? 'Closing GL Document Type' : 'ประเภทเอกสาร GL สำหรับปิดงวด',

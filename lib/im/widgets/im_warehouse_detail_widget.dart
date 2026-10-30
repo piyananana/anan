@@ -5,8 +5,11 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../cd/models/cd_branch.dart';
 import '../../cd/widgets/cd_branch_list_widget.dart';
+import '../../gl/models/gl_account.dart';
+import '../../gl/services/gl_account_service.dart';
 import '../models/im_warehouse.dart';
 import '../screens/im_location_screen.dart';
+import 'im_accounting_mode_field.dart';
 
 class ImWarehouseDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -44,6 +47,10 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
   bool _isEnglish = false;
 
   int? _branchId; String? _branchCode; String? _branchName;
+  int? _inventoryAccountId; String? _inventoryAccountCode; String? _inventoryAccountName;
+  String? _accountingMode;
+  int? _purchasesAccountId; String? _purchasesAccountCode; String? _purchasesAccountName;
+  List<Account> _accounts = [];
 
   bool get _isReadOnly => widget.mode == Mode.view;
 
@@ -85,7 +92,84 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
     final src = isNew ? null : w;
     _branchId = src?.branchId; _branchCode = src?.branchCode;
     _branchName = _isEnglish && (src?.branchNameEn ?? '').isNotEmpty ? src?.branchNameEn : src?.branchNameTh;
+    _inventoryAccountId = src?.inventoryAccountId; _inventoryAccountCode = src?.inventoryAccountCode; _inventoryAccountName = src?.inventoryAccountName;
+    _accountingMode = src?.accountingMode;
+    _purchasesAccountId = src?.purchasesAccountId; _purchasesAccountCode = src?.purchasesAccountCode; _purchasesAccountName = src?.purchasesAccountName;
   }
+
+  Future<void> _pickAccount(String title, void Function(Account) onPicked) async {
+    if (_accounts.isEmpty) {
+      try {
+        final list = await AccountService().fetchRows();
+        _accounts = list.where((a) => a.isActive && a.isNormalAccount).toList();
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    final isEnglish = _isEnglish;
+    final searchCtrl = TextEditingController();
+    List<Account> filtered = List.from(_accounts);
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
+        void doFilter(String q) => setDlg(() {
+              final uq = q.toUpperCase();
+              filtered = q.isEmpty
+                  ? List.from(_accounts)
+                  : _accounts.where((a) =>
+                      a.accountCode.toUpperCase().contains(uq) ||
+                      a.accountNameThai.toUpperCase().contains(uq) ||
+                      a.accountNameEng.toUpperCase().contains(uq)).toList();
+            });
+        String acctName(Account a) => isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
+        return AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 520,
+            height: 400,
+            child: Column(children: [
+              TextField(
+                controller: searchCtrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: isEnglish ? 'Search account code / name' : 'ค้นหา รหัส / ชื่อบัญชี',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+                onChanged: doFilter,
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(child: Text(isEnglish ? 'No data found' : 'ไม่พบข้อมูล'))
+                    : ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (_, i) {
+                          final a = filtered[i];
+                          return ListTile(
+                            dense: true,
+                            title: Row(children: [
+                              SizedBox(width: 110, child: Text(a.accountCode, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
+                              Expanded(child: Text(acctName(a))),
+                            ]),
+                            onTap: () {
+                              onPicked(a);
+                              Navigator.of(ctx).pop();
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ]),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Close' : 'ปิด'))],
+        );
+      }),
+    );
+    searchCtrl.dispose();
+  }
+
+  String _acctName(Account a) => _isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
 
   void _openLocationLayout() {
     Navigator.of(context).push(MaterialPageRoute(
@@ -109,6 +193,9 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
         address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
         isActive: _isActive,
         isConsignee: _isConsignee,
+        inventoryAccountId: _inventoryAccountId,
+        accountingMode: _accountingMode,
+        purchasesAccountId: _purchasesAccountId,
       );
       await widget.onSubmit(row);
     } catch (e) {
@@ -243,6 +330,50 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
               ),
               Switch(value: _isConsignee, activeColor: Colors.teal, onChanged: _isReadOnly ? null : (v) => setState(() => _isConsignee = v)),
             ]),
+            const SizedBox(height: 16),
+            Text(isEnglish ? 'GL Accounts' : 'บัญชี GL',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+            Text(
+              isEnglish
+                  ? 'Warehouse inventory account comes first (warehouse → item → category → document type). The mode applies when the item and its category follow the next level.'
+                  : 'บัญชีสต็อกของคลังมีผลก่อน (คลัง → สินค้า → หมวดสินค้า → ประเภทเอกสาร) ส่วนโหมดของคลังมีผลเมื่อสินค้าและหมวดสินค้าไม่ได้กำหนดโหมดไว้',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 8),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: ImAccountingModeField(
+                value: _accountingMode,
+                isEnglish: isEnglish,
+                readOnly: _isReadOnly,
+                inheritLabelTh: 'ตามค่าเริ่มต้นของบริษัท',
+                inheritLabelEn: 'Follow company default',
+                onChanged: (v) => setState(() => _accountingMode = v),
+              )),
+              const SizedBox(width: 10),
+              Expanded(child: _buildFkField(
+                label: isEnglish ? 'Inventory Account' : 'บัญชีสินค้าคงคลัง',
+                hasValue: _inventoryAccountId != null,
+                displayText: '$_inventoryAccountCode — $_inventoryAccountName',
+                onSearch: () => _pickAccount(isEnglish ? 'Select Inventory Account' : 'เลือกบัญชีสินค้าคงคลัง', (a) => setState(() {
+                      _inventoryAccountId = a.id; _inventoryAccountCode = a.accountCode; _inventoryAccountName = _acctName(a);
+                    })),
+                onClear: () => setState(() { _inventoryAccountId = null; _inventoryAccountCode = null; _inventoryAccountName = null; }),
+              )),
+            ]),
+            // บัญชีซื้อสินค้าใช้เฉพาะ Periodic — Perpetual ลง Dr บัญชีสต็อกแทน
+            ImAccountingModeField.gate(
+              enabled: _accountingMode != 'PERPETUAL',
+              isEnglish: isEnglish,
+              child: _buildFkField(
+                label: isEnglish ? 'Purchases Account (Periodic)' : 'บัญชีซื้อสินค้า (Periodic)',
+                hasValue: _purchasesAccountId != null,
+                displayText: '$_purchasesAccountCode — $_purchasesAccountName',
+                onSearch: () => _pickAccount(isEnglish ? 'Select Purchases Account' : 'เลือกบัญชีซื้อสินค้า', (a) => setState(() {
+                      _purchasesAccountId = a.id; _purchasesAccountCode = a.accountCode; _purchasesAccountName = _acctName(a);
+                    })),
+                onClear: () => setState(() { _purchasesAccountId = null; _purchasesAccountCode = null; _purchasesAccountName = null; }),
+              ),
+            ),
             if (widget.mode == Mode.edit || widget.mode == Mode.view) ...[
               const SizedBox(height: 24),
               const Divider(),

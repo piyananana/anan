@@ -17,6 +17,14 @@ class ImWarehouse {
   // Consignment-OUT — คลังนี้แทนสถานที่ของผู้รับฝากขาย สินค้าที่โอนเข้ามาด้วย TRF ยังเป็นของเราอยู่จนกว่าจะขายออก
   // ด้วย DLN ตามปกติ — เป็นแค่ flag เพื่อความชัดเจน/กรองรายงาน ไม่มีผลต่อการผ่านบัญชีใดๆ
   final bool isConsignee;
+  // บัญชีสต็อกของคลัง (ลำดับแรกของการหาบัญชีสต็อก) + โหมดบัญชีสินค้า (null = ค่าเริ่มต้นของบริษัท) + บัญชีซื้อ (Periodic)
+  final int? inventoryAccountId;
+  final String? inventoryAccountCode;
+  final String? inventoryAccountName;
+  final String? accountingMode;
+  final int? purchasesAccountId;
+  final String? purchasesAccountCode;
+  final String? purchasesAccountName;
 
   const ImWarehouse({
     required this.id,
@@ -30,6 +38,9 @@ class ImWarehouse {
     this.address,
     this.isActive = true,
     this.isConsignee = false,
+    this.inventoryAccountId, this.inventoryAccountCode, this.inventoryAccountName,
+    this.accountingMode,
+    this.purchasesAccountId, this.purchasesAccountCode, this.purchasesAccountName,
   });
 
   factory ImWarehouse.fromJson(Map<String, dynamic> json) => ImWarehouse(
@@ -44,6 +55,13 @@ class ImWarehouse {
         address: json['address'],
         isActive: json['is_active'] ?? true,
         isConsignee: json['is_consignee'] ?? false,
+        inventoryAccountId: json['inventory_account_id'],
+        inventoryAccountCode: json['inventory_account_code'],
+        inventoryAccountName: json['inventory_account_name'],
+        accountingMode: json['accounting_mode'],
+        purchasesAccountId: json['purchases_account_id'],
+        purchasesAccountCode: json['purchases_account_code'],
+        purchasesAccountName: json['purchases_account_name'],
       );
 
   Map<String, dynamic> toJson() => {
@@ -55,5 +73,8 @@ class ImWarehouse {
         'address': address,
         'is_active': isActive,
         'is_consignee': isConsignee,
+        'inventory_account_id': inventoryAccountId,
+        'accounting_mode': accountingMode,
+        'purchases_account_id': purchasesAccountId,
       };
 }
