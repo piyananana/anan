@@ -482,7 +482,7 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
               )),
               const SizedBox(width: 10),
               Expanded(child: _buildFkField(
-                label: isEnglish ? 'Expense Account' : 'บัญชีค่าใช้จ่าย',
+                label: isEnglish ? 'Expense Account (not used in posting yet)' : 'บัญชีค่าใช้จ่าย (ยังไม่ใช้ในการลงบัญชี)',
                 hasValue: _expenseAccountId != null,
                 displayText: '$_expenseAccountCode — $_expenseAccountName',
                 onSearch: () => _pickAccount(isEnglish ? 'Select Expense Account' : 'เลือกบัญชีค่าใช้จ่าย', (a) => setState(() {
@@ -497,7 +497,7 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
                 enabled: _accountingMode != 'PERIODIC',
                 isEnglish: isEnglish,
                 child: _buildFkField(
-                label: isEnglish ? 'Variance Account' : 'บัญชีผลต่างต้นทุน',
+                label: isEnglish ? 'Variance Account (not used in posting yet)' : 'บัญชีผลต่างต้นทุน (ยังไม่ใช้ในการลงบัญชี)',
                 hasValue: _varianceAccountId != null,
                 displayText: '$_varianceAccountCode — $_varianceAccountName',
                 onSearch: () => _pickAccount(isEnglish ? 'Select Variance Account' : 'เลือกบัญชีผลต่างต้นทุน', (a) => setState(() {
@@ -508,7 +508,7 @@ class ImItemCategoryDetailWidgetState extends State<ImItemCategoryDetailWidget> 
               ))),
               const SizedBox(width: 10),
               Expanded(child: _buildFkField(
-                label: isEnglish ? 'WIP Account' : 'บัญชีงานระหว่างผลิต (WIP)',
+                label: isEnglish ? 'WIP Account (not used in posting yet)' : 'บัญชีงานระหว่างผลิต (WIP) (ยังไม่ใช้ในการลงบัญชี)',
                 hasValue: _wipAccountId != null,
                 displayText: '$_wipAccountCode — $_wipAccountName',
                 onSearch: () => _pickAccount(isEnglish ? 'Select WIP Account' : 'เลือกบัญชีงานระหว่างผลิต', (a) => setState(() {

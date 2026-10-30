@@ -1228,7 +1228,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
         )),
         const SizedBox(width: 10),
         Expanded(child: _buildFkField(
-          label: isEnglish ? 'Expense Account' : 'บัญชีค่าใช้จ่าย',
+          label: isEnglish ? 'Expense Account (not used in posting yet)' : 'บัญชีค่าใช้จ่าย (ยังไม่ใช้ในการลงบัญชี)',
           hasValue: _expenseAccountId != null,
           displayText: '$_expenseAccountCode — $_expenseAccountName',
           onSearch: () => _pickAccount(isEnglish ? 'Select Expense Account' : 'เลือกบัญชีค่าใช้จ่าย', (a) => setState(() {
