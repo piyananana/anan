@@ -285,6 +285,7 @@ class ImTransactionDetail {
   final double? vatRate; // snapshot อัตรา ณ ตอนเลือก (ไม่ผูกกับ cd_vat_rate อีกทีตอน Post เหมือน AR/AP เอง)
   final int? refImTransactionDetailId; // '15'/'35' เท่านั้น — บรรทัดต้นฉบับ (GRN/DLN) ที่บรรทัดนี้คืน ใช้ตรวจคงเหลือที่คืนได้
   final int? refPoDetailId; // '10'/'11'/'12' เท่านั้น — บรรทัด PO ต้นฉบับที่บรรทัดนี้รับตาม ใช้ตรวจคงเหลือที่รับได้
+  final double? refPoUnitPriceFc; // จาก join — ราคาต่อหน่วยในใบสั่งซื้อ (สกุลเงินของ PO) ใช้เตือนเมื่อราคารับ/ตั้งหนี้ต่างจาก PO
   final double qtyReceived; // จาก join — จำนวนที่รับไปแล้วของบรรทัด PO นี้ (จาก po_transaction_detail picker เท่านั้น ไม่ใช่ตัว GRN เอง)
   final int? refSoDetailId; // '30'/'31'/'32' เท่านั้น — บรรทัด SO ต้นฉบับที่บรรทัดนี้ส่งตาม ใช้ตรวจคงเหลือที่ส่งได้
   final int? refMoComponentDetailId; // '90' เท่านั้น — บรรทัดส่วนประกอบ MO ต้นฉบับที่บรรทัดนี้เบิกตาม ใช้ตรวจคงเหลือที่เบิกได้
@@ -320,6 +321,7 @@ class ImTransactionDetail {
     this.vatRate,
     this.refImTransactionDetailId,
     this.refPoDetailId,
+    this.refPoUnitPriceFc,
     this.qtyReceived = 0,
     this.refSoDetailId,
     this.refMoComponentDetailId,
@@ -361,6 +363,7 @@ class ImTransactionDetail {
       vatRate: toDoubleN(json['vat_rate']),
       refImTransactionDetailId: json['ref_im_transaction_detail_id'],
       refPoDetailId: json['ref_po_detail_id'],
+      refPoUnitPriceFc: toDoubleN(json['ref_po_unit_price_fc']),
       qtyReceived: toDouble(json['qty_received']),
       refSoDetailId: json['ref_so_detail_id'],
       refMoComponentDetailId: json['ref_mo_component_detail_id'],
