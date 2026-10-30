@@ -3,8 +3,6 @@ import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
-import '../../gl/models/gl_period.dart';
-import '../../gl/services/gl_period_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_module_document_service.dart';
 import '../models/im_accounting_setting.dart';
@@ -25,19 +23,16 @@ class ImAccountingSettingScreen extends StatefulWidget {
 class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
   final ImAccountingSettingService _svc = ImAccountingSettingService();
   final AccountService _acctSvc = AccountService();
-  final PeriodService _periodSvc = PeriodService();
   final ModuleDocumentService _docSvc = ModuleDocumentService();
 
   bool _isLoading = true;
   bool _isSaving = false;
 
   List<Account> _accounts = [];
-  List<PostingPeriod> _periods = [];
   List<ModuleDocument> _glDocs = [];
 
   String _mode = 'PERPETUAL';
-  int? _effectivePeriodId;
-  String? _effectivePeriodLabel;
+  int? _effectivePeriodId; // ค่าเดิมในฐานข้อมูล — ไม่ต้องเลือกงวดตอนเปลี่ยนโหมดแล้ว (ปิดงวดปรับยอดให้ตรงเสมอ)
   int? _inventoryAccountId; String? _inventoryAccountLabel;
   int? _cogsAccountId; String? _cogsAccountLabel;
   int? _purchasesAccountId; String? _purchasesAccountLabel;
@@ -55,18 +50,15 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
       final results = await Future.wait([
         _svc.fetchSetting(),
         _acctSvc.fetchRows(),
-        _periodSvc.fetchOpenGlPeriods(),
         _docSvc.fetchRows(),
       ]);
       final setting = results[0] as ImAccountingSetting?;
       _accounts = (results[1] as List<Account>).where((a) => a.isActive && a.isNormalAccount).toList();
-      _periods = results[2] as List<PostingPeriod>;
-      _glDocs = (results[3] as List<ModuleDocument>).where((d) => d.isDocType && d.sysModule == '01' && d.isActive).toList();
+      _glDocs = (results[2] as List<ModuleDocument>).where((d) => d.isDocType && d.sysModule == '01' && d.isActive).toList();
 
       if (setting != null) {
         _mode = setting.inventoryAccountingMode;
         _effectivePeriodId = setting.modeEffectivePeriodId;
-        _effectivePeriodLabel = setting.modeEffectivePeriodName;
         _inventoryAccountId = setting.inventoryAccountId;
         _inventoryAccountLabel = _acctLabel(setting.inventoryAccountCode, setting.inventoryAccountName);
         _cogsAccountId = setting.cogsAccountId;
@@ -165,34 +157,6 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
     if (picked != null) onPicked(picked!);
   }
 
-  Future<void> _pickPeriod(void Function(PostingPeriod) onPicked) async {
-    PostingPeriod? picked;
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('เลือกงวดบัญชี'),
-        content: SizedBox(
-          width: 420, height: 360,
-          child: ListView.separated(
-            itemCount: _periods.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (_, i) {
-              final p = _periods[i];
-              return ListTile(
-                dense: true,
-                title: Text(p.periodName),
-                subtitle: Text('${p.periodStartDate.toLocal().toString().split(' ')[0]} - ${p.periodEndDate.toLocal().toString().split(' ')[0]}'),
-                onTap: () { picked = p; Navigator.of(ctx).pop(); },
-              );
-            },
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('ยกเลิก'))],
-      ),
-    );
-    if (picked != null) onPicked(picked!);
-  }
-
   Future<void> _pickGlDoc(void Function(ModuleDocument) onPicked) async {
     ModuleDocument? picked;
     await showDialog(
@@ -262,12 +226,6 @@ class _ImAccountingSettingScreenState extends State<ImAccountingSettingScreen> {
                   DropdownMenuItem(value: 'PERIODIC', child: Text(isEnglish ? 'Periodic' : 'Periodic (ปิดงวดครั้งเดียว)')),
                 ],
                 onChanged: (v) => setState(() => _mode = v ?? 'PERPETUAL'),
-              ),
-              const SizedBox(height: 12),
-              _field(
-                label: isEnglish ? 'Effective from period (required to switch mode)' : 'เริ่มใช้ตั้งแต่งวด (จำเป็นเมื่อสลับโหมด)',
-                value: _effectivePeriodLabel,
-                onSearch: () => _pickPeriod((p) => setState(() { _effectivePeriodId = p.id; _effectivePeriodLabel = p.periodName; })),
               ),
               const SizedBox(height: 16),
               Text(isEnglish ? 'Default accounts (both modes)' : 'บัญชีเริ่มต้น (ใช้ทั้ง 2 โหมด)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
