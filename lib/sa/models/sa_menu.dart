@@ -108,6 +108,7 @@ import '../../im/screens/im_uom_screen.dart';
 import '../../im/screens/im_warehouse_screen.dart';
 import '../../mo/screens/mo_bom_screen.dart';
 import '../../mo/screens/mo_work_center_screen.dart';
+import '../../mo/screens/mo_gl_account_setup_screen.dart';
 import '../../mo/screens/mo_header_screen.dart';
 import '../../mo/screens/mo_issue_screen.dart';
 import '../../mo/screens/mo_receipt_screen.dart';
@@ -356,6 +357,7 @@ class Menu {
     'ImLocationImportScreen': (context) => ImLocationImportScreen(onFieldsChanged: () {}),
     'MoBomScreen': (context) => MoBomScreen(onFieldsChanged: () {}),
     'MoWorkCenterScreen': (context) => MoWorkCenterScreen(onFieldsChanged: () {}),
+    'MoGlAccountSetupScreen': (context) => const MoGlAccountSetupScreen(),
     'MoHeaderScreen': (context) => const MoHeaderScreen(),
     'MoIssueScreen': (context) => const MoIssueScreen(),
     'MoReceiptScreen': (context) => const MoReceiptScreen(),

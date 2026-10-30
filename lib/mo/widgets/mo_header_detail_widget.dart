@@ -23,6 +23,7 @@ import '../models/mo_header.dart';
 import '../models/mo_bom.dart';
 import '../models/mo_work_center.dart';
 import '../services/mo_header_service.dart';
+import '../../gl/widgets/gl_journal_preview.dart';
 import '../services/mo_bom_service.dart';
 import '../widgets/mo_bom_list_widget.dart';
 import '../widgets/mo_work_center_list_widget.dart';
@@ -703,13 +704,25 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
     }
   }
 
-  Future<void> _confirmAction(String titleTh, String titleEn, String bodyTh, String bodyEn, Future<MoHeader> Function() action) async {
+  Future<void> _confirmAction(String titleTh, String titleEn, String bodyTh, String bodyEn, Future<MoHeader> Function() action,
+      {Widget? extra}) async {
     final isEnglish = _isEnglish;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(isEnglish ? titleEn : titleTh),
-        content: Text(isEnglish ? bodyEn : bodyTh),
+        content: extra == null
+            ? Text(isEnglish ? bodyEn : bodyTh)
+            : SizedBox(
+                width: 640,
+                child: SingleChildScrollView(
+                  child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(isEnglish ? bodyEn : bodyTh),
+                    const SizedBox(height: 12),
+                    extra,
+                  ]),
+                ),
+              ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Confirm' : 'ยืนยัน')),
@@ -729,6 +742,39 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  // ปิดใบสั่งผลิต — แสดงรายการปรับ WIP ที่จะลงบัญชี (คำนวณจาก backend ด้วยฟังก์ชันเดียวกับตอนปิดจริง) ก่อนยืนยัน
+  Future<void> _closeMo() async {
+    final isEnglish = _isEnglish;
+    Widget extra;
+    try {
+      final p = await _service.fetchClosePreview(_id!);
+      final missing = (p[isEnglish ? 'missing_en' : 'missing'] as List? ?? const []).cast<String>();
+      final lines = GlJournalLine.listFromJson(p['lines']);
+      extra = GlJournalPreview(
+        lines: lines,
+        isEnglish: isEnglish,
+        error: missing.isNotEmpty
+            ? (isEnglish
+                ? 'The manufacturing order document type has no ${missing.join(', ')} — set it in MO GL Account Setup before closing.'
+                : 'ประเภทเอกสารใบสั่งผลิตยังไม่ได้ตั้ง ${missing.join(', ')} — ตั้งค่าที่หน้าตั้งค่าบัญชีใบสั่งผลิตก่อนปิด')
+            : null,
+        note: lines.isEmpty && missing.isEmpty
+            ? (isEnglish ? 'WIP balance is zero — no journal entry.' : 'ยอด WIP คงเหลือเป็นศูนย์ — ไม่มีรายการบัญชี')
+            : null,
+      );
+    } catch (e) {
+      extra = Text('Error: $e', style: const TextStyle(color: Colors.red));
+    }
+    if (!mounted) return;
+    await _confirmAction(
+      'ยืนยันปิดใบสั่งผลิต', 'Close Manufacturing Order',
+      'ปิดใบสั่งผลิตนี้? ยอดคงเหลือ WIP ที่เหลืออยู่ (ถ้ามี) จะถูกปรับปรุงเข้าบัญชีผลต่างต้นทุนการผลิต และจะเบิก/รับ/บันทึกเวลาเพิ่มไม่ได้อีก',
+      'Close this MO? Any remaining WIP balance will be posted to the manufacturing cost variance account, and no further issue/receipt/time log will be allowed.',
+      () => _service.closeTransaction(_id!),
+      extra: extra,
+    );
   }
 
   // ถอย / ยกเลิก / ลบ — ต้องกรอกเหตุผล (บันทึกในประวัติ)
@@ -1082,11 +1128,7 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
           if (_status == 'Completed' && _id != null && canApprove && !widget.viewOnly) ...[
             const SizedBox(width: 8),
             ElevatedButton.icon(
-              onPressed: _isSaving ? null : () => _confirmAction(
-                  'ยืนยันปิดใบสั่งผลิต', 'Close Manufacturing Order',
-                  'ปิดใบสั่งผลิตนี้? ยอดคงเหลือ WIP ที่เหลืออยู่ (ถ้ามี) จะถูกปรับปรุงเข้าบัญชีผลต่างต้นทุนการผลิตให้อัตโนมัติ และจะเบิก/รับ/บันทึกเวลาเพิ่มไม่ได้อีก',
-                  'Close this MO? Any remaining WIP balance will be posted to the manufacturing cost variance account automatically, and no further issue/receipt/time log will be allowed.',
-                  () => _service.closeTransaction(_id!)),
+              onPressed: _isSaving ? null : _closeMo,
               icon: const Icon(Icons.lock_outline, size: 18),
               label: Text(isEnglish ? 'Close MO' : 'ปิดใบสั่งผลิต'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey[700], foregroundColor: Colors.white),

@@ -533,6 +533,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         isEnglish ? '(Inventory — not set)' : '(บัญชีสินค้าคงคลัง — ยังไม่ตั้งค่า)');
     final cogs = _acctLabel(_cogsAccountId, _cogsAccountCode, _cogsAccountName, isEnglish,
         isEnglish ? '(COGS — not set)' : '(บัญชีต้นทุนขาย — ยังไม่ตั้งค่า)');
+    final wip = _acctLabel(_wipAccountId, _wipAccountCode, _wipAccountName, isEnglish,
+        isEnglish ? '(WIP — not set)' : '(บัญชีงานระหว่างผลิต — ยังไม่ตั้งค่า)');
     final variance = _acctLabel(_varianceAccountId, _varianceAccountCode, _varianceAccountName, isEnglish,
         isEnglish ? '(Variance — not set)' : '(บัญชีผลต่างต้นทุน — ยังไม่ตั้งค่า)');
     final grir = _acctLabel(_grirAccountId, _grirAccountCode, _grirAccountName, isEnglish,
@@ -545,6 +547,33 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     final purchases = isEnglish ? 'Purchases (warehouse → item → category → company default)' : 'บัญชีซื้อสินค้า (คลัง → สินค้า → หมวดสินค้า → ค่าเริ่มต้นของบริษัท)';
 
     switch (_sdt) {
+      case '90': // MOI — เบิกวัตถุดิบเข้าผลิต
+        return [
+          _JournalSection(lines: [_JournalLine('Dr', wip), _JournalLine('  Cr', isEnglish ? '$inv (Periodic lines: $purchases)' : '$inv (บรรทัด Periodic: $purchases)')]),
+          _JournalSection(
+            title: isEnglish ? 'Referencing a manufacturing order' : 'อ้างอิงใบสั่งผลิต',
+            lines: [_JournalLine('', isEnglish ? 'WIP comes from the manufacturing order document type (MO GL Account Setup)' : 'บัญชี WIP ใช้ของประเภทเอกสารใบสั่งผลิต (หน้าตั้งค่าบัญชีใบสั่งผลิต)')],
+          ),
+        ];
+      case '95': // MOR — รับสินค้าเข้าคลังจากการผลิต
+        return [
+          _JournalSection(lines: [
+            _JournalLine('Dr', isEnglish ? '$inv (Periodic lines: $purchases)' : '$inv (บรรทัด Periodic: $purchases)'),
+            _JournalLine('Dr/Cr', isEnglish ? '$variance (standard - actual cost, STANDARD orders)' : '$variance (ต้นทุนมาตรฐาน - ต้นทุนจริง ใบสั่งผลิตแบบ STANDARD)'),
+            _JournalLine('  Cr', isEnglish ? '$wip (actual cost)' : '$wip (ต้นทุนจริง)'),
+          ]),
+          _JournalSection(
+            title: isEnglish ? 'Percentage overhead orders' : 'ใบสั่งผลิตที่คิดโสหุ้ยเป็น %',
+            lines: [
+              _JournalLine('Dr', wip),
+              _JournalLine('  Cr', isEnglish ? 'Applied overhead (MO GL Account Setup)' : 'โสหุ้ยการผลิตที่ปันเข้างาน (หน้าตั้งค่าบัญชีใบสั่งผลิต)'),
+            ],
+          ),
+          _JournalSection(
+            title: isEnglish ? 'Referencing a manufacturing order' : 'อ้างอิงใบสั่งผลิต',
+            lines: [_JournalLine('', isEnglish ? 'WIP and variance come from the manufacturing order document type' : 'บัญชี WIP และผลต่างใช้ของประเภทเอกสารใบสั่งผลิต')],
+          ),
+        ];
       case '80': // AJS — ปรับยอดสินค้า
         return [
           _JournalSection(

@@ -169,12 +169,14 @@ class MoHeaderService {
     double laborHours = 0,
     double machineHours = 0,
     bool markDone = false,
+    String? logDate, // yyyy-MM-dd — ว่าง = วันนี้ (วันที่ของรายการบัญชีปันค่าแรง/โสหุ้ย)
   }) async {
     final headers = await authService.getAuthHeader();
     final body = jsonEncode({
       'labor_hours': laborHours,
       'machine_hours': machineHours,
       'mark_done': markDone,
+      if (logDate != null) 'log_date': logDate,
     });
     final response = await http.put(
       Uri.parse('$baseUrl/mo_header/$moId/operations/$operationId/log_time'),
@@ -189,6 +191,33 @@ class MoHeaderService {
     }
     final err = json.decode(response.body);
     throw Exception(err['message'] ?? 'บันทึกเวลาปฏิบัติงานล้มเหลว');
+  }
+
+  // รายการบันทึกเวลาของใบสั่งผลิต (ทุกขั้นตอน รวมที่กลับรายการแล้ว)
+  Future<List<Map<String, dynamic>>> fetchTimeLogs(int moId) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/mo_header/$moId/time_logs'), headers: headers);
+    if (response.statusCode == 200) return List<Map<String, dynamic>>.from(json.decode(response.body) as List);
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'โหลดรายการบันทึกเวลาล้มเหลว');
+  }
+
+  Future<MoHeader> reverseTimeLog(int moId, int logId, String reason) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(Uri.parse('$baseUrl/mo_header/$moId/time_logs/$logId/reverse'),
+        headers: headers, body: jsonEncode({'reason': reason}));
+    if (response.statusCode == 200) return MoHeader.fromJson(json.decode(response.body));
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'กลับรายการบันทึกเวลาล้มเหลว');
+  }
+
+  // ตัวอย่างรายการบัญชีก่อนปิดใบสั่งผลิต — { residual, lines: [...], missing: [ชื่อคอลัมน์บัญชีที่ยังไม่ตั้ง] }
+  Future<Map<String, dynamic>> fetchClosePreview(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/mo_header/$id/close_preview'), headers: headers);
+    if (response.statusCode == 200) return json.decode(response.body) as Map<String, dynamic>;
+    final err = json.decode(response.body);
+    throw Exception(err['message'] ?? 'โหลดตัวอย่างรายการบัญชีล้มเหลว');
   }
 
   Future<MoHeader> closeTransaction(int id) async {
