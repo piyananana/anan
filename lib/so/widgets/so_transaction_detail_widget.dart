@@ -27,6 +27,10 @@ import '../../cd/services/cd_currency_service.dart';
 import '../../sa/widgets/sa_attachment_widget.dart';
 import '../../sa/models/sa_doc_approval.dart';
 import '../../sa/widgets/sa_doc_approval_panel.dart';
+import '../../sa/models/sa_credit_approval.dart';
+import '../../sa/services/sa_credit_approval_service.dart';
+import '../../sa/widgets/sa_credit_limit_panel.dart';
+import '../../config/app_config.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
 import '../../cd/widgets/cd_salesperson_split_editor.dart';
 import '../../ar/services/ar_customer_service.dart';
@@ -103,6 +107,9 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   DocActions _actions = const DocActions();
   String? _approvalMode;
   List<DocApprovalStep> _approvals = const [];
+  // วงเงินเครดิตลูกค้า — ตรวจตอนส่งอนุมัติ เกินวงเงินต้องขออนุมัติก่อน (กลไกเดียวกับใบแจ้งหนี้/ใบส่งสินค้า)
+  final _creditService = CreditApprovalService(AppConfig.apiSo, 'so_transaction');
+  DocCreditState _credit = const DocCreditState();
   int? _refQuoteId; // ใบเสนอราคา (Quote) ต้นทาง ถ้าเพิ่มรายการมาจาก _pickQuoteLines()
   String? _refQuoteDocNoLabel;
 
@@ -122,7 +129,12 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
 
   // Rejected แก้ไขแล้วส่งอนุมัติใหม่ได้เหมือน Draft
   bool get _isEditable => ['Draft', 'Rejected'].contains(_status);
-  bool get _isReadOnly => widget.viewOnly || !_isEditable;
+  bool get _isReadOnly => widget.viewOnly || !_isEditable || _credit.isPending;
+  // ยอดสำหรับตรวจวงเงิน (บาท): Σ จำนวนสั่ง × ราคา × อัตราแลกเปลี่ยน — มิเรอร์ backend soDocAmount (SO ยังไม่มี VAT)
+  double get _creditAmount {
+    double r2(double v) => (v * 100).roundToDouble() / 100;
+    return _lines.fold<double>(0, (s, l) => s + r2(l.qtyOrdered * l.unitPriceFc * _exchangeRate));
+  }
   // พนักงานขาย — ค่าเริ่มต้นจากลูกค้า หรือจากใบเสนอราคาที่ดึงรายการมา
   List<DocSalesperson> _salespersons = const [];
 
@@ -162,6 +174,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     _customer = null;
     _warehouse = null;
     _descCtrl.clear();
+    _credit = const DocCreditState();
     _status = 'Draft';
     _voidReason = null;
     _actions = const DocActions();
@@ -242,6 +255,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _actions = h.actions;
         _approvalMode = h.approvalMode;
         _approvals = h.approvals;
+        _credit = h.credit;
         _salespersons = h.salespersons;
         _refQuoteId = h.refQuoteId;
         _refQuoteDocNoLabel = h.refQuoteDocNo;
@@ -541,6 +555,31 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  // ส่งอนุมัติ — ตรวจวงเงินเครดิตก่อน: เกินวงเงินและยังไม่ได้รับอนุมัติ ถามว่าจะบันทึกร่างและขออนุมัติเกินวงเงินไหม
+  Future<void> _submit(int menuId) async {
+    if (_customer?.id != null && _id != null) {
+      final go = await checkCreditBeforePost(
+        context,
+        service: _creditService,
+        customerId: _customer!.id!,
+        docId: _id,
+        amount: _creditAmount,
+        credit: _credit,
+        saveDraft: () async {
+          await _save();
+          return _id;
+        },
+        onRequested: _load,
+      );
+      if (!go || !mounted) return;
+    }
+    await _confirmAction(
+        'ยืนยันการส่งอนุมัติ', 'Confirm Submit for Approval',
+        'ส่งอนุมัติใบสั่งขาย $_docNo? ระหว่างรออนุมัติจะแก้ไขไม่ได้ หลังอนุมัติแล้วใบส่งสินค้า (DLN) จึงอ้างอิงได้',
+        'Submit SO $_docNo for approval? It cannot be edited while waiting. DLN can reference it once approved.',
+        () => _service.submitTransaction(_id!, menuId: menuId));
   }
 
   // ถอย / ยกเลิก / ลบ — ต้องกรอกเหตุผล (บันทึกในประวัติ)
@@ -942,11 +981,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
           if (_isEditable && _id != null && !widget.viewOnly && perm?.id != null) ...[
             const SizedBox(width: 8),
             ElevatedButton.icon(
-              onPressed: _isSaving ? null : () => _confirmAction(
-                  'ยืนยันการส่งอนุมัติ', 'Confirm Submit for Approval',
-                  'ส่งอนุมัติใบสั่งขาย $_docNo? ระหว่างรออนุมัติจะแก้ไขไม่ได้ หลังอนุมัติแล้วใบส่งสินค้า (DLN) จึงอ้างอิงได้',
-                  'Submit SO $_docNo for approval? It cannot be edited while waiting. DLN can reference it once approved.',
-                  () => _service.submitTransaction(_id!, menuId: perm!.id)),
+              onPressed: _isSaving ? null : () => _submit(perm!.id),
               icon: const Icon(Icons.send, size: 18),
               label: Text(isEnglish ? 'Submit' : 'ส่งอนุมัติ'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white),
@@ -996,6 +1031,18 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                 ), _voidDoc),
           ],
         ]),
+        // วงเงินเครดิตของลูกค้า + ขอ/อนุมัติเกินวงเงิน
+        if (_customer?.id != null && (_isEditable || _credit.status != null))
+          CreditLimitPanel(
+            service: _creditService,
+            customerId: _customer!.id,
+            docId: _id,
+            docNo: _docNo,
+            amount: _creditAmount,
+            credit: _credit,
+            isDraft: _isEditable && !widget.viewOnly,
+            onChanged: _load,
+          ),
         if (_id != null && _approvals.isNotEmpty)
           DocApprovalPanel(
             docNo: _docNo,

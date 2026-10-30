@@ -73,6 +73,7 @@ class _CountLine {
   final int? refImTransactionDetailId; // '15'/'35' เท่านั้น — บรรทัดต้นฉบับ (GRN/DLN) ที่บรรทัดนี้คืน
   int? refPoDetailId; // '10'/'11'/'12' เท่านั้น — บรรทัด PO ต้นฉบับที่บรรทัดนี้รับตาม (ไม่ final — ผู้ใช้เลือกทีหลังได้ผ่าน picker)
   double? poUnitPrice; // ราคาต่อหน่วยในใบสั่งซื้อ (สกุลเงินเดียวกับหัวเอกสาร) — เตือนเมื่อราคารับ/ตั้งหนี้ต่างจาก PO
+  double? soUnitPrice; // ราคาต่อหน่วยในใบสั่งขาย (สกุลเงินเดียวกับหัวเอกสาร) — เตือนเมื่อราคาขายต่างจาก SO
   int? refSoDetailId; // '30'/'31'/'32' เท่านั้น — บรรทัด SO ต้นฉบับที่บรรทัดนี้ส่งตาม (ไม่ final — ผู้ใช้เลือกทีหลังได้ผ่าน picker)
   // VAT ต่อบรรทัด — ใช้เฉพาะประเภทเอกสารที่สร้าง/อ้างอิงใบกำกับ AP/AR อัตโนมัติ (ดู _isVatMode ใน state) เก็บเป็น
   // field ธรรมดาแทน controller เพราะเป็นค่าที่เลือกจาก dropdown ไม่ใช่กรอกอิสระ (มิเรอร์ ar_transaction_detail_widget.dart)
@@ -110,6 +111,7 @@ class _CountLine {
     this.refImTransactionDetailId,
     this.refPoDetailId,
     this.poUnitPrice,
+    this.soUnitPrice,
     this.refSoDetailId,
     this.vatType,
     this.vatRate = 0,
@@ -483,6 +485,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         refImTransactionDetailId: d.refImTransactionDetailId,
         refPoDetailId: d.refPoDetailId,
         poUnitPrice: d.refPoUnitPriceFc,
+        soUnitPrice: d.refSoUnitPriceFc,
         refSoDetailId: d.refSoDetailId,
         countedQty: d.countedQty,
         issueQty: isIncrease ? (d.countedQty - d.systemQty) : isDecrease ? (d.systemQty - d.countedQty) : 0,
@@ -1148,6 +1151,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           // ข้างล่างแล้ว (สกุลเงินเดียวกันทั้งใบ) จึงเติมราคาดิบจาก SO ตรงๆ ได้เลยโดยไม่ต้องแปลงเป็นบาท
           unitPrice: _poNum(l['unit_price_fc']),
           refSoDetailId: id,
+          soUnitPrice: _poNum(l['unit_price_fc']),
           vatType: vatType, vatRate: vatType != null ? _rateForVatCode(vatType) : 0,
         );
         _lines.add(line);
@@ -1231,32 +1235,41 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
   // Post: ตรวจวงเงินก่อน (เอกสารฝั่งขาย) — เกินและยังไม่ได้รับอนุมัติ ให้เลือกบันทึกร่างแล้วขออนุมัติ
   // บรรทัดที่ราคารับ (หรือราคาตามใบกำกับ ตอน Post AP/GL ของ '12') ต่างจากราคาในใบสั่งซื้อ — เตือนให้ยืนยันก่อน (ไม่บล็อก)
-  Future<bool> _confirmPoPriceDiffs({bool billing = false}) async {
+  Future<bool> _confirmPoPriceDiffs({bool billing = false, bool sales = false}) async {
     final isEnglish = _isEnglish;
     final fmt = NumberFormat('#,##0.####');
     final diffs = <String>[];
+    final src = sales ? 'SO' : 'PO';
     for (final l in _lines) {
-      final po = l.poUnitPrice;
-      // PO ที่ไม่ได้ใส่ราคา (0) ถือว่ายังไม่กำหนดราคา ไม่เตือน
-      if (po == null || po == 0 || l.refPoDetailId == null || l.isFree) continue;
-      final text = billing && l.billedUnitCostCtrl.text.trim().isNotEmpty ? l.billedUnitCostCtrl.text : l.unitCostCtrl.text;
+      final ref = sales ? l.soUnitPrice : l.poUnitPrice;
+      // เอกสารต้นทางที่ไม่ได้ใส่ราคา (0) ถือว่ายังไม่กำหนดราคา ไม่เตือน
+      if (ref == null || ref == 0 || (sales ? l.refSoDetailId : l.refPoDetailId) == null || l.isFree) continue;
+      final text = sales
+          ? l.unitPriceCtrl.text
+          : (billing && l.billedUnitCostCtrl.text.trim().isNotEmpty ? l.billedUnitCostCtrl.text : l.unitCostCtrl.text);
       final price = _parseNum(text);
-      if ((price - po).abs() < 0.0001) continue;
-      final pct = (price - po) / po * 100;
-      diffs.add('${l.item.itemCode}: PO ${fmt.format(po)} -> ${fmt.format(price)} (${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%)');
+      if ((price - ref).abs() < 0.0001) continue;
+      final pct = (price - ref) / ref * 100;
+      diffs.add('${l.item.itemCode}: $src ${fmt.format(ref)} -> ${fmt.format(price)} (${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%)');
     }
     if (diffs.isEmpty) return true;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(isEnglish ? 'Price differs from the purchase order' : 'ราคาต่างจากใบสั่งซื้อ'),
+        title: Text(sales
+            ? (isEnglish ? 'Price differs from the sales order' : 'ราคาต่างจากใบสั่งขาย')
+            : (isEnglish ? 'Price differs from the purchase order' : 'ราคาต่างจากใบสั่งซื้อ')),
         content: SizedBox(
           width: 480,
           child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(isEnglish
-                  ? 'These lines are priced differently from the purchase order (document currency). Post anyway?'
-                  : 'รายการต่อไปนี้ราคาต่างจากใบสั่งซื้อ (สกุลเงินของเอกสาร) ต้องการ Post ต่อหรือไม่'),
+              Text(sales
+                  ? (isEnglish
+                      ? 'These lines are priced differently from the sales order (document currency). Post anyway?'
+                      : 'รายการต่อไปนี้ราคาขายต่างจากใบสั่งขาย (สกุลเงินของเอกสาร) ต้องการ Post ต่อหรือไม่')
+                  : (isEnglish
+                      ? 'These lines are priced differently from the purchase order (document currency). Post anyway?'
+                      : 'รายการต่อไปนี้ราคาต่างจากใบสั่งซื้อ (สกุลเงินของเอกสาร) ต้องการ Post ต่อหรือไม่')),
               const SizedBox(height: 8),
               for (final d in diffs) Text(d, style: const TextStyle(fontSize: 13)),
             ]),
@@ -1274,6 +1287,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   Future<void> _onPost() async {
     if (_isReturnToSupplierMode && !await _confirmReturnSourceImpact()) return;
     if (['10', '11', '12'].contains(_selectedSysDocType) && !await _confirmPoPriceDiffs()) return;
+    // '31' ตั้งหนี้ทันที — ราคาขายต่างจาก SO ให้ยืนยัน ('32' เตือนตอนออกใบแจ้งหนี้, '30' ไม่มีราคาขาย)
+    if (_selectedSysDocType == '31' && !await _confirmPoPriceDiffs(sales: true)) return;
     if (_isArCustomerMode && _customerId != null) {
       final go = await checkCreditBeforePost(
         context,
@@ -1551,6 +1566,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (_id == null) return;
     final isEnglish = _isEnglish;
     void warn(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    if (!await _confirmPoPriceDiffs(sales: true)) return;
     setState(() => _isSaving = true);
     try {
       final details = _lines.map((l) => ImTransactionDetail(

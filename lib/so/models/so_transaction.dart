@@ -3,6 +3,7 @@
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/models/sa_doc_approval.dart';
+import '../../sa/models/sa_credit_approval.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
 
 const Map<String, String> soTransactionStatusLabelsTh = {
@@ -63,6 +64,7 @@ class SoTransactionHeader {
   // คิวผู้อนุมัติ (utils/docApproval.js) — ALL / ANY + ขั้นตอนแต่ละลำดับ
   final String? approvalMode;
   final List<DocApprovalStep> approvals;
+  final DocCreditState credit; // ขออนุมัติเกินวงเงินเครดิต (ตรวจตอนส่งอนุมัติ)
   // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
   final DocActions actions;
   final int? refQuoteId; // ใบเสนอราคา (Quote) ต้นทาง — สะดวก/แสดงผลเท่านั้น
@@ -110,6 +112,7 @@ class SoTransactionHeader {
     this.voidReason,
     this.approvalMode,
     this.approvals = const [],
+    this.credit = const DocCreditState(),
     this.actions = const DocActions(),
     this.refQuoteId,
     this.refQuoteDocNo,
@@ -157,6 +160,7 @@ class SoTransactionHeader {
       voidReason: json['void_reason'],
       approvalMode: json['approval_mode'],
       approvals: DocApprovalStep.listFromJson(json['approvals']),
+      credit: DocCreditState.fromJson(json, json['credit_approvals']),
       actions: DocActions.fromJson(json),
       refQuoteId: json['ref_quote_id'],
       refQuoteDocNo: json['ref_quote_doc_no'],

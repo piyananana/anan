@@ -21,6 +21,7 @@ class PendingApprovalService {
       _fetchQuoteTransaction(),
       _fetchCredit(AppConfig.apiAr, 'ar_transaction', 'ar_credit', 'ArTransactionScreen'),
       _fetchCredit(AppConfig.apiIm, 'im_transaction', 'im_credit', 'ImTransactionScreen'),
+      _fetchCredit(AppConfig.apiSo, 'so_transaction', 'so_credit', 'SoTransactionScreen'),
       _fetchDocQueue(AppConfig.apiPo, 'po_transaction', 'PoTransactionScreen', 'ใบสั่งซื้อ', 'Purchase Order', 'total_value_lc', 'vendor_name_th'),
       _fetchDocQueue(AppConfig.apiSo, 'so_transaction', 'SoTransactionScreen', 'ใบสั่งขาย', 'Sales Order', 'total_value_lc', 'customer_name_th'),
       _fetchDocQueue(AppConfig.apiIm, 'im_price_change', 'ImPriceChangeScreen', 'เปลี่ยนแปลงราคา', 'Price Change', null, 'price_list_name'),
@@ -62,7 +63,7 @@ class PendingApprovalService {
     }
   }
 
-  // ขออนุมัติเกินวงเงินเครดิต (AR / IM) — amount = ยอดเอกสาร
+  // ขออนุมัติเกินวงเงินเครดิต (AR / IM / SO) — amount = ยอดเอกสาร
   Future<List<PendingApprovalItem>> _fetchCredit(String base, String path, String module, String targetPath) async {
     try {
       final headers = await _auth.getAuthHeader();
