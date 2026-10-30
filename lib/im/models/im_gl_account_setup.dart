@@ -111,3 +111,52 @@ class ImGlAccountSetup {
         'gl_doc_id': glDocId,
       };
 }
+
+// บัญชีที่ตอน Post จะใช้จริงต่อสินค้า (POST /im_transaction/gl_accounts) — resolver ชุดเดียวกับ backend:
+// สต็อก: คลัง → สินค้า → หมวดสินค้า → ประเภทเอกสาร, ต้นทุน/รายได้: สินค้า → หมวดสินค้า → ประเภทเอกสาร
+class ImGlAcct {
+  final int id;
+  final String code;
+  final String nameTh;
+  final String nameEn;
+  const ImGlAcct({required this.id, required this.code, required this.nameTh, required this.nameEn});
+
+  static ImGlAcct? fromJson(dynamic j) => j is Map<String, dynamic>
+      ? ImGlAcct(id: j['id'] as int, code: j['code'] ?? '', nameTh: j['name_th'] ?? '', nameEn: j['name_en'] ?? '')
+      : null;
+
+  String name(bool isEnglish) => isEnglish && nameEn.isNotEmpty ? nameEn : nameTh;
+}
+
+class ImItemGlAccts {
+  final ImGlAcct? inventory;
+  final ImGlAcct? toInventory;
+  final ImGlAcct? cogs;
+  final ImGlAcct? revenue;
+  const ImItemGlAccts({this.inventory, this.toInventory, this.cogs, this.revenue});
+
+  factory ImItemGlAccts.fromJson(Map<String, dynamic> j) => ImItemGlAccts(
+        inventory: ImGlAcct.fromJson(j['inventory']),
+        toInventory: ImGlAcct.fromJson(j['to_inventory']),
+        cogs: ImGlAcct.fromJson(j['cogs']),
+        revenue: ImGlAcct.fromJson(j['revenue']),
+      );
+}
+
+class ImGlAccounts {
+  final String mode; // PERPETUAL / PERIODIC
+  final ImGlAcct? purchases; // บัญชีซื้อสินค้า (เฉพาะโหมด Periodic)
+  final Map<int, ImItemGlAccts> items;
+  const ImGlAccounts({required this.mode, this.purchases, required this.items});
+
+  bool get isPeriodic => mode == 'PERIODIC';
+
+  factory ImGlAccounts.fromJson(Map<String, dynamic> j) => ImGlAccounts(
+        mode: j['mode'] ?? 'PERPETUAL',
+        purchases: ImGlAcct.fromJson(j['purchases']),
+        items: {
+          for (final e in ((j['items'] ?? {}) as Map<String, dynamic>).entries)
+            int.parse(e.key): ImItemGlAccts.fromJson(e.value as Map<String, dynamic>),
+        },
+      );
+}

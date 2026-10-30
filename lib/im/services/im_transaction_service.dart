@@ -389,6 +389,18 @@ class ImTransactionService {
     return null;
   }
 
+  // บัญชีที่ตอน Post จะใช้ต่อสินค้า — ใช้ทำตัวอย่างรายการบัญชีให้ตรงกับ backend (null = โหลดไม่ได้ ใช้ค่าจากการตั้งค่าแทน)
+  Future<ImGlAccounts?> fetchGlAccounts({required String docCode, int? warehouseId, int? toWarehouseId, required List<int> itemIds}) async {
+    final headers = await authService.getAuthHeader();
+    final res = await http.post(
+      Uri.parse('$baseUrl/im_transaction/gl_accounts'),
+      headers: headers,
+      body: json.encode({'doc_code': docCode, 'warehouse_id': warehouseId, 'to_warehouse_id': toWarehouseId, 'item_ids': itemIds}),
+    );
+    if (res.statusCode == 200) return ImGlAccounts.fromJson(json.decode(res.body) as Map<String, dynamic>);
+    return null;
+  }
+
   // Review report for sys_doc_type='12' (GR รอตั้งหนี้) — Received docs with no GL backing yet
   // (accrual gap) and Posted docs whose billed cost differs from the cost that valued the stock
   // (price variance). See imGrBillingReportController.js.
