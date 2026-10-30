@@ -496,7 +496,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     final consignPayable = _acctLabel(_consignmentPayableAccountId, _consignmentPayableAccountCode, _consignmentPayableAccountName, isEnglish,
         isEnglish ? '(Consignment Payable — not set)' : '(บัญชีเจ้าหนี้ฝากขาย — ยังไม่ตั้งค่า)');
     final ap = isEnglish ? '(AP — posted in AP module)' : '(เจ้าหนี้ — บันทึกในโมดูล AP)';
-    final purchases = isEnglish ? 'Purchases (Periodic mode)' : 'บัญชีซื้อสินค้า (โหมด Periodic)';
+    final purchases = isEnglish ? 'Purchases (warehouse → item → category → company default)' : 'บัญชีซื้อสินค้า (คลัง → สินค้า → หมวดสินค้า → ค่าเริ่มต้นของบริษัท)';
 
     switch (_sdt) {
       case '80': // AJS — ปรับยอดสินค้า
@@ -520,11 +520,16 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
             _JournalLine('Dr', isEnglish ? '$inv (destination warehouse)' : '$inv (คลังปลายทาง)'),
             _JournalLine('  Cr', isEnglish ? '$inv (source warehouse)' : '$inv (คลังต้นทาง)'),
           ]),
+          // ฝั่งที่เป็น Periodic ใช้บัญชีซื้อแทนบัญชีสต็อก — ทั้งสองฝั่ง Periodic ไม่ลงบัญชี (resolveStockSideAccount)
+          _JournalSection(
+            title: isEnglish ? 'A Periodic side (warehouse/item mode)' : 'ฝั่งที่เป็น Periodic (ตามโหมดของคลัง/สินค้า)',
+            lines: [_JournalLine('Dr/Cr', isEnglish ? '$purchases instead of the inventory account; no entry when both sides are Periodic' : '$purchases แทนบัญชีสต็อก — ถ้าทั้งสองฝั่งเป็น Periodic ไม่ลงบัญชี')],
+          ),
         ];
       case '10': // GRN — รับสินค้า (ไม่มีเลขที่อ้างอิง) — AP ตั้งหนี้เองภายหลัง (Dr GR/IR / Cr AP แยกต่างหาก)
         return [
           _JournalSection(
-            title: isEnglish ? 'Perpetual mode' : 'โหมด Perpetual',
+            title: isEnglish ? 'Perpetual lines' : 'บรรทัด Perpetual',
             lines: [
               _JournalLine('Dr', inv),
               _JournalLine('Dr/Cr', isEnglish ? '$variance (purchase price - standard cost, STANDARD items)' : '$variance (ราคาซื้อ - ต้นทุนมาตรฐาน สินค้า STANDARD)'),
@@ -532,7 +537,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
             ],
           ),
           _JournalSection(
-            title: isEnglish ? 'Periodic mode' : 'โหมด Periodic',
+            title: isEnglish ? 'Periodic lines' : 'บรรทัด Periodic',
             lines: [_JournalLine('Dr', purchases), _JournalLine('  Cr', grir)],
           ),
         ];
@@ -540,11 +545,11 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         // ฝากขายแทน GR/IR จนกว่าจะขายออกและ settle เป็น AP จริงภายหลัง (ดู Consignment Settlement)
         return [
           _JournalSection(
-            title: isEnglish ? 'Perpetual mode' : 'โหมด Perpetual',
+            title: isEnglish ? 'Perpetual lines' : 'บรรทัด Perpetual',
             lines: [_JournalLine('Dr', inv), _JournalLine('  Cr', consignPayable)],
           ),
           _JournalSection(
-            title: isEnglish ? 'Periodic mode' : 'โหมด Periodic',
+            title: isEnglish ? 'Periodic lines' : 'บรรทัด Periodic',
             lines: [_JournalLine('Dr', purchases), _JournalLine('  Cr', consignPayable)],
           ),
         ];
@@ -702,8 +707,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
             const SizedBox(height: 6),
             Text(
               isEnglish
-                  ? '* Two separate entries post: the COGS entry above (this module — suppressed in Periodic mode, same as plain DLN/ISS) plus a linked AR Invoice\'s own entry (created automatically, not shown here, and always posts regardless of mode since it is a real obligation to the customer, not a stock valuation).'
-                  : '* มีการ Post 2 entry แยกกัน: entry ต้นทุนขายข้างบน (โมดูลนี้ — ถูกระงับในโหมด Periodic เหมือน DLN ธรรมดา/ISS) กับ entry ของใบแจ้งหนี้ AR ที่สร้างอัตโนมัติ (ไม่ได้แสดงที่นี่ และ Post เสมอไม่ว่าโหมดใด เพราะเป็นภาระผูกพันจริงกับลูกค้า ไม่ใช่การตีมูลค่าสต็อก)',
+                  ? '* Two separate entries post: the COGS entry above (this module — Periodic lines are skipped, same as plain DLN/ISS) plus a linked AR Invoice\'s own entry (created automatically, not shown here, and always posts regardless of mode since it is a real obligation to the customer, not a stock valuation).'
+                  : '* มีการ Post 2 entry แยกกัน: entry ต้นทุนขายข้างบน (โมดูลนี้ — บรรทัด Periodic ไม่ลง เหมือน DLN ธรรมดา/ISS) กับ entry ของใบแจ้งหนี้ AR ที่สร้างอัตโนมัติ (ไม่ได้แสดงที่นี่ และ Post เสมอไม่ว่าโหมดใด เพราะเป็นภาระผูกพันจริงกับลูกค้า ไม่ใช่การตีมูลค่าสต็อก)',
               style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
             ),
           ],

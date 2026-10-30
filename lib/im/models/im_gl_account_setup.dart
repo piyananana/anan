@@ -128,32 +128,40 @@ class ImGlAcct {
   String name(bool isEnglish) => isEnglish && nameEn.isNotEmpty ? nameEn : nameTh;
 }
 
+// บัญชีและโหมดของสินค้าในคลังต้นทาง/ปลายทาง — mode = สินค้า → หมวดสินค้า → คลัง → ค่าเริ่มต้นของบริษัท
 class ImItemGlAccts {
+  final String mode; // PERPETUAL / PERIODIC
+  final String? toMode; // คลังปลายทางของ TRF
   final ImGlAcct? inventory;
   final ImGlAcct? toInventory;
+  final ImGlAcct? purchases; // บัญชีซื้อสินค้า (ใช้แทนบัญชีสต็อกเมื่อเป็น Periodic)
+  final ImGlAcct? toPurchases;
   final ImGlAcct? cogs;
   final ImGlAcct? revenue;
-  const ImItemGlAccts({this.inventory, this.toInventory, this.cogs, this.revenue});
+  const ImItemGlAccts({required this.mode, this.toMode, this.inventory, this.toInventory, this.purchases, this.toPurchases, this.cogs, this.revenue});
+
+  bool get isPeriodic => mode == 'PERIODIC';
+  bool get isToPeriodic => toMode == 'PERIODIC';
 
   factory ImItemGlAccts.fromJson(Map<String, dynamic> j) => ImItemGlAccts(
+        mode: j['mode'] ?? 'PERPETUAL',
+        toMode: j['to_mode'],
         inventory: ImGlAcct.fromJson(j['inventory']),
         toInventory: ImGlAcct.fromJson(j['to_inventory']),
+        purchases: ImGlAcct.fromJson(j['purchases']),
+        toPurchases: ImGlAcct.fromJson(j['to_purchases']),
         cogs: ImGlAcct.fromJson(j['cogs']),
         revenue: ImGlAcct.fromJson(j['revenue']),
       );
 }
 
 class ImGlAccounts {
-  final String mode; // PERPETUAL / PERIODIC
-  final ImGlAcct? purchases; // บัญชีซื้อสินค้า (เฉพาะโหมด Periodic)
+  final String mode; // โหมดเริ่มต้นของบริษัท — โหมดจริงต่อสินค้าอยู่ที่ items[id].mode
   final Map<int, ImItemGlAccts> items;
-  const ImGlAccounts({required this.mode, this.purchases, required this.items});
-
-  bool get isPeriodic => mode == 'PERIODIC';
+  const ImGlAccounts({required this.mode, required this.items});
 
   factory ImGlAccounts.fromJson(Map<String, dynamic> j) => ImGlAccounts(
         mode: j['mode'] ?? 'PERPETUAL',
-        purchases: ImGlAcct.fromJson(j['purchases']),
         items: {
           for (final e in ((j['items'] ?? {}) as Map<String, dynamic>).entries)
             int.parse(e.key): ImItemGlAccts.fromJson(e.value as Map<String, dynamic>),

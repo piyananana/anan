@@ -2260,7 +2260,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // ต้นทุน/รายได้ สินค้า → หมวดสินค้า → ประเภทเอกสาร) — โหลดใหม่เมื่อประเภทเอกสาร คลัง หรือรายการสินค้าเปลี่ยน
   ImGlAccounts? _glAccts;
   String _glAcctsKey = '';
-  bool get _glPeriodic => _glAccts?.isPeriodic ?? false;
+  // โหมดของบรรทัด (สินค้า → หมวดสินค้า → คลัง → ค่าเริ่มต้น) — ระหว่างรอโหลดถือเป็น Perpetual
+  bool _linePeriodic(_CountLine l) => _glAccts?.items[l.item.id]?.isPeriodic ?? false;
+  bool _lineToPeriodic(_CountLine l) => _glAccts?.items[l.item.id]?.isToPeriodic ?? false;
 
   void _ensureGlAccounts() {
     final code = _docCode;
@@ -2289,16 +2291,38 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     return (code: acc.code, name: acc.name(isEnglish));
   }
 
-  // บัญชีฝั่งสินค้าของเอกสารรับเข้า/AP — โหมด Periodic ใช้บัญชีซื้อสินค้าแทนบัญชีสต็อก (เหมือน backend)
-  _Acct _receiveInvAcct(_CountLine l, bool isEnglish) {
-    if (_glPeriodic) {
-      final p = _glAccts!.purchases;
+  // บัญชีฝั่งสินค้าของบรรทัด — บรรทัด Periodic ใช้บัญชีซื้อสินค้าแทนบัญชีสต็อก (resolveStockSideAccount ฝั่ง backend)
+  _Acct _receiveInvAcct(_CountLine l, bool isEnglish, {bool destination = false}) {
+    final periodic = destination ? _lineToPeriodic(l) : _linePeriodic(l);
+    if (periodic) {
+      final p = destination ? _glAccts!.items[l.item.id]!.toPurchases : _glAccts!.items[l.item.id]!.purchases;
       return p == null
           ? (code: '!', name: isEnglish ? 'Purchases account not configured' : 'ยังไม่ตั้งค่าบัญชีซื้อสินค้า')
           : (code: p.code, name: p.name(isEnglish));
     }
-    return _lineAcct(l, (a) => a.inventory, _docSetup?.inventoryAccountCode, _docSetup?.inventoryAccountName, isEnglish);
+    return _lineAcct(l, (a) => destination ? a.toInventory : a.inventory, _docSetup?.inventoryAccountCode, _docSetup?.inventoryAccountName, isEnglish);
   }
+
+  // หมายเหตุใต้ตัวอย่าง: ฝั่งสินค้าของบรรทัด Perpetual/Periodic ใช้บัญชีต่างกัน
+  Widget _modeSideNote(bool isEnglish) => Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          isEnglish
+              ? 'Perpetual lines use the inventory account (warehouse → item → item category → document type) at stock value; Periodic lines use the purchases account at the document price.'
+              : 'บรรทัด Perpetual ลงบัญชีสินค้าคงคลัง (คลัง → สินค้า → หมวดสินค้า → ประเภทเอกสาร) ตามมูลค่าสต็อก ส่วนบรรทัด Periodic ลงบัญชีซื้อสินค้าตามราคาในเอกสาร',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+        ),
+      );
+
+  Widget _skippedPeriodicNote(int count, bool isEnglish) => Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          isEnglish
+              ? '$count Periodic line(s) post no GL at Post — their cost is calculated at period closing.'
+              : 'บรรทัด Periodic $count รายการไม่ลงบัญชีตอน Post — ต้นทุนคำนวณตอนปิดงวด',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+        ),
+      );
 
   // รวมยอดตามบัญชี (บวก = Dr, ลบ = Cr) แล้วแสดงทีละบัญชี
   List<Widget> _groupedGlLines(List<(_Acct, double)> entries, {String suffix = ''}) {
@@ -2319,8 +2343,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   Widget _periodicNoGlCard(bool isEnglish) => _card(title: isEnglish ? 'GL Preview' : 'ตัวอย่างรายการบัญชี', children: [
         Text(
           isEnglish
-              ? 'Periodic mode — this document posts no GL entry at Post; inventory and cost of sales are calculated at period closing.'
-              : 'โหมด Periodic — เอกสารนี้ไม่ลงบัญชีตอน Post สินค้าคงคลังและต้นทุนขายคำนวณรวมตอนปิดงวด',
+              ? 'All lines are Periodic — this document posts no GL entry at Post; inventory and cost of sales are calculated at period closing.'
+              : 'ทุกบรรทัดเป็น Periodic — เอกสารนี้ไม่ลงบัญชีตอน Post สินค้าคงคลังและต้นทุนขายคำนวณรวมตอนปิดงวด',
           style: TextStyle(color: Colors.grey.shade700, fontStyle: FontStyle.italic),
         ),
       ]);
@@ -2360,7 +2384,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         final billed = l.billedUnitCostCtrl.text.trim().isEmpty ? received : _parseNum(l.billedUnitCostCtrl.text) * _exchangeRate;
         billedValue += qty * billed;
         // Periodic: Dr บัญชีซื้อตามใบกำกับเต็มจำนวน ไม่มีผลต่าง (เหมือน backend)
-        final lineStock = qty * (_glPeriodic ? billed : (l.item.costingMethod == 'STANDARD' ? l.item.standardCost : received));
+        final lineStock = qty * (_linePeriodic(l) ? billed : (l.item.costingMethod == 'STANDARD' ? l.item.standardCost : received));
         stockValue += lineStock;
         invEntries.add((_receiveInvAcct(l, isEnglish), lineStock));
         if (l.vatType != null && l.vatType != 'NOVAT') vatValue += qty * billed * l.vatRate / 100;
@@ -2381,6 +2405,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           if (vatValue > 0)
             _glLine(_docSetup?.vatInputAccountCode, isEnglish ? '${_docSetup?.vatInputAccountName ?? 'VAT Input'} (on the AP bill)' : '${_docSetup?.vatInputAccountName ?? 'VAT ซื้อ'} (บนใบตั้งหนี้ AP)', vatValue, 0),
           _glLine(null, isEnglish ? 'AP payable' : 'เจ้าหนี้การค้า', 0, billedValue + vatValue),
+          _modeSideNote(isEnglish),
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
@@ -2413,17 +2438,24 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       // TRF: Dr บัญชีสต็อกปลายทาง / Cr บัญชีสต็อกต้นทาง — resolve ตามคลัง (im_warehouse.inventory_account_id) ก่อน
       // ค่อย fallback ไปที่สินค้า/ค่า default ของ docSetup (ดู resolveInventoryAccount ฝั่ง backend) วันนี้ im_warehouse
       // ยังไม่ตั้งค่าที่ไหนเลย ทั้งสองฝั่งจึงชี้บัญชีเดียวกันเสมอ และจะไม่มีการโพสต์ GL จริงจนกว่าจะตั้งค่าแยกตามคลัง
-      if (_glPeriodic) return _periodicNoGlCard(isEnglish);
+      // แต่ละฝั่งใช้บัญชีตามโหมดของคลังนั้น (Periodic = บัญชีซื้อ) — ทั้งสองฝั่ง Periodic ไม่ลงบัญชี
       final dstEntries = <(_Acct, double)>[];
       final srcEntries = <(_Acct, double)>[];
+      int skipped = 0, active = 0;
       for (final l in _lines) {
         final qty = _parseNum(l.issueQtyCtrl.text);
         if (qty <= 0) continue;
+        if (_linePeriodic(l) && _lineToPeriodic(l)) {
+          skipped++;
+          continue;
+        }
+        active++;
         final cost = l.item.costingMethod == 'STANDARD' ? l.item.standardCost : null;
         if (cost == null) continue;
-        dstEntries.add((_lineAcct(l, (a) => a.toInventory, _docSetup!.inventoryAccountCode, _docSetup!.inventoryAccountName, isEnglish), qty * cost));
-        srcEntries.add((_lineAcct(l, (a) => a.inventory, _docSetup!.inventoryAccountCode, _docSetup!.inventoryAccountName, isEnglish), -qty * cost));
+        dstEntries.add((_receiveInvAcct(l, isEnglish, destination: true), qty * cost));
+        srcEntries.add((_receiveInvAcct(l, isEnglish), -qty * cost));
       }
+      if (skipped > 0 && active == 0) return _periodicNoGlCard(isEnglish);
       return _card(title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
         ..._groupedGlLines(dstEntries, suffix: isEnglish ? ' (destination)' : ' (คลังปลายทาง)'),
         ..._groupedGlLines(srcEntries, suffix: isEnglish ? ' (source)' : ' (คลังต้นทาง)'),
@@ -2431,11 +2463,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           padding: const EdgeInsets.only(top: 6),
           child: Text(
             isEnglish
-                ? 'Accounts follow warehouse → item → item category → document type. When both warehouses use the same account the lines cancel out and no GL entry is posted.'
-                : 'บัญชีสต็อกใช้ลำดับ คลัง → สินค้า → หมวดสินค้า → ประเภทเอกสาร — ถ้าคลังต้นทางและปลายทางใช้บัญชีเดียวกัน รายการจะหักล้างกันและไม่มีการลงบัญชี',
+                ? 'Each side uses the account of its warehouse\'s mode: inventory (warehouse → item → item category → document type) for Perpetual, purchases for Periodic. When both sides use the same account the lines cancel out and no GL entry is posted.'
+                : 'แต่ละฝั่งใช้บัญชีตามโหมดของคลังนั้น: Perpetual ใช้บัญชีสต็อก (คลัง → สินค้า → หมวดสินค้า → ประเภทเอกสาร) Periodic ใช้บัญชีซื้อสินค้า — ถ้าทั้งสองฝั่งใช้บัญชีเดียวกัน รายการจะหักล้างกันและไม่มีการลงบัญชี',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
           ),
         ),
+        if (skipped > 0) _skippedPeriodicNote(skipped, isEnglish),
       ]);
     }
 
@@ -2458,7 +2491,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           final price = _parseNum(l.unitCostCtrl.text) * _exchangeRate;
           // Periodic: Dr บัญชีซื้อตามราคาซื้อ ไม่มีผลต่าง (เหมือน backend)
           invEntries.add((_receiveInvAcct(l, isEnglish),
-              qty * (!_glPeriodic && l.item.costingMethod == 'STANDARD' ? l.item.standardCost : price)));
+              qty * (!_linePeriodic(l) && l.item.costingMethod == 'STANDARD' ? l.item.standardCost : price)));
         }
         final stockValue = invEntries.fold<double>(0, (s, e) => s + e.$2);
         final priceVariance = billValue - stockValue;
@@ -2472,6 +2505,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             _glLine(_docSetup!.vatInputAccountCode, isEnglish ? '${_docSetup!.vatInputAccountName ?? 'VAT Input'} (on the AP bill)' : '${_docSetup!.vatInputAccountName ?? 'VAT ซื้อ'} (บนใบตั้งหนี้ AP)',
                 vatValue, 0),
           _glLine(null, isEnglish ? 'AP payable (auto-created)' : 'เจ้าหนี้การค้า (สร้างอัตโนมัติ)', 0, billValue + vatValue),
+          _modeSideNote(isEnglish),
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
@@ -2494,7 +2528,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         final price = _parseNum(l.unitCostCtrl.text) * _exchangeRate;
         grirValue += qty * price;
         // Periodic: Dr บัญชีซื้อตามราคาซื้อ ไม่มีผลต่าง (เหมือน backend)
-        final lineStock = qty * (!_glPeriodic && l.item.costingMethod == 'STANDARD' ? l.item.standardCost : price);
+        final lineStock = qty * (!_linePeriodic(l) && l.item.costingMethod == 'STANDARD' ? l.item.standardCost : price);
         grirStockValue += lineStock;
         invEntries.add((_receiveInvAcct(l, isEnglish), lineStock));
       }
@@ -2509,19 +2543,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _isConsignmentReceiveMode
             ? _glLine(_docSetup!.consignmentPayableAccountCode, _docSetup!.consignmentPayableAccountName, 0, grirValue)
             : _glLine(_docSetup!.grirAccountCode, _docSetup!.grirAccountName, 0, grirValue),
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(
-            _glPeriodic
-                ? (isEnglish
-                    ? 'Periodic mode — the debit side is the Purchases account at the purchase price (no variance line).'
-                    : 'โหมด Periodic — ฝั่ง Dr เป็นบัญชีซื้อสินค้าตามราคาซื้อ (ไม่มีบรรทัดผลต่าง)')
-                : (isEnglish
-                    ? 'Perpetual mode — the debit side is the inventory account (warehouse → item → item category → document type) at stock value.'
-                    : 'โหมด Perpetual — ฝั่ง Dr เป็นบัญชีสินค้าคงคลัง (คลัง → สินค้า → หมวดสินค้า → ประเภทเอกสาร) ตามมูลค่าสต็อก'),
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
-          ),
-        ),
+        _modeSideNote(isEnglish),
       ]);
     }
 
@@ -2551,6 +2573,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       final grandValue = value + (value >= 0 ? vatValue : -vatValue);
       return _card(title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
         ..._groupedGlLines(invEntries, suffix: isEnglish ? ' (on the $noteLabel)' : ' (บน$noteLabel)'),
+        _modeSideNote(isEnglish),
         if (vatValue > 0)
           _glLine(_docSetup!.vatInputAccountCode,
               isEnglish ? '${_docSetup!.vatInputAccountName ?? 'VAT Input'} (on the $noteLabel)' : '${_docSetup!.vatInputAccountName ?? 'VAT ซื้อ'} (บน$noteLabel)',
@@ -2588,8 +2611,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       ]);
     }
 
-    // Periodic: ปรับยอด/เบิก/โอน/ส่ง/รับคืนจากลูกค้า ไม่ลงบัญชีตอน Post (ดู postTransaction ฝั่ง backend) — '90'/'95' ลงเสมอ
-    if (_glPeriodic && !['90', '95'].contains(_selectedSysDocType)) return _periodicNoGlCard(isEnglish);
+    // บรรทัด Periodic ของ ปรับยอด/เบิก/ส่ง/รับคืนจากลูกค้า ไม่ลงบัญชีตอน Post (lineNeedsImGl ฝั่ง backend) — '90'/'95'
+    // ลงทุกบรรทัด โดยบรรทัด Periodic ใช้บัญชีซื้อแทนบัญชีสต็อก
+    final alwaysPost = ['90', '95'].contains(_selectedSysDocType);
+    final skippedPeriodic = alwaysPost ? 0 : _lines.where((l) => l.variance != 0 && _linePeriodic(l)).length;
+    if (skippedPeriodic > 0 && !_lines.any((l) => l.variance != 0 && !_linePeriodic(l))) return _periodicNoGlCard(isEnglish);
 
     // บัญชีคู่บัญชี (counterpart ของคลัง) ต้องตรงกับที่ postGlEntry ใช้จริง — ISS/DLN/RTC/CNC/DNC ใช้ต้นทุนของแต่ละสินค้า
     // (สินค้า → หมวดสินค้า → ประเภทเอกสาร), MOI/MOR ใช้ WIP, AJS ใช้ผลต่าง — ตัดสินจาก sys_doc_type ไม่ใช่ doc_code
@@ -2601,6 +2627,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     for (final l in _lines) {
       final v = l.variance;
       if (v == 0) continue;
+      if (!alwaysPost && _linePeriodic(l)) continue;
       final cost = l.item.costingMethod == 'STANDARD'
           ? l.item.standardCost
           : (v > 0 ? _parseNum(l.unitCostCtrl.text) : null);
@@ -2608,7 +2635,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         undetermined += v.abs();
         continue;
       }
-      invEntries.add((_lineAcct(l, (a) => a.inventory, _docSetup!.inventoryAccountCode, _docSetup!.inventoryAccountName, isEnglish), v * cost));
+      invEntries.add((_receiveInvAcct(l, isEnglish), v * cost));
       final _Acct counter = isCogsCounter
           ? _lineAcct(l, (a) => a.cogs, _docSetup!.cogsAccountCode, _docSetup!.cogsAccountName, isEnglish)
           : isWipCounter
@@ -2619,6 +2646,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     return _card(title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
       ..._groupedGlLines(invEntries),
       ..._groupedGlLines(counterEntries),
+      if (skippedPeriodic > 0) _skippedPeriodicNote(skippedPeriodic, isEnglish),
+      if (alwaysPost && _lines.any((l) => l.variance != 0 && _linePeriodic(l))) _modeSideNote(isEnglish),
       if (undetermined > 0)
         Padding(
           padding: const EdgeInsets.only(top: 6),
