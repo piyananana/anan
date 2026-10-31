@@ -34,6 +34,7 @@ import '../../cd/services/cd_wht_type_service.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../sa/models/sa_doc_approval.dart';
 import '../../sa/widgets/sa_doc_approval_panel.dart';
+import '../../utils/vat_calc.dart';
 
 class ApTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -158,6 +159,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   double _beforeVatFc = 0;
   double _vatAmountFc = 0;
   double _totalAmountFc = 0;
+  bool _priceIncludesVat = false; // ราคาที่กรอกรวม VAT — ดู lib/utils/vat_calc.dart
 
   final _fmt = NumberFormat('#,##0.00');
   final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -176,6 +178,17 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   bool get _hasWhtSection     => _isPayment || _isAdvancePayment;
   bool get _hasPaymentRows    => _isPayment || _isAdvancePayment || _isAdvanceRefund;
   bool get _hasDueDate        => _isPurchaseInvoice;
+  // ใบตั้งหนี้หักเงินมัดจำตอนตั้งหนี้ (apply_type 'inv_advance') — ใบจ่ายชำระหักตอนจ่าย ('advance')
+  double get _invAdvanceTotal => _isPurchaseInvoice ? _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc) : 0;
+
+  LineAmounts _amt(_DetailRow r) => calcLineAmounts(
+        qty: double.tryParse(r.qtyCtrl.text) ?? 0,
+        price: double.tryParse(r.priceCtrl.text) ?? 0,
+        discountPercent: double.tryParse(r.discPctCtrl.text) ?? 0,
+        vatRate: r.vatRate,
+        noVat: r.vatType == 'NOVAT',
+        priceIncludesVat: _priceIncludesVat,
+      );
 
   // RA(70) รองรับขออนุมัติเสมอ; Payment(80) รองรับเฉพาะกรณีไม่มีเลขที่อ้างอิง
   // (ไม่ได้ดึงมาจาก RA หรือใบอนุมัติจ่าย ap_payment_run ซึ่งผ่านการอนุมัติมาแล้ว)
@@ -320,6 +333,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         _voidBlockRef = data.voidBlockRef;
         _reverseHistory = data.reverseHistory;
         _isReadOnly = widget.viewOnly || h.status != 'Draft';
+        _priceIncludesVat = h.priceIncludesVat;
 
         _dimSelections = { 1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id };
         _dimNames = { 1: h.dim1Name, 2: h.dim2Name, 3: h.dim3Name, 4: h.dim4Name, 5: h.dim5Name };
@@ -358,7 +372,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                   appliedAmountLc: _fcAmt(a),
                 )).toList();
         _advanceRows = data.applies
-            .where((a) => a.applyType == 'advance')
+            .where((a) => a.applyType == 'advance' || a.applyType == 'inv_advance')
             .map((a) => _ApplyRow(
                   appliedToId: a.appliedToId,
                   appliedToDocNo: a.appliedToDocNo ?? '',
@@ -395,6 +409,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       if (_hasApplySection && _selectedVendor?.id != null) {
         await _loadOpenInvoicesKeepApplied(_selectedVendor!.id!);
         await _loadOpenAdvancesKeepApplied(_selectedVendor!.id!);
+      } else if (_isPurchaseInvoice && _selectedVendor?.id != null) {
+        await _loadOpenAdvancesKeepApplied(_selectedVendor!.id!);
       }
       if (_hasAdvanceRefund && _selectedVendor?.id != null) {
         await _loadOpenAdvancesForRefundKeepApplied(_selectedVendor!.id!);
@@ -411,6 +427,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       _transactionId = 0; _glEntryId = null;
       _docNo = 'AUTO'; _docDate = DateTime.now(); _dueDate = null;
       _apAccountId = null; _exchangeRate = 1.0;
+      _priceIncludesVat = false;
       _refNoCtrl.clear(); _descCtrl.clear();
       _status = 'Draft'; _approvals = []; _isReadOnly = false;
       _reverseBlock = null; _reverseBlockRef = null; _voidBlock = null; _voidBlockRef = null; _reverseHistory = [];
@@ -448,14 +465,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       subFc = _advanceRefundRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
     } else {
       for (final r in _detailRows) {
-        final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
-        final price = double.tryParse(r.priceCtrl.text) ?? 0;
-        final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
-        final sub = qty * price;
-        final disc = sub * discPct / 100;
-        final afterDisc = sub - disc;
-        final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
-        subFc += sub; discFc += disc; vatFc += vat;
+        final a = _amt(r);
+        subFc += a.gross; discFc += a.discount; vatFc += a.vat;
       }
     }
     final beforeVat = subFc - discFc;
@@ -527,7 +538,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
 
   Future<void> _loadOpenAdvances(int vendorId) async {
     try {
-      final adv = await _service.fetchOpenAdvances(vendorId);
+      final adv = await _service.fetchOpenAdvances(vendorId, transactionId: _transactionId);
       for (final c in _advanceCtrlMap.values) c.dispose(); _advanceCtrlMap.clear();
       if (mounted) setState(() { _openAdvances = adv; _advanceRows = []; });
     } catch (_) {}
@@ -535,7 +546,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
 
   Future<void> _loadOpenAdvancesKeepApplied(int vendorId) async {
     try {
-      final adv = await _service.fetchOpenAdvances(vendorId);
+      final adv = await _service.fetchOpenAdvances(vendorId, transactionId: _transactionId);
       final openIds = adv.map((i) => i.id).toSet();
       final missing = _advanceRows.where((a) => !openIds.contains(a.appliedToId))
           .map((a) => ApOpenInvoice(id: a.appliedToId, docNo: a.appliedToDocNo,
@@ -589,6 +600,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     });
     if (_hasApplySection && vendor != null) {
       _loadOpenInvoices(vendor.id!);
+      _loadOpenAdvances(vendor.id!);
+    } else if (_isPurchaseInvoice && vendor != null) {
       _loadOpenAdvances(vendor.id!);
     }
     if (_hasAdvanceRefund && vendor != null) {
@@ -842,6 +855,36 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     }
 
     _recalcTotals();
+    if (_invAdvanceTotal > _totalAmountFc + 0.005) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+          ? 'Deposit deducted exceeds the bill total'
+          : 'ยอดหักเงินมัดจำเกินยอดรวมใบตั้งหนี้')));
+      return;
+    }
+    // ใบจ่ายชำระที่หักมัดจำ แต่ใบตั้งหนี้ที่จ่ายหักมัดจำไปแล้วตอนตั้งหนี้ — เตือนก่อนหักซ้ำ
+    if (action == 'Post' && _isPayment && _advanceRows.isNotEmpty) {
+      final already = _openInvoices.where((inv) => inv.invAdvanceAmountFc > 0 && _applyRows.any((a) => a.appliedToId == inv.id)).toList();
+      if (already.isNotEmpty) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(isEnglish ? 'Deposit already deducted on the bill' : 'ใบตั้งหนี้หักเงินมัดจำไปแล้ว'),
+            content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(isEnglish
+                  ? 'These bills already deducted a deposit when recorded. Deduct another deposit in this payment?'
+                  : 'ใบตั้งหนี้ต่อไปนี้หักเงินมัดจำไปแล้วตอนตั้งหนี้ ต้องการหักเงินมัดจำในใบจ่ายชำระนี้อีกหรือไม่'),
+              const SizedBox(height: 8),
+              for (final inv in already) Text('${inv.docNo}: ${_fmt.format(inv.invAdvanceAmountFc)}', style: const TextStyle(fontSize: 13)),
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Continue' : 'ทำต่อ')),
+            ],
+          ),
+        );
+        if (ok != true || !mounted) return;
+      }
+    }
     final lc = _exchangeRate;
     final userName = _authService.currentUser?.userName ?? '';
 
@@ -874,6 +917,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       dim1Id: _dimSelections[1], dim2Id: _dimSelections[2],
       dim3Id: _dimSelections[3], dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
       branchId: _selectedBranch?.branchId,
+      priceIncludesVat: _priceIncludesVat,
       createdBy: _transactionId == 0 ? userName : null,
       updatedBy: _transactionId != 0 ? userName : null,
     );
@@ -883,10 +927,10 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
       final price = double.tryParse(r.priceCtrl.text) ?? 0;
       final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
-      final sub = qty * price;
-      final disc = sub * discPct / 100;
-      final afterDisc = sub - disc;
-      final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+      final amt = _amt(r);
+      final disc = amt.discount;
+      final afterDisc = amt.net;
+      final vat = amt.vat;
       final itemName = r.itemNameCtrl.text.isEmpty ? null : r.itemNameCtrl.text;
       return ApTransactionDetail(
         lineNo: i + 1,
@@ -915,7 +959,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             appliedToId: a.appliedToId, appliedToDocNo: a.appliedToDocNo,
             appliedAmountFc: a.appliedAmountLc,
             appliedAmountLc: a.appliedAmountLc * lc,
-            applyType: 'advance',
+            applyType: _isPurchaseInvoice ? 'inv_advance' : 'advance',
           )),
       ..._raRows.map((a) => ApTransactionApply(
             appliedToId: a.appliedToId, appliedToDocNo: a.appliedToDocNo,
@@ -1242,7 +1286,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             _buildHeaderSection(),
             if (_hasDetailRows) ...[const SizedBox(height: 8), _buildDetailSection()],
             if (_hasApplySection) ...[const SizedBox(height: 8), _buildApplySection()],
-            if (_hasApplySection && _isPayment) ...[const SizedBox(height: 8), _buildAdvanceSection()],
+            if ((_hasApplySection && _isPayment) || (_isPurchaseInvoice && (_openAdvances.isNotEmpty || _advanceRows.isNotEmpty)))
+              ...[const SizedBox(height: 8), _buildAdvanceSection()],
             if (_hasAdvanceRefund) ...[const SizedBox(height: 8), _buildAdvanceRefundSection()],
             if (_hasWhtSection) ...[const SizedBox(height: 8), _buildWhtSection()],
             if (_hasPaymentRows) ...[const SizedBox(height: 8), _buildPaymentSection()],
@@ -1529,12 +1574,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
 
   // ── Detail Section (PI / CN / DN) ──────────────────────────────────────────
   void _onDetailFieldChanged(_DetailRow r) {
-    final qty     = double.tryParse(r.qtyCtrl.text)     ?? 0;
-    final price   = double.tryParse(r.priceCtrl.text)   ?? 0;
-    final discPct = double.tryParse(r.discPctCtrl.text)  ?? 0;
-    final afterDisc = qty * price * (1 - discPct / 100);
-    final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
-    r.totalCtrl.text = (afterDisc + vat).toStringAsFixed(2);
+    r.totalCtrl.text = _amt(r).total.toStringAsFixed(2);
     _recalcTotals();
   }
 
@@ -1542,7 +1582,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     final total   = double.tryParse(value)              ?? 0;
     final qty     = double.tryParse(r.qtyCtrl.text)     ?? 0;
     final discPct = double.tryParse(r.discPctCtrl.text)  ?? 0;
-    final netFactor = 1 + (r.vatType == 'NOVAT' ? 0.0 : r.vatRate / 100);
+    // ราคารวม VAT: ยอดรวมคือราคาที่กรอกหลังส่วนลด ไม่ต้องถอด VAT
+    final netFactor = _priceIncludesVat ? 1.0 : 1 + (r.vatType == 'NOVAT' ? 0.0 : r.vatRate / 100);
     final afterDisc  = total / netFactor;
     final qtyFactor  = qty * (1 - discPct / 100);
     r.priceCtrl.text = qtyFactor != 0 ? (afterDisc / qtyFactor).toStringAsFixed(4) : '0.0000';
@@ -1585,18 +1626,38 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _sectionHeader(isEnglish ? 'Item / Service Details' : 'รายละเอียดสินค้า/บริการ', _detailExpanded, () => setState(() => _detailExpanded = !_detailExpanded),
           icon: Icons.list_alt,
-          trailing: _isReadOnly ? null : TextButton.icon(
-            onPressed: () {
-              final defaultVat = _vatRates.isNotEmpty ? _vatRates.first : null;
-              setState(() => _detailRows.add(_DetailRow(
-                vatType: defaultVat?.vatCode ?? 'VAT7',
-                vatRate: defaultVat?.rate ?? 7.0,
-                expenseAccountId: _docSetup?.expenseAccountId,
-              )));
-            },
-            icon: const Icon(Icons.add, size: 16),
-            label: Text(isEnglish ? 'Add Item' : 'เพิ่มรายการ'),
-          ),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            // ราคารวม VAT — ยอดก่อน VAT/VAT/ยอดรวมคำนวณใหม่ทั้งเอกสาร
+            Checkbox(
+              value: _priceIncludesVat,
+              visualDensity: VisualDensity.compact,
+              onChanged: _isReadOnly ? null : (v) {
+                setState(() {
+                  _priceIncludesVat = v ?? false;
+                  for (final r in _detailRows) {
+                    r.totalCtrl.text = _amt(r).total.toStringAsFixed(2);
+                  }
+                });
+                _recalcTotals();
+              },
+            ),
+            Text(isEnglish ? 'Prices include VAT' : 'ราคารวม VAT', style: const TextStyle(fontSize: 13)),
+            if (!_isReadOnly) ...[
+              const SizedBox(width: 12),
+              TextButton.icon(
+                onPressed: () {
+                  final defaultVat = _vatRates.isNotEmpty ? _vatRates.first : null;
+                  setState(() => _detailRows.add(_DetailRow(
+                    vatType: defaultVat?.vatCode ?? 'VAT7',
+                    vatRate: defaultVat?.rate ?? 7.0,
+                    expenseAccountId: _docSetup?.expenseAccountId,
+                  )));
+                },
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(isEnglish ? 'Add Item' : 'เพิ่มรายการ'),
+              ),
+            ],
+          ]),
         ),
         if (_detailExpanded) ...[
           const SizedBox(height: 8),
@@ -1630,11 +1691,9 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                     ],
                     rows: _detailRows.asMap().entries.map((e) {
                       final i = e.key; final r = e.value;
-                      final qty     = double.tryParse(r.qtyCtrl.text)    ?? 0;
-                      final price   = double.tryParse(r.priceCtrl.text)  ?? 0;
-                      final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
-                      final afterDisc = qty * price * (1 - discPct / 100);
-                      final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+                      final amt = _amt(r);
+                      final afterDisc = amt.net;
+                      final vat = amt.vat;
                       return DataRow(cells: [
                         DataCell(Text('${i + 1}', style: const TextStyle(fontSize: 12))),
                         DataCell(SizedBox(width: 90, child: TextFormField(
@@ -1805,7 +1864,9 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     return Card(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _sectionHeader(isEnglish ? 'Deduct Advance Payment' : 'หักมัดจำล่วงหน้า', _advanceExpanded, () => setState(() => _advanceExpanded = !_advanceExpanded), icon: Icons.money_off),
+        _sectionHeader(_isPurchaseInvoice
+            ? (isEnglish ? 'Deduct Deposit on This Bill' : 'หักเงินมัดจำในใบตั้งหนี้')
+            : (isEnglish ? 'Deduct Advance Payment' : 'หักมัดจำล่วงหน้า'), _advanceExpanded, () => setState(() => _advanceExpanded = !_advanceExpanded), icon: Icons.money_off),
         if (_advanceExpanded)
           _buildInvoiceSelectionTable(
             open: _openAdvances,
@@ -2157,6 +2218,10 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             bold: true, color: Colors.blue[800],
           ),
           if (isFc) _totalsLine(isEnglish ? 'Total (${CurrencyService.baseCode})' : 'ยอดรวม (${CurrencyService.baseCode})', _totalAmountFc * lc, bold: true, color: Colors.blue[800]),
+          if (_invAdvanceTotal > 0) ...[
+            _totalsLine(isEnglish ? 'Less: deposit deducted' : 'หัก เงินมัดจำ', -_invAdvanceTotal),
+            _totalsLine(isEnglish ? 'Payable after deposit' : 'ยอดเจ้าหนี้หลังหักมัดจำ', _totalAmountFc - _invAdvanceTotal, bold: true, color: Colors.blue[800]),
+          ],
           if (_hasWhtSection && totalWht > 0) ...[
             const Divider(),
             _totalsLine(isEnglish ? 'Withholding Tax' : 'WHT หัก ณ ที่จ่าย', totalWht, color: Colors.red),
@@ -2444,26 +2509,23 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       if (_totalAmountFc == 0 && _detailRows.isEmpty) return lines;
       if (sysType == apDocTypePurchaseInvoice || sysType == apDocTypeDebitNote) {
         for (final r in _detailRows) {
-          final qty      = double.tryParse(r.qtyCtrl.text) ?? 0;
-          final price    = double.tryParse(r.priceCtrl.text) ?? 0;
-          final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
-          final afterDisc = qty * price * (1 - discPct / 100);
-          final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+          final amt = _amt(r);
+          final afterDisc = amt.net;
+          final vat      = amt.vat;
           final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : expenseDefaultDesc;
           lines.add(_GlLine(notSetupExpenseLabel, notSetupLabel, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
           if (vat > 0) {
             lines.add(_GlLine(notSetupVatLabel, 'VAT Input', vatDesc, vat * lc, 0, isFcDoc ? vat : 0, 0));
           }
         }
-        lines.add(_GlLine(notSetupApLabel, apDesc, apDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+        lines.add(_GlLine(notSetupApLabel, apDesc, apDesc, 0, (_totalAmountFc - _invAdvanceTotal) * lc, 0, isFcDoc ? _totalAmountFc - _invAdvanceTotal : 0));
+        _addInvAdvancePreview(lines, notSetupAdvanceLabel, advanceLabel, notSetupVatLabel, 'VAT Input', lc, isFcDoc);
       } else if (sysType == apDocTypeCreditNote) {
         lines.add(_GlLine(notSetupApLabel, apDesc, apDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
         for (final r in _detailRows) {
-          final qty      = double.tryParse(r.qtyCtrl.text) ?? 0;
-          final price    = double.tryParse(r.priceCtrl.text) ?? 0;
-          final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
-          final afterDisc = qty * price * (1 - discPct / 100);
-          final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+          final amt = _amt(r);
+          final afterDisc = amt.net;
+          final vat      = amt.vat;
           final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : expenseDefaultDesc;
           lines.add(_GlLine(notSetupExpenseLabel, notSetupLabel, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
           if (vat > 0) {
@@ -2549,13 +2611,11 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     // ── PI (10) / DN (50) ────────────────────────────────────────────────
     if (sysType == apDocTypePurchaseInvoice || sysType == apDocTypeDebitNote) {
       for (final r in _detailRows) {
-        final qty      = double.tryParse(r.qtyCtrl.text)    ?? 0;
-        final price    = double.tryParse(r.priceCtrl.text)  ?? 0;
-        final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
-        final sub      = qty * price;
-        final disc     = sub * discPct / 100;
-        final afterDisc = sub - disc;
-        final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+        final amt = _amt(r);
+        final sub      = amt.gross;
+        final disc     = amt.discount;
+        final afterDisc = amt.net;
+        final vat      = amt.vat;
         final expAccId = r.expenseAccountId ?? setup.expenseAccountId;
         final expCode  = acctCode(expAccId, setup.expenseAccountCode);
         final expName  = acctName(expAccId, setup.expenseAccountName);
@@ -2593,19 +2653,20 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           lines.add(_GlLine(vatAcctCode, vatAcctName, vatDesc, vat * lc, 0, isFcDoc ? vat : 0, 0));
         }
       }
-      lines.add(_GlLine(apCode, apName.isEmpty ? 'AP Account' : apName, apDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
+      lines.add(_GlLine(apCode, apName.isEmpty ? 'AP Account' : apName, apDesc, 0, (_totalAmountFc - _invAdvanceTotal) * lc, 0, isFcDoc ? _totalAmountFc - _invAdvanceTotal : 0));
+      _addInvAdvancePreview(lines,
+          setup.advanceAccountCode ?? notSetupAdvanceLabel, acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel),
+          setup.vatInputAccountCode ?? notSetupVatLabel, acctName(setup.vatInputAccountId, setup.vatInputAccountName ?? 'VAT Input'), lc, isFcDoc);
     }
     // ── CN (30) ─────────────────────────────────────────────────────────
     else if (sysType == apDocTypeCreditNote) {
       lines.add(_GlLine(apCode, apName.isEmpty ? 'AP Account' : apName, apDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
       for (final r in _detailRows) {
-        final qty      = double.tryParse(r.qtyCtrl.text)    ?? 0;
-        final price    = double.tryParse(r.priceCtrl.text)  ?? 0;
-        final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
-        final sub      = qty * price;
-        final disc     = sub * discPct / 100;
-        final afterDisc = sub - disc;
-        final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+        final amt = _amt(r);
+        final sub      = amt.gross;
+        final disc     = amt.discount;
+        final afterDisc = amt.net;
+        final vat      = amt.vat;
         final expAccId = r.expenseAccountId ?? setup.expenseAccountId;
         final expCode  = acctCode(expAccId, setup.expenseAccountCode);
         final expName  = acctName(expAccId, setup.expenseAccountName);
@@ -2690,7 +2751,12 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         lines.add(_GlLine(setup.whtPayableAccountCode ?? '—', acctName(setup.whtPayableAccountId, setup.whtPayableAccountName ?? 'WHT Payable'), isEnglish ? 'Withholding Tax' : 'ภาษีหัก ณ ที่จ่าย', 0, totalWht * lc, 0, isFcDoc ? totalWht : 0));
       }
       if (totalAdv > 0) {
-        lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), isEnglish ? 'Advance Deducted' : 'หักมัดจำ', 0, totalAdv * lc, 0, isFcDoc ? totalAdv : 0));
+        // ส่วนก่อน VAT ล้างเงินมัดจำจ่าย ส่วน VAT ของมัดจำกลับรายการภาษีซื้อ (เหมือน backend)
+        final advVat = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc * _depositVatRatio(a.appliedToId));
+        lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), isEnglish ? 'Advance Deducted' : 'หักมัดจำ', 0, (totalAdv - advVat) * lc, 0, isFcDoc ? totalAdv - advVat : 0));
+        if (advVat > 0.005) {
+          lines.add(_GlLine(setup.vatInputAccountCode ?? '—', acctName(setup.vatInputAccountId, setup.vatInputAccountName ?? 'VAT Input'), isEnglish ? 'Deposit VAT' : 'ภาษีซื้อของมัดจำ', 0, advVat * lc, 0, isFcDoc ? advVat : 0));
+        }
       }
       // รับรู้ VAT รอตัดบัญชีของใบแจ้งหนี้ตามสัดส่วนที่จ่าย — Dr ภาษีซื้อ / Cr ภาษีซื้อรอตัด (มิเรอร์ backend)
       double deferredVatLc = 0, deferredVatFc = 0;
@@ -2719,6 +2785,26 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       }
     }
     return lines;
+  }
+
+  // สัดส่วน VAT ของใบมัดจำ (VAT / ยอดรวม) — ใช้แยกยอดหักมัดจำเป็นส่วนก่อน VAT และ VAT
+  double _depositVatRatio(int depositId) {
+    final dep = _openAdvances.where((d) => d.id == depositId).firstOrNull;
+    return dep != null && dep.totalAmountLc != 0 ? dep.vatAmountLc / dep.totalAmountLc : 0.0;
+  }
+
+  // หักเงินมัดจำตอนตั้งหนี้: Cr เงินมัดจำจ่าย (ส่วนก่อน VAT) + Cr ภาษีซื้อ (VAT ของมัดจำ) แทนเจ้าหนี้ส่วนนั้น
+  void _addInvAdvancePreview(List<_GlLine> lines, String advCode, String advName, String vatCode, String vatName, double lc, bool isFcDoc) {
+    if (_invAdvanceTotal <= 0) return;
+    final depLabel = _isEnglish ? 'Deposit deducted' : 'หักเงินมัดจำ';
+    for (final a in _advanceRows) {
+      final vatPart = a.appliedAmountLc * _depositVatRatio(a.appliedToId);
+      final netPart = a.appliedAmountLc - vatPart;
+      lines.add(_GlLine(advCode, advName, '$depLabel ${a.appliedToDocNo}', 0, netPart * lc, 0, isFcDoc ? netPart : 0));
+      if (vatPart > 0) {
+        lines.add(_GlLine(vatCode, vatName, '$depLabel ${a.appliedToDocNo}', 0, vatPart * lc, 0, isFcDoc ? vatPart : 0));
+      }
+    }
   }
 
   Widget _sectionHeader(String title, bool expanded, VoidCallback onToggle, {Widget? trailing, IconData? icon}) {

@@ -109,6 +109,7 @@ class ApTransactionHeader {
   final String? branchCode;
   final String? branchNameThai;
   final String? branchNameEng;
+  final bool priceIncludesVat; // ราคาที่กรอกรวม VAT (ยอดที่เก็บยังเป็นก่อน VAT)
   // Audit
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -162,6 +163,7 @@ class ApTransactionHeader {
     this.dim4Id, this.dim4Name,
     this.dim5Id, this.dim5Name,
     this.branchId, this.branchCode, this.branchNameThai, this.branchNameEng,
+    this.priceIncludesVat = false,
     this.createdAt, this.updatedAt, this.createdBy, this.updatedBy,
   });
 
@@ -214,6 +216,7 @@ class ApTransactionHeader {
       dim4Id: json['dim4_id'], dim4Name: json['dim4_name'],
       dim5Id: json['dim5_id'], dim5Name: json['dim5_name'],
       branchId: json['branch_id'],
+      priceIncludesVat: json['price_includes_vat'] == true,
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
       branchNameEng: json['branch_name_eng'],
@@ -257,6 +260,7 @@ class ApTransactionHeader {
         if (dim4Id != null) 'dim4_id': dim4Id,
         if (dim5Id != null) 'dim5_id': dim5Id,
         if (branchId != null) 'branch_id': branchId,
+        'price_includes_vat': priceIncludesVat,
         if (createdBy != null) 'created_by': createdBy,
         if (updatedBy != null) 'updated_by': updatedBy,
       };
@@ -634,6 +638,7 @@ class ApOpenInvoice {
   final double deferredVatAmountFc;
   // บัญชีเจ้าหนี้ที่ใบตั้งหนี้ลงไว้ — การจ่ายชำระล้างเข้าบัญชีนี้
   final int? apAccountId;
+  final double invAdvanceAmountFc; // มัดจำที่ใบตั้งหนี้หักไปแล้วตอนตั้งหนี้
 
   ApOpenInvoice({
     required this.id, required this.docNo,
@@ -643,6 +648,7 @@ class ApOpenInvoice {
     this.deferredVatAmountLc = 0, this.deferredVatAmountFc = 0,
     this.currencyCode = 'THB', this.exchangeRate = 1,
     this.docCode, this.sysDocType, this.apAccountId,
+    this.invAdvanceAmountFc = 0,
   });
 
   factory ApOpenInvoice.fromJson(Map<String, dynamic> json) {
@@ -664,6 +670,7 @@ class ApOpenInvoice {
       deferredVatAmountLc: toDouble(json['deferred_vat_amount_lc']),
       deferredVatAmountFc: toDouble(json['deferred_vat_amount_fc']),
       apAccountId: json['ap_account_id'] as int?,
+      invAdvanceAmountFc: toDouble(json['inv_advance_amount_fc']),
     );
   }
 }

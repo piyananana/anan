@@ -107,10 +107,11 @@ class ApTransactionService {
     }
   }
 
-  Future<List<ApOpenInvoice>> fetchOpenAdvances(int vendorId) async {
+  // transactionId = เอกสารที่เปิดอยู่ — รวมใบมัดจำที่เอกสารนั้นหักไว้แล้ว
+  Future<List<ApOpenInvoice>> fetchOpenAdvances(int vendorId, {int transactionId = 0}) async {
     final headers = await authService.getAuthHeader();
     final uri = Uri.parse('$baseUrl/ap_transaction/open_advances')
-        .replace(queryParameters: {'vendor_id': vendorId.toString()});
+        .replace(queryParameters: {'vendor_id': vendorId.toString(), if (transactionId > 0) 'transaction_id': transactionId.toString()});
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {
       return (json.decode(response.body) as List)
