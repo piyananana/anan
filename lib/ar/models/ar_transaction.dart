@@ -46,6 +46,7 @@ class ArTransactionHeader {
   final DateTime? expectedPaymentDate;
   final String? customerPoNo; // ใบแจ้งหนี้: เลขที่ใบสั่งซื้อของลูกค้า
   final DateTime? customerPoDate;
+  final bool priceIncludesVat; // ราคาที่กรอกรวม VAT (ยอดที่เก็บเป็นยอดก่อน VAT เหมือนเดิม)
   final int periodId;
   final int customerId;
   final String? customerCode;
@@ -76,6 +77,7 @@ class ArTransactionHeader {
   final double advanceAmountLc;
   // Deferred VAT still pending recognition (sum of detail lines with is_deferred_vat=true)
   final double deferredVatAmountLc;
+  final double invAdvanceAmountFc; // มัดจำที่ใบแจ้งหนี้หักไปแล้วตอนตั้งหนี้ (รายการค้างรับ)
   final double deferredVatAmountFc;
   // References
   final String? refNo;
@@ -117,6 +119,7 @@ class ArTransactionHeader {
     this.expectedPaymentDate,
     this.customerPoNo,
     this.customerPoDate,
+    this.priceIncludesVat = false,
     this.periodId = 0,
     required this.customerId,
     this.customerCode,
@@ -143,6 +146,7 @@ class ArTransactionHeader {
     this.whtAmountLc = 0,
     this.advanceAmountLc = 0,
     this.deferredVatAmountLc = 0,
+    this.invAdvanceAmountFc = 0,
     this.deferredVatAmountFc = 0,
     this.refNo,
     this.refDocId,
@@ -181,6 +185,7 @@ class ArTransactionHeader {
       expectedPaymentDate: parseLocalDateNullable(j['expected_payment_date']),
       customerPoNo: j['customer_po_no'] as String?,
       customerPoDate: parseLocalDateNullable(j['customer_po_date']),
+      priceIncludesVat: j['price_includes_vat'] == true,
       periodId: j['period_id'] as int? ?? 0,
       customerId: j['customer_id'] as int? ?? 0,
       customerCode: j['customer_code'],
@@ -207,6 +212,7 @@ class ArTransactionHeader {
       whtAmountLc: _toDouble(j['wht_amount_lc']) ?? 0,
       advanceAmountLc: _toDouble(j['advance_amount_lc']) ?? 0,
       deferredVatAmountLc: _toDouble(j['deferred_vat_amount_lc']) ?? 0,
+      invAdvanceAmountFc: _toDouble(j['inv_advance_amount_fc']) ?? 0,
       deferredVatAmountFc: _toDouble(j['deferred_vat_amount_fc']) ?? 0,
       refNo: j['ref_no'],
       refDocId: j['ref_doc_id'] as int?,
@@ -245,6 +251,7 @@ class ArTransactionHeader {
         'expected_payment_date': expectedPaymentDate != null ? formatLocalDate(expectedPaymentDate!) : null,
         'customer_po_no': customerPoNo,
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate!) : null,
+        'price_includes_vat': priceIncludesVat,
         'period_id': periodId,
         'customer_id': customerId,
         'customer_code': customerCode,

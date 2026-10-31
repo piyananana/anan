@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import '../../utils/vat_calc.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -168,6 +169,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
   // Totals
   double _subtotalFc = 0;
+  bool _priceIncludesVat = false; // ราคาที่กรอกรวม VAT — ดู lib/utils/vat_calc.dart
   double _discountAmountFc = 0;
   double _beforeVatFc = 0;
   double _vatAmountFc = 0;
@@ -193,7 +195,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   // ตรวจวงเงินเครดิต (ตั้งหนี้ / เพิ่มหนี้ / ลดหนี้) — ยอดรวม VAT สกุลท้องถิ่น ใบลดหนี้ติดลบ
   bool get _hasCreditCheck         => _hasSalespersons;
   double get _creditAmount =>
-      (const ['50', '55'].contains(_selectedDocType?.sysDocType) ? -1 : 1) * (_totalAmountFc * _exchangeRate * 100).roundToDouble() / 100;
+      (const ['50', '55'].contains(_selectedDocType?.sysDocType) ? -1 : 1) * ((_totalAmountFc - _invAdvanceTotal) * _exchangeRate * 100).roundToDouble() / 100;
+  // มัดจำที่หักในใบแจ้งหนี้ (ตอนตั้งหนี้) — ยอดลูกหนี้ของใบนี้ = ยอดรวม − มัดจำที่หัก
+  double get _invAdvanceTotal => _isInvoice ? _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc) : 0;
 
   bool _headerExpanded  = true;
   bool _detailExpanded  = true;
@@ -319,6 +323,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         _exchangeRate = h.exchangeRate;
         _refNoCtrl.text = h.refNo ?? '';
         _poNoCtrl.text = h.customerPoNo ?? '';
+        _priceIncludesVat = h.priceIncludesVat;
         _poDate = h.customerPoDate;
         _descCtrl.text = h.description ?? '';
         _status = h.status;
@@ -386,7 +391,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 ))
             .toList();
         _advanceRows = data.applies
-            .where((a) => isBc ? a.applyType == 'bc_advance' : a.applyType == 'advance')
+            .where((a) => isBc ? a.applyType == 'bc_advance' : (a.applyType == 'advance' || a.applyType == 'inv_advance'))
             .map((a) => _ApplyRow(
                   appliedToId: a.appliedToId,
                   appliedToDocNo: a.appliedToDocNo ?? '',
@@ -438,7 +443,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         await _loadOpenInvoicesKeepApplied(_selectedCustomer!.id!);
       }
       // โหลด open advances และ open CNs สำหรับ Receipt, BC
-      if ((_isReceipt || _isBillCollection) && _selectedCustomer?.id != null) {
+      if ((_isReceipt || _isBillCollection || _isInvoice) && _selectedCustomer?.id != null) {
         await _loadOpenAdvancesKeepApplied(_selectedCustomer!.id!);
         await _loadOpenCreditNotesKeepApplied(_selectedCustomer!.id!);
       }
@@ -487,6 +492,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       _refNoCtrl.clear();
       _poNoCtrl.clear();
       _poDate = null;
+      _priceIncludesVat = false;
       _descCtrl.clear();
       _status = 'Draft';
       _isReadOnly = false;
@@ -742,7 +748,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       _loadOpenInvoices(customer.id!);
     }
     // Load open advances และ CNs สำหรับ Receipt, BC
-    if ((_isReceipt || _isBillCollection) && customer != null) {
+    if ((_isReceipt || _isBillCollection || _isInvoice) && customer != null) {
       _loadOpenAdvances(customer.id!);
       _loadOpenCreditNotes(customer.id!);
     }
@@ -1115,6 +1121,16 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     });
   }
 
+  // ยอดของบรรทัด (ก่อน VAT) ตามตัวเลือกราคารวม VAT
+  LineAmounts _amt(_DetailRow r) => calcLineAmounts(
+        qty: double.tryParse(r.qtyCtrl.text) ?? 0,
+        price: double.tryParse(r.priceCtrl.text) ?? 0,
+        discountPercent: double.tryParse(r.discPctCtrl.text) ?? 0,
+        vatRate: r.vatRate,
+        noVat: r.vatType == 'NOVAT',
+        priceIncludesVat: _priceIncludesVat,
+      );
+
   void _recalcTotals() {
     double subFc = 0;
     double discFc = 0;
@@ -1133,13 +1149,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       subFc = _advanceRefundRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
     } else {
       for (final r in _detailRows) {
-        final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
-        final price = double.tryParse(r.priceCtrl.text) ?? 0;
-        final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
-        final sub = qty * price;
-        final disc = sub * discPct / 100;
-        final afterDisc = sub - disc;
-        final vat = afterDisc * r.vatRate / 100;
+        final amt = _amt(r);
+        final sub = amt.gross;
+        final disc = amt.discount;
+        final vat = amt.vat;
         subFc += sub;
         discFc += disc;
         vatFc += vat;
@@ -1158,6 +1171,31 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
   // Post: ตรวจวงเงินก่อน — เกินและยังไม่ได้รับอนุมัติ ให้เลือกบันทึกร่างแล้วขออนุมัติ
   Future<void> _onPost() async {
+    // ใบเสร็จที่หักมัดจำ แต่ใบแจ้งหนี้ที่รับชำระหักมัดจำไปแล้วตอนตั้งหนี้ — เตือนก่อนหักซ้ำ
+    if (_isReceipt && _advanceRows.isNotEmpty) {
+      final already = _openInvoices.where((inv) => inv.invAdvanceAmountFc > 0 && _applyRows.any((a) => a.appliedToId == inv.id)).toList();
+      if (already.isNotEmpty) {
+        final isEnglish = _isEnglish;
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(isEnglish ? 'Deposit already deducted on the invoice' : 'ใบแจ้งหนี้หักเงินมัดจำไปแล้ว'),
+            content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(isEnglish
+                  ? 'These invoices already deducted a deposit when billed. Deduct another deposit in this receipt?'
+                  : 'ใบแจ้งหนี้ต่อไปนี้หักเงินมัดจำไปแล้วตอนตั้งหนี้ ต้องการหักเงินมัดจำในใบเสร็จนี้อีกหรือไม่'),
+              const SizedBox(height: 8),
+              for (final inv in already) Text('${inv.docNo}: ${_fmt.format(inv.invAdvanceAmountFc)}', style: const TextStyle(fontSize: 13)),
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Continue' : 'ทำต่อ')),
+            ],
+          ),
+        );
+        if (ok != true || !mounted) return;
+      }
+    }
     if (_hasCreditCheck && _selectedCustomer?.id != null) {
       final go = await checkCreditBeforePost(
         context,
@@ -1210,6 +1248,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     }
 
     _recalcTotals();
+    if (_isInvoice && _invAdvanceTotal > _totalAmountFc + 0.005) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish
+          ? 'Deposit deducted exceeds the invoice total'
+          : 'ยอดหักเงินมัดจำเกินยอดรวมของใบแจ้งหนี้')));
+      return;
+    }
     final userName = _authService.currentUser?.userName ?? '';
     final lc = _exchangeRate;
 
@@ -1243,6 +1287,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       refNo: _refNoCtrl.text.isEmpty ? null : _refNoCtrl.text,
       customerPoNo: _isInvoice && _poNoCtrl.text.trim().isNotEmpty ? _poNoCtrl.text.trim() : null,
       customerPoDate: _isInvoice ? _poDate : null,
+      priceIncludesVat: _priceIncludesVat,
       description: _descCtrl.text.isEmpty ? null : _descCtrl.text,
       status: _status,
       createdBy: _transactionId == 0 ? userName : null,
@@ -1261,10 +1306,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
       final price = double.tryParse(r.priceCtrl.text) ?? 0;
       final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
-      final sub = qty * price;
-      final disc = sub * discPct / 100;
-      final afterDisc = sub - disc;
-      final vat = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+      final amt = _amt(r);
+      final disc = amt.discount;
+      final afterDisc = amt.net;
+      final vat = amt.vat;
       return ArTransactionDetail(
         lineNo: i + 1,
         itemCode: r.itemCodeCtrl.text.isEmpty ? null : r.itemCodeCtrl.text,
@@ -1300,7 +1345,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             appliedToId: a.appliedToId,
             appliedAmountFc: a.appliedAmountLc,
             appliedAmountLc: a.appliedAmountLc * lc,
-            applyType: _isBillCollection ? 'bc_advance' : 'advance',
+            applyType: _isBillCollection ? 'bc_advance' : _isInvoice ? 'inv_advance' : 'advance',
           )),
       ..._cnRows.map((a) => ArTransactionApply(
             appliedToId: a.appliedToId,
@@ -1690,12 +1735,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   // ── Detail row sync helpers ───────────────────────────────────────────────
   // เมื่อ qty / price / disc / vat เปลี่ยน → คำนวณ total ใหม่ แล้วอัปเดต totalCtrl
   void _onDetailFieldChanged(_DetailRow r) {
-    final qty     = double.tryParse(r.qtyCtrl.text)    ?? 0;
-    final price   = double.tryParse(r.priceCtrl.text)  ?? 0;
-    final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
-    final afterDisc = qty * price * (1 - discPct / 100);
-    final vat     = afterDisc * r.vatRate / 100;
-    r.totalCtrl.text = (afterDisc + vat).toStringAsFixed(2);
+    final amt = _amt(r);
+    r.totalCtrl.text = amt.total.toStringAsFixed(2);
     _recalcTotals();
   }
 
@@ -1705,7 +1746,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final qty     = double.tryParse(r.qtyCtrl.text)    ?? 0;
     final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
     // total = afterDisc × (1 + vatRate/100)  →  afterDisc = total / (1 + vatRate/100)
-    final afterDisc = total / (1 + r.vatRate / 100);
+    // ราคารวม VAT: ราคาที่กรอกรวม VAT อยู่แล้ว จึงไม่ต้องถอด VAT ออกก่อนหาราคา/หน่วย
+    final afterDisc = _priceIncludesVat || r.vatType == 'NOVAT' ? total : total / (1 + r.vatRate / 100);
     // afterDisc = qty × price × (1 - discPct/100)  →  price = afterDisc / (qty × (1-discPct/100))
     final qtyFactor = qty * (1 - discPct / 100);
     r.priceCtrl.text = qtyFactor != 0
@@ -1918,6 +1960,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   _buildDetailSection(),
                   const SizedBox(height: 16),
                 ],
+                // ใบแจ้งหนี้: หักเงินมัดจำตอนตั้งหนี้ (ฐาน VAT ลดลงตามมัดจำ — ดู postGlEntry ฝั่ง backend)
+                if (_isInvoice && (_openAdvances.isNotEmpty || _advanceRows.isNotEmpty)) ...[
+                  ..._advanceCardWidgets(),
+                  const SizedBox(height: 16),
+                ],
                 if (_hasApplySection) ...[
                   _buildApplySection(),
                   const SizedBox(height: 16),
@@ -1991,7 +2038,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                     if (_isReceipt || _isCreditNoteWithBill || _isDebitNoteWithBill || _isBillCollection) {
                       _loadOpenInvoices(_selectedCustomer!.id!);
                     }
-                    if (_isReceipt || _isBillCollection) {
+                    if (_isReceipt || _isBillCollection || _isInvoice) {
                       _loadOpenAdvances(_selectedCustomer!.id!);
                       _loadOpenCreditNotes(_selectedCustomer!.id!);
                     }
@@ -2316,6 +2363,20 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               onPressed: () => setState(() => _detailExpanded = !_detailExpanded),
             ),
             const Spacer(),
+            // ราคารวม VAT — ยอดก่อน VAT/VAT/ยอดรวมคำนวณใหม่ทั้งเอกสาร
+            Checkbox(
+              value: _priceIncludesVat,
+              visualDensity: VisualDensity.compact,
+              onChanged: _isReadOnly ? null : (v) => setState(() {
+                _priceIncludesVat = v ?? false;
+                for (final r in _detailRows) {
+                  r.totalCtrl.text = _amt(r).total.toStringAsFixed(2);
+                }
+                _recalcTotals();
+              }),
+            ),
+            Text(isEnglish ? 'Prices include VAT' : 'ราคารวม VAT', style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 12),
             if (!_isReadOnly)
               ElevatedButton.icon(
                 onPressed: _addDetailRow,
@@ -2356,13 +2417,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 rows: _detailRows.asMap().entries.map((e) {
                   final i = e.key;
                   final r = e.value;
-                  final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
-                  final price = double.tryParse(r.priceCtrl.text) ?? 0;
-                  final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
-                  final sub = qty * price;
-                  final disc = sub * discPct / 100;
-                  final afterDisc = sub - disc;
-                  final vat = afterDisc * r.vatRate / 100;
+                  final amt = _amt(r);
+                  final afterDisc = amt.net;
+                  final vat = amt.vat;
 
                   return DataRow(cells: [
                     DataCell(Text('${i + 1}', style: const TextStyle(fontSize: 12))),
@@ -2514,6 +2571,111 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         ]),
       ),
     );
+  }
+
+  // การ์ดหักมัดจำ — ใบเสร็จ/ใบวางบิล (หักตอนรับชำระ) และใบแจ้งหนี้ (หักตอนตั้งหนี้, apply_type 'inv_advance')
+  List<Widget> _advanceCardWidgets() {
+    final isEnglish = _isEnglish;
+    final totalAdvance = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
+    final currency = _selectedCurrency?.currencyCode ?? '';
+    final isFcDoc = _selectedCurrency?.baseCurrencyFlag == false;
+    return [
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.currency_exchange, size: 18, color: Colors.orange[700]),
+                const SizedBox(width: 6),
+                Text(isEnglish ? 'Advance Deduction' : 'หักมัดจำ', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold, color: Colors.orange[800])),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: Icon(_advanceExpanded ? Icons.expand_less : Icons.expand_more, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  onPressed: () => setState(() => _advanceExpanded = !_advanceExpanded),
+                ),
+              ]),
+              if (_advanceExpanded) ...[
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(Colors.orange[50]),
+                      columnSpacing: 12,
+                      dataRowMinHeight: 36,
+                      dataRowMaxHeight: 46,
+                      columns: [
+                        DataColumn(label: Text(isEnglish ? 'Advance No.' : 'เลขที่มัดจำ', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Advance Amount' : 'ยอดมัดจำ'} ($currency)' : (isEnglish ? 'Advance Amount' : 'ยอดมัดจำ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Balance' : 'คงเหลือ'} ($currency)' : (isEnglish ? 'Balance' : 'คงเหลือ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Deduct' : 'หักมัดจำ'} ($currency)' : (isEnglish ? 'Deduct' : 'หักมัดจำ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      ],
+                      rows: _openAdvances.where((adv) => _isInvoiceDateValid(adv.docDate)).map((adv) {
+                        final existing = _advanceRows.where((a) => a.appliedToId == adv.id).firstOrNull;
+                        final advCtrl = _advanceCtrlMap.putIfAbsent(
+                          adv.id,
+                          () => TextEditingController(text: existing?.appliedAmountLc.toStringAsFixed(2) ?? ''),
+                        );
+                        final advTotalDisplay = isFcDoc ? adv.totalAmountFc : adv.totalAmountLc;
+                        final advBalanceDisplay = isFcDoc && adv.exchangeRate > 0
+                            ? adv.balanceAmountLc / adv.exchangeRate
+                            : adv.balanceAmountLc;
+                        return DataRow(cells: [
+                          DataCell(Text(adv.docNo, style: const TextStyle(fontSize: 12))),
+                          DataCell(Text(_dateFmt.format(adv.docDate), style: const TextStyle(fontSize: 12))),
+                          DataCell(Text(_fmt.format(advTotalDisplay), style: const TextStyle(fontSize: 12))),
+                          DataCell(Text(_fmt.format(advBalanceDisplay),
+                              style: TextStyle(fontSize: 12, color: Colors.orange[700]))),
+                          DataCell(SizedBox(width: 140, child: _isReadOnly
+                            ? Text(_fmt.format(existing?.appliedAmountLc ?? 0),
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                textAlign: TextAlign.right)
+                            : TextFormField(
+                                controller: advCtrl,
+                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
+                                style: const TextStyle(fontSize: 12),
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.right,
+                                onChanged: (v) {
+                                  final amount = double.tryParse(v) ?? 0;
+                                  final idx = _advanceRows.indexWhere((a) => a.appliedToId == adv.id);
+                                  if (amount <= 0) {
+                                    if (idx >= 0) setState(() { _advanceRows.removeAt(idx); _recalcTotals(); });
+                                  } else {
+                                    final row = _ApplyRow(
+                                      appliedToId: adv.id, appliedToDocNo: adv.docNo,
+                                      appliedToDocDate: adv.docDate,
+                                      appliedToTotal: isFcDoc ? adv.totalAmountFc : adv.totalAmountLc,
+                                      appliedAmountLc: amount,
+                                    );
+                                    setState(() {
+                                      if (idx >= 0) _advanceRows[idx] = row; else _advanceRows.add(row);
+                                      _recalcTotals();
+                                    });
+                                  }
+                                },
+                              ))),
+                        ]);
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ),
+              ], // end _advanceExpanded
+              const SizedBox(height: 8),
+              Text('${isEnglish ? 'Total Advance Deducted' : 'หักมัดจำรวม'}: ${_fmt.format(totalAdvance)} $currency',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange[800])),
+            ]),
+          ),
+        ),
+    ];
   }
 
   Widget _buildApplySection() {
@@ -2717,103 +2879,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       ),
 
       // ── ส่วน 2: หักมัดจำ (แสดงเฉพาะ Receipt และมีเอกสารมัดจำ) ──
-      if (showAdvanceCard) ...[
-        const SizedBox(height: 8),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Icon(Icons.currency_exchange, size: 18, color: Colors.orange[700]),
-                const SizedBox(width: 6),
-                Text(isEnglish ? 'Advance Deduction' : 'หักมัดจำ', style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold, color: Colors.orange[800])),
-                const SizedBox(width: 4),
-                IconButton(
-                  icon: Icon(_advanceExpanded ? Icons.expand_less : Icons.expand_more, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  onPressed: () => setState(() => _advanceExpanded = !_advanceExpanded),
-                ),
-              ]),
-              if (_advanceExpanded) ...[
-              const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, constraints) => SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                    child: DataTable(
-                      headingRowColor: WidgetStateProperty.all(Colors.orange[50]),
-                      columnSpacing: 12,
-                      dataRowMinHeight: 36,
-                      dataRowMaxHeight: 46,
-                      columns: [
-                        DataColumn(label: Text(isEnglish ? 'Advance No.' : 'เลขที่มัดจำ', style: const TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Advance Amount' : 'ยอดมัดจำ'} ($currency)' : (isEnglish ? 'Advance Amount' : 'ยอดมัดจำ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Balance' : 'คงเหลือ'} ($currency)' : (isEnglish ? 'Balance' : 'คงเหลือ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text(isFcDoc ? '${isEnglish ? 'Deduct' : 'หักมัดจำ'} ($currency)' : (isEnglish ? 'Deduct' : 'หักมัดจำ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                      ],
-                      rows: _openAdvances.where((adv) => _isInvoiceDateValid(adv.docDate)).map((adv) {
-                        final existing = _advanceRows.where((a) => a.appliedToId == adv.id).firstOrNull;
-                        final advCtrl = _advanceCtrlMap.putIfAbsent(
-                          adv.id,
-                          () => TextEditingController(text: existing?.appliedAmountLc.toStringAsFixed(2) ?? ''),
-                        );
-                        final advTotalDisplay = isFcDoc ? adv.totalAmountFc : adv.totalAmountLc;
-                        final advBalanceDisplay = isFcDoc && adv.exchangeRate > 0
-                            ? adv.balanceAmountLc / adv.exchangeRate
-                            : adv.balanceAmountLc;
-                        return DataRow(cells: [
-                          DataCell(Text(adv.docNo, style: const TextStyle(fontSize: 12))),
-                          DataCell(Text(_dateFmt.format(adv.docDate), style: const TextStyle(fontSize: 12))),
-                          DataCell(Text(_fmt.format(advTotalDisplay), style: const TextStyle(fontSize: 12))),
-                          DataCell(Text(_fmt.format(advBalanceDisplay),
-                              style: TextStyle(fontSize: 12, color: Colors.orange[700]))),
-                          DataCell(SizedBox(width: 140, child: _isReadOnly
-                            ? Text(_fmt.format(existing?.appliedAmountLc ?? 0),
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                textAlign: TextAlign.right)
-                            : TextFormField(
-                                controller: advCtrl,
-                                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
-                                style: const TextStyle(fontSize: 12),
-                                keyboardType: TextInputType.number,
-                                textAlign: TextAlign.right,
-                                onChanged: (v) {
-                                  final amount = double.tryParse(v) ?? 0;
-                                  final idx = _advanceRows.indexWhere((a) => a.appliedToId == adv.id);
-                                  if (amount <= 0) {
-                                    if (idx >= 0) setState(() { _advanceRows.removeAt(idx); _recalcTotals(); });
-                                  } else {
-                                    final row = _ApplyRow(
-                                      appliedToId: adv.id, appliedToDocNo: adv.docNo,
-                                      appliedToDocDate: adv.docDate,
-                                      appliedToTotal: isFcDoc ? adv.totalAmountFc : adv.totalAmountLc,
-                                      appliedAmountLc: amount,
-                                    );
-                                    setState(() {
-                                      if (idx >= 0) _advanceRows[idx] = row; else _advanceRows.add(row);
-                                      _recalcTotals();
-                                    });
-                                  }
-                                },
-                              ))),
-                        ]);
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              ),
-              ], // end _advanceExpanded
-              const SizedBox(height: 8),
-              Text('${isEnglish ? 'Total Advance Deducted' : 'หักมัดจำรวม'}: ${_fmt.format(totalAdvance)} $currency',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange[800])),
-            ]),
-          ),
-        ),
-      ],
+      if (showAdvanceCard) ..._advanceCardWidgets(),
 
       // ── ส่วน 3: หักใบลดหนี้ (แสดงเฉพาะ Receipt และมีเอกสารลดหนี้) ──
       if (showCnCard) ...[
@@ -3423,6 +3489,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 ]),
                 if (_exchangeRate != 1.0)
                   _totalRow(isEnglish ? 'Total (${CurrencyService.baseCode})' : 'ยอดรวม (${CurrencyService.baseCode})', _totalAmountFc * _exchangeRate),
+                if (_invAdvanceTotal > 0) ...[
+                  _totalRow(isEnglish ? 'Less: deposit deducted' : 'หัก เงินมัดจำ', -_invAdvanceTotal),
+                  _totalRow(isEnglish ? 'Receivable after deposit' : 'ยอดลูกหนี้หลังหักมัดจำ', _totalAmountFc - _invAdvanceTotal),
+                ],
               ],
             ),
           ),
@@ -3450,11 +3520,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final deferredVat = _detailRows
         .where((r) => r.isDeferredVat && r.vatType != 'NOVAT')
         .fold(0.0, (s, r) {
-          final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
-          final price = double.tryParse(r.priceCtrl.text) ?? 0;
-          final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
-          final afterDisc = qty * price * (1 - discPct / 100);
-          return s + afterDisc * r.vatRate / 100;
+          return s + _amt(r).vat;
         });
     if (deferredVat > 0) {
       return [
@@ -4078,13 +4144,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       final receivePaymentDesc = isEnglish ? 'Receive Payment' : 'รับชำระ';
       final settleDebtDesc = isEnglish ? 'Settle Debt' : 'ชำระหนี้';
       if (sysType == arDocTypeInvoice || sysType == arDocTypeDebitNote || sysType == arDocTypeDebitNoteWithBill) {
-        lines.add(_GlLine(notSetupArLabel, arLabel, arLabel, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+        lines.add(_GlLine(notSetupArLabel, arLabel, arLabel, (_totalAmountFc - _invAdvanceTotal) * lc, 0, isFcDoc ? _totalAmountFc - _invAdvanceTotal : 0, 0));
         for (final r in _detailRows) {
-          final qty      = double.tryParse(r.qtyCtrl.text)    ?? 0;
-          final price    = double.tryParse(r.priceCtrl.text)  ?? 0;
-          final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
-          final afterDisc = qty * price * (1 - discPct / 100);
-          final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+          final amt = _amt(r);
+          final afterDisc = amt.net;
+          final vat = amt.vat;
           final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : revenueDefaultDesc;
           lines.add(_GlLine(notSetupRevLabel, notSetupLabel, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
           if (vat > 0) lines.add(_GlLine(notSetupVatLabel, 'VAT Output', vatDesc, 0, vat * lc, 0, isFcDoc ? vat : 0));
@@ -4092,11 +4156,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       } else if (sysType == arDocTypeCreditNote) {
         lines.add(_GlLine(notSetupArLabel, arLabel, arLabel, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
         for (final r in _detailRows) {
-          final qty      = double.tryParse(r.qtyCtrl.text)    ?? 0;
-          final price    = double.tryParse(r.priceCtrl.text)  ?? 0;
-          final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
-          final afterDisc = qty * price * (1 - discPct / 100);
-          final vat      = r.vatType == 'NOVAT' ? 0.0 : afterDisc * r.vatRate / 100;
+          final amt = _amt(r);
+          final afterDisc = amt.net;
+          final vat = amt.vat;
           final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : revenueDefaultDesc;
           lines.add(_GlLine(notSetupRevLabel, notSetupLabel, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
           if (vat > 0) lines.add(_GlLine(notSetupVatLabel, 'VAT Output', vatDesc, vat * lc, 0, isFcDoc ? vat : 0, 0));
@@ -4233,15 +4295,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
     // ── Invoice (10) / DN (30) / DN-with-bill (35) ────────────────────────
     if (sysType == arDocTypeInvoice || sysType == arDocTypeDebitNote || sysType == arDocTypeDebitNoteWithBill) {
-      lines.add(_GlLine(arCode, arName, arDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
+      lines.add(_GlLine(arCode, arName, arDesc, (_totalAmountFc - _invAdvanceTotal) * lc, 0, isFcDoc ? _totalAmountFc - _invAdvanceTotal : 0, 0));
       for (final r in _detailRows) {
-        final qty      = double.tryParse(r.qtyCtrl.text) ?? 0;
-        final price    = double.tryParse(r.priceCtrl.text) ?? 0;
-        final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
-        final sub      = qty * price;
-        final disc     = sub * discPct / 100;
-        final afterDisc = sub - disc;
-        final vat      = afterDisc * r.vatRate / 100;
+        final amt = _amt(r);
+        final sub = amt.gross;
+        final disc = amt.discount;
+        final afterDisc = amt.net;
+        final vat = amt.vat;
         final revCode  = acctCode(r.revenueAccountId, setup.revenueAccountCode);
         final revName  = acctName(r.revenueAccountId, setup.revenueAccountName);
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : revenueDefaultDesc);
@@ -4276,18 +4336,30 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           lines.add(_GlLine(vatAcctCode, vatAcctName, vatDesc2, 0, vat * lc, 0, isFcDoc ? vat : 0));
         }
       }
+      // หักเงินมัดจำตอนตั้งหนี้: Dr เงินมัดจำรับ (ส่วนก่อน VAT) + Dr ภาษีขาย (VAT ของมัดจำที่ออกไปแล้ว) แทนลูกหนี้ส่วนนั้น
+      if (_invAdvanceTotal > 0) {
+        final depLabel = isEnglish ? 'Deposit deducted' : 'หักเงินมัดจำ';
+        for (final a in _advanceRows) {
+          final dep = _openAdvances.where((d) => d.id == a.appliedToId).firstOrNull;
+          final ratio = dep != null && dep.totalAmountLc != 0 ? dep.vatAmountLc / dep.totalAmountLc : 0.0;
+          final vatPart = a.appliedAmountLc * ratio;
+          final netPart = a.appliedAmountLc - vatPart;
+          lines.add(_GlLine(setup.advanceAccountCode ?? (isEnglish ? '!Advance account not configured' : '!ยังไม่ตั้งค่าบัญชีเงินมัดจำ'), setup.advanceAccountName ?? depLabel, '$depLabel ${a.appliedToDocNo}', netPart * lc, 0, isFcDoc ? netPart : 0, 0));
+          if (vatPart > 0) {
+            lines.add(_GlLine(setup.vatOutputAccountCode ?? notSetupVatLabel2, setup.vatOutputAccountName ?? 'VAT Output', '$depLabel ${a.appliedToDocNo}', vatPart * lc, 0, isFcDoc ? vatPart : 0, 0));
+          }
+        }
+      }
     }
     // ── Credit Note (50) ──────────────────────────────────────────────────
     else if (sysType == arDocTypeCreditNote) {
       lines.add(_GlLine(arCode, arName, arDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       for (final r in _detailRows) {
-        final qty      = double.tryParse(r.qtyCtrl.text) ?? 0;
-        final price    = double.tryParse(r.priceCtrl.text) ?? 0;
-        final discPct  = double.tryParse(r.discPctCtrl.text) ?? 0;
-        final sub      = qty * price;
-        final disc     = sub * discPct / 100;
-        final afterDisc = sub - disc;
-        final vat      = afterDisc * r.vatRate / 100;
+        final amt = _amt(r);
+        final sub = amt.gross;
+        final disc = amt.discount;
+        final afterDisc = amt.net;
+        final vat = amt.vat;
         final revCode  = acctCode(r.revenueAccountId, setup.revenueAccountCode);
         final revName  = acctName(r.revenueAccountId, setup.revenueAccountName);
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : revenueDefaultDesc);
