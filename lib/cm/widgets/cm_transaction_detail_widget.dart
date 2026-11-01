@@ -26,6 +26,8 @@ import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../ap/models/ap_vendor.dart';
 import '../../ap/services/ap_vendor_service.dart';
+import '../../ar/models/ar_customer.dart';
+import '../../ar/services/ar_customer_service.dart';
 import '../../cd/models/cd_vat_rate.dart';
 import '../../cd/services/cd_vat_rate_service.dart';
 import '../../cd/models/cd_wht_type.dart';
@@ -241,6 +243,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   List<VatRate> _vatRates = [];
   List<CdWhtType> _whtTypes = [];
   List<ApVendor> _vendors = [];
+  List<ArCustomer>? _customers; // โหลดเมื่อเปิดค้นหาลูกค้าครั้งแรก
   CmTransactionGlSetup? _docSetup;
 
   // GL Dimensions
@@ -319,14 +322,15 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   bool get _isBankCharge     => _selectedDocType?.sysDocType == cmDocTypeBankCharge.toString();
   bool get _isInterest       => _selectedDocType?.sysDocType == cmDocTypeInterest.toString();
 
-  // รายจ่าย (20): บรรทัดรายการแบบ VAT + ภาษีหัก ณ ที่จ่าย + ผู้รับเงิน
-  bool get _hasTaxLines      => _isPayment;
+  // รายรับ (10) / รายจ่าย (20): บรรทัดรายการแบบ VAT + ภาษีหัก ณ ที่จ่าย + คู่ค้า
+  // (20 = เราหักผู้รับเงิน, 10 = ผู้จ่ายหักเรา; ใบกำกับของผู้ขายและประเภท ภ.ง.ด. เฉพาะ 20)
+  bool get _hasTaxLines      => _isPayment || _isReceipt;
   bool get _hasDetailRows    => _isVoucher || _hasTaxLines;
-  bool get _hasPartySection  => _isPayment;
-  bool get _hasWhtSection    => _isPayment;
+  bool get _hasPartySection  => _isPayment || _isReceipt;
+  bool get _hasWhtSection    => _isPayment || _isReceipt;
   bool get _hasApplySection  => _isReplenishment;
   bool get _hasPaymentSection => _isReceipt || _isPayment || _isReplenishment;
-  bool get _hasCounterparty  => _isReceipt;
+  bool get _hasCounterparty  => false; // ชื่อคู่ค้าอยู่ในส่วนคู่ค้าแล้ว (10/20)
   bool get _hasPettyCashAccountField => _isReplenishment || _isVoucher;
   bool get _hasTransferFields => _isTransfer;
   bool get _hasBankChargeFields => _isBankCharge || _isInterest;
@@ -709,11 +713,11 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       final payFc = _paymentRows.fold(0.0, (t, r) => t + (double.tryParse(r.amountCtrl.text) ?? 0));
       if ((payFc - _netPayFc).abs() > 0.005) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
-            ? 'Payment channels (${_fmt.format(payFc)}) must equal the net amount to pay (${_fmt.format(_netPayFc)})'
-            : 'ยอดช่องทางจ่ายเงิน (${_fmt.format(payFc)}) ต้องเท่ากับยอดที่ต้องจ่าย (${_fmt.format(_netPayFc)})')));
+            ? 'Payment channels (${_fmt.format(payFc)}) must equal the net amount (${_fmt.format(_netPayFc)})'
+            : 'ยอดช่องทางรับ/จ่ายเงิน (${_fmt.format(payFc)}) ต้องเท่ากับยอดสุทธิ (${_fmt.format(_netPayFc)})')));
         return;
       }
-      if (action == 'Post' && _vatFc.abs() > 0.005 && _taxInvNoCtrl.text.trim().isEmpty) {
+      if (action == 'Post' && _isPayment && _vatFc.abs() > 0.005 && _taxInvNoCtrl.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
             ? 'Please enter the vendor tax invoice no. (this document has input VAT)'
             : 'กรุณาระบุเลขที่ใบกำกับภาษีของผู้ขาย (เอกสารมีภาษีซื้อ)')));
@@ -742,11 +746,11 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       partyId: _hasPartySection ? _partyId : null,
       partyTaxId: _hasPartySection ? _partyTaxIdCtrl.text.trim() : null,
       partyBranchCode: _hasPartySection ? _partyBranchCtrl.text.trim() : null,
-      partyType: _hasPartySection ? _partyType : null,
+      partyType: _isPayment ? _partyType : null,
       partyAddress: _hasPartySection ? _partyAddressCtrl.text.trim() : null,
       priceIncludesVat: _hasTaxLines && _priceIncludesVat,
-      taxInvoiceNo: _hasTaxLines && _taxInvNoCtrl.text.trim().isNotEmpty ? _taxInvNoCtrl.text.trim() : null,
-      taxInvoiceDate: _hasTaxLines && _taxInvNoCtrl.text.trim().isNotEmpty ? (_taxInvDate ?? _docDate) : null,
+      taxInvoiceNo: _isPayment && _taxInvNoCtrl.text.trim().isNotEmpty ? _taxInvNoCtrl.text.trim() : null,
+      taxInvoiceDate: _isPayment && _taxInvNoCtrl.text.trim().isNotEmpty ? (_taxInvDate ?? _docDate) : null,
       currencyId: _selectedCurrency?.id,
       currencyCode: _selectedCurrency?.currencyCode ?? CurrencyService.baseCode,
       exchangeRate: _exchangeRate,
@@ -1413,6 +1417,84 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
     });
   }
 
+  Future<void> _pickCustomer() async {
+    final isEnglish = _isEnglish;
+    try { _customers ??= (await ArCustomerService().fetchRows()).where((c) => c.isActive).toList(); } catch (_) { _customers = []; }
+    if (!mounted) return;
+    final all = _customers!;
+    final searchCtrl = TextEditingController();
+    List<ArCustomer> filtered = List.from(all);
+    String label(ArCustomer c) => isEnglish && (c.customerNameEn ?? '').isNotEmpty ? c.customerNameEn! : c.customerNameTh;
+    final picked = await showDialog<ArCustomer>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        void doFilter() {
+          final q = searchCtrl.text.toUpperCase();
+          setS(() => filtered = q.isEmpty
+              ? all
+              : all.where((c) =>
+                  c.customerCode.toUpperCase().contains(q) ||
+                  c.customerNameTh.toUpperCase().contains(q) ||
+                  (c.customerNameEn ?? '').toUpperCase().contains(q) ||
+                  (c.taxId ?? '').contains(q)).toList());
+        }
+        return Dialog(
+          child: SizedBox(
+            width: 600, height: 500,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: searchCtrl,
+                  decoration: InputDecoration(labelText: isEnglish ? 'Search Customer' : 'ค้นหาลูกค้า', prefixIcon: const Icon(Icons.search), border: const OutlineInputBorder()),
+                  onChanged: (_) => doFilter(),
+                  autofocus: true,
+                ),
+              ),
+              Expanded(child: ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final c = filtered[i];
+                  return ListTile(
+                    dense: true,
+                    title: Text('${c.customerCode} - ${label(c)}', style: const TextStyle(fontSize: 13)),
+                    subtitle: c.taxId != null ? Text(c.taxId!, style: const TextStyle(fontSize: 11)) : null,
+                    onTap: () => Navigator.pop(ctx, c),
+                  );
+                },
+              )),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+            ]),
+          ),
+        );
+      }),
+    );
+    searchCtrl.dispose();
+    if (picked == null || picked.id == null) return;
+    // ที่อยู่จากข้อมูลลูกค้า (backend ดึงซ้ำตอนบันทึก)
+    ArCustomer full = picked;
+    try { full = await ArCustomerService().fetchRow(picked.id!); } catch (_) {}
+    final addr = full.addresses.isEmpty
+        ? null
+        : (full.addresses.where((a) => a.addressType == 'billing' && a.isDefault).firstOrNull ??
+            full.addresses.where((a) => a.addressType == 'billing').firstOrNull ?? full.addresses.first);
+    if (!mounted) return;
+    setState(() {
+      _partySource = 'AR';
+      _partyId = full.id;
+      _partyCode = full.customerCode;
+      _partyType = null;
+      _counterpartyCtrl.text = full.customerNameTh;
+      _partyTaxIdCtrl.text = full.taxId ?? '';
+      _partyBranchCtrl.text = full.taxBranchCode ?? '';
+      _partyAddressCtrl.text = addr == null
+          ? ''
+          : [addr.addressNo, addr.addressBuildingVillage, addr.addressAlley, addr.addressRoad,
+             addr.addressSubDistrict, addr.addressDistrict, addr.addressProvince, addr.addressZipCode]
+              .where((x) => (x ?? '').trim().isNotEmpty).join(' ');
+    });
+  }
+
   Widget _buildPartySection() {
     final isEnglish = _isEnglish;
     final fromMaster = _partySource != null;
@@ -1423,17 +1505,22 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         Row(children: [
           const Icon(Icons.person_outline, size: 18),
           const SizedBox(width: 6),
-          Text(isEnglish ? 'Payee' : 'ผู้รับเงิน', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(_isReceipt ? (isEnglish ? 'Payer' : 'ผู้จ่ายเงิน') : (isEnglish ? 'Payee' : 'ผู้รับเงิน'),
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           if (fromMaster) ...[
             const SizedBox(width: 8),
-            Text(isEnglish ? '(from vendor ${_partyCode ?? ''})' : '(จากข้อมูลผู้ขาย ${_partyCode ?? ''})',
+            Text(_partySource == 'AR'
+                    ? (isEnglish ? '(from customer ${_partyCode ?? ''})' : '(จากข้อมูลลูกค้า ${_partyCode ?? ''})')
+                    : (isEnglish ? '(from vendor ${_partyCode ?? ''})' : '(จากข้อมูลผู้ขาย ${_partyCode ?? ''})'),
                 style: TextStyle(fontSize: 12, color: Colors.blue[700])),
           ],
           const Spacer(),
           if (!_isReadOnly) TextButton.icon(
-            onPressed: _pickVendor,
+            onPressed: _isReceipt ? _pickCustomer : _pickVendor,
             icon: const Icon(Icons.search, size: 16),
-            label: Text(isEnglish ? 'Select vendor' : 'ค้นหาจากผู้ขาย'),
+            label: Text(_isReceipt
+                ? (isEnglish ? 'Select customer' : 'ค้นหาจากลูกค้า')
+                : (isEnglish ? 'Select vendor' : 'ค้นหาจากผู้ขาย')),
           ),
           if (!_isReadOnly && fromMaster) TextButton.icon(
             onPressed: () => setState(() { _partySource = null; _partyId = null; _partyCode = null; }),
@@ -1445,7 +1532,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         Row(children: [
           Expanded(flex: 3, child: TextFormField(
             controller: _counterpartyCtrl,
-            decoration: _fieldDeco(isEnglish ? 'Name' : 'ชื่อผู้รับเงิน', forcedReadOnly: fromMaster),
+            decoration: _fieldDeco(isEnglish ? 'Name' : (_isReceipt ? 'ชื่อผู้จ่ายเงิน' : 'ชื่อผู้รับเงิน'), forcedReadOnly: fromMaster),
             readOnly: ro,
           )),
           const SizedBox(width: 8),
@@ -1461,7 +1548,8 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
             readOnly: ro,
           )),
           const SizedBox(width: 8),
-          Expanded(flex: 2, child: DropdownButtonFormField<String?>(
+          if (!_isPayment) const Expanded(flex: 2, child: SizedBox()),
+          if (_isPayment) Expanded(flex: 2, child: DropdownButtonFormField<String?>(
             value: _partyType == 'individual' || _partyType == 'juristic' ? _partyType : null,
             isExpanded: true,
             decoration: _fieldDeco(isEnglish ? 'Type (PND)' : 'ประเภท (ภ.ง.ด.)', forcedReadOnly: fromMaster),
@@ -1478,6 +1566,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
           decoration: _fieldDeco(isEnglish ? 'Address' : 'ที่อยู่', forcedReadOnly: fromMaster),
           readOnly: ro,
         ),
+        if (_isPayment) ...[
         const SizedBox(height: 8),
         Row(children: [
           Expanded(flex: 1, child: TextFormField(
@@ -1500,11 +1589,12 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
           )),
           const Expanded(flex: 2, child: SizedBox()),
         ]),
+        ],
       ]),
     ));
   }
 
-  // ── ภาษีหัก ณ ที่จ่าย (20) ────────────────────────────────────────────────
+  // ── ภาษีหัก ณ ที่จ่าย (20: เราหัก / 10: ผู้จ่ายหักเรา) ────────────────────────────────────────────────
   Widget _buildWhtSection() {
     final isEnglish = _isEnglish;
     return Card(child: Padding(
@@ -1513,7 +1603,10 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         Row(children: [
           const Icon(Icons.percent, size: 18),
           const SizedBox(width: 6),
-          Text(isEnglish ? 'Withholding Tax (WHT)' : 'ภาษีหัก ณ ที่จ่าย', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(_isReceipt
+                  ? (isEnglish ? 'Withholding Tax Deducted by Payer' : 'ภาษีถูกหัก ณ ที่จ่าย')
+                  : (isEnglish ? 'Withholding Tax (WHT)' : 'ภาษีหัก ณ ที่จ่าย'),
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           const Spacer(),
           if (!_isReadOnly) TextButton.icon(
             onPressed: () => setState(() => _whtRows.add(_WhtRow())),
@@ -1599,7 +1692,8 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         Row(children: [
           const Icon(Icons.list_alt, size: 18),
           const SizedBox(width: 6),
-          Text(isEnglish ? 'Expense Items' : 'รายการค่าใช้จ่าย', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(_isReceipt ? (isEnglish ? 'Revenue Items' : 'รายการรายรับ') : (isEnglish ? 'Expense Items' : 'รายการค่าใช้จ่าย'),
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           if (_hasTaxLines) ...[
             const SizedBox(width: 16),
             Checkbox(
@@ -1633,7 +1727,9 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
                 Expanded(flex: 3, child: DropdownButtonFormField<int?>(
                   value: r.expenseAccountId,
                   isExpanded: true,
-                  decoration: _fieldDeco(isEnglish ? 'Expense Account *' : 'บัญชีค่าใช้จ่าย *'),
+                  decoration: _fieldDeco(_isReceipt
+                      ? (isEnglish ? 'Revenue Account *' : 'บัญชีรายได้ *')
+                      : (isEnglish ? 'Expense Account *' : 'บัญชีค่าใช้จ่าย *')),
                   items: _accounts.map((a) => DropdownMenuItem(
                         value: a.id, child: Text('${a.accountCode} ${_acctLabel(a)}', overflow: TextOverflow.ellipsis))).toList(),
                   onChanged: _isReadOnly ? null : (v) => setState(() {
@@ -1841,8 +1937,9 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
           cell(isEnglish ? 'Before VAT' : 'ก่อน VAT', _subtotalFc),
           cell('VAT', _vatFc),
           cell(isEnglish ? 'Total' : 'ยอดรวม', _totalAmountFc),
-          if (_hasWhtSection) cell(isEnglish ? 'Less WHT' : 'หัก ณ ที่จ่าย', _whtFc),
-          cell(isEnglish ? 'Net to pay' : 'ยอดจ่ายสุทธิ', _netPayFc, bold: true, color: Colors.blue),
+          if (_hasWhtSection) cell(isEnglish ? 'Less WHT' : (_isReceipt ? 'ถูกหัก ณ ที่จ่าย' : 'หัก ณ ที่จ่าย'), _whtFc),
+          cell(_isReceipt ? (isEnglish ? 'Net received' : 'ยอดรับสุทธิ') : (isEnglish ? 'Net to pay' : 'ยอดจ่ายสุทธิ'),
+              _netPayFc, bold: true, color: Colors.blue),
         ]),
       ));
     }
@@ -1910,7 +2007,29 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       lines.add(_GlLine(acct.code, acct.name, desc, fcDebit * lc, fcCredit * lc, fcDebit, fcCredit));
     }
 
-    if (_isReceipt) {
+    if (_isReceipt && _detailRows.isNotEmpty) {
+      for (final p in _paymentRows) {
+        final amt = double.tryParse(p.amountCtrl.text) ?? 0;
+        if (amt == 0) continue;
+        addLine(_paymentAcctCodeName(p), '${isEnglish ? 'Receive' : 'รับเงิน'} ${p.paymentMethodCode ?? ''}', amt, 0);
+      }
+      if (_whtFc != 0) {
+        addLine(_setupAcctCodeName(_docSetup!.whtPrepaidAccountId, _docSetup!.whtPrepaidAccountCode, _docSetup!.whtPrepaidAccountName),
+            isEnglish ? 'WHT deducted by payer' : 'ภาษีถูกหัก ณ ที่จ่าย', _whtFc, 0);
+      }
+      for (final d in _detailRows) {
+        final a = _lineAmt(d);
+        if (a.net == 0) continue;
+        final acct = d.expenseAccountId != null
+            ? _acctCodeName(d.expenseAccountId)
+            : _setupAcctCodeName(_docSetup!.revenueAccountId, _docSetup!.revenueAccountCode, _docSetup!.revenueAccountName);
+        addLine(acct, d.descCtrl.text.isEmpty ? (isEnglish ? 'Revenue' : 'รายรับ') : d.descCtrl.text, 0, a.net);
+      }
+      if (_vatFc != 0) {
+        addLine(_setupAcctCodeName(_docSetup!.vatOutputAccountId, _docSetup!.vatOutputAccountCode, _docSetup!.vatOutputAccountName),
+            isEnglish ? 'Output VAT' : 'ภาษีขาย', 0, _vatFc);
+      }
+    } else if (_isReceipt) {
       for (final p in _paymentRows) {
         final amt = double.tryParse(p.amountCtrl.text) ?? 0;
         if (amt == 0) continue;
