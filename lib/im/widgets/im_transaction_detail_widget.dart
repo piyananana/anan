@@ -282,7 +282,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
   bool get _isReadOnly => widget.viewOnly || _status != 'Draft' || _credit.isPending;
   // วันที่ใบกำกับผู้ขาย: '11' ตั้งแต่ร่าง, '12' ตอนตั้งหนี้ (Received) และหลัง Post
-  bool get _showInvoiceDate => _isGrnBillingMode || (_isGrDeferredMode && _status != 'Draft');
+  bool get _showInvoiceDate => _isGrnBillingMode || (_isGrDeferredMode && _status != 'Draft') || _isApCnDnDoc;
+  // '15'/'20'/'25' → ใบลดหนี้/เพิ่มหนี้ AP: เลขที่อ้างอิง = เลขที่เอกสารของผู้ขาย, วันที่ (ไม่บังคับ ว่าง = วันที่เอกสาร) → รายงานภาษีซื้อ
+  bool get _isApCnDnDoc => _isApReturnCnMode || _isApDnMode;
   DateTime get _invoiceDate => _vendorInvoiceDate ?? (_isGrDeferredMode ? DateTime.now() : _docDate);
   // ราคารวม VAT แก้ได้ตอนร่าง หรือตอนตั้งหนี้ของ '12' ตามรูปแบบของใบกำกับจริง
   bool get _canEditPriceInclVat => !_isReadOnly || (_isGrDeferredMode && _status == 'Received' && !widget.viewOnly);
@@ -431,6 +433,18 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       ),
     );
     return ok == true;
+  }
+
+  // ใบลดหนี้/เพิ่มหนี้ AP ที่มี VAT ต้องมีเลขที่เอกสารของผู้ขาย (รายงานภาษีซื้อ) — บังคับเหมือนหน้าจอ AP
+  bool get _vendorCnDnNoRequired => _isApCnDnDoc && _lines.fold(0.0, (t, l) => t + _amt(l).vat).abs() > 0.005;
+  bool _checkVendorCnDnNo() {
+    if (!_vendorCnDnNoRequired || _refNoCtrl.text.trim().isNotEmpty) return true;
+    final isEnglish = _isEnglish;
+    final doc = _isApDnMode ? (isEnglish ? 'debit note' : 'ใบเพิ่มหนี้') : (isEnglish ? 'credit note' : 'ใบลดหนี้');
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+        ? 'Please enter the vendor $doc no. (this document has input VAT)'
+        : 'กรุณาระบุเลขที่$docของผู้ขาย (เอกสารมีภาษีซื้อ)')));
+    return false;
   }
 
   bool get _canEditBilling => !widget.viewOnly &&
@@ -1485,6 +1499,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     // '31' ตั้งหนี้ทันที — ราคาขายต่างจาก SO ให้ยืนยัน ('32' เตือนตอนออกใบแจ้งหนี้, '30' ไม่มีราคาขาย)
     if (_selectedSysDocType == '31' && !await _confirmPoPriceDiffs(sales: true)) return;
     if (!await _confirmLinkedAdvances()) return;
+    if (!_checkVendorCnDnNo()) return;
     if (_isArCustomerMode && _customerId != null) {
       final go = await checkCreditBeforePost(
         context,
@@ -1629,7 +1644,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         vendorId: _isApVendorMode ? _vendorId : null,
         customerId: _isArCustomerMode ? _customerId : null,
         refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
-        vendorInvoiceDate: _isGrnBillingMode ? _invoiceDate : null,
+        vendorInvoiceDate: _isGrnBillingMode ? _invoiceDate : (_isApCnDnDoc ? _vendorInvoiceDate : null),
         refImTransactionId: _isReturnSourceDocMode ? _refImTransactionId : null,
         refPoId: _isReceiveMode ? _refPoId : null,
         refSoId: _isDeliverMode ? _refSoId : null,
@@ -2040,6 +2055,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             decoration: InputDecoration(
                 labelText: (_isGrnBillingMode || (_isGrDeferredMode && _status == 'Received'))
                     ? (isEnglish ? 'Vendor Invoice No. *' : 'เลขที่ใบกำกับสินค้าผู้ขาย *')
+                    : _isApCnDnDoc
+                        ? '${_isApDnMode
+                            ? (isEnglish ? 'Vendor Debit Note No.' : 'เลขที่ใบเพิ่มหนี้ผู้ขาย')
+                            : (isEnglish ? 'Vendor Credit Note No.' : 'เลขที่ใบลดหนี้ผู้ขาย')}${_vendorCnDnNoRequired ? ' *' : ''}'
                     : _isDeliverMode
                         ? (isEnglish ? 'Customer Ref. No.' : 'เลขที่อ้างอิงลูกค้า')
                         : (isEnglish ? 'Ref No.' : 'เลขที่อ้างอิง'),
@@ -2053,7 +2072,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             child: InkWell(
               onTap: _canEditBilling ? _pickInvoiceDate : null,
               child: InputDecorator(
-                decoration: InputDecoration(labelText: isEnglish ? 'Vendor Invoice Date *' : 'วันที่ใบกำกับ *', border: const OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(
+                    labelText: _isApCnDnDoc
+                        ? (_isApDnMode
+                            ? (isEnglish ? 'Vendor Debit Note Date' : 'วันที่ใบเพิ่มหนี้ผู้ขาย')
+                            : (isEnglish ? 'Vendor Credit Note Date' : 'วันที่ใบลดหนี้ผู้ขาย'))
+                        : (isEnglish ? 'Vendor Invoice Date *' : 'วันที่ใบกำกับ *'),
+                    border: const OutlineInputBorder(), isDense: true),
                 child: Text(_dateFmt.format(_invoiceDate)),
               ),
             ),

@@ -185,6 +185,9 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   bool get _hasWhtSection     => _isPayment || _isAdvancePayment;
   bool get _hasPaymentRows    => _isPayment || _isAdvancePayment || _isAdvanceRefund;
   bool get _hasDueDate        => _isPurchaseInvoice;
+  // ต้องมีเลขที่ใบกำกับภาษีของผู้ขาย: เอกสารมีรายการ VAT ที่ไม่ใช่ VAT รอตัดบัญชี
+  bool get _taxInvRequired => _hasDetailRows &&
+      _detailRows.any((r) => r.vatType != 'NOVAT' && !r.isDeferredVat && _amt(r).vat.abs() > 0.005);
   // ใบตั้งหนี้หักเงินมัดจำตอนตั้งหนี้ (apply_type 'inv_advance') — ใบจ่ายชำระหักตอนจ่าย ('advance')
   double get _invAdvanceTotal => _isPurchaseInvoice ? _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc) : 0;
 
@@ -888,21 +891,12 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     }
 
     _recalcTotals();
-    if (action == 'Post' && _hasDetailRows && _vatAmountFc.abs() > 0.005 && _taxInvNoCtrl.text.trim().isEmpty) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(isEnglish ? 'No tax invoice no.' : 'ยังไม่ได้ระบุเลขที่ใบกำกับภาษี'),
-          content: Text(isEnglish
-              ? 'The vendor tax invoice no. is empty. The input VAT report will show this document no. and date instead. Post anyway?'
-              : 'ยังไม่ได้ระบุเลขที่ใบกำกับภาษีของผู้ขาย รายงานภาษีซื้อจะแสดงเลขที่และวันที่ของเอกสารนี้แทน ต้องการ Post ต่อหรือไม่'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Post anyway' : 'Post ต่อ')),
-          ],
-        ),
-      );
-      if (ok != true || !mounted) return;
+    // รายงานภาษีซื้อต้องแสดงเลขที่ใบกำกับของผู้ขาย — บังคับเมื่อมี VAT (ไม่รวม VAT รอตัดบัญชี ที่รับรู้ตอนจ่ายชำระ)
+    if (action == 'Post' && _taxInvRequired && _taxInvNoCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+          ? 'Please enter the vendor tax invoice no. (this document has input VAT)'
+          : 'กรุณาระบุเลขที่ใบกำกับภาษีของผู้ขาย (เอกสารมีภาษีซื้อ)')));
+      return;
     }
     if (_invAdvanceTotal > _totalAmountFc + 0.005) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
@@ -1544,7 +1538,9 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           Row(children: [
             Expanded(flex: 1, child: TextFormField(
               controller: _taxInvNoCtrl,
-              decoration: _fieldDeco(isEnglish ? 'Vendor Tax Invoice No.' : 'เลขที่ใบกำกับภาษี (ผู้ขาย)'),
+              decoration: _fieldDeco(_taxInvRequired
+                  ? (isEnglish ? 'Vendor Tax Invoice No. *' : 'เลขที่ใบกำกับภาษี (ผู้ขาย) *')
+                  : (isEnglish ? 'Vendor Tax Invoice No.' : 'เลขที่ใบกำกับภาษี (ผู้ขาย)')),
               readOnly: _isReadOnly,
             )),
             const SizedBox(width: 8),
