@@ -1221,7 +1221,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       case 'FX_REVAL':
         return isEnglish ? 'Included in an FX revaluation$ref' : 'อยู่ในการปรับมูลค่าอัตราแลกเปลี่ยน$ref';
       case 'CM_CLEARED':
-        return isEnglish ? 'Bank payment already cleared/reconciled$ref' : 'การจ่ายเงินผ่านธนาคารเคลียร์/กระทบยอดแล้ว$ref';
+        return isEnglish ? 'Bank item already cleared/reconciled$ref' : 'รายการรับ/จ่ายเงินผ่านธนาคารเคลียร์/กระทบยอดแล้ว$ref';
       default:
         return code;
     }

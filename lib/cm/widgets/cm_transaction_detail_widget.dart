@@ -707,6 +707,8 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         return isEnglish ? 'The accounting period of this document is closed' : 'งวดบัญชีของเอกสารนี้ปิดแล้ว';
       case 'APPLIED':
         return isEnglish ? 'This voucher has been replenished$ref' : 'ใบเบิกนี้ถูกนำไปเติมเงินสดย่อยแล้ว$ref';
+      case 'CM_CLEARED':
+        return isEnglish ? 'Bank item already cleared/reconciled$ref' : 'รายการรับ/จ่ายเงินผ่านธนาคารเคลียร์/กระทบยอดแล้ว$ref';
       default:
         return code;
     }

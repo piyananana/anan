@@ -133,8 +133,8 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
           : 'รายการนี้กระทบยอดกับ Bank Statement แล้ว กรุณายกเลิกการกระทบยอดก่อน';
       case 'PERIOD_CLOSED': return isEnglish ? 'The CM period of the clearing date is closed' : 'งวด CM ของวันที่เคลียร์ปิดแล้ว';
       case 'SOURCE_DOC':    return isEnglish
-          ? 'Created by an AP document — void the source document instead$suffix'
-          : 'รายการนี้มาจากเอกสาร AP กรุณายกเลิกที่เอกสารต้นทาง$suffix';
+          ? 'Created by an AR/AP/CM document — void the source document instead$suffix'
+          : 'รายการนี้มาจากเอกสาร AR/AP/CM กรุณายกเลิกที่เอกสารต้นทาง$suffix';
       default:              return code;
     }
   }

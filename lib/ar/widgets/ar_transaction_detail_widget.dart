@@ -1565,7 +1565,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       case 'ALLOWANCE':
         return isEnglish ? 'Included in an allowance for doubtful accounts run$ref' : 'อยู่ในการตั้งค่าเผื่อหนี้สงสัยจะสูญ$ref';
       case 'CM_CLEARED':
-        return isEnglish ? 'Bank receipt already cleared/reconciled$ref' : 'การรับเงินผ่านธนาคารเคลียร์/กระทบยอดแล้ว$ref';
+        return isEnglish ? 'Bank item already cleared/reconciled$ref' : 'รายการรับ/จ่ายเงินผ่านธนาคารเคลียร์/กระทบยอดแล้ว$ref';
       default:
         return code;
     }
