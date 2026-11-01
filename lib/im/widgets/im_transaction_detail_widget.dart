@@ -362,6 +362,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // ใบมัดจำที่เลือกหักได้ — ใบที่ยังมียอดคงเหลือ สกุลเงินเดียวกับเอกสาร รวมกับที่บันทึกไว้แล้ว
   // เอกสารที่ตั้งหนี้แล้ว (Posted) แสดงเฉพาะที่หักไปแล้ว (ยอดคงเหลือของใบมัดจำถูกตัดไปแล้ว)
   Future<void> _loadAdvances({List<ImAdvance> saved = const []}) async {
+    final typed = {for (final r in _advRows) r.id: _parseNum(r.ctrl.text)};
     for (final r in _advRows) {
       r.ctrl.dispose();
     }
@@ -382,7 +383,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         final cur = _currency?.currencyCode ?? CurrencyService.baseCode;
         for (final o in open) {
           if ((o.currencyCode ?? CurrencyService.baseCode) != cur) continue;
-          final prev = saved.where((a) => a.advanceId == o.id).fold(0.0, (t, a) => t + a.appliedAmountFc);
+          final prev = saved.isNotEmpty
+              ? saved.where((a) => a.advanceId == o.id).fold(0.0, (t, a) => t + a.appliedAmountFc)
+              : (typed[o.id] ?? 0);
           rows.add(_AdvanceRow(id: o.id, docNo: o.docNo, docDate: o.docDate, balanceFc: o.balanceFc, vatRatio: o.vatRatio,
               rate: o.exchangeRate, amount: prev, refOrderId: o.refOrderId, refOrderDocNo: o.refOrderDocNo));
         }
@@ -1161,6 +1164,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (!_checkPickedCurrency(pickedLines.map(_poCurrencyCode).toSet())) return;
     final items = await Future.wait(pickedLines.map((l) => _itemService.fetchRow(l['item_id'] as int)));
     if (!mounted) return;
+    final curBefore = _currency?.currencyCode;
     setState(() {
       // ใบรับสินค้าที่ยังไม่มีรายการ ใช้รูปแบบราคา (รวม VAT หรือไม่) ตามใบสั่งซื้อ — ถ้ามีรายการอยู่แล้วแปลงราคาให้ตรงกับใบนี้
       if (_lines.isEmpty) _priceIncludesVat = pickedLines.first['price_includes_vat'] == true;
@@ -1207,6 +1211,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _exchangeRate = matched.baseRate > 0 ? matched.baseRate : 1;
       }
     });
+    if (_currency?.currencyCode != curBefore) _loadAdvances();
   }
 
   // '30'/'31'/'32' — เพิ่มรายการเข้า DLN จากบรรทัดที่ยังส่งได้ของ SO ที่อนุมัติแล้วของลูกค้านี้ (multi-select ได้
@@ -1313,6 +1318,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (!_checkPickedCurrency(pickedLines.map(_soCurrencyCode).toSet())) return;
     final items = await Future.wait(pickedLines.map((l) => _itemService.fetchRow(l['item_id'] as int)));
     if (!mounted) return;
+    final curBefore = _currency?.currencyCode;
     setState(() {
       // ใบส่งสินค้าที่ยังไม่มีรายการ ใช้รูปแบบราคา (รวม VAT หรือไม่) ตามใบสั่งขาย — ถ้ามีรายการอยู่แล้วแปลงราคาให้ตรงกับใบนี้
       if (_lines.isEmpty) _priceIncludesVat = pickedLines.first['price_includes_vat'] == true;
@@ -1366,6 +1372,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _exchangeRate = matched.baseRate > 0 ? matched.baseRate : 1;
       }
     });
+    if (_currency?.currencyCode != curBefore) _loadAdvances();
   }
 
   void _removeLine(_CountLine line) {
@@ -2214,7 +2221,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                     value: c,
                     child: Text('${c.currencyCode} - ${_currencyLabel(c)}', overflow: TextOverflow.ellipsis),
                   )).toList(),
-              onChanged: _isReadOnly ? null : (v) => setState(() { _currency = v; _exchangeRate = v?.baseRate ?? 1; }),
+              onChanged: _isReadOnly ? null : (v) {
+                final changed = v?.currencyCode != _currency?.currencyCode;
+                setState(() { _currency = v; _exchangeRate = v?.baseRate ?? 1; });
+                if (changed) _loadAdvances(); // ใบมัดจำที่หักได้ต้องสกุลเงินเดียวกับเอกสาร
+              },
             ),
           ),
           const SizedBox(width: 12),

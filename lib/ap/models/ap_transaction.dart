@@ -112,6 +112,9 @@ class ApTransactionHeader {
   final bool priceIncludesVat; // ราคาที่กรอกรวม VAT (ยอดที่เก็บยังเป็นก่อน VAT)
   final int? refPoId; // ใบมัดจำ: ใบสั่งซื้อที่อ้างอิง
   final String? refPoDocNo;
+  // เลขที่/วันที่ใบกำกับภาษีของผู้ขาย — รายงานภาษีซื้อ (ว่าง = ใช้เลขที่/วันที่เอกสาร)
+  final String? taxInvoiceNo;
+  final DateTime? taxInvoiceDate;
   // Audit
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -167,6 +170,7 @@ class ApTransactionHeader {
     this.branchId, this.branchCode, this.branchNameThai, this.branchNameEng,
     this.priceIncludesVat = false,
     this.refPoId, this.refPoDocNo,
+    this.taxInvoiceNo, this.taxInvoiceDate,
     this.createdAt, this.updatedAt, this.createdBy, this.updatedBy,
   });
 
@@ -222,6 +226,8 @@ class ApTransactionHeader {
       priceIncludesVat: json['price_includes_vat'] == true,
       refPoId: json['ref_po_id'] as int?,
       refPoDocNo: json['ref_po_doc_no'] as String?,
+      taxInvoiceNo: json['tax_invoice_no'] as String?,
+      taxInvoiceDate: parseLocalDateNullable(json['tax_invoice_date']),
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
       branchNameEng: json['branch_name_eng'],
@@ -267,6 +273,8 @@ class ApTransactionHeader {
         if (branchId != null) 'branch_id': branchId,
         'price_includes_vat': priceIncludesVat,
         'ref_po_id': refPoId,
+        'tax_invoice_no': taxInvoiceNo,
+        'tax_invoice_date': taxInvoiceDate != null ? formatLocalDate(taxInvoiceDate!) : null,
         if (createdBy != null) 'created_by': createdBy,
         if (updatedBy != null) 'updated_by': updatedBy,
       };

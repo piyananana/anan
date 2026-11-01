@@ -116,6 +116,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   int? _apAccountId;
   double _exchangeRate = 1.0;
   final _refNoCtrl = TextEditingController();
+  final _taxInvNoCtrl = TextEditingController(); // เลขที่ใบกำกับภาษีของผู้ขาย
+  DateTime? _taxInvDate;
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
   List<DocApprovalStep> _approvals = [];
@@ -230,6 +232,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   @override
   void dispose() {
     _refNoCtrl.dispose();
+    _taxInvNoCtrl.dispose();
     _descCtrl.dispose();
     for (final r in _detailRows) r.dispose();
     for (final c in _applyCtrlMap.values) c.dispose();
@@ -328,6 +331,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         _apAccountId = h.apAccountId;
         _exchangeRate = h.exchangeRate;
         _refNoCtrl.text = h.refNo ?? '';
+        _taxInvNoCtrl.text = h.taxInvoiceNo ?? '';
+        _taxInvDate = h.taxInvoiceDate;
         _descCtrl.text = h.description ?? '';
         _status = h.status;
         _approvals = data.approvals;
@@ -437,6 +442,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       _priceIncludesVat = false;
       _refPoId = null; _refPoDocNo = null;
       _refNoCtrl.clear(); _descCtrl.clear();
+      _taxInvNoCtrl.clear(); _taxInvDate = null;
       _status = 'Draft'; _approvals = []; _isReadOnly = false;
       _reverseBlock = null; _reverseBlockRef = null; _voidBlock = null; _voidBlockRef = null; _reverseHistory = [];
       _selectedDocType = _allowedDocTypes.isNotEmpty ? _allowedDocTypes.first : null;
@@ -882,6 +888,22 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     }
 
     _recalcTotals();
+    if (action == 'Post' && _hasDetailRows && _vatAmountFc.abs() > 0.005 && _taxInvNoCtrl.text.trim().isEmpty) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(isEnglish ? 'No tax invoice no.' : 'ยังไม่ได้ระบุเลขที่ใบกำกับภาษี'),
+          content: Text(isEnglish
+              ? 'The vendor tax invoice no. is empty. The input VAT report will show this document no. and date instead. Post anyway?'
+              : 'ยังไม่ได้ระบุเลขที่ใบกำกับภาษีของผู้ขาย รายงานภาษีซื้อจะแสดงเลขที่และวันที่ของเอกสารนี้แทน ต้องการ Post ต่อหรือไม่'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Post anyway' : 'Post ต่อ')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
     if (_invAdvanceTotal > _totalAmountFc + 0.005) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
           ? 'Deposit deducted exceeds the bill total'
@@ -946,6 +968,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       branchId: _selectedBranch?.branchId,
       priceIncludesVat: _priceIncludesVat,
       refPoId: _isAdvancePayment ? _refPoId : null,
+      taxInvoiceNo: _hasDetailRows && _taxInvNoCtrl.text.trim().isNotEmpty ? _taxInvNoCtrl.text.trim() : null,
+      taxInvoiceDate: _hasDetailRows && _taxInvNoCtrl.text.trim().isNotEmpty ? (_taxInvDate ?? _docDate) : null,
       createdBy: _transactionId == 0 ? userName : null,
       updatedBy: _transactionId != 0 ? userName : null,
     );
@@ -1515,6 +1539,41 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             ),
           ],
         ]),
+        if (_hasDetailRows) ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(flex: 1, child: TextFormField(
+              controller: _taxInvNoCtrl,
+              decoration: _fieldDeco(isEnglish ? 'Vendor Tax Invoice No.' : 'เลขที่ใบกำกับภาษี (ผู้ขาย)'),
+              readOnly: _isReadOnly,
+            )),
+            const SizedBox(width: 8),
+            Expanded(flex: 1, child: InkWell(
+              onTap: _isReadOnly ? null : () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _taxInvDate ?? _docDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100),
+                );
+                if (picked != null) setState(() => _taxInvDate = picked);
+              },
+              child: InputDecorator(
+                decoration: _fieldDeco(isEnglish ? 'Tax Invoice Date' : 'วันที่ใบกำกับภาษี'),
+                child: Row(children: [
+                  Expanded(child: Text(
+                    _taxInvDate != null ? _dateFmt.format(_taxInvDate!) : (isEnglish ? '(document date)' : '(วันที่เอกสาร)'),
+                    style: TextStyle(color: _taxInvDate == null ? Colors.grey[500] : null),
+                  )),
+                  if (!_isReadOnly && _taxInvDate != null)
+                    InkWell(onTap: () => setState(() => _taxInvDate = null), child: const Icon(Icons.clear, size: 14)),
+                  if (!_isReadOnly) const Icon(Icons.calendar_today, size: 14),
+                ]),
+              ),
+            )),
+            const Expanded(flex: 3, child: SizedBox()),
+          ]),
+        ],
         if (_headerExpanded) ...[
           const SizedBox(height: 12),
           // Row 1: Branch + Dims

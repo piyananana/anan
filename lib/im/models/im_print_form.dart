@@ -42,6 +42,7 @@ const Map<String, List<String>> printFieldGroupLabels = {
   'customer': ['ลูกค้า', 'Customer'],
   'document': ['เอกสาร', 'Document'],
   'total': ['ยอดรวม', 'Totals'],
+  'deposit': ['หักเงินมัดจำ', 'Deposit deduction'],
   'print': ['การพิมพ์', 'Printing'],
   'line': ['รายการ', 'Lines'],
 };
