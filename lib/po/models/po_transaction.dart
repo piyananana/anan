@@ -48,7 +48,11 @@ class PoTransactionHeader {
   final DateTime? dueDate;
   final String status;
   final double totalQty;
-  final double totalValueLc;
+  final double totalValueLc; // หลังส่วนลด ก่อน VAT (บาท)
+  final double vatAmountLc;
+  final double totalAmountLc; // รวม VAT (บาท)
+  // ราคาที่กรอกรวม VAT (user-approved 2026-10-31) — ส่งต่อไปใบรับสินค้าที่ดึงรายการ
+  final bool priceIncludesVat;
   final String? description;
   final int? branchId;
   final String? branchCode;
@@ -93,6 +97,9 @@ class PoTransactionHeader {
     this.status = 'Draft',
     this.totalQty = 0,
     this.totalValueLc = 0,
+    this.vatAmountLc = 0,
+    this.totalAmountLc = 0,
+    this.priceIncludesVat = false,
     this.description,
     this.branchId,
     this.branchCode,
@@ -137,6 +144,9 @@ class PoTransactionHeader {
       status: json['status'] ?? 'Draft',
       totalQty: toDouble(json['total_qty']),
       totalValueLc: toDouble(json['total_value_lc']),
+      vatAmountLc: toDouble(json['vat_amount_lc']),
+      totalAmountLc: toDouble(json['total_amount_lc']),
+      priceIncludesVat: json['price_includes_vat'] == true,
       description: json['description'],
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
@@ -170,6 +180,7 @@ class PoTransactionHeader {
         if (currencyId != null) 'currency_id': currencyId,
         if (currencyCode != null) 'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
+        'price_includes_vat': priceIncludesVat,
         if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
         if (description != null) 'description': description,
         if (refPrId != null) 'ref_pr_id': refPrId,
@@ -190,7 +201,10 @@ class PoTransactionDetail {
   final String? uomCode;
   final double qtyOrdered;
   final double unitPriceFc;
-  final double totalValueLc;
+  final double discountPercent;
+  final String? vatType; // ว่าง = ใบสั่งซื้อก่อนมี VAT ต่อบรรทัด (ใช้ VAT ตั้งต้นของสินค้า)
+  final double vatRate;
+  final double totalValueLc; // หลังส่วนลด ก่อน VAT (บาท)
   final double qtyReceived; // computed server-side — จำนวนที่รับแล้วผ่าน GRN ที่ Posted/Received (ref_po_detail_id)
   final int? refPrDetailId; // บรรทัดใบขอซื้อ (PR) ต้นทาง ถ้าบรรทัดนี้แปลงมาจาก PR
   final String? description;
@@ -208,6 +222,9 @@ class PoTransactionDetail {
     this.uomCode,
     this.qtyOrdered = 0,
     this.unitPriceFc = 0,
+    this.discountPercent = 0,
+    this.vatType,
+    this.vatRate = 0,
     this.totalValueLc = 0,
     this.qtyReceived = 0,
     this.refPrDetailId,
@@ -227,6 +244,9 @@ class PoTransactionDetail {
       uomCode: json['uom_code'],
       qtyOrdered: toDouble(json['qty_ordered']),
       unitPriceFc: toDouble(json['unit_price_fc']),
+      discountPercent: toDouble(json['discount_percent']),
+      vatType: json['vat_type'],
+      vatRate: toDouble(json['vat_rate']),
       totalValueLc: toDouble(json['total_value_lc']),
       qtyReceived: toDouble(json['qty_received']),
       refPrDetailId: json['ref_pr_detail_id'],
@@ -243,6 +263,9 @@ class PoTransactionDetail {
         if (uomId != null) 'uom_id': uomId,
         'qty_ordered': qtyOrdered,
         'unit_price_fc': unitPriceFc,
+        'discount_percent': discountPercent,
+        'vat_type': vatType,
+        'vat_rate': vatRate,
         if (refPrDetailId != null) 'ref_pr_detail_id': refPrDetailId,
         if (description != null) 'description': description,
       };

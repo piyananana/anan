@@ -22,6 +22,9 @@ import '../services/po_transaction_service.dart';
 import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../services/po_pr_transaction_service.dart';
 import '../../cd/models/cd_currency.dart';
+import '../../cd/models/cd_vat_rate.dart';
+import '../../cd/services/cd_vat_rate_service.dart';
+import '../../utils/vat_calc.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../sa/widgets/sa_attachment_widget.dart';
 import '../../sa/models/sa_doc_approval.dart';
@@ -68,8 +71,11 @@ class _LineForm {
   // ผู้ขาย (unitPriceFc=0 ไม่เคย resolve) จะถูกมองว่า "ผู้ใช้แก้ไปแล้ว" (0 != null) ตั้งแต่แรก ทำให้ไม่มีวัน
   // auto-fill ย้อนหลังได้เลยแม้จำนวนจะเปลี่ยนก็ตาม
   double lastResolvedPrice = 0;
-  _LineForm({this.id, this.item, this.qtyOrdered = 0, this.unitPriceFc = 0, this.qtyReceived = 0, this.refPrDetailId});
-  double get totalValueLc => qtyOrdered * unitPriceFc;
+  double discountPercent;
+  String? vatType; // ว่าง = ใบสั่งซื้อเก่าก่อนมี VAT ต่อบรรทัด
+  double vatRate;
+  _LineForm({this.id, this.item, this.qtyOrdered = 0, this.unitPriceFc = 0, this.qtyReceived = 0, this.refPrDetailId,
+      this.discountPercent = 0, this.vatType, this.vatRate = 0});
 }
 
 class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
@@ -105,6 +111,43 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
   List<Currency> _currencies = [];
   Currency? _currency;
   double _exchangeRate = 1;
+
+  // ราคารวม VAT + ส่วนลด % + VAT ต่อบรรทัด (user-approved 2026-10-31) — ส่งต่อไปใบรับสินค้าที่ดึงรายการ
+  bool _priceIncludesVat = false;
+  final _vatRateService = VatRateService();
+  List<VatRate> _vatRates = [];
+
+  // ยอดบรรทัดเป็นบาท — มิเรอร์ backend lineAmountsLc (utils/vatCalc.js): ปัดยอดสกุลเงินเอกสารก่อนคูณอัตรา,
+  // ราคารวม VAT ใช้ยอดรวมแปลงเป็นบาท ไม่รวม VAT คิด VAT จากยอดบาท
+  static double _r2(double v) => ((v + 2.220446049250313e-16) * 100).roundToDouble() / 100; // = backend round2 (Number.EPSILON)
+  LineAmounts _lineLc(_LineForm l) {
+    final vat = l.vatType == null || l.vatType == 'NOVAT' ? 0.0 : l.vatRate;
+    final a = calcLineAmounts(qty: l.qtyOrdered, price: l.unitPriceFc, discountPercent: l.discountPercent, vatRate: vat, priceIncludesVat: _priceIncludesVat);
+    final gross = _r2(_r2(a.gross) * _exchangeRate);
+    final net = _r2(_r2(a.net) * _exchangeRate);
+    final total = _priceIncludesVat && vat != 0 ? _r2(_r2(a.total) * _exchangeRate) : _r2(net + _r2(net * vat / 100));
+    return LineAmounts(gross, _r2(gross - net), net, _r2(total - net), total);
+  }
+  LineAmounts get _totalsLc {
+    double g = 0, d = 0, n = 0, v = 0, t = 0;
+    for (final l in _lines) {
+      final a = _lineLc(l);
+      g += a.gross; d += a.discount; n += a.net; v += a.vat; t += a.total;
+    }
+    return LineAmounts(g, d, n, v, t);
+  }
+
+  String _vatLabel(VatRate v) {
+    final rateStr = v.rate == v.rate.roundToDouble() ? v.rate.toStringAsFixed(0) : v.rate.toString();
+    return '${v.vatCode} $rateStr%';
+  }
+  // VAT ตั้งต้นของสินค้า (ไม่มีในรายการอัตรา = อัตราแรก)
+  void _applyDefaultVat(_LineForm l) {
+    final code = l.item?.defaultVatType;
+    final v = _vatRates.cast<VatRate?>().firstWhere((x) => x?.vatCode == code, orElse: () => _vatRates.isNotEmpty ? _vatRates.first : null);
+    l.vatType = v?.vatCode ?? code;
+    l.vatRate = v?.rate ?? 0;
+  }
 
   // sys_module='51' มีมากกว่าหนึ่งประเภทเอกสารได้ (เช่น POR ของ PO, PRQ ของ PR) จึงต้องกรองซ้ำด้วย sys_doc_type
   // '10' คือ PO (ตาม poSysDocType ใน sa_anan_module.dart) แล้วให้ผู้ใช้เลือกเองเหมือนหน้าจอธุรกรรม AR/AP — เผื่อ
@@ -159,6 +202,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     _refPrDocNoLabel = null;
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null);
     _exchangeRate = _currency?.baseRate ?? 1;
+    _priceIncludesVat = false;
     _lines = [];
   }
 
@@ -172,6 +216,9 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       }
       if (_currencies.isEmpty) {
         _currencies = await _currencyService.fetchActiveRows();
+      }
+      if (_vatRates.isEmpty) {
+        _vatRates = (await _vatRateService.fetchRows()).where((v) => v.isActive).toList();
       }
       if (widget.transactionId == null && widget.copyFromId != null) {
         final h = await _service.fetchRow(widget.copyFromId!);
@@ -194,6 +241,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
+        _priceIncludesVat = h.priceIncludesVat;
         final items = await Future.wait(h.details.map((d) => _itemService.fetchRow(d.itemId)));
         _lines = [
           for (var i = 0; i < h.details.length; i++)
@@ -201,8 +249,15 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
               item: items[i],
               qtyOrdered: h.details[i].qtyOrdered,
               unitPriceFc: h.details[i].unitPriceFc,
+              discountPercent: h.details[i].discountPercent,
+              vatType: h.details[i].vatType,
+              vatRate: h.details[i].vatRate,
             ),
         ];
+        // ใบเก่าก่อนมี VAT ต่อบรรทัด — ใบใหม่ใช้ VAT ตั้งต้นของสินค้า
+        for (final l in _lines) {
+          if (l.vatType == null) _applyDefaultVat(l);
+        }
         // คำนวณวันครบกำหนดใหม่จากเงื่อนไขเครดิตของผู้ขายบน doc_date ใหม่ (วันนี้) — ไม่คัดลอกวันครบกำหนดเดิมมาตรงๆ
         // เพราะเอกสารที่คัดลอกเป็นธุรกรรมใหม่ที่เกิดขึ้นวันนี้ ไม่ใช่ของเดิมที่ย้อนวันที่ไป
         if (_vendor != null) _selectVendor(_vendor!);
@@ -231,6 +286,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
+        _priceIncludesVat = h.priceIncludesVat;
         // ดึง ImItem เต็มจาก itemId เสมอ ไม่ใช้ค่า snapshot (item_code/item_name) ที่บันทึกไว้ตอนสร้างเอกสารมาแสดง
         // ตรงๆ — มิเรอร์ im_transaction_detail_widget.dart:366 (โหลด GRN) ทุกประการ เพื่อให้ชื่อสินค้าที่แสดงตรงกับ
         // ข้อมูลสินค้าปัจจุบันเสมอ ไม่ขึ้นกับว่า snapshot ตอนสร้างถูกบันทึกไว้ครบหรือไม่
@@ -244,6 +300,9 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
               unitPriceFc: h.details[i].unitPriceFc,
               qtyReceived: h.details[i].qtyReceived,
               refPrDetailId: h.details[i].refPrDetailId,
+              discountPercent: h.details[i].discountPercent,
+              vatType: h.details[i].vatType,
+              vatRate: h.details[i].vatRate,
             ),
         ];
       }
@@ -302,6 +361,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     final result = await showDialog<ImItem>(context: context, builder: (_) => const _ItemPickerDialog());
     if (result == null || !mounted) return;
     final line = _LineForm(item: result, qtyOrdered: 1, unitPriceFc: 0);
+    _applyDefaultVat(line);
     setState(() => _lines.add(line));
     if (_vendor != null) {
       final resolved = await _service.resolvePrice(
@@ -421,12 +481,14 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         final id = l['detail_id'] as int;
         final remaining = (l['qty_remaining'] as num).toDouble();
         final qty = (double.tryParse(qtyCtrls[id]!.text) ?? 0).clamp(0, remaining);
-        _lines.add(_LineForm(
+        final line = _LineForm(
           item: items[i],
           qtyOrdered: qty.toDouble(),
           unitPriceFc: _prNum(l['estimated_unit_cost']),
           refPrDetailId: id,
-        ));
+        );
+        _applyDefaultVat(line);
+        _lines.add(line);
       }
       _refPrId = pickedLines.first['header_id'] as int;
       _refPrDocNoLabel = pickedLines.first['doc_no'] as String?;
@@ -448,6 +510,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         id: _id ?? 0, docId: _docId ?? 0, docNo: _docNo, docDate: _docDate,
         vendorId: _vendor!.id!, warehouseId: _warehouse!.id, dueDate: _dueDate,
         currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? CurrencyService.baseCode, exchangeRate: _exchangeRate,
+        priceIncludesVat: _priceIncludesVat,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         refPrId: _refPrId,
       );
@@ -455,6 +518,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
           .map((l) => PoTransactionDetail(
                 id: l.id, lineNo: 0, itemId: l.item!.id!, itemCode: l.item!.itemCode, itemName: l.item!.itemNameTh,
                 qtyOrdered: l.qtyOrdered, unitPriceFc: l.unitPriceFc, refPrDetailId: l.refPrDetailId,
+                discountPercent: l.discountPercent, vatType: l.vatType, vatRate: l.vatRate,
               ))
           .toList();
       if (_id == null) {
@@ -760,6 +824,13 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                   ),
                 ],
                 const Spacer(),
+                Checkbox(
+                  value: _priceIncludesVat,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: _isReadOnly ? null : (v) => setState(() => _priceIncludesVat = v ?? false),
+                ),
+                Text(isEnglish ? 'Prices include VAT' : 'ราคารวม VAT'),
+                const SizedBox(width: 12),
                 if (!_isReadOnly) ...[
                   OutlinedButton.icon(onPressed: _pickPrLines, icon: const Icon(Icons.playlist_add_check, size: 16), label: Text(isEnglish ? 'From PR' : 'จากใบขอซื้อ')),
                   const SizedBox(width: 8),
@@ -802,7 +873,34 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    SizedBox(width: 100, child: Text(_fmtValue.format(l.totalValueLc * _exchangeRate), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    SizedBox(
+                      width: 70,
+                      child: TextFormField(
+                        initialValue: _fmtQty.format(l.discountPercent),
+                        enabled: !_isReadOnly,
+                        textAlign: TextAlign.right,
+                        decoration: InputDecoration(labelText: isEnglish ? 'Disc %' : 'ส่วนลด %', isDense: true, border: const OutlineInputBorder()),
+                        onChanged: (v) => setState(() => l.discountPercent = (double.tryParse(v) ?? 0).clamp(0, 100).toDouble()),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 110,
+                      child: DropdownButtonFormField<String>(
+                        value: l.vatType != null && _vatRates.any((v) => v.vatCode == l.vatType) ? l.vatType : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'VAT', isDense: true, border: OutlineInputBorder()),
+                        items: _vatRates.map((v) => DropdownMenuItem(value: v.vatCode, child: Text(_vatLabel(v), style: const TextStyle(fontSize: 12)))).toList(),
+                        onChanged: _isReadOnly ? null : (code) => setState(() {
+                          final v = _vatRates.firstWhere((x) => x.vatCode == code);
+                          l.vatType = v.vatCode;
+                          l.vatRate = v.rate;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // ยอดบรรทัดหลังส่วนลด (บาท) ตามรูปแบบราคาที่กรอก — รวม VAT เมื่อเลือกราคารวม VAT
+                    SizedBox(width: 100, child: Text(_fmtValue.format(_priceIncludesVat ? _lineLc(l).total : _lineLc(l).net), textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
                     if (l.qtyReceived > 0)
                       Padding(
                         padding: const EdgeInsets.only(left: 8),
@@ -818,17 +916,22 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
               const Divider(),
               Align(
                 alignment: Alignment.centerRight,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  if (_currency != null && !_currency!.baseCurrencyFlag)
-                    Text(
-                      '${isEnglish ? "Total" : "รวม"}: ${_fmtValue.format(_lines.fold<double>(0, (s, l) => s + l.totalValueLc))} ${_currency!.currencyCode}',
-                      style: const TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                  Text(
-                    '${isEnglish ? "Total" : "รวม"} ($_baseCurrencyCode): ${_fmtValue.format(_lines.fold<double>(0, (s, l) => s + l.totalValueLc * _exchangeRate))}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                ]),
+                child: Builder(builder: (_) {
+                  final t = _totalsLc;
+                  Widget row(String label, double v, {bool bold = false}) => Text(
+                        '$label ($_baseCurrencyCode): ${_fmtValue.format(v)}',
+                        style: bold ? const TextStyle(fontWeight: FontWeight.bold, fontSize: 15) : const TextStyle(fontSize: 13),
+                      );
+                  return Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    if (t.discount.abs() >= 0.005) ...[
+                      row(isEnglish ? 'Before discount' : 'ก่อนส่วนลด', t.gross),
+                      row(isEnglish ? 'Discount' : 'ส่วนลด', t.discount),
+                    ],
+                    row(isEnglish ? 'Before VAT' : 'ก่อน VAT', t.net),
+                    row('VAT', t.vat),
+                    row(isEnglish ? 'Total' : 'รวม', t.total, bold: true),
+                  ]);
+                }),
               ),
             ]),
           ),
