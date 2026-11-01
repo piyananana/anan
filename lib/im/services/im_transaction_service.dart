@@ -160,6 +160,7 @@ class ImTransactionService {
     required List<ImTransactionDetail> details,
     required String action,
     List<DocSalesperson>? salespersons, // null = ไม่ส่ง (เอกสารที่ไม่ใช่ฝั่งขาย)
+    List<ImAdvance>? advances, // เงินมัดจำที่หักในใบตั้งหนี้/ใบแจ้งหนี้อัตโนมัติ — null = ไม่ส่ง
   }) async {
     final authHeaders = await authService.getAuthHeader();
     final body = jsonEncode({
@@ -167,6 +168,7 @@ class ImTransactionService {
       'details': details.map((e) => e.toJson()).toList(),
       'action': action,
       if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
+      if (advances != null) 'advances': advances.map((e) => e.toJson()).toList(),
     });
     final response = await http.post(
       Uri.parse('$baseUrl/im_transaction'),
@@ -224,12 +226,14 @@ class ImTransactionService {
     required ImTransactionHeader header,
     required List<ImTransactionDetail> details,
     List<DocSalesperson>? salespersons,
+    List<ImAdvance>? advances,
   }) async {
     final authHeaders = await authService.getAuthHeader();
     final body = jsonEncode({
       'header': header.toJson(),
       'details': details.map((e) => e.toJson()).toList(),
       if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
+      if (advances != null) 'advances': advances.map((e) => e.toJson()).toList(),
     });
     final response = await http.put(
       Uri.parse('$baseUrl/im_transaction/$id'),
@@ -244,6 +248,23 @@ class ImTransactionService {
     } else {
       final err = json.decode(response.body);
       throw Exception(err['message'] ?? 'บันทึกข้อมูลล้มเหลว');
+    }
+  }
+
+  // ใบมัดจำที่ยังมียอดคงเหลือ — ผู้ขาย = ใบจ่ายมัดจำ AP, ลูกค้า = ใบรับมัดจำ AR (ใช้ endpoint ของ AP/AR เอง)
+  Future<List<ImOpenAdvance>> fetchOpenAdvances({int? vendorId, int? customerId}) async {
+    final headers = await authService.getAuthHeader();
+    final uri = vendorId != null
+        ? Uri.parse('${AppConfig.apiAp}/ap_transaction/open_advances?vendor_id=$vendorId')
+        : Uri.parse('${AppConfig.apiAr}/ar_transaction/open_advances?customer_id=$customerId');
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return (json.decode(response.body) as List).map((e) => ImOpenAdvance.fromJson(e as Map<String, dynamic>)).toList();
+    } else if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    } else {
+      throw Exception('โหลดใบมัดจำล้มเหลว: ${response.statusCode}');
     }
   }
 
@@ -270,6 +291,9 @@ class ImTransactionService {
     required int id,
     required String refNo,
     required List<ImTransactionDetail> details,
+    List<ImAdvance>? advances,
+    required DateTime vendorInvoiceDate,
+    required bool priceIncludesVat,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -277,7 +301,13 @@ class ImTransactionService {
       headers: headers,
       body: jsonEncode({
         'ref_no': refNo,
-        'lines': details.map((d) => {'id': d.id, 'billed_unit_cost': d.billedUnitCost, 'vat_type': d.vatType, 'vat_rate': d.vatRate}).toList(),
+        // วันที่ใบกำกับ = วันที่/งวดของใบตั้งหนี้ AP, ราคารวม VAT ตามรูปแบบของใบกำกับจริง
+        'vendor_invoice_date': formatLocalDate(vendorInvoiceDate),
+        'price_includes_vat': priceIncludesVat,
+        // ราคาตามใบกำกับในสกุลเงินเอกสาร (backend คูณอัตราแลกเปลี่ยนเอง)
+        'lines': details.map((d) => {'id': d.id, 'billed_unit_cost_fc': d.billedUnitCostFc, 'billed_unit_cost': d.billedUnitCost,
+            'discount_percent': d.discountPercent, 'vat_type': d.vatType, 'vat_rate': d.vatRate}).toList(),
+        if (advances != null) 'advances': advances.map((e) => e.toJson()).toList(),
       }),
     );
     if (response.statusCode == 200) {
@@ -301,6 +331,7 @@ class ImTransactionService {
     String? customerPoNo,
     DateTime? customerPoDate,
     double? exchangeRate,
+    List<ImAdvance>? advances,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -311,8 +342,10 @@ class ImTransactionService {
         if (exchangeRate != null) 'exchange_rate': exchangeRate,
         'customer_po_no': customerPoNo,
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate) : null,
-        'lines': details.map((d) => {'id': d.id, 'unit_price': d.unitPrice, 'vat_type': d.vatType, 'vat_rate': d.vatRate}).toList(),
+        'lines': details.map((d) => {'id': d.id, 'unit_price': d.unitPrice, 'discount_percent': d.discountPercent,
+            'vat_type': d.vatType, 'vat_rate': d.vatRate}).toList(),
         if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
+        if (advances != null) 'advances': advances.map((e) => e.toJson()).toList(),
       }),
     );
     if (response.statusCode == 200) {

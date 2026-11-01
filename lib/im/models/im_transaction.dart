@@ -73,6 +73,10 @@ class ImTransactionHeader {
   final int? currencyId;
   final String? currencyCode;
   final double exchangeRate;
+  // ราคาที่กรอกรวม VAT แล้ว (เอกสารที่มี VAT ต่อบรรทัด) — user-approved 2026-10-31
+  final bool priceIncludesVat;
+  // วันที่ใบกำกับผู้ขาย ('11'/'12') — วันที่/งวดของใบตั้งหนี้ AP อัตโนมัติ (ว่าง = วันที่รับสินค้า)
+  final DateTime? vendorInvoiceDate;
   final String? description;
   final String status;
   final int? glEntryId;
@@ -139,6 +143,8 @@ class ImTransactionHeader {
     this.currencyId,
     this.currencyCode,
     this.exchangeRate = 1,
+    this.priceIncludesVat = false,
+    this.vendorInvoiceDate,
     this.description,
     this.status = 'Draft',
     this.glEntryId,
@@ -199,6 +205,8 @@ class ImTransactionHeader {
       currencyId: json['currency_id'],
       currencyCode: json['currency_code'],
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
+      priceIncludesVat: json['price_includes_vat'] == true,
+      vendorInvoiceDate: json['vendor_invoice_date'] != null ? parseLocalDate(json['vendor_invoice_date']) : null,
       description: json['description'],
       status: json['status'] ?? 'Draft',
       glEntryId: json['gl_entry_id'],
@@ -244,6 +252,8 @@ class ImTransactionHeader {
         if (currencyId != null) 'currency_id': currencyId,
         if (currencyCode != null) 'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
+        'price_includes_vat': priceIncludesVat,
+        if (vendorInvoiceDate != null) 'vendor_invoice_date': formatLocalDate(vendorInvoiceDate!),
         if (description != null) 'description': description,
         if (dim1Id != null) 'dim1_id': dim1Id,
         if (dim2Id != null) 'dim2_id': dim2Id,
@@ -280,6 +290,7 @@ class ImTransactionDetail {
   final double? billedUnitCost; // '12' (รับสินค้า รอตั้งหนี้) เท่านั้น — ต้นทุนจริงตามใบกำกับ อาจต่างจาก unitCost
   final double? billedUnitCostFc; // เหมือน unitCostFc แต่สำหรับ billedUnitCost
   final double? unitPrice; // '31'/'32' (DLN + ตั้งหนี้ลูกหนี้) เท่านั้น — ราคาขายต่อหน่วย ใช้คำนวณรายได้ตอนสร้างใบแจ้งหนี้ AR
+  final double? discountPercent; // ส่วนลด % ของบรรทัดที่มีราคา (ฝั่งซื้อ = ส่วนลดรับ, ฝั่งขาย = ส่วนลดขาย)
   final bool isFree; // ของแถม — ฝั่งรับ (GR family) ยกเว้นบังคับ unitCost>0, ฝั่งขาย (DL family) auto-zero+lock unitPrice
   final String? vatType; // ใช้เฉพาะประเภทเอกสารที่สร้าง/อ้างอิงใบกำกับ AP/AR อัตโนมัติ — vat_code อ้างอิง cd_vat_rate
   final double? vatRate; // snapshot อัตรา ณ ตอนเลือก (ไม่ผูกกับ cd_vat_rate อีกทีตอน Post เหมือน AR/AP เอง)
@@ -317,6 +328,7 @@ class ImTransactionDetail {
     this.billedUnitCost,
     this.billedUnitCostFc,
     this.unitPrice,
+    this.discountPercent,
     this.isFree = false,
     this.vatType,
     this.vatRate,
@@ -360,6 +372,7 @@ class ImTransactionDetail {
       billedUnitCost: toDoubleN(json['billed_unit_cost']),
       billedUnitCostFc: toDoubleN(json['billed_unit_cost_fc']),
       unitPrice: toDoubleN(json['unit_price']),
+      discountPercent: toDoubleN(json['discount_percent']),
       isFree: json['is_free'] ?? false,
       vatType: json['vat_type'],
       vatRate: toDoubleN(json['vat_rate']),
@@ -394,6 +407,7 @@ class ImTransactionDetail {
         if (billedUnitCost != null) 'billed_unit_cost': billedUnitCost,
         if (billedUnitCostFc != null) 'billed_unit_cost_fc': billedUnitCostFc,
         if (unitPrice != null) 'unit_price': unitPrice,
+        if (discountPercent != null) 'discount_percent': discountPercent,
         'is_free': isFree,
         if (vatType != null) 'vat_type': vatType,
         if (vatRate != null) 'vat_rate': vatRate,
@@ -481,6 +495,7 @@ class ImReturnableLine {
   final String? vatType;
   final double? vatRate; // อัตรา VAT ณ ตอนขาย — ใบลดหนี้ควรกลับรายการด้วยอัตราเดียวกัน
   final double? returnPriceFc; // ราคาซื้อในสกุลเงินของใบรับสินค้าต้นฉบับ ('15' ใช้เป็นราคาเริ่มต้นของใบลดหนี้ AP)
+  final double? discountPercent; // ส่วนลด % ของบรรทัดต้นฉบับ — ราคาที่ดึงมาเป็นราคาก่อนส่วนลด ก่อน VAT
 
   const ImReturnableLine({
     required this.id,
@@ -501,6 +516,7 @@ class ImReturnableLine {
     this.vatType,
     this.vatRate,
     this.returnPriceFc,
+    this.discountPercent,
   });
 
   factory ImReturnableLine.fromJson(Map<String, dynamic> json) {
@@ -525,6 +541,7 @@ class ImReturnableLine {
       vatType: json['vat_type'],
       vatRate: toDoubleN(json['vat_rate']),
       returnPriceFc: toDoubleN(json['return_price_fc']),
+      discountPercent: toDoubleN(json['discount_percent']),
     );
   }
 }
@@ -562,6 +579,56 @@ class ImDocBlock {
       isEnglish ? '${_en[code] ?? code}${ref != null ? ' ($ref)' : ''}' : message;
 }
 
+// ── เงินมัดจำที่เลือกหักในใบตั้งหนี้/ใบแจ้งหนี้ที่สร้างอัตโนมัติ ('11'/'12' ใบจ่ายมัดจำ AP, '31'/'32' ใบรับมัดจำ AR)
+class ImAdvance {
+  final int advanceId;
+  final double appliedAmountFc;
+  final String? docNo;
+
+  const ImAdvance({required this.advanceId, required this.appliedAmountFc, this.docNo});
+
+  factory ImAdvance.fromJson(Map<String, dynamic> json) => ImAdvance(
+        advanceId: json['advance_id'] ?? 0,
+        appliedAmountFc: double.tryParse(json['applied_amount_fc']?.toString() ?? '') ?? 0,
+        docNo: json['doc_no'],
+      );
+
+  Map<String, dynamic> toJson() => {'advance_id': advanceId, 'applied_amount_fc': appliedAmountFc};
+}
+
+// ใบมัดจำที่ยังมียอดคงเหลือ (ตัวเลือกให้หัก) — ยอดสกุลเงินเอกสาร = ยอดบาท / อัตราของใบมัดจำ
+class ImOpenAdvance {
+  final int id;
+  final String docNo;
+  final DateTime? docDate;
+  final String? currencyCode;
+  final double exchangeRate;
+  final double totalAmountLc;
+  final double vatAmountLc;
+  final double balanceAmountLc;
+
+  const ImOpenAdvance({required this.id, required this.docNo, this.docDate, this.currencyCode, this.exchangeRate = 1,
+      this.totalAmountLc = 0, this.vatAmountLc = 0, this.balanceAmountLc = 0});
+
+  double get balanceFc => exchangeRate > 0 ? balanceAmountLc / exchangeRate : balanceAmountLc;
+  // สัดส่วน VAT ของใบมัดจำ — ส่วนที่หักแยกเป็นก่อน VAT + VAT ตามสัดส่วนนี้ (เหมือน backend)
+  double get vatRatio => totalAmountLc != 0 ? vatAmountLc / totalAmountLc : 0;
+
+  factory ImOpenAdvance.fromJson(Map<String, dynamic> json) {
+    double d(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0;
+    return ImOpenAdvance(
+      id: json['id'] ?? 0,
+      docNo: json['doc_no'] ?? '',
+      docDate: json['doc_date'] != null ? parseLocalDate(json['doc_date']) : null,
+      currencyCode: json['currency_code'],
+      exchangeRate: d(json['exchange_rate']) > 0 ? d(json['exchange_rate']) : 1,
+      totalAmountLc: d(json['total_amount_lc']),
+      vatAmountLc: d(json['vat_amount_lc']),
+      balanceAmountLc: d(json['balance_amount_lc']),
+    );
+  }
+}
+
 // ── Wrapper ───────────────────────────────────────────────────────────────
 class ImTransaction {
   final ImTransactionHeader header;
@@ -575,12 +642,14 @@ class ImTransaction {
   final List<DocSalesperson> salespersons;
   // คำขออนุมัติเกินวงเงินเครดิต (เอกสารฝั่งขาย)
   final DocCreditState credit;
+  final List<ImAdvance> advances;
 
   const ImTransaction({
     required this.header, this.details = const [],
     this.reverseBlock, this.reverseTo, this.voidBlock, this.deleteBlock, this.reverseHistory = const [],
     this.salespersons = const [],
     this.credit = const DocCreditState(),
+    this.advances = const [],
   });
 
   factory ImTransaction.fromJson(Map<String, dynamic> json) => ImTransaction(
@@ -595,5 +664,8 @@ class ImTransaction {
         reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
         salespersons: DocSalesperson.listFromJson(json['salespersons']),
         credit: DocCreditState.fromJson(json, json['credit_approvals']),
+        advances: (json['advances'] as List<dynamic>? ?? [])
+            .map((e) => ImAdvance.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }

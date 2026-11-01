@@ -9,6 +9,7 @@ import '../services/im_item_service.dart';
 import '../../po/services/po_transaction_service.dart';
 import '../../so/services/so_transaction_service.dart';
 import '../../utils/date_utils.dart';
+import '../../utils/vat_calc.dart';
 import '../widgets/im_item_list_widget.dart';
 import '../widgets/im_warehouse_list_widget.dart';
 import '../widgets/im_location_tree_widget.dart';
@@ -87,6 +88,7 @@ class _CountLine {
   final TextEditingController unitCostCtrl;
   final TextEditingController billedUnitCostCtrl; // '12' เท่านั้น — ต้นทุนตามใบกำกับจริง (อาจต่างจาก unitCostCtrl)
   final TextEditingController unitPriceCtrl; // '31'/'32' เท่านั้น — ราคาขายต่อหน่วย ใช้คำนวณรายได้ตอนสร้างใบแจ้งหนี้ AR
+  final TextEditingController discPctCtrl; // ส่วนลด % ของบรรทัดที่มีราคา (ฝั่งซื้อ = ส่วนลดรับ, ฝั่งขาย = ส่วนลดขาย)
   final TextEditingController lotNoCtrl;
   final TextEditingController serialNoCtrl;
 
@@ -121,6 +123,7 @@ class _CountLine {
     double? unitCost,
     double? billedUnitCost,
     double? unitPrice,
+    double discountPercent = 0,
     String lotNo = '',
     String serialNo = '',
   })  : countedQtyCtrl = TextEditingController(text: countedQty == 0 ? '' : _fmtInput(countedQty)),
@@ -128,6 +131,7 @@ class _CountLine {
         unitCostCtrl = TextEditingController(text: unitCost != null && unitCost != 0 ? _fmtInput(unitCost) : ''),
         billedUnitCostCtrl = TextEditingController(text: billedUnitCost != null && billedUnitCost != 0 ? _fmtInput(billedUnitCost) : ''),
         unitPriceCtrl = TextEditingController(text: unitPrice != null && unitPrice != 0 ? _fmtInput(unitPrice) : ''),
+        discPctCtrl = TextEditingController(text: discountPercent != 0 ? _fmtInput(discountPercent) : ''),
         lotNoCtrl = TextEditingController(text: lotNo),
         serialNoCtrl = TextEditingController(text: serialNo);
 
@@ -153,9 +157,25 @@ class _CountLine {
     unitCostCtrl.dispose();
     billedUnitCostCtrl.dispose();
     unitPriceCtrl.dispose();
+    discPctCtrl.dispose();
     lotNoCtrl.dispose();
     serialNoCtrl.dispose();
   }
+}
+
+// ใบมัดจำที่เลือกหักได้ + ยอดที่หัก (สกุลเงินเอกสาร)
+class _AdvanceRow {
+  final int id;
+  final String docNo;
+  final DateTime? docDate;
+  final double balanceFc;
+  final double vatRatio; // สัดส่วน VAT ของใบมัดจำ
+  final double rate; // อัตราแลกเปลี่ยนของใบมัดจำ
+  final TextEditingController ctrl;
+
+  _AdvanceRow({required this.id, required this.docNo, this.docDate, required this.balanceFc, required this.vatRatio,
+      this.rate = 1, double amount = 0})
+      : ctrl = TextEditingController(text: amount > 0 ? amount.toStringAsFixed(2) : '');
 }
 
 class ImTransactionDetailWidget extends StatefulWidget {
@@ -247,12 +267,23 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   double _exchangeRate = 1;
 
   List<_CountLine> _lines = [];
+  // ราคารวม VAT (เอกสารที่มี VAT ต่อบรรทัด) + ส่วนลด % ต่อบรรทัดที่มีราคา — user-approved 2026-10-31
+  bool _priceIncludesVat = false;
+  // วันที่ใบกำกับผู้ขาย ('11'/'12') — null = ค่าตั้งต้น ('11' วันที่เอกสาร, '12' วันนี้) ดู _invoiceDate
+  DateTime? _vendorInvoiceDate;
+  // เงินมัดจำที่หักในใบตั้งหนี้/ใบแจ้งหนี้ที่สร้างอัตโนมัติ ('11'/'12' ใบจ่ายมัดจำ AP, '31'/'32' ใบรับมัดจำ AR)
+  List<_AdvanceRow> _advRows = [];
   List<ModuleDocument> _docTypes = [];
   List<PostingPeriod> _openPeriods = [];
   ImGlAccountSetup? _docSetup;
   List<GlEntryDetail>? _postedGlDetails;
 
   bool get _isReadOnly => widget.viewOnly || _status != 'Draft' || _credit.isPending;
+  // วันที่ใบกำกับผู้ขาย: '11' ตั้งแต่ร่าง, '12' ตอนตั้งหนี้ (Received) และหลัง Post
+  bool get _showInvoiceDate => _isGrnBillingMode || (_isGrDeferredMode && _status != 'Draft');
+  DateTime get _invoiceDate => _vendorInvoiceDate ?? (_isGrDeferredMode ? DateTime.now() : _docDate);
+  // ราคารวม VAT แก้ได้ตอนร่าง หรือตอนตั้งหนี้ของ '12' ตามรูปแบบของใบกำกับจริง
+  bool get _canEditPriceInclVat => !_isReadOnly || (_isGrDeferredMode && _status == 'Received' && !widget.viewOnly);
   bool get _isIssueMode => _selectedSysDocType == '60'; // ISS — เบิกสินค้า
   bool get _isTransferMode => _selectedSysDocType == '70'; // TRF — โอนสินค้า
   bool get _isReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12' || _selectedSysDocType == '13'; // GRN — รับสินค้า (รวมรับฝากขาย '13')
@@ -291,6 +322,73 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // ตามปกติ เพราะรับของ/ส่งของจริงไปแล้ว
   // เอกสารสกุลเงินต่างประเทศ (ไม่ใช่สกุลเงินหลัก) — ใช้ตัดสินว่าแก้อัตราตอนตั้งหนี้ '32' ได้ และแสดงรหัสสกุลเงินที่ช่องราคา
   bool get _isForeignCurrency => _currency != null && !_currency!.baseCurrencyFlag;
+  // บรรทัดที่มีราคาซื้อ/ขาย (ส่วนลด %) — '30' ส่งสินค้าไม่ตั้งหนี้ไม่มีราคา
+  bool get _showDiscount => _isApVendorMode || _isArVatMode;
+  bool get _inclVat => _priceIncludesVat && _isVatMode;
+  // หักเงินมัดจำได้เฉพาะเอกสารที่สร้างใบตั้งหนี้ AP / ใบแจ้งหนี้ AR
+  bool get _showAdvances => _isGrnBillingMode || _isGrDeferredMode || _isDlnBillingMode || _isDlnDeferredMode;
+  double get _advTotalFc => _advRows.fold(0.0, (t, r) => t + _parseNum(r.ctrl.text));
+  List<ImAdvance> get _advancesForSave => [
+        for (final r in _advRows)
+          if (_parseNum(r.ctrl.text) > 0) ImAdvance(advanceId: r.id, appliedAmountFc: _parseNum(r.ctrl.text)),
+      ];
+
+  // ยอดบรรทัด (สกุลเงินเอกสาร) ตามส่วนลด/ราคารวม VAT — billed: '12' ใช้ราคาตามใบกำกับถ้ากรอกไว้ (มิเรอร์ backend imLineAmounts)
+  LineAmounts _amt(_CountLine l, {bool billed = false}) {
+    final ctrl = _isArVatMode
+        ? l.unitPriceCtrl
+        : (billed && l.billedUnitCostCtrl.text.trim().isNotEmpty ? l.billedUnitCostCtrl : l.unitCostCtrl);
+    return calcLineAmounts(
+      qty: l.variance.abs(),
+      price: _parseNum(ctrl.text),
+      discountPercent: _showDiscount ? _parseNum(l.discPctCtrl.text) : 0,
+      vatRate: l.vatRate,
+      noVat: !_isVatMode || l.vatType == null || l.vatType == 'NOVAT',
+      priceIncludesVat: _inclVat,
+    );
+  }
+
+  // ราคาต่อหน่วยหลังส่วนลด ก่อน VAT — ใช้เทียบกับราคาในใบสั่งซื้อ/ใบสั่งขาย
+  double _netUnit(_CountLine l, {bool billed = false}) {
+    final qty = l.variance.abs();
+    return qty == 0 ? 0 : _amt(l, billed: billed).net / qty;
+  }
+
+  // ยอดรวมของใบตั้งหนี้/ใบแจ้งหนี้ที่จะสร้าง (สกุลเงินเอกสาร รวม VAT) — ใช้จำกัดยอดหักมัดจำ
+  double get _billTotalFc => _lines.fold(0.0, (t, l) => t + _amt(l, billed: _isGrDeferredMode).total);
+
+  // ใบมัดจำที่เลือกหักได้ — ใบที่ยังมียอดคงเหลือ สกุลเงินเดียวกับเอกสาร รวมกับที่บันทึกไว้แล้ว
+  // เอกสารที่ตั้งหนี้แล้ว (Posted) แสดงเฉพาะที่หักไปแล้ว (ยอดคงเหลือของใบมัดจำถูกตัดไปแล้ว)
+  Future<void> _loadAdvances({List<ImAdvance> saved = const []}) async {
+    for (final r in _advRows) {
+      r.ctrl.dispose();
+    }
+    _advRows = [];
+    if (!_showAdvances || (_vendorId == null && _customerId == null)) {
+      if (mounted) setState(() {});
+      return;
+    }
+    final rows = <_AdvanceRow>[];
+    if (_status == 'Posted' || _status == 'Void') {
+      for (final a in saved) {
+        rows.add(_AdvanceRow(id: a.advanceId, docNo: a.docNo ?? '', balanceFc: a.appliedAmountFc, vatRatio: 0, amount: a.appliedAmountFc));
+      }
+    } else {
+      try {
+        final open = await _service.fetchOpenAdvances(
+            vendorId: _isApVendorMode ? _vendorId : null, customerId: _isApVendorMode ? null : _customerId);
+        final cur = _currency?.currencyCode ?? CurrencyService.baseCode;
+        for (final o in open) {
+          if ((o.currencyCode ?? CurrencyService.baseCode) != cur) continue;
+          final prev = saved.where((a) => a.advanceId == o.id).fold(0.0, (t, a) => t + a.appliedAmountFc);
+          rows.add(_AdvanceRow(id: o.id, docNo: o.docNo, docDate: o.docDate, balanceFc: o.balanceFc, vatRatio: o.vatRatio,
+              rate: o.exchangeRate, amount: prev));
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    setState(() => _advRows = rows);
+  }
   bool get _canEditBilling => !widget.viewOnly &&
       ((_status == 'Draft' && !_credit.isPending) || (_isGrDeferredMode && _status == 'Received') || (_isDlnDeferredMode && _status == 'Delivered'));
   // ยอดเอกสารสำหรับตรวจวงเงิน: Σ |จำนวน| × ราคาขาย × (1 + VAT) — รับคืน/ลดหนี้ลูกหนี้ติดลบ
@@ -299,7 +397,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     double r2(double v) => (v * 100).roundToDouble() / 100;
     final sum = _lines.fold<double>(0, (s, l) {
       final vat = (l.vatType == null || l.vatType == 'NOVAT') ? 0 : l.vatRate;
-      final lc = r2(l.variance.abs() * _parseNum(l.unitPriceCtrl.text) * _exchangeRate);
+      final a = _amt(l);
+      if (_inclVat && vat > 0) return s + r2(a.total * _exchangeRate);
+      final lc = r2(a.net * _exchangeRate);
       return s + lc + r2(lc * vat / 100);
     });
     return _isArReturnCnMode ? -sum : sum;
@@ -374,6 +474,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
     _exchangeRate = _currency?.baseRate ?? 1;
     _lines = [];
+    _priceIncludesVat = false;
+    _vendorInvoiceDate = null;
+    for (final r in _advRows) {
+      r.ctrl.dispose();
+    }
+    _advRows = [];
     _docSetup = null;
     _postedGlDetails = null;
   }
@@ -457,6 +563,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _currency = _currencies.cast<Currency?>().firstWhere(
         (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
     _exchangeRate = h.exchangeRate;
+    _priceIncludesVat = h.priceIncludesVat;
+    _vendorInvoiceDate = h.vendorInvoiceDate;
 
     final items = await Future.wait(tx.details.map((d) => _itemService.fetchRow(d.itemId)));
     final lines = <_CountLine>[];
@@ -494,6 +602,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         unitCost: _isApVendorMode ? (d.unitCostFc ?? d.unitCost) : d.unitCost,
         billedUnitCost: _isApVendorMode ? (d.billedUnitCostFc ?? d.billedUnitCost) : d.billedUnitCost,
         unitPrice: d.unitPrice,
+        discountPercent: d.discountPercent ?? 0,
         vatType: d.vatType,
         vatRate: d.vatRate ?? 0,
         isFree: d.isFree,
@@ -502,6 +611,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       ));
     }
     _lines = lines;
+    await _loadAdvances(saved: tx.advances);
 
     if (_docCode != null) {
       _docSetup = await _service.fetchSetupByDocCode(_docCode!).catchError((_) => null);
@@ -524,6 +634,18 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     });
     _docSetup = await _service.fetchSetupByDocCode(d.docCode).catchError((_) => null);
     if (mounted) setState(() {});
+    await _loadAdvances();
+  }
+
+  // วันที่ใบกำกับผู้ขาย = วันที่/งวดของใบตั้งหนี้ AP อัตโนมัติ (วันที่รับสินค้าของ IM ไม่เปลี่ยน)
+  Future<void> _pickInvoiceDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _invoiceDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _vendorInvoiceDate = picked);
   }
 
   Future<void> _pickDate() async {
@@ -563,6 +685,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         }
       }
     });
+    _loadAdvances();
   }
 
   void _selectCustomer(ArCustomer c) {
@@ -579,6 +702,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       }
     });
     if (c.id != null) _loadCustomerSalespersons(c.id!);
+    _loadAdvances();
   }
 
   // ใบสั่งขายที่ดึงรายการมา → ใช้พนักงานขายของใบสั่งขาย (ถ้ามี) แทนค่าเริ่มต้นของลูกค้า
@@ -892,6 +1016,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           // '15': ช่องต้นทุนในโหมดผู้ขายคือราคาในสกุลเงินของเอกสาร (ตั้งตามใบรับสินค้าแล้ว) = ยอดใบลดหนี้ AP
           unitCost: _isApReturnCnMode ? (l.returnPriceFc ?? l.unitCost) : l.unitCost,
           unitPrice: _isArReturnCnMode ? l.unitPrice : null,
+          discountPercent: l.discountPercent ?? 0, // ใบลดหนี้กลับรายการส่วนลดตามบรรทัดต้นฉบับ
           lotNo: l.lotNo ?? '',
           serialNo: l.serialNo ?? '',
           refImTransactionDetailId: l.id,
@@ -1244,10 +1369,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       final ref = sales ? l.soUnitPrice : l.poUnitPrice;
       // เอกสารต้นทางที่ไม่ได้ใส่ราคา (0) ถือว่ายังไม่กำหนดราคา ไม่เตือน
       if (ref == null || ref == 0 || (sales ? l.refSoDetailId : l.refPoDetailId) == null || l.isFree) continue;
-      final text = sales
-          ? l.unitPriceCtrl.text
-          : (billing && l.billedUnitCostCtrl.text.trim().isNotEmpty ? l.billedUnitCostCtrl.text : l.unitCostCtrl.text);
-      final price = _parseNum(text);
+      // ราคาหลังส่วนลด ก่อน VAT เทียบกับราคาในใบสั่งซื้อ/ใบสั่งขาย
+      final price = _netUnit(l, billed: billing);
       if ((price - ref).abs() < 0.0001) continue;
       final pct = (price - ref) / ref * 100;
       diffs.add('${l.item.itemCode}: $src ${fmt.format(ref)} -> ${fmt.format(price)} (${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%)');
@@ -1306,6 +1429,25 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       if (!go) return;
     }
     await _save('Post');
+  }
+
+  // ยอดหักมัดจำ: ไม่เกินยอดคงเหลือของแต่ละใบ และรวมไม่เกินยอดใบตั้งหนี้/ใบแจ้งหนี้ (รวม VAT)
+  bool _checkAdvances() {
+    if (!_showAdvances || _advRows.isEmpty) return true;
+    final isEnglish = _isEnglish;
+    void warn(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    for (final r in _advRows) {
+      final amt = _parseNum(r.ctrl.text);
+      if (amt < 0 || amt > r.balanceFc + 0.005) {
+        warn('${r.docNo}: ${isEnglish ? 'Deduction exceeds the deposit balance' : 'ยอดหักเกินยอดคงเหลือของใบมัดจำ'} (${_fmtMoney.format(r.balanceFc)})');
+        return false;
+      }
+    }
+    if (_advTotalFc > _billTotalFc + 0.005) {
+      warn(isEnglish ? 'Deposit deduction exceeds the bill total' : 'ยอดหักเงินมัดจำเกินยอดรวมของใบตั้งหนี้/ใบแจ้งหนี้');
+      return false;
+    }
+    return true;
   }
 
   Future<void> _save(String action, {bool notify = true}) async {
@@ -1393,8 +1535,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           warn('${l.item.itemCode}: ${isEnglish ? 'VAT type is required' : 'กรุณาระบุประเภทภาษี VAT'}');
           return;
         }
+        final pct = _parseNum(l.discPctCtrl.text);
+        if (_showDiscount && (pct < 0 || pct > 100)) {
+          warn('${l.item.itemCode}: ${isEnglish ? 'Discount must be 0-100%' : 'ส่วนลดต้องอยู่ระหว่าง 0-100%'}');
+          return;
+        }
       }
     }
+    if (!_checkAdvances()) return;
 
     setState(() => _isSaving = true);
     try {
@@ -1408,6 +1556,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         vendorId: _isApVendorMode ? _vendorId : null,
         customerId: _isArCustomerMode ? _customerId : null,
         refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
+        vendorInvoiceDate: _isGrnBillingMode ? _invoiceDate : null,
         refImTransactionId: _isReturnSourceDocMode ? _refImTransactionId : null,
         refPoId: _isReceiveMode ? _refPoId : null,
         refSoId: _isDeliverMode ? _refSoId : null,
@@ -1416,6 +1565,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         currencyId: (_isApVendorMode || _isArCustomerMode) ? _currency?.id : null,
         currencyCode: (_isApVendorMode || _isArCustomerMode) ? (_currency?.currencyCode ?? CurrencyService.baseCode) : null,
         exchangeRate: (_isApVendorMode || _isArCustomerMode) ? _exchangeRate : 1,
+        priceIncludesVat: _inclVat,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       );
       final details = _lines.map((l) => ImTransactionDetail(
@@ -1436,6 +1586,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             unitCost: _isApVendorMode ? null : (l.unitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.unitCostCtrl.text)),
             unitCostFc: _isApVendorMode && l.unitCostCtrl.text.trim().isNotEmpty ? _parseNum(l.unitCostCtrl.text) : null,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
+            discountPercent: _showDiscount ? _parseNum(l.discPctCtrl.text) : null,
             isFree: l.isFree,
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
@@ -1446,12 +1597,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
       if (_id == null) {
         final result = await _service.createTransaction(header: header, details: details, action: action,
-            salespersons: _isArCustomerMode ? _salespersons : null);
+            salespersons: _isArCustomerMode ? _salespersons : null, advances: _showAdvances ? _advancesForSave : null);
         _id = result.header.id;
       } else {
         if (_status == 'Draft') {
           await _service.updateTransaction(id: _id!, header: header, details: details,
-              salespersons: _isArCustomerMode ? _salespersons : null);
+              salespersons: _isArCustomerMode ? _salespersons : null, advances: _showAdvances ? _advancesForSave : null);
         }
         if (action == 'Post') {
           await _service.postTransaction(_id!);
@@ -1479,13 +1630,16 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       final header = ImTransactionHeader(
         id: _id!, docId: _docId!, docNo: _docNo, docDate: _docDate, warehouseId: _warehouseId!,
         vendorId: _vendorId, refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
+        priceIncludesVat: _priceIncludesVat, vendorInvoiceDate: _invoiceDate,
       );
+      if (!_checkAdvances()) return;
       final details = _lines.map((l) => ImTransactionDetail(
             id: l.id,
             itemId: l.item.id!,
             billedUnitCostFc: l.billedUnitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.billedUnitCostCtrl.text),
+            discountPercent: _parseNum(l.discPctCtrl.text),
           )).toList();
-      await _service.updateTransaction(id: _id!, header: header, details: details);
+      await _service.updateTransaction(id: _id!, header: header, details: details, advances: _advancesForSave);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
         await _loadExisting(_id!);
@@ -1508,6 +1662,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       warn(isEnglish ? 'Please enter the vendor invoice number' : 'กรุณาระบุเลขที่ใบกำกับสินค้าผู้ขาย');
       return;
     }
+    if (!_checkAdvances()) return;
     if (!await _confirmPoPriceDiffs(billing: true)) return;
     setState(() => _isSaving = true);
     try {
@@ -1515,10 +1670,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             id: l.id,
             itemId: l.item.id!,
             billedUnitCostFc: l.billedUnitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.billedUnitCostCtrl.text),
+            discountPercent: _parseNum(l.discPctCtrl.text),
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
           )).toList();
-      await _service.postBilling(id: _id!, refNo: refNo, details: details);
+      await _service.postBilling(id: _id!, refNo: refNo, details: details, advances: _advancesForSave,
+          vendorInvoiceDate: _invoiceDate, priceIncludesVat: _priceIncludesVat);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Posted successfully' : 'Post สำเร็จ')));
         widget.onSaveSuccess();
@@ -1543,12 +1700,15 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         customerId: _customerId, refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
         customerPoNo: _poNoCtrl.text.trim().isEmpty ? null : _poNoCtrl.text.trim(), customerPoDate: _poDate,
       );
+      if (!_checkAdvances()) return;
       final details = _lines.map((l) => ImTransactionDetail(
             id: l.id,
             itemId: l.item.id!,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
+            discountPercent: _parseNum(l.discPctCtrl.text),
           )).toList();
-      await _service.updateTransaction(id: _id!, header: header, details: details, salespersons: _salespersons);
+      await _service.updateTransaction(id: _id!, header: header, details: details, salespersons: _salespersons,
+          advances: _advancesForSave);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
         await _loadExisting(_id!);
@@ -1566,6 +1726,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (_id == null) return;
     final isEnglish = _isEnglish;
     void warn(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    if (!_checkAdvances()) return;
     if (!await _confirmPoPriceDiffs(sales: true)) return;
     setState(() => _isSaving = true);
     try {
@@ -1573,11 +1734,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             id: l.id,
             itemId: l.item.id!,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
+            discountPercent: _parseNum(l.discPctCtrl.text),
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
           )).toList();
       await _service.postBillingDln(id: _id!, refNo: _refNoCtrl.text.trim(), details: details, salespersons: _salespersons,
-          customerPoNo: _poNoCtrl.text.trim(), customerPoDate: _poDate, exchangeRate: _isForeignCurrency ? _exchangeRate : null);
+          customerPoNo: _poNoCtrl.text.trim(), customerPoDate: _poDate, exchangeRate: _isForeignCurrency ? _exchangeRate : null,
+          advances: _advancesForSave);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Posted successfully' : 'Post สำเร็จ')));
         widget.onSaveSuccess();
@@ -1689,6 +1852,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 _buildHeaderCard(isEnglish),
                 const SizedBox(height: 12),
                 _buildDetailCard(isEnglish),
+                if (_showAdvances && _advRows.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _buildAdvanceCard(isEnglish),
+                ],
                 const SizedBox(height: 12),
                 _buildGlCard(isEnglish),
                 if (_isDlnBillingMode || _isDlnDeferredMode || _isArReturnCnMode || _isArDnMode) ...[
@@ -1804,6 +1971,19 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 border: const OutlineInputBorder(), isDense: true),
           ),
         ),
+        if (_showInvoiceDate) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: InkWell(
+              onTap: _canEditBilling ? _pickInvoiceDate : null,
+              child: InputDecorator(
+                decoration: InputDecoration(labelText: isEnglish ? 'Vendor Invoice Date *' : 'วันที่ใบกำกับ *', border: const OutlineInputBorder(), isDense: true),
+                child: Text(_dateFmt.format(_invoiceDate)),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(width: 12),
         Expanded(
           flex: 1,
@@ -2075,6 +2255,15 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                               ? (isEnglish ? 'Lines' : 'รายการ')
                               : (isEnglish ? 'Count Lines' : 'รายการปรับยอดสินค้า'),
       children: [
+        if (_isVatMode)
+          Row(children: [
+            Checkbox(
+              value: _priceIncludesVat,
+              visualDensity: VisualDensity.compact,
+              onChanged: _canEditPriceInclVat ? (v) => setState(() => _priceIncludesVat = v ?? false) : null,
+            ),
+            Text(isEnglish ? 'Prices include VAT' : 'ราคารวม VAT'),
+          ]),
         if (_lines.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -2236,6 +2425,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   ? TextField(
                       controller: line.unitCostCtrl,
                       readOnly: _isReadOnly,
+                      onChanged: (_) => setState(() {}),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(
                         labelText: ((isApCreditPrice || isPurchasePrice)
@@ -2281,6 +2471,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 child: TextField(
                   controller: line.billedUnitCostCtrl,
                   readOnly: !_canEditBilling,
+                  onChanged: (_) => setState(() {}),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                       labelText: (isEnglish ? 'Billed Unit Cost' : 'ต้นทุนตามใบกำกับ') + (_currency != null && !_currency!.baseCurrencyFlag ? ' (${_currency!.currencyCode})' : ''),
@@ -2295,6 +2486,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 child: TextField(
                   controller: line.unitPriceCtrl,
                   readOnly: !_canEditBilling || line.isFree,
+                  onChanged: (_) => setState(() {}),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                       labelText: (isEnglish ? 'Unit Price' : 'ราคาขาย/หน่วย') + (_isForeignCurrency ? ' (${_currency!.currencyCode})' : ''),
@@ -2315,10 +2507,125 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       }),
                 ),
               ),
+            if (_showDiscount)
+              SizedBox(
+                width: 90,
+                child: TextField(
+                  controller: line.discPctCtrl,
+                  readOnly: !_canEditBilling || line.isFree,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: isEnglish ? 'Disc. %' : 'ส่วนลด %', border: const OutlineInputBorder(), isDense: true),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            if (_showDiscount)
+              SizedBox(
+                width: 130,
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Amount before VAT' : 'ยอดก่อน VAT', border: const OutlineInputBorder(), isDense: true),
+                  child: Text(_fmtMoney.format(_amt(line, billed: _isGrDeferredMode).net), textAlign: TextAlign.right),
+                ),
+              ),
           ]),
         ]),
       ),
     );
+  }
+
+  // หักเงินมัดจำในใบตั้งหนี้ AP / ใบแจ้งหนี้ AR ที่สร้างอัตโนมัติ — แก้ได้ระหว่างร่าง และตอน '12'/'32' รอตั้งหนี้
+  Widget _buildAdvanceCard(bool isEnglish) {
+    final editable = _canEditBilling;
+    return _card(
+      title: _isApVendorMode
+          ? (isEnglish ? 'Deduct Vendor Deposits on the AP Bill' : 'หักเงินมัดจำในใบตั้งหนี้')
+          : (isEnglish ? 'Deduct Customer Deposits on the Invoice' : 'หักเงินมัดจำในใบแจ้งหนี้'),
+      children: [
+        for (final r in _advRows)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(children: [
+              Expanded(
+                child: Text('${r.docNo}${r.docDate != null ? '  ${_dateFmt.format(r.docDate!)}' : ''}', style: const TextStyle(fontSize: 13)),
+              ),
+              SizedBox(
+                width: 170,
+                child: Text('${isEnglish ? 'Balance' : 'คงเหลือ'} ${_fmtMoney.format(r.balanceFc)}',
+                    textAlign: TextAlign.right, style: const TextStyle(fontSize: 13)),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 140,
+                child: TextField(
+                  controller: r.ctrl,
+                  readOnly: !editable,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: isEnglish ? 'Deduct' : 'ยอดหัก', border: const OutlineInputBorder(), isDense: true),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              if (editable)
+                IconButton(
+                  tooltip: isEnglish ? 'Deduct up to the balance' : 'หักเต็มยอดที่หักได้',
+                  icon: const Icon(Icons.playlist_add_check, size: 18),
+                  onPressed: () => setState(() {
+                    final others = _advTotalFc - _parseNum(r.ctrl.text);
+                    final room = _billTotalFc - others;
+                    final amt = room < r.balanceFc ? room : r.balanceFc;
+                    r.ctrl.text = amt > 0 ? amt.toStringAsFixed(2) : '';
+                  }),
+                ),
+            ]),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            isEnglish
+                ? 'The deducted deposit clears the deposit account and reverses its VAT on the bill (tax invoice net of deposit). Leave blank to deduct at receipt/payment instead.'
+                : 'ยอดที่หักจะล้างบัญชีเงินมัดจำและกลับรายการภาษีของมัดจำในใบนั้น (ใบกำกับภาษีหักมัดจำ) — เว้นว่างถ้าจะหักตอนรับ/จ่ายชำระแทน',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // หักเงินมัดจำในตัวอย่างรายการบัญชี — ส่วนก่อน VAT ล้างบัญชีเงินมัดจำ ส่วน VAT กลับรายการภาษีของมัดจำ (ที่อัตราของใบมัดจำ)
+  // ฝั่งซื้อ (ap) ลง Cr / ฝั่งขายลง Dr — คืนรายการ + ยอดที่ลดเจ้าหนี้/ลูกหนี้ (บาท ที่อัตราของเอกสาร) มิเรอร์ buildInvAdvanceGl
+  // ส่วนลดรับฝั่งซื้อ (บวก = Cr, ลบ = Dr กลับรายการบนใบลดหนี้) — บัญชีส่วนลดของประเภทเอกสาร AP ปลายทาง
+  // (backend imPurchaseDiscountLine ต้องตั้งไว้เมื่อมีส่วนลด) หน้าจอนี้ไม่รู้รหัสบัญชีจึงแสดงชื่อแทน
+  List<Widget> _purchaseDiscountLine(double amount, bool isEnglish) {
+    if (amount.abs() < 0.005) return const [];
+    return [
+      _glLine(null, isEnglish ? 'Discount received (AP document type discount account)' : 'ส่วนลดรับ (บัญชีส่วนลดของประเภทเอกสาร AP)',
+          amount < 0 ? -amount : 0, amount > 0 ? amount : 0),
+    ];
+  }
+
+  (List<Widget>, double) _advancePreview(bool isEnglish, {required bool ap}) {
+    final lines = <Widget>[];
+    double reduce = 0;
+    if (!_showAdvances) return (lines, reduce);
+    for (final r in _advRows) {
+      final fc = _parseNum(r.ctrl.text);
+      if (fc <= 0) continue;
+      final leg = fc * r.rate;
+      final vat = leg * r.vatRatio;
+      final net = leg - vat;
+      reduce += fc * _exchangeRate;
+      lines.add(_glLine(null, '${isEnglish ? 'Deposit deducted' : 'หักเงินมัดจำ'} ${r.docNo}', ap ? 0 : net, ap ? net : 0));
+      if (vat.abs() >= 0.005) {
+        lines.add(_glLine(ap ? _docSetup?.vatInputAccountCode : _docSetup?.vatOutputAccountCode,
+            '${isEnglish ? 'VAT of deposit' : (ap ? 'ภาษีซื้อของมัดจำ' : 'ภาษีขายของมัดจำ')} ${r.docNo}', ap ? 0 : vat, ap ? vat : 0));
+      }
+      final fx = fc * _exchangeRate - leg;
+      if (fx.abs() >= 0.005) {
+        final dr = ap ? (fx < 0 ? -fx : 0.0) : (fx > 0 ? fx : 0.0);
+        final cr = ap ? (fx > 0 ? fx : 0.0) : (fx < 0 ? -fx : 0.0);
+        lines.add(_glLine(null, isEnglish ? 'FX difference on deposit' : 'ผลต่างอัตราแลกเปลี่ยนมัดจำ', dr, cr));
+      }
+    }
+    return (lines, reduce);
   }
 
   // ── บัญชีต่อสินค้าจาก backend (resolver เดียวกับตอน Post: สต็อก คลัง → สินค้า → หมวดสินค้า → ประเภทเอกสาร,
@@ -2460,19 +2767,23 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       // ช่องต้นทุน/ต้นทุนตามใบกำกับเป็นสกุลเงินของเอกสาร — แปลงเป็นบาทด้วยอัตราแลกเปลี่ยนของเอกสาร; จำนวนที่รับ
       // คือ variance (counted คือยอดคงเหลือหลังรับ ไม่ใช่จำนวนที่รับ) — สินค้าคงคลังลงตามมูลค่าสต็อกตอนรับ
       // ส่วนต่างกับราคาใบกำกับลงบัญชีผลต่างต้นทุน (มิเรอร์ postApBillFromGrn; Periodic ลงบัญชีซื้อเต็มจำนวน)
-      double billedValue = 0, stockValue = 0, vatValue = 0;
+      double billedValue = 0, stockValue = 0, vatValue = 0, discValue = 0;
       final invEntries = <(_Acct, double)>[];
       for (final l in _lines) {
         final qty = l.variance;
-        final received = _parseNum(l.unitCostCtrl.text) * _exchangeRate;
-        final billed = l.billedUnitCostCtrl.text.trim().isEmpty ? received : _parseNum(l.billedUnitCostCtrl.text) * _exchangeRate;
-        billedValue += qty * billed;
+        // ยอดก่อนส่วนลด ก่อน VAT (ราคารวม VAT แยก VAT ออกแล้ว) — ส่วนลดรับแยกบัญชีบนใบตั้งหนี้ AP
+        final received = _amt(l).gross * _exchangeRate;
+        final billedAmt = _amt(l, billed: true);
+        final billed = billedAmt.gross * _exchangeRate;
+        billedValue += billed;
+        discValue += billedAmt.discount * _exchangeRate;
         // Periodic: Dr บัญชีซื้อตามใบกำกับเต็มจำนวน ไม่มีผลต่าง (เหมือน backend)
-        final lineStock = qty * (_linePeriodic(l) ? billed : (l.item.costingMethod == 'STANDARD' ? l.item.standardCost : received));
+        final lineStock = _linePeriodic(l) ? billed : (l.item.costingMethod == 'STANDARD' ? qty * l.item.standardCost : received);
         stockValue += lineStock;
         invEntries.add((_receiveInvAcct(l, isEnglish), lineStock));
-        if (l.vatType != null && l.vatType != 'NOVAT') vatValue += qty * billed * l.vatRate / 100;
+        vatValue += billedAmt.vat * _exchangeRate;
       }
+      final (advLines, advReduce) = _advancePreview(isEnglish, ap: true);
       final priceVariance = billedValue - stockValue;
       final hasVariance = priceVariance.abs() >= 0.005;
       final isPostedYet = _status == 'Posted';
@@ -2488,7 +2799,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 priceVariance > 0 ? priceVariance : 0, priceVariance < 0 ? -priceVariance : 0),
           if (vatValue > 0)
             _glLine(_docSetup?.vatInputAccountCode, isEnglish ? '${_docSetup?.vatInputAccountName ?? 'VAT Input'} (on the AP bill)' : '${_docSetup?.vatInputAccountName ?? 'VAT ซื้อ'} (บนใบตั้งหนี้ AP)', vatValue, 0),
-          _glLine(null, isEnglish ? 'AP payable' : 'เจ้าหนี้การค้า', 0, billedValue + vatValue),
+          ..._purchaseDiscountLine(discValue, isEnglish),
+          _glLine(null, isEnglish ? 'AP payable' : 'เจ้าหนี้การค้า', 0, billedValue - discValue + vatValue - advReduce),
+          ...advLines,
           _modeSideNote(isEnglish),
           Padding(
             padding: const EdgeInsets.only(top: 6),
@@ -2560,23 +2873,23 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       if (_isGrnBillingMode) {
         // '11' GRN Billing — ไม่ Post บัญชีที่นี่เลย สร้าง ap_transaction อัตโนมัติแล้วโพสต์ที่นั่นแทน — ใบตั้งหนี้ใช้ราคาซื้อ
         // ที่กรอก (สกุลเงินเอกสาร × อัตรา) สินค้าคงคลังใช้มูลค่าสต็อก (STANDARD = ต้นทุนมาตรฐาน) ส่วนต่างลงบัญชีผลต่าง
-        double billValue = 0, vatValue = 0;
-        for (final l in _lines) {
-          final qty = _parseNum(l.issueQtyCtrl.text);
-          if (qty <= 0) continue;
-          final price = _parseNum(l.unitCostCtrl.text) * _exchangeRate;
-          billValue += qty * price;
-          if (l.vatType != null && l.vatType != 'NOVAT') vatValue += qty * price * l.vatRate / 100;
-        }
+        // ยอดหลังส่วนลด ก่อน VAT (ราคารวม VAT แยก VAT ออกแล้ว) — มิเรอร์ backend imLineAmounts
+        // สินค้าคงคลัง/ซื้อลงยอดก่อนส่วนลด ส่วนลดรับแยกบัญชีส่วนลดของประเภทเอกสาร AP (เหมือนใบตั้งหนี้ AP)
+        double billValue = 0, vatValue = 0, discValue = 0;
         final invEntries = <(_Acct, double)>[];
         for (final l in _lines) {
           final qty = _parseNum(l.issueQtyCtrl.text);
           if (qty <= 0) continue;
-          final price = _parseNum(l.unitCostCtrl.text) * _exchangeRate;
+          final a = _amt(l);
+          final gross = a.gross * _exchangeRate;
+          billValue += gross;
+          discValue += a.discount * _exchangeRate;
+          vatValue += a.vat * _exchangeRate;
           // Periodic: Dr บัญชีซื้อตามราคาซื้อ ไม่มีผลต่าง (เหมือน backend)
           invEntries.add((_receiveInvAcct(l, isEnglish),
-              qty * (!_linePeriodic(l) && l.item.costingMethod == 'STANDARD' ? l.item.standardCost : price)));
+              !_linePeriodic(l) && l.item.costingMethod == 'STANDARD' ? qty * l.item.standardCost : gross));
         }
+        final (advLines, advReduce) = _advancePreview(isEnglish, ap: true);
         final stockValue = invEntries.fold<double>(0, (s, e) => s + e.$2);
         final priceVariance = billValue - stockValue;
         return _card(title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
@@ -2588,7 +2901,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           if (vatValue > 0)
             _glLine(_docSetup!.vatInputAccountCode, isEnglish ? '${_docSetup!.vatInputAccountName ?? 'VAT Input'} (on the AP bill)' : '${_docSetup!.vatInputAccountName ?? 'VAT ซื้อ'} (บนใบตั้งหนี้ AP)',
                 vatValue, 0),
-          _glLine(null, isEnglish ? 'AP payable (auto-created)' : 'เจ้าหนี้การค้า (สร้างอัตโนมัติ)', 0, billValue + vatValue),
+          ..._purchaseDiscountLine(discValue, isEnglish),
+          _glLine(null, isEnglish ? 'AP payable (auto-created)' : 'เจ้าหนี้การค้า (สร้างอัตโนมัติ)', 0, billValue - discValue + vatValue - advReduce),
+          ...advLines,
           _modeSideNote(isEnglish),
           Padding(
             padding: const EdgeInsets.only(top: 6),
@@ -2609,10 +2924,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       for (final l in _lines) {
         final qty = _parseNum(l.issueQtyCtrl.text);
         if (qty <= 0 || l.isFree) continue;
-        final price = _parseNum(l.unitCostCtrl.text) * _exchangeRate;
-        grirValue += qty * price;
+        final value = _amt(l).gross * _exchangeRate; // ก่อนส่วนลด — ส่วนลดรับลงตอนตั้งหนี้ AP (Dr GR/IR / Cr ส่วนลดรับ)
+        grirValue += value;
         // Periodic: Dr บัญชีซื้อตามราคาซื้อ ไม่มีผลต่าง (เหมือน backend)
-        final lineStock = qty * (!_linePeriodic(l) && l.item.costingMethod == 'STANDARD' ? l.item.standardCost : price);
+        final lineStock = !_linePeriodic(l) && l.item.costingMethod == 'STANDARD' ? qty * l.item.standardCost : value;
         grirStockValue += lineStock;
         invEntries.add((_receiveInvAcct(l, isEnglish), lineStock));
       }
@@ -2637,24 +2952,26 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       // ต้นทุนที่แน่นอนจนกว่าจะ Post (ตัดจาก stock layer จริง) จึงแสดงเป็น undetermined เหมือน AJS/ISS ทั่วไป
       // ยอดใบลดหนี้/เพิ่มหนี้ = ราคาที่กรอก (สกุลเงินเอกสาร × อัตราแลกเปลี่ยน) ทราบแน่นอนตั้งแต่ Draft — ฝั่งสินค้าคงคลัง
       // ตัดตามต้นทุนสต็อกจริงตอน Post ส่วนต่างจากราคานี้ลงบัญชีผลต่างต้นทุน (ดู postApCreditDebitNoteFromIm)
-      double value = 0, vatValue = 0, undetermined = 0;
+      double value = 0, vatValue = 0, undetermined = 0, discSigned = 0;
       final invEntries = <(_Acct, double)>[];
       for (final l in _lines) {
         final v = l.variance;
         if (v == 0) continue;
-        final cost = l.unitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.unitCostCtrl.text) * _exchangeRate;
-        if (cost == null) {
+        if (l.unitCostCtrl.text.trim().isEmpty) {
           undetermined += v.abs();
         } else {
-          value += v * cost;
-          invEntries.add((_receiveInvAcct(l, isEnglish), v * cost));
-          if (l.vatType != null && l.vatType != 'NOVAT') vatValue += v.abs() * cost * l.vatRate / 100;
+          final a = _amt(l); // ก่อนส่วนลด ก่อน VAT — ส่วนลดแยกบัญชีส่วนลดรับ (ใบลดหนี้กลับรายการ = Dr)
+          final signed = (v > 0 ? 1 : -1) * a.gross * _exchangeRate;
+          discSigned += (v > 0 ? 1 : -1) * a.discount * _exchangeRate;
+          value += signed;
+          invEntries.add((_receiveInvAcct(l, isEnglish), signed));
+          vatValue += a.vat * _exchangeRate;
         }
       }
       final noteLabel = _isApReturnCnMode
           ? (isEnglish ? 'AP Credit Note' : 'ใบลดหนี้ AP')
           : (isEnglish ? 'AP Debit Note' : 'ใบเพิ่มหนี้ AP');
-      final grandValue = value + (value >= 0 ? vatValue : -vatValue);
+      final grandValue = value - discSigned + (value >= 0 ? vatValue : -vatValue);
       return _card(title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
         ..._groupedGlLines(invEntries, suffix: isEnglish ? ' (on the $noteLabel)' : ' (บน$noteLabel)'),
         _modeSideNote(isEnglish),
@@ -2662,6 +2979,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           _glLine(_docSetup!.vatInputAccountCode,
               isEnglish ? '${_docSetup!.vatInputAccountName ?? 'VAT Input'} (on the $noteLabel)' : '${_docSetup!.vatInputAccountName ?? 'VAT ซื้อ'} (บน$noteLabel)',
               value > 0 ? vatValue : 0, value < 0 ? vatValue : 0),
+        ..._purchaseDiscountLine(discSigned, isEnglish),
         _glLine(null, isEnglish ? '$noteLabel (auto-created)' : '$noteLabel (สร้างอัตโนมัติ)',
             grandValue < 0 ? -grandValue : 0, grandValue > 0 ? grandValue : 0),
         if (undetermined > 0)
@@ -2760,12 +3078,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     double subtotal = 0, vat = 0;
     final revEntries = <(_Acct, double)>[];
     for (final l in _lines) {
-      final lineSubtotal = l.variance.abs() * _parseNum(l.unitPriceCtrl.text) * _exchangeRate;
+      final a = _amt(l); // หลังส่วนลด ก่อน VAT (ราคารวม VAT แยก VAT ออกแล้ว)
+      final lineSubtotal = a.net * _exchangeRate;
       subtotal += lineSubtotal;
       revEntries.add((_lineAcct(l, (a) => a.revenue, null, isEnglish ? 'Revenue' : 'รายได้', isEnglish), isCredit ? lineSubtotal : -lineSubtotal));
-      if (l.vatType != null && l.vatType != 'NOVAT') vat += lineSubtotal * l.vatRate / 100;
+      vat += a.vat * _exchangeRate;
     }
-    final total = subtotal + vat;
+    final (advLines, advReduce) = _advancePreview(isEnglish, ap: false);
+    final total = subtotal + vat - advReduce;
     final vatAcctCode = _docSetup?.vatOutputAccountCode;
     final vatAcctName = isEnglish ? (_docSetup?.vatOutputAccountName ?? 'VAT Output') : (_docSetup?.vatOutputAccountName ?? 'ภาษีขาย');
     final docLabel = isCredit
@@ -2779,6 +3099,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _glLine(null, isEnglish ? 'Accounts Receivable' : 'ลูกหนี้การค้า', isCredit ? 0 : total, isCredit ? total : 0),
         ..._groupedGlLines(revEntries),
         _glLine(vatAcctCode, vatAcctName, isCredit ? vat : 0, isCredit ? 0 : vat),
+        ...advLines,
         Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
@@ -2800,6 +3121,17 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _glLine(null, isEnglish ? 'Accounts Receivable' : 'ลูกหนี้การค้า', isCredit ? 0 : total, isCredit ? total : 0),
         ..._groupedGlLines(revEntries),
         _glLine(vatAcctCode, vatAcctName, isCredit ? vat : 0, isCredit ? 0 : vat),
+        ...advLines,
+        if (_lines.any((l) => _parseNum(l.discPctCtrl.text) > 0))
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              isEnglish
+                  ? 'Revenue is shown net of discount — if the AR document type has a discount account, revenue posts before discount and the discount posts to that account.'
+                  : 'รายได้แสดงยอดหลังส่วนลด — ถ้าประเภทเอกสาร AR ปลายทางตั้งบัญชีส่วนลดไว้ รายได้จะลงยอดก่อนส่วนลดและลงส่วนลดที่บัญชีนั้น',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
@@ -2842,7 +3174,43 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       : (_isApReturnCnMode || _isApDnMode || _isArReturnCnMode || _isArDnMode)
                           ? '${isEnglish ? 'Total qty' : 'จำนวนรวม'}: ${_fmtQty.format(totalQty.abs())}'
                           : '${isEnglish ? 'Total variance qty' : 'จำนวนผลต่างรวม'}: ${_fmtQty.format(totalQty)}'),
+      if (_showDiscount) ..._amountTotals(isEnglish),
     ]);
+  }
+
+  // ยอดเงินของเอกสาร (สกุลเงินเอกสาร): ก่อนส่วนลด / ส่วนลด / ก่อน VAT / VAT / รวม และยอดหลังหักมัดจำ
+  List<Widget> _amountTotals(bool isEnglish) {
+    double gross = 0, disc = 0, net = 0, vat = 0, total = 0;
+    for (final l in _lines) {
+      final a = _amt(l, billed: _isGrDeferredMode);
+      gross += a.gross;
+      disc += a.discount;
+      net += a.net;
+      vat += a.vat;
+      total += a.total;
+    }
+    final adv = _showAdvances ? _advTotalFc : 0.0;
+    final cur = _currency?.currencyCode ?? '';
+    Widget row(String label, double v, {bool bold = false}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(children: [
+            Expanded(child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal))),
+            Text('${_fmtMoney.format(v)} $cur', style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+          ]),
+        );
+    return [
+      const SizedBox(height: 6),
+      row(isEnglish ? 'Amount before discount' : 'ยอดก่อนส่วนลด', gross),
+      if (disc.abs() >= 0.005) row(isEnglish ? 'Discount' : 'ส่วนลด', -disc),
+      row(isEnglish ? 'Amount before VAT' : 'ยอดก่อน VAT', net),
+      if (_isVatMode) row('VAT', vat),
+      row(isEnglish ? 'Total' : 'ยอดรวม', total, bold: adv <= 0),
+      if (adv > 0) ...[
+        row(isEnglish ? 'Less deposits' : 'หัก เงินมัดจำ', -adv),
+        row(_isApVendorMode ? (isEnglish ? 'Payable after deposits' : 'ยอดเจ้าหนี้หลังหักมัดจำ') : (isEnglish ? 'Receivable after deposits' : 'ยอดลูกหนี้หลังหักมัดจำ'),
+            total - adv, bold: true),
+      ],
+    ];
   }
 
   // ปุ่มที่ทำไม่ได้: ล็อกไว้ และชี้เมาส์แล้วเห็นเหตุผล
