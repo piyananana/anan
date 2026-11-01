@@ -117,6 +117,7 @@ class CmTransactionService {
     required List<CmTransactionDetail> details,
     required List<CmTransactionApply> applies,
     required List<CmTransactionPayment> payments,
+    List<CmTransactionWht> whts = const [],
     required String action,
   }) async {
     final authHeaders = await authService.getAuthHeader();
@@ -125,6 +126,7 @@ class CmTransactionService {
       'details': details.map((e) => e.toJson()).toList(),
       'applies': applies.map((e) => e.toJson()).toList(),
       'payments': payments.map((e) => e.toJson()).toList(),
+      'whts': whts.map((e) => e.toJson()).toList(),
       'action': action,
     });
     final response = await http.post(Uri.parse('$baseUrl/cm_transaction'), headers: authHeaders, body: body);
@@ -145,6 +147,7 @@ class CmTransactionService {
     required List<CmTransactionDetail> details,
     required List<CmTransactionApply> applies,
     required List<CmTransactionPayment> payments,
+    List<CmTransactionWht> whts = const [],
     required String action,
   }) async {
     final authHeaders = await authService.getAuthHeader();
@@ -153,6 +156,7 @@ class CmTransactionService {
       'details': details.map((e) => e.toJson()).toList(),
       'applies': applies.map((e) => e.toJson()).toList(),
       'payments': payments.map((e) => e.toJson()).toList(),
+      'whts': whts.map((e) => e.toJson()).toList(),
       'action': action,
     });
     final response = await http.put(Uri.parse('$baseUrl/cm_transaction/$id'), headers: authHeaders, body: body);

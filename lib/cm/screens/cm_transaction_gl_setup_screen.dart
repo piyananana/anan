@@ -404,6 +404,10 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
   int? _pettyCashPayableAccountId; String? _pettyCashPayableAccountCode; String? _pettyCashPayableAccountName;
   int? _fxGainAccountId;           String? _fxGainAccountCode;           String? _fxGainAccountName;
   int? _fxLossAccountId;           String? _fxLossAccountCode;           String? _fxLossAccountName;
+  int? _vatInputAccountId; String? _vatInputAccountCode; String? _vatInputAccountName;
+  int? _vatOutputAccountId; String? _vatOutputAccountCode; String? _vatOutputAccountName;
+  int? _whtPayableAccountId; String? _whtPayableAccountCode; String? _whtPayableAccountName;
+  int? _whtPrepaidAccountId; String? _whtPrepaidAccountCode; String? _whtPrepaidAccountName;
   int? _glDocId;                   String? _glDocCode;                   String? _glDocName;
   bool _isSaving = false;
 
@@ -421,6 +425,10 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
     _pettyCashPayableAccountName = s.pettyCashPayableAccountName;
     _fxGainAccountId = s.fxGainAccountId; _fxGainAccountCode = s.fxGainAccountCode; _fxGainAccountName = s.fxGainAccountName;
     _fxLossAccountId = s.fxLossAccountId; _fxLossAccountCode = s.fxLossAccountCode; _fxLossAccountName = s.fxLossAccountName;
+    _vatInputAccountId = s.vatInputAccountId; _vatInputAccountCode = s.vatInputAccountCode; _vatInputAccountName = s.vatInputAccountName;
+    _vatOutputAccountId = s.vatOutputAccountId; _vatOutputAccountCode = s.vatOutputAccountCode; _vatOutputAccountName = s.vatOutputAccountName;
+    _whtPayableAccountId = s.whtPayableAccountId; _whtPayableAccountCode = s.whtPayableAccountCode; _whtPayableAccountName = s.whtPayableAccountName;
+    _whtPrepaidAccountId = s.whtPrepaidAccountId; _whtPrepaidAccountCode = s.whtPrepaidAccountCode; _whtPrepaidAccountName = s.whtPrepaidAccountName;
     _glDocId = s.glDocId; _glDocCode = s.glDocCode; _glDocName = s.glDocName;
   }
 
@@ -429,6 +437,12 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
   bool get _showRevenue         => ['10', '90'].contains(_sdt);
   bool get _showExpense         => ['20', '70', '90'].contains(_sdt);
   bool get _showPettyCashPayable => ['30', '40'].contains(_sdt);
+  // VAT / ภาษีหัก ณ ที่จ่าย — แสดงเฉพาะประเภทเอกสารที่การลงบัญชีใช้ (ตาม cmTransactionController.postGlEntry)
+  bool get _showVatInput   => ['20'].contains(_sdt);
+  bool get _showVatOutput  => false;
+  bool get _showWhtPayable => ['20'].contains(_sdt);
+  bool get _showWhtPrepaid => false;
+  bool get _showTax => _showVatInput || _showVatOutput || _showWhtPayable || _showWhtPrepaid;
   bool get _showFx              => false; // สำรองไว้สำหรับอนาคต (แปลงสกุลเงินต่างประเทศ)
   bool get _isTransfer          => _sdt == '50';
   // 15/25 = รายการที่สะท้อนมาจาก AR (รับชำระ) / AP (จ่ายชำระ) — ลงบัญชีที่ AR/AP แล้ว CM ไม่ Post เอง
@@ -510,6 +524,10 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
         pettyCashPayableAccountName: _pettyCashPayableAccountName,
         fxGainAccountId: _fxGainAccountId, fxGainAccountCode: _fxGainAccountCode, fxGainAccountName: _fxGainAccountName,
         fxLossAccountId: _fxLossAccountId, fxLossAccountCode: _fxLossAccountCode, fxLossAccountName: _fxLossAccountName,
+        vatInputAccountId: _vatInputAccountId, vatInputAccountCode: _vatInputAccountCode, vatInputAccountName: _vatInputAccountName,
+        vatOutputAccountId: _vatOutputAccountId, vatOutputAccountCode: _vatOutputAccountCode, vatOutputAccountName: _vatOutputAccountName,
+        whtPayableAccountId: _whtPayableAccountId, whtPayableAccountCode: _whtPayableAccountCode, whtPayableAccountName: _whtPayableAccountName,
+        whtPrepaidAccountId: _whtPrepaidAccountId, whtPrepaidAccountCode: _whtPrepaidAccountCode, whtPrepaidAccountName: _whtPrepaidAccountName,
         glDocId: _glDocId, glDocCode: _glDocCode, glDocName: _glDocName,
       );
       await widget.onSave(updated);
@@ -651,6 +669,38 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
               accountId: _pettyCashPayableAccountId, accountCode: _pettyCashPayableAccountCode, accountName: _pettyCashPayableAccountName,
               onPick: (a) { _pettyCashPayableAccountId = a.id; _pettyCashPayableAccountCode = a.accountCode; _pettyCashPayableAccountName = a.accountNameThai; },
               onClear: () => setState(() { _pettyCashPayableAccountId = null; _pettyCashPayableAccountCode = null; _pettyCashPayableAccountName = null; }),
+            ),
+        ],
+
+        if (_showTax) ...[
+          _SectionHeader(title: isEnglish ? 'VAT / Withholding Tax' : 'ภาษีมูลค่าเพิ่ม / ภาษีหัก ณ ที่จ่าย'),
+          if (_showVatInput)
+            _accountField(
+              label: isEnglish ? 'Input VAT' : 'ภาษีซื้อ',
+              accountId: _vatInputAccountId, accountCode: _vatInputAccountCode, accountName: _vatInputAccountName,
+              onPick: (a) { _vatInputAccountId = a.id; _vatInputAccountCode = a.accountCode; _vatInputAccountName = a.accountNameThai; },
+              onClear: () => setState(() { _vatInputAccountId = null; _vatInputAccountCode = null; _vatInputAccountName = null; }),
+            ),
+          if (_showVatOutput)
+            _accountField(
+              label: isEnglish ? 'Output VAT' : 'ภาษีขาย',
+              accountId: _vatOutputAccountId, accountCode: _vatOutputAccountCode, accountName: _vatOutputAccountName,
+              onPick: (a) { _vatOutputAccountId = a.id; _vatOutputAccountCode = a.accountCode; _vatOutputAccountName = a.accountNameThai; },
+              onClear: () => setState(() { _vatOutputAccountId = null; _vatOutputAccountCode = null; _vatOutputAccountName = null; }),
+            ),
+          if (_showWhtPayable)
+            _accountField(
+              label: isEnglish ? 'Withholding tax payable' : 'ภาษีหัก ณ ที่จ่ายค้างจ่าย',
+              accountId: _whtPayableAccountId, accountCode: _whtPayableAccountCode, accountName: _whtPayableAccountName,
+              onPick: (a) { _whtPayableAccountId = a.id; _whtPayableAccountCode = a.accountCode; _whtPayableAccountName = a.accountNameThai; },
+              onClear: () => setState(() { _whtPayableAccountId = null; _whtPayableAccountCode = null; _whtPayableAccountName = null; }),
+            ),
+          if (_showWhtPrepaid)
+            _accountField(
+              label: isEnglish ? 'Withholding tax deducted by payer (prepaid)' : 'ภาษีถูกหัก ณ ที่จ่าย',
+              accountId: _whtPrepaidAccountId, accountCode: _whtPrepaidAccountCode, accountName: _whtPrepaidAccountName,
+              onPick: (a) { _whtPrepaidAccountId = a.id; _whtPrepaidAccountCode = a.accountCode; _whtPrepaidAccountName = a.accountNameThai; },
+              onClear: () => setState(() { _whtPrepaidAccountId = null; _whtPrepaidAccountCode = null; _whtPrepaidAccountName = null; }),
             ),
         ],
 

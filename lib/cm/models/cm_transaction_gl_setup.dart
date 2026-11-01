@@ -17,6 +17,12 @@ class CmTransactionGlSetup {
   final int? fxGainAccountId; final String? fxGainAccountCode; final String? fxGainAccountName;
   final int? fxLossAccountId; final String? fxLossAccountCode; final String? fxLossAccountName;
 
+  // VAT / ภาษีหัก ณ ที่จ่าย: ภาษีซื้อ (20/40/70), ภาษีขาย (10), ภาษีหัก ณ ที่จ่ายค้างจ่าย (20), ภาษีถูกหัก ณ ที่จ่าย (10/90)
+  final int? vatInputAccountId; final String? vatInputAccountCode; final String? vatInputAccountName;
+  final int? vatOutputAccountId; final String? vatOutputAccountCode; final String? vatOutputAccountName;
+  final int? whtPayableAccountId; final String? whtPayableAccountCode; final String? whtPayableAccountName;
+  final int? whtPrepaidAccountId; final String? whtPrepaidAccountCode; final String? whtPrepaidAccountName;
+
   // GL Document for posting
   final int? glDocId; final String? glDocCode; final String? glDocName;
 
@@ -37,6 +43,10 @@ class CmTransactionGlSetup {
     this.pettyCashPayableAccountId, this.pettyCashPayableAccountCode, this.pettyCashPayableAccountName,
     this.fxGainAccountId, this.fxGainAccountCode, this.fxGainAccountName,
     this.fxLossAccountId, this.fxLossAccountCode, this.fxLossAccountName,
+    this.vatInputAccountId, this.vatInputAccountCode, this.vatInputAccountName,
+    this.vatOutputAccountId, this.vatOutputAccountCode, this.vatOutputAccountName,
+    this.whtPayableAccountId, this.whtPayableAccountCode, this.whtPayableAccountName,
+    this.whtPrepaidAccountId, this.whtPrepaidAccountCode, this.whtPrepaidAccountName,
     this.glDocId, this.glDocCode, this.glDocName,
     this.createdAt, this.updatedAt, this.createdBy, this.updatedBy,
   });
@@ -55,6 +65,10 @@ class CmTransactionGlSetup {
     pettyCashPayableAccountName: j['petty_cash_payable_account_name'] as String?,
     fxGainAccountId: j['fx_gain_account_id'] as int?, fxGainAccountCode: j['fx_gain_account_code'] as String?, fxGainAccountName: j['fx_gain_account_name'] as String?,
     fxLossAccountId: j['fx_loss_account_id'] as int?, fxLossAccountCode: j['fx_loss_account_code'] as String?, fxLossAccountName: j['fx_loss_account_name'] as String?,
+    vatInputAccountId: j['vat_input_account_id'] as int?, vatInputAccountCode: j['vat_input_account_code'] as String?, vatInputAccountName: j['vat_input_account_name'] as String?,
+    vatOutputAccountId: j['vat_output_account_id'] as int?, vatOutputAccountCode: j['vat_output_account_code'] as String?, vatOutputAccountName: j['vat_output_account_name'] as String?,
+    whtPayableAccountId: j['wht_payable_account_id'] as int?, whtPayableAccountCode: j['wht_payable_account_code'] as String?, whtPayableAccountName: j['wht_payable_account_name'] as String?,
+    whtPrepaidAccountId: j['wht_prepaid_account_id'] as int?, whtPrepaidAccountCode: j['wht_prepaid_account_code'] as String?, whtPrepaidAccountName: j['wht_prepaid_account_name'] as String?,
     glDocId: j['gl_doc_id'] as int?, glDocCode: j['gl_doc_code'] as String?, glDocName: j['gl_doc_name'] as String?,
     createdAt: j['created_at'] != null ? DateTime.parse(j['created_at']).toLocal() : null,
     updatedAt: j['updated_at'] != null ? DateTime.parse(j['updated_at']).toLocal() : null,
@@ -68,6 +82,10 @@ class CmTransactionGlSetup {
     'petty_cash_payable_account_id': pettyCashPayableAccountId,
     'fx_gain_account_id':            fxGainAccountId,
     'fx_loss_account_id':            fxLossAccountId,
+    'vat_input_account_id': vatInputAccountId,
+    'vat_output_account_id': vatOutputAccountId,
+    'wht_payable_account_id': whtPayableAccountId,
+    'wht_prepaid_account_id': whtPrepaidAccountId,
     'gl_doc_id':                     glDocId,
   };
 

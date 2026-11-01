@@ -70,6 +70,20 @@ class CmTransactionHeader {
   final int? glAccountId;
   final String? chargeType; // BANK_CHARGE / INTEREST_INCOME / INTEREST_EXPENSE (doc type 70/90)
   final String? counterpartyName; // doc type 10/20
+  // คู่ค้า (10/20): เลือกจากผู้ขาย AP / ลูกค้า AR (partySource) หรือพิมพ์เอง — backend ดึงจากข้อมูลหลักทับเสมอ
+  final String? partySource; // 'AP' / 'AR' / null = พิมพ์เอง
+  final int? partyId;
+  final String? partyCode;
+  final String? partyTaxId;
+  final String? partyBranchCode;
+  final String? partyType; // individual / juristic (ภ.ง.ด.3 / 53)
+  final String? partyAddress;
+  final bool priceIncludesVat;
+  final String? taxInvoiceNo; // รายจ่าย (20): เลขที่ใบกำกับภาษีของผู้ขาย
+  final DateTime? taxInvoiceDate;
+  final double subtotalLc;
+  final double vatAmountLc;
+  final double whtAmountLc;
   final int? currencyId;
   final String currencyCode;
   final double exchangeRate;
@@ -115,6 +129,9 @@ class CmTransactionHeader {
     this.glAccountId,
     this.chargeType,
     this.counterpartyName,
+    this.partySource, this.partyId, this.partyCode, this.partyTaxId, this.partyBranchCode, this.partyType, this.partyAddress,
+    this.priceIncludesVat = false, this.taxInvoiceNo, this.taxInvoiceDate,
+    this.subtotalLc = 0, this.vatAmountLc = 0, this.whtAmountLc = 0,
     this.currencyId,
     this.currencyCode = 'THB',
     this.exchangeRate = 1.0,
@@ -162,6 +179,19 @@ class CmTransactionHeader {
       glAccountId: json['gl_account_id'],
       chargeType: json['charge_type'],
       counterpartyName: json['counterparty_name'],
+      partySource: json['party_source'],
+      partyId: json['party_id'],
+      partyCode: json['party_code'],
+      partyTaxId: json['party_tax_id'],
+      partyBranchCode: json['party_branch_code'],
+      partyType: json['party_type'],
+      partyAddress: json['party_address'],
+      priceIncludesVat: json['price_includes_vat'] == true,
+      taxInvoiceNo: json['tax_invoice_no'],
+      taxInvoiceDate: parseLocalDateNullable(json['tax_invoice_date']),
+      subtotalLc: toDouble(json['subtotal_lc']),
+      vatAmountLc: toDouble(json['vat_amount_lc']),
+      whtAmountLc: toDouble(json['wht_amount_lc']),
       currencyId: json['currency_id'],
       currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
@@ -205,6 +235,15 @@ class CmTransactionHeader {
         if (glAccountId != null) 'gl_account_id': glAccountId,
         if (chargeType != null) 'charge_type': chargeType,
         if (counterpartyName != null) 'counterparty_name': counterpartyName,
+        'party_source': partySource,
+        'party_id': partyId,
+        'party_tax_id': partyTaxId,
+        'party_branch_code': partyBranchCode,
+        'party_type': partyType,
+        'party_address': partyAddress,
+        'price_includes_vat': priceIncludesVat,
+        'tax_invoice_no': taxInvoiceNo,
+        'tax_invoice_date': taxInvoiceDate != null ? formatLocalDate(taxInvoiceDate!) : null,
         if (currencyId != null) 'currency_id': currencyId,
         'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
@@ -225,7 +264,8 @@ class CmTransactionHeader {
       };
 }
 
-// ── Detail (expense line — doc type 40 only) ────────────────────────────────
+// ── Detail (บรรทัดรายการ — 40 เบิกเงินสดย่อย, 10/20 รายรับ/รายจ่ายแบบหลายบรรทัด) ─────────────
+// amountFc/Lc = ยอดก่อน VAT, enteredAmountFc = ยอดที่กรอก (รวม VAT ถ้าเลือก "ราคารวม VAT")
 class CmTransactionDetail {
   final int? id;
   final int? headerId;
@@ -236,6 +276,17 @@ class CmTransactionDetail {
   final String? expenseAccountName;
   final double amountLc;
   final double amountFc;
+  final double? enteredAmountFc;
+  final String vatType;
+  final double vatRate;
+  final double vatAmountFc;
+  final double vatAmountLc;
+  // เบิกเงินสดย่อย (40): ผู้ขายและใบกำกับภาษีต่อบรรทัด
+  final String? sellerName;
+  final String? sellerTaxId;
+  final String? sellerBranchCode;
+  final String? taxInvoiceNo;
+  final DateTime? taxInvoiceDate;
 
   CmTransactionDetail({
     this.id, this.headerId,
@@ -246,6 +297,12 @@ class CmTransactionDetail {
     this.expenseAccountName,
     this.amountLc = 0,
     this.amountFc = 0,
+    this.enteredAmountFc,
+    this.vatType = 'NOVAT',
+    this.vatRate = 0,
+    this.vatAmountFc = 0,
+    this.vatAmountLc = 0,
+    this.sellerName, this.sellerTaxId, this.sellerBranchCode, this.taxInvoiceNo, this.taxInvoiceDate,
   });
 
   factory CmTransactionDetail.fromJson(Map<String, dynamic> json) {
@@ -259,6 +316,16 @@ class CmTransactionDetail {
       expenseAccountName: json['expense_account_name'],
       amountLc: toDouble(json['amount_lc']),
       amountFc: toDouble(json['amount_fc']),
+      enteredAmountFc: json['entered_amount_fc'] != null ? toDouble(json['entered_amount_fc']) : null,
+      vatType: json['vat_type'] ?? 'NOVAT',
+      vatRate: toDouble(json['vat_rate']),
+      vatAmountFc: toDouble(json['vat_amount_fc']),
+      vatAmountLc: toDouble(json['vat_amount_lc']),
+      sellerName: json['seller_name'],
+      sellerTaxId: json['seller_tax_id'],
+      sellerBranchCode: json['seller_branch_code'],
+      taxInvoiceNo: json['tax_invoice_no'],
+      taxInvoiceDate: parseLocalDateNullable(json['tax_invoice_date']),
     );
   }
 
@@ -269,6 +336,53 @@ class CmTransactionDetail {
         if (expenseAccountId != null) 'expense_account_id': expenseAccountId,
         'amount_lc': amountLc,
         'amount_fc': amountFc,
+        if (enteredAmountFc != null) 'entered_amount_fc': enteredAmountFc,
+        'vat_type': vatType,
+        'vat_rate': vatRate,
+        'seller_name': sellerName,
+        'seller_tax_id': sellerTaxId,
+        'seller_branch_code': sellerBranchCode,
+        'tax_invoice_no': taxInvoiceNo,
+        'tax_invoice_date': taxInvoiceDate != null ? formatLocalDate(taxInvoiceDate!) : null,
+      };
+}
+
+// ── ภาษีหัก ณ ที่จ่าย (20: เราหักผู้รับ, 10: ผู้จ่ายหักเรา) — ยอดเป็นสกุลเงินของเอกสาร ─────────────
+class CmTransactionWht {
+  final int? whtTypeId;
+  final String? whtType;
+  final String? incomeType;
+  final double whtRate;
+  final double baseAmountFc;
+  final double whtAmountFc;
+  final String? description;
+
+  const CmTransactionWht({
+    this.whtTypeId, this.whtType, this.incomeType, this.whtRate = 0,
+    this.baseAmountFc = 0, this.whtAmountFc = 0, this.description,
+  });
+
+  factory CmTransactionWht.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
+    return CmTransactionWht(
+      whtTypeId: json['wht_type_id'],
+      whtType: json['wht_type'],
+      incomeType: json['income_type'],
+      whtRate: toDouble(json['wht_rate']),
+      baseAmountFc: toDouble(json['base_amount_fc']),
+      whtAmountFc: toDouble(json['wht_amount_fc']),
+      description: json['description'],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'wht_type_id': whtTypeId,
+        'wht_type': whtType,
+        'income_type': incomeType,
+        'wht_rate': whtRate,
+        'base_amount_fc': baseAmountFc,
+        'wht_amount_fc': whtAmountFc,
+        'description': description,
       };
 }
 
@@ -390,6 +504,7 @@ class CmTransaction {
   final List<CmTransactionDetail> details;
   final List<CmTransactionApply> applies;
   final List<CmTransactionPayment> payments;
+  final List<CmTransactionWht> whts;
   // ถอยเป็นร่าง / ยกเลิก: null = ทำได้ หรือรหัสเหตุผลที่ทำไม่ได้ (backend getCmReverseBlock / getCmVoidBlock)
   final String? reverseBlock;
   final String? reverseBlockRef; // เลขที่เอกสารที่อ้างอิงอยู่ (ถ้ามี)
@@ -402,6 +517,7 @@ class CmTransaction {
     this.details = const [],
     this.applies = const [],
     this.payments = const [],
+    this.whts = const [],
     this.reverseBlock,
     this.reverseBlockRef,
     this.voidBlock,
@@ -417,6 +533,8 @@ class CmTransaction {
             .map((e) => CmTransactionApply.fromJson(e)).toList(),
         payments: (json['payments'] as List<dynamic>? ?? [])
             .map((e) => CmTransactionPayment.fromJson(e)).toList(),
+        whts: (json['whts'] as List<dynamic>? ?? [])
+            .map((e) => CmTransactionWht.fromJson(e)).toList(),
         reverseBlock: json['reverse_block'] as String?,
         reverseBlockRef: json['reverse_block_ref'] as String?,
         voidBlock: json['void_block'] as String?,
