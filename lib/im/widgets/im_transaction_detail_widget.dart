@@ -171,10 +171,12 @@ class _AdvanceRow {
   final double balanceFc;
   final double vatRatio; // สัดส่วน VAT ของใบมัดจำ
   final double rate; // อัตราแลกเปลี่ยนของใบมัดจำ
+  final int? refOrderId; // ใบสั่งซื้อ/ใบสั่งขายที่ใบมัดจำอ้างอิง
+  final String? refOrderDocNo;
   final TextEditingController ctrl;
 
   _AdvanceRow({required this.id, required this.docNo, this.docDate, required this.balanceFc, required this.vatRatio,
-      this.rate = 1, double amount = 0})
+      this.rate = 1, double amount = 0, this.refOrderId, this.refOrderDocNo})
       : ctrl = TextEditingController(text: amount > 0 ? amount.toStringAsFixed(2) : '');
 }
 
@@ -382,13 +384,52 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           if ((o.currencyCode ?? CurrencyService.baseCode) != cur) continue;
           final prev = saved.where((a) => a.advanceId == o.id).fold(0.0, (t, a) => t + a.appliedAmountFc);
           rows.add(_AdvanceRow(id: o.id, docNo: o.docNo, docDate: o.docDate, balanceFc: o.balanceFc, vatRatio: o.vatRatio,
-              rate: o.exchangeRate, amount: prev));
+              rate: o.exchangeRate, amount: prev, refOrderId: o.refOrderId, refOrderDocNo: o.refOrderDocNo));
         }
       } catch (_) {}
     }
     if (!mounted) return;
     setState(() => _advRows = rows);
   }
+  // ใบมัดจำที่อ้างอิงใบสั่งซื้อ/ใบสั่งขายของเอกสารนี้ — แสดงก่อน และเตือนตอนตั้งหนี้ถ้ายังไม่ได้หัก
+  bool _isLinkedAdvance(_AdvanceRow r) {
+    final ref = _isApVendorMode ? _refPoId : _refSoId;
+    return ref != null && r.refOrderId == ref;
+  }
+  List<_AdvanceRow> get _advRowsSorted {
+    final linked = _advRows.where(_isLinkedAdvance).toList();
+    return [...linked, ..._advRows.where((r) => !_isLinkedAdvance(r))];
+  }
+  Future<bool> _confirmLinkedAdvances() async {
+    if (!_showAdvances) return true;
+    final pending = _advRows.where((r) => _isLinkedAdvance(r) && _parseNum(r.ctrl.text) <= 0 && r.balanceFc > 0.005).toList();
+    if (pending.isEmpty) return true;
+    final isEnglish = _isEnglish;
+    final src = _isApVendorMode ? (isEnglish ? 'purchase order' : 'ใบสั่งซื้อ') : (isEnglish ? 'sales order' : 'ใบสั่งขาย');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Deposit not deducted' : 'ยังไม่ได้หักเงินมัดจำ'),
+        content: SizedBox(
+          width: 460,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(isEnglish
+                ? 'These deposits reference the same $src but are not deducted on this bill (they can still be deducted at payment). Post anyway?'
+                : 'ใบมัดจำต่อไปนี้อ้างอิง$srcเดียวกันแต่ยังไม่ได้หักในใบนี้ (หักตอนรับ/จ่ายชำระได้) ต้องการ Post ต่อหรือไม่'),
+            const SizedBox(height: 8),
+            for (final r in pending)
+              Text('${r.docNo}  ${isEnglish ? 'balance' : 'คงเหลือ'} ${_fmtMoney.format(r.balanceFc)}', style: const TextStyle(fontSize: 13)),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Post anyway' : 'Post ต่อ')),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
   bool get _canEditBilling => !widget.viewOnly &&
       ((_status == 'Draft' && !_credit.isPending) || (_isGrDeferredMode && _status == 'Received') || (_isDlnDeferredMode && _status == 'Delivered'));
   // ยอดเอกสารสำหรับตรวจวงเงิน: Σ |จำนวน| × ราคาขาย × (1 + VAT) — รับคืน/ลดหนี้ลูกหนี้ติดลบ
@@ -1436,6 +1477,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (['10', '11', '12'].contains(_selectedSysDocType) && !await _confirmPoPriceDiffs()) return;
     // '31' ตั้งหนี้ทันที — ราคาขายต่างจาก SO ให้ยืนยัน ('32' เตือนตอนออกใบแจ้งหนี้, '30' ไม่มีราคาขาย)
     if (_selectedSysDocType == '31' && !await _confirmPoPriceDiffs(sales: true)) return;
+    if (!await _confirmLinkedAdvances()) return;
     if (_isArCustomerMode && _customerId != null) {
       final go = await checkCreditBeforePost(
         context,
@@ -1688,6 +1730,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
     if (!_checkAdvances()) return;
     if (!await _confirmPoPriceDiffs(billing: true)) return;
+    if (!await _confirmLinkedAdvances()) return;
     setState(() => _isSaving = true);
     try {
       final details = _lines.map((l) => ImTransactionDetail(
@@ -1752,6 +1795,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     void warn(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     if (!_checkAdvances()) return;
     if (!await _confirmPoPriceDiffs(sales: true)) return;
+    if (!await _confirmLinkedAdvances()) return;
     setState(() => _isSaving = true);
     try {
       final details = _lines.map((l) => ImTransactionDetail(
@@ -2565,12 +2609,21 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           ? (isEnglish ? 'Deduct Vendor Deposits on the AP Bill' : 'หักเงินมัดจำในใบตั้งหนี้')
           : (isEnglish ? 'Deduct Customer Deposits on the Invoice' : 'หักเงินมัดจำในใบแจ้งหนี้'),
       children: [
-        for (final r in _advRows)
+        for (final r in _advRowsSorted)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 3),
             child: Row(children: [
               Expanded(
-                child: Text('${r.docNo}${r.docDate != null ? '  ${_dateFmt.format(r.docDate!)}' : ''}', style: const TextStyle(fontSize: 13)),
+                child: Text.rich(TextSpan(children: [
+                  TextSpan(text: '${r.docNo}${r.docDate != null ? '  ${_dateFmt.format(r.docDate!)}' : ''}'),
+                  if (r.refOrderDocNo != null)
+                    TextSpan(
+                      text: '  (${_isApVendorMode ? 'PO' : 'SO'} ${r.refOrderDocNo})',
+                      style: TextStyle(
+                          color: _isLinkedAdvance(r) ? Colors.indigo[700] : Colors.grey[600],
+                          fontWeight: _isLinkedAdvance(r) ? FontWeight.bold : FontWeight.normal),
+                    ),
+                ]), style: const TextStyle(fontSize: 13)),
               ),
               SizedBox(
                 width: 170,

@@ -2,6 +2,7 @@
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/models/sa_doc_approval.dart';
+import '../../utils/order_ref_picker.dart';
 
 const Map<String, String> poTransactionStatusLabelsTh = {
   'Draft': 'ร่าง',
@@ -63,6 +64,7 @@ class PoTransactionHeader {
   // คิวผู้อนุมัติ (utils/docApproval.js) — ALL / ANY + ขั้นตอนแต่ละลำดับ
   final String? approvalMode;
   final List<DocApprovalStep> approvals;
+  final List<OrderDeposit> deposits; // ใบมัดจำที่อ้างอิงใบสั่งนี้
   // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
   final DocActions actions;
   final int? refPrId; // ใบขอซื้อ (PR) ต้นทาง — สะดวก/แสดงผลเท่านั้น
@@ -109,6 +111,7 @@ class PoTransactionHeader {
     this.voidReason,
     this.approvalMode,
     this.approvals = const [],
+    this.deposits = const [],
     this.actions = const DocActions(),
     this.refPrId,
     this.refPrDocNo,
@@ -156,6 +159,7 @@ class PoTransactionHeader {
       voidReason: json['void_reason'],
       approvalMode: json['approval_mode'],
       approvals: DocApprovalStep.listFromJson(json['approvals']),
+      deposits: OrderDeposit.listFromJson(json['deposits']),
       actions: DocActions.fromJson(json),
       refPrId: json['ref_pr_id'],
       refPrDocNo: json['ref_pr_doc_no'],

@@ -110,6 +110,8 @@ class ApTransactionHeader {
   final String? branchNameThai;
   final String? branchNameEng;
   final bool priceIncludesVat; // ราคาที่กรอกรวม VAT (ยอดที่เก็บยังเป็นก่อน VAT)
+  final int? refPoId; // ใบมัดจำ: ใบสั่งซื้อที่อ้างอิง
+  final String? refPoDocNo;
   // Audit
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -164,6 +166,7 @@ class ApTransactionHeader {
     this.dim5Id, this.dim5Name,
     this.branchId, this.branchCode, this.branchNameThai, this.branchNameEng,
     this.priceIncludesVat = false,
+    this.refPoId, this.refPoDocNo,
     this.createdAt, this.updatedAt, this.createdBy, this.updatedBy,
   });
 
@@ -217,6 +220,8 @@ class ApTransactionHeader {
       dim5Id: json['dim5_id'], dim5Name: json['dim5_name'],
       branchId: json['branch_id'],
       priceIncludesVat: json['price_includes_vat'] == true,
+      refPoId: json['ref_po_id'] as int?,
+      refPoDocNo: json['ref_po_doc_no'] as String?,
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
       branchNameEng: json['branch_name_eng'],
@@ -261,6 +266,7 @@ class ApTransactionHeader {
         if (dim5Id != null) 'dim5_id': dim5Id,
         if (branchId != null) 'branch_id': branchId,
         'price_includes_vat': priceIncludesVat,
+        'ref_po_id': refPoId,
         if (createdBy != null) 'created_by': createdBy,
         if (updatedBy != null) 'updated_by': updatedBy,
       };
@@ -639,6 +645,7 @@ class ApOpenInvoice {
   // บัญชีเจ้าหนี้ที่ใบตั้งหนี้ลงไว้ — การจ่ายชำระล้างเข้าบัญชีนี้
   final int? apAccountId;
   final double invAdvanceAmountFc; // มัดจำที่ใบตั้งหนี้หักไปแล้วตอนตั้งหนี้
+  final String? refPoDocNo; // ใบมัดจำ: ใบสั่งซื้อที่อ้างอิง
 
   ApOpenInvoice({
     required this.id, required this.docNo,
@@ -649,6 +656,7 @@ class ApOpenInvoice {
     this.currencyCode = 'THB', this.exchangeRate = 1,
     this.docCode, this.sysDocType, this.apAccountId,
     this.invAdvanceAmountFc = 0,
+    this.refPoDocNo,
   });
 
   factory ApOpenInvoice.fromJson(Map<String, dynamic> json) {
@@ -671,6 +679,7 @@ class ApOpenInvoice {
       deferredVatAmountFc: toDouble(json['deferred_vat_amount_fc']),
       apAccountId: json['ap_account_id'] as int?,
       invAdvanceAmountFc: toDouble(json['inv_advance_amount_fc']),
+      refPoDocNo: json['ref_po_doc_no'] as String?,
     );
   }
 }

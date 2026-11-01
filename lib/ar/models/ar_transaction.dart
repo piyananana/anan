@@ -47,6 +47,8 @@ class ArTransactionHeader {
   final String? customerPoNo; // ใบแจ้งหนี้: เลขที่ใบสั่งซื้อของลูกค้า
   final DateTime? customerPoDate;
   final bool priceIncludesVat; // ราคาที่กรอกรวม VAT (ยอดที่เก็บเป็นยอดก่อน VAT เหมือนเดิม)
+  final int? refSoId; // ใบมัดจำ: ใบสั่งขายที่อ้างอิง
+  final String? refSoDocNo;
   final int periodId;
   final int customerId;
   final String? customerCode;
@@ -120,6 +122,8 @@ class ArTransactionHeader {
     this.customerPoNo,
     this.customerPoDate,
     this.priceIncludesVat = false,
+    this.refSoId,
+    this.refSoDocNo,
     this.periodId = 0,
     required this.customerId,
     this.customerCode,
@@ -186,6 +190,8 @@ class ArTransactionHeader {
       customerPoNo: j['customer_po_no'] as String?,
       customerPoDate: parseLocalDateNullable(j['customer_po_date']),
       priceIncludesVat: j['price_includes_vat'] == true,
+      refSoId: j['ref_so_id'] as int?,
+      refSoDocNo: j['ref_so_doc_no'] as String?,
       periodId: j['period_id'] as int? ?? 0,
       customerId: j['customer_id'] as int? ?? 0,
       customerCode: j['customer_code'],
@@ -252,6 +258,7 @@ class ArTransactionHeader {
         'customer_po_no': customerPoNo,
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate!) : null,
         'price_includes_vat': priceIncludesVat,
+        'ref_so_id': refSoId,
         'period_id': periodId,
         'customer_id': customerId,
         'customer_code': customerCode,

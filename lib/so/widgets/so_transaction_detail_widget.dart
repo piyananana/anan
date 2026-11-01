@@ -27,6 +27,7 @@ import '../../cd/services/cd_currency_service.dart';
 import '../../sa/widgets/sa_attachment_widget.dart';
 import '../../sa/models/sa_doc_approval.dart';
 import '../../sa/widgets/sa_doc_approval_panel.dart';
+import '../../utils/order_ref_picker.dart';
 import '../../sa/models/sa_credit_approval.dart';
 import '../../sa/services/sa_credit_approval_service.dart';
 import '../../sa/widgets/sa_credit_limit_panel.dart';
@@ -113,6 +114,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   DocActions _actions = const DocActions();
   String? _approvalMode;
   List<DocApprovalStep> _approvals = const [];
+  List<OrderDeposit> _deposits = const []; // ใบมัดจำที่อ้างอิงใบสั่งนี้
   // วงเงินเครดิตลูกค้า — ตรวจตอนส่งอนุมัติ เกินวงเงินต้องขออนุมัติก่อน (กลไกเดียวกับใบแจ้งหนี้/ใบส่งสินค้า)
   final _creditService = CreditApprovalService(AppConfig.apiSo, 'so_transaction');
   DocCreditState _credit = const DocCreditState();
@@ -216,6 +218,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     _status = 'Draft';
     _voidReason = null;
     _actions = const DocActions();
+    _deposits = const [];
     _salespersons = const [];
     _refQuoteId = null;
     _refQuoteDocNoLabel = null;
@@ -257,6 +260,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _status = 'Draft';
         _voidReason = null;
         _actions = const DocActions();
+        _deposits = const [];
         _salespersons = const [];
         _refQuoteId = null;
         _refQuoteDocNoLabel = null;
@@ -305,6 +309,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _actions = h.actions;
         _approvalMode = h.approvalMode;
         _approvals = h.approvals;
+        _deposits = h.deposits;
         _credit = h.credit;
         _salespersons = h.salespersons;
         _refQuoteId = h.refQuoteId;
@@ -1104,8 +1109,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
             ElevatedButton.icon(
               onPressed: _isSaving ? null : () => _confirmAction(
                   'ยืนยันปิดใบสั่งขาย', 'Close Sale Order',
-                  'ปิดใบสั่งขายนี้? ใช้เมื่อไม่มีการส่งสินค้าเพิ่มแล้ว (แม้ยังส่งไม่ครบ 100%)',
-                  'Close this SO? Use this when no more delivery is expected (even if not 100% delivered).',
+                  'ปิดใบสั่งขายนี้? ใช้เมื่อไม่มีการส่งสินค้าเพิ่มแล้ว (แม้ยังส่งไม่ครบ 100%)${orderDepositCloseNote(_deposits, false)}',
+                  'Close this SO? Use this when no more delivery is expected (even if not 100% delivered).${orderDepositCloseNote(_deposits, true)}',
                   () => _service.closeTransaction(_id!)),
               icon: const Icon(Icons.lock_outline, size: 18),
               label: Text(isEnglish ? 'Close' : 'ปิดใบสั่งขาย'),
@@ -1155,6 +1160,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
             isDraft: _isEditable && !widget.viewOnly,
             onChanged: _load,
           ),
+        if (_id != null && _deposits.isNotEmpty)
+          OrderDepositPanel(deposits: _deposits, isEnglish: isEnglish, baseCurrencyCode: _baseCurrencyCode),
         if (_id != null && _approvals.isNotEmpty)
           DocApprovalPanel(
             docNo: _docNo,

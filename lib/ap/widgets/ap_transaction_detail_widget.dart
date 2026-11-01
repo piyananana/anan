@@ -35,6 +35,8 @@ import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../sa/models/sa_doc_approval.dart';
 import '../../sa/widgets/sa_doc_approval_panel.dart';
 import '../../utils/vat_calc.dart';
+import '../../utils/order_ref_picker.dart';
+import '../../po/services/po_transaction_service.dart';
 
 class ApTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -160,6 +162,9 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   double _vatAmountFc = 0;
   double _totalAmountFc = 0;
   bool _priceIncludesVat = false; // ราคาที่กรอกรวม VAT — ดู lib/utils/vat_calc.dart
+  // ใบมัดจำ: ใบสั่งซื้อที่อ้างอิง — ใบรับสินค้าที่อ้างอิงใบสั่งซื้อเดียวกันจะแนะนำให้หักมัดจำนี้
+  int? _refPoId;
+  String? _refPoDocNo;
 
   final _fmt = NumberFormat('#,##0.00');
   final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -334,6 +339,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         _reverseHistory = data.reverseHistory;
         _isReadOnly = widget.viewOnly || h.status != 'Draft';
         _priceIncludesVat = h.priceIncludesVat;
+        _refPoId = h.refPoId;
+        _refPoDocNo = h.refPoDocNo;
 
         _dimSelections = { 1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id };
         _dimNames = { 1: h.dim1Name, 2: h.dim2Name, 3: h.dim3Name, 4: h.dim4Name, 5: h.dim5Name };
@@ -428,6 +435,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       _docNo = 'AUTO'; _docDate = DateTime.now(); _dueDate = null;
       _apAccountId = null; _exchangeRate = 1.0;
       _priceIncludesVat = false;
+      _refPoId = null; _refPoDocNo = null;
       _refNoCtrl.clear(); _descCtrl.clear();
       _status = 'Draft'; _approvals = []; _isReadOnly = false;
       _reverseBlock = null; _reverseBlockRef = null; _voidBlock = null; _voidBlockRef = null; _reverseHistory = [];
@@ -577,8 +585,27 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     } catch (_) {}
   }
 
+  // ใบมัดจำ: เลือกใบสั่งซื้อของผู้ขายนี้
+  Future<void> _pickRefPo() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final vendorId = _selectedVendor?.id;
+    if (vendorId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a vendor first' : 'กรุณาเลือกผู้ขายก่อน')));
+      return;
+    }
+    final o = await showOrderRefPicker(context,
+        title: isEnglish ? 'Select Purchase Order' : 'เลือกใบสั่งซื้อ',
+        isEnglish: isEnglish,
+        load: () async => (await PoTransactionService().fetchRows(vendorId: vendorId))
+            .map((h) => OrderRef(id: h.id, docNo: h.docNo, docDate: h.docDate, status: h.status,
+                totalAmountLc: h.totalAmountLc != 0 ? h.totalAmountLc : h.totalValueLc))
+            .toList());
+    if (o != null && mounted) setState(() { _refPoId = o.id; _refPoDocNo = o.docNo; });
+  }
+
   void _onVendorChanged(ApVendor? vendor) {
     setState(() {
+      if (vendor?.id != _selectedVendor?.id) { _refPoId = null; _refPoDocNo = null; }
       _selectedVendor = vendor;
       _apAccountId = vendor?.apAccountId;
       if (vendor != null && vendor.currencyCode.isNotEmpty) {
@@ -918,6 +945,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       dim3Id: _dimSelections[3], dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
       branchId: _selectedBranch?.branchId,
       priceIncludesVat: _priceIncludesVat,
+      refPoId: _isAdvancePayment ? _refPoId : null,
       createdBy: _transactionId == 0 ? userName : null,
       updatedBy: _transactionId != 0 ? userName : null,
     );
@@ -1463,6 +1491,16 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
             readOnly: _isReadOnly,
             onChanged: _isPayment ? (_) => setState(() {}) : null,
           )),
+          if (_isAdvancePayment) ...[
+            const SizedBox(width: 8),
+            Expanded(flex: 1, child: OrderRefField(
+              docNo: _refPoDocNo,
+              readOnly: _isReadOnly,
+              decoration: _fieldDeco(isEnglish ? 'Purchase Order' : 'อ้างอิงใบสั่งซื้อ'),
+              onClear: () => setState(() { _refPoId = null; _refPoDocNo = null; }),
+              onPick: _pickRefPo,
+            )),
+          ],
           if (_status != 'Draft') ...[
             const SizedBox(width: 8),
             Container(
@@ -1938,7 +1976,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                 text: existing != null ? existing.appliedAmountLc.toStringAsFixed(2) : balance.toStringAsFixed(2),
               ));
               return DataRow(cells: [
-                DataCell(Text(inv.docNo, style: const TextStyle(fontSize: 12))),
+                DataCell(Text(inv.refPoDocNo != null ? '${inv.docNo} (PO ${inv.refPoDocNo})' : inv.docNo, style: const TextStyle(fontSize: 12))),
                 DataCell(Text(inv.docDate != null ? _dateFmt.format(inv.docDate!) : '', style: const TextStyle(fontSize: 12))),
                 DataCell(Text(_fmt.format(total), style: const TextStyle(fontSize: 12))),
                 DataCell(Text(_fmt.format(balance), style: TextStyle(fontSize: 12, color: Colors.blue[700]))),

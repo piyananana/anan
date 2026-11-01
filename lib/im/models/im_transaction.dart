@@ -606,9 +606,12 @@ class ImOpenAdvance {
   final double totalAmountLc;
   final double vatAmountLc;
   final double balanceAmountLc;
+  // ใบสั่งขาย (AR) / ใบสั่งซื้อ (AP) ที่ใบมัดจำอ้างอิง
+  final int? refOrderId;
+  final String? refOrderDocNo;
 
   const ImOpenAdvance({required this.id, required this.docNo, this.docDate, this.currencyCode, this.exchangeRate = 1,
-      this.totalAmountLc = 0, this.vatAmountLc = 0, this.balanceAmountLc = 0});
+      this.totalAmountLc = 0, this.vatAmountLc = 0, this.balanceAmountLc = 0, this.refOrderId, this.refOrderDocNo});
 
   double get balanceFc => exchangeRate > 0 ? balanceAmountLc / exchangeRate : balanceAmountLc;
   // สัดส่วน VAT ของใบมัดจำ — ส่วนที่หักแยกเป็นก่อน VAT + VAT ตามสัดส่วนนี้ (เหมือน backend)
@@ -625,6 +628,8 @@ class ImOpenAdvance {
       totalAmountLc: d(json['total_amount_lc']),
       vatAmountLc: d(json['vat_amount_lc']),
       balanceAmountLc: d(json['balance_amount_lc']),
+      refOrderId: (json['ref_so_id'] ?? json['ref_po_id']) as int?,
+      refOrderDocNo: (json['ref_so_doc_no'] ?? json['ref_po_doc_no']) as String?,
     );
   }
 }

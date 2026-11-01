@@ -38,6 +38,8 @@ import '../../config/app_config.dart';
 import '../../sa/models/sa_credit_approval.dart';
 import '../../sa/services/sa_credit_approval_service.dart';
 import '../../sa/widgets/sa_credit_limit_panel.dart';
+import '../../so/services/so_transaction_service.dart';
+import '../../utils/order_ref_picker.dart';
 
 class ArTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -122,6 +124,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   final _refNoCtrl = TextEditingController();
   final _poNoCtrl = TextEditingController(); // ใบแจ้งหนี้: เลขที่ใบสั่งซื้อของลูกค้า
   DateTime? _poDate;
+  // ใบมัดจำ: ใบสั่งขายที่อ้างอิง — ใบส่งสินค้าที่อ้างอิงใบสั่งขายเดียวกันจะแนะนำให้หักมัดจำนี้
+  int? _refSoId;
+  String? _refSoDocNo;
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
   // ถอยเป็นร่าง / ยกเลิก: null = ทำได้ หรือรหัสเหตุผลจาก backend
@@ -324,6 +329,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         _refNoCtrl.text = h.refNo ?? '';
         _poNoCtrl.text = h.customerPoNo ?? '';
         _priceIncludesVat = h.priceIncludesVat;
+        _refSoId = h.refSoId;
+        _refSoDocNo = h.refSoDocNo;
         _poDate = h.customerPoDate;
         _descCtrl.text = h.description ?? '';
         _status = h.status;
@@ -493,6 +500,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       _poNoCtrl.clear();
       _poDate = null;
       _priceIncludesVat = false;
+      _refSoId = null;
+      _refSoDocNo = null;
       _descCtrl.clear();
       _status = 'Draft';
       _isReadOnly = false;
@@ -714,12 +723,31 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     } catch (_) {}
   }
 
+  // ใบมัดจำ: เลือกใบสั่งขายของลูกค้านี้
+  Future<void> _pickRefSo() async {
+    final isEnglish = _isEnglish;
+    final customerId = _selectedCustomer?.id;
+    if (customerId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a customer first' : 'กรุณาเลือกลูกค้าก่อน')));
+      return;
+    }
+    final o = await showOrderRefPicker(context,
+        title: isEnglish ? 'Select Sales Order' : 'เลือกใบสั่งขาย',
+        isEnglish: isEnglish,
+        load: () async => (await SoTransactionService().fetchRows(customerId: customerId))
+            .map((h) => OrderRef(id: h.id, docNo: h.docNo, docDate: h.docDate, status: h.status,
+                totalAmountLc: h.totalAmountLc != 0 ? h.totalAmountLc : h.totalValueLc))
+            .toList());
+    if (o != null && mounted) setState(() { _refSoId = o.id; _refSoDocNo = o.docNo; });
+  }
+
   void _onCustomerChanged(ArCustomer? customer) {
     if (!_isReadOnly) {
       _salespersons = [];
       if (customer?.id != null) _loadCustomerSalespersons(customer!.id!);
     }
     setState(() {
+      if (customer?.id != _selectedCustomer?.id) { _refSoId = null; _refSoDocNo = null; }
       _selectedCustomer = customer;
       // Default AR account from customer
       _arAccountId = customer?.arAccountId;
@@ -1288,6 +1316,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       customerPoNo: _isInvoice && _poNoCtrl.text.trim().isNotEmpty ? _poNoCtrl.text.trim() : null,
       customerPoDate: _isInvoice ? _poDate : null,
       priceIncludesVat: _priceIncludesVat,
+      refSoId: _isAdvanceReceipt ? _refSoId : null,
       description: _descCtrl.text.isEmpty ? null : _descCtrl.text,
       status: _status,
       createdBy: _transactionId == 0 ? userName : null,
@@ -2158,6 +2187,21 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
               const Spacer(flex: 2),
             ]),
           ],
+          if (_isAdvanceReceipt) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: OrderRefField(
+                  docNo: _refSoDocNo,
+                  readOnly: _isReadOnly,
+                  decoration: _fieldDeco(isEnglish ? 'Sales Order' : 'อ้างอิงใบสั่งขาย'),
+                  onClear: () => setState(() { _refSoId = null; _refSoDocNo = null; }),
+                  onPick: _pickRefSo,
+                ),
+              ),
+              const Spacer(flex: 3),
+            ]),
+          ],
           if (_headerExpanded) ...[
           const SizedBox(height: 12),
           // Branch + Dimensions row (all flex: 1)
@@ -2628,7 +2672,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                             ? adv.balanceAmountLc / adv.exchangeRate
                             : adv.balanceAmountLc;
                         return DataRow(cells: [
-                          DataCell(Text(adv.docNo, style: const TextStyle(fontSize: 12))),
+                          DataCell(Text(adv.refSoDocNo != null ? '${adv.docNo} (SO ${adv.refSoDocNo})' : adv.docNo, style: const TextStyle(fontSize: 12))),
                           DataCell(Text(_dateFmt.format(adv.docDate), style: const TextStyle(fontSize: 12))),
                           DataCell(Text(_fmt.format(advTotalDisplay), style: const TextStyle(fontSize: 12))),
                           DataCell(Text(_fmt.format(advBalanceDisplay),

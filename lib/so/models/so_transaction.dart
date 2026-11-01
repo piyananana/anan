@@ -3,6 +3,7 @@
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/models/sa_doc_approval.dart';
+import '../../utils/order_ref_picker.dart';
 import '../../sa/models/sa_credit_approval.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
 
@@ -68,6 +69,7 @@ class SoTransactionHeader {
   // คิวผู้อนุมัติ (utils/docApproval.js) — ALL / ANY + ขั้นตอนแต่ละลำดับ
   final String? approvalMode;
   final List<DocApprovalStep> approvals;
+  final List<OrderDeposit> deposits; // ใบมัดจำที่อ้างอิงใบสั่งนี้
   final DocCreditState credit; // ขออนุมัติเกินวงเงินเครดิต (ตรวจตอนส่งอนุมัติ)
   // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
   final DocActions actions;
@@ -119,6 +121,7 @@ class SoTransactionHeader {
     this.voidReason,
     this.approvalMode,
     this.approvals = const [],
+    this.deposits = const [],
     this.credit = const DocCreditState(),
     this.actions = const DocActions(),
     this.refQuoteId,
@@ -170,6 +173,7 @@ class SoTransactionHeader {
       voidReason: json['void_reason'],
       approvalMode: json['approval_mode'],
       approvals: DocApprovalStep.listFromJson(json['approvals']),
+      deposits: OrderDeposit.listFromJson(json['deposits']),
       credit: DocCreditState.fromJson(json, json['credit_approvals']),
       actions: DocActions.fromJson(json),
       refQuoteId: json['ref_quote_id'],
