@@ -64,8 +64,14 @@ class _DetailRow {
   int? expenseAccountId;
   String? expenseAccountCode;
   String? expenseAccountName;
-  String vatType = 'NOVAT'; // รายรับ/รายจ่ายหลายบรรทัด (10/20)
+  String vatType = 'NOVAT'; // รายรับ/รายจ่ายหลายบรรทัด (10/20), เบิกเงินสดย่อย (40)
   double vatRate = 0;
+  // เบิกเงินสดย่อย (40): ผู้ขายและใบกำกับภาษีของบรรทัดที่มี VAT
+  final sellerNameCtrl = TextEditingController();
+  final sellerTaxIdCtrl = TextEditingController();
+  final sellerBranchCtrl = TextEditingController();
+  final taxInvNoCtrl = TextEditingController();
+  DateTime? taxInvDate;
 
   _DetailRow();
 
@@ -75,6 +81,11 @@ class _DetailRow {
     r.amountCtrl.text = (d.enteredAmountFc ?? d.amountFc).toStringAsFixed(2);
     r.vatType = d.vatType;
     r.vatRate = d.vatRate;
+    r.sellerNameCtrl.text = d.sellerName ?? '';
+    r.sellerTaxIdCtrl.text = d.sellerTaxId ?? '';
+    r.sellerBranchCtrl.text = d.sellerBranchCode ?? '';
+    r.taxInvNoCtrl.text = d.taxInvoiceNo ?? '';
+    r.taxInvDate = d.taxInvoiceDate;
     r.expenseAccountId = d.expenseAccountId;
     r.expenseAccountCode = d.expenseAccountCode;
     r.expenseAccountName = d.expenseAccountName;
@@ -84,6 +95,10 @@ class _DetailRow {
   void dispose() {
     descCtrl.dispose();
     amountCtrl.dispose();
+    sellerNameCtrl.dispose();
+    sellerTaxIdCtrl.dispose();
+    sellerBranchCtrl.dispose();
+    taxInvNoCtrl.dispose();
   }
 }
 
@@ -326,6 +341,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   // (20 = เราหักผู้รับเงิน, 10 = ผู้จ่ายหักเรา; ใบกำกับของผู้ขายและประเภท ภ.ง.ด. เฉพาะ 20)
   bool get _hasTaxLines      => _isPayment || _isReceipt;
   bool get _hasDetailRows    => _isVoucher || _hasTaxLines;
+  bool get _hasVatLines      => _hasTaxLines || _isVoucher; // บรรทัดที่เลือก VAT ได้
   bool get _hasPartySection  => _isPayment || _isReceipt;
   bool get _hasWhtSection    => _isPayment || _isReceipt;
   bool get _hasApplySection  => _isReplenishment;
@@ -616,7 +632,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   void _recalcTotals() {
     double totalFc = 0;
     _subtotalFc = 0; _vatFc = 0; _whtFc = 0;
-    if (_hasTaxLines && _detailRows.isNotEmpty) {
+    if (_hasVatLines && _detailRows.isNotEmpty) {
       for (final r in _detailRows) {
         final a = _lineAmt(r);
         _subtotalFc += a.net;
@@ -724,6 +740,16 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         return;
       }
     }
+    if (action == 'Post' && _isVoucher) {
+      final bad = _detailRows.indexWhere((r) => _lineAmt(r).vat.abs() > 0.005 &&
+          (r.sellerNameCtrl.text.trim().isEmpty || r.sellerTaxIdCtrl.text.trim().isEmpty || r.taxInvNoCtrl.text.trim().isEmpty));
+      if (bad >= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+            ? 'Line ${bad + 1}: has input VAT — enter the seller name, tax ID and tax invoice no.'
+            : 'บรรทัดที่ ${bad + 1}: มีภาษีซื้อ กรุณาระบุชื่อผู้ขาย เลขประจำตัวผู้เสียภาษี และเลขที่ใบกำกับภาษี')));
+        return;
+      }
+    }
     if (action == 'Post' && !(await CmPeriodService.canPost(context, _docDate))) {
       return;
     }
@@ -748,7 +774,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       partyBranchCode: _hasPartySection ? _partyBranchCtrl.text.trim() : null,
       partyType: _isPayment ? _partyType : null,
       partyAddress: _hasPartySection ? _partyAddressCtrl.text.trim() : null,
-      priceIncludesVat: _hasTaxLines && _priceIncludesVat,
+      priceIncludesVat: _hasVatLines && _priceIncludesVat,
       taxInvoiceNo: _isPayment && _taxInvNoCtrl.text.trim().isNotEmpty ? _taxInvNoCtrl.text.trim() : null,
       taxInvoiceDate: _isPayment && _taxInvNoCtrl.text.trim().isNotEmpty ? (_taxInvDate ?? _docDate) : null,
       currencyId: _selectedCurrency?.id,
@@ -775,9 +801,15 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
               amountLc: fc * lc,
               amountFc: fc,
               // 10/20: ยอดที่กรอก + VAT — backend คำนวณยอดก่อน VAT/VAT/ยอดบาทใหม่
-              enteredAmountFc: _hasTaxLines ? fc : null,
-              vatType: _hasTaxLines ? e.value.vatType : 'NOVAT',
-              vatRate: _hasTaxLines ? e.value.vatRate : 0,
+              enteredAmountFc: _hasVatLines ? fc : null,
+              vatType: _hasVatLines ? e.value.vatType : 'NOVAT',
+              vatRate: _hasVatLines ? e.value.vatRate : 0,
+              // 40: ผู้ขาย/ใบกำกับของบรรทัดที่มี VAT
+              sellerName: _isVoucher && e.value.vatType != 'NOVAT' ? e.value.sellerNameCtrl.text.trim() : null,
+              sellerTaxId: _isVoucher && e.value.vatType != 'NOVAT' ? e.value.sellerTaxIdCtrl.text.trim() : null,
+              sellerBranchCode: _isVoucher && e.value.vatType != 'NOVAT' ? e.value.sellerBranchCtrl.text.trim() : null,
+              taxInvoiceNo: _isVoucher && e.value.vatType != 'NOVAT' && e.value.taxInvNoCtrl.text.trim().isNotEmpty ? e.value.taxInvNoCtrl.text.trim() : null,
+              taxInvoiceDate: _isVoucher && e.value.vatType != 'NOVAT' && e.value.taxInvNoCtrl.text.trim().isNotEmpty ? (e.value.taxInvDate ?? _docDate) : null,
             );
           }).toList()
         : <CmTransactionDetail>[];
@@ -1694,7 +1726,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
           const SizedBox(width: 6),
           Text(_isReceipt ? (isEnglish ? 'Revenue Items' : 'รายการรายรับ') : (isEnglish ? 'Expense Items' : 'รายการค่าใช้จ่าย'),
               style: const TextStyle(fontWeight: FontWeight.bold)),
-          if (_hasTaxLines) ...[
+          if (_hasVatLines) ...[
             const SizedBox(width: 16),
             Checkbox(
               value: _priceIncludesVat,
@@ -1717,7 +1749,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
             final i = e.key; final r = e.value;
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(children: [
+              child: Column(children: [Row(children: [
                 Expanded(flex: 3, child: TextFormField(
                   controller: r.descCtrl,
                   decoration: _fieldDeco(isEnglish ? 'Description' : 'รายละเอียด'),
@@ -1747,7 +1779,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
                   readOnly: _isReadOnly,
                   onChanged: (_) => _recalcTotals(),
                 )),
-                if (_hasTaxLines) ...[
+                if (_hasVatLines) ...[
                   const SizedBox(width: 8),
                   Expanded(flex: 2, child: DropdownButtonFormField<String>(
                     value: _vatRates.any((v) => v.vatCode == r.vatType) || r.vatType == 'NOVAT' ? r.vatType : 'NOVAT',
@@ -1773,6 +1805,50 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
                   icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
                   onPressed: () { setState(() { r.dispose(); _detailRows.removeAt(i); }); _recalcTotals(); },
                 ),
+              ]),
+              // เบิกเงินสดย่อย: ใบเสร็จที่มี VAT ต้องระบุผู้ขายและใบกำกับภาษีของบรรทัดนั้น (รายงานภาษีซื้อ)
+              if (_isVoucher && r.vatType != 'NOVAT') Padding(
+                padding: const EdgeInsets.only(top: 6, left: 24),
+                child: Row(children: [
+                  Expanded(flex: 3, child: TextFormField(
+                    controller: r.sellerNameCtrl,
+                    decoration: _fieldDeco(isEnglish ? 'Seller *' : 'ชื่อผู้ขาย *'),
+                    readOnly: _isReadOnly,
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: TextFormField(
+                    controller: r.sellerTaxIdCtrl,
+                    decoration: _fieldDeco(isEnglish ? 'Tax ID *' : 'เลขผู้เสียภาษี *'),
+                    readOnly: _isReadOnly,
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 1, child: TextFormField(
+                    controller: r.sellerBranchCtrl,
+                    decoration: _fieldDeco(isEnglish ? 'Branch' : 'สาขา'),
+                    readOnly: _isReadOnly,
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: TextFormField(
+                    controller: r.taxInvNoCtrl,
+                    decoration: _fieldDeco(isEnglish ? 'Tax Invoice No. *' : 'เลขที่ใบกำกับ *'),
+                    readOnly: _isReadOnly,
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: InkWell(
+                    onTap: _isReadOnly ? null : () async {
+                      final d = await showDatePicker(context: context, initialDate: r.taxInvDate ?? _docDate,
+                          firstDate: DateTime(2000), lastDate: DateTime(2100));
+                      if (d != null) setState(() => r.taxInvDate = d);
+                    },
+                    child: InputDecorator(
+                      decoration: _fieldDeco(isEnglish ? 'Invoice Date' : 'วันที่ใบกำกับ'),
+                      child: Text(r.taxInvDate != null ? _dateFmt.format(r.taxInvDate!) : (isEnglish ? '(doc date)' : '(วันที่เอกสาร)'),
+                          style: TextStyle(color: r.taxInvDate == null ? Colors.grey[500] : null)),
+                    ),
+                  )),
+                  if (!_isReadOnly) const SizedBox(width: 40),
+                ]),
+              ),
               ]),
             );
           }),
@@ -1922,7 +1998,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   Widget _buildTotalsRow() {
     final isEnglish = _isEnglish;
     final isForeign = _selectedCurrency != null && _selectedCurrency!.baseCurrencyFlag == false;
-    if (_hasTaxLines && _detailRows.isNotEmpty) {
+    if (_hasVatLines && _detailRows.isNotEmpty) {
       Widget cell(String label, double v, {bool bold = false, Color? color}) => Padding(
             padding: const EdgeInsets.only(left: 24),
             child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -1936,10 +2012,11 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
           if (isForeign) Text('${_selectedCurrency!.currencyCode} × ${_exchangeRate.toStringAsFixed(4)}', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           cell(isEnglish ? 'Before VAT' : 'ก่อน VAT', _subtotalFc),
           cell('VAT', _vatFc),
-          cell(isEnglish ? 'Total' : 'ยอดรวม', _totalAmountFc),
+          cell(isEnglish ? 'Total' : 'ยอดรวม', _totalAmountFc, bold: !_hasWhtSection, color: _hasWhtSection ? null : Colors.blue),
           if (_hasWhtSection) cell(isEnglish ? 'Less WHT' : (_isReceipt ? 'ถูกหัก ณ ที่จ่าย' : 'หัก ณ ที่จ่าย'), _whtFc),
-          cell(_isReceipt ? (isEnglish ? 'Net received' : 'ยอดรับสุทธิ') : (isEnglish ? 'Net to pay' : 'ยอดจ่ายสุทธิ'),
-              _netPayFc, bold: true, color: Colors.blue),
+          if (_hasWhtSection)
+            cell(_isReceipt ? (isEnglish ? 'Net received' : 'ยอดรับสุทธิ') : (isEnglish ? 'Net to pay' : 'ยอดจ่ายสุทธิ'),
+                _netPayFc, bold: true, color: Colors.blue),
         ]),
       ));
     }
@@ -2081,12 +2158,16 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       }
     } else if (_isVoucher) {
       for (final d in _detailRows) {
-        final amt = double.tryParse(d.amountCtrl.text) ?? 0;
+        final amt = _lineAmt(d).net; // ก่อน VAT — ภาษีซื้อแยกบรรทัด
         if (amt == 0) continue;
         final acct = d.expenseAccountId != null
             ? _acctCodeName(d.expenseAccountId)
             : (code: '!', name: isEnglish ? 'Select account' : 'ยังไม่เลือกบัญชี');
         addLine(acct, d.descCtrl.text.isEmpty ? (isEnglish ? 'Petty cash expense' : 'เบิกเงินสดย่อย') : d.descCtrl.text, amt, 0);
+      }
+      if (_vatFc != 0) {
+        addLine(_setupAcctCodeName(_docSetup!.vatInputAccountId, _docSetup!.vatInputAccountCode, _docSetup!.vatInputAccountName),
+            isEnglish ? 'Input VAT' : 'ภาษีซื้อ', _vatFc, 0);
       }
       final payableAcct = _pettyCashAcctCodeName();
       addLine(payableAcct, isEnglish ? 'Petty cash voucher' : 'เบิกเงินสดย่อย', 0, _totalAmountFc);

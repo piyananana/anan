@@ -438,7 +438,7 @@ class _CmGlSetupFormState extends State<_CmGlSetupForm> {
   bool get _showExpense         => ['20', '70', '90'].contains(_sdt);
   bool get _showPettyCashPayable => ['30', '40'].contains(_sdt);
   // VAT / ภาษีหัก ณ ที่จ่าย — แสดงเฉพาะประเภทเอกสารที่การลงบัญชีใช้ (ตาม cmTransactionController.postGlEntry)
-  bool get _showVatInput   => ['20'].contains(_sdt);
+  bool get _showVatInput   => ['20', '40'].contains(_sdt);
   bool get _showVatOutput  => ['10'].contains(_sdt);
   bool get _showWhtPayable => ['20'].contains(_sdt);
   bool get _showWhtPrepaid => ['10'].contains(_sdt);
