@@ -53,7 +53,11 @@ class SoTransactionHeader {
   final DateTime? customerPoDate;
   final String status;
   final double totalQty;
-  final double totalValueLc;
+  final double totalValueLc; // หลังส่วนลด ก่อน VAT (บาท)
+  final double vatAmountLc;
+  final double totalAmountLc; // รวม VAT (บาท)
+  // ราคาที่กรอกรวม VAT (user-approved 2026-10-31) — ส่งต่อไปใบส่งสินค้าที่ดึงรายการ
+  final bool priceIncludesVat;
   final String? description;
   final int? branchId;
   final String? branchCode;
@@ -103,6 +107,9 @@ class SoTransactionHeader {
     this.status = 'Draft',
     this.totalQty = 0,
     this.totalValueLc = 0,
+    this.vatAmountLc = 0,
+    this.totalAmountLc = 0,
+    this.priceIncludesVat = false,
     this.description,
     this.branchId,
     this.branchCode,
@@ -151,6 +158,9 @@ class SoTransactionHeader {
       status: json['status'] ?? 'Draft',
       totalQty: toDouble(json['total_qty']),
       totalValueLc: toDouble(json['total_value_lc']),
+      vatAmountLc: toDouble(json['vat_amount_lc']),
+      totalAmountLc: toDouble(json['total_amount_lc']),
+      priceIncludesVat: json['price_includes_vat'] == true,
       description: json['description'],
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
@@ -186,6 +196,7 @@ class SoTransactionHeader {
         if (currencyId != null) 'currency_id': currencyId,
         if (currencyCode != null) 'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
+        'price_includes_vat': priceIncludesVat,
         if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
         'customer_po_no': customerPoNo,
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate!) : null,
@@ -208,6 +219,9 @@ class SoTransactionDetail {
   final String? uomCode;
   final double qtyOrdered;
   final double unitPriceFc;
+  final double discountPercent;
+  final String? vatType; // ว่าง = ใบสั่งขายก่อนมี VAT ต่อบรรทัด (ใช้ VAT ตั้งต้นของสินค้า)
+  final double vatRate;
   final double totalValueLc;
   final double qtyDelivered; // computed server-side — จำนวนที่ส่งแล้วผ่าน DLN ที่ Posted/Delivered (ref_so_detail_id)
   final int? refQuoteDetailId; // บรรทัดใบเสนอราคา (Quote) ต้นทาง ถ้าบรรทัดนี้แปลงมาจาก Quote
@@ -226,6 +240,9 @@ class SoTransactionDetail {
     this.uomCode,
     this.qtyOrdered = 0,
     this.unitPriceFc = 0,
+    this.discountPercent = 0,
+    this.vatType,
+    this.vatRate = 0,
     this.totalValueLc = 0,
     this.qtyDelivered = 0,
     this.refQuoteDetailId,
@@ -245,6 +262,9 @@ class SoTransactionDetail {
       uomCode: json['uom_code'],
       qtyOrdered: toDouble(json['qty_ordered']),
       unitPriceFc: toDouble(json['unit_price_fc']),
+      discountPercent: toDouble(json['discount_percent']),
+      vatType: json['vat_type'],
+      vatRate: toDouble(json['vat_rate']),
       totalValueLc: toDouble(json['total_value_lc']),
       qtyDelivered: toDouble(json['qty_delivered']),
       refQuoteDetailId: json['ref_quote_detail_id'],
@@ -262,6 +282,9 @@ class SoTransactionDetail {
         'qty_ordered': qtyOrdered,
         if (refQuoteDetailId != null) 'ref_quote_detail_id': refQuoteDetailId,
         'unit_price_fc': unitPriceFc,
+        'discount_percent': discountPercent,
+        'vat_type': vatType,
+        'vat_rate': vatRate,
         if (description != null) 'description': description,
       };
 }

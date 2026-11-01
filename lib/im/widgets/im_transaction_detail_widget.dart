@@ -1261,12 +1261,22 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     final items = await Future.wait(pickedLines.map((l) => _itemService.fetchRow(l['item_id'] as int)));
     if (!mounted) return;
     setState(() {
+      // ใบส่งสินค้าที่ยังไม่มีรายการ ใช้รูปแบบราคา (รวม VAT หรือไม่) ตามใบสั่งขาย — ถ้ามีรายการอยู่แล้วแปลงราคาให้ตรงกับใบนี้
+      if (_lines.isEmpty) _priceIncludesVat = pickedLines.first['price_includes_vat'] == true;
       for (var i = 0; i < pickedLines.length; i++) {
         final l = pickedLines[i];
         final id = l['detail_id'] as int;
         final remaining = (l['qty_remaining'] as num).toDouble();
         final qty = _parseNum(qtyCtrls[id]!.text).clamp(0, remaining);
-        final vatType = _isVatMode ? _safeVatCode(items[i].defaultVatType) : null;
+        // VAT / ส่วนลดตามบรรทัดใบสั่งขาย (ใบเก่าที่ไม่มี VAT ต่อบรรทัด = VAT ตั้งต้นของสินค้า)
+        final soVat = l['vat_type'] as String?;
+        final vatType = _isVatMode ? _safeVatCode(soVat ?? items[i].defaultVatType) : null;
+        final vatRate = vatType == null ? 0.0 : (soVat == vatType ? _poNum(l['vat_rate']) : _rateForVatCode(vatType));
+        final soIncl = l['price_includes_vat'] == true && soVat != null;
+        var price = _poNum(l['unit_price_fc']);
+        if (vatType != null && vatType != 'NOVAT' && soIncl != _priceIncludesVat) {
+          price = soIncl ? price * 100 / (100 + vatRate) : price * (100 + vatRate) / 100;
+        }
         final line = _CountLine(
           item: items[i],
           uomId: l['uom_id'] as int?, uomCode: l['uom_code'] as String?,
@@ -1274,10 +1284,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           issueQty: qty.toDouble(),
           // DLN เก็บ unitPriceCtrl เป็นราคาในสกุลเงินของ header (_currency) เสมอ — ตั้ง header ให้ตรงกับ SO ต้นทางไว้
           // ข้างล่างแล้ว (สกุลเงินเดียวกันทั้งใบ) จึงเติมราคาดิบจาก SO ตรงๆ ได้เลยโดยไม่ต้องแปลงเป็นบาท
-          unitPrice: _poNum(l['unit_price_fc']),
+          unitPrice: price,
+          discountPercent: _poNum(l['discount_percent']),
           refSoDetailId: id,
-          soUnitPrice: _poNum(l['unit_price_fc']),
-          vatType: vatType, vatRate: vatType != null ? _rateForVatCode(vatType) : 0,
+          // ราคาใบสั่งขายหลังส่วนลด ก่อน VAT — เทียบกับ _netUnit ของบรรทัดตอน Post
+          soUnitPrice: _poNum(l['net_unit_price_fc'] ?? l['unit_price_fc']),
+          vatType: vatType, vatRate: vatRate,
         );
         _lines.add(line);
         _refreshSystemQty(line);

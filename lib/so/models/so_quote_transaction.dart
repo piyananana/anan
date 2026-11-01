@@ -57,7 +57,10 @@ class QuoteTransactionHeader {
   // ถอย / ยกเลิก / ลบ + ประวัติ (เฉพาะ fetchRow)
   final DocActions actions;
   final double totalQty;
-  final double totalValueLc;
+  final double totalValueLc; // หลังส่วนลด ก่อน VAT (บาท)
+  final double totalAmountLc; // รวม VAT (บาท)
+  // ราคาที่กรอกรวม VAT — ส่งต่อไปใบสั่งขายที่ดึงรายการ
+  final bool priceIncludesVat;
   final String? description;
   final int? branchId;
   final String? branchCode;
@@ -100,6 +103,8 @@ class QuoteTransactionHeader {
     this.actions = const DocActions(),
     this.totalQty = 0,
     this.totalValueLc = 0,
+    this.totalAmountLc = 0,
+    this.priceIncludesVat = false,
     this.description,
     this.branchId,
     this.branchCode,
@@ -143,6 +148,8 @@ class QuoteTransactionHeader {
       actions: DocActions.fromJson(json),
       totalQty: toDouble(json['total_qty']),
       totalValueLc: toDouble(json['total_value_lc']),
+      totalAmountLc: toDouble(json['total_amount_lc']),
+      priceIncludesVat: json['price_includes_vat'] == true,
       description: json['description'],
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
@@ -170,6 +177,7 @@ class QuoteTransactionHeader {
         if (currencyId != null) 'currency_id': currencyId,
         if (currencyCode != null) 'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
+        'price_includes_vat': priceIncludesVat,
         if (validUntilDate != null) 'valid_until_date': formatLocalDate(validUntilDate!),
         if (description != null) 'description': description,
         if (branchId != null) 'branch_id': branchId,
@@ -189,6 +197,9 @@ class QuoteTransactionDetail {
   final String? uomCode;
   final double qtyQuoted;
   final double unitPriceFc;
+  final double discountPercent;
+  final String? vatType; // ว่าง = ใบเสนอราคาก่อนมี VAT ต่อบรรทัด (ใช้ VAT ตั้งต้นของสินค้า)
+  final double vatRate;
   final double totalValueLc;
   final double qtyConverted; // computed server-side — จำนวนที่แปลงเป็น SO แล้ว (ref_quote_detail_id, SO ไม่ Void)
   final String? description;
@@ -206,6 +217,9 @@ class QuoteTransactionDetail {
     this.uomCode,
     this.qtyQuoted = 0,
     this.unitPriceFc = 0,
+    this.discountPercent = 0,
+    this.vatType,
+    this.vatRate = 0,
     this.totalValueLc = 0,
     this.qtyConverted = 0,
     this.description,
@@ -224,6 +238,9 @@ class QuoteTransactionDetail {
       uomCode: json['uom_code'],
       qtyQuoted: toDouble(json['qty_quoted']),
       unitPriceFc: toDouble(json['unit_price_fc']),
+      discountPercent: toDouble(json['discount_percent']),
+      vatType: json['vat_type'],
+      vatRate: toDouble(json['vat_rate']),
       totalValueLc: toDouble(json['total_value_lc']),
       qtyConverted: toDouble(json['qty_converted']),
       description: json['description'],
@@ -239,6 +256,9 @@ class QuoteTransactionDetail {
         if (uomId != null) 'uom_id': uomId,
         'qty_quoted': qtyQuoted,
         'unit_price_fc': unitPriceFc,
+        'discount_percent': discountPercent,
+        'vat_type': vatType,
+        'vat_rate': vatRate,
         if (description != null) 'description': description,
       };
 }
