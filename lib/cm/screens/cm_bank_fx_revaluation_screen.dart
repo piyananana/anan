@@ -16,6 +16,8 @@ import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../cd/services/cd_currency_service.dart';
+import '../../gl/models/gl_dimension.dart';
+import '../../gl/widgets/gl_line_account_dims.dart';
 
 // ถอยเป็นร่าง (งวดเปิด + ยังไม่มีการปรับมูลค่าครั้งถัดไปของบัญชีเดียวกัน) → แก้ไขแล้วโพสต์ใหม่ด้วยเลขที่เดิม หรือลบ
 // ยกเลิกใช้เมื่อถอยไม่ได้ (ลงรายการกลับวันนี้) ทุกการกระทำต้องมีเหตุผล — ปุ่มที่ทำไม่ได้ล็อกพร้อมเหตุผล
@@ -70,6 +72,10 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
   String _formGainAcctDisplay = '';
   int? _formLossAcctId;
   String _formLossAcctDisplay = '';
+  // มิติของรายการตีราคา (ลงทุกบรรทัดของรายการบัญชี) — user-approved 2026-11-02
+  List<GlDimensionType> _dimTypes = [];
+  Map<String, List<GlDimensionValue>> _dimValues = {};
+  Map<int, int?> _formDims = {};
 
   // Outstanding currencies (auto-fetched by revaluation date) + rate entry
   List<Map<String, dynamic>> _outstandingCurrencies = [];
@@ -112,7 +118,10 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
     if (_metaLoaded) return;
     try {
       final results = await Future.wait([_docSvc.fetchRows(), _acctSvc.fetchRows()]);
+      final dims = await loadActiveDimensions();
       if (!mounted) return;
+      _dimTypes = dims.$1;
+      _dimValues = dims.$2;
       final docs  = results[0] as List<ModuleDocument>;
       final accts = results[1] as List<Account>;
       setState(() {
@@ -165,6 +174,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
       _formGainAcctDisplay = '';
       _formLossAcctId    = null;
       _formLossAcctDisplay = '';
+      _formDims = {};
       _outstandingCurrencies = [];
       _previewLines.clear();
       _previewed   = false;
@@ -195,6 +205,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
       _formLossAcctDisplay = r.fxLossAccountId != null
           ? '${r.fxLossAccountCode ?? ''} ${r.fxLossAccountName ?? ''}'.trim()
           : '';
+      _formDims = {1: r.dim1Id, 2: r.dim2Id, 3: r.dim3Id, 4: r.dim4Id, 5: r.dim5Id};
       _previewLines = r.lines.map((l) => CmFxPreviewLine(
         bankAccountId: l.bankAccountId, bankAccountCode: l.bankAccountCode,
         bankAccountName: l.bankAccountName, bankShortName: l.bankShortName,
@@ -265,6 +276,7 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
         'fx_gain_account_id': _formGainAcctId,
         'fx_loss_account_id': _formLossAcctId,
         'rates':              _ratesMap,
+        for (var i = 1; i <= 5; i++) 'dim${i}_id': _formDims[i],
       };
 
       CmBankFxRevaluation result;
@@ -707,6 +719,15 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
                   },
                 )),
               ]),
+              if (_dimTypes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                SizedBox(width: 572, child: GlHeaderDimsRow(
+                  dimTypes: _dimTypes,
+                  dimValues: _dimValues,
+                  selections: _formDims,
+                  onChanged: (slot, id) => setState(() => _formDims[slot] = id),
+                )),
+              ],
             ]),
           ),
         ),
@@ -982,6 +1003,17 @@ class _CmBankFxRevaluationScreenState extends State<CmBankFxRevaluationScreen>
                   ? '${isEnglish ? 'GL number kept for repost' : 'เลขที่รายการบัญชีเดิม (โพสต์ใหม่ใช้เลขนี้)'}: ${r.glDocNo}'
                   : 'GL Entry: ${r.glDocNo}',
               style: const TextStyle(fontSize: 13, color: _kTheme)),
+        ),
+      if (_dimTypes.isNotEmpty && [r.dim1Id, r.dim2Id, r.dim3Id, r.dim4Id, r.dim5Id].any((v) => v != null))
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: SizedBox(width: 572, child: GlHeaderDimsRow(
+            dimTypes: _dimTypes,
+            dimValues: _dimValues,
+            selections: {1: r.dim1Id, 2: r.dim2Id, 3: r.dim3Id, 4: r.dim4Id, 5: r.dim5Id},
+            readOnly: true,
+            onChanged: (_, __) {},
+          )),
         ),
       if (r.isVoided && (r.voidReason ?? '').isNotEmpty)
         Container(

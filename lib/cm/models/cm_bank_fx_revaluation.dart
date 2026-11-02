@@ -114,6 +114,8 @@ class CmBankFxRevaluation {
   final int? fxLossAccountId;
   final String? fxLossAccountCode;
   final String? fxLossAccountName;
+  // มิติ (ใช้กับทุกบรรทัดของรายการบัญชีที่ตีราคา)
+  final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
   final double totalGainLoss;
   final String status; // Draft / Posted / Voided / Deleted
   final int? glEntryId;
@@ -138,6 +140,7 @@ class CmBankFxRevaluation {
     this.fxLossAccountId,
     this.fxLossAccountCode,
     this.fxLossAccountName,
+    this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
     required this.totalGainLoss,
     required this.status,
     this.glEntryId,
@@ -169,6 +172,8 @@ class CmBankFxRevaluation {
       fxLossAccountId:     j['fx_loss_account_id'] as int?,
       fxLossAccountCode:   j['fx_loss_account_code'] as String?,
       fxLossAccountName:   j['fx_loss_account_name'] as String?,
+      dim1Id: j['dim1_id'] as int?, dim2Id: j['dim2_id'] as int?, dim3Id: j['dim3_id'] as int?,
+      dim4Id: j['dim4_id'] as int?, dim5Id: j['dim5_id'] as int?,
       totalGainLoss:       double.tryParse(j['total_gain_loss']?.toString() ?? '0') ?? 0,
       status:              j['status'] as String? ?? 'Draft',
       glEntryId:           j['gl_entry_id'] as int?,
