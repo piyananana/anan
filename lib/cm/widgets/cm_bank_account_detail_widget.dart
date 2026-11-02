@@ -44,6 +44,8 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
   late TextEditingController _nameTh;
   late TextEditingController _nameEn;
   late TextEditingController _accountNumberCtrl;
+  late TextEditingController _taxIdCtrl;
+  late TextEditingController _taxBranchCtrl;
   late TextEditingController _remarkCtrl;
 
   String _accountType = 'SAVING';
@@ -69,6 +71,8 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
     _nameTh = TextEditingController(text: d?.accountNameTh ?? '');
     _nameEn = TextEditingController(text: d?.accountNameEn ?? '');
     _accountNumberCtrl = TextEditingController(text: d?.accountNumber ?? '');
+    _taxIdCtrl = TextEditingController(text: d?.taxId ?? '');
+    _taxBranchCtrl = TextEditingController(text: d?.taxBranchCode ?? '');
     _remarkCtrl = TextEditingController(text: d?.remark ?? '');
     _accountType    = d?.accountType    ?? 'SAVING';
     _cmType         = d?.cmType         ?? 'BANK';
@@ -92,6 +96,8 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
       _nameTh.text = widget.selected?.accountNameTh ?? '';
       _nameEn.text = widget.selected?.accountNameEn ?? '';
       _accountNumberCtrl.text = widget.selected?.accountNumber ?? '';
+      _taxIdCtrl.text = widget.selected?.taxId ?? '';
+      _taxBranchCtrl.text = widget.selected?.taxBranchCode ?? '';
       _remarkCtrl.text = widget.selected?.remark ?? '';
       _accountType    = widget.selected?.accountType    ?? 'SAVING';
       _cmType         = widget.selected?.cmType         ?? 'BANK';
@@ -115,6 +121,8 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
     _nameTh.dispose();
     _nameEn.dispose();
     _accountNumberCtrl.dispose();
+    _taxIdCtrl.dispose();
+    _taxBranchCtrl.dispose();
     _remarkCtrl.dispose();
     super.dispose();
   }
@@ -318,6 +326,8 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
         accountNumber: _accountNumberCtrl.text.trim().isEmpty
             ? null
             : _accountNumberCtrl.text.trim(),
+        taxId: _cmType == 'BANK' && _taxIdCtrl.text.trim().isNotEmpty ? _taxIdCtrl.text.trim() : null,
+        taxBranchCode: _cmType == 'BANK' && _taxBranchCtrl.text.trim().isNotEmpty ? _taxBranchCtrl.text.trim() : null,
         accountType: _accountType,
         cmType: _cmType,
         currencyCode: _currencyCode,
@@ -479,6 +489,37 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                           .map((k) => DropdownMenuItem(value: k, child: Text(cmAccountTypeLabel(k, isEnglish))))
                           .toList(),
                       onChanged: ro ? null : (v) => setState(() => _accountType = v!),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // ใช้เป็นข้อมูลผู้ขายของค่าธรรมเนียมธนาคาร (ภาษีซื้อ) ในธุรกรรม CM
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      controller: _taxIdCtrl,
+                      readOnly: ro,
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'Bank Tax ID' : 'เลขประจำตัวผู้เสียภาษีของธนาคาร',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _taxBranchCtrl,
+                      readOnly: ro,
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'Tax Branch (00000 = HQ)' : 'สาขาที่ (00000 = สำนักงานใหญ่)',
+                        border: const OutlineInputBorder(),
+                      ),
+                      validator: (v) => (v ?? '').trim().isEmpty || RegExp(r'^\d{1,5}$').hasMatch(v!.trim())
+                          ? null
+                          : (isEnglish ? 'Up to 5 digits' : 'ตัวเลขไม่เกิน 5 หลัก'),
                     ),
                   ),
                 ],

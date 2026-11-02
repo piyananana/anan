@@ -14,7 +14,6 @@ import '../models/cm_receipt.dart';
 import '../services/cm_bank_account_service.dart';
 import '../services/cm_checkbook_service.dart';
 import '../services/cm_payment_service.dart';
-import '../services/cm_period_service.dart';
 import '../../utils/date_utils.dart';
 import '../../cd/services/cd_currency_service.dart';
 
@@ -56,7 +55,6 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
 
   // Selected / Creating
   CmPayment? _selected;
-  bool _showCreateForm = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -75,7 +73,7 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
   }
 
   void _selectBank(CmBankAccount b) {
-    setState(() { _selectedBank = b; _payments = []; _selected = null; _showCreateForm = false; });
+    setState(() { _selectedBank = b; _payments = []; _selected = null; });
     _loadPayments();
   }
 
@@ -107,7 +105,7 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
   }
 
   Future<void> _select(CmPayment p) async {
-    setState(() { _selected = p; _showCreateForm = false; });
+    setState(() { _selected = p; });
     try {
       final full = await _svc.fetchPayment(p.id!);
       if (mounted && _selected?.id == p.id) setState(() => _selected = full);
@@ -401,32 +399,14 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
   }
 
   Widget _buildMainPanel() {
-    final isEnglish = _isEnglish;
     return Column(children: [
       _buildFilterBar(),
       const Divider(height: 1),
       Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(child: _buildList()),
-        if (_showCreateForm || _selected != null) ...[
+        if (_selected != null) ...[
           const VerticalDivider(width: 1),
-          SizedBox(width: 400,
-            child: _showCreateForm
-                ? _CreatePaymentForm(
-                    bankAccount: _selectedBank!,
-                    checkbookSvc: _cbSvc,
-                    kColor: _kColor,
-                    onSave: (p) async {
-                      try {
-                        await _svc.createPayment(p);
-                        _showOk(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ');
-                        setState(() => _showCreateForm = false);
-                        await _loadPayments();
-                      } catch (e) { _showErr(e.toString()); }
-                    },
-                    onCancel: () => setState(() => _showCreateForm = false),
-                  )
-                : _buildDetail(_selected!),
-          ),
+          SizedBox(width: 400, child: _buildDetail(_selected!)),
         ],
       ])),
     ]);
@@ -459,14 +439,8 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
         const Spacer(),
         Text(isEnglish ? '${_payments.length} items' : '${_payments.length} รายการ',
             style: const TextStyle(color: Colors.grey, fontSize: 12)),
-        const SizedBox(width: 12),
-        if (MenuScope.of(context)?.canCreate ?? true)
-          FilledButton.icon(
-            icon: const Icon(Icons.add, size: 16),
-            label: Text(isEnglish ? 'Create Payment' : 'สร้างรายการจ่าย'),
-            style: FilledButton.styleFrom(backgroundColor: _kColor),
-            onPressed: () => setState(() { _showCreateForm = true; _selected = null; }),
-          ),
+        // สร้างรายการจ่ายเองในหน้านี้ไม่ได้แล้ว (ไม่มีรายการบัญชี ยอด CM จะไม่ตรงกับ GL) — บันทึกที่ธุรกรรม CM ประเภทรายจ่าย (20)
+        //   หรือใบจ่ายชำระ AP ซึ่งสร้างรายการในหน้านี้ให้อัตโนมัติ
       ]),
     );
   }
@@ -642,218 +616,4 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
     child: Text(cmPaymentStatusLabel(s, _isEnglish),
         style: TextStyle(fontSize: 10, color: _statusColor(s), fontWeight: FontWeight.bold)),
   );
-}
-
-// ── Create Payment Form ───────────────────────────────────────────────────────
-
-class _CreatePaymentForm extends StatefulWidget {
-  final CmBankAccount bankAccount;
-  final CmCheckbookService checkbookSvc;
-  final Future<void> Function(CmPayment) onSave;
-  final VoidCallback onCancel;
-  final Color kColor;
-
-  const _CreatePaymentForm({
-    required this.bankAccount,
-    required this.checkbookSvc,
-    required this.onSave,
-    required this.onCancel,
-    required this.kColor,
-  });
-
-  @override
-  State<_CreatePaymentForm> createState() => _CreatePaymentFormState();
-}
-
-class _CreatePaymentFormState extends State<_CreatePaymentForm> {
-  final _formKey     = GlobalKey<FormState>();
-  final _payeeCtrl   = TextEditingController();
-  final _amtCtrl     = TextEditingController(text: '0.00');
-  final _remarkCtrl  = TextEditingController();
-
-  DateTime _paymentDate = DateTime.now();
-  String   _methodType  = 'TRANSFER';
-  DateTime? _checkDate;
-  CmCheckbook? _selectedCb;
-  List<CmCheckbook> _checkbooks = [];
-  bool _saving = false;
-
-  final _dateFmt = DateFormat('dd/MM/yyyy');
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCheckbooks();
-  }
-
-  @override
-  void dispose() {
-    _payeeCtrl.dispose();
-    _amtCtrl.dispose();
-    _remarkCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadCheckbooks() async {
-    try {
-      final list = await widget.checkbookSvc.fetchCheckbooks(bankAccountId: widget.bankAccount.id);
-      setState(() => _checkbooks = list.where((c) => c.status == 'Active').toList());
-    } catch (_) {}
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (!await CmPeriodService.canPost(context, _paymentDate)) return;
-    setState(() => _saving = true);
-    try {
-      await widget.onSave(CmPayment(
-        paymentDate:       _paymentDate,
-        bankAccountId:     widget.bankAccount.id,
-        paymentMethodType: _methodType,
-        payeeNameTh:       _payeeCtrl.text.trim(),
-        amountLc:          double.tryParse(_amtCtrl.text.replaceAll(',', '')) ?? 0,
-        checkDate:         _methodType == 'CHECK' ? _checkDate : null,
-        checkbookId:       _methodType == 'CHECK' ? _selectedCb?.id : null,
-        remark:            _remarkCtrl.text.trim().isEmpty ? null : _remarkCtrl.text.trim(),
-      ));
-    } finally { if (mounted) setState(() => _saving = false); }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    return Column(children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        color: widget.kColor.withOpacity(0.08),
-        child: Row(children: [
-          Text(isEnglish ? 'Create Payment' : 'สร้างรายการจ่ายเงิน',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          const Spacer(),
-          IconButton(icon: const Icon(Icons.close, size: 18), onPressed: widget.onCancel),
-        ]),
-      ),
-      const Divider(height: 1),
-      Expanded(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Payment date
-              InkWell(
-                onTap: () async {
-                  final d = await showDatePicker(context: context, initialDate: _paymentDate,
-                      firstDate: DateTime(2000), lastDate: DateTime(2100));
-                  if (d != null) setState(() => _paymentDate = d);
-                },
-                child: InputDecorator(
-                  decoration: InputDecoration(
-                      labelText: isEnglish ? 'Payment Date *' : 'วันที่จ่าย *',
-                      border: const OutlineInputBorder(), isDense: true),
-                  child: Text(_dateFmt.format(_paymentDate)),
-                ),
-              ),
-              const SizedBox(height: 10),
-              // Method type
-              DropdownButtonFormField<String>(
-                value: _methodType,
-                decoration: InputDecoration(
-                    labelText: isEnglish ? 'Payment Method *' : 'วิธีจ่าย *',
-                    border: const OutlineInputBorder(), isDense: true),
-                items: ['TRANSFER','CHECK','CASH','BILL_OF_EXCHANGE'].map((t) =>
-                    DropdownMenuItem(value: t, child: Text(cmPaymentMethodTypeLabel(t, isEnglish)))).toList(),
-                onChanged: (v) => setState(() { _methodType = v!; _selectedCb = null; }),
-              ),
-              const SizedBox(height: 10),
-              // Checkbook (only when CHECK)
-              if (_methodType == 'CHECK') ...[
-                DropdownButtonFormField<CmCheckbook?>(
-                  value: _selectedCb,
-                  decoration: InputDecoration(
-                      labelText: isEnglish ? 'Checkbook' : 'สมุดเช็ค',
-                      border: const OutlineInputBorder(), isDense: true),
-                  items: [
-                    DropdownMenuItem(value: null, child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
-                    ..._checkbooks.map((c) => DropdownMenuItem(value: c,
-                        child: Text('${c.checkbookCode} '
-                            '(${isEnglish ? 'Next' : 'ถัดไป'}: ${c.nextCheckNo ?? c.startCheckNo})'))),
-                  ],
-                  onChanged: (v) => setState(() => _selectedCb = v),
-                ),
-                const SizedBox(height: 10),
-                // Check date
-                InkWell(
-                  onTap: () async {
-                    final d = await showDatePicker(context: context, initialDate: _checkDate ?? _paymentDate,
-                        firstDate: DateTime(2000), lastDate: DateTime(2100));
-                    if (d != null) setState(() => _checkDate = d);
-                  },
-                  child: InputDecorator(
-                    decoration: InputDecoration(
-                      labelText: isEnglish ? 'Check Date' : 'วันที่บนเช็ค', border: const OutlineInputBorder(), isDense: true,
-                      suffixIcon: _checkDate != null
-                          ? IconButton(icon: const Icon(Icons.clear, size: 16),
-                              onPressed: () => setState(() => _checkDate = null), padding: EdgeInsets.zero)
-                          : null,
-                    ),
-                    child: Text(_checkDate != null
-                        ? _dateFmt.format(_checkDate!)
-                        : (isEnglish ? '(use payment date)' : '(ใช้วันที่จ่าย)')),
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-              // Payee
-              TextFormField(
-                controller: _payeeCtrl,
-                decoration: InputDecoration(
-                    labelText: isEnglish ? 'Payee Name *' : 'ชื่อผู้รับเงิน *',
-                    border: const OutlineInputBorder(), isDense: true),
-                validator: (v) => (v?.trim().isEmpty ?? true) ? (isEnglish ? 'Required' : 'กรุณาระบุ') : null,
-              ),
-              const SizedBox(height: 10),
-              // Amount
-              TextFormField(
-                controller: _amtCtrl,
-                decoration: InputDecoration(
-                    labelText: isEnglish ? 'Amount (${CurrencyService.baseCode}) *' : 'จำนวนเงิน (${CurrencyService.baseCode}) *',
-                    border: const OutlineInputBorder(), isDense: true),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                textAlign: TextAlign.right,
-                validator: (v) {
-                  final d = double.tryParse(v?.replaceAll(',', '') ?? '');
-                  if (d == null || d <= 0) return isEnglish ? 'Enter an amount > 0' : 'กรุณาระบุจำนวนเงิน > 0';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 10),
-              // Remark
-              TextFormField(
-                controller: _remarkCtrl,
-                decoration: InputDecoration(
-                    labelText: isEnglish ? 'Note' : 'หมายเหตุ',
-                    border: const OutlineInputBorder(), isDense: true),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 16),
-              Row(children: [
-                TextButton(onPressed: widget.onCancel, child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: widget.kColor),
-                    onPressed: _saving ? null : _submit,
-                    child: _saving
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : Text(isEnglish ? 'Save' : 'บันทึก'),
-                  ),
-                ),
-              ]),
-            ]),
-          ),
-        ),
-      ),
-    ]);
-  }
 }

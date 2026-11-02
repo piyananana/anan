@@ -11,6 +11,7 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/models/cm_bank_account.dart';
 import '../../utils/date_utils.dart';
+import '../../cd/services/cd_currency_service.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -41,7 +42,8 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
 
   // Form state
   DateTime  _asOfDate = DateTime(DateTime.now().year - 1, 12, 31);
-  final _balCtrl   = TextEditingController(text: '0.00');
+  final _balCtrl   = TextEditingController(text: '0.00'); // สกุลเงินหลัก (ทุกรายงานยอดธนาคารใช้)
+  final _balFcCtrl = TextEditingController(text: '0.00'); // สกุลเงินของบัญชี (บัญชีเงินตราต่างประเทศ — ใช้ปรับมูลค่าอัตราแลกเปลี่ยน)
   final _notesCtrl = TextEditingController();
 
   // All OB records (for reference table on right)
@@ -58,6 +60,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
   @override
   void dispose() {
     _balCtrl.dispose();
+    _balFcCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
@@ -116,12 +119,14 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
         _currentOB = ob;
         _asOfDate = parseLocalDate(ob['as_of_date']);
         _balCtrl.text   = _fmt.format(double.tryParse(ob['opening_balance']?.toString() ?? '0') ?? 0);
+        _balFcCtrl.text = _fmt.format(double.tryParse(ob['opening_balance_fc']?.toString() ?? '0') ?? 0);
         _notesCtrl.text = ob['notes'] ?? '';
       });
     } else {
       setState(() {
         _currentOB = null;
         _balCtrl.text   = '0.00';
+        _balFcCtrl.text = '0.00';
         _notesCtrl.text = '';
       });
     }
@@ -132,7 +137,9 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
     if (_selAccount == null) return;
     final isEnglish = _isEnglish;
     final balance = double.tryParse(_balCtrl.text.replaceAll(',', ''));
-    if (balance == null) {
+    final isFcy = _selAccount!.isFcy;
+    final balanceFc = isFcy ? double.tryParse(_balFcCtrl.text.replaceAll(',', '')) : balance;
+    if (balance == null || balanceFc == null) {
       _showError(isEnglish ? 'The balance must be a number' : 'ยอดเงินต้องเป็นตัวเลข');
       return;
     }
@@ -146,6 +153,7 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
           'bank_account_id': _selAccount!.id,
           'as_of_date':      formatLocalDate(_asOfDate),
           'opening_balance': balance,
+          'opening_balance_fc': balanceFc,
           'notes':           _notesCtrl.text.trim(),
         }),
       );
@@ -358,8 +366,26 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
                   ),
                 ),
               ]),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (_selAccount!.isFcy) Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('${isEnglish ? 'Amount' : 'ยอดเงิน'} (${_selAccount!.currencyCode}):', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                SizedBox(
+                  width: 160,
+                  child: TextField(
+                    controller: _balFcCtrl,
+                    textAlign: TextAlign.right,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    decoration: const InputDecoration(
+                      isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      border: OutlineInputBorder(), filled: true, fillColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ]),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${isEnglish ? 'Amount' : 'ยอดเงิน'} (${CurrencyService.baseCode}${_selAccount!.isFcy ? (isEnglish ? ', base currency' : ' สกุลเงินหลัก') : ''}):',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 SizedBox(
                   width: 160,
@@ -427,17 +453,20 @@ class _State extends State<CmBankOpeningBalanceScreen> with AutomaticKeepAliveCl
                       DataColumn(label: Text(isEnglish ? 'Account Name' : 'ชื่อบัญชี')),
                       DataColumn(label: Text(isEnglish ? 'Bank' : 'ธนาคาร')),
                       DataColumn(label: Text(isEnglish ? 'Opening Balance as of' : 'ยอดยกมา ณ วันที่')),
-                      DataColumn(label: Text(isEnglish ? 'Amount' : 'ยอดเงิน'), numeric: true),
+                      DataColumn(label: Text(isEnglish ? 'Amount (account currency)' : 'ยอดเงิน (สกุลเงินบัญชี)'), numeric: true),
+                      DataColumn(label: Text(isEnglish ? 'Amount (base currency)' : 'ยอดเงิน (สกุลเงินหลัก)'), numeric: true),
                       DataColumn(label: Text(isEnglish ? 'Note' : 'หมายเหตุ')),
                     ],
                     rows: _allOBs.map((o) {
                       final bal = double.tryParse(o['opening_balance']?.toString() ?? '0') ?? 0;
+                      final balFc = double.tryParse(o['opening_balance_fc']?.toString() ?? '');
                       final dt = parseLocalDateNullable(o['as_of_date']);
                       return DataRow(cells: [
                         DataCell(Text(o['bank_account_code'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
                         DataCell(Text(o['bank_account_name'] ?? '', style: const TextStyle(fontSize: 12))),
                         DataCell(Text(o['bank_short_name'] ?? '', style: const TextStyle(fontSize: 12))),
                         DataCell(Text(dt != null ? _dateFmt.format(dt) : '', style: const TextStyle(fontSize: 12))),
+                        DataCell(Text(balFc != null ? '${_fmt.format(balFc)} ${o['currency_code'] ?? ''}' : '-', style: const TextStyle(fontSize: 12))),
                         DataCell(Text(_fmt.format(bal), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
                             color: bal >= 0 ? Colors.black87 : Colors.red.shade700))),
                         DataCell(Text(o['notes'] ?? '', style: const TextStyle(fontSize: 12))),

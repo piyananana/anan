@@ -10,6 +10,9 @@ class CmBankAccount {
   final String? bankNameTh;
   final String? bankShortName;
   final String? accountNumber;
+  // เลขประจำตัวผู้เสียภาษี/สาขาของธนาคาร — ผู้ขายในรายงานภาษีซื้อของค่าธรรมเนียมธนาคาร (CM 70)
+  final String? taxId;
+  final String? taxBranchCode;
   final String accountType;     // SAVING / CURRENT / FIXED (ประเภทบัญชีธนาคาร)
   final String cmType;          // BANK / PETTY_CASH (ประเภทหลัก)
   final String currencyCode;    // THB / USD / ...
@@ -34,6 +37,8 @@ class CmBankAccount {
     this.bankNameTh,
     this.bankShortName,
     this.accountNumber,
+    this.taxId,
+    this.taxBranchCode,
     required this.accountType,
     this.cmType = 'BANK',
     this.currencyCode = 'THB',
@@ -59,6 +64,8 @@ class CmBankAccount {
         bankNameTh: json['bank_name_th'],
         bankShortName: json['bank_short_name'],
         accountNumber: json['account_number'],
+        taxId: json['tax_id'],
+        taxBranchCode: json['tax_branch_code'],
         accountType: json['account_type'] ?? 'SAVING',
         cmType: json['cm_type'] ?? 'BANK',
         currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
@@ -81,6 +88,8 @@ class CmBankAccount {
         'account_name_en': accountNameEn,
         'bank_id': bankId,
         'account_number': accountNumber,
+        'tax_id': taxId,
+        'tax_branch_code': taxBranchCode,
         'account_type': accountType,
         'cm_type': cmType,
         'currency_code': currencyCode,
