@@ -38,6 +38,8 @@ import '../../ar/services/ar_customer_service.dart';
 import '../../cd/models/cd_vat_rate.dart';
 import '../../cd/services/cd_vat_rate_service.dart';
 import '../../utils/vat_calc.dart';
+import '../../gl/models/gl_dimension.dart';
+import '../../gl/widgets/gl_line_account_dims.dart';
 
 class SoTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -120,6 +122,11 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   DocCreditState _credit = const DocCreditState();
   int? _refQuoteId; // ใบเสนอราคา (Quote) ต้นทาง ถ้าเพิ่มรายการมาจาก _pickQuoteLines()
   String? _refQuoteDocNoLabel;
+  // มิติหัวเอกสาร — ค่าเริ่มต้นจากใบเสนอราคาที่ดึงรายการมา (แก้ได้) — user-approved 2026-11-02
+  List<GlDimensionType> _dimTypes = [];
+  Map<String, List<GlDimensionValue>> _dimValues = {};
+  Map<int, int?> _dimSelections = {};
+  bool _dimsLoaded = false;
 
   // รองรับขายสินค้าต่างประเทศเป็นสกุลเงินต่างประเทศ — unit_price_fc ต่อบรรทัดคือราคาในสกุลเงินนี้ (FC),
   // total_value_lc คำนวณจาก unit_price_fc * exchange_rate เสมอ มิเรอร์ po_transaction_detail_widget.dart ทุกประการ
@@ -222,6 +229,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     _salespersons = const [];
     _refQuoteId = null;
     _refQuoteDocNoLabel = null;
+    _dimSelections = {};
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null);
     _exchangeRate = _currency?.baseRate ?? 1;
     _priceIncludesVat = false;
@@ -241,6 +249,12 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
       }
       if (_vatRates.isEmpty) {
         _vatRates = (await _vatRateService.fetchRows()).where((v) => v.isActive).toList();
+      }
+      if (!_dimsLoaded) {
+        final dims = await loadActiveDimensions();
+        _dimTypes = dims.$1;
+        _dimValues = dims.$2;
+        _dimsLoaded = true;
       }
       if (widget.transactionId == null && widget.copyFromId != null) {
         final h = await _service.fetchRow(widget.copyFromId!);
@@ -264,6 +278,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _salespersons = const [];
         _refQuoteId = null;
         _refQuoteDocNoLabel = null;
+        _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
@@ -314,6 +329,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         _salespersons = h.salespersons;
         _refQuoteId = h.refQuoteId;
         _refQuoteDocNoLabel = h.refQuoteDocNo;
+        _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
@@ -560,6 +576,10 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
       }
       _refQuoteId = pickedLines.first['header_id'] as int;
       _refQuoteDocNoLabel = pickedLines.first['doc_no'] as String?;
+      // มิติ: ยังไม่ได้เลือกเลย = ใช้มิติของใบเสนอราคาใบแรกที่เลือก
+      if (!_dimSelections.values.any((v) => v != null)) {
+        _dimSelections = {for (var i = 1; i <= 5; i++) i: pickedLines.first['dim${i}_id'] as int?};
+      }
     });
     _loadQuoteSalespersons(_refQuoteId!);
   }
@@ -583,6 +603,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         refQuoteId: _refQuoteId,
         priceIncludesVat: _priceIncludesVat,
+        dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
+        dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
       );
       final details = _lines
           .map((l) => SoTransactionDetail(
@@ -928,6 +950,16 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                   ),
                 ),
               ]),
+              if (_dimTypes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                GlHeaderDimsRow(
+                  dimTypes: _dimTypes,
+                  dimValues: _dimValues,
+                  selections: _dimSelections,
+                  readOnly: _isReadOnly,
+                  onChanged: (slot, id) => setState(() => _dimSelections[slot] = id),
+                ),
+              ],
             ]),
           ),
         ),

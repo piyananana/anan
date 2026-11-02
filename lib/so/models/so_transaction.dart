@@ -75,6 +75,8 @@ class SoTransactionHeader {
   final DocActions actions;
   final int? refQuoteId; // ใบเสนอราคา (Quote) ต้นทาง — สะดวก/แสดงผลเท่านั้น
   final String? refQuoteDocNo;
+  // มิติหัวเอกสาร — IM ที่ส่งสินค้าตามใบสั่งขายใช้มิตินี้ (ล็อก)
+  final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
   // From join
   final String? docCode;
   final String? docNameThai;
@@ -126,6 +128,7 @@ class SoTransactionHeader {
     this.actions = const DocActions(),
     this.refQuoteId,
     this.refQuoteDocNo,
+    this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
     this.docCode,
     this.docNameThai,
     this.docNameEng,
@@ -178,6 +181,8 @@ class SoTransactionHeader {
       actions: DocActions.fromJson(json),
       refQuoteId: json['ref_quote_id'],
       refQuoteDocNo: json['ref_quote_doc_no'],
+      dim1Id: json['dim1_id'], dim2Id: json['dim2_id'], dim3Id: json['dim3_id'],
+      dim4Id: json['dim4_id'], dim5Id: json['dim5_id'],
       docCode: json['doc_code'] ?? json['d_doc_code'],
       docNameThai: json['doc_name_thai'],
       docNameEng: json['doc_name_eng'],
@@ -206,6 +211,8 @@ class SoTransactionHeader {
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate!) : null,
         if (description != null) 'description': description,
         if (refQuoteId != null) 'ref_quote_id': refQuoteId,
+        // ส่งทุกช่องเสมอ — backend เขียนทับมิติด้วยค่าที่ส่งมา
+        'dim1_id': dim1Id, 'dim2_id': dim2Id, 'dim3_id': dim3Id, 'dim4_id': dim4Id, 'dim5_id': dim5Id,
         if (branchId != null) 'branch_id': branchId,
         if (createdBy != null) 'created_by': createdBy,
         if (updatedBy != null) 'updated_by': updatedBy,
