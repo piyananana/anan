@@ -62,6 +62,8 @@ class QuoteTransactionHeader {
   // ราคาที่กรอกรวม VAT — ส่งต่อไปใบสั่งขายที่ดึงรายการ
   final bool priceIncludesVat;
   final String? description;
+  // มิติหัวเอกสาร — SO ที่ดึงรายการจากใบเสนอราคาใช้เป็นค่าเริ่มต้น
+  final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
   final int? branchId;
   final String? branchCode;
   final String? branchNameThai;
@@ -106,6 +108,7 @@ class QuoteTransactionHeader {
     this.totalAmountLc = 0,
     this.priceIncludesVat = false,
     this.description,
+    this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
     this.branchId,
     this.branchCode,
     this.branchNameThai,
@@ -151,6 +154,8 @@ class QuoteTransactionHeader {
       totalAmountLc: toDouble(json['total_amount_lc']),
       priceIncludesVat: json['price_includes_vat'] == true,
       description: json['description'],
+      dim1Id: json['dim1_id'], dim2Id: json['dim2_id'], dim3Id: json['dim3_id'],
+      dim4Id: json['dim4_id'], dim5Id: json['dim5_id'],
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
@@ -180,6 +185,8 @@ class QuoteTransactionHeader {
         'price_includes_vat': priceIncludesVat,
         if (validUntilDate != null) 'valid_until_date': formatLocalDate(validUntilDate!),
         if (description != null) 'description': description,
+        // ส่งทุกช่องเสมอ — backend เขียนทับมิติด้วยค่าที่ส่งมา
+        'dim1_id': dim1Id, 'dim2_id': dim2Id, 'dim3_id': dim3Id, 'dim4_id': dim4Id, 'dim5_id': dim5Id,
         if (branchId != null) 'branch_id': branchId,
         if (createdBy != null) 'created_by': createdBy,
         if (updatedBy != null) 'updated_by': updatedBy,

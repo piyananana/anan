@@ -32,6 +32,8 @@ import '../../ar/services/ar_customer_service.dart';
 import '../../cd/models/cd_vat_rate.dart';
 import '../../cd/services/cd_vat_rate_service.dart';
 import '../../utils/vat_calc.dart';
+import '../../gl/models/gl_dimension.dart';
+import '../../gl/widgets/gl_line_account_dims.dart';
 
 class QuoteTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -151,6 +153,11 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
   }
   Timer? _priceResolveDebounce;
 
+  // มิติหัวเอกสาร — user-approved 2026-11-02
+  List<GlDimensionType> _dimTypes = [];
+  Map<String, List<GlDimensionValue>> _dimValues = {};
+  Map<int, int?> _dimSelections = {};
+  bool _dimsLoaded = false;
   bool get _isReadOnly => widget.viewOnly || !['Draft', 'Rejected'].contains(_status);
   // พนักงานขาย — ค่าเริ่มต้นจากลูกค้า
   List<DocSalesperson> _salespersons = const [];
@@ -186,6 +193,7 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
     _customer = null;
     _warehouse = null;
     _descCtrl.clear();
+    _dimSelections = {};
     _status = 'Draft';
     _voidReason = null;
     _actions = const DocActions();
@@ -208,6 +216,12 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
       if (_currencies.isEmpty) {
         _currencies = await _currencyService.fetchActiveRows();
       }
+      if (!_dimsLoaded) {
+        final dims = await loadActiveDimensions();
+        _dimTypes = dims.$1;
+        _dimValues = dims.$2;
+        _dimsLoaded = true;
+      }
       if (_vatRates.isEmpty) {
         _vatRates = (await _vatRateService.fetchRows()).where((v) => v.isActive).toList();
       }
@@ -226,6 +240,7 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
             ? ImWarehouse(id: h.warehouseId!, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn)
             : null;
         _descCtrl.text = h.description ?? '';
+        _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
         _status = 'Draft';
         _voidReason = null;
         _actions = const DocActions();
@@ -269,6 +284,7 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
             ? ImWarehouse(id: h.warehouseId!, warehouseCode: h.warehouseCode ?? '', warehouseNameTh: h.warehouseNameTh ?? '', warehouseNameEn: h.warehouseNameEn)
             : null;
         _descCtrl.text = h.description ?? '';
+        _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
         _status = h.status;
         _voidReason = h.voidReason;
         _actions = h.actions;
@@ -403,6 +419,8 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
         customerId: _customer?.id, warehouseId: _warehouse?.id, validUntilDate: _validUntilDate,
         currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? CurrencyService.baseCode, exchangeRate: _exchangeRate,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
+        dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
         priceIncludesVat: _priceIncludesVat,
       );
       final details = _lines
@@ -700,6 +718,16 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
                   ),
                 ),
               ]),
+              if (_dimTypes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                GlHeaderDimsRow(
+                  dimTypes: _dimTypes,
+                  dimValues: _dimValues,
+                  selections: _dimSelections,
+                  readOnly: _isReadOnly,
+                  onChanged: (slot, id) => setState(() => _dimSelections[slot] = id),
+                ),
+              ],
               const SizedBox(height: 12),
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Expanded(
