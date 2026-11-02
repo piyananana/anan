@@ -598,6 +598,9 @@ class _ArCustomerBalanceImportScreenState extends State<ArCustomerBalanceImportS
                 DataColumn(label: Text('อัตราแลกเปลี่ยน')),
                 DataColumn(label: Text('ยอดคงเหลือ')),
                 DataColumn(label: Text('คำอธิบาย')),
+                DataColumn(label: Text('วันวางบิล')),
+                DataColumn(label: Text('วันคาดว่าจะได้รับชำระ')),
+                DataColumn(label: Text('มิติ')),
               ],
               rows: _validatedData
                   .take(50)
@@ -616,6 +619,9 @@ class _ArCustomerBalanceImportScreenState extends State<ArCustomerBalanceImportS
                             child: Text(_formatCellValue(r['description']),
                                 overflow: TextOverflow.ellipsis),
                           )),
+                          DataCell(Text(_formatCellValue(r['billing_date']))),
+                          DataCell(Text(_formatCellValue(r['expected_payment_date']))),
+                          DataCell(Text(_formatCellValue(r['dim_label']))),
                         ],
                       ))
                   .toList(),

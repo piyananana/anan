@@ -683,6 +683,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
       ['ประเภทสินค้า', _fmt(row['item_type'])],
       ['หน่วยนับหลัก', _fmt(row['base_uom_code'])],
       ['วิธีคำนวณต้นทุน', _fmt(row['costing_method'])],
+      ['โหมดบัญชีสินค้า', _fmt(row['accounting_mode'])],
       ['ต้นทุนมาตรฐาน', _fmt(row['standard_cost'])],
       ['ซื้อได้', _fmt(row['is_purchase_item'])],
       ['ขายได้', _fmt(row['is_sales_item'])],
@@ -706,6 +707,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
       ['รหัสบัญชีต้นทุนขาย', _fmt(row['cogs_account_code'])],
       ['รหัสบัญชีรายได้', _fmt(row['revenue_account_code'])],
       ['รหัสบัญชีค่าใช้จ่าย', _fmt(row['expense_account_code'])],
+      ['รหัสบัญชีซื้อ', _fmt(row['purchases_account_code'])],
     ];
     return _buildKeyValueTable(items);
   }

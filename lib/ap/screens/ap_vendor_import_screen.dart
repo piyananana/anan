@@ -693,6 +693,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
       ['เครดิต (วัน)', _fmt(row['credit_term_days'])],
       ['วงเงินเครดิต', _fmt(row['credit_limit'])],
       ['สกุลเงิน', _fmt(row['currency_code'])],
+      ['ตารางราคาซื้อ', _fmt(row['price_list_code'])],
       ['ใช้งาน', _fmt(row['is_active'])],
       ['หมายเหตุ', _fmt(row['remark'])],
     ];

@@ -761,6 +761,7 @@ class _ArCustomerImportScreenState extends State<ArCustomerImportScreen> {
       ['วงเงินเครดิต', _formatCellValue(row['credit_limit'])],
       ['ส่วนลด %', _formatCellValue(row['discount_percent'])],
       ['สกุลเงิน', _formatCellValue(row['currency_code'])],
+      ['ตารางราคาขาย', _formatCellValue(row['price_list_code'])],
       ['ใช้งาน', _formatCellValue(row['is_active'])],
       ['ต้องวางบิลก่อนรับชำระ', _formatCellValue(row['requires_billing'])],
       ['หมายเหตุ', _formatCellValue(row['remark'])],

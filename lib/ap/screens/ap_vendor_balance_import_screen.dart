@@ -544,6 +544,7 @@ class _ApVendorBalanceImportScreenState extends State<ApVendorBalanceImportScree
                 DataColumn(label: Text('อัตราแลกเปลี่ยน')),
                 DataColumn(label: Text('ยอดคงเหลือ')),
                 DataColumn(label: Text('คำอธิบาย')),
+                DataColumn(label: Text('มิติ')),
               ],
               rows: _validatedData
                   .take(50)
@@ -561,6 +562,7 @@ class _ApVendorBalanceImportScreenState extends State<ApVendorBalanceImportScree
                           child: Text(_fmt(r['description']),
                               overflow: TextOverflow.ellipsis),
                         )),
+                        DataCell(Text(_fmt(r['dim_label']))),
                       ]))
                   .toList(),
             ),
