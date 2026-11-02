@@ -18,6 +18,7 @@ import '../../gl/models/gl_entry.dart' show GlEntryDetail;
 import '../../gl/models/gl_dimension.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
+import '../../gl/widgets/gl_line_account_dims.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../sa/models/sa_module_document.dart';
@@ -74,6 +75,7 @@ class _DetailRow {
   final sellerBranchCtrl = TextEditingController();
   final taxInvNoCtrl = TextEditingController();
   DateTime? taxInvDate;
+  Map<int, int?> dims = {}; // มิติของบรรทัด slot → value id (ว่าง = ใช้มิติหัวเอกสาร)
 
   _DetailRow();
 
@@ -91,6 +93,7 @@ class _DetailRow {
     r.expenseAccountId = d.expenseAccountId;
     r.expenseAccountCode = d.expenseAccountCode;
     r.expenseAccountName = d.expenseAccountName;
+    r.dims = {1: d.dim1Id, 2: d.dim2Id, 3: d.dim3Id, 4: d.dim4Id, 5: d.dim5Id};
     return r;
   }
 
@@ -178,7 +181,8 @@ class _GlLine {
   final double credit;
   final double debitFc;
   final double creditFc;
-  const _GlLine(this.accountCode, this.accountName, this.description, this.debit, this.credit, this.debitFc, this.creditFc);
+  final Map<int, int?>? dims; // มิติของบรรทัด (null = มิติหัวเอกสาร)
+  const _GlLine(this.accountCode, this.accountName, this.description, this.debit, this.credit, this.debitFc, this.creditFc, [this.dims]);
 }
 
 // ── GL row (read-only preview — the server derives accounts from the GL setup,
@@ -726,7 +730,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
     for (final r in _glEditRows) r.dispose();
     setState(() {
       _glEditRows = lines.map((l) => _GlEditRow.fromLine(l,
-        dimIds: Map<int, int?>.from(_dimSelections),
+        dimIds: l.dims ?? Map<int, int?>.from(_dimSelections),
         dimNames: Map<int, String?>.from(_dimNames),
       )).toList();
     });
@@ -882,6 +886,8 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
               sellerBranchCode: _isVoucher && e.value.vatType != 'NOVAT' ? e.value.sellerBranchCtrl.text.trim() : null,
               taxInvoiceNo: _isVoucher && e.value.vatType != 'NOVAT' && e.value.taxInvNoCtrl.text.trim().isNotEmpty ? e.value.taxInvNoCtrl.text.trim() : null,
               taxInvoiceDate: _isVoucher && e.value.vatType != 'NOVAT' && e.value.taxInvNoCtrl.text.trim().isNotEmpty ? (e.value.taxInvDate ?? _docDate) : null,
+              dim1Id: e.value.dims[1], dim2Id: e.value.dims[2], dim3Id: e.value.dims[3],
+              dim4Id: e.value.dims[4], dim5Id: e.value.dims[5],
             );
           }).toList()
         : _isBankCharge
@@ -1983,6 +1989,22 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
                   readOnly: _isReadOnly,
                   onChanged: (_) => _recalcTotals(),
                 )),
+                if (_dimTypes.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  SizedBox(width: 150, child: InputDecorator(
+                    decoration: _fieldDeco(isEnglish ? 'Line Dimensions' : 'มิติของบรรทัด'),
+                    child: GlLineDimsCell(
+                      dimTypes: _dimTypes,
+                      dimValues: _dimValues,
+                      lineDims: r.dims,
+                      headerDims: _dimSelections,
+                      account: findAccount(_accounts, r.expenseAccountId),
+                      readOnly: _isReadOnly,
+                      width: 120,
+                      onChanged: (d) { setState(() => r.dims = d); _rebuildGlRows(); },
+                    ),
+                  )),
+                ],
                 if (_hasVatLines) ...[
                   const SizedBox(width: 8),
                   Expanded(flex: 2, child: DropdownButtonFormField<String>(
@@ -2310,8 +2332,8 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
     if (_docSetup == null) return lines;
     final lc = _exchangeRate;
 
-    void addLine(({String code, String name}) acct, String desc, double fcDebit, double fcCredit) {
-      lines.add(_GlLine(acct.code, acct.name, desc, fcDebit * lc, fcCredit * lc, fcDebit, fcCredit));
+    void addLine(({String code, String name}) acct, String desc, double fcDebit, double fcCredit, [Map<int, int?>? dims]) {
+      lines.add(_GlLine(acct.code, acct.name, desc, fcDebit * lc, fcCredit * lc, fcDebit, fcCredit, dims));
     }
 
     if (_isReceipt && _detailRows.isNotEmpty) {
@@ -2330,7 +2352,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         final acct = d.expenseAccountId != null
             ? _acctCodeName(d.expenseAccountId)
             : _setupAcctCodeName(_docSetup!.revenueAccountId, _docSetup!.revenueAccountCode, _docSetup!.revenueAccountName);
-        addLine(acct, d.descCtrl.text.isEmpty ? (isEnglish ? 'Revenue' : 'รายรับ') : d.descCtrl.text, 0, a.net);
+        addLine(acct, d.descCtrl.text.isEmpty ? (isEnglish ? 'Revenue' : 'รายรับ') : d.descCtrl.text, 0, a.net, effectiveLineDims(d.dims, _dimSelections));
       }
       if (_vatFc != 0) {
         addLine(_setupAcctCodeName(_docSetup!.vatOutputAccountId, _docSetup!.vatOutputAccountCode, _docSetup!.vatOutputAccountName),
@@ -2353,7 +2375,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         final acct = d.expenseAccountId != null
             ? _acctCodeName(d.expenseAccountId)
             : _setupAcctCodeName(_docSetup!.expenseAccountId, _docSetup!.expenseAccountCode, _docSetup!.expenseAccountName);
-        addLine(acct, d.descCtrl.text.isEmpty ? (isEnglish ? 'Expense' : 'รายจ่าย') : d.descCtrl.text, a.net, 0);
+        addLine(acct, d.descCtrl.text.isEmpty ? (isEnglish ? 'Expense' : 'รายจ่าย') : d.descCtrl.text, a.net, 0, effectiveLineDims(d.dims, _dimSelections));
       }
       if (_vatFc != 0) {
         addLine(_setupAcctCodeName(_docSetup!.vatInputAccountId, _docSetup!.vatInputAccountCode, _docSetup!.vatInputAccountName),
@@ -2393,7 +2415,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         final acct = d.expenseAccountId != null
             ? _acctCodeName(d.expenseAccountId)
             : (code: '!', name: isEnglish ? 'Select account' : 'ยังไม่เลือกบัญชี');
-        addLine(acct, d.descCtrl.text.isEmpty ? (isEnglish ? 'Petty cash expense' : 'เบิกเงินสดย่อย') : d.descCtrl.text, amt, 0);
+        addLine(acct, d.descCtrl.text.isEmpty ? (isEnglish ? 'Petty cash expense' : 'เบิกเงินสดย่อย') : d.descCtrl.text, amt, 0, effectiveLineDims(d.dims, _dimSelections));
       }
       if (_vatFc != 0) {
         addLine(_setupAcctCodeName(_docSetup!.vatInputAccountId, _docSetup!.vatInputAccountCode, _docSetup!.vatInputAccountName),

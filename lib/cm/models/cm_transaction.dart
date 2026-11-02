@@ -287,6 +287,8 @@ class CmTransactionDetail {
   final String? sellerBranchCode;
   final String? taxInvoiceNo;
   final DateTime? taxInvoiceDate;
+  // มิติของบรรทัด (10/20/40 — ว่าง = ใช้มิติหัวเอกสาร)
+  final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
 
   CmTransactionDetail({
     this.id, this.headerId,
@@ -303,6 +305,7 @@ class CmTransactionDetail {
     this.vatAmountFc = 0,
     this.vatAmountLc = 0,
     this.sellerName, this.sellerTaxId, this.sellerBranchCode, this.taxInvoiceNo, this.taxInvoiceDate,
+    this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
   });
 
   factory CmTransactionDetail.fromJson(Map<String, dynamic> json) {
@@ -326,6 +329,8 @@ class CmTransactionDetail {
       sellerBranchCode: json['seller_branch_code'],
       taxInvoiceNo: json['tax_invoice_no'],
       taxInvoiceDate: parseLocalDateNullable(json['tax_invoice_date']),
+      dim1Id: json['dim1_id'], dim2Id: json['dim2_id'], dim3Id: json['dim3_id'],
+      dim4Id: json['dim4_id'], dim5Id: json['dim5_id'],
     );
   }
 
@@ -344,6 +349,7 @@ class CmTransactionDetail {
         'seller_branch_code': sellerBranchCode,
         'tax_invoice_no': taxInvoiceNo,
         'tax_invoice_date': taxInvoiceDate != null ? formatLocalDate(taxInvoiceDate!) : null,
+        'dim1_id': dim1Id, 'dim2_id': dim2Id, 'dim3_id': dim3Id, 'dim4_id': dim4Id, 'dim5_id': dim5Id,
       };
 }
 
