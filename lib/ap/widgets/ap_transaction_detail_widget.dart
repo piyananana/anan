@@ -27,6 +27,8 @@ import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
 import '../../cm/models/cm_payment_method.dart';
 import '../../cm/widgets/cm_payment_method_list_widget.dart';
+import '../../cm/models/cm_checkbook.dart';
+import '../../cm/services/cm_checkbook_service.dart';
 import '../../gl/services/gl_entry_service.dart';
 import '../../gl/models/gl_entry.dart' show GlEntryDetail;
 import '../../cd/models/cd_wht_type.dart';
@@ -156,6 +158,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   // WHT rows (for Payment 80, Advance Payment 60)
   List<_WhtRow> _whtRows = [];
   List<CdWhtType> _whtTypes = [];
+  final Map<int, List<CmCheckbook>> _checkbooks = {}; // สมุดเช็คที่ใช้งานได้ ต่อบัญชีธนาคาร (โหลดเมื่อใช้)
 
   // Totals
   double _subtotalFc = 0;
@@ -1039,6 +1042,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         drawerBankName: r.drawerBankNameCtrl.text.isEmpty ? null : r.drawerBankNameCtrl.text,
         drawerBankBranch: r.drawerBankBranchCtrl.text.isEmpty ? null : r.drawerBankBranchCtrl.text,
         drawerAccountNo: r.drawerAccountNoCtrl.text.isEmpty ? null : r.drawerAccountNoCtrl.text,
+        checkbookId: _usesCheckbook(r) ? r.checkbookId : null,
       );
     }).toList();
 
@@ -2174,6 +2178,19 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   }
 
   // ── Payment Section ───────────────────────────────────────────────────────
+  // สมุดเช็ค: จ่ายด้วยเช็คของใบจ่ายชำระ/จ่ายมัดจำ (80/60) — เลขเช็คว่าง = backend ใช้เลขถัดไปของสมุดเช็คตอน Post
+  bool _usesCheckbook(_PaymentRow r) => (_isPayment || _isAdvancePayment) && r.paymentMethodType == 'CHECK' && r.cmBankAccountId != null;
+  Future<void> _ensureCheckbooks(int bankAccountId) async {
+    if (_checkbooks.containsKey(bankAccountId)) return;
+    _checkbooks[bankAccountId] = const [];
+    try {
+      final list = await CmCheckbookService().fetchCheckbooks(bankAccountId: bankAccountId);
+      if (mounted) setState(() => _checkbooks[bankAccountId] = list);
+    } catch (_) {}
+  }
+  String? _nextCheckNo(_PaymentRow r) =>
+      (_checkbooks[r.cmBankAccountId] ?? const <CmCheckbook>[]).where((b) => b.id == r.checkbookId).firstOrNull?.nextCheckNo;
+
   Widget _buildPaymentSection() {
     final isEnglish = _isEnglish;
     return Card(child: Padding(
@@ -2234,9 +2251,35 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                     onChanged: (_) => _recalcTotals(),
                   )),
                   const SizedBox(width: 8),
+                  if (_usesCheckbook(r)) ...[
+                    Expanded(flex: 2, child: Builder(builder: (_) {
+                      _ensureCheckbooks(r.cmBankAccountId!);
+                      final books = (_checkbooks[r.cmBankAccountId!] ?? const <CmCheckbook>[])
+                          .where((b) => b.status == 'Active' || b.id == r.checkbookId).toList();
+                      return DropdownButtonFormField<int?>(
+                        value: books.any((b) => b.id == r.checkbookId) ? r.checkbookId : null,
+                        isExpanded: true,
+                        decoration: _fieldDeco(isEnglish ? 'Checkbook' : 'สมุดเช็ค'),
+                        items: [
+                          DropdownMenuItem(value: null, child: Text(isEnglish ? '— Type check no. —' : '— พิมพ์เลขเช็คเอง —')),
+                          ...books.map((b) => DropdownMenuItem(value: b.id,
+                              child: Text('${b.checkbookCode} (${b.startCheckNo}-${b.endCheckNo})', overflow: TextOverflow.ellipsis))),
+                        ],
+                        onChanged: _isReadOnly ? null : (v) => setState(() => r.checkbookId = v),
+                      );
+                    })),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(flex: 2, child: TextFormField(
                     controller: r.refNoCtrl,
-                    decoration: _fieldDeco(isEnglish ? 'Reference No.' : 'เลขที่อ้างอิง'),
+                    // เช็คที่จ่ายออก: เลขเช็คอยู่ช่องนี้ (รายการจ่ายธนาคาร/ทะเบียนเช็คใช้ค่านี้)
+                    decoration: _fieldDeco(_usesCheckbook(r)
+                        ? (isEnglish ? 'Check No.' : 'เลขที่เช็ค')
+                        : (isEnglish ? 'Reference No.' : 'เลขที่อ้างอิง')).copyWith(
+                      hintText: _usesCheckbook(r) && r.checkbookId != null
+                          ? (isEnglish ? 'Next: ${_nextCheckNo(r) ?? '-'} (on post)' : 'เลขถัดไป ${_nextCheckNo(r) ?? '-'} (ตอน Post)')
+                          : null,
+                    ),
                     readOnly: _isReadOnly,
                   )),
                   const SizedBox(width: 8),
@@ -2257,7 +2300,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                       ]),
                     ),
                   )),
-                  if (r.paymentMethodType == 'CHECK') ...[
+                  // เช็คที่รับ (เช่น รับคืนมัดจำ): ธนาคารและเลขที่เช็คของผู้สั่งจ่าย — เช็คที่เราจ่ายออกใช้สมุดเช็คด้านบน
+                  if (r.paymentMethodType == 'CHECK' && !_usesCheckbook(r)) ...[
                     const SizedBox(width: 8),
                     Expanded(flex: 2, child: TextFormField(
                       controller: r.drawerBankNameCtrl,
@@ -3081,13 +3125,14 @@ class _PaymentRow {
   final TextEditingController drawerBankBranchCtrl;
   final TextEditingController drawerAccountNoCtrl;
   DateTime? paymentDate;
+  int? checkbookId; // จ่ายด้วยเช็ค (60/80): สมุดเช็ค
 
   _PaymentRow({
     this.paymentMethodId, this.paymentMethodCode, this.paymentMethodName,
     this.paymentMethodType = 'CASH',
     this.cmBankAccountId, this.glAccountId,
     double amount = 0, String? refNo, String? remark, this.paymentDate,
-    String? drawerBankName, String? drawerBankBranch, String? drawerAccountNo,
+    String? drawerBankName, String? drawerBankBranch, String? drawerAccountNo, this.checkbookId,
   })  : amountCtrl = TextEditingController(text: amount > 0 ? amount.toStringAsFixed(2) : ''),
         refNoCtrl = TextEditingController(text: refNo ?? ''),
         remarkCtrl = TextEditingController(text: remark ?? ''),
@@ -3102,6 +3147,7 @@ class _PaymentRow {
         amount: isFc && p.amountFc > 0 ? p.amountFc : p.amountLc,
         refNo: p.refNo, remark: p.remark, paymentDate: p.paymentDate,
         drawerBankName: p.drawerBankName, drawerBankBranch: p.drawerBankBranch, drawerAccountNo: p.drawerAccountNo,
+        checkbookId: p.checkbookId,
       );
 
   void dispose() {

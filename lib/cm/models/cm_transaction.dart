@@ -444,6 +444,7 @@ class CmTransactionPayment {
   final String? drawerBankName;
   final String? drawerBankBranch;
   final String? drawerAccountNo;
+  final int? checkbookId; // จ่ายด้วยเช็ค (20/30): สมุดเช็ค — เลขเช็คว่าง = ใช้เลขถัดไปตอน Post
 
   CmTransactionPayment({
     this.id, this.headerId,
@@ -454,6 +455,7 @@ class CmTransactionPayment {
     this.amountLc = 0, this.amountFc = 0,
     this.refNo, this.paymentDate, this.remark,
     this.drawerBankName, this.drawerBankBranch, this.drawerAccountNo,
+    this.checkbookId,
   });
 
   factory CmTransactionPayment.fromJson(Map<String, dynamic> json) {
@@ -475,12 +477,14 @@ class CmTransactionPayment {
       drawerBankName: json['drawer_bank_name'],
       drawerBankBranch: json['drawer_bank_branch'],
       drawerAccountNo: json['drawer_account_no'],
+      checkbookId: json['checkbook_id'],
     );
   }
 
   Map<String, dynamic> toJson() => {
         if (id != null) 'id': id,
         'line_no': lineNo,
+        'checkbook_id': checkbookId,
         if (paymentMethodId != null) 'payment_method_id': paymentMethodId,
         'payment_method_code': paymentMethodCode,
         'payment_method_name': paymentMethodName,

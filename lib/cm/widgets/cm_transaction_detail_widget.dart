@@ -33,6 +33,8 @@ import '../../cd/services/cd_vat_rate_service.dart';
 import '../../cd/models/cd_wht_type.dart';
 import '../../cd/services/cd_wht_type_service.dart';
 import '../../utils/vat_calc.dart';
+import '../models/cm_checkbook.dart';
+import '../services/cm_checkbook_service.dart';
 
 class CmTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -124,6 +126,7 @@ class _PaymentRow {
   String? paymentMethodName;
   String paymentMethodType;
   int? cmBankAccountId;
+  int? checkbookId; // จ่ายด้วยเช็ค: สมุดเช็ค
   final amountCtrl = TextEditingController(text: '0.00');
   final refNoCtrl = TextEditingController();
 
@@ -135,6 +138,7 @@ class _PaymentRow {
     r.paymentMethodCode = p.paymentMethodCode;
     r.paymentMethodName = p.paymentMethodName;
     r.cmBankAccountId = p.cmBankAccountId;
+    r.checkbookId = p.checkbookId;
     r.amountCtrl.text = p.amountFc.toStringAsFixed(2);
     r.refNoCtrl.text = p.refNo ?? '';
     return r;
@@ -259,6 +263,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   List<CdWhtType> _whtTypes = [];
   List<ApVendor> _vendors = [];
   List<ArCustomer>? _customers; // โหลดเมื่อเปิดค้นหาลูกค้าครั้งแรก
+  final Map<int, List<CmCheckbook>> _checkbooks = {}; // สมุดเช็คที่ใช้งานได้ ต่อบัญชีธนาคาร (โหลดเมื่อใช้)
   CmTransactionGlSetup? _docSetup;
 
   // GL Dimensions
@@ -659,6 +664,17 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
     });
   }
 
+// สมุดเช็ค: ช่องทางจ่ายด้วยเช็คของเอกสารจ่ายเงิน (20/30) — เลขเช็คว่าง = backend ใช้เลขถัดไปของสมุดเช็คตอน Post
+  bool _usesCheckbook(_PaymentRow r) => (_isPayment || _isReplenishment) && r.paymentMethodType == 'CHECK' && r.cmBankAccountId != null;
+  Future<void> _ensureCheckbooks(int bankAccountId) async {
+    if (_checkbooks.containsKey(bankAccountId)) return;
+    _checkbooks[bankAccountId] = const [];
+    try {
+      final list = await CmCheckbookService().fetchCheckbooks(bankAccountId: bankAccountId);
+      if (mounted) setState(() => _checkbooks[bankAccountId] = list);
+    } catch (_) {}
+  }
+
   // ยอดของบรรทัดรายการแบบ VAT (เหมือน backend calcTaxDoc)
   LineAmounts _lineAmt(_DetailRow r) => calcLineAmounts(
         qty: 1,
@@ -903,6 +919,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
               amountFc: fc,
               refNo: p.refNoCtrl.text.isEmpty ? null : p.refNoCtrl.text,
               paymentDate: _docDate,
+              checkbookId: _usesCheckbook(p) ? p.checkbookId : null,
             );
           }).toList()
         : <CmTransactionPayment>[];
@@ -2157,10 +2174,33 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
                         value: b.id, child: Text(_bankAcctLabel(b), overflow: TextOverflow.ellipsis))).toList(),
                   onChanged: _isReadOnly ? null : (v) => setState(() => r.cmBankAccountId = v),
                 )),
+                if (_usesCheckbook(r)) ...[
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: Builder(builder: (_) {
+                    _ensureCheckbooks(r.cmBankAccountId!);
+                    final books = (_checkbooks[r.cmBankAccountId!] ?? const <CmCheckbook>[])
+                        .where((b) => b.status == 'Active' || b.id == r.checkbookId).toList();
+                    return DropdownButtonFormField<int?>(
+                      value: books.any((b) => b.id == r.checkbookId) ? r.checkbookId : null,
+                      isExpanded: true,
+                      decoration: _fieldDeco(isEnglish ? 'Checkbook' : 'สมุดเช็ค'),
+                      items: [
+                        DropdownMenuItem(value: null, child: Text(isEnglish ? '— Type check no. —' : '— พิมพ์เลขเช็คเอง —')),
+                        ...books.map((b) => DropdownMenuItem(value: b.id,
+                            child: Text('${b.checkbookCode} (${b.startCheckNo}-${b.endCheckNo})', overflow: TextOverflow.ellipsis))),
+                      ],
+                      onChanged: _isReadOnly ? null : (v) => setState(() => r.checkbookId = v),
+                    );
+                  })),
+                ],
                 const SizedBox(width: 8),
                 Expanded(flex: 2, child: TextFormField(
                   controller: r.refNoCtrl,
-                  decoration: _fieldDeco(isEnglish ? 'Ref./Check No.' : 'เลขที่อ้างอิง/เช็ค'),
+                  decoration: _fieldDeco(isEnglish ? 'Ref./Check No.' : 'เลขที่อ้างอิง/เช็ค').copyWith(
+                    hintText: _usesCheckbook(r) && r.checkbookId != null
+                        ? (isEnglish ? 'Next: ${_nextCheckNo(r) ?? '-'} (on post)' : 'เลขถัดไป ${_nextCheckNo(r) ?? '-'} (ตอน Post)')
+                        : null,
+                  ),
                   readOnly: _isReadOnly,
                 )),
                 const SizedBox(width: 8),
@@ -2181,6 +2221,9 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       ]),
     ));
   }
+
+  String? _nextCheckNo(_PaymentRow r) =>
+      (_checkbooks[r.cmBankAccountId] ?? const <CmCheckbook>[]).where((b) => b.id == r.checkbookId).firstOrNull?.nextCheckNo;
 
   Widget _buildTotalsRow() {
     final isEnglish = _isEnglish;
