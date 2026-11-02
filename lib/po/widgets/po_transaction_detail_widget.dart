@@ -30,6 +30,8 @@ import '../../sa/widgets/sa_attachment_widget.dart';
 import '../../sa/models/sa_doc_approval.dart';
 import '../../sa/widgets/sa_doc_approval_panel.dart';
 import '../../utils/order_ref_picker.dart';
+import '../../gl/models/gl_dimension.dart';
+import '../../gl/widgets/gl_line_account_dims.dart';
 
 class PoTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -107,6 +109,11 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
   List<OrderDeposit> _deposits = const []; // ใบมัดจำที่อ้างอิงใบสั่งนี้
   int? _refPrId; // ใบขอซื้อ (PR) ต้นทาง ถ้าเพิ่มรายการมาจาก _pickPrLines()
   String? _refPrDocNoLabel;
+  // มิติหัวเอกสาร — ค่าเริ่มต้นจากใบขอซื้อที่ดึงรายการมา (แก้ได้) — user-approved 2026-11-02
+  List<GlDimensionType> _dimTypes = [];
+  Map<String, List<GlDimensionValue>> _dimValues = {};
+  Map<int, int?> _dimSelections = {};
+  bool _dimsLoaded = false;
 
   // รองรับสั่งซื้อสินค้าต่างประเทศเป็นสกุลเงินต่างประเทศ — unit_price_fc ต่อบรรทัดคือราคาในสกุลเงินนี้ (FC),
   // total_value_lc คำนวณจาก unit_price_fc * exchange_rate เสมอ มิเรอร์ ap_transaction_detail_widget.dart ทุกประการ
@@ -203,6 +210,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     _deposits = const [];
     _refPrId = null;
     _refPrDocNoLabel = null;
+    _dimSelections = {};
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null);
     _exchangeRate = _currency?.baseRate ?? 1;
     _priceIncludesVat = false;
@@ -223,6 +231,12 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       if (_vatRates.isEmpty) {
         _vatRates = (await _vatRateService.fetchRows()).where((v) => v.isActive).toList();
       }
+      if (!_dimsLoaded) {
+        final dims = await loadActiveDimensions();
+        _dimTypes = dims.$1;
+        _dimValues = dims.$2;
+        _dimsLoaded = true;
+      }
       if (widget.transactionId == null && widget.copyFromId != null) {
         final h = await _service.fetchRow(widget.copyFromId!);
         _id = null;
@@ -242,6 +256,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         _deposits = const [];
         _refPrId = null;
         _refPrDocNoLabel = null;
+        _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
@@ -288,6 +303,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         _deposits = h.deposits;
         _refPrId = h.refPrId;
         _refPrDocNoLabel = h.refPrDocNo;
+        _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
@@ -497,6 +513,10 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       }
       _refPrId = pickedLines.first['header_id'] as int;
       _refPrDocNoLabel = pickedLines.first['doc_no'] as String?;
+      // มิติ: ยังไม่ได้เลือกเลย = ใช้มิติของใบขอซื้อใบแรกที่เลือก
+      if (!_dimSelections.values.any((v) => v != null)) {
+        _dimSelections = {for (var i = 1; i <= 5; i++) i: pickedLines.first['dim${i}_id'] as int?};
+      }
     });
   }
 
@@ -518,6 +538,8 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         priceIncludesVat: _priceIncludesVat,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         refPrId: _refPrId,
+        dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
+        dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
       );
       final details = _lines
           .map((l) => PoTransactionDetail(
@@ -802,6 +824,16 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                   ),
                 ),
               ]),
+              if (_dimTypes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                GlHeaderDimsRow(
+                  dimTypes: _dimTypes,
+                  dimValues: _dimValues,
+                  selections: _dimSelections,
+                  readOnly: _isReadOnly,
+                  onChanged: (slot, id) => setState(() => _dimSelections[slot] = id),
+                ),
+              ],
             ]),
           ),
         ),

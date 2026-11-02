@@ -69,6 +69,8 @@ class PoTransactionHeader {
   final DocActions actions;
   final int? refPrId; // ใบขอซื้อ (PR) ต้นทาง — สะดวก/แสดงผลเท่านั้น
   final String? refPrDocNo;
+  // มิติหัวเอกสาร — IM ที่รับสินค้าตามใบสั่งซื้อใช้มิตินี้ (ล็อก)
+  final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
   // From join
   final String? docCode;
   final String? docNameThai;
@@ -115,6 +117,7 @@ class PoTransactionHeader {
     this.actions = const DocActions(),
     this.refPrId,
     this.refPrDocNo,
+    this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
     this.docCode,
     this.docNameThai,
     this.docNameEng,
@@ -163,6 +166,8 @@ class PoTransactionHeader {
       actions: DocActions.fromJson(json),
       refPrId: json['ref_pr_id'],
       refPrDocNo: json['ref_pr_doc_no'],
+      dim1Id: json['dim1_id'], dim2Id: json['dim2_id'], dim3Id: json['dim3_id'],
+      dim4Id: json['dim4_id'], dim5Id: json['dim5_id'],
       docCode: json['doc_code'] ?? json['d_doc_code'],
       docNameThai: json['doc_name_thai'],
       docNameEng: json['doc_name_eng'],
@@ -188,6 +193,8 @@ class PoTransactionHeader {
         if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
         if (description != null) 'description': description,
         if (refPrId != null) 'ref_pr_id': refPrId,
+        // ส่งทุกช่องเสมอ — backend เขียนทับมิติด้วยค่าที่ส่งมา
+        'dim1_id': dim1Id, 'dim2_id': dim2Id, 'dim3_id': dim3Id, 'dim4_id': dim4Id, 'dim5_id': dim5Id,
         if (branchId != null) 'branch_id': branchId,
         if (createdBy != null) 'created_by': createdBy,
         if (updatedBy != null) 'updated_by': updatedBy,

@@ -4,12 +4,66 @@ import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../models/gl_account.dart';
 import '../models/gl_dimension.dart';
+import '../services/gl_dimension_service.dart';
 import 'gl_dimension_picker_field.dart';
 
 // บัญชีที่ใช้ลงบัญชีและมิติของบรรทัดรายการเอกสาร (AR/AP/IM) — user-approved 2026-11-02
 //   - บัญชีของบรรทัดเลือกได้ทุกบัญชีที่ลงรายการได้ (ไม่ใช่บัญชีคุม) ค่าเริ่มต้นจากการตั้งค่าของประเภทเอกสาร
 //   - มิติของบรรทัด: ช่องที่ว่างใช้มิติหัวเอกสาร (backend utils/glDims.js lineDims)
 //   - บัญชีที่ตั้งให้บังคับมิติ (gl_account_dim_rule) แต่บรรทัดและหัวเอกสารไม่มีค่า = แสดงเตือนสีแดง (backend ไม่ให้ Post)
+
+/// ประเภทมิติที่เปิดใช้ + ค่าของแต่ละประเภท (type_code → values)
+Future<(List<GlDimensionType>, Map<String, List<GlDimensionValue>>)> loadActiveDimensions() async {
+  final svc = GlDimensionService();
+  final types = await svc.fetchActiveTypes();
+  final vals = await Future.wait(types.map((t) => svc.fetchValuesByType(t.typeCode)));
+  return (types, {for (var i = 0; i < types.length; i++) types[i].typeCode: vals[i]});
+}
+
+/// แถวช่องมิติหัวเอกสาร (แสดงเฉพาะประเภทมิติที่เปิดใช้ — ไม่มีเลย = ไม่แสดง)
+class GlHeaderDimsRow extends StatelessWidget {
+  final List<GlDimensionType> dimTypes;
+  final Map<String, List<GlDimensionValue>> dimValues;
+  final Map<int, int?> selections;
+  final bool readOnly;
+  final void Function(int slot, int? valueId) onChanged;
+  final Widget? trailing;
+
+  const GlHeaderDimsRow({
+    super.key,
+    required this.dimTypes,
+    required this.dimValues,
+    required this.selections,
+    required this.onChanged,
+    this.readOnly = false,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (dimTypes.isEmpty) return const SizedBox.shrink();
+    GlDimensionValue? sel(GlDimensionType t) {
+      final id = selections[t.slotNo];
+      for (final v in dimValues[t.typeCode] ?? const <GlDimensionValue>[]) {
+        if (v.id == id) return v;
+      }
+      return null;
+    }
+    return Row(children: [
+      for (final t in dimTypes) ...[
+        Expanded(child: GlDimensionPickerField(
+          dimType: t,
+          values: dimValues[t.typeCode] ?? const [],
+          selected: sel(t),
+          readOnly: readOnly,
+          onSelected: (v) => onChanged(t.slotNo, v?.id),
+        )),
+        const SizedBox(width: 8),
+      ],
+      if (trailing != null) Expanded(child: trailing!),
+    ]);
+  }
+}
 
 String _accName(Account a, bool isEnglish) =>
     isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
