@@ -304,6 +304,9 @@ class ImTransactionDetail {
   final int? refMoOutputDetailId; // '95' เท่านั้น — บรรทัดผลผลิต MO ต้นฉบับที่บรรทัดนี้รับตาม ใช้ตรวจคงเหลือที่รับได้
   final double? totalValueLc;
   final String? description;
+  // บัญชีที่ใช้ลงบัญชีของบรรทัด (เบิกสินค้า '60' — null = สินค้า → หมวด → ตั้งค่า) + มิติของบรรทัด (ว่าง = หัวเอกสาร)
+  final int? glAccountId;
+  final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
 
   const ImTransactionDetail({
     this.id,
@@ -342,6 +345,8 @@ class ImTransactionDetail {
     this.refMoOutputDetailId,
     this.totalValueLc,
     this.description,
+    this.glAccountId,
+    this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
   });
 
   double get variance => countedQty - systemQty;
@@ -386,6 +391,9 @@ class ImTransactionDetail {
       refMoOutputDetailId: json['ref_mo_output_detail_id'],
       totalValueLc: toDoubleN(json['total_value_lc']),
       description: json['description'],
+      glAccountId: json['gl_account_id'],
+      dim1Id: json['dim1_id'], dim2Id: json['dim2_id'], dim3Id: json['dim3_id'],
+      dim4Id: json['dim4_id'], dim5Id: json['dim5_id'],
     );
   }
 
@@ -417,6 +425,8 @@ class ImTransactionDetail {
         if (refMoComponentDetailId != null) 'ref_mo_component_detail_id': refMoComponentDetailId,
         if (refMoOutputDetailId != null) 'ref_mo_output_detail_id': refMoOutputDetailId,
         if (description != null) 'description': description,
+        if (glAccountId != null) 'gl_account_id': glAccountId,
+        'dim1_id': dim1Id, 'dim2_id': dim2Id, 'dim3_id': dim3Id, 'dim4_id': dim4Id, 'dim5_id': dim5Id,
       };
 }
 

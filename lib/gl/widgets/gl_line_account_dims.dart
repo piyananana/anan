@@ -106,6 +106,8 @@ class GlLineAccountCell extends StatelessWidget {
   final bool readOnly;
   final ValueChanged<Account> onChanged;
   final double width;
+  final String? placeholder; // ข้อความเมื่อยังไม่เลือก (null = แจ้งให้เลือกบัญชี)
+  final VoidCallback? onClear; // ล้างบัญชีที่เลือก (กลับไปใช้ค่าตั้งต้น)
 
   const GlLineAccountCell({
     super.key,
@@ -114,6 +116,8 @@ class GlLineAccountCell extends StatelessWidget {
     required this.onChanged,
     this.readOnly = false,
     this.width = 150,
+    this.placeholder,
+    this.onClear,
   });
 
   @override
@@ -121,8 +125,9 @@ class GlLineAccountCell extends StatelessWidget {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final acc = findAccount(accounts, accountId);
     final content = acc == null
-        ? Text(isEnglish ? '— Select —' : '— เลือกบัญชี —',
-            style: TextStyle(fontSize: 12, color: readOnly ? Colors.grey : Colors.red[400]))
+        ? Text(placeholder ?? (isEnglish ? '— Select —' : '— เลือกบัญชี —'),
+            style: TextStyle(fontSize: 12, color: readOnly || placeholder != null ? Colors.grey : Colors.red[400],
+                fontStyle: placeholder != null ? FontStyle.italic : FontStyle.normal))
         : Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             Text(acc.accountCode, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.teal[700])),
             Text(_accName(acc, isEnglish), style: const TextStyle(fontSize: 10, color: Colors.grey),
@@ -142,6 +147,8 @@ class GlLineAccountCell extends StatelessWidget {
               : const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.teal, width: 1))),
           child: Row(children: [
             Expanded(child: content),
+            if (!readOnly && acc != null && onClear != null)
+              InkWell(onTap: onClear, child: const Icon(Icons.clear, size: 14, color: Colors.grey)),
             if (!readOnly) const Icon(Icons.search, size: 14, color: Colors.teal),
           ]),
         ),

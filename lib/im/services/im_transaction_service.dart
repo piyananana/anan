@@ -434,6 +434,18 @@ class ImTransactionService {
     return null;
   }
 
+  // มิติของเอกสารต้นทาง (slot → value id) — null = เอกสารต้นทางไม่มีมิติ (ไม่ล็อก)
+  Future<Map<int, int?>?> fetchRefDims({int? poId, int? soId, int? moId}) async {
+    if (poId == null && soId == null && moId == null) return null;
+    final headers = await authService.getAuthHeader();
+    final q = [if (poId != null) 'po_id=$poId', if (soId != null) 'so_id=$soId', if (moId != null) 'mo_id=$moId'].join('&');
+    final res = await http.get(Uri.parse('$baseUrl/im_transaction/ref_dims?$q'), headers: headers);
+    if (res.statusCode != 200) return null;
+    final j = json.decode(res.body);
+    if (j is! Map<String, dynamic>) return null;
+    return {for (var i = 1; i <= 5; i++) i: j['dim${i}_id'] as int?};
+  }
+
   // Review report for sys_doc_type='12' (GR รอตั้งหนี้) — Received docs with no GL backing yet
   // (accrual gap) and Posted docs whose billed cost differs from the cost that valued the stock
   // (price variance). See imGrBillingReportController.js.

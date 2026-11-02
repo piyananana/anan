@@ -37,6 +37,12 @@ import '../../sa/models/sa_credit_approval.dart';
 import '../../sa/services/sa_credit_approval_service.dart';
 import '../../sa/widgets/sa_credit_limit_panel.dart';
 import '../../ar/services/ar_customer_service.dart';
+import '../../gl/models/gl_account.dart';
+import '../../gl/services/gl_account_service.dart';
+import '../../gl/models/gl_dimension.dart';
+import '../../gl/services/gl_dimension_service.dart';
+import '../../gl/widgets/gl_dimension_picker_field.dart';
+import '../../gl/widgets/gl_line_account_dims.dart';
 
 double _parseNum(String s) => double.tryParse(s.trim()) ?? 0;
 
@@ -83,6 +89,9 @@ class _CountLine {
   // ของแถม — ฝั่งรับ (isReceiveMode) ยกเว้นบังคับ unitCostCtrl>0, ฝั่งขาย (isDeliverMode) auto-zero+lock unitPriceCtrl
   // (ดู build() ของบรรทัดและ validation ตอน save) เป็น field ธรรมดาเหมือน vatType เพราะเป็น toggle ไม่ใช่กรอกอิสระ
   bool isFree;
+  // เบิกสินค้า ('60'): บัญชีที่ใช้ลงบัญชีของบรรทัด (null = สินค้า → หมวดสินค้า → ตั้งค่า) + มิติของบรรทัด (ว่าง = หัวเอกสาร)
+  int? glAccountId;
+  Map<int, int?> dims = {};
   final TextEditingController countedQtyCtrl;
   final TextEditingController issueQtyCtrl;
   final TextEditingController unitCostCtrl;
@@ -210,6 +219,16 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   final PeriodService _periodService = PeriodService();
   final GlEntryService _glEntryService = GlEntryService();
   final VatRateService _vatRateService = VatRateService();
+  final AccountService _accountService = AccountService();
+  final GlDimensionService _dimService = GlDimensionService();
+  // มิติหัวเอกสาร (ลงทุกบรรทัดรายการบัญชีของ IM และเอกสาร AR/AP ที่สร้างอัตโนมัติ) — อ้างอิงใบสั่งซื้อ/ใบสั่งขาย/ใบสั่งผลิต
+  // ที่มีมิติ = ใช้มิติของเอกสารนั้นและแก้ไม่ได้ (_refDims != null) — user-approved 2026-11-02
+  List<Account> _accounts = [];
+  List<GlDimensionType> _dimTypes = [];
+  final Map<String, List<GlDimensionValue>> _dimValues = {};
+  Map<int, int?> _dimSelections = {};
+  Map<int, int?>? _refDims;
+  int? _refMoId;
   List<VatRate> _vatRates = [];
   final _fmtQty = NumberFormat('#,##0.####');
   final _fmtMoney = NumberFormat('#,##0.00');
@@ -516,6 +535,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refPoDocNoLabel = null;
     _refSoId = null;
     _refSoDocNoLabel = null;
+    _refMoId = null;
+    _dimSelections = {};
+    _refDims = null;
     _refNoCtrl.clear();
     _poNoCtrl.clear();
     _poDate = null;
@@ -552,7 +574,15 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _periodService.fetchOpenGlPeriods(),
         _vatRateService.fetchRows(),
         _currencyService.fetchActiveRows(),
+        _accountService.fetchRows(),
+        _dimService.fetchActiveTypes(),
       ]);
+      _accounts = results[4] as List<Account>;
+      _dimTypes = results[5] as List<GlDimensionType>;
+      final dimValueResults = await Future.wait(_dimTypes.map((t) => _dimService.fetchValuesByType(t.typeCode)));
+      for (var i = 0; i < _dimTypes.length; i++) {
+        _dimValues[_dimTypes[i].typeCode] = dimValueResults[i];
+      }
       _docTypes = (results[0] as List<ModuleDocument>).where((d) => d.isDocType).toList();
       _openPeriods = results[1] as List<PostingPeriod>;
       _vatRates = (results[2] as List<VatRate>).where((v) => v.isActive).toList();
@@ -605,6 +635,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refPoDocNoLabel = h.refPoDocNo;
     _refSoId = h.refSoId;
     _refSoDocNoLabel = h.refSoDocNo;
+    _refMoId = h.refMoId;
+    _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
     _refNoCtrl.text = h.refNo ?? '';
     _poNoCtrl.text = h.customerPoNo ?? '';
     _poDate = h.customerPoDate;
@@ -666,9 +698,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         isFree: d.isFree,
         lotNo: d.lotNo ?? '',
         serialNo: d.serialNo ?? '',
-      ));
+      )
+        ..glAccountId = d.glAccountId
+        ..dims = {1: d.dim1Id, 2: d.dim2Id, 3: d.dim3Id, 4: d.dim4Id, 5: d.dim5Id});
     }
     _lines = lines;
+    if (_status == 'Draft') await _loadRefDims();
     await _loadAdvances(saved: tx.advances);
 
     if (_docCode != null) {
@@ -680,6 +715,20 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       final result = await _glEntryService.fetchEntryDetail(_glEntryId!);
       _postedGlDetails = result['details'] as List<GlEntryDetail>;
     }
+  }
+
+  // มิติของใบสั่งซื้อ/ใบสั่งขาย/ใบสั่งผลิตที่อ้างอิง — มีมิติ = ใช้มิตินั้นและล็อก, ไม่มี = แก้ที่เอกสาร IM ได้
+  Future<void> _loadRefDims() async {
+    Map<int, int?>? d;
+    try {
+      d = await _service.fetchRefDims(
+          poId: _isReceiveMode ? _refPoId : null, soId: _isDeliverMode ? _refSoId : null, moId: _refMoId);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _refDims = d;
+      if (d != null) _dimSelections = Map<int, int?>.from(d);
+    });
   }
 
   Future<void> _selectDocType(ModuleDocument d) async {
@@ -1215,6 +1264,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       }
       _refPoId = pickedLines.first['header_id'] as int;
       _refPoDocNoLabel = pickedLines.first['doc_no'] as String?;
+      _loadRefDims();
       // รับตามสกุลเงินของ PO ต้นทางเสมอ (ทุกบรรทัดที่เลือกมาจาก fetchReceivableLines ของผู้ขายเดียวกัน แต่อาจมาจาก
       // PO คนละใบ คนละสกุลเงินได้ในทางทฤษฎี — ใช้สกุลเงินของ PO ใบแรกที่เลือกเป็นสกุลเงินของทั้ง GRN นี้)
       // อัตราแลกเปลี่ยนใช้อัตราปัจจุบันของสกุลเงิน ไม่ใช่อัตราตอนสั่งซื้อ — การซื้อบันทึกด้วยอัตรา ณ วันที่เกิดรายการ (TAS 21)
@@ -1369,6 +1419,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       }
       _refSoId = pickedLines.first['header_id'] as int;
       _refSoDocNoLabel = pickedLines.first['doc_no'] as String?;
+      _loadRefDims();
       // ใบสั่งซื้อลูกค้า: ค่าเริ่มต้นจากใบสั่งขาย (ไม่ทับค่าที่ผู้ใช้กรอกไว้แล้ว)
       if (_poNoCtrl.text.trim().isEmpty && _poDate == null) {
         _poNoCtrl.text = (pickedLines.first['customer_po_no'] as String?) ?? '';
@@ -1655,6 +1706,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         exchangeRate: (_isApVendorMode || _isArCustomerMode) ? _exchangeRate : 1,
         priceIncludesVat: _inclVat,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
+        dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
       );
       final details = _lines.map((l) => ImTransactionDetail(
             id: l.id,
@@ -1681,6 +1734,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             refImTransactionDetailId: l.refImTransactionDetailId,
             refPoDetailId: l.refPoDetailId,
             refSoDetailId: l.refSoDetailId,
+            glAccountId: _isIssueMode ? l.glAccountId : null,
+            dim1Id: _isIssueMode ? l.dims[1] : null, dim2Id: _isIssueMode ? l.dims[2] : null,
+            dim3Id: _isIssueMode ? l.dims[3] : null, dim4Id: _isIssueMode ? l.dims[4] : null,
+            dim5Id: _isIssueMode ? l.dims[5] : null,
           )).toList();
 
       if (_id == null) {
@@ -2301,6 +2358,31 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             },
           ),
       ],
+      if (_dimTypes.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        Row(children: [
+          for (final t in _dimTypes) ...[
+            Expanded(child: GlDimensionPickerField(
+              dimType: t,
+              values: _dimValues[t.typeCode] ?? const [],
+              selected: () {
+                final id = _dimSelections[t.slotNo];
+                for (final v in _dimValues[t.typeCode] ?? const <GlDimensionValue>[]) {
+                  if (v.id == id) return v;
+                }
+                return null;
+              }(),
+              readOnly: _isReadOnly || _refDims != null,
+              onSelected: (v) => setState(() => _dimSelections[t.slotNo] = v?.id),
+            )),
+            const SizedBox(width: 8),
+          ],
+          if (_refDims != null)
+            Expanded(child: Text(
+                isEnglish ? 'Dimensions follow the referenced order' : 'มิติตามเอกสารต้นทางที่อ้างอิง (แก้ไขไม่ได้)',
+                style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic))),
+        ]),
+      ],
       const SizedBox(height: 6),
       Row(children: [
         Container(
@@ -2629,6 +2711,41 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   decoration: InputDecoration(
                       labelText: isEnglish ? 'Amount before VAT' : 'ยอดก่อน VAT', border: const OutlineInputBorder(), isDense: true),
                   child: Text(_fmtMoney.format(_amt(line, billed: _isGrDeferredMode).net), textAlign: TextAlign.right),
+                ),
+              ),
+            if (_isIssueMode)
+              SizedBox(
+                width: 220,
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Expense Account' : 'บัญชีค่าใช้จ่าย', border: const OutlineInputBorder(), isDense: true),
+                  child: GlLineAccountCell(
+                    accounts: _accounts,
+                    accountId: line.glAccountId,
+                    readOnly: _isReadOnly,
+                    width: 190,
+                    placeholder: isEnglish ? 'From item / category / setup' : 'ตามสินค้า / หมวด / ตั้งค่า',
+                    onChanged: (a) => setState(() => line.glAccountId = a.id),
+                    onClear: () => setState(() => line.glAccountId = null),
+                  ),
+                ),
+              ),
+            if (_isIssueMode && _dimTypes.isNotEmpty)
+              SizedBox(
+                width: 170,
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                      labelText: isEnglish ? 'Line Dimensions' : 'มิติของบรรทัด', border: const OutlineInputBorder(), isDense: true),
+                  child: GlLineDimsCell(
+                    dimTypes: _dimTypes,
+                    dimValues: _dimValues,
+                    lineDims: line.dims,
+                    headerDims: _dimSelections,
+                    account: findAccount(_accounts, line.glAccountId),
+                    readOnly: _isReadOnly,
+                    width: 140,
+                    onChanged: (d) => setState(() => line.dims = d),
+                  ),
                 ),
               ),
           ]),
@@ -3151,7 +3268,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         continue;
       }
       invEntries.add((_receiveInvAcct(l, isEnglish), v * cost));
-      final _Acct counter = isCogsCounter
+      final lineAcc = _isIssueMode ? findAccount(_accounts, l.glAccountId) : null;
+      final _Acct counter = lineAcc != null
+          ? (code: lineAcc.accountCode, name: isEnglish && lineAcc.accountNameEng.isNotEmpty ? lineAcc.accountNameEng : lineAcc.accountNameThai)
+          : isCogsCounter
           ? _lineAcct(l, (a) => a.cogs, _docSetup!.cogsAccountCode, _docSetup!.cogsAccountName, isEnglish)
           : isWipCounter
               ? (code: _docSetup!.wipAccountCode, name: _docSetup!.wipAccountName)
