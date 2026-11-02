@@ -25,6 +25,7 @@ import '../../cd/services/cd_vat_rate_service.dart';
 import '../../gl/models/gl_dimension.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
+import '../../gl/widgets/gl_line_account_dims.dart';
 import '../../cm/models/cm_payment_method.dart';
 import '../../cm/widgets/cm_payment_method_list_widget.dart';
 import '../../cm/models/cm_checkbook.dart';
@@ -316,7 +317,16 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     try {
       final setup = await _service.fetchSetupByDocCode(_selectedDocType!.docCode);
       if (mounted) {
-        setState(() => _docSetup = setup);
+        // บรรทัดที่ยังใช้บัญชีเริ่มต้นของประเภทเอกสารเดิม (หรือยังไม่มีบัญชี) เปลี่ยนตามประเภทเอกสารใหม่
+        final oldDefault = _docSetup?.expenseAccountId;
+        setState(() {
+          _docSetup = setup;
+          if (!_isReadOnly) {
+            for (final r in _detailRows) {
+              if (r.expenseAccountId == null || r.expenseAccountId == oldDefault) r.expenseAccountId = setup?.expenseAccountId;
+            }
+          }
+        });
         if (!_isReadOnly || _status == 'Approved') _rebuildGlRows();
       }
     } catch (_) {}
@@ -503,7 +513,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     for (final r in _glEditRows) r.dispose();
     setState(() {
       _glEditRows = lines.map((l) => _GlEditRow.fromLine(l,
-        dimIds: Map<int, int?>.from(_dimSelections),
+        dimIds: l.dims ?? Map<int, int?>.from(_dimSelections),
         dimNames: Map<int, String?>.from(_dimNames),
       )).toList();
     });
@@ -994,6 +1004,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         subtotalLc: afterDisc * lc, vatAmountLc: vat * lc,
         totalAmountLc: (afterDisc + vat) * lc,
         isDeferredVat: r.isDeferredVat && r.vatType != 'NOVAT',
+        dim1Id: r.dims[1], dim2Id: r.dims[2], dim3Id: r.dims[3], dim4Id: r.dims[4], dim5Id: r.dims[5],
       );
     }).toList();
 
@@ -1784,6 +1795,9 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                       DataColumn(label: Text(isEnglish ? 'VAT Amount' : 'ยอด VAT', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       DataColumn(label: Text(isEnglish ? 'Total' : 'รวม', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), numeric: true),
                       DataColumn(label: Tooltip(message: isEnglish ? 'VAT recognized on payment, not on invoicing' : 'VAT บันทึกตอนรับชำระ ไม่ใช่ตอนตั้งหนี้', child: Text(isEnglish ? 'Deferred\nVAT' : 'VAT\nรอตัด', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center))),
+                      DataColumn(label: Tooltip(message: isEnglish ? 'Posting account of the line (default from the document type setup)' : 'บัญชีที่ใช้ลงบัญชีของบรรทัด (ค่าเริ่มต้นจากการตั้งค่าของประเภทเอกสาร)', child: Text(isEnglish ? 'Account' : 'บัญชี', style: const TextStyle(fontWeight: FontWeight.bold)))),
+                      if (_dimTypes.isNotEmpty)
+                        DataColumn(label: Tooltip(message: isEnglish ? 'Line dimensions — blank uses the header' : 'มิติของบรรทัด — ว่างใช้มิติหัวเอกสาร', child: Text(isEnglish ? 'Dimensions' : 'มิติ', style: const TextStyle(fontWeight: FontWeight.bold)))),
                       if (!_isReadOnly) const DataColumn(label: SizedBox()),
                     ],
                     rows: _detailRows.asMap().entries.map((e) {
@@ -1896,6 +1910,22 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                             _rebuildGlRows();
                           },
                         )),
+                        DataCell(GlLineAccountCell(
+                          accounts: _accounts,
+                          accountId: r.expenseAccountId ?? _docSetup?.expenseAccountId,
+                          readOnly: _isReadOnly,
+                          onChanged: (a) { setState(() => r.expenseAccountId = a.id); _rebuildGlRows(); },
+                        )),
+                        if (_dimTypes.isNotEmpty)
+                          DataCell(GlLineDimsCell(
+                            dimTypes: _dimTypes,
+                            dimValues: _dimValues,
+                            lineDims: r.dims,
+                            headerDims: _dimSelections,
+                            account: findAccount(_accounts, r.expenseAccountId ?? _docSetup?.expenseAccountId),
+                            readOnly: _isReadOnly,
+                            onChanged: (d) { setState(() => r.dims = d); _rebuildGlRows(); },
+                          )),
                         if (!_isReadOnly)
                           DataCell(IconButton(
                             icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
@@ -2591,7 +2621,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
           if (_status != 'Posted' && !_glLoading && _glEditRows.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: Text(isEnglish ? '* Accounts come from the document type\'s GL account setup (revenue/expense accounts can be chosen on each item line) and dimensions follow the header selection — the entry is recalculated on Post' : '* รหัสบัญชีกำหนดจากการตั้งค่ารหัสบัญชีของประเภทเอกสาร (บัญชีรายได้/ค่าใช้จ่ายเลือกได้ที่แต่ละบรรทัดของรายการ) และมิติใช้ตามที่เลือกที่หัวเอกสาร — ระบบคำนวณรายการบัญชีใหม่ตอน Post',
+              child: Text(isEnglish ? '* Accounts come from the document type\'s GL account setup; the account and dimensions of each item line can be chosen on the line (blank line dimensions use the header) — the entry is recalculated on Post' : '* รหัสบัญชีกำหนดจากการตั้งค่ารหัสบัญชีของประเภทเอกสาร ส่วนบัญชีและมิติของแต่ละบรรทัดรายการเลือกได้ที่บรรทัด (มิติที่ว่างใช้ตามหัวเอกสาร) — ระบบคำนวณรายการบัญชีใหม่ตอน Post',
                   style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.blueGrey.shade600)),
             ),
         ],
@@ -2759,13 +2789,14 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : expenseDefaultDesc;
         final notSetupDiscountLabel = isEnglish ? '!Discount account not configured' : '!ยังไม่ตั้งค่าบัญชีส่วนลด';
         final discountReceivedLabel = isEnglish ? 'Discount Received' : 'ส่วนลดรับ';
+        final dims = effectiveLineDims(r.dims, _dimSelections);
         if (setup.discountAccountId != null && disc > 0) {
-          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, sub * lc, 0, isFcDoc ? sub : 0, 0));
+          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, sub * lc, 0, isFcDoc ? sub : 0, 0, dims));
           final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, notSetupDiscountLabel);
           final discName = acctName(setup.discountAccountId, setup.discountAccountName ?? discountReceivedLabel);
-          lines.add(_GlLine(discCode, discName.isEmpty ? discountReceivedLabel : discName, discountReceivedLabel, 0, disc * lc, 0, isFcDoc ? disc : 0));
+          lines.add(_GlLine(discCode, discName.isEmpty ? discountReceivedLabel : discName, discountReceivedLabel, 0, disc * lc, 0, isFcDoc ? disc : 0, dims));
         } else {
-          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
+          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0, dims));
         }
         if (vat > 0) {
           final notSetupVatPendingLabel = isEnglish ? '!Deferred VAT not configured' : '!ยังไม่ตั้งค่า VAT รอตัด';
@@ -2810,13 +2841,14 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : expenseDefaultDesc;
         final notSetupDiscountLabel = isEnglish ? '!Discount account not configured' : '!ยังไม่ตั้งค่าบัญชีส่วนลด';
         final discountReceivedLabel = isEnglish ? 'Discount Received' : 'ส่วนลดรับ';
+        final dims = effectiveLineDims(r.dims, _dimSelections);
         if (setup.discountAccountId != null && disc > 0) {
-          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, 0, sub * lc, 0, isFcDoc ? sub : 0));
+          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, 0, sub * lc, 0, isFcDoc ? sub : 0, dims));
           final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, notSetupDiscountLabel);
           final discName = acctName(setup.discountAccountId, setup.discountAccountName ?? discountReceivedLabel);
-          lines.add(_GlLine(discCode, discName.isEmpty ? discountReceivedLabel : discName, discountReceivedLabel, disc * lc, 0, isFcDoc ? disc : 0, 0));
+          lines.add(_GlLine(discCode, discName.isEmpty ? discountReceivedLabel : discName, discountReceivedLabel, disc * lc, 0, isFcDoc ? disc : 0, 0, dims));
         } else {
-          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
+          lines.add(_GlLine(expCode, expName.isEmpty ? 'Expense' : expName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, dims));
         }
         if (vat > 0) {
           final notSetupVatPendingLabel = isEnglish ? '!Deferred VAT not configured' : '!ยังไม่ตั้งค่า VAT รอตัด';
@@ -2972,7 +3004,8 @@ class _GlLine {
   final double credit;
   final double debitFc;
   final double creditFc;
-  const _GlLine(this.accountCode, this.accountName, this.description, this.debit, this.credit, this.debitFc, this.creditFc);
+  final Map<int, int?>? dims; // มิติของบรรทัด (null = มิติหัวเอกสาร)
+  const _GlLine(this.accountCode, this.accountName, this.description, this.debit, this.credit, this.debitFc, this.creditFc, [this.dims]);
 }
 
 // ── Helper: editable GL row for inline section ───────────────────────────────
@@ -3055,6 +3088,7 @@ class _DetailRow {
   double vatRate;
   int? expenseAccountId;
   bool isDeferredVat;
+  Map<int, int?> dims; // มิติของบรรทัด slot → value id (ว่าง = ใช้มิติหัวเอกสาร)
 
   _DetailRow({
     String? itemCode,
@@ -3068,7 +3102,9 @@ class _DetailRow {
     this.expenseAccountId,
     this.isDeferredVat = false,
     double totalFc = 0,
-  })  : itemCodeCtrl = TextEditingController(text: itemCode ?? ''),
+    Map<int, int?>? dims,
+  })  : dims = dims ?? {},
+        itemCodeCtrl = TextEditingController(text: itemCode ?? ''),
         itemNameCtrl = TextEditingController(text: itemName ?? ''),
         descCtrl = TextEditingController(text: desc ?? ''),
         qtyCtrl = TextEditingController(text: qty.toString()),
@@ -3084,6 +3120,7 @@ class _DetailRow {
         discPct: d.discountPercent, vatType: d.vatType, vatRate: d.vatRate,
         expenseAccountId: d.expenseAccountId, isDeferredVat: d.isDeferredVat,
         totalFc: d.totalAmountFc,
+        dims: {1: d.dim1Id, 2: d.dim2Id, 3: d.dim3Id, 4: d.dim4Id, 5: d.dim5Id},
       );
 
   void dispose() {
