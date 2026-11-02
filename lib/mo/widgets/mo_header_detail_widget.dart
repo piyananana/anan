@@ -27,6 +27,8 @@ import '../../gl/widgets/gl_journal_preview.dart';
 import '../services/mo_bom_service.dart';
 import '../widgets/mo_bom_list_widget.dart';
 import '../widgets/mo_work_center_list_widget.dart';
+import '../../gl/models/gl_dimension.dart';
+import '../../gl/widgets/gl_line_account_dims.dart';
 
 // ---------------------------------------------------------------------------
 // Add/Edit component dialog
@@ -409,6 +411,11 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
   String _costingMode = 'OVERHEAD_PERCENT';
   late TextEditingController _overheadPercentCtrl;
   final _descCtrl = TextEditingController();
+  // มิติหัวเอกสาร — user-approved 2026-11-02
+  List<GlDimensionType> _dimTypes = [];
+  Map<String, List<GlDimensionValue>> _dimValues = {};
+  Map<int, int?> _dimSelections = {};
+  bool _dimsLoaded = false;
 
   static const _moSysDocType = '10';
   List<ModuleDocument> _allowedDocTypes = [];
@@ -467,6 +474,7 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
     _costingMode = 'OVERHEAD_PERCENT';
     _overheadPercentCtrl.text = '0';
     _descCtrl.clear();
+    _dimSelections = {};
     _components = [];
     _outputs = [];
     _operations = [];
@@ -479,6 +487,12 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
       if (_allowedDocTypes.isEmpty) {
         final docTypes = await _service.fetchDocTypesByUser();
         _allowedDocTypes = docTypes.where((d) => d.isDocType && d.sysDocType == _moSysDocType).toList();
+      }
+      if (!_dimsLoaded) {
+        final dims = await loadActiveDimensions();
+        _dimTypes = dims.$1;
+        _dimValues = dims.$2;
+        _dimsLoaded = true;
       }
       if (widget.transactionId == null) {
         _resetForm();
@@ -509,6 +523,7 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         _costingMode = h.costingMode;
         _overheadPercentCtrl.text = '${h.overheadPercent}';
         _descCtrl.text = h.description ?? '';
+        _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
         _components = List.from(h.components);
         _outputs = List.from(h.outputs);
         _operations = List.from(h.operations);
@@ -687,6 +702,8 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         issueMethod: _issueMethod, costingMethod: _costingMethod, costingMode: _costingMode,
         overheadPercent: double.tryParse(_overheadPercentCtrl.text) ?? 0,
         dueDate: _dueDate, description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
+        dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
       );
       if (_id == null) {
         await _service.createTransaction(header: header, components: _components, outputs: _outputs, operations: _operations);
@@ -1001,6 +1018,16 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
                 controller: _descCtrl,
                 decoration: InputDecoration(labelText: isEnglish ? 'Description' : 'คำอธิบาย', border: const OutlineInputBorder(), isDense: true),
               ),
+              if (_dimTypes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                GlHeaderDimsRow(
+                  dimTypes: _dimTypes,
+                  dimValues: _dimValues,
+                  selections: _dimSelections,
+                  readOnly: _isReadOnly,
+                  onChanged: (slot, id) => setState(() => _dimSelections[slot] = id),
+                ),
+              ],
             ]),
           ),
         ),

@@ -620,6 +620,8 @@ class MoHeader {
   final String? parentMoDocNo;
   final int? parentMoDetailId;
   final String? description;
+  // มิติหัวเอกสาร — รายการบัญชีของใบสั่งผลิต และเบิก/รับสินค้าที่อ้างอิงใบสั่งผลิตใช้มิตินี้
+  final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
   final int? branchId;
   final String? branchCode;
   final String? branchNameThai;
@@ -675,6 +677,7 @@ class MoHeader {
     this.parentMoDocNo,
     this.parentMoDetailId,
     this.description,
+    this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
     this.branchId,
     this.branchCode,
     this.branchNameThai,
@@ -733,6 +736,8 @@ class MoHeader {
       parentMoDocNo: json['parent_mo_doc_no'],
       parentMoDetailId: json['parent_mo_detail_id'],
       description: json['description'],
+      dim1Id: json['dim1_id'], dim2Id: json['dim2_id'], dim3Id: json['dim3_id'],
+      dim4Id: json['dim4_id'], dim5Id: json['dim5_id'],
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
@@ -770,6 +775,8 @@ class MoHeader {
         'overhead_percent': overheadPercent,
         if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
         if (description != null) 'description': description,
+        // ส่งทุกช่องเสมอ — backend เขียนทับมิติด้วยค่าที่ส่งมา
+        'dim1_id': dim1Id, 'dim2_id': dim2Id, 'dim3_id': dim3Id, 'dim4_id': dim4Id, 'dim5_id': dim5Id,
         if (parentMoId != null) 'parent_mo_id': parentMoId,
         if (parentMoDetailId != null) 'parent_mo_detail_id': parentMoDetailId,
         if (branchId != null) 'branch_id': branchId,
