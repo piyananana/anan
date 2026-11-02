@@ -32,6 +32,7 @@ import '../../gl/models/gl_dimension.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
+import '../../gl/widgets/gl_line_account_dims.dart';
 import '../../cd/models/cd_doc_salesperson.dart';
 import '../../cd/widgets/cd_salesperson_split_editor.dart';
 import '../../config/app_config.dart';
@@ -1048,7 +1049,16 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     try {
       final setup = await _glSetupService.fetchRow(docCode);
       if (mounted) {
-        setState(() => _docSetup = setup);
+        // บรรทัดที่ยังใช้บัญชีเริ่มต้นของประเภทเอกสารเดิม (หรือยังไม่มีบัญชี) เปลี่ยนตามประเภทเอกสารใหม่
+        final oldDefault = _docSetup?.revenueAccountId;
+        setState(() {
+          _docSetup = setup;
+          if (!_isReadOnly) {
+            for (final r in _detailRows) {
+              if (r.revenueAccountId == null || r.revenueAccountId == oldDefault) r.revenueAccountId = setup.revenueAccountId;
+            }
+          }
+        });
         if (!_isReadOnly) _rebuildGlRows();
       }
     } catch (_) {
@@ -1061,7 +1071,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     for (final r in _glEditRows) r.dispose();
     setState(() {
       _glEditRows = lines.map((l) => _GlEditRow.fromLine(l,
-        dimIds: Map<int, int?>.from(_dimSelections),
+        dimIds: l.dims ?? Map<int, int?>.from(_dimSelections),
         dimNames: Map<int, String?>.from(_dimNames),
       )).toList();
     });
@@ -1358,6 +1368,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         vatAmountLc: vat * lc,
         totalAmountLc: (afterDisc + vat) * lc,
         isDeferredVat: r.isDeferredVat && r.vatType != 'NOVAT',
+        dim1Id: r.dims[1], dim2Id: r.dims[2], dim3Id: r.dims[3], dim4Id: r.dims[4], dim5Id: r.dims[5],
       );
     }).toList();
 
@@ -1908,59 +1919,6 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     );
   }
 
-  // ---- Show account picker dialog ----
-  Future<Account?> _showAccountPicker() async {
-    final isEnglish = context.read<LanguageProvider>().isEnglish;
-    final searchCtrl = TextEditingController();
-    // Only show normal accounts (can receive transactions) that are not control accounts
-    final available = _accounts.where((a) => a.isNormalAccount && !a.isControlAccount && a.isActive).toList();
-    List<Account> filtered = List.from(available);
-
-    return showDialog<Account>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
-        void doFilter() {
-          final q = searchCtrl.text.toUpperCase();
-          setS(() => filtered = q.isEmpty
-              ? available
-              : available.where((a) =>
-                  a.accountCode.toUpperCase().contains(q) ||
-                  a.accountNameThai.toUpperCase().contains(q) ||
-                  a.accountNameEng.toUpperCase().contains(q)).toList());
-        }
-        return Dialog(
-          child: SizedBox(
-            width: 520, height: 500,
-            child: Column(children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: TextField(
-                  controller: searchCtrl,
-                  decoration: InputDecoration(labelText: isEnglish ? 'Search Account' : 'ค้นหาบัญชี', prefixIcon: const Icon(Icons.search), border: const OutlineInputBorder()),
-                  onChanged: (_) => doFilter(),
-                  autofocus: true,
-                ),
-              ),
-              Expanded(child: ListView.builder(
-                itemCount: filtered.length,
-                itemBuilder: (_, i) {
-                  final a = filtered[i];
-                  final displayName = isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
-                  return ListTile(
-                    dense: true,
-                    title: Text('${a.accountCode} - $displayName', style: const TextStyle(fontSize: 13)),
-                    onTap: () => Navigator.pop(ctx, a),
-                  );
-                },
-              )),
-              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-            ]),
-          ),
-        );
-      }),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
@@ -2456,6 +2414,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   DataColumn(label: Text(isEnglish ? 'VAT Amount' : 'ยอด VAT', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                   DataColumn(label: Text(isEnglish ? 'Total' : 'รวม', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                   DataColumn(label: Tooltip(message: isEnglish ? 'VAT recorded at payment, not at billing' : 'VAT บันทึกตอนรับชำระ ไม่ใช่ตอนตั้งหนี้', child: Text(isEnglish ? 'Deferred\nVAT' : 'VAT\nรอตัด', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center))),
+                  DataColumn(label: Tooltip(message: isEnglish ? 'Posting account of the line (default from the document type setup)' : 'บัญชีที่ใช้ลงบัญชีของบรรทัด (ค่าเริ่มต้นจากการตั้งค่าของประเภทเอกสาร)', child: Text(isEnglish ? 'Account' : 'บัญชี', style: const TextStyle(fontWeight: FontWeight.bold)))),
+                  if (_dimTypes.isNotEmpty)
+                    DataColumn(label: Tooltip(message: isEnglish ? 'Line dimensions — blank uses the header' : 'มิติของบรรทัด — ว่างใช้มิติหัวเอกสาร', child: Text(isEnglish ? 'Dimensions' : 'มิติ', style: const TextStyle(fontWeight: FontWeight.bold)))),
                   if (!_isReadOnly) const DataColumn(label: Text('')),
                 ],
                 rows: _detailRows.asMap().entries.map((e) {
@@ -2593,6 +2554,22 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                         _rebuildGlRows();
                       },
                     )),
+                    DataCell(GlLineAccountCell(
+                      accounts: _accounts,
+                      accountId: r.revenueAccountId,
+                      readOnly: _isReadOnly,
+                      onChanged: (a) { setState(() => r.revenueAccountId = a.id); _rebuildGlRows(); },
+                    )),
+                    if (_dimTypes.isNotEmpty)
+                      DataCell(GlLineDimsCell(
+                        dimTypes: _dimTypes,
+                        dimValues: _dimValues,
+                        lineDims: r.dims,
+                        headerDims: _dimSelections,
+                        account: findAccount(_accounts, r.revenueAccountId),
+                        readOnly: _isReadOnly,
+                        onChanged: (d) { setState(() => r.dims = d); _rebuildGlRows(); },
+                      )),
                     if (!_isReadOnly)
                       DataCell(IconButton(icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red), onPressed: () => _removeDetailRow(i), visualDensity: VisualDensity.compact)),
                   ]);
@@ -3870,7 +3847,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           if (_status != 'Posted' && !_glLoading && _glEditRows.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: Text(isEnglish ? '* Accounts come from the document type\'s GL account setup (revenue/expense accounts can be chosen on each item line) and dimensions follow the header selection — the entry is recalculated on Post' : '* รหัสบัญชีกำหนดจากการตั้งค่ารหัสบัญชีของประเภทเอกสาร (บัญชีรายได้/ค่าใช้จ่ายเลือกได้ที่แต่ละบรรทัดของรายการ) และมิติใช้ตามที่เลือกที่หัวเอกสาร — ระบบคำนวณรายการบัญชีใหม่ตอน Post',
+              child: Text(isEnglish ? '* Accounts come from the document type\'s GL account setup; the account and dimensions of each item line can be chosen on the line (blank line dimensions use the header) — the entry is recalculated on Post' : '* รหัสบัญชีกำหนดจากการตั้งค่ารหัสบัญชีของประเภทเอกสาร ส่วนบัญชีและมิติของแต่ละบรรทัดรายการเลือกได้ที่บรรทัด (มิติที่ว่างใช้ตามหัวเอกสาร) — ระบบคำนวณรายการบัญชีใหม่ตอน Post',
                   style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.blueGrey.shade600)),
             ),
         ],
@@ -4350,13 +4327,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         final revName  = acctName(r.revenueAccountId, setup.revenueAccountName);
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : revenueDefaultDesc);
         final revenueFallback = isEnglish ? 'Revenue' : 'รายได้';
+        final dims = effectiveLineDims(r.dims, _dimSelections);
         if (setup.discountAccountId != null && disc > 0) {
-          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, 0, sub * lc, 0, isFcDoc ? sub : 0));
+          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, 0, sub * lc, 0, isFcDoc ? sub : 0, dims));
           final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, notSetupDiscountLabel);
           final discName = acctName(setup.discountAccountId, setup.discountAccountName ?? discountPaidLabel);
-          lines.add(_GlLine(discCode, discName.isEmpty ? discountPaidLabel : discName, discountPaidLabel, disc * lc, 0, isFcDoc ? disc : 0, 0));
+          lines.add(_GlLine(discCode, discName.isEmpty ? discountPaidLabel : discName, discountPaidLabel, disc * lc, 0, isFcDoc ? disc : 0, 0, dims));
         } else {
-          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0));
+          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, 0, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, dims));
         }
         if (vat > 0) {
           final vatOutputFallback = isEnglish ? 'VAT Output' : 'ภาษีขาย';
@@ -4408,13 +4386,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         final revName  = acctName(r.revenueAccountId, setup.revenueAccountName);
         final desc     = r.itemNameCtrl.text.isNotEmpty ? r.itemNameCtrl.text : (r.descCtrl.text.isNotEmpty ? r.descCtrl.text : revenueDefaultDesc);
         final revenueFallback = isEnglish ? 'Revenue' : 'รายได้';
+        final dims = effectiveLineDims(r.dims, _dimSelections);
         if (setup.discountAccountId != null && disc > 0) {
-          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, sub * lc, 0, isFcDoc ? sub : 0, 0));
+          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, sub * lc, 0, isFcDoc ? sub : 0, 0, dims));
           final discCode = setup.discountAccountCode ?? acctCode(setup.discountAccountId, notSetupDiscountLabel);
           final discName = acctName(setup.discountAccountId, setup.discountAccountName ?? discountPaidLabel);
-          lines.add(_GlLine(discCode, discName.isEmpty ? discountPaidLabel : discName, discountPaidLabel, 0, disc * lc, 0, isFcDoc ? disc : 0));
+          lines.add(_GlLine(discCode, discName.isEmpty ? discountPaidLabel : discName, discountPaidLabel, 0, disc * lc, 0, isFcDoc ? disc : 0, dims));
         } else {
-          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0));
+          lines.add(_GlLine(revCode, revName.isEmpty ? revenueFallback : revName, desc, afterDisc * lc, 0, isFcDoc ? afterDisc : 0, 0, dims));
         }
         if (vat > 0) {
           final vatOutputFallback = isEnglish ? 'VAT Output' : 'ภาษีขาย';
@@ -4620,6 +4599,7 @@ class _DetailRow {
   double vatRate;
   int? revenueAccountId;
   bool isDeferredVat;
+  Map<int, int?> dims; // มิติของบรรทัด slot → value id (ว่าง = ใช้มิติหัวเอกสาร)
 
   _DetailRow({
     String? itemCode,
@@ -4633,7 +4613,9 @@ class _DetailRow {
     this.revenueAccountId,
     this.isDeferredVat = false,
     double totalFc = 0,
-  })  : itemCodeCtrl = TextEditingController(text: itemCode ?? ''),
+    Map<int, int?>? dims,
+  })  : dims = dims ?? {},
+        itemCodeCtrl = TextEditingController(text: itemCode ?? ''),
         itemNameCtrl = TextEditingController(text: itemName ?? ''),
         descCtrl = TextEditingController(text: desc ?? ''),
         qtyCtrl = TextEditingController(text: qty.toString()),
@@ -4654,6 +4636,7 @@ class _DetailRow {
       revenueAccountId: d.revenueAccountId,
       isDeferredVat: d.isDeferredVat,
       totalFc: d.totalAmountFc,
+      dims: {1: d.dim1Id, 2: d.dim2Id, 3: d.dim3Id, 4: d.dim4Id, 5: d.dim5Id},
     );
   }
 
@@ -4793,8 +4776,9 @@ class _GlLine {
   final double credit;   // LC amount
   final double debitFc;  // FC amount (0 for base-currency docs)
   final double creditFc; // FC amount
+  final Map<int, int?>? dims; // มิติของบรรทัด (null = มิติหัวเอกสาร)
 
-  const _GlLine(this.accountCode, this.accountName, this.description, this.debit, this.credit, [this.debitFc = 0, this.creditFc = 0]);
+  const _GlLine(this.accountCode, this.accountName, this.description, this.debit, this.credit, [this.debitFc = 0, this.creditFc = 0, this.dims]);
 }
 
 // ---- Helper: editable GL row for inline section ----

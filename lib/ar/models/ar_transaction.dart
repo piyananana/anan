@@ -318,6 +318,8 @@ class ArTransactionDetail {
   final double vatAmountLc;
   final double totalAmountLc;
   final bool isDeferredVat;  // true = VAT รอตัด (บันทึก VAT ตอนรับชำระ ไม่ใช่ตอนตั้งหนี้)
+  // มิติของบรรทัด (ว่าง = ใช้มิติหัวเอกสาร) — revenueAccountId = บัญชีที่ใช้ลงบัญชีของบรรทัด
+  final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
 
   const ArTransactionDetail({
     this.id = 0,
@@ -341,6 +343,7 @@ class ArTransactionDetail {
     this.vatAmountLc = 0,
     this.totalAmountLc = 0,
     this.isDeferredVat = false,
+    this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
   });
 
   factory ArTransactionDetail.fromJson(Map<String, dynamic> j) {
@@ -366,6 +369,8 @@ class ArTransactionDetail {
       vatAmountLc: _toDouble(j['vat_amount_lc']) ?? 0,
       totalAmountLc: _toDouble(j['total_amount_lc']) ?? 0,
       isDeferredVat: j['is_deferred_vat'] as bool? ?? false,
+      dim1Id: j['dim1_id'] as int?, dim2Id: j['dim2_id'] as int?, dim3Id: j['dim3_id'] as int?,
+      dim4Id: j['dim4_id'] as int?, dim5Id: j['dim5_id'] as int?,
     );
   }
 
@@ -391,6 +396,7 @@ class ArTransactionDetail {
         'vat_amount_lc': vatAmountLc,
         'total_amount_lc': totalAmountLc,
         'is_deferred_vat': isDeferredVat,
+        'dim1_id': dim1Id, 'dim2_id': dim2Id, 'dim3_id': dim3Id, 'dim4_id': dim4Id, 'dim5_id': dim5Id,
       };
 
   ArTransactionDetail copyWith({
