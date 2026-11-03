@@ -1,219 +1,88 @@
 ﻿// lib/cm/screens/cm_reset_screen.dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_menu_scope.dart';
-import '../services/cm_reset_service.dart';
+import '../../config/app_config.dart';
+import '../../sa/widgets/sa_master_reset_view.dart';
 
-const _kTheme = Color(0xFF1565C0);
-
-class CmResetScreen extends StatefulWidget {
+// ล้างข้อมูลหลัก/การตั้งค่าของ CM — ธุรกรรม (รวมยอดยกมาธนาคาร) ล้างที่หน้าจอ "ล้างธุรกรรมทุกโมดูล" (SaSystemResetScreen)
+class CmResetScreen extends StatelessWidget {
   const CmResetScreen({super.key});
-  @override
-  State<CmResetScreen> createState() => _State();
-}
 
-class _State extends State<CmResetScreen> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  final _svc         = CmResetService();
-  final _confirmCtrl = TextEditingController();
-  bool _resetting    = false;
-  bool _done         = false;
-  bool _isEnglish    = false;
-  List<Map<String, dynamic>> _result = [];
-
-  static const _tablesToDelete = [
-    'cm_inter_bank_transfer',
-    'cm_bank_fx_revaluation_line',
-    'cm_bank_fx_revaluation',
-    'cm_bank_statement_line',
-    'cm_bank_statement',
-    'cm_petty_cash_voucher',
-    'cm_petty_cash_replenishment',
-    'cm_receipt',
-    'cm_payment',
-  ];
-
-  @override
-  void dispose() {
-    _confirmCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _reset() async {
-    if (!(MenuScope.of(context)?.canDelete ?? true)) return;
-    final isEnglish = _isEnglish;
-    if (_confirmCtrl.text != 'RESET CM') {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEnglish ? 'Type "RESET CM" to confirm' : 'พิมพ์ "RESET CM" เพื่อยืนยัน'),
-              backgroundColor: Colors.red.shade700));
-      return;
-    }
-    final ok = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: Row(children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.red.shade700),
-          const SizedBox(width: 8),
-          Text(isEnglish ? 'Confirm CM Reset' : 'ยืนยัน Reset CM'),
-        ]),
-        content: Text(isEnglish
-            ? 'This action will permanently delete ALL CM transaction data.\n\n'
-              'Including: receipts, payments, petty cash, bank statements, '
-              'FX revaluation and inter-bank transfers\n\n'
-              'Deleted data CANNOT be recovered — continue?'
-            : 'การดำเนินการนี้จะ**ลบข้อมูลธุรกรรม CM ทั้งหมด**อย่างถาวร\n\n'
-              'รวมถึง: ใบรับเงิน, ใบจ่ายเงิน, เงินสดย่อย, Bank Statement, '
-              'FX Revaluation และ Inter-bank Transfer\n\n'
-              'ข้อมูลที่ลบแล้ว**ไม่สามารถกู้คืนได้** — ดำเนินการต่อใช่หรือไม่?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(isEnglish ? 'Confirm Reset' : 'ยืนยัน Reset'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
-    setState(() { _resetting = true; _done = false; });
-    try {
-      final result = await _svc.resetData('RESET CM');
-      if (!mounted) return;
-      setState(() {
-        _result    = result;
-        _done      = true;
-        _resetting = false;
-        _confirmCtrl.clear();
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEnglish ? 'CM Reset complete' : 'Reset CM เสร็จสิ้น'), backgroundColor: Colors.green));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _resetting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade700));
-    }
-  }
+  static String _rows(Map<String, dynamic>? c, String key, bool en) =>
+      '$key (${c?[key] ?? '-'} ${en ? 'rows' : 'รายการ'})';
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    _isEnglish = isEnglish;
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: _kTheme,
-        foregroundColor: Colors.white,
-        title: const MenuTitle(),
-        titleTextStyle: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-        toolbarHeight: 40,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Warning box
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                border: Border.all(color: Colors.red.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 22),
-                    const SizedBox(width: 8),
-                    Text(isEnglish ? 'Warning: this action cannot be undone' : 'คำเตือน: การดำเนินการนี้ไม่สามารถยกเลิกได้',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
-                  ]),
-                  const SizedBox(height: 12),
-                  Text(isEnglish ? 'Items that will be deleted:' : 'รายการที่จะถูกลบทั้งหมด:',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  ..._tablesToDelete.map((t) => Padding(
-                    padding: const EdgeInsets.only(left: 12, bottom: 2),
-                    child: Row(children: [
-                      const Icon(Icons.remove, size: 14, color: Colors.red),
-                      const SizedBox(width: 6),
-                      Text(t, style: const TextStyle(fontSize: 13, fontFamily: 'monospace')),
-                    ]),
-                  )),
-                  const SizedBox(height: 12),
-                  Text(isEnglish
-                      ? 'Master data (bank accounts, payment methods, checkbooks, etc.) will NOT be deleted'
-                      : 'ข้อมูล Master (บัญชีธนาคาร, วิธีการชำระเงิน, สมุดเช็ค ฯลฯ) จะ**ไม่ถูกลบ**',
-                      style: const TextStyle(fontSize: 13, color: Colors.green)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Confirmation input
-            Text(isEnglish ? 'Type "RESET CM" to confirm:' : 'พิมพ์ "RESET CM" เพื่อยืนยัน:',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: 240,
-              child: TextField(
-                controller: _confirmCtrl,
-                style: const TextStyle(fontSize: 14, fontFamily: 'monospace', letterSpacing: 1),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.all(10),
-                  border: const OutlineInputBorder(),
-                  focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.red.shade400, width: 2)),
-                  hintText: 'RESET CM',
-                  hintStyle: TextStyle(color: Colors.grey.shade400),
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _confirmCtrl.text == 'RESET CM' ? Colors.red : Colors.grey.shade400,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(0, 40),
-              ),
-              onPressed: (_resetting || _confirmCtrl.text != 'RESET CM') ? null : _reset,
-              icon: _resetting
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.delete_forever, size: 18),
-              label: Text(isEnglish ? 'Reset All CM Data' : 'Reset ข้อมูล CM ทั้งหมด', style: const TextStyle(fontSize: 13)),
-            ),
-
-            // Result
-            if (_done && _result.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              const Divider(),
-              const SizedBox(height: 12),
-              Text(isEnglish ? 'Reset Result:' : 'ผลการ Reset:', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              ..._result.map((r) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(children: [
-                  Icon(Icons.check_circle_outline, size: 16, color: Colors.green.shade600),
-                  const SizedBox(width: 8),
-                  Text('${r['table']}', style: const TextStyle(fontSize: 13, fontFamily: 'monospace')),
-                  const SizedBox(width: 8),
-                  Text(isEnglish ? 'Deleted ${r['deleted']} rows' : 'ลบ ${r['deleted']} แถว',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                ]),
-              )),
-            ],
+    return MasterResetView(
+      countsUrl: '${AppConfig.apiCm}/cm_reset_master/counts',
+      resetUrl: '${AppConfig.apiCm}/cm_reset_master',
+      descriptionTh: 'ฟังก์ชันนี้จะลบข้อมูลหลักของ CM (บัญชีธนาคาร, สมุดเช็ค, รูปแบบพิมพ์เช็ค, ช่องทางชำระเงิน, '
+          'รูปแบบไฟล์ธนาคาร) และ/หรือการตั้งค่าบัญชีตามที่เลือกไว้ด้านล่างอย่างถาวร',
+      descriptionEn: 'Permanently deletes CM master data (bank accounts, checkbooks, check print layouts, '
+          'payment methods, bank file formats) and/or the account setup selected below.',
+      options: [
+        MasterResetOption(
+          bodyKey: 'resetBankAccounts',
+          icon: Icons.account_balance,
+          color: Colors.red[700]!,
+          titleTh: 'บัญชีธนาคาร / เงินสด',
+          titleEn: 'Bank / cash accounts',
+          subtitle: (c, en) => _rows(c, 'cm_bank_account', en),
+          details: const [
+            ('ลบบัญชีธนาคาร/เงินสด/เงินสดย่อยทั้งหมด รวมสมุดเช็คและรูปแบบพิมพ์เช็คของบัญชี',
+             'Deletes all bank/cash/petty cash accounts incl. their checkbooks and check print layouts'),
+            ('ถ้าช่องทางชำระเงินยังผูกบัญชีธนาคารอยู่ ต้องเลือก "ช่องทางชำระเงิน" ด้วย',
+             'If payment methods are still linked to a bank account, select "Payment methods" too'),
           ],
         ),
-      ),
+        MasterResetOption(
+          bodyKey: 'resetCheckbooks',
+          icon: Icons.menu_book,
+          color: Colors.orange[800]!,
+          titleTh: 'สมุดเช็ค',
+          titleEn: 'Checkbooks',
+          subtitle: (c, en) => _rows(c, 'cm_checkbook', en),
+        ),
+        MasterResetOption(
+          bodyKey: 'resetCheckPrintConfig',
+          icon: Icons.print,
+          color: Colors.brown[600]!,
+          titleTh: 'รูปแบบพิมพ์เช็ค',
+          titleEn: 'Check print layouts',
+          subtitle: (c, en) => _rows(c, 'cm_check_print_config', en),
+        ),
+        MasterResetOption(
+          bodyKey: 'resetPaymentMethods',
+          icon: Icons.payments,
+          color: Colors.blue[700]!,
+          titleTh: 'ช่องทางชำระเงิน',
+          titleEn: 'Payment methods',
+          subtitle: (c, en) => _rows(c, 'cm_payment_method', en),
+          details: const [
+            ('ลบช่องทางรับ/จ่ายชำระทั้งหมด (ใช้ในใบรับ/จ่ายชำระ AR/AP และเอกสาร CM)',
+             'Deletes all payment methods (used by AR/AP receipts/payments and CM documents)'),
+          ],
+        ),
+        MasterResetOption(
+          bodyKey: 'resetBankFileFormats',
+          icon: Icons.description,
+          color: Colors.indigo[700]!,
+          titleTh: 'รูปแบบไฟล์ธนาคาร',
+          titleEn: 'Bank file formats',
+          subtitle: (c, en) => _rows(c, 'cm_bank_file_format', en),
+        ),
+        MasterResetOption(
+          bodyKey: 'resetGlAccountSetup',
+          icon: Icons.account_tree,
+          color: Colors.teal[700]!,
+          titleTh: 'ตั้งค่าบัญชีตามประเภทเอกสาร CM',
+          titleEn: 'GL setup by CM document type',
+          subtitle: (c, en) => _rows(c, 'cm_transaction_gl_setup', en),
+          details: const [
+            ('ลบการตั้งค่าบัญชีรายได้/ค่าใช้จ่าย/VAT/WHT/FX ตามประเภทเอกสาร CM ทั้งหมด',
+             'Deletes all revenue/expense/VAT/WHT/FX account setup by CM document type'),
+          ],
+        ),
+      ],
     );
   }
 }
