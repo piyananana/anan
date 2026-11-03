@@ -109,6 +109,90 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
     return list;
   }
 
+  // panel ซ้ายแสดงเป็นลำดับชั้น — เฉพาะเมนูที่เปิดใช้การอนุมัติ และหัวข้อ (folder) ที่อยู่เหนือเมนูเหล่านั้น
+  final Set<int> _collapsedFolders = {};
+
+  List<Menu> get _approvalTreeMenus {
+    final byId = {for (final m in _allMenus) m.id: m};
+    final keep = <int>{};
+    for (final m in _approvableMenus) {
+      Menu? cur = m;
+      while (cur != null && keep.add(cur.id)) {
+        cur = cur.parentId == null ? null : byId[cur.parentId];
+      }
+    }
+    return _allMenus.where((m) => keep.contains(m.id)).toList();
+  }
+
+  List<Menu> _childrenOf(List<Menu> menus, int? parentId) {
+    final ids = menus.map((m) => m.id).toSet();
+    return menus
+        .where((m) => parentId == null
+            ? (m.parentId == null || !ids.contains(m.parentId))
+            : m.parentId == parentId)
+        .toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
+  List<Widget> _buildTreeNodes(List<Menu> menus, int? parentId, int level, bool isEnglish) {
+    final out = <Widget>[];
+    for (final m in _childrenOf(menus, parentId)) {
+      final isApprovable = m.requiresApproval && !menus.any((c) => c.parentId == m.id);
+      if (!isApprovable) {
+        final collapsed = _collapsedFolders.contains(m.id);
+        out.add(InkWell(
+          onTap: () => setState(() =>
+              collapsed ? _collapsedFolders.remove(m.id) : _collapsedFolders.add(m.id)),
+          child: Padding(
+            padding: EdgeInsets.only(left: 4 + level * 16.0, top: 6, bottom: 6, right: 8),
+            child: Row(children: [
+              Icon(collapsed ? Icons.arrow_right : Icons.arrow_drop_down, size: 20),
+              Icon(collapsed ? Icons.folder : Icons.folder_open, size: 18, color: Colors.blue),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(m.localName(isEnglish),
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ]),
+          ),
+        ));
+        if (!collapsed) out.addAll(_buildTreeNodes(menus, m.id, level + 1, isEnglish));
+        continue;
+      }
+      final selected = _selectedMenu?.id == m.id;
+      final desc = m.localApprovalDescription(isEnglish) ?? '';
+      out.add(Material(
+        color: selected ? Colors.blueGrey.shade100 : Colors.transparent,
+        child: InkWell(
+          onTap: () => _selectMenu(m),
+          child: Padding(
+            padding: EdgeInsets.only(left: 4 + level * 16.0 + 20, top: 6, bottom: 6, right: 8),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.verified_user, size: 18, color: selected ? Colors.blueGrey[800] : Colors.green),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(m.localName(isEnglish),
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: selected ? FontWeight.bold : FontWeight.normal),
+                      overflow: TextOverflow.ellipsis),
+                  if (desc.isNotEmpty)
+                    Text(desc,
+                        style: const TextStyle(fontSize: 11, color: Colors.black54),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                ]),
+              ),
+            ]),
+          ),
+        ),
+      ));
+    }
+    return out;
+  }
+
   Future<void> _selectMenu(Menu menu) async {
     setState(() {
       _selectedMenu = menu;
@@ -417,31 +501,9 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
                                   ),
                                 ),
                               )
-                            : ListView.builder(
-                                padding: const EdgeInsets.all(8),
-                                itemCount: _approvableMenus.length,
-                                itemBuilder: (ctx, i) {
-                                  final m = _approvableMenus[i];
-                                  final selected = _selectedMenu?.id == m.id;
-                                  return Card(
-                                    margin: const EdgeInsets.only(bottom: 6),
-                                    color: selected ? Colors.blueGrey.shade100 : Colors.white,
-                                    child: ListTile(
-                                      dense: true,
-                                      selected: selected,
-                                      title: Text(m.localName(isEnglish),
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w600, fontSize: 13)),
-                                      subtitle: (m.localApprovalDescription(isEnglish) ?? '').isNotEmpty
-                                          ? Text(m.localApprovalDescription(isEnglish)!,
-                                              style: const TextStyle(fontSize: 11),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis)
-                                          : null,
-                                      onTap: () => _selectMenu(m),
-                                    ),
-                                  );
-                                },
+                            : ListView(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                children: _buildTreeNodes(_approvalTreeMenus, null, 0, isEnglish),
                               ),
                       ),
                     ),
