@@ -275,6 +275,26 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
     }
   }
 
+  Future<void> _showCopyDialog() async {
+    final menuService      = Provider.of<MenuService>(context, listen: false);
+    final groupMenuService = Provider.of<GroupMenuService>(context, listen: false);
+
+    final targetGroupId = await showDialog<String>(
+      context: context,
+      builder: (_) => _CopyGroupPermissionsDialog(
+        groups: _currentList,
+        preselectedGroup: _selectedNode,
+        menuService: menuService,
+        groupMenuService: groupMenuService,
+      ),
+    );
+
+    // ถ้า dialog คัดลอกไปยังกลุ่มที่กำลัง view/edit อยู่ → refresh
+    if (targetGroupId != null && mounted && _selectedNode?.id == targetGroupId) {
+      _onView(_selectedNode!);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -311,6 +331,11 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
             icon: const Icon(Icons.refresh),
             tooltip: l.refresh,
             onPressed: _fetchData,
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy_all, color: Colors.white),
+            onPressed: _showCopyDialog,
+            tooltip: l.isEnglish ? 'Copy Permissions from Another Group' : 'คัดลอกสิทธิ์จากกลุ่มอื่น',
           ),
           _selectedNode != null && _nodeMode == NodeMode.edit
             ? IconButton(
@@ -511,4 +536,208 @@ class _GroupMenuManagementScreenState extends State<GroupMenuManagementScreen> w
     );
   }
   
+}
+// คัดลอกสิทธิ์เมนูจากกลุ่มหนึ่งไปอีกกลุ่ม — มิเรอร์ _CopyPermissionsDialog ใน sa_user_menu_screen.dart
+class _CopyGroupPermissionsDialog extends StatefulWidget {
+  final List<Group> groups;
+  final Group? preselectedGroup;     // กลุ่มที่กำลัง view/edit อยู่ (เป็น "ปลายทาง" default)
+  final MenuService menuService;
+  final GroupMenuService groupMenuService;
+
+  const _CopyGroupPermissionsDialog({
+    required this.groups,
+    required this.preselectedGroup,
+    required this.menuService,
+    required this.groupMenuService,
+  });
+
+  @override
+  State<_CopyGroupPermissionsDialog> createState() => _CopyGroupPermissionsDialogState();
+}
+
+class _CopyGroupPermissionsDialogState extends State<_CopyGroupPermissionsDialog> {
+  String? _fromId;
+  String? _toId;
+  bool _replaceExisting = true;   // true = ลบก่อนแล้วคัดลอก, false = รวมสิทธิ์
+  bool _isCopying = false;
+  String? _errorMsg;
+
+  @override
+  void initState() {
+    super.initState();
+    _toId = widget.preselectedGroup?.id;
+  }
+
+  Map<int, MenuPermission> _permsFromMenuList(List<Menu> menus) => {
+    for (final m in menus)
+      m.id: MenuPermission(
+        menuId: m.id,
+        canView: m.canView,
+        canCreate: m.canCreate,
+        canEdit: m.canEdit,
+        canDelete: m.canDelete,
+        canApprove: m.canApprove,
+        canPrint: m.canPrint,
+        canExport: m.canExport,
+      )
+  };
+
+  Future<void> _doCopy() async {
+    if (_fromId == null || _toId == null) return;
+    setState(() { _isCopying = true; _errorMsg = null; });
+
+    try {
+      // โหลดสิทธิ์ต้นทาง
+      final srcPerms = _permsFromMenuList(await widget.menuService.fetchMenuByGroupId(_fromId));
+
+      Map<int, MenuPermission> finalPerms;
+
+      if (_replaceExisting) {
+        finalPerms = srcPerms;
+      } else {
+        // โหลดสิทธิ์ปลายทาง แล้ว OR กัน
+        finalPerms = _permsFromMenuList(await widget.menuService.fetchMenuByGroupId(_toId));
+        for (final entry in srcPerms.entries) {
+          final dst = finalPerms[entry.key];
+          if (dst == null) {
+            finalPerms[entry.key] = entry.value;
+          } else {
+            finalPerms[entry.key] = MenuPermission(
+              menuId:    dst.menuId,
+              canView:   dst.canView   || entry.value.canView,
+              canCreate: dst.canCreate || entry.value.canCreate,
+              canEdit:   dst.canEdit   || entry.value.canEdit,
+              canDelete: dst.canDelete || entry.value.canDelete,
+              canApprove:dst.canApprove|| entry.value.canApprove,
+              canPrint:  dst.canPrint  || entry.value.canPrint,
+              canExport: dst.canExport || entry.value.canExport,
+            );
+          }
+        }
+      }
+
+      if (finalPerms.isEmpty) {
+        await widget.groupMenuService.deleteGroupMenu(_toId);
+      } else {
+        await widget.groupMenuService.updateGroupMenu(_toId, finalPerms);
+      }
+
+      if (mounted) Navigator.pop(context, _toId);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCopying = false;
+          _errorMsg = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  List<DropdownMenuItem<String>> _items(String? excludeId) => widget.groups
+      .where((g) => g.id != null && g.id != excludeId)
+      .map((g) => DropdownMenuItem(
+            value: g.id,
+            child: Text(g.name, overflow: TextOverflow.ellipsis),
+          ))
+      .toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final canCopy = _fromId != null && _toId != null && !_isCopying;
+
+    return AlertDialog(
+      title: Row(children: [
+        const Icon(Icons.copy_all, color: Colors.deepOrange),
+        const SizedBox(width: 8),
+        Text(l.isEnglish ? 'Copy Group Menu Permissions' : 'คัดลอกสิทธิ์เมนูของกลุ่ม'),
+      ]),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // FROM
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              value: _fromId,
+              decoration: InputDecoration(
+                labelText: l.isEnglish ? 'Copy From (Source)' : 'คัดลอกจาก (ต้นทาง)',
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: _items(_toId),
+              onChanged: _isCopying ? null : (id) => setState(() => _fromId = id),
+            ),
+            const SizedBox(height: 14),
+
+            // TO
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              value: _toId,
+              decoration: InputDecoration(
+                labelText: l.isEnglish ? 'Copy To (Destination)' : 'คัดลอกไปยัง (ปลายทาง)',
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: _items(_fromId),
+              onChanged: _isCopying ? null : (id) => setState(() => _toId = id),
+            ),
+            const SizedBox(height: 16),
+
+            // Mode
+            Text(l.isEnglish ? 'Copy Mode' : 'วิธีการคัดลอก',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            RadioListTile<bool>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(l.isEnglish
+                  ? 'Replace existing (keep only copied permissions)'
+                  : 'แทนที่สิทธิ์เดิม (ได้รับเฉพาะสิทธิ์ที่คัดลอก)'),
+              value: true,
+              groupValue: _replaceExisting,
+              onChanged: _isCopying ? null : (v) => setState(() => _replaceExisting = v!),
+            ),
+            RadioListTile<bool>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(l.isEnglish
+                  ? 'Merge with existing (original + copied permissions)'
+                  : 'รวมกับสิทธิ์เดิม (ได้รับสิทธิ์เดิม + สิทธิ์ที่คัดลอก)'),
+              value: false,
+              groupValue: _replaceExisting,
+              onChanged: _isCopying ? null : (v) => setState(() => _replaceExisting = v!),
+            ),
+
+            if (_errorMsg != null) ...[
+              const SizedBox(height: 8),
+              Text(_errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isCopying ? null : () => Navigator.pop(context),
+          child: Text(l.cancel),
+        ),
+        ElevatedButton.icon(
+          icon: _isCopying
+              ? const SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.copy_all, size: 18),
+          label: Text(_isCopying
+              ? (l.isEnglish ? 'Copying...' : 'กำลังคัดลอก...')
+              : (l.isEnglish ? 'Copy' : 'คัดลอก')),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.deepOrange[700],
+            foregroundColor: Colors.white,
+          ),
+          onPressed: canCopy ? _doCopy : null,
+        ),
+      ],
+    );
+  }
 }
