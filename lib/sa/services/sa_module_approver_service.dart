@@ -24,7 +24,7 @@ class SaModuleApproverService {
   }
 
   // approvers เรียงตามลำดับอนุมัติใหม่ (index 0 = ลำดับที่ 1); isActive ใช้ "งดอนุมัติ" คนนั้นชั่วคราว
-  // ส่ง signatureImage/approvalLimit ของแต่ละคนไปบันทึกพร้อมกันด้วย
+  // ส่ง signatureImage/approvalLimit/paymentLimit ของแต่ละคนไปบันทึกพร้อมกันด้วย
   Future<void> reorder(int menuId, List<SaModuleApprover> approvers, {String? docType}) async {
     final headers = await _auth.getAuthHeader();
     final resp = await http.put(
@@ -39,6 +39,7 @@ class SaModuleApproverService {
                   'is_active': a.isActive,
                   'signature_image': a.signatureImage,
                   'approval_limit': a.approvalLimit,
+                  'payment_limit': a.paymentLimit,
                 })
             .toList(),
       }),

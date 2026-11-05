@@ -62,6 +62,12 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
   bool _savingOrder = false;
   bool _orderDirty = false;
 
+  // เมนูที่ใช้วงเงินของผู้อนุมัติ — แยกสองช่อง: วงเงินเกินเครดิต (approval_limit) / วงเงินอนุมัติจ่าย (payment_limit)
+  static const _creditLimitMenus = {'ArTransactionScreen', 'ImTransactionScreen', 'SoTransactionScreen'};
+  static const _paymentLimitMenus = {'ApTransactionScreen', 'ApPaymentRunScreen', 'CmTransactionScreen'};
+  bool get _showCreditLimit => _creditLimitMenus.contains(_selectedMenu?.targetPath);
+  bool get _showPaymentLimit => _paymentLimitMenus.contains(_selectedMenu?.targetPath);
+
   bool _isLeftPanelExpanded = true;
   double _leftPanelWidth = 380.0;
   bool _isDraggingDivider = false;
@@ -394,6 +400,46 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
     });
   }
 
+  void _setPaymentLimit(int index, double value) {
+    setState(() {
+      _approvers[index] = _approvers[index].copyWith(paymentLimit: value);
+      _orderDirty = true;
+    });
+  }
+
+  Widget _limitField({
+    required String fieldKey,
+    required double value,
+    required String label,
+    required String helper,
+    required String tooltip,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: 120,
+        child: TextFormField(
+          key: ValueKey(fieldKey),
+          initialValue: value == 0 ? '' : value.toStringAsFixed(0),
+          textAlign: TextAlign.right,
+          keyboardType: const TextInputType.numberWithOptions(decimal: false),
+          style: const TextStyle(fontSize: 12),
+          decoration: InputDecoration(
+            labelText: label,
+            hintText: '0',
+            helperText: helper,
+            helperStyle: const TextStyle(fontSize: 10),
+            isDense: true,
+            border: const OutlineInputBorder(),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          ),
+          onChanged: (v) => onChanged(double.tryParse(v.replaceAll(',', '')) ?? 0),
+        ),
+      ),
+    );
+  }
+
   Future<void> _pickSignature(int index) async {
     if (!kIsWeb) return;
     final input = html.FileUploadInputElement()..accept = 'image/*';
@@ -602,10 +648,26 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
             ),
             Text(
               isEnglish
-                  ? 'Applies to every approval of this menu. For credit-limit approval, the approver Limit caps the amount over the credit limit (0 = unlimited).'
-                  : 'ใช้กับทุกการอนุมัติของเมนูนี้ — สำหรับการขออนุมัติเกินวงเงินเครดิต "วงเงิน" ของผู้อนุมัติจำกัดยอดส่วนที่เกินวงเงินที่อนุมัติได้ (0 = ไม่จำกัด)',
+                  ? 'Applies to every approval of this menu.'
+                  : 'ใช้กับทุกการอนุมัติของเมนูนี้',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
             ),
+            if (_showCreditLimit)
+              Text(
+                isEnglish
+                    ? 'Over-credit limit: caps the amount over the customer credit limit an approver can approve (0 = unlimited); approvers whose limit is too low are left out of the queue.'
+                    : 'วงเงินเกินเครดิต: จำกัดยอดส่วนที่เกินวงเงินเครดิตลูกค้าที่ผู้อนุมัติอนุมัติได้ (0 = ไม่จำกัด) — คนที่วงเงินไม่พอจะไม่ถูกใส่ในคิว',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+              ),
+            if (_showPaymentLimit)
+              Text(
+                isEnglish
+                    ? 'Payment limit (base currency, 0 = cannot approve payments): "all approve in order" goes up the queue and stops at the first approver whose limit covers the amount; '
+                        '"any one" uses only approvers whose limit covers it. If nobody has a high enough limit, the document cannot be submitted. Remittance advice does not use the limit.'
+                    : 'วงเงินอนุมัติจ่าย (สกุลเงินหลัก, 0 = อนุมัติจ่ายไม่ได้): แบบ "ครบทุกคนตามลำดับ" อนุมัติไล่ขั้นตามลำดับ และหยุดที่คนแรกที่วงเงินพอ; '
+                        'แบบ "คนใดคนหนึ่ง" ใช้เฉพาะคนที่วงเงินพอ — ถ้าไม่มีใครวงเงินพอจะส่งขออนุมัติไม่ได้ (แจ้งชำระไม่ใช้วงเงิน)',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+              ),
             const SizedBox(height: 12),
             // 2) ข้อความอธิบายการอนุมัติ ไทย/อังกฤษ
             Text(isEnglish ? 'Approval description' : 'ข้อความอธิบายการอนุมัติ',
@@ -858,30 +920,33 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        // วงเงินอนุมัติ (0 = ไม่ต้องเช็ควงเงิน) — แสดงด้านขวาของรูปลายเซ็น
-                        SizedBox(
-                          width: 96,
-                          child: TextFormField(
-                            key: ValueKey('limit_${a.id ?? i}'),
-                            initialValue:
-                                a.approvalLimit == 0 ? '' : a.approvalLimit.toStringAsFixed(0),
-                            textAlign: TextAlign.right,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: false),
-                            style: const TextStyle(fontSize: 12),
-                            decoration: InputDecoration(
-                              labelText: isEnglish ? 'Limit' : 'วงเงิน',
-                              hintText: '0',
-                              helperText: isEnglish ? '0 = no check' : '0=ไม่เช็ค',
-                              helperStyle: const TextStyle(fontSize: 10),
-                              isDense: true,
-                              border: const OutlineInputBorder(),
-                              contentPadding:
-                                  const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            ),
-                            onChanged: (v) => _setApprovalLimit(i, double.tryParse(v) ?? 0),
+                        // วงเงินของผู้อนุมัติ — แสดงด้านขวาของรูปลายเซ็น เฉพาะเมนูที่ใช้วงเงินนั้น
+                        if (_showCreditLimit) ...[
+                          const SizedBox(width: 8),
+                          _limitField(
+                            fieldKey: 'limit_${a.id ?? i}',
+                            value: a.approvalLimit,
+                            label: isEnglish ? 'Over-credit limit' : 'วงเงินเกินเครดิต',
+                            helper: isEnglish ? '0 = unlimited' : '0 = ไม่จำกัด',
+                            tooltip: isEnglish
+                                ? 'Max amount over the customer credit limit this approver can approve'
+                                : 'ยอดส่วนที่เกินวงเงินเครดิตลูกค้าที่ผู้อนุมัติคนนี้อนุมัติได้',
+                            onChanged: (v) => _setApprovalLimit(i, v),
                           ),
-                        ),
+                        ],
+                        if (_showPaymentLimit) ...[
+                          const SizedBox(width: 8),
+                          _limitField(
+                            fieldKey: 'pay_limit_${a.id ?? i}',
+                            value: a.paymentLimit,
+                            label: isEnglish ? 'Payment limit' : 'วงเงินอนุมัติจ่าย',
+                            helper: isEnglish ? '0 = cannot approve' : '0 = อนุมัติจ่ายไม่ได้',
+                            tooltip: isEnglish
+                                ? 'Max payment amount (base currency) this approver can approve'
+                                : 'ยอดจ่ายสูงสุด (สกุลเงินหลัก) ที่ผู้อนุมัติคนนี้อนุมัติได้',
+                            onChanged: (v) => _setPaymentLimit(i, v),
+                          ),
+                        ],
                         Tooltip(
                           message: a.isActive
                               ? (isEnglish ? 'Suspend (skip in approval queue)' : 'งดอนุมัติ')

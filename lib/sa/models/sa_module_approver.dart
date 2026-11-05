@@ -13,7 +13,8 @@ class SaModuleApprover {
   final bool isActive;
   final String? docType; // null = คิวระดับเมนู
   final String? signatureImage; // ลายเซ็น base64 data URL, null = ยังไม่มี
-  final double approvalLimit; // วงเงินอนุมัติ — 0 = ไม่ต้องเช็ควงเงิน
+  final double approvalLimit; // วงเงินอนุมัติเกินวงเงินเครดิต — 0 = ไม่ต้องเช็ควงเงิน
+  final double paymentLimit; // วงเงินอนุมัติจ่าย (เอกสารจ่ายเงิน AP/CM) — 0 = ไม่มีวงเงินจ่าย
 
   SaModuleApprover({
     this.id,
@@ -27,6 +28,7 @@ class SaModuleApprover {
     this.docType,
     this.signatureImage,
     this.approvalLimit = 0,
+    this.paymentLimit = 0,
   });
 
   String get approverFullName {
@@ -54,6 +56,7 @@ class SaModuleApprover {
         docType: json['doc_type'] as String?,
         signatureImage: json['signature_image'] as String?,
         approvalLimit: _parseLimit(json['approval_limit']),
+        paymentLimit: _parseLimit(json['payment_limit']),
       );
 
   SaModuleApprover copyWith({
@@ -61,7 +64,7 @@ class SaModuleApprover {
     int? approverUserId, String? approverUsername,
     String? approverFirstName, String? approverLastName, String? approverEmail,
     bool? isActive, String? docType,
-    String? signatureImage, double? approvalLimit,
+    String? signatureImage, double? approvalLimit, double? paymentLimit,
   }) => SaModuleApprover(
         id: id ?? this.id,
         approvalLevel: approvalLevel ?? this.approvalLevel,
@@ -74,5 +77,6 @@ class SaModuleApprover {
         docType: docType ?? this.docType,
         signatureImage: signatureImage ?? this.signatureImage,
         approvalLimit: approvalLimit ?? this.approvalLimit,
+        paymentLimit: paymentLimit ?? this.paymentLimit,
       );
 }
