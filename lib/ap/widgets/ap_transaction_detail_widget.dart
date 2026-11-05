@@ -204,8 +204,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         priceIncludesVat: _priceIncludesVat,
       );
 
-  // RA(70) รองรับขออนุมัติเสมอ; Payment(80) รองรับเฉพาะกรณีไม่มีเลขที่อ้างอิง
-  // (ไม่ได้ดึงมาจาก RA หรือใบอนุมัติจ่าย ap_payment_run ซึ่งผ่านการอนุมัติมาแล้ว)
+  // RA(70) ต้องขออนุมัติเสมอ; Payment(80) ต้องขออนุมัติเมื่อไม่มีเลขที่อ้างอิง
+  // (ไม่ได้ดึงมาจาก RA หรือใบอนุมัติจ่าย ap_payment_run ซึ่งผ่านการอนุมัติมาแล้ว) — backend ตรวจซ้ำว่าเลขอ้างอิงมีจริง
   bool get _canRequestApproval {
     if (_isRA) return true;
     if (_isPayment) return _refNoCtrl.text.trim().isEmpty;
@@ -1370,7 +1370,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     final isApproved = _status == 'Approved';
     final isPosted = _status == 'Posted';
     final canEditNow = !widget.viewOnly && isDraft;
-    final canPostNow = !widget.viewOnly && (isDraft || isApproved);
+    // RA / ใบจ่ายชำระที่ไม่มีเลขอ้างอิง บังคับขออนุมัติ — Draft ต้องส่งขออนุมัติก่อน Post ได้หลังอนุมัติแล้วเท่านั้น
+    final canPostNow = !widget.viewOnly && (isApproved || (isDraft && !_canRequestApproval));
     return Container(
       color: Colors.blue[50],
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
