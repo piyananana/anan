@@ -217,4 +217,27 @@ class CmTransactionService {
       throw Exception(err['message'] ?? 'ถอยเป็นร่างล้มเหลว');
     }
   }
+
+  // ── ขออนุมัติ (20/30/40/50 ต้องอนุมัติก่อน Post) — คิวอนุมัติกลาง doc_kind 'CM_TXN' ──
+  Future<void> _approvalPut(int id, String action, Map<String, dynamic> body, String failMsg) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(Uri.parse('$baseUrl/cm_transaction/$id/$action'), headers: headers, body: json.encode(body));
+    if (response.statusCode == 200) return;
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized.');
+    }
+    String msg = failMsg;
+    try { msg = json.decode(response.body)['message'] ?? failMsg; } catch (_) {}
+    throw Exception(msg);
+  }
+
+  Future<void> submitTransaction(int id, {required int menuId}) =>
+      _approvalPut(id, 'submit', {'menu_id': menuId}, 'ส่งขออนุมัติล้มเหลว');
+  Future<void> approveTransaction(int id, {String? remarks}) =>
+      _approvalPut(id, 'approve', {'remarks': remarks}, 'อนุมัติล้มเหลว');
+  Future<void> rejectTransaction(int id, {String? remarks}) =>
+      _approvalPut(id, 'reject', {'remarks': remarks}, 'ปฏิเสธล้มเหลว');
+  // Post เอกสารที่อนุมัติแล้ว จากข้อมูลที่บันทึกไว้
+  Future<void> postTransaction(int id) => _approvalPut(id, 'post', {}, 'Post ล้มเหลว');
 }

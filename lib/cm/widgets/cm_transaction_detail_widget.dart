@@ -25,6 +25,9 @@ import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
+import '../../sa/models/sa_doc_approval.dart';
+import '../../sa/widgets/sa_doc_approval_panel.dart';
+import '../../sa/utils/sa_menu_scope.dart';
 import '../../ap/models/ap_vendor.dart';
 import '../../ap/services/ap_vendor_service.dart';
 import '../../ar/models/ar_customer.dart';
@@ -314,6 +317,8 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   String? _voidBlock;
   String? _voidBlockRef;
   List<DocReverseLog> _reverseHistory = [];
+  List<DocApprovalStep> _approvals = [];
+  String? _approvalMode;
 
   int? _fromBankAccountId;
   int? _toBankAccountId;
@@ -351,6 +356,8 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   bool get _isTransfer       => _selectedDocType?.sysDocType == cmDocTypeInterBankTransfer.toString();
   bool get _isBankCharge     => _selectedDocType?.sysDocType == cmDocTypeBankCharge.toString();
   bool get _isInterest       => _selectedDocType?.sysDocType == cmDocTypeInterest.toString();
+  // 20/30/40/50 ต้องส่งขออนุมัติและได้รับอนุมัติก่อน Post (backend APPROVAL_TYPES)
+  bool get _requiresApproval => _isPayment || _isReplenishment || _isVoucher || _isTransfer;
 
   // รายรับ (10) / รายจ่าย (20): บรรทัดรายการแบบ VAT + ภาษีหัก ณ ที่จ่าย + คู่ค้า
   // (20 = เราหักผู้รับเงิน, 10 = ผู้จ่ายหักเรา; ใบกำกับของผู้ขายและประเภท ภ.ง.ด. เฉพาะ 20)
@@ -558,6 +565,8 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         _voidBlock = data.voidBlock;
         _voidBlockRef = data.voidBlockRef;
         _reverseHistory = data.reverseHistory;
+        _approvals = data.approvals;
+        _approvalMode = data.approvalMode;
         _fromBankAccountId = h.fromBankAccountId;
         _toBankAccountId = h.toBankAccountId;
         _bankAccountId = h.bankAccountId;
@@ -643,6 +652,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       _isReadOnly = false;
       _isReadOnlyView = false;
       _reverseBlock = null; _reverseBlockRef = null; _voidBlock = null; _voidBlockRef = null; _reverseHistory = [];
+      _approvals = []; _approvalMode = null;
       _legacyRow = null;
       _selectedDocType = _allowedDocTypes.isNotEmpty ? _allowedDocTypes.first : null;
       _fromBankAccountId = null;
@@ -1035,13 +1045,96 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
     }
   }
 
+  // ส่งขออนุมัติ (20/30/40/50) — เอกสารต้องบันทึกร่างไว้ก่อน แก้ไขไม่ได้ระหว่างรออนุมัติ
+  Future<void> _submitForApproval() async {
+    final isEnglish = _isEnglish;
+    final menuId = MenuScope.of(context)?.id;
+    if (menuId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(isEnglish ? 'Cannot determine current menu' : 'ไม่สามารถระบุเมนูปัจจุบันได้'), backgroundColor: Colors.red));
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Confirm Submit for Approval' : 'ยืนยันการส่งขออนุมัติ'),
+        content: Text(isEnglish
+            ? 'Submit $_docNo for approval?\nThe document cannot be edited while awaiting approval.'
+            : 'ส่งขออนุมัติ $_docNo?\nระหว่างรออนุมัติจะแก้ไขเอกสารไม่ได้'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Submit' : 'ส่งขออนุมัติ')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _isLoading = true);
+    try {
+      await _service.submitTransaction(_transactionId, menuId: menuId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Submitted for approval' : 'ส่งขออนุมัติเรียบร้อย')));
+        widget.onSaveSuccess();
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Submit failed: $msg' : 'ส่งขออนุมัติไม่สำเร็จ: $msg'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Post เอกสารที่อนุมัติแล้ว — ใช้ข้อมูลที่บันทึกไว้ (ไม่ส่งข้อมูลจากหน้าจอ)
+  Future<void> _postApproved() async {
+    final isEnglish = _isEnglish;
+    if (!(await CmPeriodService.canPost(context, _docDate))) return;
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Confirm Post' : 'ยืนยันการ Post'),
+        content: Text(isEnglish ? 'Post $_docNo?' : 'Post เอกสาร $_docNo?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Post' : 'Post')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _isLoading = true);
+    try {
+      await _service.postTransaction(_transactionId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Posted successfully' : 'Post เรียบร้อย')));
+        widget.onSaveSuccess();
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Post failed: $msg' : 'Post ไม่สำเร็จ: $msg'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _reverse() async {
     final isEnglish = _isEnglish;
+    final awaiting = _status == 'Submitted' || _status == 'Approved';
     final reason = await showDocReasonDialog(
       context,
       isEnglish: isEnglish,
       title: isEnglish ? 'Reverse to Draft' : 'ถอยเอกสารกลับเป็นร่าง',
-      message: isEnglish
+      message: awaiting
+          ? (isEnglish
+              ? 'The approval request is withdrawn and the document returns to Draft.\nIt must be submitted for approval again.'
+              : 'ระบบจะถอนคำขออนุมัติและเอกสารกลับเป็นร่าง\nต้องส่งขออนุมัติใหม่ก่อน Post')
+          : isEnglish
           ? 'The GL entry is removed and the document returns to Draft.\n'
             'Edit it and post again with the same document no. $_docNo (and the same GL entry no.)'
           : 'ระบบจะลบรายการบัญชีออกและเอกสารกลับเป็นร่าง\n'
@@ -1106,6 +1199,8 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
     switch (s) {
       case 'Posted': return Colors.green;
       case 'Void':   return Colors.red;
+      case 'Submitted': return Colors.orange;
+      case 'Approved':  return Colors.blue;
       default:       return Colors.grey;
     }
   }
@@ -1129,6 +1224,16 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
                   margin: EdgeInsets.zero),
               const SizedBox(height: 8),
             ],
+            if (_approvals.isNotEmpty)
+              DocApprovalPanel(
+                docNo: _docNo,
+                approvals: _approvals,
+                approvalMode: _approvalMode,
+                awaiting: _status == 'Submitted',
+                onApprove: (r) => _service.approveTransaction(_transactionId, remarks: r),
+                onReject: (r) => _service.rejectTransaction(_transactionId, remarks: r),
+                onDone: () async => widget.onSaveSuccess(),
+              ),
             _buildHeaderSection(),
             if (_hasPartySection) ...[const SizedBox(height: 8), _buildPartySection()],
             if (_hasDetailRows) ...[const SizedBox(height: 8), _buildDetailSection()],
@@ -1210,13 +1315,25 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700], foregroundColor: Colors.white),
           ),
           const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: () => _save('Post'),
-            icon: const Icon(Icons.check_circle_outline, size: 16),
-            label: Text(isEnglish ? 'Post Document' : 'Post เอกสาร'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
-          ),
-          const SizedBox(width: 8),
+          // 20/30/40/50 ต้องส่งขออนุมัติก่อน (บันทึกร่างก่อน) — Post ได้หลังอนุมัติแล้วเท่านั้น
+          if (!_requiresApproval) ...[
+            ElevatedButton.icon(
+              onPressed: () => _save('Post'),
+              icon: const Icon(Icons.check_circle_outline, size: 16),
+              label: Text(isEnglish ? 'Post Document' : 'Post เอกสาร'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
+            ),
+            const SizedBox(width: 8),
+          ],
+          if (_requiresApproval && _transactionId != 0) ...[
+            OutlinedButton.icon(
+              onPressed: _submitForApproval,
+              icon: const Icon(Icons.how_to_reg_outlined, size: 16),
+              label: Text(isEnglish ? 'Request Approval' : 'ขออนุมัติ'),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
+            ),
+            const SizedBox(width: 8),
+          ],
           if (_transactionId != 0 && widget.canDelete)
             OutlinedButton.icon(
               onPressed: _delete,
@@ -1224,6 +1341,24 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
               label: Text(isEnglish ? 'Delete' : 'ลบ'),
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
             ),
+        ],
+        if (_status == 'Approved' && !widget.viewOnly) ...[
+          ElevatedButton.icon(
+            onPressed: _postApproved,
+            icon: const Icon(Icons.check_circle_outline, size: 16),
+            label: Text(isEnglish ? 'Post Document' : 'Post เอกสาร'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
+          ),
+          const SizedBox(width: 8),
+        ],
+        if ((_status == 'Submitted' || _status == 'Approved') && widget.canDelete && !widget.viewOnly) ...[
+          ElevatedButton.icon(
+            onPressed: _reverse,
+            icon: const Icon(Icons.undo, size: 16),
+            label: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+          ),
+          const SizedBox(width: 8),
         ],
         if (isPosted && widget.canDelete && !widget.viewOnly) ...[
           Builder(builder: (_) {

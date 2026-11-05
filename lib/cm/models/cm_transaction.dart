@@ -1,6 +1,7 @@
 // lib/cm/models/cm_transaction.dart
 import '../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
+import '../../sa/models/sa_doc_approval.dart';
 import '../../cd/services/cd_currency_service.dart';
 
 // CM document types (sys_doc_type in sa_module_document, sys_module='81')
@@ -37,12 +38,16 @@ const Map<String, String> cmChargeTypeLabels = {
 
 const Map<String, String> cmTransactionStatusLabels = {
   'Draft':  'ร่าง',
+  'Submitted': 'รออนุมัติ',
+  'Approved': 'อนุมัติแล้ว',
   'Posted': 'Post แล้ว',
   'Void':   'ยกเลิก',
   'Deleted': 'ลบแล้ว',
 };
 const Map<String, String> cmTransactionStatusLabelsEn = {
   'Draft':  'Draft',
+  'Submitted': 'Submitted',
+  'Approved': 'Approved',
   'Posted': 'Posted',
   'Void':   'Void',
   'Deleted': 'Deleted',
@@ -521,6 +526,9 @@ class CmTransaction {
   final String? voidBlock;
   final String? voidBlockRef;
   final List<DocReverseLog> reverseHistory;
+  // ขั้นตอนอนุมัติ (20/30/40/50) — คิวกลาง doc_approval
+  final List<DocApprovalStep> approvals;
+  final String? approvalMode;
 
   CmTransaction({
     required this.header,
@@ -533,6 +541,8 @@ class CmTransaction {
     this.voidBlock,
     this.voidBlockRef,
     this.reverseHistory = const [],
+    this.approvals = const [],
+    this.approvalMode,
   });
 
   factory CmTransaction.fromJson(Map<String, dynamic> json) => CmTransaction(
@@ -550,6 +560,8 @@ class CmTransaction {
         voidBlock: json['void_block'] as String?,
         voidBlockRef: json['void_block_ref'] as String?,
         reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
+        approvals: DocApprovalStep.listFromJson(json['approvals']),
+        approvalMode: json['approval_mode'] as String?,
       );
 }
 

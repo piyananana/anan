@@ -167,6 +167,8 @@ class _CmTransactionListWidgetState extends State<CmTransactionListWidget>
   Color _statusColor(String status) {
     switch (status) {
       case 'Draft':    return Colors.orange;
+      case 'Submitted': return Colors.deepOrange;
+      case 'Approved': return Colors.blue;
       case 'Posted':   return Colors.green;
       case 'Void':     return Colors.red;
       case 'Cleared':  return Colors.green;
@@ -263,6 +265,8 @@ class _CmTransactionListWidgetState extends State<CmTransactionListWidget>
                   items: [
                     DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
                     const DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                    const DropdownMenuItem(value: 'Submitted', child: Text('Submitted')),
+                    const DropdownMenuItem(value: 'Approved', child: Text('Approved')),
                     const DropdownMenuItem(value: 'Posted', child: Text('Posted')),
                     const DropdownMenuItem(value: 'Void', child: Text('Void')),
                     const DropdownMenuItem(value: 'Pending', child: Text('Pending')),
@@ -382,11 +386,13 @@ class _CmTransactionListWidgetState extends State<CmTransactionListWidget>
             rows: _filteredRows.map((row) {
               final isReadOnlyType = row.sysDocType != null && cmReadOnlyDocTypes.contains(row.sysDocType);
               final isDraft = !isReadOnlyType && row.status == 'Draft';
+              // รออนุมัติ/อนุมัติแล้ว: เปิดแบบมีปุ่มดำเนินการ (Post / ถอยเป็นร่าง) — ฟอร์มยังแก้ไขไม่ได้ตามสถานะ
+              final openForAction = isDraft || (!isReadOnlyType && (row.status == 'Submitted' || row.status == 'Approved'));
               return DataRow(
                 cells: [
                   DataCell(
                     Text(row.docNo, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                    onTap: () => isDraft
+                    onTap: () => openForAction
                         ? widget.onEditPressed(row.id, row.sysDocType)
                         : widget.onViewPressed(row.id, row.sysDocType),
                   ),
@@ -418,7 +424,9 @@ class _CmTransactionListWidgetState extends State<CmTransactionListWidget>
                       IconButton(
                         icon: const Icon(Icons.visibility, size: 16),
                         tooltip: isEnglish ? 'View' : 'ดู',
-                        onPressed: () => widget.onViewPressed(row.id, row.sysDocType),
+                        onPressed: () => openForAction
+                            ? widget.onEditPressed(row.id, row.sysDocType)
+                            : widget.onViewPressed(row.id, row.sysDocType),
                         visualDensity: VisualDensity.compact,
                       ),
                   ])),
