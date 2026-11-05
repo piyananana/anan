@@ -304,6 +304,26 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
     });
   }
 
+  Future<void> _showCopyDialog() async {
+    final moduleDocumentService = Provider.of<ModuleDocumentService>(context, listen: false);
+    final userDocumentService   = Provider.of<UserDocumentService>(context, listen: false);
+
+    final targetUserId = await showDialog<int>(
+      context: context,
+      builder: (_) => _CopyDocumentPermissionsDialog(
+        users: _headers,
+        preselectedUser: _selected,
+        moduleDocumentService: moduleDocumentService,
+        userDocumentService: userDocumentService,
+      ),
+    );
+
+    // ถ้า dialog คัดลอกไปยัง user ที่กำลัง view/edit อยู่ → refresh
+    if (targetUserId != null && mounted && _selected?.id == targetUserId) {
+      _onView(_selected!);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -324,6 +344,11 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
             icon: const Icon(Icons.cleaning_services_outlined, color: Colors.white),
             onPressed: _onClearRightPanel,
             tooltip: isEnglish ? 'Clear right panel' : 'เคลียร์ Panel ขวา',
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy_all, color: Colors.white),
+            onPressed: _showCopyDialog,
+            tooltip: isEnglish ? 'Copy Permissions from Another User' : 'คัดลอกสิทธิ์จากผู้ใช้อื่น',
           ),
           _selected != null ?
           IconButton(
@@ -461,5 +486,188 @@ class _UserDocumentScreenState extends State<UserDocumentScreen> with AutomaticK
       ],
     );
   }
-  
+
+}
+
+// คัดลอกสิทธิ์ประเภทเอกสารจากผู้ใช้หนึ่งไปอีกผู้ใช้ — มิเรอร์ _CopyPermissionsDialog ใน sa_user_menu_screen.dart
+// (สิทธิ์ประเภทเอกสารเป็นชุด id อย่างเดียว การ "รวม" จึงเป็น union ของสองชุด)
+class _CopyDocumentPermissionsDialog extends StatefulWidget {
+  final List<User> users;
+  final User? preselectedUser;       // user ที่กำลัง view/edit อยู่ (เป็น "ปลายทาง" default)
+  final ModuleDocumentService moduleDocumentService;
+  final UserDocumentService userDocumentService;
+
+  const _CopyDocumentPermissionsDialog({
+    required this.users,
+    required this.preselectedUser,
+    required this.moduleDocumentService,
+    required this.userDocumentService,
+  });
+
+  @override
+  State<_CopyDocumentPermissionsDialog> createState() => _CopyDocumentPermissionsDialogState();
+}
+
+class _CopyDocumentPermissionsDialogState extends State<_CopyDocumentPermissionsDialog> {
+  User? _fromUser;
+  User? _toUser;
+  bool _replaceExisting = true;   // true = ลบก่อนแล้วคัดลอก, false = รวมสิทธิ์
+  bool _isCopying = false;
+  String? _errorMsg;
+
+  @override
+  void initState() {
+    super.initState();
+    _toUser = widget.preselectedUser;
+  }
+
+  List<User> get _fromCandidates =>
+      widget.users.where((u) => u.id != _toUser?.id).toList();
+
+  List<User> get _toCandidates =>
+      widget.users.where((u) => u.id != _fromUser?.id).toList();
+
+  Future<void> _doCopy() async {
+    if (_fromUser == null || _toUser == null) return;
+    setState(() { _isCopying = true; _errorMsg = null; });
+
+    try {
+      // โหลดสิทธิ์ต้นทาง
+      final srcDocs = await widget.moduleDocumentService.fetchRowsByUserId(_fromUser!.id);
+      final finalIds = srcDocs.map((d) => d.id).toSet();
+
+      if (!_replaceExisting) {
+        // โหลดสิทธิ์ปลายทาง แล้วรวมกัน
+        final dstDocs = await widget.moduleDocumentService.fetchRowsByUserId(_toUser!.id);
+        finalIds.addAll(dstDocs.map((d) => d.id));
+      }
+
+      if (finalIds.isEmpty) {
+        await widget.userDocumentService.deleteRowsByUserId(_toUser!.id);
+      } else {
+        await widget.userDocumentService.updateRowsByUserId(_toUser!.id, finalIds);
+      }
+
+      if (mounted) Navigator.pop(context, _toUser!.id);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCopying = false;
+          _errorMsg = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    final canCopy = _fromUser != null && _toUser != null && !_isCopying;
+
+    return AlertDialog(
+      title: Row(children: [
+        const Icon(Icons.copy_all, color: Colors.deepOrange),
+        const SizedBox(width: 8),
+        Text(l.isEnglish ? 'Copy Document Permissions' : 'คัดลอกสิทธิ์ประเภทเอกสาร'),
+      ]),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // FROM
+            DropdownButtonFormField<User>(
+              isExpanded: true,
+              value: _fromUser,
+              decoration: InputDecoration(
+                labelText: l.isEnglish ? 'Copy From (Source)' : 'คัดลอกจาก (ต้นทาง)',
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: _fromCandidates
+                  .map((u) => DropdownMenuItem(
+                        value: u,
+                        child: Text('${u.userName}  (${u.firstName} ${u.lastName})',
+                            overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
+              onChanged: _isCopying ? null : (u) => setState(() => _fromUser = u),
+            ),
+            const SizedBox(height: 14),
+
+            // TO
+            DropdownButtonFormField<User>(
+              isExpanded: true,
+              value: _toUser,
+              decoration: InputDecoration(
+                labelText: l.isEnglish ? 'Copy To (Destination)' : 'คัดลอกไปยัง (ปลายทาง)',
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: _toCandidates
+                  .map((u) => DropdownMenuItem(
+                        value: u,
+                        child: Text('${u.userName}  (${u.firstName} ${u.lastName})',
+                            overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
+              onChanged: _isCopying ? null : (u) => setState(() => _toUser = u),
+            ),
+            const SizedBox(height: 16),
+
+            // Mode
+            Text(l.isEnglish ? 'Copy Mode' : 'วิธีการคัดลอก',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            RadioListTile<bool>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(l.isEnglish
+                  ? 'Replace existing (keep only copied permissions)'
+                  : 'แทนที่สิทธิ์เดิม (ได้รับเฉพาะสิทธิ์ที่คัดลอก)'),
+              value: true,
+              groupValue: _replaceExisting,
+              onChanged: _isCopying ? null : (v) => setState(() => _replaceExisting = v!),
+            ),
+            RadioListTile<bool>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(l.isEnglish
+                  ? 'Merge with existing (original + copied permissions)'
+                  : 'รวมกับสิทธิ์เดิม (ได้รับสิทธิ์เดิม + สิทธิ์ที่คัดลอก)'),
+              value: false,
+              groupValue: _replaceExisting,
+              onChanged: _isCopying ? null : (v) => setState(() => _replaceExisting = v!),
+            ),
+
+            if (_errorMsg != null) ...[
+              const SizedBox(height: 8),
+              Text(_errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isCopying ? null : () => Navigator.pop(context),
+          child: Text(l.cancel),
+        ),
+        ElevatedButton.icon(
+          icon: _isCopying
+              ? const SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.copy_all, size: 18),
+          label: Text(_isCopying
+              ? (l.isEnglish ? 'Copying...' : 'กำลังคัดลอก...')
+              : (l.isEnglish ? 'Copy' : 'คัดลอก')),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.deepOrange[700],
+            foregroundColor: Colors.white,
+          ),
+          onPressed: canCopy ? _doCopy : null,
+        ),
+      ],
+    );
+  }
 }

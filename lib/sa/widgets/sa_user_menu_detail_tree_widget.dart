@@ -163,7 +163,8 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
     return false;
   }
 
-  Widget _buildPermissionRow(int menuId, bool isEnglish) {
+  Widget _buildPermissionRow(Menu row, bool isEnglish) {
+    final menuId = row.id;
     final perm = _currentPermissions[menuId]!;
 
     Widget permCheckbox(
@@ -217,8 +218,10 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
               (v) => updatePerm(perm.copyWith(canEdit: v ?? perm.canEdit))),
           permCheckbox('ลบ', 'Delete', perm.canDelete,
               (v) => updatePerm(perm.copyWith(canDelete: v ?? perm.canDelete))),
-          permCheckbox('อนุมัติ', 'Approve', perm.canApprove,
-              (v) => updatePerm(perm.copyWith(canApprove: v ?? perm.canApprove))),
+          // แสดงเฉพาะเมนูที่มีขั้นตอนอนุมัติ (sa_menu.requires_approval)
+          if (row.requiresApproval)
+            permCheckbox('อนุมัติ', 'Approve', perm.canApprove,
+                (v) => updatePerm(perm.copyWith(canApprove: v ?? perm.canApprove))),
           permCheckbox('พิมพ์', 'Print', perm.canPrint,
               (v) => updatePerm(perm.copyWith(canPrint: v ?? perm.canPrint))),
           permCheckbox('ส่งออก', 'Export', perm.canExport,
@@ -286,7 +289,7 @@ class _UserMenuDetailTreeWidget extends State<UserMenuDetailTreeWidget> {
                 ),
               if (showPerms) ...[
                 const SizedBox(width: 8),
-                Flexible(child: _buildPermissionRow(row.id, isEnglish)),
+                Flexible(child: _buildPermissionRow(row, isEnglish)),
               ],
             ],
           ),
