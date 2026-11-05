@@ -13,6 +13,8 @@ import '../../cm/services/cm_period_service.dart';
 import '../../utils/date_utils.dart';
 import '../../cd/services/cd_currency_service.dart';
 import '../../gl/widgets/gl_journal_preview.dart';
+import '../../sa/models/sa_doc_approval.dart';
+import '../../sa/widgets/sa_doc_approval_panel.dart';
 
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
 final _dateFmt = DateFormat('dd/MM/yyyy');
@@ -49,6 +51,10 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
   bool _loading  = false;
   bool _running  = false;
 
+  // ชุดจ่ายแบบกลุ่ม — ต้องผ่านอนุมัติก่อนจ่าย (Draft → Submitted → Approved → Paid)
+  List<Map<String, dynamic>> _batches = [];
+  bool _loadingBatches = false;
+
   final _vendorCtrl = TextEditingController();
 
   @override
@@ -56,6 +62,7 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
     super.initState();
     _loadBankAccounts();
     _loadInvoices();
+    _loadBatches();
   }
 
   @override
@@ -165,7 +172,7 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Bulk Payment' : 'ยืนยัน Bulk Payment'),
+        title: Text(isEnglish ? 'Create Payment Batch and Request Approval' : 'สร้างชุดจ่ายและส่งขออนุมัติ'),
         content: SizedBox(
           width: (MediaQuery.of(context).size.width * 0.8).clamp(320.0, 900.0),
           child: SingleChildScrollView(
@@ -182,6 +189,12 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
                 Text(isEnglish
                     ? 'Payment date: ${_dateFmt.format(_fPaymentDate)}'
                     : 'วันที่ชำระ: ${_dateFmt.format(_fPaymentDate)}'),
+                const SizedBox(height: 6),
+                Text(
+                    isEnglish
+                        ? 'The batch is paid only after it is approved (Payment Batches tab).'
+                        : 'ระบบจะจ่ายได้หลังชุดได้รับอนุมัติแล้วเท่านั้น (ที่แท็บชุดจ่ายแบบกลุ่ม)',
+                    style: TextStyle(fontSize: 12, color: Colors.orange[800])),
                 const SizedBox(height: 12),
                 GlJournalPreview(
                   lines: journal, isEnglish: isEnglish,
@@ -205,23 +218,66 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
     );
     if (confirm != true) return;
 
+    if (!mounted) return;
+    final menuId = MenuScope.of(context)?.id;
     setState(() => _running = true);
     try {
       final h = await _headers();
       final r = await http.post(
-          Uri.parse('${AppConfig.apiAp}/ap_bulk_payment/run'), headers: h, body: body);
-      if (r.statusCode == 200 || r.statusCode == 201) {
-        final result = json.decode(r.body) as Map<String, dynamic>;
-        final count = result['created_count'] ?? items.length;
+          Uri.parse('${AppConfig.apiAp}/ap_bulk_payment/batches'), headers: h, body: body);
+      if (r.statusCode != 201) {
+        _showErr(isEnglish ? 'Error: ${_errMsg(r.body)}' : 'เกิดข้อผิดพลาด: ${_errMsg(r.body)}');
+        return;
+      }
+      final created = json.decode(r.body) as Map<String, dynamic>;
+      final batchNo = created['batch_no'] ?? '';
+      await _loadInvoices();
+      await _loadBatches();
+      // ส่งขออนุมัติต่อทันที — ถ้าไม่ผ่าน (เช่น วงเงินไม่พอ) ชุดยังอยู่เป็น Draft ให้แก้แล้วส่งใหม่ที่แท็บชุดจ่าย
+      final s = await http.put(Uri.parse('${AppConfig.apiAp}/ap_bulk_payment/batches/${created['id']}/submit'),
+          headers: h, body: json.encode({'menu_id': menuId}));
+      await _loadBatches();
+      if (s.statusCode == 200) {
         _showOk(isEnglish
-            ? 'Created $count payment(s) successfully'
-            : 'สร้างรายการชำระ $count รายการสำเร็จ');
-        await _loadInvoices();
+            ? 'Batch $batchNo created and submitted for approval'
+            : 'สร้างชุด $batchNo และส่งขออนุมัติแล้ว');
       } else {
-        _showErr(isEnglish ? 'Error: ${r.body}' : 'เกิดข้อผิดพลาด: ${r.body}');
+        _showErr(isEnglish
+            ? 'Batch $batchNo saved as draft but could not be submitted: ${_errMsg(s.body)}'
+            : 'บันทึกชุด $batchNo เป็นร่างแล้ว แต่ส่งขออนุมัติไม่ได้: ${_errMsg(s.body)}');
       }
     } catch (e) { _showErr('$e'); }
     finally { if (mounted) setState(() => _running = false); }
+  }
+
+  String _errMsg(String body) {
+    try {
+      final m = json.decode(body) as Map<String, dynamic>;
+      return (m['message'] ?? m['error'] ?? body).toString();
+    } catch (_) { return body; }
+  }
+
+  Future<void> _loadBatches() async {
+    setState(() => _loadingBatches = true);
+    try {
+      final r = await http.get(Uri.parse('${AppConfig.apiAp}/ap_bulk_payment/batches'), headers: await _headers());
+      if (r.statusCode == 200 && mounted) {
+        setState(() => _batches = (json.decode(r.body) as List).cast<Map<String, dynamic>>());
+      }
+    } catch (e) { _showErr('$e'); }
+    finally { if (mounted) setState(() => _loadingBatches = false); }
+  }
+
+  Future<void> _openBatch(int id) async {
+    final menu = MenuScope.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (_) {
+        final dlg = _BulkBatchDialog(batchId: id, onChanged: () { _loadBatches(); _loadInvoices(); });
+        return menu == null ? dlg : MenuScope(menu: menu, child: dlg);
+      },
+    );
+    await _loadBatches();
   }
 
   void _showOk(String msg) {
@@ -248,7 +304,8 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
         foregroundColor: Colors.white,
         title: const MenuTitle(),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), tooltip: l.refresh, onPressed: _loadInvoices),
+          IconButton(icon: const Icon(Icons.refresh), tooltip: l.refresh,
+              onPressed: () { _loadInvoices(); _loadBatches(); }),
           const SizedBox(width: 4),
           if (_selected.isNotEmpty)
             TextButton.icon(
@@ -256,11 +313,11 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
               onPressed: _running ? null : _runBulkPayment,
               icon: _running
                   ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.payments, size: 16),
+                  : const Icon(Icons.how_to_reg_outlined, size: 16),
               label: Text(
                   isEnglish
-                      ? 'Pay ${_selected.length} item(s) | ${_fmt.format(_totalSelected)}'
-                      : 'ชำระ ${_selected.length} รายการ | ${_fmt.format(_totalSelected)} ${CurrencyService.baseCode}',
+                      ? 'Request approval: ${_selected.length} item(s) | ${_fmt.format(_totalSelected)}'
+                      : 'ขออนุมัติจ่าย ${_selected.length} รายการ | ${_fmt.format(_totalSelected)} ${CurrencyService.baseCode}',
                   style: const TextStyle(fontSize: 13)),
             ),
           const SizedBox(width: 8),
@@ -399,9 +456,25 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
                 child: Container(width: 5, color: Colors.grey[400]),
               ),
             ),
-          // Right panel – invoice list
+          // Right panel – invoice list / payment batches
           Expanded(
-            child: Column(children: [
+            child: DefaultTabController(
+              length: 2,
+              child: Column(children: [
+                Material(
+                  color: Colors.blueGrey.shade100,
+                  child: TabBar(
+                    labelColor: Colors.blue[800],
+                    unselectedLabelColor: Colors.blueGrey.shade700,
+                    indicatorColor: Colors.blue[700],
+                    tabs: [
+                      Tab(height: 36, text: isEnglish ? 'Select Invoices' : 'เลือกใบแจ้งหนี้'),
+                      Tab(height: 36, text: isEnglish ? 'Payment Batches (${_batches.length})' : 'ชุดจ่ายแบบกลุ่ม (${_batches.length})'),
+                    ],
+                  ),
+                ),
+                Expanded(child: TabBarView(children: [
+            Column(children: [
               // Column headers
               Container(
                 color: Colors.blueGrey.shade200,
@@ -495,10 +568,65 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
                           ),
               ),
             ]),
+                  _buildBatchList(isEnglish, l),
+                ])),
+              ]),
+            ),
           ),
         ]);
       }),
     );
+  }
+
+  Widget _buildBatchList(bool isEnglish, AppL10n l) {
+    const hdr = TextStyle(fontSize: 12, fontWeight: FontWeight.bold);
+    return Column(children: [
+      Container(
+        color: Colors.blueGrey.shade200,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(children: [
+          Expanded(flex: 2, child: Text(isEnglish ? 'Batch No.' : 'เลขที่ชุด', style: hdr)),
+          SizedBox(width: 90, child: Text(isEnglish ? 'Pay Date' : 'วันที่จ่าย', style: hdr)),
+          Expanded(flex: 3, child: Text(isEnglish ? 'Bank Account' : 'บัญชีธนาคาร', style: hdr)),
+          SizedBox(width: 60, child: Text(isEnglish ? 'Items' : 'รายการ', style: hdr, textAlign: TextAlign.right)),
+          SizedBox(width: 120, child: Text(isEnglish ? 'Total' : 'ยอดรวม', style: hdr, textAlign: TextAlign.right)),
+          SizedBox(width: 110, child: Text(l.status, style: hdr, textAlign: TextAlign.center)),
+        ]),
+      ),
+      Expanded(
+        child: _loadingBatches
+            ? const Center(child: CircularProgressIndicator())
+            : _batches.isEmpty
+                ? Center(child: Text(isEnglish ? 'No payment batches' : 'ยังไม่มีชุดจ่ายแบบกลุ่ม',
+                    style: TextStyle(color: Colors.blueGrey.shade400)))
+                : ListView.builder(
+                    itemCount: _batches.length,
+                    itemBuilder: (_, i) {
+                      final b = _batches[i];
+                      final date = parseLocalDateNullable(b['payment_date']);
+                      final bankName = isEnglish && (b['bank_account_name_en'] ?? '').toString().isNotEmpty
+                          ? b['bank_account_name_en'] : (b['bank_account_name_th'] ?? '');
+                      return InkWell(
+                        onTap: () => _openBatch(b['id'] as int),
+                        child: Container(
+                          color: i.isEven ? Colors.grey.shade50 : Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(children: [
+                            Expanded(flex: 2, child: Text(b['batch_no'] ?? '', style: const TextStyle(fontSize: 13))),
+                            SizedBox(width: 90, child: Text(date != null ? _dateFmt.format(date) : '', style: const TextStyle(fontSize: 12))),
+                            Expanded(flex: 3, child: Text('${b['bank_account_code'] ?? ''} $bankName',
+                                style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)),
+                            SizedBox(width: 60, child: Text('${b['item_count'] ?? 0}', style: const TextStyle(fontSize: 12), textAlign: TextAlign.right)),
+                            SizedBox(width: 120, child: Text(_fmt.format((b['total_amount_lc'] as num?)?.toDouble() ?? 0),
+                                style: const TextStyle(fontSize: 13), textAlign: TextAlign.right)),
+                            SizedBox(width: 110, child: Center(child: _batchStatusChip(b['status'] ?? '', isEnglish))),
+                          ]),
+                        ),
+                      );
+                    },
+                  ),
+      ),
+    ]);
   }
 
   Widget _field(String label, Widget child) => Column(
@@ -536,4 +664,324 @@ class _ApBulkPaymentScreenState extends State<ApBulkPaymentScreen>
           ]),
         ),
       );
+}
+
+Widget _batchStatusChip(String status, bool isEnglish) {
+  final (MaterialColor color, String th, String en) = switch (status) {
+    'Draft' => (Colors.grey, 'ร่าง', 'Draft'),
+    'Submitted' => (Colors.orange, 'รออนุมัติ', 'Submitted'),
+    'Approved' => (Colors.blue, 'อนุมัติแล้ว', 'Approved'),
+    'Paid' => (Colors.green, 'จ่ายแล้ว', 'Paid'),
+    _ => (Colors.blueGrey, status, status),
+  };
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: color),
+    ),
+    child: Text(isEnglish ? en : th, style: TextStyle(fontSize: 11, color: color.shade700)),
+  );
+}
+
+// รายละเอียดชุดจ่ายแบบกลุ่ม + ขั้นตอนอนุมัติ + ปุ่มตามสถานะ
+// Draft: ส่งขออนุมัติ / ลบ — Submitted: อนุมัติ/ปฏิเสธ (DocApprovalPanel) / ถอยเป็นร่าง — Approved: จ่าย / ถอยเป็นร่าง
+class _BulkBatchDialog extends StatefulWidget {
+  final int batchId;
+  final VoidCallback onChanged;
+  const _BulkBatchDialog({required this.batchId, required this.onChanged});
+
+  @override
+  State<_BulkBatchDialog> createState() => _BulkBatchDialogState();
+}
+
+class _BulkBatchDialogState extends State<_BulkBatchDialog> {
+  Map<String, dynamic>? _b;
+  bool _busy = false;
+
+  String get _base => '${AppConfig.apiAp}/ap_bulk_payment/batches/${widget.batchId}';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<Map<String, String>> _headers() async =>
+      {...await AuthService().getAuthHeader(), 'Content-Type': 'application/json'};
+
+  String _errMsg(String body) {
+    try {
+      final m = json.decode(body) as Map<String, dynamic>;
+      return (m['message'] ?? m['error'] ?? body).toString();
+    } catch (_) { return body; }
+  }
+
+  Future<void> _load() async {
+    final r = await http.get(Uri.parse(_base), headers: await _headers());
+    if (!mounted) return;
+    if (r.statusCode == 200) setState(() => _b = json.decode(r.body) as Map<String, dynamic>);
+  }
+
+  void _snack(String msg, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: error ? Colors.red.shade700 : Colors.green.shade700));
+  }
+
+  // เรียก endpoint ของชุดนี้ — โยน Exception(ข้อความ backend) เมื่อไม่สำเร็จ
+  Future<void> _send(String method, String path, [Map<String, dynamic>? body]) async {
+    final uri = Uri.parse(path.isEmpty ? _base : '$_base/$path');
+    final h = await _headers();
+    final payload = json.encode(body ?? {});
+    final r = switch (method) {
+      'DELETE' => await http.delete(uri, headers: h, body: payload),
+      _ => await http.put(uri, headers: h, body: payload),
+    };
+    if (r.statusCode != 200) throw Exception(_errMsg(r.body));
+  }
+
+  Future<void> _run(Future<void> Function() action, String okMsg) async {
+    setState(() => _busy = true);
+    try {
+      await action();
+      _snack(okMsg);
+      widget.onChanged();
+      await _load();
+    } catch (e) {
+      _snack(e.toString().replaceFirst('Exception: ', ''), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<bool> _confirm(String title, String content, AppL10n l) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(title),
+          content: Text(content),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(l.confirm)),
+          ],
+        ),
+      ) ==
+      true;
+
+  Future<void> _submit(bool isEnglish) async {
+    final menuId = MenuScope.of(context)?.id;
+    if (!await _confirm(isEnglish ? 'Submit for Approval' : 'ส่งขออนุมัติ',
+        isEnglish ? 'Submit ${_b!['batch_no']} for approval?' : 'ส่งขออนุมัติชุด ${_b!['batch_no']}?', AppL10n(isEnglish))) {
+      return;
+    }
+    await _run(() => _send('PUT', 'submit', {'menu_id': menuId}), isEnglish ? 'Submitted for approval' : 'ส่งขออนุมัติแล้ว');
+  }
+
+  Future<void> _delete(bool isEnglish) async {
+    if (!await _confirm(isEnglish ? 'Delete Batch' : 'ลบชุดจ่าย',
+        isEnglish
+            ? 'Delete ${_b!['batch_no']}? Its invoices become available again.'
+            : 'ลบชุด ${_b!['batch_no']}? ใบแจ้งหนี้ในชุดจะกลับไปเลือกจ่ายได้อีก',
+        AppL10n(isEnglish))) {
+      return;
+    }
+    await _run(() => _send('DELETE', ''), isEnglish ? 'Deleted' : 'ลบแล้ว');
+  }
+
+  Future<void> _reverse(bool isEnglish) async {
+    final l = AppL10n(isEnglish);
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(isEnglish
+              ? 'Pending approvals are skipped; the batch must be submitted again.'
+              : 'ผู้อนุมัติที่ยังไม่ตัดสินจะถูกข้าม ต้องส่งขออนุมัติใหม่'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            decoration: InputDecoration(
+                labelText: isEnglish ? 'Reason *' : 'เหตุผล *', border: const OutlineInputBorder(), isDense: true),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(l.confirm)),
+        ],
+      ),
+    );
+    final reason = ctrl.text.trim();
+    ctrl.dispose();
+    if (ok != true) return;
+    await _run(() => _send('PUT', 'reverse', {'reason': reason}), isEnglish ? 'Reversed to draft' : 'ถอยเป็นร่างแล้ว');
+  }
+
+  // จ่าย: แสดงรายการบัญชีที่จะเกิดก่อน แล้วยืนยัน
+  Future<void> _pay(bool isEnglish) async {
+    final payDate = parseLocalDateNullable(_b!['payment_date']);
+    if (payDate != null && !await CmPeriodService.canPost(context, payDate)) return;
+    if (!mounted) return;
+    setState(() => _busy = true);
+    List<GlJournalLine> journal;
+    try {
+      final r = await http.post(Uri.parse('$_base/preview'), headers: await _headers());
+      if (r.statusCode != 200) throw Exception(_errMsg(r.body));
+      journal = GlJournalLine.listFromJson((json.decode(r.body) as Map<String, dynamic>)['journal']);
+    } catch (e) {
+      _snack(e.toString().replaceFirst('Exception: ', ''), error: true);
+      return;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    final l = AppL10n(isEnglish);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEnglish ? 'Confirm Payment ${_b!['batch_no']}' : 'ยืนยันการจ่ายชุด ${_b!['batch_no']}'),
+        content: SizedBox(
+          width: (MediaQuery.of(context).size.width * 0.8).clamp(320.0, 900.0),
+          child: SingleChildScrollView(
+            child: GlJournalPreview(
+              lines: journal, isEnglish: isEnglish,
+              note: isEnglish
+                  ? '* AP accounts from the vendor (or the AP payment GL setup), bank account from the selected bank; deferred VAT is recognized pro rata to the amount paid'
+                  : '* บัญชีเจ้าหนี้จากผู้ขาย (หรือการตั้งค่าบัญชีของเอกสารจ่ายชำระ AP) บัญชีธนาคารจากบัญชีที่เลือก และรับรู้ VAT รอตัดบัญชีตามสัดส่วนที่จ่าย',
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(isEnglish ? 'Pay' : 'จ่าย'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _run(() => _send('PUT', 'pay'), isEnglish ? 'Paid successfully' : 'จ่ายสำเร็จ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final l = AppL10n(isEnglish);
+    final b = _b;
+    final menu = MenuScope.of(context);
+    final status = (b?['status'] ?? '').toString();
+    final items = (b?['items'] as List? ?? []).cast<Map<String, dynamic>>();
+    final payDate = parseLocalDateNullable(b?['payment_date']);
+    const hdr = TextStyle(fontSize: 12, fontWeight: FontWeight.bold);
+    String bankName() => isEnglish && (b?['bank_account_name_en'] ?? '').toString().isNotEmpty
+        ? b!['bank_account_name_en'] : (b?['bank_account_name_th'] ?? '');
+
+    return AlertDialog(
+      titlePadding: EdgeInsets.zero,
+      title: Container(
+        color: Colors.blue[700],
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(children: [
+          Expanded(
+            child: Text('${isEnglish ? 'Payment Batch' : 'ชุดจ่ายแบบกลุ่ม'} ${b?['batch_no'] ?? ''}',
+                style: const TextStyle(color: Colors.white, fontSize: 16)),
+          ),
+          if (b != null) _batchStatusChip(status, isEnglish),
+        ]),
+      ),
+      content: SizedBox(
+        width: (MediaQuery.of(context).size.width * 0.8).clamp(320.0, 900.0),
+        child: b == null
+            ? const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()))
+            : SingleChildScrollView(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Wrap(spacing: 24, runSpacing: 4, children: [
+                    Text('${isEnglish ? 'Pay date' : 'วันที่จ่าย'}: ${payDate != null ? _dateFmt.format(payDate) : ''}'),
+                    Text('${isEnglish ? 'Bank' : 'บัญชีธนาคาร'}: ${b['bank_account_code'] ?? ''} ${bankName()}'),
+                    Text('${isEnglish ? 'Total' : 'ยอดรวม'}: ${_fmt.format((b['total_amount_lc'] as num?)?.toDouble() ?? 0)} ${CurrencyService.baseCode}',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    if ((b['gl_doc_no'] ?? '').toString().isNotEmpty)
+                      Text('${isEnglish ? 'GL doc' : 'เลขที่ GL'}: ${b['gl_doc_no']}'),
+                  ]),
+                  DocApprovalPanel(
+                    docNo: b['batch_no'] ?? '',
+                    approvals: DocApprovalStep.listFromJson(b['approvals']),
+                    approvalMode: b['approval_mode'],
+                    awaiting: status == 'Submitted',
+                    onApprove: (r) => _send('PUT', 'approve', {'remarks': r}),
+                    onReject: (r) => _send('PUT', 'reject', {'remarks': r}),
+                    onDone: () async { widget.onChanged(); await _load(); },
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    color: Colors.blueGrey.shade100,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    child: Row(children: [
+                      Expanded(flex: 2, child: Text(isEnglish ? 'Invoice No.' : 'เลขที่ใบแจ้งหนี้', style: hdr)),
+                      Expanded(flex: 3, child: Text(isEnglish ? 'Vendor' : 'ผู้ขาย', style: hdr)),
+                      SizedBox(width: 90, child: Text(isEnglish ? 'Due Date' : 'ครบกำหนด', style: hdr)),
+                      SizedBox(width: 110, child: Text(isEnglish ? 'Amount' : 'ยอดจ่าย', style: hdr, textAlign: TextAlign.right)),
+                    ]),
+                  ),
+                  ...items.map((it) {
+                    final due = parseLocalDateNullable(it['due_date']);
+                    final vName = isEnglish && (it['vendor_name_en'] ?? '').toString().isNotEmpty
+                        ? it['vendor_name_en'] : (it['vendor_name_th'] ?? '');
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(children: [
+                        Expanded(flex: 2, child: Text(it['doc_no'] ?? '', style: const TextStyle(fontSize: 13))),
+                        Expanded(flex: 3, child: Text('${it['vendor_code'] ?? ''} $vName',
+                            style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)),
+                        SizedBox(width: 90, child: Text(due != null ? _dateFmt.format(due) : '', style: const TextStyle(fontSize: 12))),
+                        SizedBox(width: 110, child: Text(_fmt.format((it['amount_lc'] as num?)?.toDouble() ?? 0),
+                            style: const TextStyle(fontSize: 13), textAlign: TextAlign.right)),
+                      ]),
+                    );
+                  }),
+                ]),
+              ),
+      ),
+      actions: [
+        if (_busy) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+        if (!_busy && b != null) ...[
+          if (status == 'Draft' && (menu?.canDelete ?? true))
+            TextButton.icon(
+              onPressed: () => _delete(isEnglish),
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: Text(l.delete),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+            ),
+          if ((status == 'Submitted' || status == 'Approved') && (menu?.canDelete ?? true))
+            TextButton.icon(
+              onPressed: () => _reverse(isEnglish),
+              icon: const Icon(Icons.undo, size: 16),
+              label: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+              style: TextButton.styleFrom(foregroundColor: Colors.orange[800]),
+            ),
+          if (status == 'Draft' && (menu?.canCreate ?? true))
+            OutlinedButton.icon(
+              onPressed: () => _submit(isEnglish),
+              icon: const Icon(Icons.how_to_reg_outlined, size: 16),
+              label: Text(isEnglish ? 'Request Approval' : 'ขออนุมัติ'),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
+            ),
+          if (status == 'Approved' && (menu?.canCreate ?? true))
+            ElevatedButton.icon(
+              onPressed: () => _pay(isEnglish),
+              icon: const Icon(Icons.payments, size: 16),
+              label: Text(isEnglish ? 'Pay' : 'จ่าย'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
+            ),
+        ],
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(l.close)),
+      ],
+    );
+  }
 }

@@ -27,6 +27,7 @@ class PendingApprovalService {
       _fetchDocQueue(AppConfig.apiIm, 'im_price_change', 'ImPriceChangeScreen', 'เปลี่ยนแปลงราคา', 'Price Change', null, 'price_list_name'),
       _fetchDocQueue(AppConfig.apiIm, 'im_stock_count', 'ImStockCountSummaryScreen', 'ผลการตรวจนับ', 'Stock Count', null, 'warehouse_name_th'),
       _fetchDocQueue(AppConfig.apiMo, 'mo_header', 'MoHeaderScreen', 'ใบสั่งผลิต', 'Manufacturing Order', null, 'item_name_th'),
+      _fetchDocQueue(AppConfig.apiAp, 'ap_bulk_payment', 'ApBulkPaymentScreen', 'ชุดจ่ายแบบกลุ่ม', 'Bulk Payment Batch', 'total_amount_lc', null),
       // ขอปิดงวด GL — id = ปีบัญชี, เลขที่ = ชื่องวด
       _fetchDocQueue(AppConfig.apiGl, 'gl_period_close_request', 'PeriodScreen', 'ขอปิดงวดบัญชี', 'Period Close Request', null, 'fiscal_year_name'),
     ]);

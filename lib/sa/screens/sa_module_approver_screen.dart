@@ -64,7 +64,7 @@ class _SaModuleApproverScreenState extends State<SaModuleApproverScreen>
 
   // เมนูที่ใช้วงเงินของผู้อนุมัติ — แยกสองช่อง: วงเงินเกินเครดิต (approval_limit) / วงเงินอนุมัติจ่าย (payment_limit)
   static const _creditLimitMenus = {'ArTransactionScreen', 'ImTransactionScreen', 'SoTransactionScreen'};
-  static const _paymentLimitMenus = {'ApTransactionScreen', 'ApPaymentRunScreen', 'CmTransactionScreen'};
+  static const _paymentLimitMenus = {'ApTransactionScreen', 'ApPaymentRunScreen', 'ApBulkPaymentScreen', 'CmTransactionScreen'};
   bool get _showCreditLimit => _creditLimitMenus.contains(_selectedMenu?.targetPath);
   bool get _showPaymentLimit => _paymentLimitMenus.contains(_selectedMenu?.targetPath);
 
