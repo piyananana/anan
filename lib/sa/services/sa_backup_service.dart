@@ -7,6 +7,23 @@ import 'package:http/http.dart' as http;
 import '../models/sa_backup_schedule.dart';
 import 'sa_auth_service.dart';
 
+// ผล restore: warnings = ข้อผิดพลาดที่ pg_restore ข้ามไปแล้วทำต่อจนจบ (ข้อมูลส่วนใหญ่เข้าแล้ว แต่ควรตรวจ)
+class RestoreResult {
+  final String message;
+  final List<String> warnings;
+  RestoreResult(this.message, this.warnings);
+
+  factory RestoreResult.fromBody(String body) {
+    try {
+      final m = json.decode(body) as Map<String, dynamic>;
+      return RestoreResult((m['message'] ?? '').toString(),
+          ((m['warnings'] as List?) ?? const []).map((e) => e.toString()).toList());
+    } catch (_) {
+      return RestoreResult('', const []);
+    }
+  }
+}
+
 class BackupService {
   // static const String baseUrl = 'http://localhost:3000/api/sa'; // เปลี่ยนเป็น IP/Domain ของ Backend ของคุณ
   static const String baseUrl = AppConfig.apiSa;
@@ -69,7 +86,7 @@ class BackupService {
     }
   }
 
-  Future<void> restoreBackup(String filename) async {
+  Future<RestoreResult> restoreBackup(String filename) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(
       Uri.parse('$baseUrl/backup/restore'),
@@ -80,6 +97,7 @@ class BackupService {
       final errorData = json.decode(response.body);
       throw Exception(errorData['message'] ?? 'Failed to restore backup with status: ${response.statusCode}');
     }
+    return RestoreResult.fromBody(response.body);
   }
 
   Future<http.Response> downloadBackupFile(String filename) async {
@@ -109,11 +127,13 @@ class BackupService {
   }
 
   // New Methods for Instant Backup
-  Future<void> startInstantBackup() async {
+  // format: 'custom' = ไฟล์ .backup, 'plain' = ไฟล์ .sql (ย้ายข้ามเครื่องที่ PostgreSQL ต่างเวอร์ชันได้)
+  Future<void> startInstantBackup({String format = 'custom'}) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(
       Uri.parse('$baseUrl/backup/instant/start'),
-      headers: headers,
+      headers: {...headers, 'Content-Type': 'application/json'},
+      body: json.encode({'format': format}),
     );
     if (response.statusCode != 200) {
       final errorData = json.decode(response.body);
@@ -147,7 +167,7 @@ class BackupService {
     }
   }
 
-  Future<void> restoreInstantBackup(String filename) async {
+  Future<RestoreResult> restoreInstantBackup(String filename) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(
       Uri.parse('$baseUrl/backup/instant/restore'),
@@ -158,10 +178,11 @@ class BackupService {
       final errorData = json.decode(response.body);
       throw Exception(errorData['message'] ?? 'Failed to restore instant backup with status: ${response.statusCode}');
     }
+    return RestoreResult.fromBody(response.body);
   }
 
   /// Upload ไฟล์ .backup จากเครื่อง client แล้ว restore ไปยัง targetDatabase
-  Future<void> restoreFromUpload(PlatformFile file, String targetDatabase) async {
+  Future<RestoreResult> restoreFromUpload(PlatformFile file, String targetDatabase) async {
     final authHeaders = await authService.getAuthHeader();
     final uri = Uri.parse('$baseUrl/backup/restore-from-upload');
     final request = http.MultipartRequest('POST', uri);
@@ -191,6 +212,7 @@ class BackupService {
       final errorData = json.decode(response.body);
       throw Exception(errorData['message'] ?? 'Restore failed: ${response.statusCode}');
     }
+    return RestoreResult.fromBody(response.body);
   }
 
   Future<void> saveSchedule(int id, BackupSchedule schedule) async {

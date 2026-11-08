@@ -577,6 +577,7 @@ class _BackupScreenState extends State<BackupScreen>
   String? _instantStatus;
   bool _isInstantBackupRunning = false;
   Timer? _instantBackupStatusTimer;
+  String _instantFormat = 'custom'; // 'custom' = .backup, 'plain' = .sql
 
   // Daily
   List<bool> _dailyDaysOfWeek = List.filled(7, false);
@@ -691,7 +692,7 @@ class _BackupScreenState extends State<BackupScreen>
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     try {
       _showSnackBar(isEnglish ? 'Starting instant backup...' : 'กำลังเริ่มการสำรองข้อมูลทันที...', Colors.blue);
-      await _backupService.startInstantBackup();
+      await _backupService.startInstantBackup(format: _instantFormat);
       _fetchInstantBackupStatus();
     } catch (e) {
       _showSnackBar(isEnglish ? 'Error starting backup: $e' : 'เกิดข้อผิดพลาดในการเริ่มการสำรองข้อมูล: $e', Colors.red);
@@ -986,6 +987,7 @@ class _BackupScreenState extends State<BackupScreen>
               onStart: _startInstantBackup,
               onStop: _stopInstantBackup,
               isRunning: _isInstantBackupRunning,
+              extra: _buildInstantFormatSelector(isEnglish),
             ),
           _buildRestoreSection(
               isEnglish ? 'Restore Instant Data' : 'เรียกคืนข้อมูลปัจจุบัน',
@@ -1038,6 +1040,7 @@ class _BackupScreenState extends State<BackupScreen>
     VoidCallback? onStart,
     VoidCallback? onStop,
     bool? isRunning,
+    Widget? extra,
   }) {
     Color? statusColor;
     if (status != null) {
@@ -1085,6 +1088,10 @@ class _BackupScreenState extends State<BackupScreen>
                 ],
               );
             }),
+            if (extra != null) ...[
+              const SizedBox(height: 12),
+              extra,
+            ],
             if (onStart != null && onStop != null && isRunning != null)
               Padding(
                 padding: const EdgeInsets.only(top: 15),
@@ -1107,6 +1114,45 @@ class _BackupScreenState extends State<BackupScreen>
           ],
         ),
       ),
+    );
+  }
+
+  // รูปแบบไฟล์ของการสำรองข้อมูลปัจจุบัน: .backup ใช้ restore ด้วยเมนูนี้บนเครื่องที่ PostgreSQL เวอร์ชันเท่ากันหรือใหม่กว่า
+  // .sql (plain) ใช้ย้ายไปเครื่องที่ PostgreSQL เวอร์ชันต่ำกว่า — restore ได้ทั้งเมนูนี้และ pgAdmin
+  Widget _buildInstantFormatSelector(bool isEnglish) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(isEnglish ? 'File format' : 'รูปแบบไฟล์'),
+        const SizedBox(height: 6),
+        SegmentedButton<String>(
+          segments: [
+            ButtonSegment(
+              value: 'custom',
+              label: Text(isEnglish ? 'System file (.backup)' : 'ไฟล์ระบบ (.backup)'),
+            ),
+            ButtonSegment(
+              value: 'plain',
+              label: Text(isEnglish ? 'SQL file (.sql)' : 'ไฟล์ SQL (.sql)'),
+            ),
+          ],
+          selected: {_instantFormat},
+          onSelectionChanged: _isInstantBackupRunning
+              ? null
+              : (s) => setState(() => _instantFormat = s.first),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _instantFormat == 'plain'
+              ? (isEnglish
+                  ? 'For moving data to a machine with an older PostgreSQL version. Restore with this screen or pgAdmin. Larger file, slower restore.'
+                  : 'ใช้ย้ายข้อมูลไปเครื่องที่ PostgreSQL เวอร์ชันต่ำกว่า restore ได้ทั้งหน้าจอนี้และ pgAdmin ไฟล์ใหญ่กว่าและ restore ช้ากว่า')
+              : (isEnglish
+                  ? 'Restore requires the same or newer PostgreSQL version as this machine.'
+                  : 'เครื่องที่จะ restore ต้องใช้ PostgreSQL เวอร์ชันเดียวกันหรือใหม่กว่าเครื่องนี้'),
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+        ),
+      ],
     );
   }
 
@@ -1531,26 +1577,15 @@ class _BackupScreenState extends State<BackupScreen>
 
     setState(() => _isUploadRestoring = true);
     try {
-      await _backupService.restoreFromUpload(_uploadFile!, _uploadTargetDatabase!);
+      final result = await _backupService.restoreFromUpload(_uploadFile!, _uploadTargetDatabase!);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isEnglish
-                ? 'Restore to "$_uploadTargetDatabase" completed'
-                : 'Restore ไปยัง "$_uploadTargetDatabase" สำเร็จ'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showRestoreResult(result, isEnglish
+            ? 'Restore to "$_uploadTargetDatabase" completed'
+            : 'Restore ไปยัง "$_uploadTargetDatabase" สำเร็จ');
         setState(() => _uploadFile = null);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'),
-              backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) _showRestoreError(e);
     } finally {
       if (mounted) setState(() => _isUploadRestoring = false);
     }
@@ -1707,18 +1742,81 @@ class _BackupScreenState extends State<BackupScreen>
           content: Text(isEnglish
               ? 'Restoring $backupType data...'
               : 'กำลังเรียกข้อมูลคืน $backupType...')));
-      await _backupService.restoreBackup(filename);
+      final result = await _backupService.restoreBackup(filename);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish ? 'Restore completed successfully' : 'เรียกข้อมูลคืนสำเร็จ')));
+        _showRestoreResult(result, isEnglish ? 'Restore completed successfully' : 'เรียกข้อมูลคืนสำเร็จ');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish
-                ? 'Error restoring data: $e'
-                : 'เกิดข้อผิดพลาดในการเรียกข้อมูลคืน: $e')));
-      }
+      if (mounted) _showRestoreError(e);
     }
+  }
+
+  // สำเร็จไม่มีคำเตือน → snackbar; มีข้อผิดพลาดที่ pg_restore ข้ามไป → dialog แสดงรายการให้ตรวจ/คัดลอกได้
+  void _showRestoreResult(RestoreResult result, String successText) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    if (result.warnings.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(successText), backgroundColor: Colors.green));
+      return;
+    }
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    _showRestoreDialog(
+      icon: const Icon(Icons.warning_amber, color: Colors.orange),
+      title: isEnglish ? 'Restore completed with warnings' : 'Restore สำเร็จพร้อมคำเตือน',
+      message: result.message,
+      details: result.warnings.join('\n'),
+    );
+  }
+
+  // error จาก PostgreSQL มักยาวหลายบรรทัด — แสดงใน dialog แทน snackbar
+  void _showRestoreError(Object e) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final text = e.toString().replaceFirst('Exception: ', '');
+    final nl = text.indexOf('\n');
+    _showRestoreDialog(
+      icon: const Icon(Icons.error_outline, color: Colors.red),
+      title: isEnglish ? 'Restore failed' : 'Restore ไม่สำเร็จ',
+      message: nl < 0 ? text : text.substring(0, nl),
+      details: nl < 0 ? '' : text.substring(nl + 1),
+    );
+  }
+
+  void _showRestoreDialog({required Widget icon, required String title, required String message, required String details}) {
+    final l = AppL10n(Provider.of<LanguageProvider>(context, listen: false).isEnglish);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(children: [icon, const SizedBox(width: 8), Expanded(child: Text(title))]),
+        content: SizedBox(
+          width: 640,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SelectableText(message),
+              if (details.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: SingleChildScrollView(
+                      child: SelectableText(details,
+                          style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l.close))],
+      ),
+    );
   }
 }
