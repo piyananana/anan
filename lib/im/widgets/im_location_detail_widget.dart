@@ -37,6 +37,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
   late TextEditingController _nameCtrl;
   late TextEditingController _sortOrderCtrl;
   bool _isActive = true;
+  bool _isDefault = false;
   bool _isSaving = false;
   bool _isEnglish = false;
   String _locationType = 'BIN';
@@ -77,6 +78,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
     _nameCtrl.text = isNewNode ? '' : (l?.locationName ?? '');
     _sortOrderCtrl.text = isNewNode ? '' : (l?.sortOrder?.toString() ?? '');
     _isActive = isNewNode ? true : (l?.isActive ?? true);
+    _isDefault = isNewNode ? false : (l?.isDefault ?? false);
     _locationType = isNewNode ? 'BIN' : (l?.locationType ?? 'BIN');
     final src = isNewNode ? null : l;
     _categoryId = src?.categoryId;
@@ -103,6 +105,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
         categoryId: _locationType == 'BIN' ? _categoryId : null,
         isActive: _isActive,
         sortOrder: _sortOrderCtrl.text.trim().isEmpty ? null : int.tryParse(_sortOrderCtrl.text.trim()),
+        isDefault: _isDefault && _isActive && _locationType == 'BIN',
       );
       await widget.onSubmit(row);
     } catch (e) {
@@ -253,6 +256,19 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
                 value: _isActive,
                 activeColor: Colors.teal,
                 onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v),
+              ),
+            ]),
+            // ตำแหน่งหลักของคลัง — ใช้เป็นตำแหน่งเริ่มต้นของรายการในเอกสารสินค้า เมื่อสินค้าไม่ได้กำหนดตำแหน่งเริ่มต้นของคลังไว้
+            Row(children: [
+              Expanded(
+                child: Text(isEnglish
+                    ? 'Main location of this warehouse (default on inventory document lines; storage bins only)'
+                    : 'ตำแหน่งจัดเก็บหลักของคลัง (ใช้เป็นตำแหน่งเริ่มต้นของรายการในเอกสารสินค้า เฉพาะช่องเก็บ BIN)'),
+              ),
+              Switch(
+                value: _isDefault && _isActive && _locationType == 'BIN',
+                activeColor: Colors.teal,
+                onChanged: _isReadOnly || !_isActive || _locationType != 'BIN' ? null : (v) => setState(() => _isDefault = v),
               ),
             ]),
             const SizedBox(height: 10),

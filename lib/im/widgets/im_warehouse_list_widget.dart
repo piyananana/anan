@@ -158,8 +158,9 @@ class ImWarehouseListWidgetState extends State<ImWarehouseListWidget> with Autom
                             '${item.warehouseCode}  ${_warehouseName(item, isEnglish)}',
                             style: TextStyle(fontWeight: FontWeight.bold, color: item.isActive ? null : Colors.grey),
                           ),
-                          subtitle: (item.isConsignee || item.branchId != null)
+                          subtitle: (item.isDefault || item.isConsignee || item.branchId != null)
                               ? Text([
+                                  if (item.isDefault) (isEnglish ? 'Main warehouse' : 'คลังหลัก'),
                                   if (item.isConsignee) (isEnglish ? 'Consignee warehouse' : 'คลังผู้รับฝากขาย'),
                                   if (item.branchId != null) _branchName(item, isEnglish),
                                 ].join('  •  '))

@@ -6,6 +6,8 @@ import '../models/im_item.dart';
 import '../models/im_gl_account_setup.dart';
 import '../services/im_transaction_service.dart';
 import '../services/im_item_service.dart';
+import '../services/im_warehouse_service.dart';
+import '../services/im_location_service.dart';
 import '../../po/services/po_transaction_service.dart';
 import '../../so/services/so_transaction_service.dart';
 import '../../utils/date_utils.dart';
@@ -100,6 +102,9 @@ class _CountLine {
   final TextEditingController discPctCtrl; // ส่วนลด % ของบรรทัดที่มีราคา (ฝั่งซื้อ = ส่วนลดรับ, ฝั่งขาย = ส่วนลดขาย)
   final TextEditingController lotNoCtrl;
   final TextEditingController serialNoCtrl;
+  // ส่วนลดเงินของรายการ (ต่อทั้งรายการ) — เอกสารขาย; ส่วนลด % ของเอกสารขายใช้ discPctCtrl เป็นขั้นบันได "10+5+2"
+  final TextEditingController lineDiscAmtCtrl;
+  final TextEditingController remarkCtrl; // หมายเหตุของรายการ (im_transaction_detail.description) — บริการพิมพ์แทนชื่อสินค้า
 
   _CountLine({
     this.id,
@@ -135,14 +140,22 @@ class _CountLine {
     double discountPercent = 0,
     String lotNo = '',
     String serialNo = '',
-  })  : countedQtyCtrl = TextEditingController(text: countedQty == 0 ? '' : _fmtInput(countedQty)),
+    String remark = '',
+    String? discountText, // เอกสารขาย: ขั้นบันไดที่บันทึกไว้ (null = ใช้ discountPercent เป็นขั้นเดียว)
+    double lineDiscountAmount = 0,
+  })  : remarkCtrl = TextEditingController(text: remark),
+        lineDiscAmtCtrl = TextEditingController(text: lineDiscountAmount != 0 ? _fmtInput(lineDiscountAmount) : ''),
+        countedQtyCtrl = TextEditingController(text: countedQty == 0 ? '' : _fmtInput(countedQty)),
         issueQtyCtrl = TextEditingController(text: issueQty == 0 ? '' : _fmtInput(issueQty)),
         unitCostCtrl = TextEditingController(text: unitCost != null && unitCost != 0 ? _fmtInput(unitCost) : ''),
         billedUnitCostCtrl = TextEditingController(text: billedUnitCost != null && billedUnitCost != 0 ? _fmtInput(billedUnitCost) : ''),
         unitPriceCtrl = TextEditingController(text: unitPrice != null && unitPrice != 0 ? _fmtInput(unitPrice) : ''),
-        discPctCtrl = TextEditingController(text: discountPercent != 0 ? _fmtInput(discountPercent) : ''),
+        discPctCtrl = TextEditingController(text: discountText ?? (discountPercent != 0 ? _fmtInput(discountPercent) : '')),
         lotNoCtrl = TextEditingController(text: lotNo),
         serialNoCtrl = TextEditingController(text: serialNo);
+
+  // สินค้าบริการ/ไม่นับสต็อก (เฉพาะเอกสารฝั่งขาย) — ไม่มีตำแหน่ง/ล็อต/ยอดคงเหลือ ไม่ตัดสต็อก
+  bool get isNonStock => item.itemType != 'STOCK';
 
   bool get isDeltaMode =>
       isIssueMode || isTransferMode || isReceiveMode || isDeliverMode ||
@@ -169,6 +182,8 @@ class _CountLine {
     discPctCtrl.dispose();
     lotNoCtrl.dispose();
     serialNoCtrl.dispose();
+    remarkCtrl.dispose();
+    lineDiscAmtCtrl.dispose();
   }
 }
 
@@ -264,6 +279,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   String? _refSoDocNoLabel;
   final _refNoCtrl = TextEditingController();
   final _poNoCtrl = TextEditingController(); // '30'/'31'/'32' — เลขที่ใบสั่งซื้อของลูกค้า
+  // ส่วนลดท้ายบิลของเอกสารขาย (% แล้วตามด้วยเงินสด) — ปันส่วนเข้าแต่ละรายการ
+  final _billDiscPctCtrl = TextEditingController();
+  final _cashDiscCtrl = TextEditingController();
   DateTime? _poDate;
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
@@ -283,6 +301,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // รองรับรับสินค้าจากผู้ขายต่างประเทศเป็นสกุลเงินต่างประเทศ (เฉพาะ _isApVendorMode) — มิเรอร์
   // po_transaction_detail_widget.dart ทุกประการ unit_cost (LC) ยังคงใช้ตีมูลค่าสต็อก/โพสต์ GL เหมือนเดิมเสมอ
   final CurrencyService _currencyService = CurrencyService();
+  // คลังหลัก (im_warehouse.is_default) = คลังเริ่มต้นของเอกสารใหม่, ตำแหน่งหลักของแต่ละคลัง (im_location.is_default) =
+  // ตำแหน่งเริ่มต้นของรายการ — cache ตามคลัง (null = คลังนั้นไม่มีตำแหน่งหลัก)
+  ImWarehouse? _mainWarehouse;
+  final Map<int, ImLocation?> _mainLocations = {};
   List<Currency> _currencies = [];
   Currency? _currency;
   double _exchangeRate = 1;
@@ -357,7 +379,34 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       ];
 
   // ยอดบรรทัด (สกุลเงินเอกสาร) ตามส่วนลด/ราคารวม VAT — billed: '12' ใช้ราคาตามใบกำกับถ้ากรอกไว้ (มิเรอร์ backend imLineAmounts)
+  // ส่วนลดเอกสารขาย: ขั้นบันได + เงินของรายการ + ส่วนลดท้ายบิลที่ปันส่วน (มิเรอร์ backend computeSalesDiscounts)
+  bool get _salesDiscountMode => _isArVatMode;
+  double get _billDiscPct => _parseNum(_billDiscPctCtrl.text);
+  double get _cashDisc => _parseNum(_cashDiscCtrl.text);
+  Map<_CountLine, SalesLineDiscount> _salesDiscounts() {
+    final res = computeSalesDiscounts([
+      for (final l in _lines)
+        SalesDiscountInput(
+          entered: l.variance.abs() * _parseNum(l.unitPriceCtrl.text),
+          stepText: l.discPctCtrl.text,
+          lineAmount: _parseNum(l.lineDiscAmtCtrl.text),
+          isFree: l.isFree,
+        ),
+    ], billDiscountPercent: _billDiscPct, cashDiscountAmount: _cashDisc);
+    return {for (var i = 0; i < _lines.length; i++) _lines[i]: res[i]};
+  }
+
   LineAmounts _amt(_CountLine l, {bool billed = false}) {
+    if (_salesDiscountMode) {
+      return calcLineAmounts(
+        qty: l.variance.abs(),
+        price: _parseNum(l.unitPriceCtrl.text),
+        discountAmount: _salesDiscounts()[l]?.total ?? 0,
+        vatRate: l.vatRate,
+        noVat: !_isVatMode || l.vatType == null || l.vatType == 'NOVAT',
+        priceIncludesVat: _inclVat,
+      );
+    }
     final ctrl = _isArVatMode
         ? l.unitPriceCtrl
         : (billed && l.billedUnitCostCtrl.text.trim().isNotEmpty ? l.billedUnitCostCtrl : l.unitCostCtrl);
@@ -500,6 +549,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   void dispose() {
     _refNoCtrl.dispose();
     _poNoCtrl.dispose();
+    _billDiscPctCtrl.dispose();
+    _cashDiscCtrl.dispose();
     _descCtrl.dispose();
     for (final l in _lines) {
       l.dispose();
@@ -540,6 +591,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refDims = null;
     _refNoCtrl.clear();
     _poNoCtrl.clear();
+    _billDiscPctCtrl.clear();
+    _cashDiscCtrl.clear();
     _poDate = null;
     _descCtrl.clear();
     _status = 'Draft';
@@ -576,7 +629,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _currencyService.fetchActiveRows(),
         _accountService.fetchRows(),
         _dimService.fetchActiveTypes(),
+        ImWarehouseService().fetchActiveRows(),
       ]);
+      _mainWarehouse = (results[6] as List<ImWarehouse>).cast<ImWarehouse?>().firstWhere((w) => w!.isDefault, orElse: () => null);
       _accounts = results[4] as List<Account>;
       _dimTypes = results[5] as List<GlDimensionType>;
       final dimValueResults = await Future.wait(_dimTypes.map((t) => _dimService.fetchValuesByType(t.typeCode)));
@@ -595,6 +650,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
       if (widget.transactionId != null) {
         await _loadExisting(widget.transactionId!);
+      } else if (_mainWarehouse != null) {
+        _warehouseId = _mainWarehouse!.id;
+        _warehouseLabel = '${_mainWarehouse!.warehouseCode} ${_mainWarehouse!.warehouseNameTh}';
       }
     } catch (e) {
       if (mounted) {
@@ -639,6 +697,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
     _refNoCtrl.text = h.refNo ?? '';
     _poNoCtrl.text = h.customerPoNo ?? '';
+    _billDiscPctCtrl.text = h.billDiscountPercent != 0 ? _CountLine._fmtInput(h.billDiscountPercent) : '';
+    _cashDiscCtrl.text = h.cashDiscountAmount != 0 ? _CountLine._fmtInput(h.cashDiscountAmount) : '';
     _poDate = h.customerPoDate;
     _descCtrl.text = h.description ?? '';
     _status = h.status;
@@ -698,6 +758,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         isFree: d.isFree,
         lotNo: d.lotNo ?? '',
         serialNo: d.serialNo ?? '',
+        remark: d.description ?? '',
+        discountText: d.discountText,
+        lineDiscountAmount: d.lineDiscountAmount,
       )
         ..glAccountId = d.glAccountId
         ..dims = {1: d.dim1Id, 2: d.dim2Id, 3: d.dim3Id, 4: d.dim4Id, 5: d.dim5Id});
@@ -765,18 +828,74 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (picked != null) setState(() => _docDate = picked);
   }
 
+  // เปลี่ยนคลัง → ตำแหน่งของรายการเดิมเป็นของคลังเก่า ใช้ไม่ได้ จึงเปลี่ยนเป็นตำแหน่งหลักของคลังใหม่
   void _selectWarehouse(ImWarehouse w) {
+    final changed = _warehouseId != w.id;
     setState(() {
       _warehouseId = w.id;
       _warehouseLabel = '${w.warehouseCode} ${w.warehouseNameTh}';
+      if (changed) {
+        for (final l in _lines) {
+          l.locationId = null;
+          l.locationCode = null;
+        }
+      }
     });
+    if (changed) {
+      for (final l in _lines) {
+        _applyMainLocation(l);
+      }
+    }
   }
 
   void _selectToWarehouse(ImWarehouse w) {
+    final changed = _toWarehouseId != w.id;
     setState(() {
       _toWarehouseId = w.id;
       _toWarehouseLabel = '${w.warehouseCode} ${w.warehouseNameTh}';
+      if (changed) {
+        for (final l in _lines) {
+          l.toLocationId = null;
+          l.toLocationCode = null;
+        }
+      }
     });
+    if (changed) {
+      for (final l in _lines) {
+        _applyMainLocation(l);
+      }
+    }
+  }
+
+  Future<ImLocation?> _mainLocationOf(int warehouseId) async {
+    if (_mainLocations.containsKey(warehouseId)) return _mainLocations[warehouseId];
+    try {
+      final locs = await ImLocationService().fetchActiveRows(warehouseId: warehouseId);
+      _mainLocations[warehouseId] = locs.cast<ImLocation?>().firstWhere((l) => l!.isDefault, orElse: () => null);
+    } catch (_) {
+      return null; // โหลดไม่ได้ → ปล่อยว่างให้ผู้ใช้เลือกเอง (ไม่ cache เพื่อให้ลองใหม่ได้)
+    }
+    return _mainLocations[warehouseId];
+  }
+
+  // ใส่ตำแหน่งหลักของคลังให้รายการที่ยังไม่มีตำแหน่ง (โอนย้าย: ตำแหน่งปลายทางด้วย) แล้วโหลดยอดคงเหลือตามตำแหน่ง
+  Future<void> _applyMainLocation(_CountLine line) async {
+    if (line.isNonStock) return; // บริการไม่มีตำแหน่ง/ยอดคงเหลือ
+    final whId = _warehouseId;
+    if (whId != null && line.locationId == null) {
+      final loc = await _mainLocationOf(whId);
+      if (loc != null && mounted && _warehouseId == whId && line.locationId == null && _lines.contains(line)) {
+        setState(() { line.locationId = loc.id; line.locationCode = loc.locationCode; });
+      }
+    }
+    final toWhId = _toWarehouseId;
+    if (line.isTransferMode && toWhId != null && line.toLocationId == null) {
+      final loc = await _mainLocationOf(toWhId);
+      if (loc != null && mounted && _toWarehouseId == toWhId && line.toLocationId == null && _lines.contains(line)) {
+        setState(() { line.toLocationId = loc.id; line.toLocationCode = loc.locationCode; });
+      }
+    }
+    if (mounted && _lines.contains(line)) _refreshSystemQty(line);
   }
 
   void _selectVendor(ApVendor v) {
@@ -831,7 +950,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   }
 
   Future<void> _refreshSystemQty(_CountLine line) async {
-    if (_warehouseId == null || line.item.id == null) return;
+    if (_warehouseId == null || line.item.id == null || line.isNonStock) return;
     setState(() => line.loadingSystemQty = true);
     try {
       final qty = await _service.fetchSystemQty(
@@ -874,7 +993,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           content: Text(isEnglish ? 'Please select a warehouse first' : 'กรุณาเลือกคลังสินค้าก่อน')));
       return;
     }
-    ImItemListWidget.search(context, itemTypeFilter: 'STOCK', onSelected: (ImItem item) async {
+    // เอกสารฝั่งขายใส่สินค้าบริการ/ไม่นับสต็อกได้ (ไม่ตัดสต็อก ลงแค่รายได้) — ประเภทอื่นเฉพาะสินค้านับสต็อก
+    ImItemListWidget.search(context, itemTypeFilter: _isArCustomerMode ? null : 'STOCK', onSelected: (ImItem item) async {
       // รับฝากขาย ('13') บังคับ FIFO/SPECIFIC เท่านั้น — กันปนกับต้นทุนเฉลี่ยของสินค้าของเราเอง (มิเรอร์ validation
       // ฝั่ง backend ใน insertAndPostAdjustment) เช็คที่นี่เพื่อไม่ให้ผู้ใช้เพิ่มบรรทัดที่จะถูก reject ตอน save
       if (_isConsignmentReceiveMode && item.costingMethod != 'FIFO' && item.costingMethod != 'SPECIFIC') {
@@ -892,7 +1012,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         vatType: vatType, vatRate: vatType != null ? _rateForVatCode(vatType) : 0,
       );
       setState(() => _lines.add(line));
-      _refreshSystemQty(line);
+      _applyMainLocation(line);
       await _maybeResolveDirectLinePrice(line);
     });
   }
@@ -1130,7 +1250,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           vatType: vatType, vatRate: vatRate,
         );
         _lines.add(line);
-        _refreshSystemQty(line);
+        _applyMainLocation(line);
       }
     });
   }
@@ -1260,7 +1380,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           vatType: vatType, vatRate: vatRate,
         );
         _lines.add(line);
-        _refreshSystemQty(line);
+        _applyMainLocation(line);
       }
       _refPoId = pickedLines.first['header_id'] as int;
       _refPoDocNoLabel = pickedLines.first['doc_no'] as String?;
@@ -1415,7 +1535,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           vatType: vatType, vatRate: vatRate,
         );
         _lines.add(line);
-        _refreshSystemQty(line);
+        _applyMainLocation(line);
       }
       _refSoId = pickedLines.first['header_id'] as int;
       _refSoDocNoLabel = pickedLines.first['doc_no'] as String?;
@@ -1674,13 +1794,18 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           warn('${l.item.itemCode}: ${isEnglish ? 'VAT type is required' : 'กรุณาระบุประเภทภาษี VAT'}');
           return;
         }
+        if (_salesDiscountMode && !parseStepDiscount(l.discPctCtrl.text).valid) {
+          warn('${l.item.itemCode}: ${isEnglish ? 'Discount must be percentages joined by +, at most $maxDiscountSteps steps (e.g. 10+5+2)' : 'ส่วนลดต้องเป็น % คั่นด้วย + ไม่เกิน $maxDiscountSteps ขั้น เช่น 10+5+2'}');
+          return;
+        }
         final pct = _parseNum(l.discPctCtrl.text);
-        if (_showDiscount && (pct < 0 || pct > 100)) {
+        if (_showDiscount && !_salesDiscountMode && (pct < 0 || pct > 100)) {
           warn('${l.item.itemCode}: ${isEnglish ? 'Discount must be 0-100%' : 'ส่วนลดต้องอยู่ระหว่าง 0-100%'}');
           return;
         }
       }
     }
+    if (_salesDiscountMode && !_checkSalesDiscountTotals(warn)) return;
     if (!_checkAdvances()) return;
 
     setState(() => _isSaving = true);
@@ -1705,6 +1830,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         currencyCode: (_isApVendorMode || _isArCustomerMode) ? (_currency?.currencyCode ?? CurrencyService.baseCode) : null,
         exchangeRate: (_isApVendorMode || _isArCustomerMode) ? _exchangeRate : 1,
         priceIncludesVat: _inclVat,
+        billDiscountPercent: _salesDiscountMode ? _billDiscPct : 0,
+        cashDiscountAmount: _salesDiscountMode ? _cashDisc : 0,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
         dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
@@ -1727,7 +1854,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             unitCost: _isApVendorMode ? null : (l.unitCostCtrl.text.trim().isEmpty ? null : _parseNum(l.unitCostCtrl.text)),
             unitCostFc: _isApVendorMode && l.unitCostCtrl.text.trim().isNotEmpty ? _parseNum(l.unitCostCtrl.text) : null,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
-            discountPercent: _showDiscount ? _parseNum(l.discPctCtrl.text) : null,
+            discountPercent: _showDiscount && !_salesDiscountMode ? _parseNum(l.discPctCtrl.text) : null,
+            discountText: _salesDiscountMode ? l.discPctCtrl.text.trim() : null,
+            lineDiscountAmount: _salesDiscountMode ? _parseNum(l.lineDiscAmtCtrl.text) : 0,
             isFree: l.isFree,
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
@@ -1738,6 +1867,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             dim1Id: _isIssueMode ? l.dims[1] : null, dim2Id: _isIssueMode ? l.dims[2] : null,
             dim3Id: _isIssueMode ? l.dims[3] : null, dim4Id: _isIssueMode ? l.dims[4] : null,
             dim5Id: _isIssueMode ? l.dims[5] : null,
+            description: l.remarkCtrl.text.trim().isEmpty ? null : l.remarkCtrl.text.trim(),
           )).toList();
 
       if (_id == null) {
@@ -1845,13 +1975,16 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         id: _id!, docId: _docId!, docNo: _docNo, docDate: _docDate, warehouseId: _warehouseId!,
         customerId: _customerId, refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
         customerPoNo: _poNoCtrl.text.trim().isEmpty ? null : _poNoCtrl.text.trim(), customerPoDate: _poDate,
+        billDiscountPercent: _billDiscPct, cashDiscountAmount: _cashDisc,
       );
+      if (!_checkSalesDiscountTotals(warn)) return;
       if (!_checkAdvances()) return;
       final details = _lines.map((l) => ImTransactionDetail(
             id: l.id,
             itemId: l.item.id!,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
-            discountPercent: _parseNum(l.discPctCtrl.text),
+            discountText: l.discPctCtrl.text.trim(),
+            lineDiscountAmount: _parseNum(l.lineDiscAmtCtrl.text),
           )).toList();
       await _service.updateTransaction(id: _id!, header: header, details: details, salespersons: _salespersons,
           advances: _advancesForSave);
@@ -1872,6 +2005,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (_id == null) return;
     final isEnglish = _isEnglish;
     void warn(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    if (!_checkSalesDiscountTotals(warn)) return;
     if (!_checkAdvances()) return;
     if (!await _confirmPoPriceDiffs(sales: true)) return;
     if (!await _confirmLinkedAdvances()) return;
@@ -1881,13 +2015,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             id: l.id,
             itemId: l.item.id!,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
-            discountPercent: _parseNum(l.discPctCtrl.text),
+            discountText: l.discPctCtrl.text.trim(),
+            lineDiscountAmount: _parseNum(l.lineDiscAmtCtrl.text),
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
           )).toList();
       await _service.postBillingDln(id: _id!, refNo: _refNoCtrl.text.trim(), details: details, salespersons: _salespersons,
           customerPoNo: _poNoCtrl.text.trim(), customerPoDate: _poDate, exchangeRate: _isForeignCurrency ? _exchangeRate : null,
-          advances: _advancesForSave);
+          advances: _advancesForSave, billDiscountPercent: _billDiscPct, cashDiscountAmount: _cashDisc);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Posted successfully' : 'Post สำเร็จ')));
         widget.onSaveSuccess();
@@ -2455,7 +2590,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(isEnglish ? 'No lines yet' : 'ยังไม่มีรายการ', style: TextStyle(color: Colors.grey.shade600)),
           ),
-        ..._lines.map((l) => _buildLineCard(l, isEnglish)),
+        ..._lines.asMap().entries.map((e) => _buildLineCard(e.value, isEnglish, e.key + 1)),
         if (!_isReadOnly)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -2471,7 +2606,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     );
   }
 
-  Widget _buildLineCard(_CountLine line, bool isEnglish) {
+  Widget _buildLineCard(_CountLine line, bool isEnglish, int lineNo) {
     final itemName = isEnglish && (line.item.itemNameEn ?? '').isNotEmpty ? line.item.itemNameEn! : line.item.itemNameTh;
     final variance = line.variance;
     final varianceColor = variance > 0 ? Colors.green.shade700 : (variance < 0 ? Colors.red.shade700 : Colors.black87);
@@ -2493,15 +2628,29 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         padding: const EdgeInsets.all(8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
+            // ลำดับที่ — ตรงกับ line_no ที่บันทึก (เรียงตามหน้าจอ)
+            SizedBox(
+              width: 30,
+              child: Text('$lineNo.', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+            ),
             Expanded(
               child: Text('${line.item.itemCode} — $itemName',
                   style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
             ),
-            Text(line.item.costingMethod, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+            if (line.isNonStock)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(4)),
+                child: Text(isEnglish ? 'Service / non-stock' : 'บริการ/ไม่นับสต็อก',
+                    style: TextStyle(fontSize: 11, color: Colors.indigo.shade700)),
+              )
+            else
+              Text(line.item.costingMethod, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
             if (!_isReadOnly)
               IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 18), onPressed: () => _removeLine(line)),
           ]),
           Wrap(spacing: 10, runSpacing: 6, children: [
+            if (!line.isNonStock)
             SizedBox(
               width: 220,
               child: _fkField(
@@ -2530,7 +2679,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                           }),
                 ),
               ),
-            if (showLot)
+            if (showLot && !line.isNonStock)
               SizedBox(
                 width: 130,
                 child: TextField(
@@ -2540,7 +2689,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   onChanged: (_) => _refreshSystemQty(line),
                 ),
               ),
-            if (showSerial)
+            if (showSerial && !line.isNonStock)
               SizedBox(
                 width: 150,
                 child: TextField(
@@ -2550,6 +2699,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   onChanged: (_) => _refreshSystemQty(line),
                 ),
               ),
+            if (!line.isNonStock)
             SizedBox(
               width: 110,
               child: InputDecorator(
@@ -2582,6 +2732,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 onChanged: (_) => setState(() {}),
               ),
             ),
+            if (!line.isNonStock)
             SizedBox(
               width: 110,
               child: InputDecorator(
@@ -2605,6 +2756,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 ),
               ),
             ),
+            // ฝั่งขาย: ต้นทุนเป็นข้อมูลภายใน ไม่แสดงบนเอกสารขาย (ผู้ใช้ขอซ่อน 2026-11-08)
+            if (canEditUnitCost || !_isArCustomerMode)
             SizedBox(
               width: 120,
               child: canEditUnitCost
@@ -2693,7 +2846,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       }),
                 ),
               ),
-            if (_showDiscount)
+            if (_showDiscount && !_salesDiscountMode)
               SizedBox(
                 width: 90,
                 child: TextField(
@@ -2704,6 +2857,44 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   onChanged: (_) => setState(() {}),
                 ),
               ),
+            // เอกสารขาย: ส่วนลดขั้นบันได "10+5+2" + ส่วนลดเงินของรายการ + ยอดส่วนลดสุทธิ (รวมส่วนที่ปันจากท้ายบิล)
+            if (_salesDiscountMode) ...[
+              SizedBox(
+                width: 120,
+                child: TextField(
+                  controller: line.discPctCtrl,
+                  readOnly: !_canEditBilling || line.isFree,
+                  decoration: InputDecoration(
+                    labelText: isEnglish ? 'Disc. % (10+5)' : 'ส่วนลด % (10+5)',
+                    errorText: parseStepDiscount(line.discPctCtrl.text).valid ? null : (isEnglish ? 'e.g. 10+5+2' : 'เช่น 10+5+2'),
+                    border: const OutlineInputBorder(), isDense: true,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              SizedBox(
+                width: 100,
+                child: TextField(
+                  controller: line.lineDiscAmtCtrl,
+                  readOnly: !_canEditBilling || line.isFree,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: isEnglish ? 'Disc. amount' : 'ส่วนลด (เงิน)', border: const OutlineInputBorder(), isDense: true),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              SizedBox(
+                width: 110,
+                child: Tooltip(
+                  message: isEnglish
+                      ? 'Line discount + share of bill discounts'
+                      : 'ส่วนลดของรายการ + ส่วนลดท้ายบิลที่ปันส่วนมา',
+                  child: InputDecorator(
+                    decoration: InputDecoration(labelText: isEnglish ? 'Net discount' : 'ส่วนลดสุทธิ', border: const OutlineInputBorder(), isDense: true),
+                    child: Text(_fmtMoney.format(_salesDiscounts()[line]?.total ?? 0), textAlign: TextAlign.right),
+                  ),
+                ),
+              ),
+            ],
             if (_showDiscount)
               SizedBox(
                 width: 130,
@@ -2748,6 +2939,23 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   ),
                 ),
               ),
+            SizedBox(
+              width: 280,
+              child: TextField(
+                controller: line.remarkCtrl,
+                readOnly: _isReadOnly,
+                maxLength: 500,
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Line remark' : 'หมายเหตุรายการ',
+                  helperText: line.isNonStock
+                      ? (isEnglish ? 'Printed instead of the item name' : 'พิมพ์แทนชื่อสินค้าในใบกำกับ')
+                      : null,
+                  counterText: '',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
           ]),
         ]),
       ),
@@ -3407,8 +3615,66 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       : (_isApReturnCnMode || _isApDnMode || _isArReturnCnMode || _isArDnMode)
                           ? '${isEnglish ? 'Total qty' : 'จำนวนรวม'}: ${_fmtQty.format(totalQty.abs())}'
                           : '${isEnglish ? 'Total variance qty' : 'จำนวนผลต่างรวม'}: ${_fmtQty.format(totalQty)}'),
+      if (_salesDiscountMode) _billDiscountInputs(isEnglish),
       if (_showDiscount) ..._amountTotals(isEnglish),
     ]);
+  }
+
+  // ส่วนลดท้ายบิล — % ของยอดหลังส่วนลดรายการ แล้วตามด้วยส่วนลดเงินสด ปันส่วนเข้าแต่ละรายการตามสัดส่วนยอด
+  Widget _billDiscountInputs(bool isEnglish) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Wrap(spacing: 10, runSpacing: 6, children: [
+          SizedBox(
+            width: 150,
+            child: TextField(
+              controller: _billDiscPctCtrl,
+              readOnly: !_canEditBilling,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: isEnglish ? 'Bill discount %' : 'ส่วนลดท้ายบิล %', border: const OutlineInputBorder(), isDense: true),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          SizedBox(
+            width: 170,
+            child: TextField(
+              controller: _cashDiscCtrl,
+              readOnly: !_canEditBilling,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: isEnglish ? 'Cash discount' : 'ส่วนลดเงินสดท้ายบิล', border: const OutlineInputBorder(), isDense: true),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          Text(
+            isEnglish ? 'Allocated to lines by amount' : 'ปันส่วนเข้าแต่ละรายการตามสัดส่วนยอด',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ]),
+      );
+
+  // ส่วนลดเกินยอด: รายการ (ขั้นบันได + เงิน) เกินยอดของรายการ / ท้ายบิล % เกิน 100 / เงินสดเกินยอดคงเหลือ
+  bool _checkSalesDiscountTotals(void Function(String) warn) {
+    final isEnglish = _isEnglish;
+    if (_billDiscPct < 0 || _billDiscPct > 100) {
+      warn(isEnglish ? 'Bill discount must be 0-100%' : 'ส่วนลดท้ายบิลต้องอยู่ระหว่าง 0-100%');
+      return false;
+    }
+    double remaining = 0;
+    for (final l in _lines) {
+      if (l.isFree) continue;
+      final entered = l.variance.abs() * _parseNum(l.unitPriceCtrl.text);
+      final own = entered * (1 - parseStepDiscount(l.discPctCtrl.text).factor) + _parseNum(l.lineDiscAmtCtrl.text);
+      if (own > entered + 0.005) {
+        warn('${l.item.itemCode}: ${isEnglish ? 'line discount exceeds the line amount' : 'ส่วนลดของรายการมากกว่ายอดของรายการ'}');
+        return false;
+      }
+      remaining += entered - own;
+    }
+    remaining -= remaining * _billDiscPct / 100;
+    if (_cashDisc < 0 || _cashDisc > remaining + 0.005) {
+      warn(isEnglish ? 'Cash discount exceeds the remaining amount' : 'ส่วนลดเงินสดท้ายบิลมากกว่ายอดหลังส่วนลด');
+      return false;
+    }
+    return true;
   }
 
   // ยอดเงินของเอกสาร (สกุลเงินเอกสาร): ก่อนส่วนลด / ส่วนลด / ก่อน VAT / VAT / รวม และยอดหลังหักมัดจำ

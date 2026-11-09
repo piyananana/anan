@@ -43,6 +43,7 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
   late TextEditingController _addressCtrl;
   bool _isActive = true;
   bool _isConsignee = false;
+  bool _isDefault = false;
   bool _isSaving = false;
   bool _isEnglish = false;
 
@@ -89,6 +90,7 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
     _addressCtrl.text = isNew ? '' : (w?.address ?? '');
     _isActive = isNew ? true : (w?.isActive ?? true);
     _isConsignee = isNew ? false : (w?.isConsignee ?? false);
+    _isDefault = isNew ? false : (w?.isDefault ?? false);
     final src = isNew ? null : w;
     _branchId = src?.branchId; _branchCode = src?.branchCode;
     _branchName = _isEnglish && (src?.branchNameEn ?? '').isNotEmpty ? src?.branchNameEn : src?.branchNameTh;
@@ -193,6 +195,7 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
         address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
         isActive: _isActive,
         isConsignee: _isConsignee,
+        isDefault: _isDefault && _isActive,
         inventoryAccountId: _inventoryAccountId,
         accountingMode: _accountingMode,
         purchasesAccountId: _purchasesAccountId,
@@ -319,6 +322,19 @@ class ImWarehouseDetailWidgetState extends State<ImWarehouseDetailWidget> {
             Row(children: [
               Expanded(child: Text(isEnglish ? 'Status: ${_isActive ? 'Active' : 'Inactive'}' : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
               Switch(value: _isActive, activeColor: Colors.teal, onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v)),
+            ]),
+            // คลังหลัก — มีได้คลังเดียวทั้งบริษัท เอกสาร IM ใหม่ใช้เป็นคลังเริ่มต้น (ตั้งคลังใหม่ คลังเดิมจะถูกยกเลิกอัตโนมัติ)
+            Row(children: [
+              Expanded(
+                child: Text(isEnglish
+                    ? 'Main warehouse (default on new inventory documents; only one per company)'
+                    : 'คลังหลัก (ใช้เป็นคลังเริ่มต้นของเอกสารสินค้าใหม่ มีได้คลังเดียว)'),
+              ),
+              Switch(
+                value: _isDefault && _isActive,
+                activeColor: Colors.teal,
+                onChanged: _isReadOnly || !_isActive ? null : (v) => setState(() => _isDefault = v),
+              ),
             ]),
             // Consignment-OUT — คลังนี้แทนสถานที่ของผู้รับฝากขาย สินค้าที่โอนเข้ามาด้วยใบโอน (TRF) ยังเป็นของเราอยู่
             // จนกว่าจะขายออกจากคลังนี้ด้วยใบส่งสินค้า (DLN) ตามปกติ

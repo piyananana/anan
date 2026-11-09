@@ -17,6 +17,8 @@ class ImWarehouse {
   // Consignment-OUT — คลังนี้แทนสถานที่ของผู้รับฝากขาย สินค้าที่โอนเข้ามาด้วย TRF ยังเป็นของเราอยู่จนกว่าจะขายออก
   // ด้วย DLN ตามปกติ — เป็นแค่ flag เพื่อความชัดเจน/กรองรายงาน ไม่มีผลต่อการผ่านบัญชีใดๆ
   final bool isConsignee;
+  // คลังหลัก — มีได้คลังเดียวทั้งบริษัท เอกสาร IM ใหม่ใช้เป็นคลังเริ่มต้น
+  final bool isDefault;
   // บัญชีสต็อกของคลัง (ลำดับแรกของการหาบัญชีสต็อก) + โหมดบัญชีสินค้า (null = ค่าเริ่มต้นของบริษัท) + บัญชีซื้อ (Periodic)
   final int? inventoryAccountId;
   final String? inventoryAccountCode;
@@ -38,6 +40,7 @@ class ImWarehouse {
     this.address,
     this.isActive = true,
     this.isConsignee = false,
+    this.isDefault = false,
     this.inventoryAccountId, this.inventoryAccountCode, this.inventoryAccountName,
     this.accountingMode,
     this.purchasesAccountId, this.purchasesAccountCode, this.purchasesAccountName,
@@ -55,6 +58,7 @@ class ImWarehouse {
         address: json['address'],
         isActive: json['is_active'] ?? true,
         isConsignee: json['is_consignee'] ?? false,
+        isDefault: json['is_default'] ?? false,
         inventoryAccountId: json['inventory_account_id'],
         inventoryAccountCode: json['inventory_account_code'],
         inventoryAccountName: json['inventory_account_name'],
@@ -73,6 +77,7 @@ class ImWarehouse {
         'address': address,
         'is_active': isActive,
         'is_consignee': isConsignee,
+        'is_default': isDefault,
         'inventory_account_id': inventoryAccountId,
         'accounting_mode': accountingMode,
         'purchases_account_id': purchasesAccountId,

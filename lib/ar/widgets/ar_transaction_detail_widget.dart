@@ -177,6 +177,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   double _subtotalFc = 0;
   bool _priceIncludesVat = false; // ราคาที่กรอกรวม VAT — ดู lib/utils/vat_calc.dart
   double _discountAmountFc = 0;
+  // ส่วนลดท้ายบิล (ใบแจ้งหนี้/ใบเพิ่มหนี้/ใบลดหนี้) — ปันส่วนเข้าแต่ละรายการ (computeSalesDiscounts)
+  final _billDiscPctCtrl = TextEditingController();
+  final _cashDiscCtrl = TextEditingController();
   double _beforeVatFc = 0;
   double _vatAmountFc = 0;
   double _totalAmountFc = 0;
@@ -196,6 +199,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   bool get _hasApplySection        => _isReceipt || _isCreditNoteWithBill || _isDebitNoteWithBill || _isBillCollection;
   bool get _hasAdvanceRefundSection => _isAdvanceRefund;
   bool get _isInvoice              => _selectedDocType?.sysDocType == arDocTypeInvoice.toString();
+  // ส่วนลดเอกสารขาย: ขั้นบันได + เงินของรายการ + ท้ายบิล % / เงินสด (มิเรอร์ backend applyArSalesDiscounts)
+  bool get _salesDiscountMode      => const ['10', '30', '50'].contains(_selectedDocType?.sysDocType);
   // เอกสารขายที่มีพนักงานขาย (ตั้งหนี้ / เพิ่มหนี้ / ลดหนี้)
   bool get _hasSalespersons        => const ['10', '30', '35', '50', '55'].contains(_selectedDocType?.sysDocType);
   // ตรวจวงเงินเครดิต (ตั้งหนี้ / เพิ่มหนี้ / ลดหนี้) — ยอดรวม VAT สกุลท้องถิ่น ใบลดหนี้ติดลบ
@@ -234,6 +239,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     _refNoCtrl.dispose();
     _poNoCtrl.dispose();
     _descCtrl.dispose();
+    _billDiscPctCtrl.dispose();
+    _cashDiscCtrl.dispose();
     for (final r in _detailRows) r.dispose();
     for (final c in _applyCtrlMap.values) c.dispose();
     for (final c in _advanceCtrlMap.values) c.dispose();
@@ -330,6 +337,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         _refNoCtrl.text = h.refNo ?? '';
         _poNoCtrl.text = h.customerPoNo ?? '';
         _priceIncludesVat = h.priceIncludesVat;
+        _billDiscPctCtrl.text = h.billDiscountPercent != 0 ? _fmtInput(h.billDiscountPercent) : '';
+        _cashDiscCtrl.text = h.cashDiscountAmount != 0 ? _fmtInput(h.cashDiscountAmount) : '';
         _refSoId = h.refSoId;
         _refSoDocNo = h.refSoDocNo;
         _poDate = h.customerPoDate;
@@ -501,6 +510,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       _poNoCtrl.clear();
       _poDate = null;
       _priceIncludesVat = false;
+      _billDiscPctCtrl.clear();
+      _cashDiscCtrl.clear();
       _refSoId = null;
       _refSoDocNo = null;
       _descCtrl.clear();
@@ -1160,13 +1171,108 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   }
 
   // ยอดของบรรทัด (ก่อน VAT) ตามตัวเลือกราคารวม VAT
-  LineAmounts _amt(_DetailRow r) => calcLineAmounts(
-        qty: double.tryParse(r.qtyCtrl.text) ?? 0,
-        price: double.tryParse(r.priceCtrl.text) ?? 0,
-        discountPercent: double.tryParse(r.discPctCtrl.text) ?? 0,
+  LineAmounts _amt(_DetailRow r, [Map<_DetailRow, SalesLineDiscount>? sd]) => calcLineAmounts(
+        qty: _n(r.qtyCtrl.text),
+        price: _n(r.priceCtrl.text),
+        discountPercent: _salesDiscountMode ? 0 : _n(r.discPctCtrl.text),
+        discountAmount: _salesDiscountMode ? ((sd ?? _salesDiscounts())[r]?.total ?? 0) : null,
         vatRate: r.vatRate,
         noVat: r.vatType == 'NOVAT',
         priceIncludesVat: _priceIncludesVat,
+      );
+
+  static double _n(String s) => double.tryParse(s.trim()) ?? 0;
+  static String _fmtInput(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
+  double get _billDiscPct => _n(_billDiscPctCtrl.text);
+  double get _cashDisc => _n(_cashDiscCtrl.text);
+  bool get _hasBillDiscount => _billDiscPct != 0 || _cashDisc != 0;
+
+  // ส่วนลดของแต่ละบรรทัด (หน่วยเดียวกับราคาที่กรอก): own = ขั้นบันได + เงิน, bill = ส่วนที่ปันมาจากท้ายบิล
+  Map<_DetailRow, SalesLineDiscount> _salesDiscounts() {
+    final res = computeSalesDiscounts([
+      for (final r in _detailRows)
+        SalesDiscountInput(
+          entered: _n(r.qtyCtrl.text) * _n(r.priceCtrl.text),
+          stepText: r.discPctCtrl.text,
+          lineAmount: _n(r.lineDiscAmtCtrl.text),
+        ),
+    ], billDiscountPercent: _billDiscPct, cashDiscountAmount: _cashDisc);
+    return {for (var i = 0; i < _detailRows.length; i++) _detailRows[i]: res[i]};
+  }
+
+  // ส่วนลดท้ายบิลเปลี่ยนยอดของทุกบรรทัด — ปรับช่องรวมของทุกบรรทัด
+  void _refreshLineTotals() {
+    final sd = _salesDiscountMode ? _salesDiscounts() : null;
+    for (final r in _detailRows) {
+      r.totalCtrl.text = _amt(r, sd).total.toStringAsFixed(2);
+    }
+    _recalcTotals();
+  }
+
+  // ส่วนลดเกินยอด: รายการ (ขั้นบันได + เงิน) เกินยอดของรายการ / ขั้นบันไดผิดรูปแบบ / ท้ายบิล % เกิน 100 / เงินสดเกินยอดคงเหลือ
+  bool _checkSalesDiscountTotals() {
+    final isEnglish = _isEnglish;
+    void warn(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), backgroundColor: Colors.red));
+    if (_billDiscPct < 0 || _billDiscPct > 100) {
+      warn(isEnglish ? 'Bill discount must be 0-100%' : 'ส่วนลดท้ายบิลต้องอยู่ระหว่าง 0-100%');
+      return false;
+    }
+    double remaining = 0;
+    for (var i = 0; i < _detailRows.length; i++) {
+      final r = _detailRows[i];
+      final label = r.itemCodeCtrl.text.isNotEmpty ? r.itemCodeCtrl.text : (isEnglish ? 'Line ${i + 1}' : 'รายการที่ ${i + 1}');
+      final step = parseStepDiscount(r.discPctCtrl.text);
+      if (!step.valid) {
+        warn('$label: ${isEnglish ? 'discount must be % separated by + (max $maxDiscountSteps steps), e.g. 10+5+2' : 'ส่วนลดต้องเป็น % คั่นด้วย + ไม่เกิน $maxDiscountSteps ขั้น เช่น 10+5+2'}');
+        return false;
+      }
+      final entered = _n(r.qtyCtrl.text) * _n(r.priceCtrl.text);
+      final own = entered * (1 - step.factor) + _n(r.lineDiscAmtCtrl.text);
+      if (own > entered + 0.005) {
+        warn('$label: ${isEnglish ? 'line discount exceeds the line amount' : 'ส่วนลดของรายการมากกว่ายอดของรายการ'}');
+        return false;
+      }
+      remaining += entered - own;
+    }
+    remaining -= remaining * _billDiscPct / 100;
+    if (_cashDisc < 0 || _cashDisc > remaining + 0.005) {
+      warn(isEnglish ? 'Cash discount exceeds the remaining amount' : 'ส่วนลดเงินสดท้ายบิลมากกว่ายอดหลังส่วนลด');
+      return false;
+    }
+    return true;
+  }
+
+  // ส่วนลดท้ายบิล — % ของยอดหลังส่วนลดรายการ แล้วตามด้วยส่วนลดเงินสด ปันส่วนเข้าแต่ละรายการตามสัดส่วนยอด
+  Widget _billDiscountInputs(bool isEnglish) => Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 4),
+        child: Wrap(spacing: 10, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          SizedBox(
+            width: 150,
+            child: TextField(
+              controller: _billDiscPctCtrl,
+              readOnly: _isReadOnly,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+              decoration: InputDecoration(labelText: isEnglish ? 'Bill discount %' : 'ส่วนลดท้ายบิล %', border: const OutlineInputBorder(), isDense: true),
+              onChanged: (_) => _refreshLineTotals(),
+            ),
+          ),
+          SizedBox(
+            width: 170,
+            child: TextField(
+              controller: _cashDiscCtrl,
+              readOnly: _isReadOnly,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+              decoration: InputDecoration(labelText: isEnglish ? 'Cash discount' : 'ส่วนลดเงินสดท้ายบิล', border: const OutlineInputBorder(), isDense: true),
+              onChanged: (_) => _refreshLineTotals(),
+            ),
+          ),
+          Text(
+            isEnglish ? 'Allocated to lines by amount' : 'ปันส่วนเข้าแต่ละรายการตามสัดส่วนยอด',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ]),
       );
 
   void _recalcTotals() {
@@ -1186,8 +1292,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       // For advance refund: total = sum of refunded advances
       subFc = _advanceRefundRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
     } else {
+      final sd = _salesDiscountMode ? _salesDiscounts() : null;
       for (final r in _detailRows) {
-        final amt = _amt(r);
+        final amt = _amt(r, sd);
         final sub = amt.gross;
         final disc = amt.discount;
         final vat = amt.vat;
@@ -1285,6 +1392,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       return;
     }
 
+    if (_salesDiscountMode && !_checkSalesDiscountTotals()) return;
     _recalcTotals();
     if (_isInvoice && _invAdvanceTotal > _totalAmountFc + 0.005) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish
@@ -1326,6 +1434,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       customerPoNo: _isInvoice && _poNoCtrl.text.trim().isNotEmpty ? _poNoCtrl.text.trim() : null,
       customerPoDate: _isInvoice ? _poDate : null,
       priceIncludesVat: _priceIncludesVat,
+      billDiscountPercent: _salesDiscountMode ? _billDiscPct : 0,
+      cashDiscountAmount: _salesDiscountMode ? _cashDisc : 0,
       refSoId: _isAdvanceReceipt ? _refSoId : null,
       description: _descCtrl.text.isEmpty ? null : _descCtrl.text,
       status: _status,
@@ -1339,13 +1449,19 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       branchId: _selectedBranch?.branchId,
     );
 
+    final sd = _salesDiscountMode ? _salesDiscounts() : null;
     final details = _detailRows.asMap().entries.map((e) {
       final i = e.key;
       final r = e.value;
       final qty = double.tryParse(r.qtyCtrl.text) ?? 0;
       final price = double.tryParse(r.priceCtrl.text) ?? 0;
-      final discPct = double.tryParse(r.discPctCtrl.text) ?? 0;
-      final amt = _amt(r);
+      // เอกสารขาย: % เทียบเท่าของส่วนลดรวม (backend คำนวณซ้ำและเก็บค่าของตัวเอง)
+      final entered = qty * price;
+      final discPct = sd != null
+          ? (entered != 0 ? (sd[r]?.total ?? 0) / entered * 100 : 0.0)
+          : double.tryParse(r.discPctCtrl.text) ?? 0;
+      final stepText = r.discPctCtrl.text.trim();
+      final amt = _amt(r, sd);
       final disc = amt.discount;
       final afterDisc = amt.net;
       final vat = amt.vat;
@@ -1368,6 +1484,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         vatAmountLc: vat * lc,
         totalAmountLc: (afterDisc + vat) * lc,
         isDeferredVat: r.isDeferredVat && r.vatType != 'NOVAT',
+        discountText: sd != null ? (parseStepDiscount(stepText).factor == 1 ? '' : stepText) : null,
+        lineDiscountAmount: sd != null ? _n(r.lineDiscAmtCtrl.text) : 0,
         dim1Id: r.dims[1], dim2Id: r.dims[2], dim3Id: r.dims[3], dim4Id: r.dims[4], dim5Id: r.dims[5],
       );
     }).toList();
@@ -1775,6 +1893,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   // ── Detail row sync helpers ───────────────────────────────────────────────
   // เมื่อ qty / price / disc / vat เปลี่ยน → คำนวณ total ใหม่ แล้วอัปเดต totalCtrl
   void _onDetailFieldChanged(_DetailRow r) {
+    // เอกสารขาย: ส่วนลดท้ายบิลปันตามยอดทุกบรรทัด — บรรทัดหนึ่งเปลี่ยน ยอดบรรทัดอื่นเปลี่ยนด้วย
+    if (_salesDiscountMode) {
+      _refreshLineTotals();
+      return;
+    }
     final amt = _amt(r);
     r.totalCtrl.text = amt.total.toStringAsFixed(2);
     _recalcTotals();
@@ -1788,6 +1911,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     // total = afterDisc × (1 + vatRate/100)  →  afterDisc = total / (1 + vatRate/100)
     // ราคารวม VAT: ราคาที่กรอกรวม VAT อยู่แล้ว จึงไม่ต้องถอด VAT ออกก่อนหาราคา/หน่วย
     final afterDisc = _priceIncludesVat || r.vatType == 'NOVAT' ? total : total / (1 + r.vatRate / 100);
+    // เอกสารขาย (ไม่มีส่วนลดท้ายบิล — มีแล้วช่องรวมแก้ไม่ได้): afterDisc = qty × price × factor − ส่วนลดเงิน
+    if (_salesDiscountMode) {
+      final f = qty * parseStepDiscount(r.discPctCtrl.text).factor;
+      r.priceCtrl.text = f != 0 ? ((afterDisc + _n(r.lineDiscAmtCtrl.text)) / f).toStringAsFixed(4) : '0.0000';
+      _recalcTotals();
+      return;
+    }
     // afterDisc = qty × price × (1 - discPct/100)  →  price = afterDisc / (qty × (1-discPct/100))
     final qtyFactor = qty * (1 - discPct / 100);
     r.priceCtrl.text = qtyFactor != 0
@@ -2406,9 +2536,16 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                   const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text(isEnglish ? 'Item Code' : 'รหัสสินค้า', style: const TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text(isEnglish ? 'Item / Service Name' : 'ชื่อสินค้า/บริการ', style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Tooltip(message: isEnglish ? 'Line remark — printed instead of the name for service items' : 'หมายเหตุของรายการ — สินค้าบริการพิมพ์หมายเหตุแทนชื่อสินค้า', child: Text(isEnglish ? 'Remark' : 'หมายเหตุ', style: const TextStyle(fontWeight: FontWeight.bold)))),
                   DataColumn(label: Text(isEnglish ? 'Qty' : 'จำนวน', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                   DataColumn(label: Text(isEnglish ? 'Unit Price' : 'ราคา/หน่วย', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                  DataColumn(label: Text(isEnglish ? 'Disc %' : 'ส่วนลด%', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                  DataColumn(label: Tooltip(
+                    message: _salesDiscountMode ? (isEnglish ? 'Step discount, up to $maxDiscountSteps steps e.g. 10+5+2' : 'ส่วนลดขั้นบันได ไม่เกิน $maxDiscountSteps ขั้น เช่น 10+5+2') : '',
+                    child: Text(_salesDiscountMode ? (isEnglish ? 'Disc % (10+5)' : 'ส่วนลด % (10+5)') : (isEnglish ? 'Disc %' : 'ส่วนลด%'), style: const TextStyle(fontWeight: FontWeight.bold))), numeric: true),
+                  if (_salesDiscountMode) ...[
+                    DataColumn(label: Tooltip(message: isEnglish ? 'Discount amount for the whole line, after the step discount' : 'ส่วนลดเป็นเงินต่อทั้งรายการ หักหลังส่วนลดขั้นบันได', child: Text(isEnglish ? 'Disc (amt)' : 'ส่วนลด (เงิน)', style: const TextStyle(fontWeight: FontWeight.bold))), numeric: true),
+                    DataColumn(label: Tooltip(message: isEnglish ? 'Line discount + allocated bill discount' : 'ส่วนลดของรายการ + ส่วนลดท้ายบิลที่ปันส่วน', child: Text(isEnglish ? 'Net Disc' : 'ส่วนลดสุทธิ', style: const TextStyle(fontWeight: FontWeight.bold))), numeric: true),
+                  ],
                   DataColumn(label: Text(isEnglish ? 'Net Amount' : 'ยอดสุทธิ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                   DataColumn(label: Text('VAT', style: const TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text(isEnglish ? 'VAT Amount' : 'ยอด VAT', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
@@ -2419,10 +2556,12 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                     DataColumn(label: Tooltip(message: isEnglish ? 'Line dimensions — blank uses the header' : 'มิติของบรรทัด — ว่างใช้มิติหัวเอกสาร', child: Text(isEnglish ? 'Dimensions' : 'มิติ', style: const TextStyle(fontWeight: FontWeight.bold)))),
                   if (!_isReadOnly) const DataColumn(label: Text('')),
                 ],
-                rows: _detailRows.asMap().entries.map((e) {
+                rows: () {
+                  final sd = _salesDiscountMode ? _salesDiscounts() : null;
+                  return _detailRows.asMap().entries.map((e) {
                   final i = e.key;
                   final r = e.value;
-                  final amt = _amt(r);
+                  final amt = _amt(r, sd);
                   final afterDisc = amt.net;
                   final vat = amt.vat;
 
@@ -2443,6 +2582,19 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                     ))),
                     DataCell(SizedBox(width: 160, child: TextFormField(
                       controller: r.itemNameCtrl,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: !_isReadOnly,
+                        fillColor: Colors.white,
+                        border: InputBorder.none,
+                        enabledBorder: _isReadOnly ? InputBorder.none : const UnderlineInputBorder(borderSide: BorderSide(color: Colors.teal, width: 1)),
+                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.teal, width: 2)),
+                      ),
+                      style: const TextStyle(fontSize: 12),
+                      readOnly: _isReadOnly,
+                    ))),
+                    DataCell(SizedBox(width: 160, child: TextFormField(
+                      controller: r.descCtrl,
                       decoration: InputDecoration(
                         isDense: true,
                         filled: !_isReadOnly,
@@ -2488,7 +2640,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                       readOnly: _isReadOnly,
                       onChanged: (_) => _onDetailFieldChanged(r),
                     ))),
-                    DataCell(SizedBox(width: 60, child: TextFormField(
+                    DataCell(SizedBox(width: _salesDiscountMode ? 90 : 60, child: TextFormField(
                       controller: r.discPctCtrl,
                       decoration: InputDecoration(
                         isDense: true,
@@ -2498,13 +2650,33 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                         enabledBorder: _isReadOnly ? InputBorder.none : const UnderlineInputBorder(borderSide: BorderSide(color: Colors.teal, width: 1)),
                         focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.teal, width: 2)),
                       ),
-                      style: const TextStyle(fontSize: 12),
+                      style: TextStyle(fontSize: 12, color: parseStepDiscount(r.discPctCtrl.text).valid ? null : Colors.red),
                       keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(_salesDiscountMode ? r'[0-9.+]' : r'[0-9.]'))],
                       textAlign: TextAlign.right,
                       readOnly: _isReadOnly,
                       onChanged: (_) => _onDetailFieldChanged(r),
                     ))),
+                    if (_salesDiscountMode) ...[
+                      DataCell(SizedBox(width: 90, child: TextFormField(
+                        controller: r.lineDiscAmtCtrl,
+                        decoration: InputDecoration(
+                        isDense: true,
+                        filled: !_isReadOnly,
+                        fillColor: Colors.white,
+                        border: InputBorder.none,
+                        enabledBorder: _isReadOnly ? InputBorder.none : const UnderlineInputBorder(borderSide: BorderSide(color: Colors.teal, width: 1)),
+                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.teal, width: 2)),
+                      ),
+                        style: const TextStyle(fontSize: 12),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                        textAlign: TextAlign.right,
+                        readOnly: _isReadOnly,
+                        onChanged: (_) => _onDetailFieldChanged(r),
+                      ))),
+                      DataCell(Text(_fmt.format(sd?[r]?.total ?? 0), style: const TextStyle(fontSize: 12))),
+                    ],
                     DataCell(Text(_fmt.format(afterDisc), style: const TextStyle(fontSize: 12))),
                     DataCell(SizedBox(width: 110, child: _isReadOnly
                         ? Text(_vatLabel(r.vatType), style: const TextStyle(fontSize: 12))
@@ -2532,7 +2704,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                             },
                           )))),
                     DataCell(Text(_fmt.format(vat), style: const TextStyle(fontSize: 12))),
-                    DataCell(SizedBox(width: 100, child: _isReadOnly
+                    DataCell(SizedBox(width: 100, child: _isReadOnly || (_salesDiscountMode && _hasBillDiscount)
                         ? Text(_fmt.format(double.tryParse(r.totalCtrl.text) ?? 0),
                             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                             textAlign: TextAlign.right)
@@ -2573,7 +2745,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                     if (!_isReadOnly)
                       DataCell(IconButton(icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red), onPressed: () => _removeDetailRow(i), visualDensity: VisualDensity.compact)),
                   ]);
-                }).toList(),
+                }).toList();
+                }(),
                   ),
                 ),
               ),
@@ -2581,6 +2754,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           ], // end _detailExpanded
           if (_detailRows.isNotEmpty) ...[
             const Divider(height: 8),
+            if (_salesDiscountMode) _billDiscountInputs(isEnglish),
             Align(
               alignment: Alignment.centerRight,
               child: Text(
@@ -4593,7 +4767,8 @@ class _DetailRow {
   final TextEditingController descCtrl;
   final TextEditingController qtyCtrl;
   final TextEditingController priceCtrl;
-  final TextEditingController discPctCtrl;
+  final TextEditingController discPctCtrl; // เอกสารขาย = ขั้นบันได "10+5+2"
+  final TextEditingController lineDiscAmtCtrl; // เอกสารขาย: ส่วนลดเงินต่อทั้งรายการ
   final TextEditingController totalCtrl;
   String vatType;
   double vatRate;
@@ -4608,6 +4783,8 @@ class _DetailRow {
     double qty = 1,
     double price = 0,
     double discPct = 0,
+    String? discText,
+    double lineDiscAmt = 0,
     this.vatType = '',
     this.vatRate = 0.0,
     this.revenueAccountId,
@@ -4620,7 +4797,8 @@ class _DetailRow {
         descCtrl = TextEditingController(text: desc ?? ''),
         qtyCtrl = TextEditingController(text: qty.toString()),
         priceCtrl = TextEditingController(text: price.toStringAsFixed(2)),
-        discPctCtrl = TextEditingController(text: discPct.toStringAsFixed(2)),
+        discPctCtrl = TextEditingController(text: discText ?? discPct.toStringAsFixed(2)),
+        lineDiscAmtCtrl = TextEditingController(text: lineDiscAmt != 0 ? lineDiscAmt.toStringAsFixed(2) : ''),
         totalCtrl = TextEditingController(text: totalFc.toStringAsFixed(2));
 
   factory _DetailRow.fromModel(ArTransactionDetail d) {
@@ -4631,6 +4809,8 @@ class _DetailRow {
       qty: d.quantity,
       price: d.unitPriceFc,
       discPct: d.discountPercent,
+      discText: d.discountText,
+      lineDiscAmt: d.lineDiscountAmount,
       vatType: d.vatType,
       vatRate: d.vatRate,
       revenueAccountId: d.revenueAccountId,
@@ -4647,6 +4827,7 @@ class _DetailRow {
     qtyCtrl.dispose();
     priceCtrl.dispose();
     discPctCtrl.dispose();
+    lineDiscAmtCtrl.dispose();
     totalCtrl.dispose();
   }
 }

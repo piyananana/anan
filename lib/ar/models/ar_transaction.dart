@@ -47,6 +47,9 @@ class ArTransactionHeader {
   final String? customerPoNo; // ใบแจ้งหนี้: เลขที่ใบสั่งซื้อของลูกค้า
   final DateTime? customerPoDate;
   final bool priceIncludesVat; // ราคาที่กรอกรวม VAT (ยอดที่เก็บเป็นยอดก่อน VAT เหมือนเดิม)
+  // ส่วนลดท้ายบิลของเอกสารขาย: % ของยอดหลังส่วนลดรายการ แล้วตามด้วยส่วนลดเงินสด — ปันส่วนเข้าแต่ละรายการ
+  final double billDiscountPercent;
+  final double cashDiscountAmount;
   final int? refSoId; // ใบมัดจำ: ใบสั่งขายที่อ้างอิง
   final String? refSoDocNo;
   final int periodId;
@@ -122,6 +125,8 @@ class ArTransactionHeader {
     this.customerPoNo,
     this.customerPoDate,
     this.priceIncludesVat = false,
+    this.billDiscountPercent = 0,
+    this.cashDiscountAmount = 0,
     this.refSoId,
     this.refSoDocNo,
     this.periodId = 0,
@@ -190,6 +195,8 @@ class ArTransactionHeader {
       customerPoNo: j['customer_po_no'] as String?,
       customerPoDate: parseLocalDateNullable(j['customer_po_date']),
       priceIncludesVat: j['price_includes_vat'] == true,
+      billDiscountPercent: _toDouble(j['bill_discount_percent']) ?? 0,
+      cashDiscountAmount: _toDouble(j['cash_discount_amount']) ?? 0,
       refSoId: j['ref_so_id'] as int?,
       refSoDocNo: j['ref_so_doc_no'] as String?,
       periodId: j['period_id'] as int? ?? 0,
@@ -258,6 +265,8 @@ class ArTransactionHeader {
         'customer_po_no': customerPoNo,
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate!) : null,
         'price_includes_vat': priceIncludesVat,
+        'bill_discount_percent': billDiscountPercent,
+        'cash_discount_amount': cashDiscountAmount,
         'ref_so_id': refSoId,
         'period_id': periodId,
         'customer_id': customerId,
@@ -318,6 +327,11 @@ class ArTransactionDetail {
   final double vatAmountLc;
   final double totalAmountLc;
   final bool isDeferredVat;  // true = VAT รอตัด (บันทึก VAT ตอนรับชำระ ไม่ใช่ตอนตั้งหนี้)
+  // ส่วนลดเอกสารขาย (หน่วยเดียวกับราคาที่กรอก): ขั้นบันได "10+5+2", ส่วนลดเงินของบรรทัด, ส่วนที่ปันมาจากท้ายบิล
+  // discountPercent = % เทียบเท่าของส่วนลดรวม, discountAmountFc = ส่วนลดรวมก่อน VAT
+  final String? discountText;
+  final double lineDiscountAmount;
+  final double billDiscountAmount;
   // มิติของบรรทัด (ว่าง = ใช้มิติหัวเอกสาร) — revenueAccountId = บัญชีที่ใช้ลงบัญชีของบรรทัด
   final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
 
@@ -343,6 +357,9 @@ class ArTransactionDetail {
     this.vatAmountLc = 0,
     this.totalAmountLc = 0,
     this.isDeferredVat = false,
+    this.discountText,
+    this.lineDiscountAmount = 0,
+    this.billDiscountAmount = 0,
     this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
   });
 
@@ -369,6 +386,9 @@ class ArTransactionDetail {
       vatAmountLc: _toDouble(j['vat_amount_lc']) ?? 0,
       totalAmountLc: _toDouble(j['total_amount_lc']) ?? 0,
       isDeferredVat: j['is_deferred_vat'] as bool? ?? false,
+      discountText: j['discount_text'] as String?,
+      lineDiscountAmount: _toDouble(j['line_discount_amount']) ?? 0,
+      billDiscountAmount: _toDouble(j['bill_discount_amount']) ?? 0,
       dim1Id: j['dim1_id'] as int?, dim2Id: j['dim2_id'] as int?, dim3Id: j['dim3_id'] as int?,
       dim4Id: j['dim4_id'] as int?, dim5Id: j['dim5_id'] as int?,
     );
@@ -396,6 +416,8 @@ class ArTransactionDetail {
         'vat_amount_lc': vatAmountLc,
         'total_amount_lc': totalAmountLc,
         'is_deferred_vat': isDeferredVat,
+        if (discountText != null) 'discount_text': discountText,
+        if (discountText != null) 'line_discount_amount': lineDiscountAmount,
         'dim1_id': dim1Id, 'dim2_id': dim2Id, 'dim3_id': dim3Id, 'dim4_id': dim4Id, 'dim5_id': dim5Id,
       };
 
@@ -444,6 +466,9 @@ class ArTransactionDetail {
       vatAmountLc: vatAmountLc ?? this.vatAmountLc,
       totalAmountLc: totalAmountLc ?? this.totalAmountLc,
       isDeferredVat: isDeferredVat ?? this.isDeferredVat,
+      discountText: discountText,
+      lineDiscountAmount: lineDiscountAmount,
+      billDiscountAmount: billDiscountAmount,
     );
   }
 }

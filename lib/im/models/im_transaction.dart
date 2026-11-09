@@ -75,6 +75,9 @@ class ImTransactionHeader {
   final double exchangeRate;
   // ราคาที่กรอกรวม VAT แล้ว (เอกสารที่มี VAT ต่อบรรทัด) — user-approved 2026-10-31
   final bool priceIncludesVat;
+  // ส่วนลดท้ายบิลของเอกสารขาย: % ของยอดหลังส่วนลดรายการ แล้วตามด้วยส่วนลดเงินสด — ปันส่วนเข้าแต่ละรายการ
+  final double billDiscountPercent;
+  final double cashDiscountAmount;
   // วันที่ใบกำกับผู้ขาย ('11'/'12') — วันที่/งวดของใบตั้งหนี้ AP อัตโนมัติ (ว่าง = วันที่รับสินค้า)
   final DateTime? vendorInvoiceDate;
   final String? description;
@@ -144,6 +147,8 @@ class ImTransactionHeader {
     this.currencyCode,
     this.exchangeRate = 1,
     this.priceIncludesVat = false,
+    this.billDiscountPercent = 0,
+    this.cashDiscountAmount = 0,
     this.vendorInvoiceDate,
     this.description,
     this.status = 'Draft',
@@ -206,6 +211,8 @@ class ImTransactionHeader {
       currencyCode: json['currency_code'],
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       priceIncludesVat: json['price_includes_vat'] == true,
+      billDiscountPercent: toDouble(json['bill_discount_percent']),
+      cashDiscountAmount: toDouble(json['cash_discount_amount']),
       vendorInvoiceDate: json['vendor_invoice_date'] != null ? parseLocalDate(json['vendor_invoice_date']) : null,
       description: json['description'],
       status: json['status'] ?? 'Draft',
@@ -253,6 +260,8 @@ class ImTransactionHeader {
         if (currencyCode != null) 'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
         'price_includes_vat': priceIncludesVat,
+        'bill_discount_percent': billDiscountPercent,
+        'cash_discount_amount': cashDiscountAmount,
         if (vendorInvoiceDate != null) 'vendor_invoice_date': formatLocalDate(vendorInvoiceDate!),
         if (description != null) 'description': description,
         if (dim1Id != null) 'dim1_id': dim1Id,
@@ -304,6 +313,11 @@ class ImTransactionDetail {
   final int? refMoOutputDetailId; // '95' เท่านั้น — บรรทัดผลผลิต MO ต้นฉบับที่บรรทัดนี้รับตาม ใช้ตรวจคงเหลือที่รับได้
   final double? totalValueLc;
   final String? description;
+  // ส่วนลดเอกสารขาย: ขั้นบันได "10+5+2", ส่วนลดเงินของบรรทัด, ส่วนที่ปันมาจากท้ายบิล, รวมทั้งหมด (หน่วยเดียวกับราคา)
+  final String? discountText;
+  final double lineDiscountAmount;
+  final double billDiscountAmount;
+  final double? discountAmount;
   // บัญชีที่ใช้ลงบัญชีของบรรทัด (เบิกสินค้า '60' — null = สินค้า → หมวด → ตั้งค่า) + มิติของบรรทัด (ว่าง = หัวเอกสาร)
   final int? glAccountId;
   final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
@@ -345,6 +359,10 @@ class ImTransactionDetail {
     this.refMoOutputDetailId,
     this.totalValueLc,
     this.description,
+    this.discountText,
+    this.lineDiscountAmount = 0,
+    this.billDiscountAmount = 0,
+    this.discountAmount,
     this.glAccountId,
     this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
   });
@@ -391,6 +409,10 @@ class ImTransactionDetail {
       refMoOutputDetailId: json['ref_mo_output_detail_id'],
       totalValueLc: toDoubleN(json['total_value_lc']),
       description: json['description'],
+      discountText: json['discount_text'],
+      lineDiscountAmount: toDouble(json['line_discount_amount']),
+      billDiscountAmount: toDouble(json['bill_discount_amount']),
+      discountAmount: toDoubleN(json['discount_amount']),
       glAccountId: json['gl_account_id'],
       dim1Id: json['dim1_id'], dim2Id: json['dim2_id'], dim3Id: json['dim3_id'],
       dim4Id: json['dim4_id'], dim5Id: json['dim5_id'],
@@ -416,6 +438,8 @@ class ImTransactionDetail {
         if (billedUnitCostFc != null) 'billed_unit_cost_fc': billedUnitCostFc,
         if (unitPrice != null) 'unit_price': unitPrice,
         if (discountPercent != null) 'discount_percent': discountPercent,
+        if (discountText != null) 'discount_text': discountText,
+        if (discountText != null) 'line_discount_amount': lineDiscountAmount,
         'is_free': isFree,
         if (vatType != null) 'vat_type': vatType,
         if (vatRate != null) 'vat_rate': vatRate,

@@ -332,6 +332,8 @@ class ImTransactionService {
     DateTime? customerPoDate,
     double? exchangeRate,
     List<ImAdvance>? advances,
+    double? billDiscountPercent,
+    double? cashDiscountAmount,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -342,7 +344,11 @@ class ImTransactionService {
         if (exchangeRate != null) 'exchange_rate': exchangeRate,
         'customer_po_no': customerPoNo,
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate) : null,
+        if (billDiscountPercent != null) 'bill_discount_percent': billDiscountPercent,
+        if (cashDiscountAmount != null) 'cash_discount_amount': cashDiscountAmount,
         'lines': details.map((d) => {'id': d.id, 'unit_price': d.unitPrice, 'discount_percent': d.discountPercent,
+            if (d.discountText != null) 'discount_text': d.discountText,
+            if (d.discountText != null) 'line_discount_amount': d.lineDiscountAmount,
             'vat_type': d.vatType, 'vat_rate': d.vatRate}).toList(),
         if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
         if (advances != null) 'advances': advances.map((e) => e.toJson()).toList(),

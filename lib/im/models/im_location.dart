@@ -24,6 +24,7 @@ class ImLocation {
   final String? categoryNameEn;
   final bool isActive;
   final int? sortOrder; // ลำดับการเดินตรวจนับสต็อก — ไม่ระบุ = เรียงตาม locationCode แทน
+  final bool isDefault; // ตำแหน่งจัดเก็บหลักของคลัง (1 ตำแหน่งต่อคลัง เฉพาะ BIN)
 
   const ImLocation({
     required this.id,
@@ -42,6 +43,7 @@ class ImLocation {
     this.categoryNameEn,
     this.isActive = true,
     this.sortOrder,
+    this.isDefault = false,
   });
 
   factory ImLocation.fromJson(Map<String, dynamic> json) => ImLocation(
@@ -61,6 +63,7 @@ class ImLocation {
         categoryNameEn: json['category_name_en'],
         isActive: json['is_active'] ?? true,
         sortOrder: json['sort_order'],
+        isDefault: json['is_default'] ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -73,5 +76,6 @@ class ImLocation {
         'category_id': categoryId,
         'is_active': isActive,
         'sort_order': sortOrder,
+        'is_default': isDefault,
       };
 }

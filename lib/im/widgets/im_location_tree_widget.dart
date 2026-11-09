@@ -198,6 +198,13 @@ class ImLocationTreeWidgetState extends State<ImLocationTreeWidget>
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (item.isDefault) ...[
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: isEnglish ? 'Main location' : 'ตำแหน่งจัดเก็บหลัก',
+                      child: Icon(Icons.star, size: 16, color: Colors.amber.shade700),
+                    ),
+                  ],
                   if (!isGroup && item.categoryId != null) ...[
                     const SizedBox(width: 6),
                     Container(

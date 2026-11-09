@@ -59,6 +59,9 @@ class SoTransactionHeader {
   final double totalAmountLc; // รวม VAT (บาท)
   // ราคาที่กรอกรวม VAT (user-approved 2026-10-31) — ส่งต่อไปใบส่งสินค้าที่ดึงรายการ
   final bool priceIncludesVat;
+  // ส่วนลดท้ายบิล: % ของยอดหลังส่วนลดรายการ แล้วตามด้วยส่วนลดเงินสด — ปันส่วนเข้าแต่ละรายการ
+  final double billDiscountPercent;
+  final double cashDiscountAmount;
   final String? description;
   final int? branchId;
   final String? branchCode;
@@ -114,6 +117,8 @@ class SoTransactionHeader {
     this.vatAmountLc = 0,
     this.totalAmountLc = 0,
     this.priceIncludesVat = false,
+    this.billDiscountPercent = 0,
+    this.cashDiscountAmount = 0,
     this.description,
     this.branchId,
     this.branchCode,
@@ -167,6 +172,8 @@ class SoTransactionHeader {
       vatAmountLc: toDouble(json['vat_amount_lc']),
       totalAmountLc: toDouble(json['total_amount_lc']),
       priceIncludesVat: json['price_includes_vat'] == true,
+      billDiscountPercent: toDouble(json['bill_discount_percent']),
+      cashDiscountAmount: toDouble(json['cash_discount_amount']),
       description: json['description'],
       branchId: json['branch_id'],
       branchCode: json['branch_code'],
@@ -206,6 +213,8 @@ class SoTransactionHeader {
         if (currencyCode != null) 'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
         'price_includes_vat': priceIncludesVat,
+        'bill_discount_percent': billDiscountPercent,
+        'cash_discount_amount': cashDiscountAmount,
         if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
         'customer_po_no': customerPoNo,
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate!) : null,
@@ -230,7 +239,12 @@ class SoTransactionDetail {
   final String? uomCode;
   final double qtyOrdered;
   final double unitPriceFc;
-  final double discountPercent;
+  final double discountPercent; // % เทียบเท่าของส่วนลดรวม (ใบส่งสินค้าที่ดึงจาก SO ใช้ค่านี้)
+  // ส่วนลดเอกสารขาย (หน่วยราคาที่กรอก): ขั้นบันได "10+5+2", ส่วนลดเงินของบรรทัด, ส่วนที่ปันมาจากท้ายบิล, รวม
+  final String? discountText;
+  final double lineDiscountAmount;
+  final double billDiscountAmount;
+  final double? discountAmount;
   final String? vatType; // ว่าง = ใบสั่งขายก่อนมี VAT ต่อบรรทัด (ใช้ VAT ตั้งต้นของสินค้า)
   final double vatRate;
   final double totalValueLc;
@@ -252,6 +266,10 @@ class SoTransactionDetail {
     this.qtyOrdered = 0,
     this.unitPriceFc = 0,
     this.discountPercent = 0,
+    this.discountText,
+    this.lineDiscountAmount = 0,
+    this.billDiscountAmount = 0,
+    this.discountAmount,
     this.vatType,
     this.vatRate = 0,
     this.totalValueLc = 0,
@@ -274,6 +292,10 @@ class SoTransactionDetail {
       qtyOrdered: toDouble(json['qty_ordered']),
       unitPriceFc: toDouble(json['unit_price_fc']),
       discountPercent: toDouble(json['discount_percent']),
+      discountText: json['discount_text'],
+      lineDiscountAmount: toDouble(json['line_discount_amount']),
+      billDiscountAmount: toDouble(json['bill_discount_amount']),
+      discountAmount: json['discount_amount'] == null ? null : toDouble(json['discount_amount']),
       vatType: json['vat_type'],
       vatRate: toDouble(json['vat_rate']),
       totalValueLc: toDouble(json['total_value_lc']),
@@ -294,6 +316,8 @@ class SoTransactionDetail {
         if (refQuoteDetailId != null) 'ref_quote_detail_id': refQuoteDetailId,
         'unit_price_fc': unitPriceFc,
         'discount_percent': discountPercent,
+        if (discountText != null) 'discount_text': discountText,
+        if (discountText != null) 'line_discount_amount': lineDiscountAmount,
         'vat_type': vatType,
         'vat_rate': vatRate,
         if (description != null) 'description': description,

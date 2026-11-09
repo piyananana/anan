@@ -61,6 +61,9 @@ class QuoteTransactionHeader {
   final double totalAmountLc; // รวม VAT (บาท)
   // ราคาที่กรอกรวม VAT — ส่งต่อไปใบสั่งขายที่ดึงรายการ
   final bool priceIncludesVat;
+  // ส่วนลดท้ายบิล: % ของยอดหลังส่วนลดรายการ แล้วตามด้วยส่วนลดเงินสด — ปันส่วนเข้าแต่ละรายการ
+  final double billDiscountPercent;
+  final double cashDiscountAmount;
   final String? description;
   // มิติหัวเอกสาร — SO ที่ดึงรายการจากใบเสนอราคาใช้เป็นค่าเริ่มต้น
   final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
@@ -107,6 +110,8 @@ class QuoteTransactionHeader {
     this.totalValueLc = 0,
     this.totalAmountLc = 0,
     this.priceIncludesVat = false,
+    this.billDiscountPercent = 0,
+    this.cashDiscountAmount = 0,
     this.description,
     this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
     this.branchId,
@@ -153,6 +158,8 @@ class QuoteTransactionHeader {
       totalValueLc: toDouble(json['total_value_lc']),
       totalAmountLc: toDouble(json['total_amount_lc']),
       priceIncludesVat: json['price_includes_vat'] == true,
+      billDiscountPercent: toDouble(json['bill_discount_percent']),
+      cashDiscountAmount: toDouble(json['cash_discount_amount']),
       description: json['description'],
       dim1Id: json['dim1_id'], dim2Id: json['dim2_id'], dim3Id: json['dim3_id'],
       dim4Id: json['dim4_id'], dim5Id: json['dim5_id'],
@@ -183,6 +190,8 @@ class QuoteTransactionHeader {
         if (currencyCode != null) 'currency_code': currencyCode,
         'exchange_rate': exchangeRate,
         'price_includes_vat': priceIncludesVat,
+        'bill_discount_percent': billDiscountPercent,
+        'cash_discount_amount': cashDiscountAmount,
         if (validUntilDate != null) 'valid_until_date': formatLocalDate(validUntilDate!),
         if (description != null) 'description': description,
         // ส่งทุกช่องเสมอ — backend เขียนทับมิติด้วยค่าที่ส่งมา
@@ -204,7 +213,12 @@ class QuoteTransactionDetail {
   final String? uomCode;
   final double qtyQuoted;
   final double unitPriceFc;
-  final double discountPercent;
+  final double discountPercent; // % เทียบเท่าของส่วนลดรวม (ใบสั่งขายที่ดึงจากใบเสนอราคาใช้ค่านี้)
+  // ส่วนลดเอกสารขาย (หน่วยราคาที่กรอก): ขั้นบันได "10+5+2", ส่วนลดเงินของบรรทัด, ส่วนที่ปันมาจากท้ายบิล, รวม
+  final String? discountText;
+  final double lineDiscountAmount;
+  final double billDiscountAmount;
+  final double? discountAmount;
   final String? vatType; // ว่าง = ใบเสนอราคาก่อนมี VAT ต่อบรรทัด (ใช้ VAT ตั้งต้นของสินค้า)
   final double vatRate;
   final double totalValueLc;
@@ -225,6 +239,10 @@ class QuoteTransactionDetail {
     this.qtyQuoted = 0,
     this.unitPriceFc = 0,
     this.discountPercent = 0,
+    this.discountText,
+    this.lineDiscountAmount = 0,
+    this.billDiscountAmount = 0,
+    this.discountAmount,
     this.vatType,
     this.vatRate = 0,
     this.totalValueLc = 0,
@@ -246,6 +264,10 @@ class QuoteTransactionDetail {
       qtyQuoted: toDouble(json['qty_quoted']),
       unitPriceFc: toDouble(json['unit_price_fc']),
       discountPercent: toDouble(json['discount_percent']),
+      discountText: json['discount_text'],
+      lineDiscountAmount: toDouble(json['line_discount_amount']),
+      billDiscountAmount: toDouble(json['bill_discount_amount']),
+      discountAmount: json['discount_amount'] == null ? null : toDouble(json['discount_amount']),
       vatType: json['vat_type'],
       vatRate: toDouble(json['vat_rate']),
       totalValueLc: toDouble(json['total_value_lc']),
@@ -264,6 +286,8 @@ class QuoteTransactionDetail {
         'qty_quoted': qtyQuoted,
         'unit_price_fc': unitPriceFc,
         'discount_percent': discountPercent,
+        if (discountText != null) 'discount_text': discountText,
+        if (discountText != null) 'line_discount_amount': lineDiscountAmount,
         'vat_type': vatType,
         'vat_rate': vatRate,
         if (description != null) 'description': description,

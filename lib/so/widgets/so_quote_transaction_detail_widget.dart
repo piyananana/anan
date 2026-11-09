@@ -5,6 +5,7 @@
 // per-line neededByDate ของ PR) ดู soQuoteTransactionController.js สำหรับ workflow เต็ม
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -70,6 +71,9 @@ class _LineForm {
   double unitPriceFc;
   double qtyConverted;
   double discountPercent;
+  // ส่วนลดขั้นบันได "10+5+2" (ไม่เกิน 5 ขั้น) + ส่วนลดเงินต่อทั้งบรรทัด — ใบเก่าที่มีแต่ % = ขั้นเดียว
+  String discountText = '';
+  double lineDiscountAmount = 0;
   String? vatType; // ว่าง = ใบเสนอราคาเก่าก่อนมี VAT ต่อบรรทัด
   double vatRate;
   // ราคาล่าสุดที่ระบบ auto-fill ให้จาก im_price_list — ใช้เทียบกับ unitPriceFc ปัจจุบันตอนจำนวน/ลูกค้าเปลี่ยน เพื่อ
@@ -77,7 +81,10 @@ class _LineForm {
   // ให้ตรงกับ unitPriceFc เริ่มต้นของบรรทัดใหม่ — มิเรอร์ so_transaction_detail_widget.dart ทุกประการ
   double lastResolvedPrice = 0;
   _LineForm({this.id, this.item, this.qtyQuoted = 0, this.unitPriceFc = 0, this.qtyConverted = 0,
-      this.discountPercent = 0, this.vatType, this.vatRate = 0});
+      this.discountPercent = 0, this.vatType, this.vatRate = 0, String? discountText, this.lineDiscountAmount = 0})
+      : discountText = discountText ?? (discountPercent != 0 ? _fmtPct(discountPercent) : '');
+
+  static String _fmtPct(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
 }
 
 class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWidget> {
@@ -99,6 +106,9 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
   ArCustomer? _customer;
   ImWarehouse? _warehouse;
   final _descCtrl = TextEditingController();
+  // ส่วนลดท้ายบิล — ปันส่วนเข้าแต่ละรายการ (มิเรอร์ backend applyOrderSalesDiscounts)
+  final _billDiscPctCtrl = TextEditingController();
+  final _cashDiscCtrl = TextEditingController();
   String _status = 'Draft';
   String? _voidReason;
   DocActions _actions = const DocActions();
@@ -124,9 +134,22 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
 
   // ยอดบรรทัดเป็นบาท — มิเรอร์ backend lineAmountsLc (utils/vatCalc.js) เหมือน so_transaction_detail_widget.dart
   static double _r2(double v) => ((v + 2.220446049250313e-16) * 100).roundToDouble() / 100; // = backend round2 (Number.EPSILON)
-  LineAmounts _lineLc(_LineForm l) {
+  static double _n(String s) => double.tryParse(s.trim()) ?? 0;
+  double get _billDiscPct => _n(_billDiscPctCtrl.text);
+  double get _cashDisc => _n(_cashDiscCtrl.text);
+  // ส่วนลดของแต่ละบรรทัด (หน่วยราคาที่กรอก): own = ขั้นบันได + เงิน, bill = ส่วนที่ปันมาจากท้ายบิล
+  Map<_LineForm, SalesLineDiscount> _salesDiscounts() {
+    final res = computeSalesDiscounts([
+      for (final l in _lines)
+        SalesDiscountInput(entered: l.qtyQuoted * l.unitPriceFc, stepText: l.discountText, lineAmount: l.lineDiscountAmount),
+    ], billDiscountPercent: _billDiscPct, cashDiscountAmount: _cashDisc);
+    return {for (var i = 0; i < _lines.length; i++) _lines[i]: res[i]};
+  }
+
+  LineAmounts _lineLc(_LineForm l, [Map<_LineForm, SalesLineDiscount>? sd]) {
     final vat = l.vatType == null || l.vatType == 'NOVAT' ? 0.0 : l.vatRate;
-    final a = calcLineAmounts(qty: l.qtyQuoted, price: l.unitPriceFc, discountPercent: l.discountPercent, vatRate: vat, priceIncludesVat: _priceIncludesVat);
+    final a = calcLineAmounts(qty: l.qtyQuoted, price: l.unitPriceFc, discountAmount: (sd ?? _salesDiscounts())[l]?.total ?? 0,
+        vatRate: vat, priceIncludesVat: _priceIncludesVat);
     final gross = _r2(_r2(a.gross) * _exchangeRate);
     final net = _r2(_r2(a.net) * _exchangeRate);
     final total = _priceIncludesVat && vat != 0 ? _r2(_r2(a.total) * _exchangeRate) : _r2(net + _r2(net * vat / 100));
@@ -134,8 +157,9 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
   }
   LineAmounts get _totalsLc {
     double g = 0, d = 0, n = 0, v = 0, t = 0;
+    final sd = _salesDiscounts();
     for (final l in _lines) {
-      final a = _lineLc(l);
+      final a = _lineLc(l, sd);
       g += a.gross; d += a.discount; n += a.net; v += a.vat; t += a.total;
     }
     return LineAmounts(g, d, n, v, t);
@@ -179,6 +203,8 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
   @override
   void dispose() {
     _descCtrl.dispose();
+    _billDiscPctCtrl.dispose();
+    _cashDiscCtrl.dispose();
     _priceResolveDebounce?.cancel();
     super.dispose();
   }
@@ -202,7 +228,37 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
     _exchangeRate = _currency?.baseRate ?? 1;
     _priceIncludesVat = false;
+    _billDiscPctCtrl.clear();
+    _cashDiscCtrl.clear();
     _lines = [];
+  }
+
+  void _setBillDiscount(QuoteTransactionHeader h) {
+    _billDiscPctCtrl.text = h.billDiscountPercent != 0 ? _LineForm._fmtPct(h.billDiscountPercent) : '';
+    _cashDiscCtrl.text = h.cashDiscountAmount != 0 ? _LineForm._fmtPct(h.cashDiscountAmount) : '';
+  }
+
+  // ส่วนลดเกินยอด / ขั้นบันไดผิดรูปแบบ / ท้ายบิล % เกิน 100 / เงินสดเกินยอดคงเหลือ — backend ตรวจซ้ำ
+  String? _salesDiscountError() {
+    final isEnglish = _isEnglish;
+    if (_billDiscPct < 0 || _billDiscPct > 100) return isEnglish ? 'Bill discount must be 0-100%' : 'ส่วนลดท้ายบิลต้องอยู่ระหว่าง 0-100%';
+    double remaining = 0;
+    for (final l in _lines) {
+      final code = l.item?.itemCode ?? '';
+      final step = parseStepDiscount(l.discountText);
+      if (!step.valid) {
+        return '$code: ${isEnglish ? 'discount must be % separated by + (max $maxDiscountSteps steps), e.g. 10+5+2' : 'ส่วนลดต้องเป็น % คั่นด้วย + ไม่เกิน $maxDiscountSteps ขั้น เช่น 10+5+2'}';
+      }
+      final entered = l.qtyQuoted * l.unitPriceFc;
+      final own = entered * (1 - step.factor) + l.lineDiscountAmount;
+      if (own > entered + 0.005) return '$code: ${isEnglish ? 'line discount exceeds the line amount' : 'ส่วนลดของรายการมากกว่ายอดของรายการ'}';
+      remaining += entered - own;
+    }
+    remaining -= remaining * _billDiscPct / 100;
+    if (_cashDisc < 0 || _cashDisc > remaining + 0.005) {
+      return isEnglish ? 'Cash discount exceeds the remaining amount' : 'ส่วนลดเงินสดท้ายบิลมากกว่ายอดหลังส่วนลด';
+    }
+    return null;
   }
 
   Future<void> _load() async {
@@ -250,6 +306,7 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
         _priceIncludesVat = h.priceIncludesVat;
+        _setBillDiscount(h);
         final items = await Future.wait(h.details.map((d) => _itemService.fetchRow(d.itemId)));
         _lines = [
           for (var i = 0; i < h.details.length; i++)
@@ -258,6 +315,8 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
               qtyQuoted: h.details[i].qtyQuoted,
               unitPriceFc: h.details[i].unitPriceFc,
               discountPercent: h.details[i].discountPercent,
+              discountText: h.details[i].discountText,
+              lineDiscountAmount: h.details[i].lineDiscountAmount,
               vatType: h.details[i].vatType,
               vatRate: h.details[i].vatRate,
             ),
@@ -295,6 +354,7 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
         _priceIncludesVat = h.priceIncludesVat;
+        _setBillDiscount(h);
         // ดึง ImItem เต็มจาก itemId เสมอ ไม่ใช้ค่า snapshot ที่บันทึกไว้ตอนสร้างเอกสารมาแสดงตรงๆ — มิเรอร์
         // po_transaction_detail_widget.dart ทุกประการ (ดู comment เดียวกันที่นั่น)
         final items = await Future.wait(h.details.map((d) => _itemService.fetchRow(d.itemId)));
@@ -307,6 +367,8 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
               unitPriceFc: h.details[i].unitPriceFc,
               qtyConverted: h.details[i].qtyConverted,
               discountPercent: h.details[i].discountPercent,
+              discountText: h.details[i].discountText,
+              lineDiscountAmount: h.details[i].lineDiscountAmount,
               vatType: h.details[i].vatType,
               vatRate: h.details[i].vatRate,
             ),
@@ -412,6 +474,8 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
     for (final l in _lines) {
       if (l.item == null || l.qtyQuoted <= 0) { _warn(isEnglish ? 'Please complete every line' : 'กรุณากรอกรายการให้ครบถ้วน'); return; }
     }
+    final discErr = _salesDiscountError();
+    if (discErr != null) { _warn(discErr); return; }
     setState(() => _isSaving = true);
     try {
       final header = QuoteTransactionHeader(
@@ -422,12 +486,16 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
         dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
         dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
         priceIncludesVat: _priceIncludesVat,
+        billDiscountPercent: _billDiscPct,
+        cashDiscountAmount: _cashDisc,
       );
       final details = _lines
           .map((l) => QuoteTransactionDetail(
                 id: l.id, lineNo: 0, itemId: l.item!.id!, itemCode: l.item!.itemCode, itemName: l.item!.itemNameTh,
                 qtyQuoted: l.qtyQuoted, unitPriceFc: l.unitPriceFc,
                 discountPercent: l.discountPercent, vatType: l.vatType, vatRate: l.vatRate,
+                discountText: parseStepDiscount(l.discountText).factor == 1 ? '' : l.discountText.trim(),
+                lineDiscountAmount: l.lineDiscountAmount,
               ))
           .toList();
       if (_id == null) {
@@ -810,6 +878,11 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                    // ลำดับที่ — ตรงกับ line_no ที่บันทึก (เรียงตามหน้าจอ)
+                    SizedBox(
+                      width: 30,
+                      child: Text('${i + 1}.', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
+                    ),
                     Expanded(flex: 3, child: Text('${l.item?.itemCode ?? ''}  ${l.item?.itemNameTh ?? ''}', style: const TextStyle(fontSize: 13))),
                     SizedBox(
                       width: 90,
@@ -840,13 +913,41 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
                     ),
                     const SizedBox(width: 8),
                     SizedBox(
-                      width: 70,
+                      width: 100,
+                      child: Tooltip(
+                        message: isEnglish ? 'Step discount, up to $maxDiscountSteps steps e.g. 10+5+2' : 'ส่วนลดขั้นบันได ไม่เกิน $maxDiscountSteps ขั้น เช่น 10+5+2',
+                        child: TextFormField(
+                          initialValue: l.discountText,
+                          enabled: !_isReadOnly,
+                          textAlign: TextAlign.right,
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.+]'))],
+                          decoration: InputDecoration(
+                            labelText: isEnglish ? 'Disc % (10+5)' : 'ส่วนลด % (10+5)', isDense: true, border: const OutlineInputBorder(),
+                            errorText: parseStepDiscount(l.discountText).valid ? null : (isEnglish ? 'Invalid' : 'ไม่ถูกต้อง'),
+                          ),
+                          onChanged: (v) => setState(() => l.discountText = v),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 90,
                       child: TextFormField(
-                        initialValue: _fmtQty.format(l.discountPercent),
+                        initialValue: l.lineDiscountAmount != 0 ? _fmtValue.format(l.lineDiscountAmount) : '',
                         enabled: !_isReadOnly,
                         textAlign: TextAlign.right,
-                        decoration: InputDecoration(labelText: isEnglish ? 'Disc %' : 'ส่วนลด %', isDense: true, border: const OutlineInputBorder()),
-                        onChanged: (v) => setState(() => l.discountPercent = (double.tryParse(v) ?? 0).clamp(0, 100).toDouble()),
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                        decoration: InputDecoration(labelText: isEnglish ? 'Disc (amt)' : 'ส่วนลด (เงิน)', isDense: true, border: const OutlineInputBorder()),
+                        onChanged: (v) => setState(() => l.lineDiscountAmount = _n(v)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // ส่วนลดสุทธิ = ของรายการ + ส่วนลดท้ายบิลที่ปันส่วน (สกุลเงินเอกสาร หน่วยราคาที่กรอก)
+                    SizedBox(
+                      width: 90,
+                      child: InputDecorator(
+                        decoration: InputDecoration(labelText: isEnglish ? 'Net Disc' : 'ส่วนลดสุทธิ', isDense: true, border: const OutlineInputBorder()),
+                        child: Text(_fmtValue.format(_salesDiscounts()[l]?.total ?? 0), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13)),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -880,6 +981,34 @@ class _QuoteTransactionDetailWidgetState extends State<QuoteTransactionDetailWid
                 );
               }),
               const Divider(),
+              // ส่วนลดท้ายบิล — % ของยอดหลังส่วนลดรายการ แล้วตามด้วยส่วนลดเงินสด ปันส่วนเข้าแต่ละรายการตามสัดส่วนยอด
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Wrap(spacing: 10, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  SizedBox(
+                    width: 150,
+                    child: TextField(
+                      controller: _billDiscPctCtrl,
+                      readOnly: _isReadOnly,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                      decoration: InputDecoration(labelText: isEnglish ? 'Bill discount %' : 'ส่วนลดท้ายบิล %', border: const OutlineInputBorder(), isDense: true),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 170,
+                    child: TextField(
+                      controller: _cashDiscCtrl,
+                      readOnly: _isReadOnly,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                      decoration: InputDecoration(labelText: isEnglish ? 'Cash discount' : 'ส่วนลดเงินสดท้ายบิล', border: const OutlineInputBorder(), isDense: true),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  Text(isEnglish ? 'Allocated to lines by amount' : 'ปันส่วนเข้าแต่ละรายการตามสัดส่วนยอด',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                ]),
+              ),
               Align(
                 alignment: Alignment.centerRight,
                 child: Builder(builder: (_) {
