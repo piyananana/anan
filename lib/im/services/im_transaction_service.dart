@@ -161,6 +161,8 @@ class ImTransactionService {
     required String action,
     List<DocSalesperson>? salespersons, // null = ไม่ส่ง (เอกสารที่ไม่ใช่ฝั่งขาย)
     List<ImAdvance>? advances, // เงินมัดจำที่หักในใบตั้งหนี้/ใบแจ้งหนี้อัตโนมัติ — null = ไม่ส่ง
+    List<ImCashPayment>? payments, // ขายเงินสด ('33') — null = ไม่ส่ง
+    List<ImCashWht>? whts,
   }) async {
     final authHeaders = await authService.getAuthHeader();
     final body = jsonEncode({
@@ -169,6 +171,8 @@ class ImTransactionService {
       'action': action,
       if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
       if (advances != null) 'advances': advances.map((e) => e.toJson()).toList(),
+      if (payments != null) 'payments': payments.map((e) => e.toJson()).toList(),
+      if (whts != null) 'whts': whts.map((e) => e.toJson()).toList(),
     });
     final response = await http.post(
       Uri.parse('$baseUrl/im_transaction'),
@@ -227,6 +231,8 @@ class ImTransactionService {
     required List<ImTransactionDetail> details,
     List<DocSalesperson>? salespersons,
     List<ImAdvance>? advances,
+    List<ImCashPayment>? payments,
+    List<ImCashWht>? whts,
   }) async {
     final authHeaders = await authService.getAuthHeader();
     final body = jsonEncode({
@@ -234,6 +240,8 @@ class ImTransactionService {
       'details': details.map((e) => e.toJson()).toList(),
       if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
       if (advances != null) 'advances': advances.map((e) => e.toJson()).toList(),
+      if (payments != null) 'payments': payments.map((e) => e.toJson()).toList(),
+      if (whts != null) 'whts': whts.map((e) => e.toJson()).toList(),
     });
     final response = await http.put(
       Uri.parse('$baseUrl/im_transaction/$id'),

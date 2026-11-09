@@ -53,6 +53,7 @@ import '../../ar/screens/ar_transaction_screen.dart';
 import '../../ar/screens/ar_aging_report_screen.dart';
 import '../../ar/screens/ar_due_report_screen.dart';
 import '../../ar/screens/ar_movement_report_screen.dart';
+import '../../ar/screens/ar_wht_report_screen.dart';
 import '../../ar/screens/ar_billing_plan_report_screen.dart';
 import '../../ar/screens/ar_bulk_billing_screen.dart';
 import '../../ar/screens/ar_transaction_report_screen.dart';
@@ -416,6 +417,7 @@ class Menu {
     'ApPaymentRunRunningScreen': (context) => const ApPaymentRunRunningScreen(),
     'ApVendorReportScreen': (context) => const ApVendorReportScreen(),
     'ApWhtReportScreen':   (context) => const ApWhtReportScreen(),
+    'ArWhtReportScreen':   (context) => const ArWhtReportScreen(),
     'ApTransactionScreen': (context) => const ApTransactionScreen(),
     'ApGlAccountSetupScreen': (context) => const ApGlAccountSetupScreen(),
     'ApPaymentRunScreen': (context) => const ApPaymentRunScreen(),

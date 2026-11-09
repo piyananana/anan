@@ -78,6 +78,15 @@ class ImTransactionHeader {
   // ส่วนลดท้ายบิลของเอกสารขาย: % ของยอดหลังส่วนลดรายการ แล้วตามด้วยส่วนลดเงินสด — ปันส่วนเข้าแต่ละรายการ
   final double billDiscountPercent;
   final double cashDiscountAmount;
+  // ขายเงินสด ('33'): ผู้ซื้อที่ระบุในเอกสาร (แทนข้อมูลลูกค้าเงินสดในใบแจ้งหนี้/ใบเสร็จ/รายงานภาษีขาย) + เงินที่รับมา/เงินทอน
+  final String? billToName;
+  final String? billToAddress;
+  final String? billToTaxId;
+  final String? billToBranch;
+  final double cashReceived;
+  final double changeAmount;
+  final String? linkedArInvoiceNo; // จาก join — เลขที่ใบแจ้งหนี้ AR ที่สร้างอัตโนมัติ
+  final String? linkedArReceiptNo; // จาก join — เลขที่ใบเสร็จ AR ('33')
   // วันที่ใบกำกับผู้ขาย ('11'/'12') — วันที่/งวดของใบตั้งหนี้ AP อัตโนมัติ (ว่าง = วันที่รับสินค้า)
   final DateTime? vendorInvoiceDate;
   final String? description;
@@ -149,6 +158,14 @@ class ImTransactionHeader {
     this.priceIncludesVat = false,
     this.billDiscountPercent = 0,
     this.cashDiscountAmount = 0,
+    this.billToName,
+    this.billToAddress,
+    this.billToTaxId,
+    this.billToBranch,
+    this.cashReceived = 0,
+    this.changeAmount = 0,
+    this.linkedArInvoiceNo,
+    this.linkedArReceiptNo,
     this.vendorInvoiceDate,
     this.description,
     this.status = 'Draft',
@@ -213,6 +230,14 @@ class ImTransactionHeader {
       priceIncludesVat: json['price_includes_vat'] == true,
       billDiscountPercent: toDouble(json['bill_discount_percent']),
       cashDiscountAmount: toDouble(json['cash_discount_amount']),
+      billToName: json['bill_to_name'],
+      billToAddress: json['bill_to_address'],
+      billToTaxId: json['bill_to_tax_id'],
+      billToBranch: json['bill_to_branch'],
+      cashReceived: toDouble(json['cash_received']),
+      changeAmount: toDouble(json['change_amount']),
+      linkedArInvoiceNo: json['linked_ar_invoice_no'],
+      linkedArReceiptNo: json['linked_ar_receipt_no'],
       vendorInvoiceDate: json['vendor_invoice_date'] != null ? parseLocalDate(json['vendor_invoice_date']) : null,
       description: json['description'],
       status: json['status'] ?? 'Draft',
@@ -262,6 +287,11 @@ class ImTransactionHeader {
         'price_includes_vat': priceIncludesVat,
         'bill_discount_percent': billDiscountPercent,
         'cash_discount_amount': cashDiscountAmount,
+        if (billToName != null) 'bill_to_name': billToName,
+        if (billToAddress != null) 'bill_to_address': billToAddress,
+        if (billToTaxId != null) 'bill_to_tax_id': billToTaxId,
+        if (billToBranch != null) 'bill_to_branch': billToBranch,
+        'cash_received': cashReceived,
         if (vendorInvoiceDate != null) 'vendor_invoice_date': formatLocalDate(vendorInvoiceDate!),
         if (description != null) 'description': description,
         if (dim1Id != null) 'dim1_id': dim1Id,
@@ -605,6 +635,7 @@ class ImDocBlock {
     'INSUFFICIENT_STOCK':  'Current stock balance is not enough to reverse',
     'AP_LINKED':           'The AP invoice created from this document cannot be reversed or voided',
     'AR_LINKED':           'The AR invoice created from this document cannot be reversed or voided',
+    'AR_RECEIPT_LINKED':   'The AR receipt created from this document cannot be reversed or voided',
     'VOIDED':              'This document has been voided or deleted',
     'AP_BLOCKED':          'The AP invoice has been paid, applied, or is in a payment run / FX revaluation',
   };
@@ -668,6 +699,117 @@ class ImOpenAdvance {
   }
 }
 
+// ── ขายเงินสด ('33'): วิธีรับชำระ (สกุลเงินเอกสาร) → ใบเสร็จ AR ที่สร้างตอน Post
+class ImCashPayment {
+  final int? paymentMethodId;
+  final String? paymentMethodCode;
+  final String? paymentMethodName;
+  final String paymentMethodType;
+  final int? cmBankAccountId;
+  final int? glAccountId;
+  final double amountFc;
+  final String? refNo;
+  final String? remark;
+  final String? drawerBankName;
+  final String? drawerBankBranch;
+  final String? drawerAccountNo;
+  final String? cardType;
+  final String? cardLast4;
+  final String? approvalCode;
+  final String? terminalId;
+  final String? batchNo;
+
+  const ImCashPayment({
+    this.paymentMethodId, this.paymentMethodCode, this.paymentMethodName, this.paymentMethodType = 'CASH',
+    this.cmBankAccountId, this.glAccountId, this.amountFc = 0, this.refNo, this.remark,
+    this.drawerBankName, this.drawerBankBranch, this.drawerAccountNo,
+    this.cardType, this.cardLast4, this.approvalCode, this.terminalId, this.batchNo,
+  });
+
+  factory ImCashPayment.fromJson(Map<String, dynamic> json) => ImCashPayment(
+        paymentMethodId: json['payment_method_id'],
+        paymentMethodCode: json['payment_method_code'],
+        paymentMethodName: json['payment_method_name'],
+        paymentMethodType: json['payment_method_type'] ?? 'CASH',
+        cmBankAccountId: json['cm_bank_account_id'],
+        glAccountId: json['gl_account_id'],
+        amountFc: double.tryParse(json['amount_fc']?.toString() ?? '') ?? 0,
+        refNo: json['ref_no'],
+        remark: json['remark'],
+        drawerBankName: json['drawer_bank_name'],
+        drawerBankBranch: json['drawer_bank_branch'],
+        drawerAccountNo: json['drawer_account_no'],
+        cardType: json['card_type'],
+        cardLast4: json['card_last4'],
+        approvalCode: json['approval_code'],
+        terminalId: json['terminal_id'],
+        batchNo: json['batch_no'],
+      );
+
+  Map<String, dynamic> toJson() => {
+        'payment_method_id': paymentMethodId,
+        'payment_method_code': paymentMethodCode,
+        'payment_method_name': paymentMethodName,
+        'payment_method_type': paymentMethodType,
+        'cm_bank_account_id': cmBankAccountId,
+        'gl_account_id': glAccountId,
+        'amount_fc': amountFc,
+        'ref_no': refNo,
+        'remark': remark,
+        'drawer_bank_name': drawerBankName,
+        'drawer_bank_branch': drawerBankBranch,
+        'drawer_account_no': drawerAccountNo,
+        'card_type': cardType,
+        'card_last4': cardLast4,
+        'approval_code': approvalCode,
+        'terminal_id': terminalId,
+        'batch_no': batchNo,
+      };
+}
+
+// ── ขายเงินสด ('33'): ภาษีที่ลูกค้าหัก ณ ที่จ่าย — เก็บเป็นเงินบาท เหมือนใบเสร็จ AR
+class ImCashWht {
+  final int? whtTypeId;
+  final String? whtCode;
+  final String? whtName;
+  final String? incomeType;
+  final double whtRate;
+  final double baseAmountLc;
+  final double whtAmountLc;
+  final String? certificateNo;
+  final String? description;
+
+  const ImCashWht({this.whtTypeId, this.whtCode, this.whtName, this.incomeType, this.whtRate = 0,
+      this.baseAmountLc = 0, this.whtAmountLc = 0, this.certificateNo, this.description});
+
+  factory ImCashWht.fromJson(Map<String, dynamic> json) {
+    double d(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0;
+    return ImCashWht(
+      whtTypeId: json['wht_type_id'],
+      whtCode: json['wht_code'],
+      whtName: json['wht_name'],
+      incomeType: json['income_type'],
+      whtRate: d(json['wht_rate']),
+      baseAmountLc: d(json['base_amount_lc']),
+      whtAmountLc: d(json['wht_amount_lc']),
+      certificateNo: json['certificate_no'],
+      description: json['description'],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'wht_type_id': whtTypeId,
+        'wht_code': whtCode,
+        'wht_name': whtName,
+        'income_type': incomeType,
+        'wht_rate': whtRate,
+        'base_amount_lc': baseAmountLc,
+        'wht_amount_lc': whtAmountLc,
+        'certificate_no': certificateNo,
+        'description': description,
+      };
+}
+
 // ── Wrapper ───────────────────────────────────────────────────────────────
 class ImTransaction {
   final ImTransactionHeader header;
@@ -682,6 +824,8 @@ class ImTransaction {
   // คำขออนุมัติเกินวงเงินเครดิต (เอกสารฝั่งขาย)
   final DocCreditState credit;
   final List<ImAdvance> advances;
+  final List<ImCashPayment> payments; // '33'
+  final List<ImCashWht> whts; // '33'
 
   const ImTransaction({
     required this.header, this.details = const [],
@@ -689,6 +833,8 @@ class ImTransaction {
     this.salespersons = const [],
     this.credit = const DocCreditState(),
     this.advances = const [],
+    this.payments = const [],
+    this.whts = const [],
   });
 
   factory ImTransaction.fromJson(Map<String, dynamic> json) => ImTransaction(
@@ -705,6 +851,12 @@ class ImTransaction {
         credit: DocCreditState.fromJson(json, json['credit_approvals']),
         advances: (json['advances'] as List<dynamic>? ?? [])
             .map((e) => ImAdvance.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        payments: (json['payments'] as List<dynamic>? ?? [])
+            .map((e) => ImCashPayment.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        whts: (json['whts'] as List<dynamic>? ?? [])
+            .map((e) => ImCashWht.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
 }

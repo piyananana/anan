@@ -14,6 +14,17 @@ class ImGlAccountSetup {
   final String? targetDocCodeSel;
   final String? targetDocNameTh;
   final String? targetDocNameEn;
+  // ขายเงินสด ('33'): sys_doc_type ของใบเสร็จ AR ที่สร้างอัตโนมัติ (derived server-side) + ประเภทเอกสารที่ผู้ใช้ตั้ง
+  final String? receiptDocCode;
+  final int? receiptTargetDocId;
+  final String? receiptTargetDocCode;
+  final String? receiptTargetDocNameTh;
+  final String? receiptTargetDocNameEn;
+  // ลูกค้าเงินสดตั้งต้นของเอกสารใหม่
+  final int? defaultCustomerId;
+  final String? defaultCustomerCode;
+  final String? defaultCustomerNameTh;
+  final String? defaultCustomerNameEn;
   final int? glDocId;
   final String? glDocCode;
   final String? glDocName;
@@ -56,6 +67,15 @@ class ImGlAccountSetup {
     this.targetDocCodeSel,
     this.targetDocNameTh,
     this.targetDocNameEn,
+    this.receiptDocCode,
+    this.receiptTargetDocId,
+    this.receiptTargetDocCode,
+    this.receiptTargetDocNameTh,
+    this.receiptTargetDocNameEn,
+    this.defaultCustomerId,
+    this.defaultCustomerCode,
+    this.defaultCustomerNameTh,
+    this.defaultCustomerNameEn,
     this.glDocId,
     this.glDocCode,
     this.glDocName,
@@ -85,6 +105,15 @@ class ImGlAccountSetup {
         targetDocCodeSel: json['target_doc_code_sel'],
         targetDocNameTh: json['target_doc_name_th'],
         targetDocNameEn: json['target_doc_name_en'],
+        receiptDocCode: json['receipt_doc_code'],
+        receiptTargetDocId: json['receipt_target_doc_id'],
+        receiptTargetDocCode: json['receipt_target_doc_code'],
+        receiptTargetDocNameTh: json['receipt_target_doc_name_th'],
+        receiptTargetDocNameEn: json['receipt_target_doc_name_en'],
+        defaultCustomerId: json['default_customer_id'],
+        defaultCustomerCode: json['default_customer_code'],
+        defaultCustomerNameTh: json['default_customer_name_th'],
+        defaultCustomerNameEn: json['default_customer_name_en'],
         glDocId: json['gl_doc_id'],
         glDocCode: json['gl_doc_code'],
         glDocName: json['gl_doc_name'],
@@ -125,7 +154,12 @@ class ImGlAccountSetup {
         'consignment_payable_account_id': consignmentPayableAccountId,
         'gl_doc_id': glDocId,
         'target_doc_id': targetDocId,
+        'receipt_target_doc_id': receiptTargetDocId,
+        'default_customer_id': defaultCustomerId,
       };
+
+  String? defaultCustomerName(bool isEnglish) =>
+      isEnglish && (defaultCustomerNameEn ?? '').isNotEmpty ? defaultCustomerNameEn : defaultCustomerNameTh;
 }
 
 // บัญชีที่ตอน Post จะใช้จริงต่อสินค้า (POST /im_transaction/gl_accounts) — resolver ชุดเดียวกับ backend:

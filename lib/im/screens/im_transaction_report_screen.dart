@@ -27,12 +27,12 @@ enum _Family { generic, purchase, sales }
 
 _Family _familyOf(String sdt) {
   if (['10', '11', '12', '13', '15', '20', '25'].contains(sdt)) return _Family.purchase;
-  if (['30', '31', '32', '35', '40', '45'].contains(sdt)) return _Family.sales;
+  if (['30', '31', '32', '33', '35', '40', '45'].contains(sdt)) return _Family.sales;
   return _Family.generic; // '60' ISS, '70' TRF, '80' AJS
 }
 
 // ประเภทเอกสารที่มี VAT ต่อบรรทัด (ดู pattern_im_vat_feature) — '10'/'30' ไม่มีเพราะ Post บัญชีของ IM เองแยกจาก AP/AR
-bool _isVatType(String sdt) => ['11', '12', '15', '20', '25', '31', '32', '35', '40', '45'].contains(sdt);
+bool _isVatType(String sdt) => ['11', '12', '15', '20', '25', '31', '32', '33', '35', '40', '45'].contains(sdt);
 
 class ImTransactionReportScreen extends StatefulWidget {
   const ImTransactionReportScreen({super.key});

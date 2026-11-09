@@ -74,6 +74,7 @@ const Map<String, String> imSysDocType = {
   '30': 'ส่งสินค้า - Delivery Note', // delivery(sale) (-stock +ar)
   '31': 'ส่งสินค้าพร้อมใบแจ้งหนี้ - Delivery Note with AR Billing', // delivery(sale) (-stock +ar)
   '32': 'ส่งสินค้ารอใบแจ้งหนี้ - Delivery Note Pending AR Billing', // delivery(sale) (-stock only) ตั้งหนี้+GL ทีหลังเมื่อได้ invoice
+  '33': 'ขายเงินสด - Cash Sale', // sale (-stock +cash) ตั้งหนี้ AR + รับชำระ AR อัตโนมัติในครั้งเดียว
   '35': 'รับคืนสินค้า - Return from Customer', // return (+stock -ar)
   '40': 'ลดหนี้ลูกหนี้ - Credit Note to Customer', // cn (+stock -ar)
   '45': 'เพิ่มหนี้ลูกหนี้ - Debit Note to Customer', // dn (-stock +ar)

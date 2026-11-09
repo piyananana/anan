@@ -486,6 +486,8 @@ class ArTransactionWht {
   final double  whtRate;
   final double  baseAmountLc;   // ฐานภาษี (LC)
   final double  whtAmountLc;    // จำนวนภาษีที่ถูกหัก (LC)
+  final String? certificateNo;  // เลขที่หนังสือรับรองการหักภาษี ณ ที่จ่ายที่ลูกค้าออกให้
+  final String? description;
 
   const ArTransactionWht({
     this.id = 0,
@@ -498,6 +500,8 @@ class ArTransactionWht {
     this.whtRate = 0,
     this.baseAmountLc = 0,
     this.whtAmountLc = 0,
+    this.certificateNo,
+    this.description,
   });
 
   factory ArTransactionWht.fromJson(Map<String, dynamic> j) {
@@ -512,6 +516,8 @@ class ArTransactionWht {
       whtRate:      _toDouble(j['wht_rate']) ?? 0,
       baseAmountLc: _toDouble(j['base_amount_lc']) ?? 0,
       whtAmountLc:  _toDouble(j['wht_amount_lc']) ?? 0,
+      certificateNo: j['certificate_no'] as String?,
+      description:  j['description'] as String?,
     );
   }
 
@@ -526,12 +532,14 @@ class ArTransactionWht {
     'wht_rate':       whtRate,
     'base_amount_lc': baseAmountLc,
     'wht_amount_lc':  whtAmountLc,
+    'certificate_no': certificateNo,
+    'description':    description,
   };
 
   ArTransactionWht copyWith({
     int? id, int? headerId, int? lineNo,
     int? whtTypeId, String? whtCode, String? whtName, String? incomeType,
-    double? whtRate, double? baseAmountLc, double? whtAmountLc,
+    double? whtRate, double? baseAmountLc, double? whtAmountLc, String? certificateNo, String? description,
   }) {
     return ArTransactionWht(
       id:           id ?? this.id,
@@ -544,6 +552,8 @@ class ArTransactionWht {
       whtRate:      whtRate ?? this.whtRate,
       baseAmountLc: baseAmountLc ?? this.baseAmountLc,
       whtAmountLc:  whtAmountLc ?? this.whtAmountLc,
+      certificateNo: certificateNo ?? this.certificateNo,
+      description:  description ?? this.description,
     );
   }
 }

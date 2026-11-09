@@ -8,6 +8,8 @@ import '../../gl/models/gl_account.dart';
 import '../../gl/services/gl_account_service.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_module_document_service.dart';
+import '../../ar/models/ar_customer.dart';
+import '../../ar/widgets/ar_customer_list_widget.dart';
 import '../models/im_gl_account_setup.dart';
 import '../services/im_gl_account_setup_service.dart';
 
@@ -165,6 +167,12 @@ class _ImGlAccountSetupScreenState extends State<ImGlAccountSetupScreen> with Au
                                       && d.sysDocType == _selected!.targetDocCode).toList()
                                 ..sort((a, b) => a.docCode.compareTo(b.docCode)))
                               : const [],
+                          // ขายเงินสด: ประเภทเอกสารรับชำระ AR ที่เลือกได้
+                          receiptDocs: _selected!.receiptDocCode != null
+                              ? (_allDocs.where((d) => d.isDocType && d.isActive && d.sysModule == '11'
+                                      && d.sysDocType == _selected!.receiptDocCode).toList()
+                                ..sort((a, b) => a.docCode.compareTo(b.docCode)))
+                              : const [],
                           onSave: _onSave,
                         ),
                 ),
@@ -211,6 +219,7 @@ class _ImGlSetupForm extends StatefulWidget {
   final List<Account> accounts;
   final List<ModuleDocument> glDocs;
   final List<ModuleDocument> targetDocs;
+  final List<ModuleDocument> receiptDocs;
   final Future<void> Function(ImGlAccountSetup) onSave;
 
   const _ImGlSetupForm({
@@ -219,6 +228,7 @@ class _ImGlSetupForm extends StatefulWidget {
     required this.accounts,
     required this.glDocs,
     required this.targetDocs,
+    required this.receiptDocs,
     required this.onSave,
   });
 
@@ -237,6 +247,8 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   int? _consignmentPayableAccountId; String? _consignmentPayableAccountCode; String? _consignmentPayableAccountName;
   int? _glDocId;            String? _glDocCode;            String? _glDocName;
   int? _targetDocId;        String? _targetDocCode;        String? _targetDocName;
+  int? _receiptDocId;       String? _receiptDocCode;       String? _receiptDocName;
+  int? _defaultCustomerId;  String? _defaultCustomerCode;  String? _defaultCustomerName;
   bool _isSaving = false;
 
   @override
@@ -264,6 +276,9 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     _consignmentPayableAccountName = s.consignmentPayableAccountName;
     _glDocId            = s.glDocId;            _glDocCode            = s.glDocCode;            _glDocName            = s.glDocName;
     _targetDocId        = s.targetDocId;        _targetDocCode        = s.targetDocCodeSel;     _targetDocName        = s.targetDocNameTh;
+    _receiptDocId       = s.receiptTargetDocId; _receiptDocCode       = s.receiptTargetDocCode; _receiptDocName       = s.receiptTargetDocNameTh;
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    _defaultCustomerId  = s.defaultCustomerId;  _defaultCustomerCode  = s.defaultCustomerCode;  _defaultCustomerName  = s.defaultCustomerName(isEnglish);
   }
 
   String _acctName(int? id, String? storedName) {
@@ -395,6 +410,25 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     }
   }
 
+  Future<void> _pickReceiptDoc() async {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final picked = await _pickDoc(widget.receiptDocs, isEnglish ? 'Select AR Receipt Document Type' : 'เลือกประเภทเอกสารรับชำระ AR');
+    if (picked != null) {
+      setState(() { _receiptDocId = picked.id; _receiptDocCode = picked.docCode; _receiptDocName = picked.docNameThai; });
+    }
+  }
+
+  void _pickDefaultCustomer() {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    ArCustomerListWidget.search(context, onSelected: (ArCustomer c) {
+      setState(() {
+        _defaultCustomerId = c.id;
+        _defaultCustomerCode = c.customerCode;
+        _defaultCustomerName = isEnglish && (c.customerNameEn ?? '').isNotEmpty ? c.customerNameEn : c.customerNameTh;
+      });
+    });
+  }
+
   Future<ModuleDocument?> _pickDoc(List<ModuleDocument> docs, String title) async {
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     final searchCtrl = TextEditingController();
@@ -461,6 +495,9 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         glDocId: _glDocId, glDocCode: _glDocCode, glDocName: _glDocName,
         targetAuto: widget.setup.targetAuto,
         targetDocId: _targetDocId, targetDocCodeSel: _targetDocCode, targetDocNameTh: _targetDocName,
+        receiptDocCode: widget.setup.receiptDocCode,
+        receiptTargetDocId: _receiptDocId, receiptTargetDocCode: _receiptDocCode, receiptTargetDocNameTh: _receiptDocName,
+        defaultCustomerId: _defaultCustomerId, defaultCustomerCode: _defaultCustomerCode, defaultCustomerNameTh: _defaultCustomerName,
         inventoryAccountId: _inventoryAccountId, inventoryAccountCode: _inventoryAccountCode, inventoryAccountName: _inventoryAccountName,
         cogsAccountId: _cogsAccountId, cogsAccountCode: _cogsAccountCode, cogsAccountName: _cogsAccountName,
         varianceAccountId: _varianceAccountId, varianceAccountCode: _varianceAccountCode, varianceAccountName: _varianceAccountName,
@@ -491,6 +528,11 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     if (s.targetModule == 'NONE') return isEnglish ? 'Internal only — no AR/AP document is created' : 'ภายในเท่านั้น — ไม่สร้างเอกสาร AR/AP';
     final moduleLabel = s.targetModule == 'AP' ? 'AP' : 'AR';
     final kind = _targetKind(isEnglish);
+    if (s.receiptDocCode != null) {
+      return isEnglish
+          ? 'Creates an AR invoice (system type ${s.targetDocCode}) and an AR receipt (system type ${s.receiptDocCode}) that settles it when posted — choose both document types below'
+          : 'เมื่อ Post จะสร้างใบแจ้งหนี้ AR (ประเภทระบบ ${s.targetDocCode}) และใบเสร็จรับชำระ AR (ประเภทระบบ ${s.receiptDocCode}) ตัดใบแจ้งหนี้นั้นอัตโนมัติ — เลือกประเภทเอกสารทั้งสองด้านล่าง';
+    }
     if (!s.targetAuto) {
       return isEnglish
           ? 'No document is created automatically — record the $moduleLabel $kind later in the $moduleLabel module'
@@ -513,7 +555,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   // postApBillFromGrn/postApCreditDebitNoteFromIm/postArBillFromDln/postArCreditDebitNoteFromIm)
   // '11'/'12'/'15'/'20'/'25' ลงบัญชีผ่านเอกสาร AP เท่านั้น (ใช้ประเภทเอกสาร GL ของ AP) — ใช้บัญชีสินค้า/ผลต่าง/VAT ซื้อของหน้านี้
   static const _apLinked = ['11', '12', '15', '20', '25'];
-  static const _arLinked = ['31', '32', '35', '40', '45'];
+  static const _arLinked = ['31', '32', '33', '35', '40', '45'];
   bool get _noGl         => _sdt == '85';                                        // เปลี่ยนแปลงราคา ไม่ลงบัญชี
   bool get _showGlDoc    => !_noGl && !_apLinked.contains(_sdt);                 // postGlEntry ของ IM เอง
   bool get _showInv      => !_noGl;
@@ -668,6 +710,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
       case '30': // DLN — ส่งสินค้า (ขาย)
       case '31': // DLN Billing — ส่งสินค้า+ตั้งหนี้อัตโนมัติ — ต้นทุนขาย Post ที่นี่เสมอ ใบแจ้งหนี้ AR แยกต่างหาก (ดู note ด้านล่าง)
       case '32': // DLN รอตั้งหนี้ — ต้นทุนขาย Post ทันทีตอน Post IM เหมือนกัน (ไม่ขึ้นกับราคาขาย) ต่างจาก '12' ตรงนี้
+      case '33': // ขายเงินสด — ต้นทุนขายที่นี่ ใบแจ้งหนี้ + ใบเสร็จ AR แยกต่างหาก (ดู note ด้านล่าง)
       case '45': // DNC — เพิ่มหนี้ลูกหนี้
         return [
           _JournalSection(lines: [_JournalLine('Dr', cogs), _JournalLine('  Cr', inv)]),
@@ -685,7 +728,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   Widget _buildJournalPreview(bool isEnglish) {
     final sections = _journalSections(isEnglish);
     if (sections.isEmpty) return const SizedBox.shrink();
-    final isLive = ['80', '60', '70', '10', '11', '12', '13', '30', '31', '32', '15', '20', '25', '35', '40', '45'].contains(_sdt);
+    final isLive = ['80', '60', '70', '10', '11', '12', '13', '30', '31', '32', '33', '15', '20', '25', '35', '40', '45'].contains(_sdt);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -787,6 +830,15 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
               style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
             ),
           ],
+          if (_sdt == '33') ...[
+            const SizedBox(height: 6),
+            Text(
+              isEnglish
+                  ? '* Three separate entries post: the COGS entry above (this module) plus the linked AR Invoice (Dr AR / Cr Revenue + Output VAT) and the linked AR Receipt (Dr Cash/Bank per payment method + WHT + deposit deducted / Cr AR), both created automatically and not shown here.'
+                  : '* มีการ Post 3 entry แยกกัน: entry ต้นทุนขายข้างบน (โมดูลนี้) กับใบแจ้งหนี้ AR (Dr ลูกหนี้ / Cr รายได้ + ภาษีขาย) และใบเสร็จรับชำระ AR (Dr เงินสด/ธนาคารตามวิธีรับเงิน + ภาษีถูกหัก ณ ที่จ่าย + มัดจำที่หัก / Cr ลูกหนี้) ที่สร้างอัตโนมัติ (ไม่ได้แสดงที่นี่)',
+              style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic),
+            ),
+          ],
           if (_sdt == '32') ...[
             const SizedBox(height: 6),
             Text(
@@ -808,6 +860,12 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         ],
       ),
     );
+  }
+
+  String? _receiptDocDisplayName(bool isEnglish) {
+    final m = widget.receiptDocs.cast<ModuleDocument?>().firstWhere((d) => d?.id == _receiptDocId, orElse: () => null);
+    if (m == null) return _receiptDocName;
+    return isEnglish && m.docNameEng.isNotEmpty ? m.docNameEng : m.docNameThai;
   }
 
   String? _targetDocDisplayName(bool isEnglish) {
@@ -892,6 +950,54 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
             child: Text(
               _targetDocId != null ? '$_targetDocCode  ${_targetDocDisplayName(isEnglish) ?? ''}' : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
               style: TextStyle(fontSize: 13, color: _targetDocId != null ? null : Colors.grey.shade500),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        ],
+
+        // ขายเงินสด: ประเภทเอกสารรับชำระ AR + ลูกค้าเงินสดตั้งต้น
+        if (s.receiptDocCode != null) ...[
+        InkWell(
+          onTap: _pickReceiptDoc,
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'AR receipt document type (required)' : 'ประเภทเอกสารรับชำระ AR (ต้องระบุ)',
+              border: const OutlineInputBorder(),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              errorText: _receiptDocId == null ? (isEnglish ? 'Required before posting this document type' : 'ต้องตั้งก่อน Post เอกสารประเภทนี้') : null,
+              suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (_receiptDocId != null)
+                  IconButton(icon: const Icon(Icons.clear, size: 16), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => setState(() { _receiptDocId = null; _receiptDocCode = null; _receiptDocName = null; })),
+                const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.description_outlined, size: 18)),
+              ]),
+            ),
+            child: Text(
+              _receiptDocId != null ? '$_receiptDocCode  ${_receiptDocDisplayName(isEnglish) ?? ''}' : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
+              style: TextStyle(fontSize: 13, color: _receiptDocId != null ? null : Colors.grey.shade500),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _SectionHeader(title: isEnglish ? 'Default Cash Customer' : 'ลูกค้าเงินสดตั้งต้น'),
+        InkWell(
+          onTap: _pickDefaultCustomer,
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Customer filled in on new documents (optional)' : 'ลูกค้าที่ใส่ให้อัตโนมัติในเอกสารใหม่ (ไม่บังคับ)',
+              border: const OutlineInputBorder(),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (_defaultCustomerId != null)
+                  IconButton(icon: const Icon(Icons.clear, size: 16), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => setState(() { _defaultCustomerId = null; _defaultCustomerCode = null; _defaultCustomerName = null; })),
+                const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.person_search, size: 18)),
+              ]),
+            ),
+            child: Text(
+              _defaultCustomerId != null ? '$_defaultCustomerCode  ${_defaultCustomerName ?? ''}' : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
+              style: TextStyle(fontSize: 13, color: _defaultCustomerId != null ? null : Colors.grey.shade500),
             ),
           ),
         ),

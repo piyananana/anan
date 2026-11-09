@@ -120,6 +120,7 @@ class ArTransactionService {
     required List<ArTransactionApply> applies,
     required String action, // 'Draft' | 'Post'
     List<ArTransactionPayment> payments = const [],
+    List<ArTransactionWht> whts = const [], // ภาษีถูกหัก ณ ที่จ่าย (ใบรับชำระเท่านั้น)
     List<DocSalesperson>? salespersons, // null = ไม่ส่ง (เอกสารที่ไม่มีพนักงานขาย)
   }) async {
     final headers = await authService.getAuthHeader();
@@ -128,6 +129,7 @@ class ArTransactionService {
       'details': details.map((d) => d.toJson()).toList(),
       'applies': applies.map((a) => a.toJson()).toList(),
       'payments': payments.map((p) => p.toJson()).toList(),
+      'whts': whts.map((w) => w.toJson()).toList(),
       'action': action,
       if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
     });
@@ -154,6 +156,7 @@ class ArTransactionService {
     required List<ArTransactionApply> applies,
     required String action,
     List<ArTransactionPayment> payments = const [],
+    List<ArTransactionWht> whts = const [],
     List<DocSalesperson>? salespersons,
   }) async {
     final authHeaders = await authService.getAuthHeader();
@@ -162,6 +165,7 @@ class ArTransactionService {
       'details': details.map((d) => d.toJson()).toList(),
       'applies': applies.map((a) => a.toJson()).toList(),
       'payments': payments.map((p) => p.toJson()).toList(),
+      'whts': whts.map((w) => w.toJson()).toList(),
       'action': action,
       if (salespersons != null) 'salespersons': salespersons.map((e) => e.toJson()).toList(),
     });

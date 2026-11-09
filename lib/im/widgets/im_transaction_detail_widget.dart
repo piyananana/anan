@@ -45,6 +45,9 @@ import '../../gl/models/gl_dimension.dart';
 import '../../gl/services/gl_dimension_service.dart';
 import '../../gl/widgets/gl_dimension_picker_field.dart';
 import '../../gl/widgets/gl_line_account_dims.dart';
+import '../../cd/models/cd_wht_type.dart';
+import '../../cd/services/cd_wht_type_service.dart';
+import 'im_cash_sale_panel.dart';
 
 double _parseNum(String s) => double.tryParse(s.trim()) ?? 0;
 
@@ -320,6 +323,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   List<PostingPeriod> _openPeriods = [];
   ImGlAccountSetup? _docSetup;
   List<GlEntryDetail>? _postedGlDetails;
+  // ขายเงินสด ('33') — ผู้ซื้อ วิธีรับชำระ ภาษีถูกหัก ณ ที่จ่าย เงินที่รับมา (ดู im_cash_sale_panel.dart)
+  final ImCashSaleController _cash = ImCashSaleController();
+  List<CdWhtType> _whtTypes = [];
 
   bool get _isReadOnly => widget.viewOnly || _status != 'Draft' || _credit.isPending;
   // วันที่ใบกำกับผู้ขาย: '11' ตั้งแต่ร่าง, '12' ตอนตั้งหนี้ (Received) และหลัง Post
@@ -340,8 +346,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // (ตั้งหนี้เป็นก้อนภายหลังผ่านหน้า Consignment Settlement) บังคับ FIFO/SPECIFIC เท่านั้น ไม่ให้ปนกับต้นทุนเฉลี่ย
   // ของสินค้าของเราเอง และไม่ให้ใช้ ของแถม (is_free) ร่วมกัน เพราะเป็นคนละแนวคิดกัน
   bool get _isConsignmentReceiveMode => _selectedSysDocType == '13';
-  bool get _isDeliverMode => _selectedSysDocType == '30' || _selectedSysDocType == '31' || _selectedSysDocType == '32'; // DLN — ส่งสินค้า
-  bool get _isDlnBillingMode => _selectedSysDocType == '31'; // DLN Billing — ส่งสินค้า+ตั้งหนี้อัตโนมัติ
+  bool get _isDeliverMode => _selectedSysDocType == '30' || _selectedSysDocType == '31' || _selectedSysDocType == '32' || _isCashSaleMode; // DLN — ส่งสินค้า
+  // DLN Billing — ส่งสินค้า+ตั้งหนี้อัตโนมัติ ('33' ขายเงินสดทำเหมือน '31' ทุกอย่าง แล้วสร้างใบเสร็จรับเงินต่อ)
+  bool get _isDlnBillingMode => _selectedSysDocType == '31' || _isCashSaleMode;
+  bool get _isCashSaleMode => _selectedSysDocType == '33';
+  // ยอดที่ต้องรับชำระของขายเงินสด = ใบแจ้งหนี้ (รวม VAT) − เงินมัดจำที่หัก
+  double get _cashDueFc => _billTotalFc - _advTotalFc;
   bool get _isDlnDeferredMode => _selectedSysDocType == '32'; // DLN รอตั้งหนี้ — Post IM ก่อน (COGS ทันที) ค่อย Post AR/GL ทีหลัง
   // Return/CN/DN family — '15'/'20'/'25' ฝั่งผู้ขาย (AP), '35'/'40'/'45' ฝั่งลูกค้า (AR) มิเรอร์ GRN/DLN แต่ทั้งคู่
   // auto-create เอกสาร AP/AR CN หรือ DN เสมอ (ต่างจาก '10'/'30' ที่ IM Post บัญชีของตัวเอง แยกจาก AP/AR) — '15'/'35'
@@ -552,6 +562,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _billDiscPctCtrl.dispose();
     _cashDiscCtrl.dispose();
     _descCtrl.dispose();
+    _cash.dispose();
     for (final l in _lines) {
       l.dispose();
     }
@@ -615,6 +626,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _advRows = [];
     _docSetup = null;
     _postedGlDetails = null;
+    _cash.clear();
   }
 
   Future<void> _load() async {
@@ -644,6 +656,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       _currencies = results[3] as List<Currency>;
       _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
       _exchangeRate = _currency?.baseRate ?? 1;
+      if (_docTypes.any((d) => d.sysDocType == '33')) {
+        try { _whtTypes = await CdWhtTypeService().fetchActiveRows(); } catch (_) { _whtTypes = []; }
+      }
       if (_docTypes.length == 1) {
         await _selectDocType(_docTypes.first);
       }
@@ -766,6 +781,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         ..dims = {1: d.dim1Id, 2: d.dim2Id, 3: d.dim3Id, 4: d.dim4Id, 5: d.dim5Id});
     }
     _lines = lines;
+    if (_isCashSaleMode) {
+      if (_whtTypes.isEmpty) {
+        try { _whtTypes = await CdWhtTypeService().fetchActiveRows(); } catch (_) {}
+      }
+      _cash.load(tx, _whtTypes);
+    }
     if (_status == 'Draft') await _loadRefDims();
     await _loadAdvances(saved: tx.advances);
 
@@ -804,6 +825,17 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     });
     _docSetup = await _service.fetchSetupByDocCode(d.docCode).catchError((_) => null);
     if (mounted) setState(() {});
+    // ขายเงินสด: เอกสารใหม่ที่ยังไม่เลือกลูกค้า → ลูกค้าเงินสดตามที่ตั้งค่าไว้ในหน้าตั้งค่าบัญชี IM
+    final defaultCustomerId = _docSetup?.defaultCustomerId;
+    if (_isCashSaleMode && _id == null && _customerId == null && defaultCustomerId != null) {
+      try {
+        final c = await ArCustomerService().fetchRow(defaultCustomerId);
+        if (mounted && _customerId == null && _docId == d.id) {
+          _selectCustomer(c);
+          return; // _selectCustomer โหลดเงินมัดจำให้แล้ว
+        }
+      } catch (_) {}
+    }
     await _loadAdvances();
   }
 
@@ -1668,10 +1700,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (_isReturnToSupplierMode && !await _confirmReturnSourceImpact()) return;
     if (['10', '11', '12'].contains(_selectedSysDocType) && !await _confirmPoPriceDiffs()) return;
     // '31' ตั้งหนี้ทันที — ราคาขายต่างจาก SO ให้ยืนยัน ('32' เตือนตอนออกใบแจ้งหนี้, '30' ไม่มีราคาขาย)
-    if (_selectedSysDocType == '31' && !await _confirmPoPriceDiffs(sales: true)) return;
+    if (_isDlnBillingMode && !await _confirmPoPriceDiffs(sales: true)) return;
     if (!await _confirmLinkedAdvances()) return;
     if (!_checkVendorCnDnNo()) return;
-    if (_isArCustomerMode && _customerId != null) {
+    // ขายเงินสดรับเงินครบตอน Post — ไม่ตรวจวงเงินเครดิต
+    if (_isArCustomerMode && _customerId != null && !_isCashSaleMode) {
       final go = await checkCreditBeforePost(
         context,
         service: _creditService,
@@ -1727,7 +1760,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       warn(isEnglish ? 'Please enter the vendor invoice number' : 'กรุณาระบุเลขที่ใบกำกับสินค้าผู้ขาย');
       return;
     }
-    if (_isArCustomerMode && _customerId == null) {
+    // ขายเงินสดไม่เลือกลูกค้าได้ — backend ใช้ลูกค้าเงินสดตามที่ตั้งค่าไว้
+    if (_isArCustomerMode && _customerId == null && !_isCashSaleMode) {
       warn(isEnglish ? 'Please select a customer' : 'กรุณาเลือกลูกค้า');
       return;
     }
@@ -1807,6 +1841,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
     if (_salesDiscountMode && !_checkSalesDiscountTotals(warn)) return;
     if (!_checkAdvances()) return;
+    if (_isCashSaleMode) {
+      final err = _cash.validate(post: action == 'Post', dueFc: _cashDueFc, isEnglish: isEnglish, fmt: _fmtMoney);
+      if (err != null) { warn(err); return; }
+    }
 
     setState(() => _isSaving = true);
     try {
@@ -1832,6 +1870,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         priceIncludesVat: _inclVat,
         billDiscountPercent: _salesDiscountMode ? _billDiscPct : 0,
         cashDiscountAmount: _salesDiscountMode ? _cashDisc : 0,
+        billToName: _isCashSaleMode ? _cash.billToName : null,
+        billToAddress: _isCashSaleMode ? _cash.billToAddress : null,
+        billToTaxId: _isCashSaleMode ? _cash.billToTaxId : null,
+        billToBranch: _isCashSaleMode ? _cash.billToBranch : null,
+        cashReceived: _isCashSaleMode ? _cash.cashReceived : 0,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
         dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
@@ -1870,14 +1913,18 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             description: l.remarkCtrl.text.trim().isEmpty ? null : l.remarkCtrl.text.trim(),
           )).toList();
 
+      final payments = _isCashSaleMode ? _cash.paymentsForSave() : null;
+      final whts = _isCashSaleMode ? _cash.whtsForSave(_exchangeRate) : null;
       if (_id == null) {
         final result = await _service.createTransaction(header: header, details: details, action: action,
-            salespersons: _isArCustomerMode ? _salespersons : null, advances: _showAdvances ? _advancesForSave : null);
+            salespersons: _isArCustomerMode ? _salespersons : null, advances: _showAdvances ? _advancesForSave : null,
+            payments: payments, whts: whts);
         _id = result.header.id;
       } else {
         if (_status == 'Draft') {
           await _service.updateTransaction(id: _id!, header: header, details: details,
-              salespersons: _isArCustomerMode ? _salespersons : null, advances: _showAdvances ? _advancesForSave : null);
+              salespersons: _isArCustomerMode ? _salespersons : null, advances: _showAdvances ? _advancesForSave : null,
+              payments: payments, whts: whts);
         }
         if (action == 'Post') {
           await _service.postTransaction(_id!);
@@ -2138,6 +2185,19 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   const SizedBox(height: 12),
                   _buildAdvanceCard(isEnglish),
                 ],
+                if (_isCashSaleMode) ...[
+                  const SizedBox(height: 12),
+                  ImCashSalePanel(
+                    controller: _cash,
+                    readOnly: _isReadOnly,
+                    isEnglish: isEnglish,
+                    dueFc: _cashDueFc,
+                    whtBaseFc: _lines.fold(0.0, (t, l) => t + _amt(l).net),
+                    currencyCode: _currency?.currencyCode ?? CurrencyService.baseCode,
+                    whtTypes: _whtTypes,
+                    customerLabel: _customerId != null ? _customerLabel : null,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 _buildGlCard(isEnglish),
                 if (_isDlnBillingMode || _isDlnDeferredMode || _isArReturnCnMode || _isArDnMode) ...[
@@ -2315,7 +2375,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           Expanded(
             flex: 1,
             child: _fkField(
-              label: isEnglish ? 'Customer *' : 'ลูกค้า *',
+              label: _isCashSaleMode
+                  ? (isEnglish ? 'Customer (blank = cash customer)' : 'ลูกค้า (ว่าง = ลูกค้าเงินสด)')
+                  : (isEnglish ? 'Customer *' : 'ลูกค้า *'),
               hasValue: _customerId != null,
               displayText: _customerLabel,
               onSearch: _isReadOnly ? null : () => ArCustomerListWidget.search(context, onSelected: _selectCustomer),

@@ -25,6 +25,8 @@ import '../models/ar_gl_account_setup.dart';
 import '../services/ar_gl_account_setup_service.dart';
 import '../../utils/date_utils.dart' show parseLocalDateNullable;
 import '../../cm/models/cm_payment_method.dart';
+import '../../cd/models/cd_wht_type.dart';
+import '../../cd/services/cd_wht_type_service.dart';
 import '../../cm/widgets/cm_payment_method_list_widget.dart';
 import '../../gl/services/gl_entry_service.dart';
 import '../../gl/models/gl_entry.dart';
@@ -169,6 +171,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   // Payment rows (for Receipt / Advance Receipt)
   List<_PaymentRow> _paymentRows = [];
 
+  // ภาษีที่ลูกค้าหัก ณ ที่จ่าย (Receipt เท่านั้น) — กรอกเป็นสกุลเงินเอกสาร เก็บเป็นบาท (× อัตราแลกเปลี่ยน)
+  List<_WhtRow> _whtRows = [];
+  List<CdWhtType> _whtTypes = [];
+  double get _totalWht => _whtRows.fold(0.0, (s, w) => s + (double.tryParse(w.whtCtrl.text) ?? 0));
+
   // ข้อมูลวางบิลของแต่ละ invoice (invoice_id → {bc_doc_no, billing_date, billed_amount})
   // โหลดเฉพาะเมื่อ Receipt + requiresBilling
   Map<int, Map<String, dynamic>> _invoiceBcMap = {};
@@ -247,6 +254,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     for (final c in _cnCtrlMap.values) c.dispose();
     for (final c in _advanceRefundCtrlMap.values) c.dispose();
     for (final r in _paymentRows) r.dispose();
+    for (final r in _whtRows) r.dispose();
     for (final r in _glEditRows) r.dispose();
     _glHeaderHScroll.dispose();
     _glBodyHScroll.dispose();
@@ -285,6 +293,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       _vatRates = (results[5] as List<VatRate>).where((v) => v.isActive).toList();
       _dimTypes = results[6] as List<GlDimensionType>;
       _allBranches = results[7] as List<Branch>;
+      try { _whtTypes = await CdWhtTypeService().fetchActiveRows(); } catch (_) { _whtTypes = []; }
 
       // Load values for each active dimension type
       final dimValueResults = await Future.wait(
@@ -451,6 +460,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
             .toList();
         for (final r in _paymentRows) r.dispose();
         _paymentRows = data.payments.map((p) => _PaymentRow.fromModel(p, isFcLoad)).toList();
+        for (final r in _whtRows) r.dispose();
+        final loadRate = h.exchangeRate == 0 ? 1.0 : h.exchangeRate;
+        _whtRows = data.whts.map((x) => _WhtRow.fromModel(x, _whtTypes, loadRate)).toList();
       });
       _recalcTotals();
       if (h.status == 'Posted') _loadPostedGl();
@@ -558,6 +570,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
       for (final r in _paymentRows) r.dispose();
       _paymentRows = [];
+      for (final r in _whtRows) r.dispose();
+      _whtRows = [];
 
       for (final r in _glEditRows) r.dispose();
       _glEditRows = [];
@@ -1280,11 +1294,11 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     double discFc = 0;
     double vatFc = 0;
     if (_isReceipt || _isBillCollection) {
-      // Receipt / BC: total = sum(invoice applies) - advance - CN deductions
+      // Receipt / BC: total = sum(invoice applies) - advance - CN deductions - WHT (receipt)
       final applied    = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
       final advanced   = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
       final cnDeducted = _cnRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
-      subFc = applied - advanced - cnDeducted;
+      subFc = applied - advanced - cnDeducted - (_isReceipt ? _totalWht : 0);
     } else if (_isCreditNoteWithBill || _isDebitNoteWithBill) {
       // CN-55 / DN-35: total = sum of apply rows (no detail lines)
       subFc = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
@@ -1546,17 +1560,33 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       );
     }).toList();
 
+    final whts = !_isReceipt ? <ArTransactionWht>[] : _whtRows.asMap().entries
+        .where((e) => (double.tryParse(e.value.whtCtrl.text) ?? 0) > 0)
+        .map((e) {
+      final r = e.value;
+      final t = r.selectedWhtType;
+      return ArTransactionWht(
+        lineNo: e.key + 1,
+        whtTypeId: t?.id, whtCode: t?.whtCode, whtName: t?.whtName, incomeType: t?.incomeType,
+        whtRate: t?.whtRate ?? 0,
+        baseAmountLc: (double.tryParse(r.baseCtrl.text) ?? 0) * lc,
+        whtAmountLc: (double.tryParse(r.whtCtrl.text) ?? 0) * lc,
+        certificateNo: r.certCtrl.text.trim().isEmpty ? null : r.certCtrl.text.trim(),
+        description: r.descCtrl.text.trim().isEmpty ? null : r.descCtrl.text.trim(),
+      );
+    }).toList();
+
     setState(() => _isLoading = true);
     try {
       if (_transactionId == 0) {
         final created = await _service.createTransaction(
-          header: header, details: details, applies: applies, payments: payments, action: action,
+          header: header, details: details, applies: applies, payments: payments, whts: whts, action: action,
           salespersons: _hasSalespersons ? _salespersons : null,
         );
         _lastSavedId = created['id'] as int?;
       } else {
         await _service.updateTransaction(
-          id: _transactionId, header: header, details: details, applies: applies, payments: payments, action: action,
+          id: _transactionId, header: header, details: details, applies: applies, payments: payments, whts: whts, action: action,
           salespersons: _hasSalespersons ? _salespersons : null,
         );
         _lastSavedId = _transactionId;
@@ -2088,6 +2118,10 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
                 ],
                 if (_hasAdvanceRefundSection) ...[
                   _buildAdvanceRefundSection(),
+                  const SizedBox(height: 16),
+                ],
+                if (_isReceipt) ...[
+                  _buildWhtSection(),
                   const SizedBox(height: 16),
                 ],
                 if (_isReceipt || _isAdvanceReceipt) ...[
@@ -2878,7 +2912,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final totalApplied   = _applyRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
     final totalAdvance   = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
     final totalCnDeduct  = _cnRows.fold(0.0, (s, a) => s + a.appliedAmountLc);
-    final totalCash      = totalApplied - totalAdvance - totalCnDeduct;
+    final totalCash      = totalApplied - totalAdvance - totalCnDeduct - (_isReceipt ? _totalWht : 0);
     final currency       = _selectedCurrency?.currencyCode ?? '';
     final showBcCols        = _isReceipt &&
         (_selectedCustomer?.requiresBilling == true ||
@@ -3176,7 +3210,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       ],
 
       // ── สรุปยอดสุทธิ (เฉพาะ Receipt) ───────────────────────────
-      if (_isReceipt && (showAdvanceCard || showCnCard)) ...[
+      if (_isReceipt && (showAdvanceCard || showCnCard || _totalWht > 0)) ...[
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerRight,
@@ -3276,6 +3310,103 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           const SizedBox(height: 8),
           Text('${isEnglish ? 'Total Advance Refund' : 'ยอดคืนมัดจำรวม'}: ${_fmt.format(totalRefund)} $currency',
               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple[800])),
+        ]),
+      ),
+    );
+  }
+
+  // ภาษีที่ลูกค้าหัก ณ ที่จ่าย — ฐานภาษีเริ่มต้นจากยอดก่อน VAT ไม่ได้ (ใบรับชำระไม่มีรายการ) จึงให้กรอกเอง
+  Widget _buildWhtSection() {
+    final isEnglish = _isEnglish;
+    final currency = _selectedCurrency?.currencyCode ?? CurrencyService.baseCode;
+    InputDecoration deco(String label) => InputDecoration(labelText: label, isDense: true, border: const OutlineInputBorder());
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(Icons.percent, size: 18, color: Colors.red[700]),
+            const SizedBox(width: 6),
+            Text(isEnglish ? 'Withholding Tax Deducted by Customer' : 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold, color: Colors.red[800])),
+            const Spacer(),
+            if (!_isReadOnly)
+              TextButton.icon(
+                onPressed: () => setState(() => _whtRows.add(_WhtRow())),
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(isEnglish ? 'Add WHT' : 'เพิ่มรายการ'),
+              ),
+          ]),
+          if (_whtRows.isEmpty)
+            Padding(padding: const EdgeInsets.all(8), child: Text(isEnglish ? 'No withholding tax' : 'ไม่มีการหัก ณ ที่จ่าย', style: const TextStyle(color: Colors.grey)))
+          else
+            ..._whtRows.asMap().entries.map((e) {
+              final i = e.key;
+              final w = e.value;
+              final rate = w.selectedWhtType?.whtRate ?? 0;
+              void recalc() {
+                final base = double.tryParse(w.baseCtrl.text) ?? 0;
+                w.whtCtrl.text = (base * (w.selectedWhtType?.whtRate ?? 0) / 100).toStringAsFixed(2);
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  SizedBox(width: 260, child: DropdownButtonFormField<CdWhtType?>(
+                    value: w.selectedWhtType,
+                    decoration: deco(isEnglish ? 'WHT Type' : 'ประเภทภาษี'),
+                    isExpanded: true,
+                    items: [
+                      DropdownMenuItem(value: null, child: Text(isEnglish ? '— Select type —' : '— เลือกประเภท —')),
+                      ..._whtTypes.map((t) => DropdownMenuItem(
+                        value: t,
+                        child: Text('${t.whtCode} — ${isEnglish && (t.whtNameEn ?? '').isNotEmpty ? t.whtNameEn! : t.whtName}', overflow: TextOverflow.ellipsis),
+                      )),
+                    ],
+                    onChanged: _isReadOnly ? null : (t) { setState(() { w.selectedWhtType = t; recalc(); }); _recalcTotals(); },
+                  )),
+                  SizedBox(width: 80, child: InputDecorator(
+                    decoration: deco(isEnglish ? 'Rate' : 'อัตรา'),
+                    child: Text(rate > 0 ? '${rate.toStringAsFixed(2)}%' : '—', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13)),
+                  )),
+                  SizedBox(width: 140, child: TextFormField(
+                    controller: w.baseCtrl,
+                    decoration: deco(isEnglish ? 'Tax base ($currency)' : 'ฐานภาษี ($currency)'),
+                    textAlign: TextAlign.right, readOnly: _isReadOnly,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                    onChanged: (_) { setState(recalc); _recalcTotals(); },
+                  )),
+                  SizedBox(width: 130, child: TextFormField(
+                    controller: w.whtCtrl,
+                    decoration: deco(isEnglish ? 'WHT ($currency)' : 'ภาษีที่หัก ($currency)'),
+                    textAlign: TextAlign.right, readOnly: _isReadOnly,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                    onChanged: (_) => _recalcTotals(),
+                  )),
+                  SizedBox(width: 160, child: TextFormField(
+                    controller: w.certCtrl,
+                    decoration: deco(isEnglish ? 'Certificate no.' : 'เลขที่หนังสือรับรอง'),
+                    readOnly: _isReadOnly,
+                  )),
+                  SizedBox(width: 220, child: TextFormField(
+                    controller: w.descCtrl,
+                    decoration: deco(isEnglish ? 'Description' : 'คำอธิบาย'),
+                    readOnly: _isReadOnly,
+                  )),
+                  if (!_isReadOnly)
+                    IconButton(
+                      icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                      onPressed: () { setState(() { w.dispose(); _whtRows.removeAt(i); }); _recalcTotals(); },
+                    ),
+                ]),
+              );
+            }),
+          if (_whtRows.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Align(alignment: Alignment.centerRight, child: Text(
+              '${isEnglish ? 'Total WHT' : 'รวมภาษีที่ถูกหัก'}: ${_fmt.format(_totalWht)} $currency',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+            )),
+          ],
         ]),
       ),
     );
@@ -4686,6 +4817,15 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         ));
       }
 
+      // DR: ภาษีถูกหัก ณ ที่จ่าย
+      final whtFc = _totalWht;
+      if (whtFc > 0.005) {
+        lines.add(_GlLine(
+          setup.whtAccountCode ?? '—', acctName(setup.whtAccountId, setup.whtAccountName ?? (_isEnglish ? 'Withholding tax' : 'ภาษีถูกหัก ณ ที่จ่าย')),
+          _isEnglish ? 'Withholding tax' : 'ภาษีถูกหัก ณ ที่จ่าย', whtFc * lc, 0, isFcReceipt ? whtFc : 0, 0,
+        ));
+      }
+
       // CR: ลูกหนี้การค้า — FC = applied FC, LC = at invoice rate
       // ล้างเข้าบัญชีลูกหนี้ที่ใบแจ้งหนี้/ใบลดหนี้แต่ละใบลงไว้ (เหมือน backend) ไม่มีใบอ้างอิงใช้บัญชีของใบรับชำระ
       final docArAccount = <int, int?>{
@@ -4708,7 +4848,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
           addAr(docArAccount[a.appliedToId] ?? arAccountId, -lcAmt, isFcReceipt ? -a.appliedAmountLc : 0);
         }
       } else {
-        addAr(arAccountId, totalCashLc, 0);
+        addAr(arAccountId, totalCashLc + whtFc * lc, 0);
       }
       arCredit.forEach((acc, v) {
         if (v[0].abs() <= 0.005) return;
@@ -4858,6 +4998,30 @@ class _ApplyRow {
 }
 
 // ---- Helper: payment row state ----
+class _WhtRow {
+  CdWhtType? selectedWhtType;
+  final TextEditingController baseCtrl;
+  final TextEditingController whtCtrl;
+  final TextEditingController certCtrl;
+  final TextEditingController descCtrl;
+
+  _WhtRow({this.selectedWhtType, double base = 0, double wht = 0, String? cert, String? desc})
+      : baseCtrl = TextEditingController(text: base > 0 ? base.toStringAsFixed(2) : ''),
+        whtCtrl  = TextEditingController(text: wht > 0 ? wht.toStringAsFixed(2) : ''),
+        certCtrl = TextEditingController(text: cert ?? ''),
+        descCtrl = TextEditingController(text: desc ?? '');
+
+  // เก็บเป็นบาท — แสดงเป็นสกุลเงินเอกสาร (÷ อัตราแลกเปลี่ยนของใบ)
+  static _WhtRow fromModel(ArTransactionWht w, List<CdWhtType> types, double rate) => _WhtRow(
+        selectedWhtType: w.whtTypeId == null ? null : types.cast<CdWhtType?>().firstWhere((t) => t!.id == w.whtTypeId, orElse: () => null),
+        base: w.baseAmountLc / rate, wht: w.whtAmountLc / rate, cert: w.certificateNo, desc: w.description,
+      );
+
+  void dispose() {
+    baseCtrl.dispose(); whtCtrl.dispose(); certCtrl.dispose(); descCtrl.dispose();
+  }
+}
+
 class _PaymentRow {
   final int? paymentMethodId;
   final String? paymentMethodCode;

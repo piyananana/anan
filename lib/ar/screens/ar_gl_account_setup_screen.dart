@@ -487,7 +487,7 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
   bool get _showCash       => ['60','65','80'].contains(_sdt);               // Advance, Refund, Receipt
   bool get _showPayMethod  => ['60','80'].contains(_sdt);                    // คืนมัดจำใช้บัญชี Cash/Bank บัญชีเดียว
   bool get _showFx         => _sdt == '80';                                  // Receipt เท่านั้น
-  // ภาษีหัก ณ ที่จ่าย (wht_account_id) — การรับชำระ AR ยังไม่ลงบัญชี WHT จึงไม่แสดง (ค่าเดิมที่บันทึกไว้คงอยู่)
+  bool get _showWht        => _sdt == '80';                                  // ภาษีถูกหัก ณ ที่จ่าย (รับชำระ)
 
   // ── Account picker helper ─────────────────────────────────────────────────
   Future<void> _pick(String title, void Function(Account) onPicked) async {
@@ -857,6 +857,13 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
             onClear: () => _clearAccount(() { _billOfExchangeAccountId = null; _billOfExchangeAccountCode = null; _billOfExchangeAccountName = null; })),
         ],
 
+        if (_showWht)
+          _accountField(
+            label: isEnglish ? 'Withholding Tax Deducted (prepaid tax)' : 'ภาษีถูกหัก ณ ที่จ่าย',
+            accountId: _whtAccountId, accountCode: _whtAccountCode, accountName: _whtAccountName,
+            onPick: (a) { _whtAccountId = a.id; _whtAccountCode = a.accountCode; _whtAccountName = a.accountNameThai; },
+            onClear: () => _clearAccount(() { _whtAccountId = null; _whtAccountCode = null; _whtAccountName = null; }),
+          ),
         if (_showFx) ...[
           _accountField(
             label: isEnglish ? 'Exchange Rate Gain (FX Gain)' : 'กำไรจากอัตราแลกเปลี่ยน (FX Gain)',
