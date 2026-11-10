@@ -43,6 +43,10 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
   bool _isLoading = false;
   bool _isImporting = false;
 
+  // การตั้งค่ารหัสอัตโนมัติ (จาก template) — null = ยังโหลดไม่ได้ ไม่แสดงคำเตือน
+  bool? _autoNumbering;
+  List<String> _autoGroupCodes = [];
+
   final _previewScrollCtrl = ScrollController();
 
   static const _appColor = Colors.teal;
@@ -74,6 +78,8 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
         if (!mounted) return;
         setState(() {
           _templateSheets = List<Map<String, dynamic>>.from(data['sheets'] ?? []);
+          _autoNumbering = data['auto_numbering'] == true;
+          _autoGroupCodes = List<String>.from((data['auto_group_codes'] ?? []).map((e) => e.toString()));
         });
       }
     } catch (_) {}
@@ -260,7 +266,10 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: Column(children: [
+        if (_autoNumbering != null) _buildCodeModeBanner(),
+        Expanded(
+          child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _buildTemplateSection(),
@@ -273,6 +282,8 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
           const SizedBox(height: 80),
         ]),
       ),
+        ),
+      ]),
       bottomNavigationBar: _isValidated && _errorRows == 0 && _validRows > 0
           ? SafeArea(
               child: Padding(
@@ -391,6 +402,35 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
         ),
         const SizedBox(height: 8),
       ],
+    );
+  }
+
+  // ─── Code mode banner ───────────────────────────────────────────────────────
+
+  // คำเตือนใต้ AppBar: รหัสสินค้าใหม่มาจากไหน ตามการตั้งค่ารหัสอัตโนมัติ
+  Widget _buildCodeModeBanner() {
+    final auto = _autoNumbering == true;
+    final text = auto
+        ? 'รหัสใหม่อัตโนมัติ แต่ระบบยังเก็บรหัสเก่าไว้ให้ด้วย'
+        : 'ใช้รหัสใหม่เหมือนรหัสเก่า ถ้าไม่ระบุรหัสเก่า จะนำข้อมูลเข้าไม่ได้';
+    final groupNote = !auto && _autoGroupCodes.isNotEmpty
+        ? '\n(ยกเว้นหมวดหมู่สินค้าที่ตั้งรหัสอัตโนมัติ: ${_autoGroupCodes.join(', ')})'
+        : '';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      color: auto ? Colors.blue.shade50 : Colors.orange.shade50,
+      child: Row(children: [
+        Icon(auto ? Icons.info_outline : Icons.warning_amber_rounded,
+            color: auto ? Colors.blue.shade700 : Colors.orange.shade800),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text('$text$groupNote',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: auto ? Colors.blue.shade900 : Colors.orange.shade900)),
+        ),
+      ]),
     );
   }
 
