@@ -444,13 +444,13 @@ class _ApGlSetupFormState extends State<_ApGlSetupForm> {
   bool get _showAp         => _isExpense || _sdt == '80';
   bool get _showExpense    => _isExpense;
   bool get _showVat        => _isExpense || ['60', '65', '80'].contains(_sdt);  // จ่ายชำระ: รับรู้ VAT รอตัดเป็นภาษีซื้อ
-  bool get _showVatPending => _isExpense || _sdt == '80';                       // ตั้งหนี้บรรทัด VAT รอตัด / รับรู้ตอนจ่ายชำระ
+  bool get _showVatPending => _isExpense || ['60', '80'].contains(_sdt);        // ตั้งหนี้/จ่ายมัดจำบรรทัด VAT รอตัด / รับรู้ตอนจ่ายชำระ
   bool get _showDiscount   => _isExpense;                                       // ลดหนี้ใช้ส่วนลดด้วย (กลับทิศ)
   bool get _showAdvance    => ['60', '65', '80'].contains(_sdt);
   bool get _showBank       => ['60', '65', '80'].contains(_sdt);
   bool get _showPayMethod  => ['60', '80'].contains(_sdt);                      // รับคืนมัดจำใช้บัญชี Cash/Bank บัญชีเดียว
   bool get _showWht        => _sdt == '80';
-  bool get _showFx         => _sdt == '80';
+  bool get _showFx         => ['10', '80'].contains(_sdt);                      // ตั้งหนี้: ผลต่างอัตราแลกเปลี่ยนของมัดจำที่หัก
 
   // ── Bilingual account name resolver — prefer live lookup by id over the stored name ──
   String _acctName(int? id, String? storedName) {

@@ -481,12 +481,12 @@ class _ArGlSetupFormState extends State<_ArGlSetupForm> {
   bool get _showAr         => _isRevenue || _sdt == '80';
   bool get _showRevenue    => _isRevenue;
   bool get _showVat        => _isRevenue || ['60','65','80'].contains(_sdt); // มัดจำ/คืนมัดจำ: VAT ของมัดจำ, รับชำระ: รับรู้ VAT รอตัด
-  bool get _showVatPending => _isRevenue || _sdt == '80';                    // รายการ VAT รอตัด (บริการ) และรับรู้ตอนรับชำระ
+  bool get _showVatPending => _isRevenue || ['60','80'].contains(_sdt);     // รายการ VAT รอตัด (บริการ / มัดจำ) และรับรู้ตอนรับชำระ
   bool get _showDiscount   => _isRevenue;                                    // ลดหนี้ใช้ส่วนลดด้วย (กลับทิศ)
   bool get _showAdvance    => ['60','65','80'].contains(_sdt);               // Advance, Refund, Receipt (ตัดมัดจำ)
   bool get _showCash       => ['60','65','80'].contains(_sdt);               // Advance, Refund, Receipt
   bool get _showPayMethod  => ['60','80'].contains(_sdt);                    // คืนมัดจำใช้บัญชี Cash/Bank บัญชีเดียว
-  bool get _showFx         => _sdt == '80';                                  // Receipt เท่านั้น
+  bool get _showFx         => ['10','80'].contains(_sdt);                    // Receipt + ใบแจ้งหนี้ที่หักมัดจำต่างอัตราแลกเปลี่ยน (buildInvAdvanceGl รวมใบแจ้งหนี้จาก IM)
   bool get _showWht        => _sdt == '80';                                  // ภาษีถูกหัก ณ ที่จ่าย (รับชำระ)
 
   // ── Account picker helper ─────────────────────────────────────────────────

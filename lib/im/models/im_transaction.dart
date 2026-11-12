@@ -670,17 +670,19 @@ class ImOpenAdvance {
   final double exchangeRate;
   final double totalAmountLc;
   final double vatAmountLc;
+  final double deferredVatAmountLc; // VAT รอตัดของใบมัดจำ (AR/AP) — ส่วนนี้ล้างบัญชี VAT รอตัด ไม่ใช่ภาษีขาย/ภาษีซื้อ
   final double balanceAmountLc;
   // ใบสั่งขาย (AR) / ใบสั่งซื้อ (AP) ที่ใบมัดจำอ้างอิง
   final int? refOrderId;
   final String? refOrderDocNo;
 
   const ImOpenAdvance({required this.id, required this.docNo, this.docDate, this.currencyCode, this.exchangeRate = 1,
-      this.totalAmountLc = 0, this.vatAmountLc = 0, this.balanceAmountLc = 0, this.refOrderId, this.refOrderDocNo});
+      this.totalAmountLc = 0, this.vatAmountLc = 0, this.deferredVatAmountLc = 0, this.balanceAmountLc = 0, this.refOrderId, this.refOrderDocNo});
 
   double get balanceFc => exchangeRate > 0 ? balanceAmountLc / exchangeRate : balanceAmountLc;
   // สัดส่วน VAT ของใบมัดจำ — ส่วนที่หักแยกเป็นก่อน VAT + VAT ตามสัดส่วนนี้ (เหมือน backend)
-  double get vatRatio => totalAmountLc != 0 ? vatAmountLc / totalAmountLc : 0;
+  double get vatRatio => totalAmountLc != 0 ? (vatAmountLc - deferredVatAmountLc) / totalAmountLc : 0;
+  double get pendingVatRatio => totalAmountLc != 0 ? deferredVatAmountLc / totalAmountLc : 0;
 
   factory ImOpenAdvance.fromJson(Map<String, dynamic> json) {
     double d(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0;
@@ -692,6 +694,7 @@ class ImOpenAdvance {
       exchangeRate: d(json['exchange_rate']) > 0 ? d(json['exchange_rate']) : 1,
       totalAmountLc: d(json['total_amount_lc']),
       vatAmountLc: d(json['vat_amount_lc']),
+      deferredVatAmountLc: d(json['deferred_vat_amount_lc']),
       balanceAmountLc: d(json['balance_amount_lc']),
       refOrderId: (json['ref_so_id'] ?? json['ref_po_id']) as int?,
       refOrderDocNo: (json['ref_so_doc_no'] ?? json['ref_po_doc_no']) as String?,

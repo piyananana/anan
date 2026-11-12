@@ -2633,16 +2633,18 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
   // ── Client-side GL preview for Draft ──────────────────────────────────────
 
   // VAT ที่ต้อง reverse จากมัดจำเดิม ตามสัดส่วนของยอดที่คืนต่อยอดมัดจำเต็มใบ
-  ({double vatLc, double vatFc}) _advanceRefundVatTotals() {
-    double vatLc = 0, vatFc = 0;
+  // VAT รอตัดของใบมัดจำ (pendFc) ล้างบัญชีภาษีซื้อรอตัด ไม่ใช่ภาษีซื้อ (เหมือน backend)
+  ({double vatLc, double vatFc, double pendFc}) _advanceRefundVatTotals() {
+    double vatLc = 0, vatFc = 0, pendFc = 0;
     for (final row in _advanceRefundRows) {
       final adv = _openAdvancesForRefund.where((a) => a.id == row.appliedToId).firstOrNull;
       if (adv == null || adv.totalAmountFc == 0) continue;
       final ratio = row.appliedAmountLc / adv.totalAmountFc;
-      vatFc += adv.vatAmountFc * ratio;
-      vatLc += adv.vatAmountLc * ratio;
+      vatFc += (adv.vatAmountFc - adv.deferredVatAmountFc) * ratio;
+      vatLc += (adv.vatAmountLc - adv.deferredVatAmountLc) * ratio;
+      pendFc += adv.deferredVatAmountFc * ratio;
     }
-    return (vatLc: vatLc, vatFc: vatFc);
+    return (vatLc: vatLc, vatFc: vatFc, pendFc: pendFc);
   }
 
   List<_GlLine> _computeGlPreview() {
@@ -2708,7 +2710,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         lines.add(_GlLine(notSetupCashLabel, cashBankLabel, payDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
       } else if (sysType == apDocTypeAdvanceRefund) {
         final refundVat = _advanceRefundVatTotals();
-        final advanceNetFc = _totalAmountFc - refundVat.vatFc;
+        final advanceNetFc = _totalAmountFc - refundVat.vatFc - refundVat.pendFc;
         lines.add(_GlLine(notSetupCashLabel, cashBankLabel, receiveAdvanceRefundDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
         lines.add(_GlLine(notSetupAdvanceLabel, advanceLabel, refundAdvanceDesc, 0, advanceNetFc * lc, 0, isFcDoc ? advanceNetFc : 0));
         if (refundVat.vatFc > 0) {
@@ -2878,10 +2880,19 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     // ── Advance Payment (60) ─────────────────────────────────────────────
     else if (sysType == apDocTypeAdvancePayment) {
       lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), payAdvanceDesc, _beforeVatFc * lc, 0, isFcDoc ? _beforeVatFc : 0, 0));
-      if (_vatAmountFc > 0) {
+      // บรรทัดที่ติ๊ก VAT รอตัด → บัญชีภาษีซื้อรอตัด (เหมือน backend)
+      final pendVatFc = _detailRows.where((r) => r.isDeferredVat && r.vatType != 'NOVAT').fold(0.0, (s, r) => s + _amt(r).vat);
+      final nowVatFc = _vatAmountFc - pendVatFc;
+      if (nowVatFc > 0.005) {
         final vatCode = setup.vatInputAccountCode ?? notSetupVatLabel;
         final vatName = acctName(setup.vatInputAccountId, setup.vatInputAccountName ?? 'VAT Input');
-        lines.add(_GlLine(vatCode, vatName.isEmpty ? 'VAT Input' : vatName, vatDesc, _vatAmountFc * lc, 0, isFcDoc ? _vatAmountFc : 0, 0));
+        lines.add(_GlLine(vatCode, vatName.isEmpty ? 'VAT Input' : vatName, vatDesc, nowVatFc * lc, 0, isFcDoc ? nowVatFc : 0, 0));
+      }
+      if (pendVatFc > 0.005) {
+        final deferredVatLabel = isEnglish ? 'Deferred VAT' : 'VAT รอตัดบัญชี';
+        lines.add(_GlLine(setup.vatPendingInputAccountCode ?? (isEnglish ? '!Deferred VAT not configured' : '!ยังไม่ตั้งค่า VAT รอตัด'),
+            acctName(setup.vatPendingInputAccountId, setup.vatPendingInputAccountName ?? deferredVatLabel), deferredVatLabel,
+            pendVatFc * lc, 0, isFcDoc ? pendVatFc : 0, 0));
       }
       if (_paymentRows.isEmpty) {
         lines.add(_GlLine(setup.cashAccountCode ?? '—', acctName(setup.cashAccountId, setup.cashAccountName ?? cashFallback), payDesc, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
@@ -2896,13 +2907,16 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     // ── Advance Refund (65) ──────────────────────────────────────────────
     else if (sysType == apDocTypeAdvanceRefund) {
       final refundVat = _advanceRefundVatTotals();
-      final advanceNetFc = _totalAmountFc - refundVat.vatFc;
+      final advanceNetFc = _totalAmountFc - refundVat.vatFc - refundVat.pendFc;
       lines.add(_GlLine(setup.cashAccountCode ?? '—', acctName(setup.cashAccountId, setup.cashAccountName ?? cashFallback), receiveAdvanceRefundDesc, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0, 0));
       lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), refundAdvanceDesc, 0, advanceNetFc * lc, 0, isFcDoc ? advanceNetFc : 0));
       if (refundVat.vatFc > 0) {
         final vatCode = setup.vatInputAccountCode ?? notSetupVatLabel;
         final vatName = acctName(setup.vatInputAccountId, setup.vatInputAccountName ?? 'VAT Input');
         lines.add(_GlLine(vatCode, vatName.isEmpty ? 'VAT Input' : vatName, vatDesc, 0, refundVat.vatFc * lc, 0, isFcDoc ? refundVat.vatFc : 0));
+      }
+      if (refundVat.pendFc > 0.005) {
+        lines.add(_GlLine('—', _depositPendingVatLabel, refundAdvanceDesc, 0, refundVat.pendFc * lc, 0, isFcDoc ? refundVat.pendFc : 0));
       }
     }
     // ── Payment (80) ─────────────────────────────────────────────────────
@@ -2922,10 +2936,18 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
       }
       if (totalAdv > 0) {
         // ส่วนก่อน VAT ล้างเงินมัดจำจ่าย ส่วน VAT ของมัดจำกลับรายการภาษีซื้อ (เหมือน backend)
-        final advVat = _advanceRows.fold(0.0, (s, a) => s + a.appliedAmountLc * _depositVatRatio(a.appliedToId));
-        lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), isEnglish ? 'Advance Deducted' : 'หักมัดจำ', 0, (totalAdv - advVat) * lc, 0, isFcDoc ? totalAdv - advVat : 0));
+        double advVat = 0, advPend = 0;
+        for (final a in _advanceRows) {
+          final s = _depositSplit(a.appliedToId, a.appliedAmountLc);
+          advVat += s.vat; advPend += s.pend;
+        }
+        final advNet = totalAdv - advVat - advPend;
+        lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceLabel), isEnglish ? 'Advance Deducted' : 'หักมัดจำ', 0, advNet * lc, 0, isFcDoc ? advNet : 0));
         if (advVat > 0.005) {
           lines.add(_GlLine(setup.vatInputAccountCode ?? '—', acctName(setup.vatInputAccountId, setup.vatInputAccountName ?? 'VAT Input'), isEnglish ? 'Deposit VAT' : 'ภาษีซื้อของมัดจำ', 0, advVat * lc, 0, isFcDoc ? advVat : 0));
+        }
+        if (advPend > 0.005) {
+          lines.add(_GlLine('—', _depositPendingVatLabel, isEnglish ? 'Advance Deducted' : 'หักมัดจำ', 0, advPend * lc, 0, isFcDoc ? advPend : 0));
         }
       }
       // รับรู้ VAT รอตัดบัญชีของใบแจ้งหนี้ตามสัดส่วนที่จ่าย — Dr ภาษีซื้อ / Cr ภาษีซื้อรอตัด (มิเรอร์ backend)
@@ -2957,22 +2979,33 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
     return lines;
   }
 
-  // สัดส่วน VAT ของใบมัดจำ (VAT / ยอดรวม) — ใช้แยกยอดหักมัดจำเป็นส่วนก่อน VAT และ VAT
-  double _depositVatRatio(int depositId) {
+  // มัดจำที่หัก แยกเป็น ส่วนก่อน VAT / VAT ที่ขอคืนแล้ว / VAT รอตัด ตามสัดส่วนของใบมัดจำ (เหมือน backend depositParts)
+  ({double net, double vat, double pend}) _depositSplit(int depositId, double amount) {
     final dep = _openAdvances.where((d) => d.id == depositId).firstOrNull;
-    return dep != null && dep.totalAmountLc != 0 ? dep.vatAmountLc / dep.totalAmountLc : 0.0;
+    if (dep == null || dep.totalAmountLc == 0) return (net: amount, vat: 0, pend: 0);
+    final vat = amount * (dep.vatAmountLc - dep.deferredVatAmountLc) / dep.totalAmountLc;
+    final pend = amount * dep.deferredVatAmountLc / dep.totalAmountLc;
+    return (net: amount - vat - pend, vat: vat, pend: pend);
   }
+
+  // บัญชีภาษีซื้อรอตัดที่ใบมัดจำลงไว้ (ตั้งที่ประเภทเอกสารจ่ายมัดจำ — ไม่ใช่ประเภทเอกสารนี้)
+  String get _depositPendingVatLabel =>
+      _isEnglish ? 'Deferred VAT (per deposit document type)' : 'VAT รอตัด (ตามประเภทเอกสารจ่ายมัดจำ)';
 
   // หักเงินมัดจำตอนตั้งหนี้: Cr เงินมัดจำจ่าย (ส่วนก่อน VAT) + Cr ภาษีซื้อ (VAT ของมัดจำ) แทนเจ้าหนี้ส่วนนั้น
   void _addInvAdvancePreview(List<_GlLine> lines, String advCode, String advName, String vatCode, String vatName, double lc, bool isFcDoc) {
     if (_invAdvanceTotal <= 0) return;
     final depLabel = _isEnglish ? 'Deposit deducted' : 'หักเงินมัดจำ';
     for (final a in _advanceRows) {
-      final vatPart = a.appliedAmountLc * _depositVatRatio(a.appliedToId);
-      final netPart = a.appliedAmountLc - vatPart;
+      final split = _depositSplit(a.appliedToId, a.appliedAmountLc);
+      final vatPart = split.vat;
+      final netPart = split.net;
       lines.add(_GlLine(advCode, advName, '$depLabel ${a.appliedToDocNo}', 0, netPart * lc, 0, isFcDoc ? netPart : 0));
       if (vatPart > 0) {
         lines.add(_GlLine(vatCode, vatName, '$depLabel ${a.appliedToDocNo}', 0, vatPart * lc, 0, isFcDoc ? vatPart : 0));
+      }
+      if (split.pend > 0.005) {
+        lines.add(_GlLine('—', _depositPendingVatLabel, '$depLabel ${a.appliedToDocNo}', 0, split.pend * lc, 0, isFcDoc ? split.pend : 0));
       }
     }
   }

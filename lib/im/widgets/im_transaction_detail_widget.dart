@@ -196,14 +196,15 @@ class _AdvanceRow {
   final String docNo;
   final DateTime? docDate;
   final double balanceFc;
-  final double vatRatio; // สัดส่วน VAT ของใบมัดจำ
+  final double vatRatio; // สัดส่วน VAT ของใบมัดจำ (ที่ออกแล้ว)
+  final double pendingVatRatio; // สัดส่วน VAT รอตัดของใบมัดจำ (AR) — ล้างบัญชี VAT รอตัด
   final double rate; // อัตราแลกเปลี่ยนของใบมัดจำ
   final int? refOrderId; // ใบสั่งซื้อ/ใบสั่งขายที่ใบมัดจำอ้างอิง
   final String? refOrderDocNo;
   final TextEditingController ctrl;
 
   _AdvanceRow({required this.id, required this.docNo, this.docDate, required this.balanceFc, required this.vatRatio,
-      this.rate = 1, double amount = 0, this.refOrderId, this.refOrderDocNo})
+      this.pendingVatRatio = 0, this.rate = 1, double amount = 0, this.refOrderId, this.refOrderDocNo})
       : ctrl = TextEditingController(text: amount > 0 ? amount.toStringAsFixed(2) : '');
 }
 
@@ -467,7 +468,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
               ? saved.where((a) => a.advanceId == o.id).fold(0.0, (t, a) => t + a.appliedAmountFc)
               : (typed[o.id] ?? 0);
           rows.add(_AdvanceRow(id: o.id, docNo: o.docNo, docDate: o.docDate, balanceFc: o.balanceFc, vatRatio: o.vatRatio,
-              rate: o.exchangeRate, amount: prev, refOrderId: o.refOrderId, refOrderDocNo: o.refOrderDocNo));
+              pendingVatRatio: o.pendingVatRatio, rate: o.exchangeRate, amount: prev, refOrderId: o.refOrderId, refOrderDocNo: o.refOrderDocNo));
         }
       } catch (_) {}
     }
@@ -3111,12 +3112,17 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       if (fc <= 0) continue;
       final leg = fc * r.rate;
       final vat = leg * r.vatRatio;
-      final net = leg - vat;
+      final pend = leg * r.pendingVatRatio;
+      final net = leg - vat - pend;
       reduce += fc * _exchangeRate;
       lines.add(_glLine(null, '${isEnglish ? 'Deposit deducted' : 'หักเงินมัดจำ'} ${r.docNo}', ap ? 0 : net, ap ? net : 0));
       if (vat.abs() >= 0.005) {
         lines.add(_glLine(ap ? _docSetup?.vatInputAccountCode : _docSetup?.vatOutputAccountCode,
             '${isEnglish ? 'VAT of deposit' : (ap ? 'ภาษีซื้อของมัดจำ' : 'ภาษีขายของมัดจำ')} ${r.docNo}', ap ? 0 : vat, ap ? vat : 0));
+      }
+      if (pend.abs() >= 0.005) {
+        // บัญชี VAT รอตัดที่ตั้งไว้ในประเภทเอกสารรับ/จ่ายมัดจำ — ฝั่งซื้อ Cr ภาษีซื้อรอตัด / ฝั่งขาย Dr ภาษีขายรอตัด
+        lines.add(_glLine(null, '${isEnglish ? 'Deferred VAT of deposit' : 'ล้าง VAT รอตัดของมัดจำ'} ${r.docNo}', ap ? 0 : pend, ap ? pend : 0));
       }
       final fx = fc * _exchangeRate - leg;
       if (fx.abs() >= 0.005) {

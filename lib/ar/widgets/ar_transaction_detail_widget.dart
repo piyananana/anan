@@ -4417,16 +4417,27 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   // ── Client-side GL preview for Draft ──────────────────────────────────────
 
   // VAT ที่ต้อง reverse จากมัดจำเดิม ตามสัดส่วนของยอดที่คืนต่อยอดมัดจำเต็มใบ
-  ({double vatLc, double vatFc}) _advanceRefundVatTotals() {
-    double vatLc = 0, vatFc = 0;
+  // VAT รอตัดของใบมัดจำ (pendFc) กลับรายการที่บัญชี VAT รอตัด ไม่ใช่ภาษีขาย (เหมือน backend)
+  ({double vatLc, double vatFc, double pendFc}) _advanceRefundVatTotals() {
+    double vatLc = 0, vatFc = 0, pendFc = 0;
     for (final row in _advanceRefundRows) {
       final adv = _openAdvancesForRefund.where((a) => a.id == row.appliedToId).firstOrNull;
       if (adv == null || adv.totalAmountFc == 0) continue;
       final ratio = row.appliedAmountLc / adv.totalAmountFc;
-      vatFc += adv.vatAmountFc * ratio;
-      vatLc += adv.vatAmountLc * ratio;
+      vatFc += (adv.vatAmountFc - adv.deferredVatAmountFc) * ratio;
+      vatLc += (adv.vatAmountLc - adv.deferredVatAmountLc) * ratio;
+      pendFc += adv.deferredVatAmountFc * ratio;
     }
-    return (vatLc: vatLc, vatFc: vatFc);
+    return (vatLc: vatLc, vatFc: vatFc, pendFc: pendFc);
+  }
+
+  // มัดจำที่ตัด/หัก แยกเป็น ส่วนก่อน VAT / VAT ที่ออกแล้ว / VAT รอตัด ตามสัดส่วนของใบมัดจำ (เหมือน backend depositParts)
+  ({double net, double vat, double pend}) _depositSplit(int appliedToId, double amount) {
+    final dep = _openAdvances.where((d) => d.id == appliedToId).firstOrNull;
+    if (dep == null || dep.totalAmountLc == 0) return (net: amount, vat: 0, pend: 0);
+    final vat = amount * (dep.vatAmountLc - dep.deferredVatAmountLc) / dep.totalAmountLc;
+    final pend = amount * dep.deferredVatAmountLc / dep.totalAmountLc;
+    return (net: amount - vat - pend, vat: vat, pend: pend);
   }
 
   // VAT รอตัดบัญชีที่ต้องรับรู้ ตามสัดส่วนที่ชำระจริงของแต่ละใบที่ apply (เหมือน backend postGlEntry)
@@ -4543,6 +4554,8 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     final discountPaidLabel = isEnglish ? 'Discount Paid' : 'ส่วนลดจ่าย';
     final notSetupVatPendingLabel = isEnglish ? '!Deferred VAT not configured' : '!ยังไม่ตั้งค่า VAT รอตัด';
     final deferredVatLabel = isEnglish ? 'Deferred VAT' : 'VAT รอตัดบัญชี';
+    // บัญชี VAT รอตัดที่ใบมัดจำลงไว้ (ตั้งที่ประเภทเอกสารรับมัดจำ — ไม่ใช่ประเภทเอกสารนี้)
+    final depositPendingVatLabel = isEnglish ? 'Deferred VAT (per deposit document type)' : 'VAT รอตัด (ตามประเภทเอกสารรับมัดจำ)';
     final notSetupVatLabel2 = isEnglish ? '!VAT account not configured' : '!ยังไม่ตั้งค่าบัญชี VAT';
     final vatDesc2 = isEnglish ? 'VAT' : 'ภาษีมูลค่าเพิ่ม';
     final creditNoteDesc = isEnglish ? 'Credit Note' : 'ลดหนี้';
@@ -4667,13 +4680,15 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       if (_invAdvanceTotal > 0) {
         final depLabel = isEnglish ? 'Deposit deducted' : 'หักเงินมัดจำ';
         for (final a in _advanceRows) {
-          final dep = _openAdvances.where((d) => d.id == a.appliedToId).firstOrNull;
-          final ratio = dep != null && dep.totalAmountLc != 0 ? dep.vatAmountLc / dep.totalAmountLc : 0.0;
-          final vatPart = a.appliedAmountLc * ratio;
-          final netPart = a.appliedAmountLc - vatPart;
+          final split = _depositSplit(a.appliedToId, a.appliedAmountLc);
+          final vatPart = split.vat;
+          final netPart = split.net;
           lines.add(_GlLine(setup.advanceAccountCode ?? (isEnglish ? '!Advance account not configured' : '!ยังไม่ตั้งค่าบัญชีเงินมัดจำ'), setup.advanceAccountName ?? depLabel, '$depLabel ${a.appliedToDocNo}', netPart * lc, 0, isFcDoc ? netPart : 0, 0));
           if (vatPart > 0) {
             lines.add(_GlLine(setup.vatOutputAccountCode ?? notSetupVatLabel2, setup.vatOutputAccountName ?? 'VAT Output', '$depLabel ${a.appliedToDocNo}', vatPart * lc, 0, isFcDoc ? vatPart : 0, 0));
+          }
+          if (split.pend > 0) {
+            lines.add(_GlLine('—', depositPendingVatLabel, '$depLabel ${a.appliedToDocNo}', split.pend * lc, 0, isFcDoc ? split.pend : 0, 0));
           }
         }
       }
@@ -4748,23 +4763,33 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         }
       }
       lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceFallback), advanceReceivedLabel2, 0, _beforeVatFc * lc, 0, isFcDoc ? _beforeVatFc : 0));
-      if (_vatAmountFc > 0) {
+      final pendVatFc = _detailRows.where((r) => r.isDeferredVat && r.vatType != 'NOVAT').fold(0.0, (s, r) => s + _amt(r).vat);
+      final nowVatFc = _vatAmountFc - pendVatFc;
+      if (nowVatFc > 0.005) {
         final vatOutputFallback2 = isEnglish ? 'VAT Output' : 'ภาษีขาย';
         final vatCode = setup.vatOutputAccountCode ?? notSetupVatLabel2;
         final vatName = acctName(setup.vatOutputAccountId, setup.vatOutputAccountName ?? vatOutputFallback2);
-        lines.add(_GlLine(vatCode, vatName.isEmpty ? vatOutputFallback2 : vatName, vatDesc2, 0, _vatAmountFc * lc, 0, isFcDoc ? _vatAmountFc : 0));
+        lines.add(_GlLine(vatCode, vatName.isEmpty ? vatOutputFallback2 : vatName, vatDesc2, 0, nowVatFc * lc, 0, isFcDoc ? nowVatFc : 0));
+      }
+      if (pendVatFc > 0.005) {
+        lines.add(_GlLine(setup.vatPendingOutputAccountCode ?? notSetupVatPendingLabel,
+            acctName(setup.vatPendingOutputAccountId, setup.vatPendingOutputAccountName ?? deferredVatLabel), deferredVatLabel,
+            0, pendVatFc * lc, 0, isFcDoc ? pendVatFc : 0));
       }
     }
     // ── Advance Refund (65) ──────────────────────────────────────────────
     else if (sysType == arDocTypeAdvanceRefund) {
       final refundVat = _advanceRefundVatTotals();
-      final advanceNetFc = _totalAmountFc - refundVat.vatFc;
+      final advanceNetFc = _totalAmountFc - refundVat.vatFc - refundVat.pendFc;
       lines.add(_GlLine(setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceFallback), advanceRefundDesc2, advanceNetFc * lc, 0, isFcDoc ? advanceNetFc : 0, 0));
       if (refundVat.vatFc > 0) {
         final vatOutputFallback3 = isEnglish ? 'VAT Output' : 'ภาษีขาย';
         final vatCode = setup.vatOutputAccountCode ?? notSetupVatLabel2;
         final vatName = acctName(setup.vatOutputAccountId, setup.vatOutputAccountName ?? vatOutputFallback3);
         lines.add(_GlLine(vatCode, vatName.isEmpty ? vatOutputFallback3 : vatName, vatDesc2, refundVat.vatFc * lc, 0, isFcDoc ? refundVat.vatFc : 0, 0));
+      }
+      if (refundVat.pendFc > 0.005) {
+        lines.add(_GlLine('—', depositPendingVatLabel, advanceRefundDesc2, refundVat.pendFc * lc, 0, isFcDoc ? refundVat.pendFc : 0, 0));
       }
       lines.add(_GlLine(setup.cashAccountCode ?? '—', acctName(setup.cashAccountId, setup.cashAccountName ?? cashFallback), payAdvanceRefundDesc2, 0, _totalAmountFc * lc, 0, isFcDoc ? _totalAmountFc : 0));
     }
@@ -4811,10 +4836,21 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
       // DR: เงินมัดจำรับ (ตัดมัดจำ)
       if (totalAdvanceDeducted > 0.005) {
+        double net = 0, vat = 0, pend = 0;
+        for (final a in _advanceRows) {
+          final s = _depositSplit(a.appliedToId, a.appliedAmountLc);
+          net += s.net; vat += s.vat; pend += s.pend;
+        }
         lines.add(_GlLine(
           setup.advanceAccountCode ?? '—', acctName(setup.advanceAccountId, setup.advanceAccountName ?? advanceFallback),
-          advanceDeductDesc, totalAdvanceDeducted * lc, 0, isFcReceipt ? totalAdvanceDeducted : 0, 0,
+          advanceDeductDesc, net * lc, 0, isFcReceipt ? net : 0, 0,
         ));
+        if (vat > 0.005) {
+          lines.add(_GlLine(setup.vatOutputAccountCode ?? notSetupVatLabel2, setup.vatOutputAccountName ?? 'VAT Output', advanceDeductDesc, vat * lc, 0, isFcReceipt ? vat : 0, 0));
+        }
+        if (pend > 0.005) {
+          lines.add(_GlLine('—', depositPendingVatLabel, advanceDeductDesc, pend * lc, 0, isFcReceipt ? pend : 0, 0));
+        }
       }
 
       // DR: ภาษีถูกหัก ณ ที่จ่าย
