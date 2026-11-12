@@ -22,6 +22,7 @@ import '../../gl/services/gl_period_service.dart';
 import '../../gl/services/gl_entry_service.dart';
 import '../../gl/models/gl_entry.dart';
 import '../../sa/models/sa_module_document.dart';
+import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../ap/models/ap_vendor.dart';
@@ -86,6 +87,10 @@ class _CountLine {
   int? refPoDetailId; // '10'/'11'/'12' เท่านั้น — บรรทัด PO ต้นฉบับที่บรรทัดนี้รับตาม (ไม่ final — ผู้ใช้เลือกทีหลังได้ผ่าน picker)
   double? poUnitPrice; // ราคาต่อหน่วยในใบสั่งซื้อ (สกุลเงินเดียวกับหัวเอกสาร) — เตือนเมื่อราคารับ/ตั้งหนี้ต่างจาก PO
   double? soUnitPrice; // ราคาต่อหน่วยในใบสั่งขาย (สกุลเงินเดียวกับหัวเอกสาร) — เตือนเมื่อราคาขายต่างจาก SO
+  // ราคาขายมาจากตารางราคา ('LIST') — ล็อกช่องราคา (บรรทัดจากใบสั่งขายล็อกด้วย refSoDetailId) ดู _priceLocked
+  String? priceSource;
+  bool priceOverridden = false; // ผู้ดูแลระบบแก้ราคาเอง — ไม่ดึงราคาจากตารางราคาทับอีก
+  int priceSeq = 0; // กันผลดึงราคาที่มาช้ากว่าการแก้จำนวนครั้งล่าสุด
   int? refSoDetailId; // '30'/'31'/'32' เท่านั้น — บรรทัด SO ต้นฉบับที่บรรทัดนี้ส่งตาม (ไม่ final — ผู้ใช้เลือกทีหลังได้ผ่าน picker)
   // VAT ต่อบรรทัด — ใช้เฉพาะประเภทเอกสารที่สร้าง/อ้างอิงใบกำกับ AP/AR อัตโนมัติ (ดู _isVatMode ใน state) เก็บเป็น
   // field ธรรมดาแทน controller เพราะเป็นค่าที่เลือกจาก dropdown ไม่ใช่กรอกอิสระ (มิเรอร์ ar_transaction_detail_widget.dart)
@@ -790,6 +795,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
     if (_status == 'Draft') await _loadRefDims();
     await _loadAdvances(saved: tx.advances);
+    await _refreshListPrices(null, true);
 
     if (_docCode != null) {
       _docSetup = await _service.fetchSetupByDocCode(_docCode!).catchError((_) => null);
@@ -858,7 +864,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (picked != null) setState(() => _docDate = picked);
+    if (picked != null) {
+      setState(() => _docDate = picked);
+      _refreshListPrices(); // ราคาตามช่วงวันที่มีผลของตารางราคา
+    }
   }
 
   // เปลี่ยนคลัง → ตำแหน่งของรายการเดิมเป็นของคลังเก่า ใช้ไม่ได้ จึงเปลี่ยนเป็นตำแหน่งหลักของคลังใหม่
@@ -962,6 +971,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     });
     if (c.id != null) _loadCustomerSalespersons(c.id!);
     _loadAdvances();
+    _refreshListPrices(); // ตารางราคาของลูกค้า
   }
 
   // ใบสั่งขายที่ดึงรายการมา → ใช้พนักงานขายของใบสั่งขาย (ถ้ามี) แทนค่าเริ่มต้นของลูกค้า
@@ -1065,12 +1075,61 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       );
       final price = double.tryParse(resolved['unit_price_fc']?.toString() ?? '') ?? 0;
       if (price > 0 && mounted) setState(() => line.unitCostCtrl.text = _CountLine._fmtInput(price));
-    } else if ((_isDlnBillingMode || _isDlnDeferredMode || _isArDnMode) && _customerId != null) {
-      final resolved = await _soService.resolvePrice(
-        itemId: itemId, customerId: _customerId!, qty: 1, docDate: docDate, uomId: line.item.baseUomId,
-      );
+    } else if (_isSalesPriceMode) {
+      await _refreshListPrices([line]);
+    }
+  }
+
+  // ── ราคาขายตามตารางราคา ('31'/'32'/'33'/'45') ─────────────────────────────────────────────────────
+  // หาได้จากตารางราคา หรือดึงมาจากใบสั่งขาย = ล็อกช่องราคา แก้ได้เฉพาะ administrator/developer ไม่พบจึงกรอกเองได้
+  // (user decision 2026-11-12 — backend assertSalesPrices ตรวจซ้ำตอนบันทึก) ดึงราคาใหม่เมื่อจำนวน/ลูกค้า/วันที่/
+  // สกุลเงินเปลี่ยน (ราคาตามขั้นจำนวนและสกุลเงินของเอกสาร)
+  bool get _isSalesPriceMode => _isDlnBillingMode || _isDlnDeferredMode || _isArDnMode;
+  bool get _canOverridePrice => AuthService().isAdmin; // administrator หรือ developer
+  bool _priceFromSource(_CountLine l) => _isSalesPriceMode && !l.isFree && (l.refSoDetailId != null || l.priceSource == 'LIST');
+  bool _priceLocked(_CountLine l) => _priceFromSource(l) && !_canOverridePrice;
+
+  // onLoad: เอกสารที่เปิดมาแก้ — ราคาที่ต่างจากตารางราคา ผู้ดูแลระบบคงไว้ (ถือว่าแก้เอง) ผู้ใช้ทั่วไปเปลี่ยนเป็นราคาตาราง
+  Future<void> _refreshListPrices([Iterable<_CountLine>? only, bool onLoad = false]) async {
+    if (!_isSalesPriceMode || _customerId == null || !_canEditBilling) return;
+    final customerId = _customerId!;
+    final docDate = DateFormat('yyyy-MM-dd').format(_docDate);
+    final currencyCode = _currency?.currencyCode;
+    final changed = <String>[];
+    await Future.wait((only ?? List.of(_lines)).map((l) async {
+      final itemId = l.item.id;
+      if (itemId == null || l.refSoDetailId != null || l.isFree || l.priceOverridden) return;
+      final seq = ++l.priceSeq;
+      final qty = l.variance.abs();
+      Map<String, dynamic> resolved;
+      try {
+        resolved = await _soService.resolvePrice(itemId: itemId, customerId: customerId, qty: qty == 0 ? 1 : qty,
+            docDate: docDate, uomId: l.uomId ?? l.item.baseUomId, currencyCode: currencyCode);
+      } catch (_) {
+        return;
+      }
+      if (!mounted || seq != l.priceSeq || !_lines.contains(l)) return;
       final price = double.tryParse(resolved['unit_price_fc']?.toString() ?? '') ?? 0;
-      if (price > 0 && mounted) setState(() => line.unitPriceCtrl.text = _CountLine._fmtInput(price));
+      if (price <= 0) {
+        l.priceSource = null; // ไม่พบในตารางราคา — กรอกเองได้ (คงราคาเดิมไว้)
+        return;
+      }
+      l.priceSource = 'LIST';
+      if ((_parseNum(l.unitPriceCtrl.text) - price).abs() < 0.005) return;
+      if (onLoad && _canOverridePrice) {
+        l.priceOverridden = true;
+        return;
+      }
+      if (onLoad) changed.add('${l.item.itemCode}: ${l.unitPriceCtrl.text} -> ${_CountLine._fmtInput(price)}');
+      l.unitPriceCtrl.text = _CountLine._fmtInput(price);
+    }));
+    if (!mounted) return;
+    setState(() {});
+    if (changed.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 6),
+        content: Text('${_isEnglish ? 'Unit prices updated to the price list' : 'ปรับราคาขาย/หน่วยตามตารางราคา'}: ${changed.join(', ')}'),
+      ));
     }
   }
 
@@ -1591,6 +1650,20 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       }
     });
     if (_currency?.currencyCode != curBefore) _loadAdvances();
+  }
+
+  // ที่มาของราคาขาย: ล็อก = ตารางราคา/ใบสั่งขาย, ปลดล็อก = ผู้ดูแลระบบแก้ได้, ดินสอ = ผู้ดูแลระบบแก้ราคาเองแล้ว
+  Widget? _priceSourceIcon(_CountLine l, bool isEnglish) {
+    if (!_priceFromSource(l)) return null;
+    final src = l.refSoDetailId != null
+        ? (isEnglish ? 'Sales order price' : 'ราคาตามใบสั่งขาย')
+        : (isEnglish ? 'Price list price' : 'ราคาตามตารางราคา');
+    final (IconData icon, String tip) = l.priceOverridden
+        ? (Icons.edit, isEnglish ? 'Price changed by administrator' : 'ผู้ดูแลระบบแก้ราคาเอง')
+        : _priceLocked(l)
+            ? (Icons.lock, '$src — ${isEnglish ? 'only administrators can change it' : 'แก้ได้เฉพาะผู้ดูแลระบบ'}')
+            : (Icons.lock_open, '$src — ${isEnglish ? 'editable for administrators' : 'ผู้ดูแลระบบแก้ได้'}');
+    return Tooltip(message: tip, child: Icon(icon, size: 14, color: Colors.grey.shade600));
   }
 
   void _removeLine(_CountLine line) {
@@ -2505,6 +2578,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 final changed = v?.currencyCode != _currency?.currencyCode;
                 setState(() { _currency = v; _exchangeRate = v?.baseRate ?? 1; });
                 if (changed) _loadAdvances(); // ใบมัดจำที่หักได้ต้องสกุลเงินเดียวกับเอกสาร
+                if (changed) _refreshListPrices(); // ตารางราคาสกุลเงินเดียวกับเอกสาร
               },
             ),
           ),
@@ -2644,7 +2718,16 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             Checkbox(
               value: _priceIncludesVat,
               visualDensity: VisualDensity.compact,
-              onChanged: _canEditPriceInclVat ? (v) => setState(() => _priceIncludesVat = v ?? false) : null,
+              onChanged: _canEditPriceInclVat ? (v) => setState(() {
+                    final incl = v ?? false;
+                    if (incl != _priceIncludesVat) {
+                      for (final l in _lines.where((l) => l.refSoDetailId != null && l.vatType != null && l.vatType != 'NOVAT' && l.vatRate > 0)) {
+                        final p = _parseNum(l.unitPriceCtrl.text);
+                        if (p != 0) l.unitPriceCtrl.text = _CountLine._fmtInput(incl ? p * (100 + l.vatRate) / 100 : p * 100 / (100 + l.vatRate));
+                      }
+                    }
+                    _priceIncludesVat = incl;
+                  }) : null,
             ),
             Text(isEnglish ? 'Prices include VAT' : 'ราคารวม VAT'),
           ]),
@@ -2792,7 +2875,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                                         : (isEnglish ? 'Counted Qty *' : 'ยอดนับได้ *'),
                     border: const OutlineInputBorder(),
                     isDense: true),
-                onChanged: (_) => setState(() {}),
+                onChanged: (_) {
+                  setState(() {});
+                  if (_isSalesPriceMode) _refreshListPrices([line]); // ราคาตามขั้นจำนวน
+                },
               ),
             ),
             if (!line.isNonStock)
@@ -2863,6 +2949,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                     onChanged: _isReadOnly ? null : (v) => setState(() {
                           line.isFree = v ?? false;
                           if (line.isFree && line.isDeliverMode) line.unitPriceCtrl.clear();
+                          if (!line.isFree && _isSalesPriceMode) _refreshListPrices([line]);
                         }),
                   ),
                 ),
@@ -2887,11 +2974,15 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 width: 120,
                 child: TextField(
                   controller: line.unitPriceCtrl,
-                  readOnly: !_canEditBilling || line.isFree,
-                  onChanged: (_) => setState(() {}),
+                  readOnly: !_canEditBilling || line.isFree || _priceLocked(line),
+                  onChanged: (_) => setState(() {
+                    if (_priceFromSource(line)) line.priceOverridden = true; // ผู้ดูแลระบบแก้ราคาเอง
+                  }),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                       labelText: (isEnglish ? 'Unit Price' : 'ราคาขาย/หน่วย') + (_isForeignCurrency ? ' (${_currency!.currencyCode})' : ''),
+                      suffixIcon: _priceSourceIcon(line, isEnglish),
+                      suffixIconConstraints: const BoxConstraints(minWidth: 24, minHeight: 20),
                       border: const OutlineInputBorder(), isDense: true),
                 ),
               ),

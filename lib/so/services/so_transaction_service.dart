@@ -196,6 +196,7 @@ class SoTransactionService {
     required double qty,
     required String docDate,
     int? uomId,
+    String? currencyCode, // ระบุ = ใช้เฉพาะตารางราคาสกุลเงินนี้ (เอกสาร IM ฝั่งขาย)
   }) async {
     final headers = await authService.getAuthHeader();
     final uri = Uri.parse('${AppConfig.apiIm}/im_price_list/resolve_price').replace(queryParameters: {
@@ -205,6 +206,7 @@ class SoTransactionService {
       'qty': qty.toString(),
       'doc_date': docDate,
       if (uomId != null) 'uom_id': uomId.toString(),
+      if (currencyCode != null) 'currency_code': currencyCode,
     });
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {
