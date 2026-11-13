@@ -4,11 +4,13 @@ import '../models/sa_credit_approval.dart';
 import 'sa_auth_service.dart';
 
 // endpoint ขออนุมัติเกินวงเงินเครดิต — base = AppConfig.apiAr / apiIm, path = 'ar_transaction' / 'im_transaction'
+// prefix: 'credit' (เกินวงเงินเครดิต) / 'payment' (ขออนุมัติจ่ายของซื้อเงินสด IM '14') — endpoint ชื่อ <prefix>_request ฯลฯ
 class CreditApprovalService {
   final String base;
   final String path;
+  final String prefix;
   final AuthService _auth = AuthService();
-  CreditApprovalService(this.base, this.path);
+  CreditApprovalService(this.base, this.path, {this.prefix = 'credit'});
 
   String _err(http.Response r) {
     try {
@@ -37,14 +39,14 @@ class CreditApprovalService {
     throw Exception(_err(r));
   }
 
-  Future<String> request(int id, {required int menuId}) => _put(id, 'credit_request', {'menu_id': menuId});
-  Future<String> approve(int id, {String? remarks}) => _put(id, 'credit_approve', {'remarks': remarks});
-  Future<String> reject(int id, {String? remarks}) => _put(id, 'credit_reject', {'remarks': remarks});
-  Future<String> withdraw(int id) => _put(id, 'credit_withdraw', {});
+  Future<String> request(int id, {required int menuId}) => _put(id, '${prefix}_request', {'menu_id': menuId});
+  Future<String> approve(int id, {String? remarks}) => _put(id, '${prefix}_approve', {'remarks': remarks});
+  Future<String> reject(int id, {String? remarks}) => _put(id, '${prefix}_reject', {'remarks': remarks});
+  Future<String> withdraw(int id) => _put(id, '${prefix}_withdraw', {});
 
   Future<List<Map<String, dynamic>>> myPending() async {
     final headers = await _auth.getAuthHeader();
-    final r = await http.get(Uri.parse('$base/$path/credit_my_pending'), headers: headers);
+    final r = await http.get(Uri.parse('$base/$path/${prefix}_my_pending'), headers: headers);
     if (r.statusCode == 200) return List<Map<String, dynamic>>.from(json.decode(r.body));
     throw Exception(_err(r));
   }

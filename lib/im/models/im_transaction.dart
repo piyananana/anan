@@ -87,6 +87,10 @@ class ImTransactionHeader {
   final double changeAmount;
   final String? linkedArInvoiceNo; // จาก join — เลขที่ใบแจ้งหนี้ AR ที่สร้างอัตโนมัติ
   final String? linkedArReceiptNo; // จาก join — เลขที่ใบเสร็จ AR ('33')
+  // ซื้อเงินสด ('14'): ประเภทใบกำกับภาษีของผู้ขาย FULL / ABB (อย่างย่อ) / NONE (ไม่มี) — ABB/NONE: VAT รวมเข้าต้นทุน
+  final String? taxInvoiceKind;
+  final String? linkedApInvoiceNo; // จาก join — เลขที่ใบตั้งหนี้ AP ที่สร้างอัตโนมัติ
+  final String? linkedApPaymentNo; // จาก join — เลขที่ใบจ่ายชำระ AP ('14')
   // วันที่ใบกำกับผู้ขาย ('11'/'12') — วันที่/งวดของใบตั้งหนี้ AP อัตโนมัติ (ว่าง = วันที่รับสินค้า)
   final DateTime? vendorInvoiceDate;
   final String? description;
@@ -166,6 +170,9 @@ class ImTransactionHeader {
     this.changeAmount = 0,
     this.linkedArInvoiceNo,
     this.linkedArReceiptNo,
+    this.taxInvoiceKind,
+    this.linkedApInvoiceNo,
+    this.linkedApPaymentNo,
     this.vendorInvoiceDate,
     this.description,
     this.status = 'Draft',
@@ -238,6 +245,9 @@ class ImTransactionHeader {
       changeAmount: toDouble(json['change_amount']),
       linkedArInvoiceNo: json['linked_ar_invoice_no'],
       linkedArReceiptNo: json['linked_ar_receipt_no'],
+      taxInvoiceKind: json['tax_invoice_kind'],
+      linkedApInvoiceNo: json['linked_ap_invoice_no'],
+      linkedApPaymentNo: json['linked_ap_payment_no'],
       vendorInvoiceDate: json['vendor_invoice_date'] != null ? parseLocalDate(json['vendor_invoice_date']) : null,
       description: json['description'],
       status: json['status'] ?? 'Draft',
@@ -292,6 +302,7 @@ class ImTransactionHeader {
         if (billToTaxId != null) 'bill_to_tax_id': billToTaxId,
         if (billToBranch != null) 'bill_to_branch': billToBranch,
         'cash_received': cashReceived,
+        if (taxInvoiceKind != null) 'tax_invoice_kind': taxInvoiceKind,
         if (vendorInvoiceDate != null) 'vendor_invoice_date': formatLocalDate(vendorInvoiceDate!),
         if (description != null) 'description': description,
         if (dim1Id != null) 'dim1_id': dim1Id,
@@ -829,6 +840,8 @@ class ImTransaction {
   final List<ImAdvance> advances;
   final List<ImCashPayment> payments; // '33'
   final List<ImCashWht> whts; // '33'
+  // ซื้อเงินสด ('14'): ขออนุมัติจ่าย (pay_status / pay_amount / คิวผู้อนุมัติ) — โครงเดียวกับขออนุมัติเกินวงเงิน
+  final DocCreditState payApproval;
 
   const ImTransaction({
     required this.header, this.details = const [],
@@ -838,6 +851,7 @@ class ImTransaction {
     this.advances = const [],
     this.payments = const [],
     this.whts = const [],
+    this.payApproval = const DocCreditState(),
   });
 
   factory ImTransaction.fromJson(Map<String, dynamic> json) => ImTransaction(
@@ -861,5 +875,10 @@ class ImTransaction {
         whts: (json['whts'] as List<dynamic>? ?? [])
             .map((e) => ImCashWht.fromJson(e as Map<String, dynamic>))
             .toList(),
+        payApproval: DocCreditState.fromJson({
+          'credit_status': json['pay_status'],
+          'credit_amount': json['pay_amount'],
+          'credit_approval_mode': json['pay_approval_mode'],
+        }, json['payment_approvals']),
       );
 }

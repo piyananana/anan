@@ -1,6 +1,8 @@
 // lib/im/widgets/im_cash_sale_panel.dart
 // ขายเงินสด ('33') — ส่วนที่เพิ่มจากส่งสินค้าพร้อมใบแจ้งหนี้ ('31'): ผู้ซื้อที่ระบุในเอกสาร, วิธีรับชำระหลายแบบ,
 // ภาษีที่ลูกค้าหัก ณ ที่จ่าย, เงินที่รับมา/เงินทอน และเลขที่ใบแจ้งหนี้/ใบเสร็จ AR ที่สร้างตอน Post
+// ซื้อเงินสด ('14', purchase = true) ใช้แผงเดียวกัน: ผู้ขายจริง + ประเภทใบกำกับภาษี, วิธีจ่าย, ภาษีที่เราหัก ณ ที่จ่าย,
+// เลขที่ใบตั้งหนี้/ใบจ่าย AP (ไม่มีเงินที่รับมา/เงินทอน)
 // state (controller) อยู่กับหน้าเอกสาร IM — widget นี้แค่แสดงและแก้ค่าใน ImCashSaleController
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -104,6 +106,8 @@ class ImCashSaleController {
   List<ImCashWhtRow> whts = [];
   String? linkedInvoiceNo;
   String? linkedReceiptNo;
+  // ซื้อเงินสด: ประเภทใบกำกับภาษีของผู้ขาย FULL / ABB / NONE
+  String taxInvoiceKind = 'FULL';
 
   double get paymentTotal => payments.fold(0.0, (t, p) => t + p.amount);
   double get cashTotal => payments.where((p) => p.paymentMethodType == 'CASH').fold(0.0, (t, p) => t + p.amount);
@@ -125,6 +129,7 @@ class ImCashSaleController {
     whts = [];
     linkedInvoiceNo = null;
     linkedReceiptNo = null;
+    taxInvoiceKind = 'FULL';
   }
 
   void load(ImTransaction tx, List<CdWhtType> whtTypes) {
@@ -135,8 +140,9 @@ class ImCashSaleController {
     billToTaxIdCtrl.text = h.billToTaxId ?? '';
     billToBranchCtrl.text = h.billToBranch ?? '';
     cashReceivedCtrl.text = _fmtInput(h.cashReceived);
-    linkedInvoiceNo = h.linkedArInvoiceNo;
-    linkedReceiptNo = h.linkedArReceiptNo;
+    linkedInvoiceNo = h.linkedArInvoiceNo ?? h.linkedApInvoiceNo;
+    linkedReceiptNo = h.linkedArReceiptNo ?? h.linkedApPaymentNo;
+    taxInvoiceKind = h.taxInvoiceKind ?? 'FULL';
     payments = tx.payments.map(ImCashPaymentRow.fromModel).toList();
     final rate = h.exchangeRate > 0 ? h.exchangeRate : 1;
     whts = tx.whts
@@ -168,20 +174,21 @@ class ImCashSaleController {
       ];
 
   // ตรวจก่อนบันทึก — คืนข้อความผิดพลาด หรือ null = ผ่าน; post = ตรวจยอดรับชำระครบด้วย
-  String? validate({required bool post, required double dueFc, required bool isEnglish, required NumberFormat fmt}) {
-    // ข้อมูลผู้ซื้อใช้เมื่อระบุชื่อเท่านั้น — กรอกช่องอื่นโดยไม่มีชื่อ ข้อมูลจะไม่ถูกใช้
+  String? validate({required bool post, required double dueFc, required bool isEnglish, required NumberFormat fmt, bool purchase = false}) {
+    final party = purchase ? (isEnglish ? 'vendor' : 'ผู้ขาย') : (isEnglish ? 'buyer' : 'ผู้ซื้อ');
+    // ข้อมูลผู้ซื้อ/ผู้ขายใช้เมื่อระบุชื่อเท่านั้น — กรอกช่องอื่นโดยไม่มีชื่อ ข้อมูลจะไม่ถูกใช้
     if (billToName == null && (billToAddress != null || billToTaxId != null || billToBranch != null)) {
-      return isEnglish ? 'Please enter the buyer name' : 'กรุณาระบุชื่อผู้ซื้อ';
+      return isEnglish ? 'Please enter the $party name' : 'กรุณาระบุชื่อ$party';
     }
     if (billToBranch != null && !RegExp(r'^\d{5}$').hasMatch(billToBranch!)) {
-      return isEnglish ? 'Buyer tax branch must be 5 digits (00000 = head office)' : 'สาขาผู้ซื้อต้องเป็นตัวเลข 5 หลัก (00000 = สำนักงานใหญ่)';
+      return isEnglish ? 'The $party tax branch must be 5 digits (00000 = head office)' : 'สาขา$partyต้องเป็นตัวเลข 5 หลัก (00000 = สำนักงานใหญ่)';
     }
     for (final w in whts) {
       if (w.whtAmount > 0 && w.whtType == null) {
         return isEnglish ? 'Please select the withholding tax type' : 'กรุณาเลือกประเภทภาษีหัก ณ ที่จ่าย';
       }
     }
-    if (cashReceived > 0 && cashReceived < cashTotal - 0.005) {
+    if (!purchase && cashReceived > 0 && cashReceived < cashTotal - 0.005) {
       return isEnglish
           ? 'Cash received (${fmt.format(cashReceived)}) is less than the cash payment (${fmt.format(cashTotal)})'
           : 'เงินที่รับมา (${fmt.format(cashReceived)}) น้อยกว่ายอดรับชำระด้วยเงินสด (${fmt.format(cashTotal)})';
@@ -190,15 +197,15 @@ class ImCashSaleController {
     if (dueFc <= 0.005) {
       if (paymentTotal > 0 || whtTotal > 0) {
         return isEnglish
-            ? 'Deposits cover the whole sale — remove the payment methods and withholding tax'
-            : 'เงินมัดจำครอบคลุมยอดขายทั้งหมดแล้ว ไม่ต้องระบุวิธีรับชำระและภาษีหัก ณ ที่จ่าย';
+            ? 'Deposits cover the whole ${purchase ? 'purchase' : 'sale'} — remove the payment methods and withholding tax'
+            : 'เงินมัดจำครอบคลุมยอด${purchase ? 'ซื้อ' : 'ขาย'}ทั้งหมดแล้ว ไม่ต้องระบุวิธี${purchase ? 'จ่าย' : 'รับชำระ'}และภาษีหัก ณ ที่จ่าย';
       }
       return null;
     }
     if ((paymentTotal + whtTotal - dueFc).abs() > 0.01) {
       return isEnglish
           ? 'Payments (${fmt.format(paymentTotal)}) + withholding tax (${fmt.format(whtTotal)}) must equal the amount due (${fmt.format(dueFc)})'
-          : 'ยอดรับชำระ (${fmt.format(paymentTotal)}) + ภาษีถูกหัก ณ ที่จ่าย (${fmt.format(whtTotal)}) ต้องเท่ากับยอดที่ต้องชำระ (${fmt.format(dueFc)})';
+          : 'ยอด${purchase ? 'จ่าย' : 'รับชำระ'} (${fmt.format(paymentTotal)}) + ภาษี${purchase ? '' : 'ถูก'}หัก ณ ที่จ่าย (${fmt.format(whtTotal)}) ต้องเท่ากับยอดที่ต้อง${purchase ? 'จ่าย' : 'ชำระ'} (${fmt.format(dueFc)})';
     }
     return null;
   }
@@ -219,7 +226,9 @@ class ImCashSalePanel extends StatefulWidget {
   final double whtBaseFc; // ฐานภาษีเริ่มต้นของรายการภาษีถูกหักใหม่ (ยอดก่อน VAT)
   final String currencyCode;
   final List<CdWhtType> whtTypes;
-  final String? customerLabel; // ลูกค้าในเอกสาร — ใช้เป็นคำแนะนำของช่องชื่อผู้ซื้อ
+  final String? customerLabel; // ลูกค้า/ผู้ขายในเอกสาร — ใช้เป็นคำแนะนำของช่องชื่อผู้ซื้อ/ผู้ขาย
+  final bool purchase; // ซื้อเงินสด ('14')
+  final VoidCallback? onTaxInvoiceKindChanged;
 
   const ImCashSalePanel({
     super.key,
@@ -231,6 +240,8 @@ class ImCashSalePanel extends StatefulWidget {
     required this.currencyCode,
     required this.whtTypes,
     this.customerLabel,
+    this.purchase = false,
+    this.onTaxInvoiceKindChanged,
   });
 
   @override
@@ -244,6 +255,7 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
   ImCashSaleController get _c => widget.controller;
   bool get _ro => widget.readOnly;
   bool get _en => widget.isEnglish;
+  bool get _buy => widget.purchase;
 
   InputDecoration _deco(String label, {String? hint}) =>
       InputDecoration(labelText: label, hintText: hint, isDense: true, border: const OutlineInputBorder());
@@ -291,18 +303,59 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
     ]);
   }
 
+  static const _taxKinds = ['FULL', 'ABB', 'NONE'];
+  String _taxKindLabel(String k) => switch (k) {
+        'ABB' => _en ? 'Abbreviated tax invoice' : 'ใบกำกับภาษีอย่างย่อ',
+        'NONE' => _en ? 'No tax invoice' : 'ไม่มีใบกำกับภาษี',
+        _ => _en ? 'Full tax invoice' : 'ใบกำกับภาษีเต็มรูป',
+      };
+
   Widget _buildBillTo() {
     final linked = [
-      if (_c.linkedInvoiceNo != null) '${_en ? 'AR invoice' : 'ใบแจ้งหนี้'} ${_c.linkedInvoiceNo}',
-      if (_c.linkedReceiptNo != null) '${_en ? 'Receipt' : 'ใบเสร็จรับเงิน'} ${_c.linkedReceiptNo}',
+      if (_c.linkedInvoiceNo != null) _buy ? '${_en ? 'AP invoice' : 'ใบตั้งหนี้'} ${_c.linkedInvoiceNo}' : '${_en ? 'AR invoice' : 'ใบแจ้งหนี้'} ${_c.linkedInvoiceNo}',
+      if (_c.linkedReceiptNo != null) _buy ? '${_en ? 'AP payment' : 'ใบจ่ายชำระ'} ${_c.linkedReceiptNo}' : '${_en ? 'Receipt' : 'ใบเสร็จรับเงิน'} ${_c.linkedReceiptNo}',
     ];
+    final partyName = _buy ? (_en ? 'Vendor name' : 'ชื่อผู้ขาย') : (_en ? 'Buyer name' : 'ชื่อผู้ซื้อ');
     return _card(
-      icon: Icons.person_outline,
+      icon: _buy ? Icons.storefront_outlined : Icons.person_outline,
       color: Colors.blueGrey.shade700,
-      title: _en ? 'Buyer (printed on the tax invoice / receipt)' : 'ผู้ซื้อ (พิมพ์ในใบกำกับภาษี/ใบเสร็จ)',
+      title: _buy
+          ? (_en ? 'Vendor (as on the vendor\'s tax invoice / receipt)' : 'ผู้ขาย (ตามใบกำกับภาษี/ใบเสร็จของผู้ขาย)')
+          : (_en ? 'Buyer (printed on the tax invoice / receipt)' : 'ผู้ซื้อ (พิมพ์ในใบกำกับภาษี/ใบเสร็จ)'),
       children: [
+        if (_buy) ...[
+          Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            SizedBox(
+              width: 240,
+              child: DropdownButtonFormField<String>(
+                value: _c.taxInvoiceKind,
+                isExpanded: true,
+                decoration: _deco(_en ? 'Tax invoice received' : 'เอกสารที่ได้รับจากผู้ขาย'),
+                items: _taxKinds.map((k) => DropdownMenuItem(value: k, child: Text(_taxKindLabel(k)))).toList(),
+                onChanged: _ro
+                    ? null
+                    : (v) {
+                        setState(() => _c.taxInvoiceKind = v ?? 'FULL');
+                        widget.onTaxInvoiceKindChanged?.call();
+                      },
+              ),
+            ),
+            SizedBox(
+              width: 460,
+              child: Text(
+                _c.taxInvoiceKind == 'FULL'
+                    ? (_en ? 'Input VAT is claimable — enter the tax invoice number in the reference field above.'
+                        : 'ขอคืนภาษีซื้อได้ — กรอกเลขที่ใบกำกับภาษีในช่องเลขที่อ้างอิงด้านบน')
+                    : (_en ? 'Input VAT is not claimable — VAT is added to the item cost when saved, and is not in the input VAT report.'
+                        : 'ขอคืนภาษีซื้อไม่ได้ — ตอนบันทึก VAT จะรวมเข้าต้นทุนสินค้า และไม่ลงรายงานภาษีซื้อ'),
+                style: TextStyle(fontSize: 12, color: _c.taxInvoiceKind == 'FULL' ? Colors.grey.shade700 : Colors.orange.shade800),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 10),
+        ],
         Wrap(spacing: 8, runSpacing: 8, children: [
-          _field(_en ? 'Buyer name' : 'ชื่อผู้ซื้อ', _c.billToNameCtrl, width: 320,
+          _field(partyName, _c.billToNameCtrl, width: 320,
               hint: widget.customerLabel != null ? (_en ? 'Blank = ${widget.customerLabel}' : 'ว่าง = ${widget.customerLabel}') : null),
           _field(_en ? 'Tax ID' : 'เลขประจำตัวผู้เสียภาษี', _c.billToTaxIdCtrl, width: 200, maxLength: 13),
           _field(_en ? 'Branch (5 digits)' : 'สาขา (5 หลัก)', _c.billToBranchCtrl, width: 140, maxLength: 5,
@@ -312,7 +365,11 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
         _field(_en ? 'Address' : 'ที่อยู่', _c.billToAddressCtrl, maxLines: 2),
         const SizedBox(height: 6),
         Text(
-          _en
+          _buy
+              ? (_en
+                  ? 'Blank name = the vendor on the document. With a vendor name, the name, address, tax ID and branch here replace the cash vendor on the AP invoice, payment and input VAT report (blank fields stay blank).'
+                  : 'ไม่ระบุชื่อ = ใช้ผู้ขายในเอกสาร ระบุชื่อผู้ขายแล้ว ชื่อ ที่อยู่ เลขผู้เสียภาษี และสาขาในช่องนี้ใช้แทนผู้ขายเงินสดทั้งชุดในใบตั้งหนี้ ใบจ่ายชำระ และรายงานภาษีซื้อ (ช่องที่ว่างจะว่าง)')
+              : _en
               ? 'Blank name = the customer\'s details. With a buyer name, the name, address, tax ID and branch here replace the cash customer on the AR invoice, receipt, print form and output VAT report (blank fields stay blank).'
               : 'ไม่ระบุชื่อ = ใช้ข้อมูลของลูกค้า ระบุชื่อผู้ซื้อแล้ว ชื่อ ที่อยู่ เลขผู้เสียภาษี และสาขาในช่องนี้ใช้แทนลูกค้าเงินสดทั้งชุดในใบแจ้งหนี้ ใบเสร็จ ฟอร์มพิมพ์ และรายงานภาษีขาย (ช่องที่ว่างจะว่าง)',
           style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
@@ -354,7 +411,7 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
     return _card(
       icon: Icons.payments_outlined,
       color: Colors.green.shade800,
-      title: _en ? 'Payment Methods' : 'วิธีรับชำระเงิน',
+      title: _buy ? (_en ? 'Payment Methods' : 'วิธีจ่ายเงิน') : (_en ? 'Payment Methods' : 'วิธีรับชำระเงิน'),
       action: _ro
           ? null
           : TextButton.icon(
@@ -368,8 +425,10 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
               widget.dueFc <= 0.005
-                  ? (_en ? 'Deposits cover the whole sale — no payment needed' : 'เงินมัดจำครอบคลุมยอดขายทั้งหมด ไม่ต้องรับชำระ')
-                  : (_en ? 'No payment methods yet' : 'ยังไม่มีวิธีรับชำระ'),
+                  ? (_buy
+                      ? (_en ? 'Deposits cover the whole purchase — no payment needed' : 'เงินมัดจำครอบคลุมยอดซื้อทั้งหมด ไม่ต้องจ่าย')
+                      : (_en ? 'Deposits cover the whole sale — no payment needed' : 'เงินมัดจำครอบคลุมยอดขายทั้งหมด ไม่ต้องรับชำระ'))
+                  : (_buy ? (_en ? 'No payment methods yet' : 'ยังไม่มีวิธีจ่าย') : (_en ? 'No payment methods yet' : 'ยังไม่มีวิธีรับชำระ')),
               style: const TextStyle(color: Colors.grey),
             ),
           )
@@ -377,14 +436,15 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
           for (var i = 0; i < _c.payments.length; i++) _paymentRow(i, _c.payments[i]),
         const Divider(),
         Wrap(spacing: 24, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-          Text('${_en ? 'Amount due' : 'ยอดที่ต้องชำระ'}: ${_fmt.format(widget.dueFc)} $cur',
+          Text('${_en ? 'Amount due' : (_buy ? 'ยอดที่ต้องจ่าย' : 'ยอดที่ต้องชำระ')}: ${_fmt.format(widget.dueFc)} $cur',
               style: const TextStyle(fontWeight: FontWeight.bold)),
-          Text('${_en ? 'Paid' : 'รับชำระ'}: ${_fmt.format(_c.paymentTotal)}'),
-          Text('${_en ? 'WHT' : 'ภาษีถูกหัก'}: ${_fmt.format(_c.whtTotal)}'),
+          Text('${_en ? 'Paid' : (_buy ? 'จ่าย' : 'รับชำระ')}: ${_fmt.format(_c.paymentTotal)}'),
+          Text('${_en ? 'WHT' : (_buy ? 'ภาษีหัก ณ ที่จ่าย' : 'ภาษีถูกหัก')}: ${_fmt.format(_c.whtTotal)}'),
           if (diff.abs() > 0.005)
             Text('${_en ? 'Difference' : 'ส่วนต่าง'}: ${_fmt.format(diff)}',
                 style: TextStyle(fontWeight: FontWeight.bold, color: diff > 0 ? Colors.orange.shade800 : Colors.red.shade700)),
         ]),
+        if (!_buy) ...[
         const SizedBox(height: 10),
         Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
           _field('${_en ? 'Cash received' : 'รับเงินมา'} ($cur)', _c.cashReceivedCtrl, width: 180, numeric: true),
@@ -404,6 +464,7 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
           ),
         ]),
+        ],
       ],
     );
   }
@@ -475,7 +536,9 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
     return _card(
       icon: Icons.percent,
       color: Colors.red.shade800,
-      title: _en ? 'Withholding Tax Deducted by Customer' : 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย',
+      title: _buy
+          ? (_en ? 'Withholding Tax Deducted from the Vendor' : 'ภาษีหัก ณ ที่จ่าย (หักจากผู้ขาย)')
+          : (_en ? 'Withholding Tax Deducted by Customer' : 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย'),
       action: _ro
           ? null
           : TextButton.icon(
@@ -494,7 +557,7 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
         if (_c.whts.isNotEmpty)
           Align(
             alignment: Alignment.centerRight,
-            child: Text('${_en ? 'Total WHT' : 'รวมภาษีที่ถูกหัก'}: ${_fmt.format(_c.whtTotal)} $cur',
+            child: Text('${_en ? 'Total WHT' : (_buy ? 'รวมภาษีหัก ณ ที่จ่าย' : 'รวมภาษีที่ถูกหัก')}: ${_fmt.format(_c.whtTotal)} $cur',
                 style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700)),
           ),
       ],

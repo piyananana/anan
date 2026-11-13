@@ -27,6 +27,8 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../ap/models/ap_vendor.dart';
 import '../../ap/widgets/ap_vendor_list_widget.dart';
+import '../../ap/services/ap_vendor_service.dart';
+import 'im_payment_approval_panel.dart';
 import '../../ar/models/ar_customer.dart';
 import '../../ar/widgets/ar_customer_list_widget.dart';
 import '../../cd/models/cd_vat_rate.dart';
@@ -308,6 +310,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // วงเงินเครดิต: คำขออนุมัติเกินวงเงิน — รออนุมัติ = แก้เอกสารไม่ได้จนกว่าจะถอนคำขอ
   DocCreditState _credit = const DocCreditState();
   final _creditService = CreditApprovalService(AppConfig.apiIm, 'im_transaction');
+  // ซื้อเงินสด ('14'): ขออนุมัติจ่าย (endpoint payment_*)
+  DocCreditState _payApproval = const DocCreditState();
+  final _payService = CreditApprovalService(AppConfig.apiIm, 'im_transaction', prefix: 'payment');
   int? _glEntryId;
 
   // รองรับรับสินค้าจากผู้ขายต่างประเทศเป็นสกุลเงินต่างประเทศ (เฉพาะ _isApVendorMode) — มิเรอร์
@@ -336,7 +341,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   final ImCashSaleController _cash = ImCashSaleController();
   List<CdWhtType> _whtTypes = [];
 
-  bool get _isReadOnly => widget.viewOnly || _status != 'Draft' || _credit.isPending;
+  bool get _isReadOnly => widget.viewOnly || _status != 'Draft' || _credit.isPending || _payApproval.isPending;
   // วันที่ใบกำกับผู้ขาย: '11' ตั้งแต่ร่าง, '12' ตอนตั้งหนี้ (Received) และหลัง Post
   bool get _showInvoiceDate => _isGrnBillingMode || (_isGrDeferredMode && _status != 'Draft') || _isApCnDnDoc;
   // '15'/'20'/'25' → ใบลดหนี้/เพิ่มหนี้ AP: เลขที่อ้างอิง = เลขที่เอกสารของผู้ขาย, วันที่ (ไม่บังคับ ว่าง = วันที่เอกสาร) → รายงานภาษีซื้อ
@@ -346,10 +351,16 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   bool get _canEditPriceInclVat => !_isReadOnly || (_isGrDeferredMode && _status == 'Received' && !widget.viewOnly);
   bool get _isIssueMode => _selectedSysDocType == '60'; // ISS — เบิกสินค้า
   bool get _isTransferMode => _selectedSysDocType == '70'; // TRF — โอนสินค้า
-  bool get _isReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12' || _selectedSysDocType == '13'; // GRN — รับสินค้า (รวมรับฝากขาย '13')
+  bool get _isReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12' || _selectedSysDocType == '13' || _isCashPurchaseMode; // GRN — รับสินค้า (รวมรับฝากขาย '13' และซื้อเงินสด '14')
   // รับสินค้าตามใบสั่งซื้อ (PO) — ไม่รวม '13' (รับฝากขาย) เพราะฝากขายไม่มีแนวคิด PO ผูกไว้เลยในระบบนี้
   bool get _isPoReceiveMode => _selectedSysDocType == '10' || _selectedSysDocType == '11' || _selectedSysDocType == '12';
-  bool get _isGrnBillingMode => _selectedSysDocType == '11'; // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ
+  bool get _isGrnBillingMode => _selectedSysDocType == '11' || _isCashPurchaseMode; // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ ('14' ทำเหมือน '11' แล้วสร้างใบจ่ายต่อ)
+  // ซื้อเงินสด — รับของ ตั้งหนี้ และจ่ายเงินในครั้งเดียว ต้องอนุมัติจ่ายก่อน Post (ยอดที่ต้องจ่าย = _cashDueFc เหมือนขายเงินสด)
+  bool get _isCashPurchaseMode => _selectedSysDocType == '14';
+  bool get _isCashMode => _isCashSaleMode || _isCashPurchaseMode;
+  // เลขที่ใบกำกับผู้ขายบังคับ: '11' เสมอ, '14' เฉพาะใบกำกับภาษีเต็มรูป
+  bool get _vendorRefRequired => !_isCashPurchaseMode || _cash.taxInvoiceKind == 'FULL';
+  double get _cashPaidLc => double.parse((_cash.paymentTotal * _exchangeRate).toStringAsFixed(2));
   bool get _isGrDeferredMode => _selectedSysDocType == '12'; // GR รอตั้งหนี้ — Post IM ก่อน ค่อย Post AP/GL ทีหลัง
   // รับฝากขาย (Consignment) — ต้นทุนจริงตั้งแต่รับ (ไม่ใช่ 0 เหมือนของแถม) แต่ยังไม่เป็นหนี้ AP จริงจนกว่าจะขายออก
   // (ตั้งหนี้เป็นก้อนภายหลังผ่านหน้า Consignment Settlement) บังคับ FIFO/SPECIFIC เท่านั้น ไม่ให้ปนกับต้นทุนเฉลี่ย
@@ -622,6 +633,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _deleteBlock = null;
     _reverseHistory = const [];
     _credit = const DocCreditState();
+    _payApproval = const DocCreditState();
     _salespersons = const [];
     _glEntryId = null;
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c?.baseCurrencyFlag == true, orElse: () => null);
@@ -732,6 +744,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _deleteBlock = tx.deleteBlock;
     _reverseHistory = tx.reverseHistory;
     _credit = tx.credit;
+    _payApproval = tx.payApproval;
     _salespersons = tx.salespersons;
     _glEntryId = h.glEntryId;
     _currency = _currencies.cast<Currency?>().firstWhere(
@@ -790,7 +803,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         ..dims = {1: d.dim1Id, 2: d.dim2Id, 3: d.dim3Id, 4: d.dim4Id, 5: d.dim5Id});
     }
     _lines = lines;
-    if (_isCashSaleMode) {
+    if (_isCashMode) {
       if (_whtTypes.isEmpty) {
         try { _whtTypes = await CdWhtTypeService().fetchActiveRows(); } catch (_) {}
       }
@@ -844,6 +857,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           _selectCustomer(c);
           return; // _selectCustomer โหลดเงินมัดจำให้แล้ว
         }
+      } catch (_) {}
+    }
+    // ซื้อเงินสด: เอกสารใหม่ที่ยังไม่เลือกผู้ขาย → ผู้ขายเงินสดตามที่ตั้งค่าไว้
+    final defaultVendorId = _docSetup?.defaultVendorId;
+    if (_isCashPurchaseMode && _id == null && _vendorId == null && defaultVendorId != null) {
+      try {
+        final v = await ApVendorService().fetchRow(defaultVendorId);
+        if (mounted && _vendorId == null && _docId == d.id) _selectVendor(v);
       } catch (_) {}
     }
     await _loadAdvances();
@@ -1807,6 +1828,15 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (_isDlnBillingMode && !await _confirmPoPriceDiffs(sales: true)) return;
     if (!await _confirmLinkedAdvances()) return;
     if (!_checkVendorCnDnNo()) return;
+    if (_isCashPurchaseMode && _cashPaidLc > 0.005 && !_payApproval.covers(_cashPaidLc)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_payApproval.isPending
+          ? (_isEnglish ? 'This cash purchase is waiting for payment approval' : 'เอกสารซื้อเงินสดนี้อยู่ระหว่างรออนุมัติจ่าย')
+          : (_isEnglish
+              ? 'Save the draft and request payment approval before posting'
+              : 'กรุณาบันทึกร่างและขออนุมัติจ่ายก่อน Post'))));
+      return;
+    }
     // ขายเงินสดรับเงินครบตอน Post — ไม่ตรวจวงเงินเครดิต
     if (_isArCustomerMode && _customerId != null && !_isCashSaleMode) {
       final go = await checkCreditBeforePost(
@@ -1856,12 +1886,15 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       warn(isEnglish ? 'Please select a destination warehouse' : 'กรุณาเลือกคลังปลายทาง');
       return;
     }
-    if (_isApVendorMode && _vendorId == null) {
+    // ซื้อเงินสดไม่เลือกผู้ขายได้ — backend ใช้ผู้ขายเงินสดตามที่ตั้งค่าไว้
+    if (_isApVendorMode && _vendorId == null && !_isCashPurchaseMode) {
       warn(isEnglish ? 'Please select a vendor' : 'กรุณาเลือกผู้ขาย');
       return;
     }
-    if (_isGrnBillingMode && _refNoCtrl.text.trim().isEmpty) {
-      warn(isEnglish ? 'Please enter the vendor invoice number' : 'กรุณาระบุเลขที่ใบกำกับสินค้าผู้ขาย');
+    if (_isGrnBillingMode && _vendorRefRequired && _refNoCtrl.text.trim().isEmpty) {
+      warn(_isCashPurchaseMode
+          ? (isEnglish ? 'Please enter the vendor tax invoice number' : 'กรุณาระบุเลขที่ใบกำกับภาษีของผู้ขาย')
+          : (isEnglish ? 'Please enter the vendor invoice number' : 'กรุณาระบุเลขที่ใบกำกับสินค้าผู้ขาย'));
       return;
     }
     // ขายเงินสดไม่เลือกลูกค้าได้ — backend ใช้ลูกค้าเงินสดตามที่ตั้งค่าไว้
@@ -1945,8 +1978,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     }
     if (_salesDiscountMode && !_checkSalesDiscountTotals(warn)) return;
     if (!_checkAdvances()) return;
-    if (_isCashSaleMode) {
-      final err = _cash.validate(post: action == 'Post', dueFc: _cashDueFc, isEnglish: isEnglish, fmt: _fmtMoney);
+    if (_isCashMode) {
+      final err = _cash.validate(post: action == 'Post', dueFc: _cashDueFc, isEnglish: isEnglish, fmt: _fmtMoney, purchase: _isCashPurchaseMode);
       if (err != null) { warn(err); return; }
     }
 
@@ -1974,11 +2007,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         priceIncludesVat: _inclVat,
         billDiscountPercent: _salesDiscountMode ? _billDiscPct : 0,
         cashDiscountAmount: _salesDiscountMode ? _cashDisc : 0,
-        billToName: _isCashSaleMode ? _cash.billToName : null,
-        billToAddress: _isCashSaleMode ? _cash.billToAddress : null,
-        billToTaxId: _isCashSaleMode ? _cash.billToTaxId : null,
-        billToBranch: _isCashSaleMode ? _cash.billToBranch : null,
+        billToName: _isCashMode ? _cash.billToName : null,
+        billToAddress: _isCashMode ? _cash.billToAddress : null,
+        billToTaxId: _isCashMode ? _cash.billToTaxId : null,
+        billToBranch: _isCashMode ? _cash.billToBranch : null,
         cashReceived: _isCashSaleMode ? _cash.cashReceived : 0,
+        taxInvoiceKind: _isCashPurchaseMode ? _cash.taxInvoiceKind : null,
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
         dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
@@ -2017,8 +2051,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             description: l.remarkCtrl.text.trim().isEmpty ? null : l.remarkCtrl.text.trim(),
           )).toList();
 
-      final payments = _isCashSaleMode ? _cash.paymentsForSave() : null;
-      final whts = _isCashSaleMode ? _cash.whtsForSave(_exchangeRate) : null;
+      final payments = _isCashMode ? _cash.paymentsForSave() : null;
+      final whts = _isCashMode ? _cash.whtsForSave(_exchangeRate) : null;
       if (_id == null) {
         final result = await _service.createTransaction(header: header, details: details, action: action,
             salespersons: _isArCustomerMode ? _salespersons : null, advances: _showAdvances ? _advancesForSave : null,
@@ -2289,7 +2323,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   const SizedBox(height: 12),
                   _buildAdvanceCard(isEnglish),
                 ],
-                if (_isCashSaleMode) ...[
+                if (_isCashMode) ...[
                   const SizedBox(height: 12),
                   ImCashSalePanel(
                     controller: _cash,
@@ -2299,7 +2333,34 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                     whtBaseFc: _lines.fold(0.0, (t, l) => t + _amt(l).net),
                     currencyCode: _currency?.currencyCode ?? CurrencyService.baseCode,
                     whtTypes: _whtTypes,
-                    customerLabel: _customerId != null ? _customerLabel : null,
+                    customerLabel: _isCashPurchaseMode
+                        ? (_vendorId != null ? _vendorLabel : null)
+                        : (_customerId != null ? _customerLabel : null),
+                    purchase: _isCashPurchaseMode,
+                    onTaxInvoiceKindChanged: () => setState(() {}),
+                  ),
+                ],
+                if (_isCashPurchaseMode && (_status == 'Draft' || _payApproval.status != null)) ...[
+                  const SizedBox(height: 8),
+                  ImPaymentApprovalPanel(
+                    service: _payService,
+                    docId: _id,
+                    docNo: _docNo,
+                    paidLc: _cashPaidLc,
+                    approval: _payApproval,
+                    isDraft: _status == 'Draft' && !widget.viewOnly,
+                    isEnglish: isEnglish,
+                    // ขออนุมัติตามยอดที่บันทึกไว้ — บันทึกร่างก่อนเสมอ
+                    beforeRequest: () async {
+                      await _save('Draft', notify: false);
+                      return _id != null;
+                    },
+                    onChanged: () async {
+                      if (_id == null) return;
+                      await _loadExisting(_id!);
+                      if (mounted) setState(() {});
+                      widget.onSaveSuccess();
+                    },
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -2409,7 +2470,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             controller: _refNoCtrl,
             readOnly: !_canEditBilling,
             decoration: InputDecoration(
-                labelText: (_isGrnBillingMode || (_isGrDeferredMode && _status == 'Received'))
+                labelText: _isCashPurchaseMode
+                    ? '${isEnglish ? 'Vendor Tax Invoice / Receipt No.' : 'เลขที่ใบกำกับภาษี/ใบเสร็จผู้ขาย'}${_vendorRefRequired ? ' *' : ''}'
+                    : (_isGrnBillingMode || (_isGrDeferredMode && _status == 'Received'))
                     ? (isEnglish ? 'Vendor Invoice No. *' : 'เลขที่ใบกำกับสินค้าผู้ขาย *')
                     : _isApCnDnDoc
                         ? '${_isApDnMode
@@ -2467,7 +2530,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           Expanded(
             flex: 1,
             child: _fkField(
-              label: isEnglish ? 'Vendor *' : 'ผู้ขาย *',
+              label: _isCashPurchaseMode
+                  ? (isEnglish ? 'Vendor (blank = cash vendor)' : 'ผู้ขาย (ว่าง = ผู้ขายเงินสด)')
+                  : (isEnglish ? 'Vendor *' : 'ผู้ขาย *'),
               hasValue: _vendorId != null,
               displayText: _vendorLabel,
               onSearch: _isReadOnly ? null : () => ApVendorListWidget.search(context, onSelected: _selectVendor),

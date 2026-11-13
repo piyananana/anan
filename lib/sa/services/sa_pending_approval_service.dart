@@ -21,6 +21,7 @@ class PendingApprovalService {
       _fetchQuoteTransaction(),
       _fetchCredit(AppConfig.apiAr, 'ar_transaction', 'ar_credit', 'ArTransactionScreen'),
       _fetchCredit(AppConfig.apiIm, 'im_transaction', 'im_credit', 'ImTransactionScreen'),
+      _fetchImCashPurchase(),
       _fetchCredit(AppConfig.apiSo, 'so_transaction', 'so_credit', 'SoTransactionScreen'),
       _fetchDocQueue(AppConfig.apiPo, 'po_transaction', 'PoTransactionScreen', 'ใบสั่งซื้อ', 'Purchase Order', 'total_value_lc', 'vendor_name_th'),
       _fetchDocQueue(AppConfig.apiSo, 'so_transaction', 'SoTransactionScreen', 'ใบสั่งขาย', 'Sales Order', 'total_value_lc', 'customer_name_th'),
@@ -58,6 +59,33 @@ class PendingApprovalService {
           submittedBy: m['submitted_by'],
           amount: amountKey == null ? 0 : _toDouble(m[amountKey]),
           targetPath: targetPath,
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ขออนุมัติจ่ายของซื้อเงินสด IM ('14') — amount = ยอดจ่าย (สกุลเงินหลัก)
+  Future<List<PendingApprovalItem>> _fetchImCashPurchase() async {
+    try {
+      final headers = await _auth.getAuthHeader();
+      final resp = await http.get(Uri.parse('${AppConfig.apiIm}/im_transaction/payment_my_pending'), headers: headers);
+      if (resp.statusCode != 200) return [];
+      return (jsonDecode(resp.body) as List).map((e) {
+        final m = e as Map<String, dynamic>;
+        final docNo = (m['doc_no'] ?? '').toString();
+        final vendor = (m['bill_to_name'] ?? m['vendor_name_th'] ?? '').toString();
+        return PendingApprovalItem(
+          module: 'im_cash_purchase',
+          id: m['id'],
+          docNo: docNo,
+          date: parseLocalDateNullable(m['doc_date']),
+          titleTh: 'ขออนุมัติจ่าย (ซื้อเงินสด) $docNo${vendor.isNotEmpty ? ' — $vendor' : ''}',
+          titleEn: 'Cash Purchase Payment Approval $docNo',
+          submittedBy: m['pay_requested_by'],
+          amount: _toDouble(m['amount']),
+          targetPath: 'ImTransactionScreen',
         );
       }).toList();
     } catch (_) {
