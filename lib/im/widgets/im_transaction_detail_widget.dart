@@ -1083,7 +1083,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // ── ราคาขายตามตารางราคา ('31'/'32'/'33'/'45') ─────────────────────────────────────────────────────
   // หาได้จากตารางราคา หรือดึงมาจากใบสั่งขาย = ล็อกช่องราคา แก้ได้เฉพาะ administrator/developer ไม่พบจึงกรอกเองได้
   // (user decision 2026-11-12 — backend assertSalesPrices ตรวจซ้ำตอนบันทึก) ดึงราคาใหม่เมื่อจำนวน/ลูกค้า/วันที่/
-  // สกุลเงินเปลี่ยน (ราคาตามขั้นจำนวนและสกุลเงินของเอกสาร)
+  // สกุลเงิน/ราคารวม VAT/ประเภท VAT ของบรรทัดเปลี่ยน (ราคาตามขั้นจำนวน สกุลเงิน และแปลงรวม/ไม่รวม VAT ตามตาราง)
   bool get _isSalesPriceMode => _isDlnBillingMode || _isDlnDeferredMode || _isArDnMode;
   bool get _canOverridePrice => AuthService().isAdmin; // administrator หรือ developer
   bool _priceFromSource(_CountLine l) => _isSalesPriceMode && !l.isFree && (l.refSoDetailId != null || l.priceSource == 'LIST');
@@ -1104,7 +1104,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       Map<String, dynamic> resolved;
       try {
         resolved = await _soService.resolvePrice(itemId: itemId, customerId: customerId, qty: qty == 0 ? 1 : qty,
-            docDate: docDate, uomId: l.uomId ?? l.item.baseUomId, currencyCode: currencyCode);
+            docDate: docDate, uomId: l.uomId ?? l.item.baseUomId, currencyCode: currencyCode,
+            priceIncludesVat: _priceIncludesVat, vatRate: (l.vatType == null || l.vatType == 'NOVAT') ? 0 : l.vatRate);
       } catch (_) {
         return;
       }
@@ -2727,6 +2728,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       }
                     }
                     _priceIncludesVat = incl;
+                    _refreshListPrices(); // ราคาจากตารางราคา: แปลงรวม/ไม่รวม VAT ใหม่ (backend)
                   }) : null,
             ),
             Text(isEnglish ? 'Prices include VAT' : 'ราคารวม VAT'),
@@ -2994,10 +2996,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   isExpanded: true,
                   decoration: InputDecoration(labelText: isEnglish ? 'VAT *' : 'VAT *', border: const OutlineInputBorder(), isDense: true),
                   items: _vatRates.map((v) => DropdownMenuItem(value: v.vatCode, child: Text(_vatLabel(v.vatCode), style: const TextStyle(fontSize: 12)))).toList(),
-                  onChanged: _isReadOnly ? null : (v) => setState(() {
-                        line.vatType = v;
-                        line.vatRate = v != null ? _rateForVatCode(v) : 0;
-                      }),
+                  onChanged: _isReadOnly ? null : (v) {
+                        setState(() {
+                          line.vatType = v;
+                          line.vatRate = v != null ? _rateForVatCode(v) : 0;
+                        });
+                        _refreshListPrices([line]); // ราคาตามตารางที่ต้องแปลง VAT ขึ้นกับอัตราของบรรทัด
+                      },
                 ),
               ),
             if (_showDiscount && !_salesDiscountMode)
