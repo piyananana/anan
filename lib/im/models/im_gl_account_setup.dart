@@ -25,6 +25,11 @@ class ImGlAccountSetup {
   final String? defaultCustomerCode;
   final String? defaultCustomerNameTh;
   final String? defaultCustomerNameEn;
+  // ซื้อเงินสด ('14'): ผู้ขายเงินสดตั้งต้นของเอกสารใหม่ (ใบจ่ายชำระ AP ใช้ receiptTargetDoc* ชุดเดียวกับใบเสร็จ AR)
+  final int? defaultVendorId;
+  final String? defaultVendorCode;
+  final String? defaultVendorNameTh;
+  final String? defaultVendorNameEn;
   final int? glDocId;
   final String? glDocCode;
   final String? glDocName;
@@ -76,6 +81,10 @@ class ImGlAccountSetup {
     this.defaultCustomerCode,
     this.defaultCustomerNameTh,
     this.defaultCustomerNameEn,
+    this.defaultVendorId,
+    this.defaultVendorCode,
+    this.defaultVendorNameTh,
+    this.defaultVendorNameEn,
     this.glDocId,
     this.glDocCode,
     this.glDocName,
@@ -114,6 +123,10 @@ class ImGlAccountSetup {
         defaultCustomerCode: json['default_customer_code'],
         defaultCustomerNameTh: json['default_customer_name_th'],
         defaultCustomerNameEn: json['default_customer_name_en'],
+        defaultVendorId: json['default_vendor_id'],
+        defaultVendorCode: json['default_vendor_code'],
+        defaultVendorNameTh: json['default_vendor_name_th'],
+        defaultVendorNameEn: json['default_vendor_name_en'],
         glDocId: json['gl_doc_id'],
         glDocCode: json['gl_doc_code'],
         glDocName: json['gl_doc_name'],
@@ -156,10 +169,14 @@ class ImGlAccountSetup {
         'target_doc_id': targetDocId,
         'receipt_target_doc_id': receiptTargetDocId,
         'default_customer_id': defaultCustomerId,
+        'default_vendor_id': defaultVendorId,
       };
 
   String? defaultCustomerName(bool isEnglish) =>
       isEnglish && (defaultCustomerNameEn ?? '').isNotEmpty ? defaultCustomerNameEn : defaultCustomerNameTh;
+
+  String? defaultVendorName(bool isEnglish) =>
+      isEnglish && (defaultVendorNameEn ?? '').isNotEmpty ? defaultVendorNameEn : defaultVendorNameTh;
 }
 
 // บัญชีที่ตอน Post จะใช้จริงต่อสินค้า (POST /im_transaction/gl_accounts) — resolver ชุดเดียวกับ backend:

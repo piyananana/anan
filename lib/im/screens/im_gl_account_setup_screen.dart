@@ -10,6 +10,8 @@ import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_module_document_service.dart';
 import '../../ar/models/ar_customer.dart';
 import '../../ar/widgets/ar_customer_list_widget.dart';
+import '../../ap/models/ap_vendor.dart';
+import '../../ap/widgets/ap_vendor_list_widget.dart';
 import '../models/im_gl_account_setup.dart';
 import '../services/im_gl_account_setup_service.dart';
 
@@ -167,9 +169,10 @@ class _ImGlAccountSetupScreenState extends State<ImGlAccountSetupScreen> with Au
                                       && d.sysDocType == _selected!.targetDocCode).toList()
                                 ..sort((a, b) => a.docCode.compareTo(b.docCode)))
                               : const [],
-                          // ขายเงินสด: ประเภทเอกสารรับชำระ AR ที่เลือกได้
+                          // ขายเงินสด/ซื้อเงินสด: ประเภทเอกสารรับชำระ AR / จ่ายชำระ AP ที่เลือกได้
                           receiptDocs: _selected!.receiptDocCode != null
-                              ? (_allDocs.where((d) => d.isDocType && d.isActive && d.sysModule == '11'
+                              ? (_allDocs.where((d) => d.isDocType && d.isActive
+                                      && d.sysModule == (_selected!.targetModule == 'AP' ? '21' : '11')
                                       && d.sysDocType == _selected!.receiptDocCode).toList()
                                 ..sort((a, b) => a.docCode.compareTo(b.docCode)))
                               : const [],
@@ -249,6 +252,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   int? _targetDocId;        String? _targetDocCode;        String? _targetDocName;
   int? _receiptDocId;       String? _receiptDocCode;       String? _receiptDocName;
   int? _defaultCustomerId;  String? _defaultCustomerCode;  String? _defaultCustomerName;
+  int? _defaultVendorId;    String? _defaultVendorCode;    String? _defaultVendorName;
   bool _isSaving = false;
 
   @override
@@ -279,6 +283,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     _receiptDocId       = s.receiptTargetDocId; _receiptDocCode       = s.receiptTargetDocCode; _receiptDocName       = s.receiptTargetDocNameTh;
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     _defaultCustomerId  = s.defaultCustomerId;  _defaultCustomerCode  = s.defaultCustomerCode;  _defaultCustomerName  = s.defaultCustomerName(isEnglish);
+    _defaultVendorId    = s.defaultVendorId;    _defaultVendorCode    = s.defaultVendorCode;    _defaultVendorName    = s.defaultVendorName(isEnglish);
   }
 
   String _acctName(int? id, String? storedName) {
@@ -412,7 +417,10 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
 
   Future<void> _pickReceiptDoc() async {
     final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    final picked = await _pickDoc(widget.receiptDocs, isEnglish ? 'Select AR Receipt Document Type' : 'เลือกประเภทเอกสารรับชำระ AR');
+    final ap = widget.setup.targetModule == 'AP';
+    final picked = await _pickDoc(widget.receiptDocs, ap
+        ? (isEnglish ? 'Select AP Payment Document Type' : 'เลือกประเภทเอกสารจ่ายชำระ AP')
+        : (isEnglish ? 'Select AR Receipt Document Type' : 'เลือกประเภทเอกสารรับชำระ AR'));
     if (picked != null) {
       setState(() { _receiptDocId = picked.id; _receiptDocCode = picked.docCode; _receiptDocName = picked.docNameThai; });
     }
@@ -425,6 +433,17 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         _defaultCustomerId = c.id;
         _defaultCustomerCode = c.customerCode;
         _defaultCustomerName = isEnglish && (c.customerNameEn ?? '').isNotEmpty ? c.customerNameEn : c.customerNameTh;
+      });
+    });
+  }
+
+  void _pickDefaultVendor() {
+    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    ApVendorListWidget.search(context, onSelected: (ApVendor v) {
+      setState(() {
+        _defaultVendorId = v.id;
+        _defaultVendorCode = v.vendorCode;
+        _defaultVendorName = isEnglish && (v.vendorNameEn ?? '').isNotEmpty ? v.vendorNameEn : v.vendorNameTh;
       });
     });
   }
@@ -498,6 +517,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
         receiptDocCode: widget.setup.receiptDocCode,
         receiptTargetDocId: _receiptDocId, receiptTargetDocCode: _receiptDocCode, receiptTargetDocNameTh: _receiptDocName,
         defaultCustomerId: _defaultCustomerId, defaultCustomerCode: _defaultCustomerCode, defaultCustomerNameTh: _defaultCustomerName,
+        defaultVendorId: _defaultVendorId, defaultVendorCode: _defaultVendorCode, defaultVendorNameTh: _defaultVendorName,
         inventoryAccountId: _inventoryAccountId, inventoryAccountCode: _inventoryAccountCode, inventoryAccountName: _inventoryAccountName,
         cogsAccountId: _cogsAccountId, cogsAccountCode: _cogsAccountCode, cogsAccountName: _cogsAccountName,
         varianceAccountId: _varianceAccountId, varianceAccountCode: _varianceAccountCode, varianceAccountName: _varianceAccountName,
@@ -528,6 +548,11 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
     if (s.targetModule == 'NONE') return isEnglish ? 'Internal only — no AR/AP document is created' : 'ภายในเท่านั้น — ไม่สร้างเอกสาร AR/AP';
     final moduleLabel = s.targetModule == 'AP' ? 'AP' : 'AR';
     final kind = _targetKind(isEnglish);
+    if (s.receiptDocCode != null && s.targetModule == 'AP') {
+      return isEnglish
+          ? 'Creates an AP invoice (system type ${s.targetDocCode}) and an AP payment (system type ${s.receiptDocCode}) that settles it when posted — choose both document types below. The document must be approved before posting (payment limit).'
+          : 'เมื่อ Post จะสร้างใบตั้งหนี้ AP (ประเภทระบบ ${s.targetDocCode}) และใบจ่ายชำระ AP (ประเภทระบบ ${s.receiptDocCode}) ตัดใบตั้งหนี้นั้นอัตโนมัติ — เลือกประเภทเอกสารทั้งสองด้านล่าง เอกสารต้องได้รับอนุมัติก่อน Post (ตามวงเงินจ่าย)';
+    }
     if (s.receiptDocCode != null) {
       return isEnglish
           ? 'Creates an AR invoice (system type ${s.targetDocCode}) and an AR receipt (system type ${s.receiptDocCode}) that settles it when posted — choose both document types below'
@@ -554,7 +579,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   // แสดงเฉพาะบัญชีที่ใช้จริงตาม sys_doc_type (imTransactionController: postGlEntry/resolveCounterAccount และ
   // postApBillFromGrn/postApCreditDebitNoteFromIm/postArBillFromDln/postArCreditDebitNoteFromIm)
   // '11'/'12'/'15'/'20'/'25' ลงบัญชีผ่านเอกสาร AP เท่านั้น (ใช้ประเภทเอกสาร GL ของ AP) — ใช้บัญชีสินค้า/ผลต่าง/VAT ซื้อของหน้านี้
-  static const _apLinked = ['11', '12', '15', '20', '25'];
+  static const _apLinked = ['11', '12', '14', '15', '20', '25'];
   static const _arLinked = ['31', '32', '33', '35', '40', '45'];
   bool get _noGl         => _sdt == '85';                                        // เปลี่ยนแปลงราคา ไม่ลงบัญชี
   bool get _showGlDoc    => !_noGl && !_apLinked.contains(_sdt);                 // postGlEntry ของ IM เอง
@@ -670,6 +695,22 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
             lines: [_JournalLine('Dr', purchases), _JournalLine('  Cr', consignPayable)],
           ),
         ];
+      case '14': // ซื้อเงินสด — เหมือน '11' + ใบจ่ายชำระ AP ตัดใบตั้งหนี้ทันที
+        return [
+          _JournalSection(lines: [
+            _JournalLine('Dr', isEnglish ? '$inv / $purchases (auto, on the AP bill)' : '$inv / $purchases (อัตโนมัติ บนใบตั้งหนี้ AP)'),
+            _JournalLine('Dr/Cr', isEnglish ? '$variance (purchase price - standard cost, STANDARD items, Perpetual only)' : '$variance (ราคาซื้อ - ต้นทุนมาตรฐาน สินค้า STANDARD เฉพาะ Perpetual)'),
+            _JournalLine('Dr', isEnglish ? '$vatIn (full tax invoice only — abbreviated/none: VAT goes into the item cost)' : '$vatIn (เฉพาะใบกำกับภาษีเต็มรูป — อย่างย่อ/ไม่มี: VAT รวมเข้าต้นทุนสินค้า)'),
+            _JournalLine('  Cr', ap),
+          ]),
+          _JournalSection(
+            title: isEnglish ? 'AP payment (auto)' : 'ใบจ่ายชำระ AP (อัตโนมัติ)',
+            lines: [
+              _JournalLine('Dr', ap),
+              _JournalLine('  Cr', isEnglish ? 'Cash/Bank per payment method + WHT payable + deposit deducted' : 'เงินสด/ธนาคารตามวิธีจ่าย + ภาษีหัก ณ ที่จ่ายค้างจ่าย + มัดจำที่หัก'),
+            ],
+          ),
+        ];
       case '11': // GRN Billing — รับสินค้า+ตั้งหนี้อัตโนมัติ — ไม่ Post ที่นี่ สร้าง ap_transaction แล้วโพสต์ที่นั่นแทน
         return [
           _JournalSection(lines: [
@@ -728,7 +769,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   Widget _buildJournalPreview(bool isEnglish) {
     final sections = _journalSections(isEnglish);
     if (sections.isEmpty) return const SizedBox.shrink();
-    final isLive = ['80', '60', '70', '10', '11', '12', '13', '30', '31', '32', '33', '15', '20', '25', '35', '40', '45'].contains(_sdt);
+    final isLive = ['80', '60', '70', '10', '11', '12', '13', '14', '30', '31', '32', '33', '15', '20', '25', '35', '40', '45'].contains(_sdt);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -962,7 +1003,9 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           onTap: _pickReceiptDoc,
           child: InputDecorator(
             decoration: InputDecoration(
-              labelText: isEnglish ? 'AR receipt document type (required)' : 'ประเภทเอกสารรับชำระ AR (ต้องระบุ)',
+              labelText: s.targetModule == 'AP'
+                  ? (isEnglish ? 'AP payment document type (required)' : 'ประเภทเอกสารจ่ายชำระ AP (ต้องระบุ)')
+                  : (isEnglish ? 'AR receipt document type (required)' : 'ประเภทเอกสารรับชำระ AR (ต้องระบุ)'),
               border: const OutlineInputBorder(),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -980,6 +1023,29 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
           ),
         ),
         const SizedBox(height: 16),
+        if (s.targetModule == 'AP') ...[
+        _SectionHeader(title: isEnglish ? 'Default Cash Vendor' : 'ผู้ขายเงินสดตั้งต้น'),
+        InkWell(
+          onTap: _pickDefaultVendor,
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: isEnglish ? 'Vendor filled in on new documents (optional)' : 'ผู้ขายที่ใส่ให้อัตโนมัติในเอกสารใหม่ (ไม่บังคับ)',
+              border: const OutlineInputBorder(),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (_defaultVendorId != null)
+                  IconButton(icon: const Icon(Icons.clear, size: 16), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => setState(() { _defaultVendorId = null; _defaultVendorCode = null; _defaultVendorName = null; })),
+                const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.person_search, size: 18)),
+              ]),
+            ),
+            child: Text(
+              _defaultVendorId != null ? '$_defaultVendorCode  ${_defaultVendorName ?? ''}' : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
+              style: TextStyle(fontSize: 13, color: _defaultVendorId != null ? null : Colors.grey.shade500),
+            ),
+          ),
+        ),
+        ] else ...[
         _SectionHeader(title: isEnglish ? 'Default Cash Customer' : 'ลูกค้าเงินสดตั้งต้น'),
         InkWell(
           onTap: _pickDefaultCustomer,
@@ -1001,6 +1067,7 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
             ),
           ),
         ),
+        ],
         const SizedBox(height: 16),
         ],
 
