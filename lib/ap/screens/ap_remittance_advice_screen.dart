@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -152,8 +153,8 @@ class _ApRemittanceAdviceScreenState extends State<ApRemittanceAdviceScreen>
 
   Future<void> _addPageToDoc(pw.Document doc, Map<String, dynamic> data) async {
     final isEnglish = _isEnglish;
-    final font = await PdfGoogleFonts.sarabunRegular();
-    final fontBold = await PdfGoogleFonts.sarabunBold();
+    final font = pw.Font.ttf(await rootBundle.load('assets/fonts/THSarabun.ttf'));
+    final fontBold = pw.Font.ttf(await rootBundle.load('assets/fonts/THSarabun Bold.ttf'));
 
     final company   = (data['company']  as Map<String, dynamic>?) ?? {};
     final payment   = (data['payment']  as Map<String, dynamic>?) ?? {};
