@@ -191,6 +191,9 @@ class PoTransactionService {
     // ระบุ = เอกสารคิดราคารวม VAT หรือไม่ — backend แปลงราคาตามตารางให้ตรงกับเอกสารด้วย vatRate ของบรรทัด
     bool? priceIncludesVat,
     double vatRate = 0,
+    // ไม่พบในตารางราคา = ใช้ราคาซื้อล่าสุดจากผู้ขายรายนี้ (IM รับของ/PO) — ผลมี source 'LIST'|'LAST' และ
+    // ref_doc_no/ref_doc_date ของเอกสารที่ใช้ราคา
+    bool fallbackLastPurchase = false,
   }) async {
     final headers = await authService.getAuthHeader();
     final uri = Uri.parse('${AppConfig.apiIm}/im_price_list/resolve_price').replace(queryParameters: {
@@ -203,6 +206,7 @@ class PoTransactionService {
       if (currencyCode != null) 'currency_code': currencyCode,
       if (priceIncludesVat != null) 'price_includes_vat': priceIncludesVat.toString(),
       if (priceIncludesVat != null) 'vat_rate': vatRate.toString(),
+      if (fallbackLastPurchase) 'fallback_last_purchase': 'true',
     });
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {

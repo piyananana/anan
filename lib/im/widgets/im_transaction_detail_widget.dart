@@ -91,6 +91,9 @@ class _CountLine {
   String? priceSource;
   bool priceOverridden = false; // ผู้ดูแลระบบแก้ราคาเอง — ไม่ดึงราคาจากตารางราคาทับอีก
   int priceSeq = 0; // กันผลดึงราคาที่มาช้ากว่าการแก้จำนวนครั้งล่าสุด
+  // ฝั่งซื้อ ('11'/'12' เพิ่มบรรทัดตรง): ราคาที่ระบบเติม + ที่มา (ตารางราคา / ราคาซื้อล่าสุด) — แสดงไอคอนเมื่อราคายังเท่าค่าที่เติม
+  double? purchasePriceAuto;
+  String? purchasePriceNote;
   int? refSoDetailId; // '30'/'31'/'32' เท่านั้น — บรรทัด SO ต้นฉบับที่บรรทัดนี้ส่งตาม (ไม่ final — ผู้ใช้เลือกทีหลังได้ผ่าน picker)
   // VAT ต่อบรรทัด — ใช้เฉพาะประเภทเอกสารที่สร้าง/อ้างอิงใบกำกับ AP/AR อัตโนมัติ (ดู _isVatMode ใน state) เก็บเป็น
   // field ธรรมดาแทน controller เพราะเป็นค่าที่เลือกจาก dropdown ไม่ใช่กรอกอิสระ (มิเรอร์ ar_transaction_detail_widget.dart)
@@ -1074,12 +1077,36 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         itemId: itemId, vendorId: _vendorId!, qty: 1, docDate: docDate, uomId: line.item.baseUomId,
         currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat,
         vatRate: (line.vatType == null || line.vatType == 'NOVAT') ? 0 : line.vatRate,
+        fallbackLastPurchase: true,
       );
       final price = double.tryParse(resolved['unit_price_fc']?.toString() ?? '') ?? 0;
-      if (price > 0 && mounted) setState(() => line.unitCostCtrl.text = _CountLine._fmtInput(price));
+      if (price > 0 && mounted) {
+        setState(() {
+          line.unitCostCtrl.text = _CountLine._fmtInput(price);
+          line.purchasePriceAuto = price;
+          line.purchasePriceNote = _purchasePriceNote(resolved);
+        });
+      }
     } else if (_isSalesPriceMode) {
       await _refreshListPrices([line]);
     }
+  }
+
+  // ที่มาของราคาซื้อที่ระบบเติมให้ — ตารางราคา หรือราคาซื้อล่าสุดจากผู้ขายรายนี้ (เอกสาร + วันที่)
+  String? _purchasePriceNote(Map<String, dynamic> r) {
+    final isEnglish = _isEnglish;
+    if (r['source'] == 'LIST') return isEnglish ? 'Price list price' : 'ราคาตามตารางราคา';
+    if (r['source'] != 'LAST') return null;
+    final d = parseLocalDateNullable(r['ref_doc_date']?.toString());
+    final date = d != null ? DateFormat('dd/MM/yyyy').format(d) : '';
+    return isEnglish ? 'Last purchase price: ${r['ref_doc_no'] ?? ''} $date' : 'ราคาซื้อล่าสุด: ${r['ref_doc_no'] ?? ''} $date';
+  }
+
+  Widget? _purchasePriceIcon(_CountLine l) {
+    final note = l.purchasePriceNote;
+    if (note == null || l.purchasePriceAuto == null || (_parseNum(l.unitCostCtrl.text) - l.purchasePriceAuto!).abs() >= 0.00005) return null;
+    final last = l.purchasePriceNote!.startsWith('ราคาซื้อล่าสุด') || l.purchasePriceNote!.startsWith('Last');
+    return Tooltip(message: note, child: Icon(last ? Icons.history : Icons.list_alt, size: 14, color: Colors.grey.shade600));
   }
 
   // ── ราคาขายตามตารางราคา ('31'/'32'/'33'/'45') ─────────────────────────────────────────────────────
@@ -2925,6 +2952,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                                 : (isEnglish ? 'Unit Cost *' : 'ต้นทุน/หน่วย *')) +
                             (_isApVendorMode && _currency != null ? ' (${_currency!.currencyCode})' : ''),
                         border: const OutlineInputBorder(), isDense: true,
+                        suffixIcon: _purchasePriceIcon(line),
+                        suffixIconConstraints: const BoxConstraints(minWidth: 24, minHeight: 20),
                       ),
                     )
                   : InputDecorator(

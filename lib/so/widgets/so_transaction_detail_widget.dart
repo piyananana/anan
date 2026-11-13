@@ -1117,6 +1117,8 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
                     SizedBox(
                       width: 100,
                       child: TextFormField(
+                        // ราคาที่ระบบเติมให้ภายหลัง (ตารางราคา) ต้องแสดงในช่อง — initialValue ไม่อัปเดตเอง จึงสร้างช่องใหม่
+                        key: ValueKey('price_${identityHashCode(l)}_${l.lastResolvedPrice}'),
                         initialValue: _fmtValue.format(l.unitPriceFc),
                         enabled: !_isReadOnly,
                         textAlign: TextAlign.right,

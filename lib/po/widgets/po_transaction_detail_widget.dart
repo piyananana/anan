@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../utils/date_utils.dart';
 import 'package:provider/provider.dart';
 
 import '../../sa/services/sa_language_provider.dart';
@@ -74,6 +75,7 @@ class _LineForm {
   // ผู้ขาย (unitPriceFc=0 ไม่เคย resolve) จะถูกมองว่า "ผู้ใช้แก้ไปแล้ว" (0 != null) ตั้งแต่แรก ทำให้ไม่มีวัน
   // auto-fill ย้อนหลังได้เลยแม้จำนวนจะเปลี่ยนก็ตาม
   double lastResolvedPrice = 0;
+  String? priceSourceNote; // ที่มาของราคาที่ระบบเติม (ตารางราคา / ราคาซื้อล่าสุด เลขที่+วันที่) แสดงเป็น tooltip
   double discountPercent;
   String? vatType; // ว่าง = ใบสั่งซื้อเก่าก่อนมี VAT ต่อบรรทัด
   double vatRate;
@@ -150,6 +152,16 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     final rateStr = v.rate == v.rate.roundToDouble() ? v.rate.toStringAsFixed(0) : v.rate.toString();
     return '${v.vatCode} $rateStr%';
   }
+  // ที่มาของราคาที่ระบบเติมให้ — ตารางราคา หรือราคาซื้อล่าสุดจากผู้ขายรายนี้ (เอกสาร + วันที่)
+  String? _priceSourceNote(Map<String, dynamic> r) {
+    final isEnglish = _isEnglish;
+    if (r['source'] == 'LIST') return isEnglish ? 'Price list price' : 'ราคาตามตารางราคา';
+    if (r['source'] != 'LAST') return null;
+    final d = parseLocalDateNullable(r['ref_doc_date']?.toString());
+    final date = d != null ? DateFormat('dd/MM/yyyy').format(d) : '';
+    return isEnglish ? 'Last purchase price: ${r['ref_doc_no'] ?? ''} $date' : 'ราคาซื้อล่าสุด: ${r['ref_doc_no'] ?? ''} $date';
+  }
+
   // อัตรา VAT ที่ใช้แปลงราคาตามตารางราคา (ไม่มี VAT = 0 ไม่แปลง)
   double _lineVatRate(_LineForm l) => (l.vatType == null || l.vatType == 'NOVAT') ? 0 : l.vatRate;
 
@@ -372,12 +384,12 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       final resolved = await _service.resolvePrice(
         itemId: line.item!.id!, vendorId: vendor.id!, qty: line.qtyOrdered,
         docDate: DateFormat('yyyy-MM-dd').format(_docDate), uomId: line.item!.baseUomId,
-        currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line),
+        currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line), fallbackLastPurchase: true,
       );
       if (!mounted || _vendor != vendor) return;
       if (resolved['unit_price_fc'] != null && line.unitPriceFc == line.lastResolvedPrice) {
         final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
-        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; });
+        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; line.priceSourceNote = _priceSourceNote(resolved); });
       }
     }
   }
@@ -392,11 +404,11 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       final resolved = await _service.resolvePrice(
         itemId: result.id!, vendorId: _vendor!.id!, qty: 1, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
         uomId: result.baseUomId,
-        currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line),
+        currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line), fallbackLastPurchase: true,
       );
       if (resolved['unit_price_fc'] != null && mounted) {
         final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
-        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; });
+        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; line.priceSourceNote = _priceSourceNote(resolved); });
       }
     }
   }
@@ -413,11 +425,11 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       final resolved = await _service.resolvePrice(
         itemId: line.item!.id!, vendorId: _vendor!.id!, qty: line.qtyOrdered, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
         uomId: line.item!.baseUomId,
-        currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line),
+        currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line), fallbackLastPurchase: true,
       );
       if (resolved['unit_price_fc'] != null && mounted && line.unitPriceFc == line.lastResolvedPrice) {
         final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
-        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; });
+        setState(() { line.unitPriceFc = price; line.lastResolvedPrice = price; line.priceSourceNote = _priceSourceNote(resolved); });
       }
     });
   }
@@ -911,12 +923,20 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                     SizedBox(
                       width: 100,
                       child: TextFormField(
+                        // ราคาที่ระบบเติมให้ภายหลัง (ตารางราคา) ต้องแสดงในช่อง — initialValue ไม่อัปเดตเอง จึงสร้างช่องใหม่
+                        key: ValueKey('price_${identityHashCode(l)}_${l.lastResolvedPrice}'),
                         initialValue: _fmtValue.format(l.unitPriceFc),
                         enabled: !_isReadOnly,
                         textAlign: TextAlign.right,
                         decoration: InputDecoration(
                           labelText: (isEnglish ? 'Unit Price' : 'ราคา/หน่วย') + (_currency != null ? ' (${_currency!.currencyCode})' : ''),
                           isDense: true, border: const OutlineInputBorder(),
+                          suffixIcon: l.priceSourceNote != null && l.unitPriceFc == l.lastResolvedPrice
+                              ? Tooltip(message: l.priceSourceNote!, child: Icon(
+                                  l.priceSourceNote!.startsWith(isEnglish ? 'Last' : 'ราคาซื้อล่าสุด') ? Icons.history : Icons.list_alt,
+                                  size: 14, color: Colors.grey.shade600))
+                              : null,
+                          suffixIconConstraints: const BoxConstraints(minWidth: 20, minHeight: 20),
                         ),
                         onChanged: (v) => setState(() => l.unitPriceFc = double.tryParse(v) ?? 0),
                       ),
