@@ -262,7 +262,8 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
     return (code.isEmpty && name.isEmpty) ? '-' : '$code $name'.trim();
   }
 
-  static String _priceListStr(ImItemPriceRow r) => '${r.priceListCode} ${r.priceListName}'.trim();
+  static String _priceListStr(ImItemPriceRow r, bool isEnglish) =>
+      '${r.priceListCode} ${r.priceListName}'.trim() + imPriceInclVatSuffix(r.priceIncludesVat, isEnglish);
 
   static String _priceDateRangeStr(ImItemPriceRow r) {
     final f = r.effectiveFrom != null ? DateFormat('dd/MM/yyyy').format(r.effectiveFrom!) : '-';
@@ -280,7 +281,7 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
 
   static String _priceRowStr(ImItemPriceRow r, bool isEnglish) => [
         '${isEnglish ? "Price Group" : "กลุ่มราคา"}: ${_priceGroupStr(r, isEnglish)}',
-        '${isEnglish ? "Price List" : "ตารางราคา"}: ${_priceListStr(r)}',
+        '${isEnglish ? "Price List" : "ตารางราคา"}: ${_priceListStr(r, isEnglish)}',
         '${isEnglish ? "Type" : "ประเภท"}: ${imPriceListTypeLabel(r.listType, isEnglish)}',
         '${isEnglish ? "Effective" : "มีผล"}: ${_priceDateRangeStr(r)}',
         '${isEnglish ? "Status" : "สถานะ"}: ${_priceStatusLabel(r, isEnglish)}',
@@ -493,7 +494,7 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
           ),
           child: pw.Row(children: [
             box(priceGroupW, _priceGroupStr(r, isEnglish), tN(8)),
-            box(priceListW,  _priceListStr(r),             tN(8)),
+            box(priceListW,  _priceListStr(r, isEnglish),             tN(8)),
             box(priceTypeW,  imPriceListTypeLabel(r.listType, isEnglish), tN(8)),
             box(priceDateW,  _priceDateRangeStr(r),         tN(8)),
             box(priceStW,    _priceStatusLabel(r, isEnglish), tN(8)),
@@ -737,7 +738,7 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
                   if (firstSec) writeItemCols();
                   _xl(s, row, 4, sec.label(isEnglish), bg: catBg);
                   _xl(s, row, 6, _priceGroupStr(r, isEnglish));
-                  _xl(s, row, 7, _priceListStr(r));
+                  _xl(s, row, 7, _priceListStr(r, isEnglish));
                   _xl(s, row, 8, imPriceListTypeLabel(r.listType, isEnglish));
                   _xl(s, row, 9, _priceDateRangeStr(r));
                   _xl(s, row, 10, _priceStatusLabel(r, isEnglish));

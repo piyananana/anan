@@ -360,7 +360,7 @@ class _ImPriceChangeReportScreenState extends State<ImPriceChangeReportScreen> {
         items: _priceLists,
         selected: _selectedPriceListIds,
         idOf: (p) => p.id!,
-        labelOf: (p) => '${p.priceListCode}  ${p.priceListName}',
+        labelOf: (p) => '${p.priceListCode}  ${p.priceListName}${imPriceInclVatSuffix(p.priceIncludesVat, isEnglish)}',
         isEnglish: isEnglish,
       ),
     );
@@ -605,7 +605,7 @@ class _ImPriceChangeReportScreenState extends State<ImPriceChangeReportScreen> {
           decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: cBorder, width: 0.3))),
           child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
             box(wGroup, '${r.priceGroupCode ?? ''}\n${groupName ?? ''}', tN(7.5)),
-            box(wList, '${r.priceListCode ?? ''}\n${r.priceListName ?? ''}', tN(7.5)),
+            box(wList, '${r.priceListCode ?? ''}\n${r.priceListName ?? ''}${imPriceInclVatSuffix(r.priceListIncludesVat, isEnglish)}', tN(7.5)),
             box(wCat, '${r.categoryCode ?? ''}\n${catName ?? ''}', tN(7.5)),
             box(wItem, '${r.itemCode ?? ''}\n${itemName ?? ''}', tN(7.5)),
             box(wDate, '${fmtDate(r.effectiveFrom)} -\n${fmtDate(r.effectiveTo)}', tN(7.5)),
@@ -685,7 +685,7 @@ class _ImPriceChangeReportScreenState extends State<ImPriceChangeReportScreen> {
         final groupName = isEnglish && (r.priceGroupNameEn ?? '').isNotEmpty ? r.priceGroupNameEn : r.priceGroupNameTh;
         final catName = isEnglish && (r.categoryNameEn ?? '').isNotEmpty ? r.categoryNameEn : r.categoryNameTh;
         _xl(s, row, 0, '${r.priceGroupCode ?? ''} ${groupName ?? ''}');
-        _xl(s, row, 1, '${r.priceListCode ?? ''} ${r.priceListName ?? ''}');
+        _xl(s, row, 1, '${r.priceListCode ?? ''} ${r.priceListName ?? ''}${imPriceInclVatSuffix(r.priceListIncludesVat, isEnglish)}');
         _xl(s, row, 2, '${r.categoryCode ?? ''} ${catName ?? ''}');
         _xl(s, row, 3, r.itemCode ?? '');
         _xl(s, row, 4, itemName ?? '');

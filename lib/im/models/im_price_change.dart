@@ -165,6 +165,7 @@ class ImPriceChangeHeader {
   final int? priceListId;
   final String? priceListCode;
   final String? priceListName;
+  final bool priceListIncludesVat; // ตารางราคาเป้าหมายรวม VAT แล้ว
   final String? listType;
   final String changeType;
   final String adjustmentMode;
@@ -201,6 +202,7 @@ class ImPriceChangeHeader {
     this.priceListId,
     this.priceListCode,
     this.priceListName,
+    this.priceListIncludesVat = false,
     this.listType,
     this.changeType = 'REVISE',
     this.adjustmentMode = 'PERCENT',
@@ -235,6 +237,7 @@ class ImPriceChangeHeader {
         priceListId: json['price_list_id'],
         priceListCode: json['price_list_code'],
         priceListName: json['price_list_name'],
+        priceListIncludesVat: json['price_includes_vat'] == true,
         listType: json['list_type'],
         changeType: json['change_type'] ?? 'REVISE',
         adjustmentMode: json['adjustment_mode'] ?? 'PERCENT',

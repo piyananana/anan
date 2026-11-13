@@ -327,6 +327,7 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
   // ตั้งเป็นลิสต์ default ของ _listType นี้หรือไม่ — ใบเดียวต่อ list_type เท่านั้น (unique index ฝั่ง backend
   // บังคับ) และตั้งคู่กับการเจาะจงลูกค้า/ผู้ขายรายตัว (ด้านล่าง) ไม่ได้
   bool _isDefault = false;
+  bool _priceIncludesVat = false; // ราคาทั้งตารางรวม VAT แล้ว
   String _listType = 'SALES';
 
   int? _currencyId; String? _currencyCode; String? _currencyName;
@@ -370,6 +371,7 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
     _nameCtrl.text = h.priceListName;
     _isActive = h.isActive;
     _isDefault = h.isDefault;
+    _priceIncludesVat = h.priceIncludesVat;
     _listType = h.listType;
     _currencyId = h.currencyId; _currencyCode = h.currencyCode;
     _currencyName = _isEnglish && (h.currencyNameEn ?? '').isNotEmpty ? h.currencyNameEn : h.currencyNameTh;
@@ -383,6 +385,7 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
     _nameCtrl.clear();
     _isActive = true;
     _isDefault = false;
+    _priceIncludesVat = false;
     _listType = 'SALES';
     _currencyId = null; _currencyCode = null; _currencyName = null;
     _priceGroupId = null; _priceGroupCode = null; _priceGroupName = null;
@@ -406,6 +409,7 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
         currencyId: _currencyId,
         priceGroupId: _priceGroupId,
         isDefault: _isDefault,
+        priceIncludesVat: _priceIncludesVat,
         isActive: _isActive,
         details: _details,
       );
@@ -551,6 +555,20 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         dense: true,
+        title: Text(isEnglish ? 'Prices include VAT' : 'ราคาในตารางนี้รวม VAT แล้ว'),
+        subtitle: Text(
+          isEnglish
+              ? 'Documents set the other way get the price converted by the line VAT rate'
+              : 'เอกสารที่ตั้งราคารวม/ไม่รวม VAT ต่างจากตารางนี้ ระบบแปลงราคาตามอัตรา VAT ของรายการ',
+          style: const TextStyle(fontSize: 11),
+        ),
+        value: _priceIncludesVat,
+        activeColor: Colors.teal,
+        onChanged: _isReadOnly ? null : (v) => setState(() => _priceIncludesVat = v),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        dense: true,
         title: Text(isEnglish ? 'Active' : 'ใช้งาน'),
         value: _isActive,
         activeColor: Colors.teal,
@@ -601,8 +619,8 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
                 ]),
                 subtitle: Text(
                   isEnglish
-                      ? 'Price: ${d.unitPriceFc} / $uomName${d.minQty > 0 ? '  ·  Min qty ${d.minQty}' : ''}$rangeText$auditText'
-                      : 'ราคา: ${d.unitPriceFc} / $uomName${d.minQty > 0 ? '  ·  ขั้นต่ำ ${d.minQty}' : ''}$rangeText$auditText',
+                      ? 'Price${imPriceInclVatSuffix(_priceIncludesVat, true)}: ${d.unitPriceFc} / $uomName${d.minQty > 0 ? '  ·  Min qty ${d.minQty}' : ''}$rangeText$auditText'
+                      : 'ราคา${imPriceInclVatSuffix(_priceIncludesVat, false)}: ${d.unitPriceFc} / $uomName${d.minQty > 0 ? '  ·  ขั้นต่ำ ${d.minQty}' : ''}$rangeText$auditText',
                   style: const TextStyle(fontSize: 12),
                 ),
                 trailing: _isReadOnly

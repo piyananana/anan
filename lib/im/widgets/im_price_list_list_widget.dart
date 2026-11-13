@@ -164,6 +164,7 @@ class ImPriceListListWidgetState extends State<ImPriceListListWidget> with Autom
                           subtitle: Text(
                             '${imPriceListTypeLabel(item.listType, isEnglish)}'
                             '${item.currencyCode != null ? '  •  ${item.currencyCode}' : ''}'
+                            '${item.priceIncludesVat ? (isEnglish ? '  •  incl. VAT' : '  •  รวม VAT') : ''}'
                             '  •  ${isEnglish ? '${item.lineCount} items' : '${item.lineCount} รายการ'}',
                           ),
                           trailing: Row(

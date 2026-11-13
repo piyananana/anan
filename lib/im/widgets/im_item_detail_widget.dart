@@ -1144,7 +1144,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
             child: ListTile(
               dense: true,
               leading: Icon(r.listType == 'PURCHASE' ? Icons.shopping_cart_outlined : Icons.sell_outlined, color: Colors.teal, size: 20),
-              title: Text('${r.priceListCode}  ${r.priceListName}'),
+              title: Text('${r.priceListCode}  ${r.priceListName}${imPriceInclVatSuffix(r.priceIncludesVat, isEnglish)}'),
               subtitle: Text(
                 isEnglish
                     ? 'Price: ${r.unitPriceFc} ${r.currencyCode ?? ''} / $uomName${r.minQty > 0 ? '  ·  Min qty ${r.minQty}' : ''}$rangeText'

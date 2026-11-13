@@ -18,6 +18,7 @@ import '../../sa/models/sa_doc_approval.dart';
 import '../../sa/widgets/sa_doc_approval_panel.dart';
 import '../models/im_item_category.dart';
 import '../models/im_price_change.dart';
+import '../models/im_price_list.dart' show imPriceInclVatSuffix;
 import '../services/im_item_category_service.dart';
 import '../services/im_price_change_service.dart';
 import 'im_price_list_list_widget.dart';
@@ -163,6 +164,7 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
   int? _priceListId;
   String? _priceListCode;
   String? _priceListName;
+  bool _priceListIncludesVat = false;
   String _changeType = 'REVISE';
   String _adjustmentMode = 'PERCENT';
   String _adjustmentDirection = 'INCREASE';
@@ -265,6 +267,7 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
     _approvals = h.approvals;
     _docId = h.docId; _docCode = h.docCode; _docNameThai = h.docNameThai; _docNameEng = h.docNameEng;
     _priceListId = h.priceListId; _priceListCode = h.priceListCode; _priceListName = h.priceListName;
+    _priceListIncludesVat = h.priceListIncludesVat;
     _changeType = h.changeType;
     _adjustmentMode = h.adjustmentMode;
     _adjustmentDirection = h.adjustmentDirection;
@@ -284,7 +287,7 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
     _currentId = null; _changeNo = null; _status = 'Draft';
     _voidReason = null; _actions = const DocActions(); _approvalMode = null; _approvals = const [];
     _docId = null; _docCode = null; _docNameThai = null; _docNameEng = null;
-    _priceListId = null; _priceListCode = null; _priceListName = null;
+    _priceListId = null; _priceListCode = null; _priceListName = null; _priceListIncludesVat = false;
     _changeType = 'REVISE'; _adjustmentMode = 'PERCENT'; _adjustmentDirection = 'INCREASE'; _roundingStep = 0;
     _adjustmentValueCtrl.clear();
     _effectiveFrom = DateTime.now().add(const Duration(days: 1));
@@ -304,7 +307,7 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
   Future<void> _pickPriceList() async {
     await ImPriceListListWidget.search(context, onSelected: (h) {
       setState(() {
-        _priceListId = h.id; _priceListCode = h.priceListCode; _priceListName = h.priceListName; 
+        _priceListId = h.id; _priceListCode = h.priceListCode; _priceListName = h.priceListName; _priceListIncludesVat = h.priceIncludesVat;
         _setDetails([]); // ราคาที่ดึงมาก่อนหน้าอ้างลิสต์เดิม ไม่เกี่ยวกับลิสต์ใหม่ที่เพิ่งเลือก
       });
     });
@@ -651,7 +654,7 @@ class ImPriceChangeDetailWidgetState extends State<ImPriceChangeDetailWidget> {
 
   // ── Zone 1: เงื่อนไข ─────────────────────────────────────────────────────
   Widget _buildFilterZone(bool isEnglish) {
-    final priceListDisplay = '${_priceListCode ?? ''} — ${_priceListName ?? ''}';
+    final priceListDisplay = '${_priceListCode ?? ''} — ${_priceListName ?? ''}${imPriceInclVatSuffix(_priceListIncludesVat, isEnglish)}';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Expanded(flex: 1, child: _buildDocTypeField(isEnglish)),

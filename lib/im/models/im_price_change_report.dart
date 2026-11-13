@@ -38,6 +38,7 @@ class ImPriceChangeReportRow {
   final int? priceListId;
   final String? priceListCode;
   final String? priceListName;
+  final bool priceListIncludesVat; // ตารางราคารวม VAT แล้ว
   final int? priceGroupId;
   final String? priceGroupCode;
   final String? priceGroupNameTh;
@@ -72,6 +73,7 @@ class ImPriceChangeReportRow {
     this.priceListId,
     this.priceListCode,
     this.priceListName,
+    this.priceListIncludesVat = false,
     this.priceGroupId,
     this.priceGroupCode,
     this.priceGroupNameTh,
@@ -113,6 +115,7 @@ class ImPriceChangeReportRow {
         priceListId: json['price_list_id'],
         priceListCode: json['price_list_code'],
         priceListName: json['price_list_name'],
+        priceListIncludesVat: json['price_includes_vat'] == true,
         priceGroupId: json['price_group_id'],
         priceGroupCode: json['price_group_code'],
         priceGroupNameTh: json['price_group_name_th'],

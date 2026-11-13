@@ -19,6 +19,10 @@ String imPriceTypeLabel(String type, bool isEnglish) {
   return isEnglish ? 'Standard' : 'ปกติ';
 }
 
+// ป้ายต่อท้ายชื่อตารางราคาที่ราคารวม VAT แล้ว (ตารางที่ไม่รวม VAT ไม่มีป้าย — คงหน้าตาเดิม)
+String imPriceInclVatSuffix(bool includesVat, bool isEnglish) =>
+    includesVat ? (isEnglish ? ' (incl. VAT)' : ' (รวม VAT)') : '';
+
 class ImPriceListDetail {
   final int? id;
   final int? priceListId;
@@ -106,6 +110,7 @@ class ImItemPriceRow {
   // ลิสต์นี้เป็นลิสต์ default ของ list_type นี้หรือไม่ (im_price_list.is_default) — ใช้แสดงคอลัมน์
   // "เป็นราคาเริ่มต้น" ในรายงาน ไม่เกี่ยวกับ priceType (STANDARD/PROMOTION) ของบรรทัดราคา
   final bool isDefault;
+  final bool priceIncludesVat; // ราคาของตารางนี้รวม VAT แล้ว
   final int? priceGroupId;
   final String? priceGroupCode;
   final String? priceGroupNameTh;
@@ -125,6 +130,7 @@ class ImItemPriceRow {
     required this.priceListName,
     required this.listType,
     this.isDefault = false,
+    this.priceIncludesVat = false,
     this.priceGroupId,
     this.priceGroupCode,
     this.priceGroupNameTh,
@@ -155,6 +161,7 @@ class ImItemPriceRow {
         priceListName: json['price_list_name'] ?? '',
         listType: json['list_type'] ?? 'SALES',
         isDefault: json['is_default'] ?? false,
+        priceIncludesVat: json['price_includes_vat'] == true,
         priceGroupId: json['price_group_id'],
         priceGroupCode: json['price_group_code'],
         priceGroupNameTh: json['price_group_name_th'],
@@ -189,6 +196,8 @@ class ImPriceListHeader {
   // ลิสต์ที่ใช้เป็น fallback ของ list_type นี้เมื่อผู้ขาย/ลูกค้าไม่มีลิสต์เฉพาะราย (ar_customer.priceListId/
   // ap_vendor.priceListId เป็น null) — ตั้งได้ใบเดียวต่อ list_type (การันตีด้วย unique index ฝั่ง backend)
   final bool isDefault;
+  // ราคาทั้งตารางรวม VAT แล้วหรือไม่ — เอกสารที่ตั้งต่างจากนี้ backend แปลงราคาให้ตามอัตรา VAT ของบรรทัด
+  final bool priceIncludesVat;
   final bool isActive;
   final int lineCount;
   final List<ImPriceListDetail> details;
@@ -207,6 +216,7 @@ class ImPriceListHeader {
     this.priceGroupNameTh,
     this.priceGroupNameEn,
     this.isDefault = false,
+    this.priceIncludesVat = false,
     this.isActive = true,
     this.lineCount = 0,
     this.details = const [],
@@ -226,6 +236,7 @@ class ImPriceListHeader {
         priceGroupNameTh: json['price_group_name_th'],
         priceGroupNameEn: json['price_group_name_en'],
         isDefault: json['is_default'] ?? false,
+        priceIncludesVat: json['price_includes_vat'] == true,
         isActive: json['is_active'] ?? true,
         lineCount: int.tryParse(json['line_count']?.toString() ?? '') ?? 0,
         details: (json['details'] as List<dynamic>? ?? []).map((e) => ImPriceListDetail.fromJson(e)).toList(),
@@ -239,6 +250,7 @@ class ImPriceListHeader {
         'currency_id': currencyId,
         'price_group_id': priceGroupId,
         'is_default': isDefault,
+        'price_includes_vat': priceIncludesVat,
         'is_active': isActive,
         'details': details.map((e) => e.toJson()).toList(),
       };
