@@ -450,6 +450,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     );
   }
 
+  // เอกสารขาย: ราคาขาย/หน่วยสุทธิหลังส่วนลดทั้งหมด (ของรายการ + ท้ายบิลที่ปันส่วน) ในหน่วยเดียวกับราคาที่กรอก
+  // (ราคารวม VAT = สุทธิรวม VAT) — แสดงบนบรรทัดเท่านั้น
+  double _salesNetUnit(_CountLine l, SalesLineDiscount? d) {
+    final qty = l.variance.abs();
+    if (qty == 0) return 0;
+    return (qty * _parseNum(l.unitPriceCtrl.text) - (d?.total ?? 0)) / qty;
+  }
+
   // ราคาต่อหน่วยหลังส่วนลด ก่อน VAT — ใช้เทียบกับราคาในใบสั่งซื้อ/ใบสั่งขาย
   double _netUnit(_CountLine l, {bool billed = false}) {
     final qty = l.variance.abs();
@@ -3137,6 +3145,19 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   onChanged: (_) => setState(() {}),
                 ),
               ),
+              // ส่วนลดท้ายบิล % + ส่วนลดเงินสดท้ายบิล ที่ปันส่วนมาที่รายการนี้ (ตามสัดส่วนยอดคงเหลือหลังส่วนลดของรายการ)
+              SizedBox(
+                width: 120,
+                child: Tooltip(
+                  message: isEnglish
+                      ? 'Share of the bill discount % and bill cash discount'
+                      : 'ส่วนลดท้ายบิล % และส่วนลดเงินสดท้ายบิล ที่ปันส่วนมาที่รายการนี้',
+                  child: InputDecorator(
+                    decoration: InputDecoration(labelText: isEnglish ? 'Bill disc. share' : 'ส่วนลดท้ายบิล', border: const OutlineInputBorder(), isDense: true),
+                    child: Text(_fmtMoney.format(_salesDiscounts()[line]?.bill ?? 0), textAlign: TextAlign.right),
+                  ),
+                ),
+              ),
               SizedBox(
                 width: 110,
                 child: Tooltip(
@@ -3146,6 +3167,20 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   child: InputDecorator(
                     decoration: InputDecoration(labelText: isEnglish ? 'Net discount' : 'ส่วนลดสุทธิ', border: const OutlineInputBorder(), isDense: true),
                     child: Text(_fmtMoney.format(_salesDiscounts()[line]?.total ?? 0), textAlign: TextAlign.right),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 130,
+                child: Tooltip(
+                  message: isEnglish
+                      ? 'Unit price after all discounts (line + bill)'
+                      : 'ราคาขายต่อหน่วยหลังหักส่วนลดทั้งหมด (ของรายการ + ท้ายบิล)',
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                        labelText: (isEnglish ? 'Net unit price' : 'ราคา/หน่วยสุทธิ') + (_inclVat ? (isEnglish ? ' (incl. VAT)' : ' (รวม VAT)') : ''),
+                        border: const OutlineInputBorder(), isDense: true),
+                    child: Text(_fmtMoney.format(_salesNetUnit(line, _salesDiscounts()[line])), textAlign: TextAlign.right),
                   ),
                 ),
               ),
