@@ -59,6 +59,7 @@ class Account {
   final bool branchRequired;
   final bool isActive;
   final List<GlAccountDimRule> dimRules;
+  final bool hasTransactions; // มีธุรกรรมอ้างบัญชีแล้ว — ผังบัญชีไม่แสดงปุ่มลบ (มาจาก /gl_account/all เท่านั้น)
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final String? createdBy;
@@ -80,6 +81,7 @@ class Account {
     required this.branchRequired,
     required this.isActive,
     this.dimRules = const [],
+    this.hasTransactions = false,
     this.createdAt,
     this.updatedAt,
     this.createdBy,
@@ -107,6 +109,7 @@ class Account {
               ?.map((r) => GlAccountDimRule.fromJson(r as Map<String, dynamic>))
               .toList() ??
           const [],
+      hasTransactions: json['has_transactions'] as bool? ?? false,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at']).toLocal()
           : null,

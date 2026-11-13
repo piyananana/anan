@@ -196,6 +196,8 @@ class AccountService {
       throw Exception('Unauthorized to delete row. Please login again.');
     } else if (response.statusCode == 404) {
       throw Exception('Account not found.');
+    } else if (response.statusCode == 409) {
+      throw Exception(jsonDecode(response.body)['message']);
     } else {
       throw Exception('Failed to delete row: ${response.body}');
     }

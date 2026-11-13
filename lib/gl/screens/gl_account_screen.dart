@@ -261,8 +261,8 @@ class _AccountScreenState extends State<AccountScreen>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(isEnglish
-                  ? 'Error deleting: ${e.toString()}'
-                  : 'เกิดข้อผิดพลาดในการลบ: ${e.toString()}')));
+                  ? 'Error deleting: ${e.toString().replaceFirst('Exception: ', '')}'
+                  : 'เกิดข้อผิดพลาดในการลบ: ${e.toString().replaceFirst('Exception: ', '')}')));
         }
       }
     }

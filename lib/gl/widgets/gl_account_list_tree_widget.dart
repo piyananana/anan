@@ -227,25 +227,12 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                         onPressed: () => widget.onEdit(item),
                       )
                     : const SizedBox.shrink(),
-                // Icon ปุ่ม Delete
-                widget.enableDeleteButton
+                // Icon ปุ่ม Delete — เฉพาะบัญชีที่ยังไม่มีธุรกรรมและไม่มีบัญชีย่อย
+                widget.enableDeleteButton && !item.hasTransactions && !hasChildren
                     ? IconButton(
                         icon: Icon(Icons.delete, size: 20, color: deleteColor),
-                        tooltip: isEnglish ? 'Delete' : 'ลบ',
-                        onPressed: () {
-                          if (_buildTree(_lists, item.id).isNotEmpty &&
-                              item.isNormalAccount == false) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: Text(isEnglish
-                                      ? 'Cannot delete account with children. Remove children first.'
-                                      : 'ไม่สามารถลบรายการที่มีรายการย่อยได้ กรุณาลบรายการย่อยออกก่อน'),
-                                  backgroundColor: Colors.red),
-                            );
-                          } else {
-                            widget.onDelete(item);
-                          }
-                        },
+                        tooltip: isEnglish ? 'Delete (no transactions yet)' : 'ลบ (ยังไม่มีธุรกรรม)',
+                        onPressed: () => widget.onDelete(item),
                       )
                     : const SizedBox.shrink(),
                 // Icon ปุ่ม search
