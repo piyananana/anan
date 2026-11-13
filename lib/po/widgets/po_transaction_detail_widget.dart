@@ -150,6 +150,9 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     final rateStr = v.rate == v.rate.roundToDouble() ? v.rate.toStringAsFixed(0) : v.rate.toString();
     return '${v.vatCode} $rateStr%';
   }
+  // อัตรา VAT ที่ใช้แปลงราคาตามตารางราคา (ไม่มี VAT = 0 ไม่แปลง)
+  double _lineVatRate(_LineForm l) => (l.vatType == null || l.vatType == 'NOVAT') ? 0 : l.vatRate;
+
   // VAT ตั้งต้นของสินค้า (ไม่มีในรายการอัตรา = อัตราแรก)
   void _applyDefaultVat(_LineForm l) {
     final code = l.item?.defaultVatType;
@@ -369,6 +372,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       final resolved = await _service.resolvePrice(
         itemId: line.item!.id!, vendorId: vendor.id!, qty: line.qtyOrdered,
         docDate: DateFormat('yyyy-MM-dd').format(_docDate), uomId: line.item!.baseUomId,
+        currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line),
       );
       if (!mounted || _vendor != vendor) return;
       if (resolved['unit_price_fc'] != null && line.unitPriceFc == line.lastResolvedPrice) {
@@ -388,6 +392,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       final resolved = await _service.resolvePrice(
         itemId: result.id!, vendorId: _vendor!.id!, qty: 1, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
         uomId: result.baseUomId,
+        currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line),
       );
       if (resolved['unit_price_fc'] != null && mounted) {
         final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
@@ -408,6 +413,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       final resolved = await _service.resolvePrice(
         itemId: line.item!.id!, vendorId: _vendor!.id!, qty: line.qtyOrdered, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
         uomId: line.item!.baseUomId,
+        currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line),
       );
       if (resolved['unit_price_fc'] != null && mounted && line.unitPriceFc == line.lastResolvedPrice) {
         final price = double.tryParse(resolved['unit_price_fc'].toString()) ?? 0;
@@ -800,7 +806,10 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                           value: c,
                           child: Text('${c.currencyCode} - ${_currencyLabel(c)}', overflow: TextOverflow.ellipsis),
                         )).toList(),
-                    onChanged: _isReadOnly ? null : (v) => setState(() { _currency = v; _exchangeRate = v?.baseRate ?? 1; }),
+                    onChanged: _isReadOnly ? null : (v) {
+                      setState(() { _currency = v; _exchangeRate = v?.baseRate ?? 1; });
+                      _reresolveAllLinesForVendor(); // ใช้ตารางราคาตามสกุลเงินของเอกสาร
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -864,7 +873,10 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                 Checkbox(
                   value: _priceIncludesVat,
                   visualDensity: VisualDensity.compact,
-                  onChanged: _isReadOnly ? null : (v) => setState(() => _priceIncludesVat = v ?? false),
+                  onChanged: _isReadOnly ? null : (v) {
+                    setState(() => _priceIncludesVat = v ?? false);
+                    _reresolveAllLinesForVendor(); // ราคาตามตาราง: แปลงรวม/ไม่รวม VAT ใหม่
+                  },
                 ),
                 Text(isEnglish ? 'Prices include VAT' : 'ราคารวม VAT'),
                 const SizedBox(width: 12),
@@ -928,11 +940,14 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                         isExpanded: true,
                         decoration: const InputDecoration(labelText: 'VAT', isDense: true, border: OutlineInputBorder()),
                         items: _vatRates.map((v) => DropdownMenuItem(value: v.vatCode, child: Text(_vatLabel(v), style: const TextStyle(fontSize: 12)))).toList(),
-                        onChanged: _isReadOnly ? null : (code) => setState(() {
-                          final v = _vatRates.firstWhere((x) => x.vatCode == code);
-                          l.vatType = v.vatCode;
-                          l.vatRate = v.rate;
-                        }),
+                        onChanged: _isReadOnly ? null : (code) {
+                          setState(() {
+                            final v = _vatRates.firstWhere((x) => x.vatCode == code);
+                            l.vatType = v.vatCode;
+                            l.vatRate = v.rate;
+                          });
+                          _maybeReresolvePrice(l); // ราคาตามตารางที่ต้องแปลง VAT ขึ้นกับอัตราของบรรทัด
+                        },
                       ),
                     ),
                     const SizedBox(width: 8),

@@ -1072,6 +1072,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if ((_isGrnBillingMode || _isGrDeferredMode) && _vendorId != null) {
       final resolved = await _poService.resolvePrice(
         itemId: itemId, vendorId: _vendorId!, qty: 1, docDate: docDate, uomId: line.item.baseUomId,
+        currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat,
+        vatRate: (line.vatType == null || line.vatType == 'NOVAT') ? 0 : line.vatRate,
       );
       final price = double.tryParse(resolved['unit_price_fc']?.toString() ?? '') ?? 0;
       if (price > 0 && mounted) setState(() => line.unitCostCtrl.text = _CountLine._fmtInput(price));
