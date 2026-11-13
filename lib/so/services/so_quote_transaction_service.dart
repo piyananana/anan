@@ -202,6 +202,10 @@ class QuoteTransactionService {
     required double qty,
     required String docDate,
     int? uomId,
+    String? currencyCode, // ระบุ = ใช้เฉพาะตารางราคาสกุลเงินนี้
+    // ระบุ = เอกสารคิดราคารวม VAT หรือไม่ — backend แปลงราคาตามตารางให้ตรงกับเอกสารด้วย vatRate ของบรรทัด
+    bool? priceIncludesVat,
+    double vatRate = 0,
   }) async {
     final headers = await authService.getAuthHeader();
     final uri = Uri.parse('${AppConfig.apiIm}/im_price_list/resolve_price').replace(queryParameters: {
@@ -211,6 +215,9 @@ class QuoteTransactionService {
       'qty': qty.toString(),
       'doc_date': docDate,
       if (uomId != null) 'uom_id': uomId.toString(),
+      if (currencyCode != null) 'currency_code': currencyCode,
+      if (priceIncludesVat != null) 'price_includes_vat': priceIncludesVat.toString(),
+      if (priceIncludesVat != null) 'vat_rate': vatRate.toString(),
     });
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {
