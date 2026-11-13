@@ -180,7 +180,11 @@ class _ImPrintFormDesignerScreenState extends State<ImPrintFormDesignerScreen> {
         PrintFormCopy(nameTh: 'ต้นฉบับ', nameEn: 'Original'),
         PrintFormCopy(nameTh: 'สำเนา', nameEn: 'Copy'),
       ],
-      elements: src.key == 'SALES_INVOICE' ? starterSalesInvoiceLayout(_newId) : [],
+      elements: src.key == 'SALES_INVOICE'
+          ? starterSalesInvoiceLayout(_newId)
+          : src.key == 'PAYMENT_VOUCHER'
+              ? starterPaymentVoucherLayout(_newId)
+              : [],
     );
     setState(() {
       _form = f;

@@ -241,6 +241,7 @@ class Menu {
     // แบบฟอร์มพิมพ์กลาง — หน้าจอพิมพ์ลงทะเบียนแยกต่อแหล่งข้อมูล (utils/printDataSources.js ฝั่ง backend)
     'ImPrintFormDesignerScreen': (context) => const ImPrintFormDesignerScreen(),
     'ImPrintSalesInvoiceScreen': (context) => const ImPrintFormPrintScreen(dataSource: 'SALES_INVOICE'),
+    'ImPrintPaymentVoucherScreen': (context) => const ImPrintFormPrintScreen(dataSource: 'PAYMENT_VOUCHER'), // ใบสำคัญจ่าย ซื้อเงินสด IM '14'
     'UserDocumentScreen': (context) => const UserDocumentScreen(),
     'UserMenuScreen': (context) => const UserMenuScreen(),
     'UserScreen': (context) => const UserScreen(),

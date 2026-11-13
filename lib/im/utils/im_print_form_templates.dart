@@ -87,3 +87,102 @@ List<PrintElement> starterSalesInvoiceLayout(String Function() newId) {
     fld('page_label', 150, 287, 50, 6, fs: 12, align: 'R'),
   ];
 }
+
+// ── โครงตัวอย่างใบสำคัญจ่าย (ซื้อเงินสด IM '14', A4) ─────────────────────────────
+List<PrintElement> starterPaymentVoucherLayout(String Function() newId) {
+  PrintElement fld(String key, double x, double y, double w, double h,
+          {double fs = 14, bool bold = false, String align = 'L', int maxLines = 1, String fmt = '', String prefix = '', String pages = 'all'}) =>
+      PrintElement(
+          id: newId(), type: 'field', field: key, x: x, y: y, w: w, h: h, fontSize: fs, bold: bold, align: align,
+          maxLines: maxLines, fmt: fmt, prefix: prefix, pages: pages);
+  PrintElement txt(String text, double x, double y, double w, double h,
+          {double fs = 14, bool bold = false, String align = 'L', int maxLines = 1, String pages = 'all'}) =>
+      PrintElement(
+          id: newId(), type: 'text', text: text, x: x, y: y, w: w, h: h, fontSize: fs, bold: bold, align: align, maxLines: maxLines, pages: pages);
+  PrintElement box(double x, double y, double w, double h, {String pages = 'all'}) =>
+      PrintElement(id: newId(), type: 'rect', x: x, y: y, w: w, h: h, strokeWidth: 0.7, pages: pages);
+  PrintElement line(double x, double y, double w) => PrintElement(id: newId(), type: 'line', x: x, y: y, w: w, h: 0, pages: 'last');
+  return [
+    PrintElement(id: newId(), type: 'image', field: 'company_logo', x: 10, y: 10, w: 25, h: 22),
+    fld('company_name', 38, 10, 100, 8, fs: 18, bold: true),
+    fld('company_address', 38, 18, 100, 11, fs: 13, maxLines: 2),
+    txt('เลขประจำตัวผู้เสียภาษี {company_tax_id}  {branch_name}', 38, 29, 100, 6, fs: 13),
+    txt('ใบสำคัญจ่าย', 130, 10, 70, 9, fs: 20, bold: true, align: 'R'),
+    fld('copy_name', 130, 19, 70, 7, fs: 16, bold: true, align: 'R'),
+    fld('reprint_label', 130, 26, 70, 6, fs: 13, align: 'R'),
+    box(10, 37, 120, 33),
+    txt('จ่ายให้', 12, 38, 18, 6, bold: true),
+    fld('vendor_name', 30, 38, 98, 6, bold: true),
+    fld('vendor_address', 30, 44, 98, 12, maxLines: 2),
+    txt('เลขประจำตัวผู้เสียภาษี {vendor_tax_id_branch}', 12, 57, 116, 6),
+    txt('{tax_invoice_kind} เลขที่ {tax_invoice_no}', 12, 63, 116, 6),
+    box(132, 37, 68, 33),
+    txt('เลขที่', 134, 38, 22, 6, bold: true),
+    fld('doc_no', 156, 38, 42, 6),
+    txt('วันที่', 134, 44, 22, 6, bold: true),
+    fld('doc_date', 156, 44, 42, 6, fmt: 'dmy_be'),
+    txt('ใบจ่ายชำระ', 134, 50, 22, 6, bold: true),
+    fld('payment_no', 156, 50, 42, 6),
+    txt('ใบตั้งหนี้', 134, 56, 22, 6, bold: true),
+    fld('ap_invoice_no', 156, 56, 42, 6),
+    txt('รายการบัญชี', 134, 62, 22, 6, bold: true),
+    fld('gl_doc_no', 156, 62, 42, 6),
+    PrintElement(
+      id: newId(),
+      type: 'table',
+      x: 10,
+      y: 73,
+      w: 190,
+      h: 110,
+      fontSize: 14,
+      rowHeight: 7,
+      headerHeight: 8,
+      border: 'box',
+      strokeWidth: 0.7,
+      columns: [
+        PrintColumn(field: 'line_no', title: 'ลำดับ', w: 12, align: 'C'),
+        PrintColumn(field: 'item_code', title: 'รหัสสินค้า', w: 28),
+        PrintColumn(field: 'item_desc', title: 'รายการ', w: 70),
+        PrintColumn(field: 'qty', title: 'จำนวน', w: 18, align: 'R'),
+        PrintColumn(field: 'unit', title: 'หน่วย', w: 14, align: 'C'),
+        PrintColumn(field: 'unit_price', title: 'ราคา/หน่วย', w: 22, align: 'R'),
+        PrintColumn(field: 'amount', title: 'จำนวนเงิน', w: 26, align: 'R'),
+      ],
+    ),
+    box(10, 185, 120, 44, pages: 'last'),
+    txt('วิธีจ่าย', 12, 186, 116, 6, bold: true, pages: 'last'),
+    txt('[{cash_mark}] เงินสด {cash_amount}', 12, 192, 116, 6, pages: 'last'),
+    txt('[{check_mark}] เช็ค {check_amount}  {check_details}', 12, 198, 116, 6, pages: 'last'),
+    txt('[{transfer_mark}] เงินโอน {transfer_amount}  {payment_refs}', 12, 204, 116, 6, pages: 'last'),
+    txt('หัก ณ ที่จ่าย {wht_amount}  หนังสือรับรองเลขที่ {wht_certificate_nos}', 12, 210, 116, 6, pages: 'last'),
+    txt('จ่ายสุทธิ (ตัวอักษร)', 12, 216, 116, 6, bold: true, pages: 'last'),
+    txt('({net_paid_text})', 12, 222, 116, 7, fs: 15, bold: true, align: 'C', pages: 'last'),
+    box(132, 185, 68, 44, pages: 'last'),
+    txt('รวมเงิน', 134, 186, 36, 6, pages: 'last'),
+    fld('before_vat', 170, 186, 28, 6, align: 'R', pages: 'last'),
+    txt('ภาษีซื้อ {vat_rate}%', 134, 192, 36, 6, pages: 'last'),
+    fld('vat_amount', 170, 192, 28, 6, align: 'R', pages: 'last'),
+    txt('รวมทั้งสิ้น', 134, 198, 36, 6, pages: 'last'),
+    fld('total_amount', 170, 198, 28, 6, align: 'R', pages: 'last'),
+    txt('หักมัดจำ', 134, 204, 36, 6, pages: 'last'),
+    fld('deposit_total', 170, 204, 28, 6, align: 'R', pages: 'last'),
+    txt('หัก ณ ที่จ่าย', 134, 210, 36, 6, pages: 'last'),
+    fld('wht_amount', 170, 210, 28, 6, align: 'R', pages: 'last'),
+    txt('จ่ายสุทธิ', 134, 220, 36, 6, bold: true, pages: 'last'),
+    fld('net_paid', 170, 220, 28, 6, bold: true, align: 'R', pages: 'last'),
+    fld('description', 10, 231, 190, 6, prefix: 'หมายเหตุ: ', pages: 'last'),
+    line(12, 262, 42),
+    txt('ผู้จัดทำ', 12, 263, 42, 6, align: 'C', pages: 'last'),
+    fld('prepared_by', 12, 269, 42, 6, align: 'C', pages: 'last'),
+    line(60, 262, 42),
+    txt('ผู้อนุมัติ', 60, 263, 42, 6, align: 'C', pages: 'last'),
+    fld('approver_name', 60, 269, 42, 6, align: 'C', pages: 'last'),
+    line(108, 262, 42),
+    txt('ผู้จ่ายเงิน', 108, 263, 42, 6, align: 'C', pages: 'last'),
+    txt('วันที่ ______/______/______', 108, 269, 42, 6, align: 'C', pages: 'last'),
+    line(156, 262, 42),
+    txt('ผู้รับเงิน', 156, 263, 42, 6, align: 'C', pages: 'last'),
+    txt('วันที่ ______/______/______', 156, 269, 42, 6, align: 'C', pages: 'last'),
+    fld('page_label', 150, 287, 50, 6, fs: 12, align: 'R'),
+  ];
+}
