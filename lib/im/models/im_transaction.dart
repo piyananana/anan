@@ -66,6 +66,11 @@ class ImTransactionHeader {
   final String? refSoDocNo; // จาก join — เลขที่ SO ใช้แสดงผลเท่านั้น
   final String? customerPoNo; // '30'/'31'/'32' — เลขที่ใบสั่งซื้อของลูกค้า (ค่าเริ่มต้นจาก SO, แก้ได้)
   final DateTime? customerPoDate;
+  // เอกสารขาย ('31'/'32'/'45'): เงื่อนไขเครดิต (ค่าเริ่มต้นจากลูกค้า แก้ได้) + วันครบกำหนดของใบแจ้งหนี้ AR อัตโนมัติ
+  final int? creditTermMonths;
+  final int? creditTermDays;
+  final DateTime? dueDate;
+  final bool sendCreditTerm; // ส่ง 3 ค่านี้ไปบันทึก (backend บันทึกเมื่อมี key due_date เท่านั้น)
   final int? refMoId; // '90'/'95' เท่านั้น — ใบสั่งผลิต (MO) ที่ธุรกรรมนี้อ้างอิง (สะดวก/แสดงผล — การตรวจจริงอยู่ระดับบรรทัด)
   final String? refMoDocNo; // จาก join — เลขที่ MO ใช้แสดงผลเท่านั้น
   // สกุลเงินต่างประเทศ (ฝั่งรับจากผู้ขายเท่านั้น — GRN family '10'/'11'/'12'/'13' + คืนสินค้า/AP CN/DN '15'/'20'/'25')
@@ -154,6 +159,10 @@ class ImTransactionHeader {
     this.refSoDocNo,
     this.customerPoNo,
     this.customerPoDate,
+    this.creditTermMonths,
+    this.creditTermDays,
+    this.dueDate,
+    this.sendCreditTerm = false,
     this.refMoId,
     this.refMoDocNo,
     this.currencyId,
@@ -229,6 +238,9 @@ class ImTransactionHeader {
       refSoDocNo: json['ref_so_doc_no'],
       customerPoNo: json['customer_po_no'],
       customerPoDate: json['customer_po_date'] != null ? parseLocalDate(json['customer_po_date']) : null,
+      creditTermMonths: json['credit_term_months'] == null ? null : int.tryParse(json['credit_term_months'].toString()),
+      creditTermDays: json['credit_term_days'] == null ? null : int.tryParse(json['credit_term_days'].toString()),
+      dueDate: json['due_date'] != null ? parseLocalDate(json['due_date']) : null,
       refMoId: json['ref_mo_id'],
       refMoDocNo: json['ref_mo_doc_no'],
       currencyId: json['currency_id'],
@@ -290,6 +302,11 @@ class ImTransactionHeader {
         if (refSoId != null) 'ref_so_id': refSoId,
         if (customerPoNo != null) 'customer_po_no': customerPoNo,
         if (customerPoDate != null) 'customer_po_date': formatLocalDate(customerPoDate!),
+        if (sendCreditTerm) ...{
+          'credit_term_months': creditTermMonths,
+          'credit_term_days': creditTermDays,
+          'due_date': dueDate != null ? formatLocalDate(dueDate!) : null,
+        },
         if (refMoId != null) 'ref_mo_id': refMoId,
         if (currencyId != null) 'currency_id': currencyId,
         if (currencyCode != null) 'currency_code': currencyCode,
@@ -359,6 +376,7 @@ class ImTransactionDetail {
   final double lineDiscountAmount;
   final double billDiscountAmount;
   final double? discountAmount;
+  final double? netUnitPrice; // ราคาสุทธิ/หน่วย (ก่อนส่วนลดท้ายบิล) ที่ผู้ใช้กรอกเอง — null = ไม่ได้กรอก
   // บัญชีที่ใช้ลงบัญชีของบรรทัด (เบิกสินค้า '60' — null = สินค้า → หมวด → ตั้งค่า) + มิติของบรรทัด (ว่าง = หัวเอกสาร)
   final int? glAccountId;
   final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
@@ -404,6 +422,7 @@ class ImTransactionDetail {
     this.lineDiscountAmount = 0,
     this.billDiscountAmount = 0,
     this.discountAmount,
+    this.netUnitPrice,
     this.glAccountId,
     this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
   });
@@ -454,6 +473,7 @@ class ImTransactionDetail {
       lineDiscountAmount: toDouble(json['line_discount_amount']),
       billDiscountAmount: toDouble(json['bill_discount_amount']),
       discountAmount: toDoubleN(json['discount_amount']),
+      netUnitPrice: toDoubleN(json['net_unit_price']),
       glAccountId: json['gl_account_id'],
       dim1Id: json['dim1_id'], dim2Id: json['dim2_id'], dim3Id: json['dim3_id'],
       dim4Id: json['dim4_id'], dim5Id: json['dim5_id'],
@@ -481,6 +501,7 @@ class ImTransactionDetail {
         if (discountPercent != null) 'discount_percent': discountPercent,
         if (discountText != null) 'discount_text': discountText,
         if (discountText != null) 'line_discount_amount': lineDiscountAmount,
+        if (discountText != null) 'net_unit_price': netUnitPrice,
         'is_free': isFree,
         if (vatType != null) 'vat_type': vatType,
         if (vatRate != null) 'vat_rate': vatRate,

@@ -117,6 +117,9 @@ class _CountLine {
   final TextEditingController serialNoCtrl;
   // ส่วนลดเงินของรายการ (ต่อทั้งรายการ) — เอกสารขาย; ส่วนลด % ของเอกสารขายใช้ discPctCtrl เป็นขั้นบันได "10+5+2"
   final TextEditingController lineDiscAmtCtrl;
+  // ราคาสุทธิ/หน่วย (ก่อนส่วนลดท้ายบิล) ที่ผู้ใช้กรอกเอง — เอกสารขาย; มีค่า = ส่วนลด (เงิน) คำนวณย้อนจากค่านี้เสมอ
+  // (จำนวน/ราคา/ส่วนลด % เปลี่ยน → ส่วนลด (เงิน) เปลี่ยนตาม ราคาสุทธิคงเดิม) ว่าง = กรอกส่วนลด (เงิน) เอง
+  final TextEditingController netPriceCtrl;
   final TextEditingController remarkCtrl; // หมายเหตุของรายการ (im_transaction_detail.description) — บริการพิมพ์แทนชื่อสินค้า
 
   _CountLine({
@@ -156,7 +159,9 @@ class _CountLine {
     String remark = '',
     String? discountText, // เอกสารขาย: ขั้นบันไดที่บันทึกไว้ (null = ใช้ discountPercent เป็นขั้นเดียว)
     double lineDiscountAmount = 0,
+    double? netUnitPrice,
   })  : remarkCtrl = TextEditingController(text: remark),
+        netPriceCtrl = TextEditingController(text: netUnitPrice != null ? _fmtInput(netUnitPrice) : ''),
         lineDiscAmtCtrl = TextEditingController(text: lineDiscountAmount != 0 ? _fmtInput(lineDiscountAmount) : ''),
         countedQtyCtrl = TextEditingController(text: countedQty == 0 ? '' : _fmtInput(countedQty)),
         issueQtyCtrl = TextEditingController(text: issueQty == 0 ? '' : _fmtInput(issueQty)),
@@ -197,6 +202,7 @@ class _CountLine {
     serialNoCtrl.dispose();
     remarkCtrl.dispose();
     lineDiscAmtCtrl.dispose();
+    netPriceCtrl.dispose();
   }
 }
 
@@ -297,6 +303,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   final _billDiscPctCtrl = TextEditingController();
   final _cashDiscCtrl = TextEditingController();
   DateTime? _poDate;
+  // เอกสารขายเงินเชื่อ ('31'/'32'/'45'): ระยะเครดิต เดือน/วัน (ค่าเริ่มต้นจากลูกค้า แก้ได้) + วันที่ครบกำหนด (แก้ได้)
+  final _creditMonthsCtrl = TextEditingController();
+  final _creditDaysCtrl = TextEditingController();
+  DateTime? _dueDate;
+  final _fmt4 = NumberFormat('#,##0.0000');
   final _descCtrl = TextEditingController();
   String _status = 'Draft';
   // เหตุที่ถอย / ยกเลิก / ลบไม่ได้ (null = ทำได้) + สถานะปลายทางของการถอย + ประวัติ — จาก backend ตอนโหลด
@@ -419,7 +430,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         SalesDiscountInput(
           entered: l.variance.abs() * _parseNum(l.unitPriceCtrl.text),
           stepText: l.discPctCtrl.text,
-          lineAmount: _parseNum(l.lineDiscAmtCtrl.text),
+          lineAmount: _lineDiscOf(l),
           isFree: l.isFree,
         ),
     ], billDiscountPercent: _billDiscPct, cashDiscountAmount: _cashDisc);
@@ -456,6 +467,60 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     final qty = l.variance.abs();
     if (qty == 0) return 0;
     return (qty * _parseNum(l.unitPriceCtrl.text) - (d?.total ?? 0)) / qty;
+  }
+
+  // ราคาสุทธิ/หน่วยก่อนส่วนลดท้ายบิล (หลังส่วนลดของรายการ) — ค่าที่ผู้ใช้กรอกเองได้ในช่อง netPriceCtrl
+  double _netBeforeBill(_CountLine l, SalesLineDiscount? d) {
+    final qty = l.variance.abs();
+    if (qty == 0) return 0;
+    return (qty * _parseNum(l.unitPriceCtrl.text) - (d?.own ?? 0)) / qty;
+  }
+
+  // จำนวนเงินของรายการ = จำนวน × ราคาขายสุทธิ/หน่วย (หลังส่วนลดทั้งหมด) ในหน่วยเดียวกับราคาที่กรอก
+  double _salesLineAmount(_CountLine l, SalesLineDiscount? d) =>
+      l.variance.abs() * _parseNum(l.unitPriceCtrl.text) - (d?.total ?? 0);
+
+  static double _round2(double v) => (v * 100).roundToDouble() / 100; // ส่วนลดเป็นเงิน 2 ตำแหน่ง (backend เก็บแบบเดียวกัน)
+  bool _netEntered(_CountLine l) => _salesDiscountMode && !l.isFree && l.netPriceCtrl.text.trim().isNotEmpty;
+  // ส่วนลด (เงิน) ที่ให้ได้ราคาสุทธิที่กรอก = จำนวน × ราคาหลังหักส่วนลด % − จำนวน × ราคาสุทธิ (ติดลบ = ราคาสุทธิสูงเกิน)
+  double _netBackSolveDisc(_CountLine l) {
+    final qty = l.variance.abs();
+    final afterStep = _parseNum(l.unitPriceCtrl.text) * parseStepDiscount(l.discPctCtrl.text).factor;
+    return _round2(qty * afterStep - qty * _parseNum(l.netPriceCtrl.text));
+  }
+  // ส่วนลด (เงิน) ของรายการที่ใช้คำนวณ/บันทึกจริง
+  double _lineDiscOf(_CountLine l) {
+    if (!_netEntered(l)) return _parseNum(l.lineDiscAmtCtrl.text);
+    final v = _netBackSolveDisc(l);
+    return v < 0 ? 0 : v;
+  }
+  bool _netTooHigh(_CountLine l) => _netEntered(l) && _netBackSolveDisc(l) < 0;
+  // ส่วนลด (เงิน) ที่กรอกเองติดลบ = ขายสูงกว่าราคา ไม่อนุญาต (ต้องแก้ราคาขายแทน)
+  bool _lineDiscNegative(_CountLine l) => _salesDiscountMode && !_netEntered(l) && _parseNum(l.lineDiscAmtCtrl.text) < 0;
+
+  // Post: จำนวนจ่ายออกรวมทุกบรรทัดของสินค้า/ตำแหน่ง/ล็อตเดียวกัน ต้องไม่เกินยอดคงเหลือ (สินค้าไม่นับสต็อกไม่ตรวจ)
+  // คืนข้อความเตือนของกลุ่มแรกที่ไม่พอ หรือ null
+  String? _stockShortage(bool isEnglish) {
+    final need = <String, double>{};
+    final onHand = <String, double>{};
+    final code = <String, String>{};
+    for (final l in _lines) {
+      if (!l.isDeltaMode || l.isIncreaseMode || l.isNonStock) continue;
+      final serial = l.item.costingMethod == 'SPECIFIC' ? l.serialNoCtrl.text.trim() : '';
+      final key = '${l.item.id}|${l.locationId ?? ''}|${l.lotNoCtrl.text.trim()}|$serial';
+      need[key] = (need[key] ?? 0) + _parseNum(l.issueQtyCtrl.text);
+      onHand[key] = l.systemQty;
+      code[key] = l.item.itemCode;
+    }
+    for (final k in need.keys) {
+      if (need[k]! > onHand[k]! + 0.00005) {
+        final msg = isEnglish
+            ? 'Not enough stock (on hand ${_fmtQty.format(onHand[k])}, required ${_fmtQty.format(need[k])})'
+            : 'ยอดคงเหลือไม่พอ (คงเหลือ ${_fmtQty.format(onHand[k])} ต้องการ ${_fmtQty.format(need[k])})';
+        return '${code[k]}: $msg';
+      }
+    }
+    return null;
   }
 
   // ราคาต่อหน่วยหลังส่วนลด ก่อน VAT — ใช้เทียบกับราคาในใบสั่งซื้อ/ใบสั่งขาย
@@ -587,6 +652,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   void dispose() {
     _refNoCtrl.dispose();
     _poNoCtrl.dispose();
+    _creditMonthsCtrl.dispose();
+    _creditDaysCtrl.dispose();
     _billDiscPctCtrl.dispose();
     _cashDiscCtrl.dispose();
     _descCtrl.dispose();
@@ -633,6 +700,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _billDiscPctCtrl.clear();
     _cashDiscCtrl.clear();
     _poDate = null;
+    _creditMonthsCtrl.clear();
+    _creditDaysCtrl.clear();
+    _dueDate = null;
     _descCtrl.clear();
     _status = 'Draft';
     _reverseBlock = null;
@@ -744,6 +814,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _billDiscPctCtrl.text = h.billDiscountPercent != 0 ? _CountLine._fmtInput(h.billDiscountPercent) : '';
     _cashDiscCtrl.text = h.cashDiscountAmount != 0 ? _CountLine._fmtInput(h.cashDiscountAmount) : '';
     _poDate = h.customerPoDate;
+    _creditMonthsCtrl.text = h.creditTermMonths?.toString() ?? '';
+    _creditDaysCtrl.text = h.creditTermDays?.toString() ?? '';
+    _dueDate = h.dueDate;
     _descCtrl.text = h.description ?? '';
     _status = h.status;
     _reverseBlock = tx.reverseBlock;
@@ -806,6 +879,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         remark: d.description ?? '',
         discountText: d.discountText,
         lineDiscountAmount: d.lineDiscountAmount,
+        netUnitPrice: d.netUnitPrice,
       )
         ..glAccountId = d.glAccountId
         ..dims = {1: d.dim1Id, 2: d.dim2Id, 3: d.dim3Id, 4: d.dim4Id, 5: d.dim5Id});
@@ -897,7 +971,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       lastDate: DateTime(2100),
     );
     if (picked != null) {
-      setState(() => _docDate = picked);
+      setState(() {
+        _docDate = picked;
+        _recalcDueDate(); // วันครบกำหนด = วันที่เอกสาร + ระยะเครดิต
+      });
       _refreshListPrices(); // ราคาตามช่วงวันที่มีผลของตารางราคา
     }
   }
@@ -1020,8 +1097,27 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     try {
       final c = await ArCustomerService().fetchRow(customerId);
       if (!mounted || _customerId != customerId) return;
-      setState(() => _salespersons = DocSalesperson.namesOnly(c.salespersons));
+      setState(() {
+        _salespersons = DocSalesperson.namesOnly(c.salespersons);
+        // ระยะเครดิตของลูกค้า → ค่าเริ่มต้นของเอกสาร (แก้ได้)
+        _creditMonthsCtrl.text = '${c.creditTermMonths}';
+        _creditDaysCtrl.text = '${c.creditTermDays}';
+        _recalcDueDate();
+      });
     } catch (_) {}
+  }
+
+  bool get _showCreditTerm => (_isDlnBillingMode && !_isCashSaleMode) || _isDlnDeferredMode || _isArDnMode;
+  int? get _creditMonths => int.tryParse(_creditMonthsCtrl.text.trim());
+  int? get _creditDays => int.tryParse(_creditDaysCtrl.text.trim());
+
+  // วันครบกำหนด = วันที่เอกสาร + เดือน (วันที่เกินสิ้นเดือน → สิ้นเดือน เหมือน PostgreSQL) + วัน; ไม่ได้ระบุระยะเครดิต = คงค่าเดิม
+  void _recalcDueDate() {
+    if (_creditMonthsCtrl.text.trim().isEmpty && _creditDaysCtrl.text.trim().isEmpty) return;
+    final months = _creditMonths ?? 0, days = _creditDays ?? 0;
+    final lastDay = DateTime(_docDate.year, _docDate.month + months + 1, 0).day;
+    final day = _docDate.day > lastDay ? lastDay : _docDate.day;
+    _dueDate = DateTime(_docDate.year, _docDate.month + months, day + days);
   }
 
   Future<void> _refreshSystemQty(_CountLine line) async {
@@ -1941,7 +2037,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           warn('${l.item.itemCode}: ${l.isTransferMode ? (isEnglish ? 'Transfer qty is required' : 'กรุณาระบุจำนวนที่โอน') : l.isReceiveMode ? (isEnglish ? 'Receive qty is required' : 'กรุณาระบุจำนวนที่รับ') : l.isDeliverMode ? (isEnglish ? 'Delivery qty is required' : 'กรุณาระบุจำนวนที่ส่ง') : l.isIssueMode ? (isEnglish ? 'Issue qty is required' : 'กรุณาระบุจำนวนที่เบิก') : (isEnglish ? 'Qty is required' : 'กรุณาระบุจำนวน')}');
           return;
         }
-        if (l.isDeltaMode && !l.isIncreaseMode && l.counted < 0) {
+        if (l.isDeltaMode && !l.isIncreaseMode && !l.isNonStock && l.counted < 0) {
           warn('${l.item.itemCode}: ${l.isTransferMode ? (isEnglish ? 'Transfer qty exceeds current balance' : 'จำนวนที่โอนเกินยอดคงเหลือ') : l.isDeliverMode ? (isEnglish ? 'Delivery qty exceeds current balance' : 'จำนวนที่ส่งเกินยอดคงเหลือ') : l.isIssueMode ? (isEnglish ? 'Issue qty exceeds current balance' : 'จำนวนที่เบิกเกินยอดคงเหลือ') : (isEnglish ? 'Qty exceeds current balance' : 'จำนวนเกินยอดคงเหลือ')}');
           return;
         }
@@ -1983,6 +2079,21 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           return;
         }
       }
+      final shortage = _stockShortage(isEnglish);
+      if (shortage != null) { warn(shortage); return; }
+    }
+    // ส่วนลดติดลบ/ราคาสุทธิสูงเกิน — ตรวจทั้งร่างและโพสต์ (backend ก็ไม่ให้บันทึก)
+    if (_salesDiscountMode) {
+      for (final l in _lines) {
+        if (_lineDiscNegative(l)) {
+          warn('${l.item.itemCode}: ${isEnglish ? 'Discount amount cannot be negative — change the unit price instead' : 'ส่วนลด (เงิน) ติดลบไม่ได้ — ถ้าต้องการขายสูงกว่าราคา ให้แก้ราคาขาย/หน่วย'}');
+          return;
+        }
+        if (_netTooHigh(l)) {
+          warn('${l.item.itemCode}: ${isEnglish ? 'Net price/unit is higher than the price after discount % — change the unit price instead' : 'ราคาสุทธิ/หน่วยสูงกว่าราคาหลังหักส่วนลด % — ถ้าต้องการขายสูงกว่าราคา ให้แก้ราคาขาย/หน่วย'}');
+          return;
+        }
+      }
     }
     if (_salesDiscountMode && !_checkSalesDiscountTotals(warn)) return;
     if (!_checkAdvances()) return;
@@ -2015,6 +2126,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         priceIncludesVat: _inclVat,
         billDiscountPercent: _salesDiscountMode ? _billDiscPct : 0,
         cashDiscountAmount: _salesDiscountMode ? _cashDisc : 0,
+        sendCreditTerm: _showCreditTerm,
+        creditTermMonths: _showCreditTerm ? _creditMonths : null,
+        creditTermDays: _showCreditTerm ? _creditDays : null,
+        dueDate: _showCreditTerm ? _dueDate : null,
         billToName: _isCashMode ? _cash.billToName : null,
         billToAddress: _isCashMode ? _cash.billToAddress : null,
         billToTaxId: _isCashMode ? _cash.billToTaxId : null,
@@ -2045,7 +2160,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
             discountPercent: _showDiscount && !_salesDiscountMode ? _parseNum(l.discPctCtrl.text) : null,
             discountText: _salesDiscountMode ? l.discPctCtrl.text.trim() : null,
-            lineDiscountAmount: _salesDiscountMode ? _parseNum(l.lineDiscAmtCtrl.text) : 0,
+            lineDiscountAmount: _salesDiscountMode ? _lineDiscOf(l) : 0,
+            netUnitPrice: _netEntered(l) ? _parseNum(l.netPriceCtrl.text) : null,
             isFree: l.isFree,
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
@@ -2169,6 +2285,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         customerId: _customerId, refNo: _refNoCtrl.text.trim().isEmpty ? null : _refNoCtrl.text.trim(),
         customerPoNo: _poNoCtrl.text.trim().isEmpty ? null : _poNoCtrl.text.trim(), customerPoDate: _poDate,
         billDiscountPercent: _billDiscPct, cashDiscountAmount: _cashDisc,
+        sendCreditTerm: _showCreditTerm, creditTermMonths: _creditMonths, creditTermDays: _creditDays, dueDate: _dueDate,
       );
       if (!_checkSalesDiscountTotals(warn)) return;
       if (!_checkAdvances()) return;
@@ -2177,7 +2294,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             itemId: l.item.id!,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
             discountText: l.discPctCtrl.text.trim(),
-            lineDiscountAmount: _parseNum(l.lineDiscAmtCtrl.text),
+            lineDiscountAmount: _lineDiscOf(l),
+            netUnitPrice: _netEntered(l) ? _parseNum(l.netPriceCtrl.text) : null,
           )).toList();
       await _service.updateTransaction(id: _id!, header: header, details: details, salespersons: _salespersons,
           advances: _advancesForSave);
@@ -2209,13 +2327,15 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             itemId: l.item.id!,
             unitPrice: l.unitPriceCtrl.text.trim().isEmpty ? null : _parseNum(l.unitPriceCtrl.text),
             discountText: l.discPctCtrl.text.trim(),
-            lineDiscountAmount: _parseNum(l.lineDiscAmtCtrl.text),
+            lineDiscountAmount: _lineDiscOf(l),
+            netUnitPrice: _netEntered(l) ? _parseNum(l.netPriceCtrl.text) : null,
             vatType: _isVatMode ? l.vatType : null,
             vatRate: _isVatMode ? l.vatRate : null,
           )).toList();
       await _service.postBillingDln(id: _id!, refNo: _refNoCtrl.text.trim(), details: details, salespersons: _salespersons,
           customerPoNo: _poNoCtrl.text.trim(), customerPoDate: _poDate, exchangeRate: _isForeignCurrency ? _exchangeRate : null,
-          advances: _advancesForSave, billDiscountPercent: _billDiscPct, cashDiscountAmount: _cashDisc);
+          advances: _advancesForSave, billDiscountPercent: _billDiscPct, cashDiscountAmount: _cashDisc,
+          sendCreditTerm: _showCreditTerm, creditTermMonths: _creditMonths, creditTermDays: _creditDays, dueDate: _dueDate);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Posted successfully' : 'Post สำเร็จ')));
         widget.onSaveSuccess();
@@ -2397,13 +2517,16 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     );
   }
 
-  Widget _card({required String title, required List<Widget> children}) => Card(
+  Widget _card({required String title, required List<Widget> children, Widget? trailing}) => Card(
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Row(children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                if (trailing != null) ...[const SizedBox(width: 12), Flexible(child: trailing)],
+              ]),
               const Divider(),
               ...children,
             ],
@@ -2430,7 +2553,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
   Widget _buildHeaderCard(bool isEnglish) {
     final canEditDocType = !_isReadOnly && _id == null;
-    return _card(title: isEnglish ? 'Document Header' : 'ข้อมูลเอกสาร', children: [
+    return _card(title: isEnglish ? 'Document Header' : 'ข้อมูลเอกสาร', trailing: _statusBadges(isEnglish), children: [
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
           flex: 1,
@@ -2664,6 +2787,55 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           const Spacer(flex: 2),
         ]),
       ],
+      if (_showCreditTerm) ...[
+        const SizedBox(height: 6),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            flex: 1,
+            child: TextField(
+              controller: _creditMonthsCtrl,
+              readOnly: !_canEditBilling,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: isEnglish ? 'Credit term (months)' : 'ระยะเครดิต (เดือน)', border: const OutlineInputBorder(), isDense: true),
+              onChanged: (_) => setState(_recalcDueDate),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: TextField(
+              controller: _creditDaysCtrl,
+              readOnly: !_canEditBilling,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: isEnglish ? 'Credit term (days)' : 'ระยะเครดิต (วัน)', border: const OutlineInputBorder(), isDense: true),
+              onChanged: (_) => setState(_recalcDueDate),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 1,
+            child: InkWell(
+              onTap: !_canEditBilling
+                  ? null
+                  : () async {
+                      final picked = await showDatePicker(
+                          context: context, initialDate: _dueDate ?? _docDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
+                      if (picked != null) setState(() => _dueDate = picked);
+                    },
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Due Date' : 'วันที่ครบกำหนด',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: _canEditBilling ? const Icon(Icons.calendar_today, size: 16) : null,
+                ),
+                child: Text(_dueDate != null ? _dateFmt.format(_dueDate!) : '-'),
+              ),
+            ),
+          ),
+          const Spacer(flex: 1),
+        ]),
+      ],
       if (_isApVendorMode || _isArCustomerMode) ...[
         const SizedBox(height: 6),
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -2758,36 +2930,22 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic))),
         ]),
       ],
-      const SizedBox(height: 6),
-      Row(children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: _statusColor(_status).withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-          child: Text(_status, style: TextStyle(color: _statusColor(_status), fontWeight: FontWeight.w600)),
-        ),
-        if (_linkedApTransactionId != null) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
-            child: Text(
-              isEnglish ? 'AP bill created (#$_linkedApTransactionId)' : 'สร้างใบตั้งหนี้ AP แล้ว (#$_linkedApTransactionId)',
-              style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600, fontSize: 12),
-            ),
-          ),
-        ],
-        if (_linkedArTransactionId != null) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
-            child: Text(
-              isEnglish ? 'AR invoice created (#$_linkedArTransactionId)' : 'สร้างใบแจ้งหนี้ AR แล้ว (#$_linkedArTransactionId)',
-              style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600, fontSize: 12),
-            ),
-          ),
-        ],
-      ]),
+    ]);
+  }
+
+  // ป้ายสถานะ + ใบตั้งหนี้/ใบแจ้งหนี้ที่สร้างแล้ว — แสดงต่อท้ายหัวข้อ "ข้อมูลเอกสาร"
+  Widget _statusBadges(bool isEnglish) {
+    Widget chip(String text, Color color, {double fontSize = 14, double bg = 0.12}) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          decoration: BoxDecoration(color: color.withOpacity(bg), borderRadius: BorderRadius.circular(12)),
+          child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: fontSize)),
+        );
+    return Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+      chip(_status, _statusColor(_status), fontSize: 13, bg: 0.15),
+      if (_linkedApTransactionId != null)
+        chip(isEnglish ? 'AP bill created (#$_linkedApTransactionId)' : 'สร้างใบตั้งหนี้ AP แล้ว (#$_linkedApTransactionId)', Colors.blue, fontSize: 12),
+      if (_linkedArTransactionId != null)
+        chip(isEnglish ? 'AR invoice created (#$_linkedArTransactionId)' : 'สร้างใบแจ้งหนี้ AR แล้ว (#$_linkedArTransactionId)', Colors.blue, fontSize: 12),
     ]);
   }
 
@@ -3136,13 +3294,50 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                 ),
               ),
               SizedBox(
-                width: 100,
-                child: TextField(
-                  controller: line.lineDiscAmtCtrl,
-                  readOnly: !_canEditBilling || line.isFree,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(labelText: isEnglish ? 'Disc. amount' : 'ส่วนลด (เงิน)', border: const OutlineInputBorder(), isDense: true),
-                  onChanged: (_) => setState(() {}),
+                width: 110,
+                child: _netEntered(line)
+                    ? Tooltip(
+                        message: isEnglish
+                            ? 'Calculated from the net price/unit entered (clear that field to type the amount)'
+                            : 'คำนวณจากราคาสุทธิ/หน่วยที่กรอก (ล้างช่องราคาสุทธิเพื่อกรอกส่วนลดเอง)',
+                        child: InputDecorator(
+                          decoration: InputDecoration(labelText: isEnglish ? 'Disc. amount' : 'ส่วนลด (เงิน)', border: const OutlineInputBorder(), isDense: true),
+                          child: Text(_fmtMoney.format(_lineDiscOf(line)), textAlign: TextAlign.right),
+                        ),
+                      )
+                    : TextField(
+                        controller: line.lineDiscAmtCtrl,
+                        readOnly: !_canEditBilling || line.isFree,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(labelText: isEnglish ? 'Disc. amount' : 'ส่วนลด (เงิน)', border: const OutlineInputBorder(), isDense: true,
+                            errorText: _lineDiscNegative(line) ? (isEnglish ? 'Cannot be negative' : 'ติดลบไม่ได้') : null),
+                        onChanged: (_) => setState(() {}),
+                      ),
+              ),
+              // ราคาสุทธิ/หน่วยก่อนท้ายบิล — กรอกได้ ระบบคำนวณส่วนลด (เงิน) ย้อนให้ (ว่าง = แสดงค่าปัจจุบันเป็นตัวอย่าง)
+              SizedBox(
+                width: 170,
+                child: Tooltip(
+                  message: isEnglish
+                      ? 'Type the agreed net price per unit; the discount amount is calculated back from it and kept when qty or price changes'
+                      : 'กรอกราคาสุทธิ/หน่วยที่ตกลงกับลูกค้า ระบบคำนวณส่วนลด (เงิน) ให้ และคงราคาสุทธินี้เมื่อจำนวนหรือราคาเปลี่ยน',
+                  child: TextField(
+                    controller: line.netPriceCtrl,
+                    readOnly: !_canEditBilling || line.isFree,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: (isEnglish ? 'Net price/unit before bill disc.' : 'ราคาสุทธิ/หน่วย (ก่อนท้ายบิล)') +
+                          (_inclVat ? (isEnglish ? ' incl. VAT' : ' รวม VAT') : ''),
+                      hintText: _fmt4.format(_netBeforeBill(line, _salesDiscounts()[line])),
+                      errorText: _netTooHigh(line) ? (isEnglish ? 'Above price after disc. %' : 'สูงกว่าราคาหลังหักส่วนลด %') : null,
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (v) => setState(() {
+                      // จำส่วนลด (เงิน) ล่าสุดไว้ในช่องเดิม — ล้างราคาสุทธิทีหลังจะได้ส่วนลดนี้ต่อ
+                      if (v.trim().isNotEmpty && !_netTooHigh(line)) line.lineDiscAmtCtrl.text = _CountLine._fmtInput(_lineDiscOf(line));
+                    }),
+                  ),
                 ),
               ),
               // ส่วนลดท้ายบิล % + ส่วนลดเงินสดท้ายบิล ที่ปันส่วนมาที่รายการนี้ (ตามสัดส่วนยอดคงเหลือหลังส่วนลดของรายการ)
@@ -3180,8 +3375,16 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                     decoration: InputDecoration(
                         labelText: (isEnglish ? 'Net unit price' : 'ราคา/หน่วยสุทธิ') + (_inclVat ? (isEnglish ? ' (incl. VAT)' : ' (รวม VAT)') : ''),
                         border: const OutlineInputBorder(), isDense: true),
-                    child: Text(_fmtMoney.format(_salesNetUnit(line, _salesDiscounts()[line])), textAlign: TextAlign.right),
+                    child: Text(_fmt4.format(_salesNetUnit(line, _salesDiscounts()[line])), textAlign: TextAlign.right),
                   ),
+                ),
+              ),
+              // จำนวนเงิน = จำนวน × ราคาขายสุทธิ/หน่วย (หน่วยเดียวกับราคาที่กรอก ไม่แยกรวม/ไม่รวม VAT)
+              SizedBox(
+                width: 130,
+                child: InputDecorator(
+                  decoration: InputDecoration(labelText: isEnglish ? 'Amount' : 'จำนวนเงิน', border: const OutlineInputBorder(), isDense: true),
+                  child: Text(_fmtMoney.format(_salesLineAmount(line, _salesDiscounts()[line])), textAlign: TextAlign.right),
                 ),
               ),
             ],
@@ -3957,7 +4160,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     for (final l in _lines) {
       if (l.isFree) continue;
       final entered = l.variance.abs() * _parseNum(l.unitPriceCtrl.text);
-      final own = entered * (1 - parseStepDiscount(l.discPctCtrl.text).factor) + _parseNum(l.lineDiscAmtCtrl.text);
+      final own = entered * (1 - parseStepDiscount(l.discPctCtrl.text).factor) + _lineDiscOf(l);
       if (own > entered + 0.005) {
         warn('${l.item.itemCode}: ${isEnglish ? 'line discount exceeds the line amount' : 'ส่วนลดของรายการมากกว่ายอดของรายการ'}');
         return false;
