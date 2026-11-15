@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/im_transaction.dart';
 import '../models/im_item.dart';
 import '../models/im_gl_account_setup.dart';
@@ -278,6 +279,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   String? _docCode, _docNameThai, _docNameEng;
   String? _selectedSysDocType;
   String _docNo = 'AUTO';
+  // การ์ดข้อมูลเอกสาร ย่อ/ขยาย — ค่าที่ผู้ใช้กดของเอกสารนี้ (_hdrCollapsedId) ไม่งั้นใช้ค่าที่จำไว้ตามกลุ่มสถานะ
+  bool? _hdrCollapsed;
+  int? _hdrCollapsedId;
+  bool _hdrPrefPosted = true;
+  bool _hdrPrefDraft = false;
   DateTime _docDate = DateTime.now();
   int? _warehouseId;
   String? _warehouseLabel;
@@ -637,6 +643,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   @override
   void initState() {
     super.initState();
+    _loadHeaderPrefs();
     _load();
   }
 
@@ -2536,9 +2543,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
   String _currencyLabel(Currency c) => _isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai;
 
-  Widget _fkField({required String label, required String? displayText, required bool hasValue, VoidCallback? onSearch}) {
+  Widget _fkField({required String label, required String? displayText, required bool hasValue, VoidCallback? onSearch,
+      bool editable = true, bool auto = false, Widget? trailing}) {
     return InputDecorator(
-      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
+      decoration: _hDec(label, editable: editable, auto: auto),
       child: Row(children: [
         Expanded(
           child: hasValue
@@ -2547,390 +2555,569 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         ),
         if (onSearch != null)
           IconButton(icon: const Icon(Icons.search, color: Colors.teal, size: 18), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: onSearch),
+        if (trailing != null) ...[const SizedBox(width: 4), trailing],
       ]),
     );
   }
 
-  Widget _buildHeaderCard(bool isEnglish) {
-    final canEditDocType = !_isReadOnly && _id == null;
-    return _card(title: isEnglish ? 'Document Header' : 'ข้อมูลเอกสาร', trailing: _statusBadges(isEnglish), children: [
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(
-          flex: 1,
-          child: canEditDocType && _docTypes.length > 1
-              ? DropdownButtonFormField<int>(
-                  value: _docId,
-                  isExpanded: true,
-                  decoration: InputDecoration(labelText: isEnglish ? 'Document Type *' : 'ประเภทเอกสาร *', border: const OutlineInputBorder(), isDense: true),
-                  items: _docTypes.map((d) => DropdownMenuItem(value: d.id, child: Text('${d.docCode} ${isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai}'))).toList(),
-                  onChanged: (v) {
-                    final d = _docTypes.firstWhere((e) => e.id == v);
-                    _selectDocType(d);
-                  },
-                )
-              : _fkField(
-                  label: isEnglish ? 'Document Type' : 'ประเภทเอกสาร',
-                  hasValue: _docCode != null,
-                  displayText: '${_docCode ?? ''} ${isEnglish && (_docNameEng ?? '').isNotEmpty ? _docNameEng : (_docNameThai ?? '')}',
-                ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 1,
-          child: TextFormField(
-            readOnly: true,
-            decoration: InputDecoration(labelText: isEnglish ? 'Doc No.' : 'เลขที่เอกสาร', border: const OutlineInputBorder(), isDense: true),
-            controller: TextEditingController(text: _docNo),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 1,
-          child: InkWell(
-            onTap: _isReadOnly ? null : _pickDate,
-            child: InputDecorator(
-              decoration: InputDecoration(labelText: isEnglish ? 'Doc Date *' : 'วันที่เอกสาร *', border: const OutlineInputBorder(), isDense: true),
-              child: Text(_dateFmt.format(_docDate)),
+  // ── การ์ดข้อมูลเอกสาร (user request 2026-11-15): 4 กลุ่มสีตามลำดับป้อน ① เอกสาร ② คู่ค้า/อ้างอิง ③ เงื่อนไขการเงิน
+  // ④ เพิ่มเติม; สีฟิลด์ ขาว = กรอกเอง, ฟ้าอ่อน = ระบบเติมให้แก้ได้, เทา = อ่านอย่างเดียว; ย่อเป็นแถบสรุปได้
+  // (ค่าเริ่มต้น: Posted/Void ย่อ, อื่นๆ ขยาย — จำค่าที่ผู้ใช้เลือกแยกตามกลุ่มสถานะ)
+  static const _hAuto = Color(0xFFE3EEFA);
+  static const _hRo = Color(0xFFEEF0F2);
+  static const _gDoc = Color(0xFF1E5AA8);
+  static const _gParty = Color(0xFF1F7A4D);
+  static const _gFin = Color(0xFFB45309);
+  static const _gMore = Color(0xFF5B6B7C);
+
+  InputDecoration _hDec(String label, {bool auto = false, bool editable = true, Widget? suffixIcon, String? counterText}) {
+    final req = label.endsWith(' *');
+    final text = req ? label.substring(0, label.length - 2) : label;
+    return InputDecoration(
+      label: req
+          ? Text.rich(TextSpan(text: text, children: const [TextSpan(text: ' *', style: TextStyle(color: Color(0xFFC62828)))]))
+          : Text(text),
+      border: const OutlineInputBorder(),
+      isDense: true,
+      filled: !editable || auto,
+      fillColor: !editable ? _hRo : _hAuto,
+      suffixIcon: suffixIcon,
+      counterText: counterText,
+    );
+  }
+
+  bool get _hdrPostedGroup => _status == 'Posted' || _status == 'Void';
+  bool get _isHeaderCollapsed =>
+      (_hdrCollapsedId == _id && _hdrCollapsed != null) ? _hdrCollapsed! : (_hdrPostedGroup ? _hdrPrefPosted : _hdrPrefDraft);
+
+  Future<void> _loadHeaderPrefs() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _hdrPrefPosted = p.getBool('im_hdr_collapsed_posted') ?? true;
+        _hdrPrefDraft = p.getBool('im_hdr_collapsed_draft') ?? false;
+      });
+    } catch (_) {}
+  }
+
+  void _toggleHeader() {
+    final v = !_isHeaderCollapsed;
+    final posted = _hdrPostedGroup;
+    setState(() {
+      _hdrCollapsed = v;
+      _hdrCollapsedId = _id;
+      if (posted) {
+        _hdrPrefPosted = v;
+      } else {
+        _hdrPrefDraft = v;
+      }
+    });
+    SharedPreferences.getInstance()
+        .then((p) => p.setBool(posted ? 'im_hdr_collapsed_posted' : 'im_hdr_collapsed_draft', v))
+        .catchError((_) => false);
+  }
+
+  String _salespersonNames(bool isEnglish) => _salespersons
+      .map((s) => isEnglish && (s.salespersonNameEng ?? '').isNotEmpty ? s.salespersonNameEng! : s.salespersonNameThai)
+      .join(', ');
+
+  Future<void> _editSalespersons(bool isEnglish) async {
+    var list = List<DocSalesperson>.from(_salespersons);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text(isEnglish ? 'Salespersons' : 'พนักงานขาย', style: const TextStyle(fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: SalespersonSplitEditor(
+                items: list,
+                isEnglish: isEnglish,
+                onChanged: (l) => setD(() => list = l),
+              ),
             ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'OK' : 'ตกลง')),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 1,
-          child: TextField(
-            controller: _refNoCtrl,
-            readOnly: !_canEditBilling,
-            decoration: InputDecoration(
-                labelText: _isCashPurchaseMode
-                    ? '${isEnglish ? 'Vendor Tax Invoice / Receipt No.' : 'เลขที่ใบกำกับภาษี/ใบเสร็จผู้ขาย'}${_vendorRefRequired ? ' *' : ''}'
-                    : (_isGrnBillingMode || (_isGrDeferredMode && _status == 'Received'))
-                    ? (isEnglish ? 'Vendor Invoice No. *' : 'เลขที่ใบกำกับสินค้าผู้ขาย *')
-                    : _isApCnDnDoc
-                        ? '${_isApDnMode
-                            ? (isEnglish ? 'Vendor Debit Note No.' : 'เลขที่ใบเพิ่มหนี้ผู้ขาย')
-                            : (isEnglish ? 'Vendor Credit Note No.' : 'เลขที่ใบลดหนี้ผู้ขาย')}${_vendorCnDnNoRequired ? ' *' : ''}'
+      ),
+    );
+    if (ok == true && mounted) setState(() => _salespersons = list);
+  }
+
+  // แถวฟิลด์ในกลุ่ม — flex ตามลำดับ (ไม่ระบุ = 1)
+  Widget _hRow(List<Widget> children, [List<int>? flex]) {
+    final out = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      if (i > 0) out.add(const SizedBox(width: 8));
+      out.add(Expanded(flex: flex != null && i < flex.length ? flex[i] : 1, child: children[i]));
+    }
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: out);
+  }
+
+  Widget _hGroupLabel(int no, String title, Color color) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 18,
+          height: 18,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(9)),
+          child: Text('$no', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(width: 6),
+        Flexible(child: Text(title, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+      ]);
+
+  // กลุ่มฟิลด์: แถบสีด้านบน + ชื่อกลุ่ม; inline = ชื่อกลุ่มอยู่ซ้ายของแถว (กลุ่มแถวเดียว/เต็มความกว้าง)
+  Widget _hGroup(int no, String title, Color color, List<Widget> rows, {bool inline = false}) {
+    final body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: 8), rows[i]],
+    ]);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFFBFCFD),
+          border: Border.all(color: const Color(0xFFDDE3EA)),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(height: 3, color: color),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+            child: inline
+                ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    SizedBox(width: 108, child: Padding(padding: const EdgeInsets.only(top: 12), child: _hGroupLabel(no, title, color))),
+                    Expanded(child: body),
+                  ])
+                : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    _hGroupLabel(no, title, color),
+                    const SizedBox(height: 8),
+                    body,
+                  ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _datePickField({required String label, required String text, required VoidCallback? onTap, bool auto = false, Widget? suffixIcon}) =>
+      InkWell(
+        onTap: onTap,
+        child: InputDecorator(
+          decoration: _hDec(label, auto: auto, editable: onTap != null, suffixIcon: suffixIcon),
+          child: Text(text),
+        ),
+      );
+
+  Widget _buildHeaderCard(bool isEnglish) {
+    final canEditDocType = !_isReadOnly && _id == null;
+    final collapsed = _isHeaderCollapsed;
+
+    // ── ฟิลด์ ──
+    final docTypeW = canEditDocType && _docTypes.length > 1
+        ? DropdownButtonFormField<int>(
+            value: _docId,
+            isExpanded: true,
+            decoration: _hDec(isEnglish ? 'Document Type *' : 'ประเภทเอกสาร *'),
+            items: _docTypes
+                .map((d) => DropdownMenuItem(
+                    value: d.id,
+                    child: Text('${d.docCode} ${isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai}', overflow: TextOverflow.ellipsis)))
+                .toList(),
+            onChanged: (v) => _selectDocType(_docTypes.firstWhere((e) => e.id == v)),
+          )
+        : _fkField(
+            label: isEnglish ? 'Document Type' : 'ประเภทเอกสาร',
+            hasValue: _docCode != null,
+            displayText: '${_docCode ?? ''} ${isEnglish && (_docNameEng ?? '').isNotEmpty ? _docNameEng : (_docNameThai ?? '')}',
+            editable: false,
+          );
+    final dateW = _datePickField(
+      label: isEnglish ? 'Doc Date *' : 'วันที่เอกสาร *',
+      text: _dateFmt.format(_docDate),
+      onTap: _isReadOnly ? null : _pickDate,
+    );
+    final whW = _fkField(
+      label: _isTransferMode ? (isEnglish ? 'From Warehouse *' : 'คลังต้นทาง *') : (isEnglish ? 'Warehouse *' : 'คลังสินค้า *'),
+      hasValue: _warehouseId != null,
+      displayText: _warehouseLabel,
+      editable: !_isReadOnly,
+      onSearch: _isReadOnly ? null : () => ImWarehouseListWidget.search(context, onSelected: _selectWarehouse),
+    );
+    final toWhW = !_isTransferMode
+        ? null
+        : _fkField(
+            label: isEnglish ? 'To Warehouse *' : 'คลังปลายทาง *',
+            hasValue: _toWarehouseId != null,
+            displayText: _toWarehouseLabel,
+            editable: !_isReadOnly,
+            onSearch: _isReadOnly ? null : () => ImWarehouseListWidget.search(context, onSelected: _selectToWarehouse),
+          );
+    final refNoW = TextField(
+      controller: _refNoCtrl,
+      readOnly: !_canEditBilling,
+      decoration: _hDec(
+        _isCashPurchaseMode
+            ? '${isEnglish ? 'Vendor Tax Invoice / Receipt No.' : 'เลขที่ใบกำกับภาษี/ใบเสร็จผู้ขาย'}${_vendorRefRequired ? ' *' : ''}'
+            : (_isGrnBillingMode || (_isGrDeferredMode && _status == 'Received'))
+                ? (isEnglish ? 'Vendor Invoice No. *' : 'เลขที่ใบกำกับสินค้าผู้ขาย *')
+                : _isApCnDnDoc
+                    ? '${_isApDnMode ? (isEnglish ? 'Vendor Debit Note No.' : 'เลขที่ใบเพิ่มหนี้ผู้ขาย') : (isEnglish ? 'Vendor Credit Note No.' : 'เลขที่ใบลดหนี้ผู้ขาย')}${_vendorCnDnNoRequired ? ' *' : ''}'
                     : _isDeliverMode
                         ? (isEnglish ? 'Customer Ref. No.' : 'เลขที่อ้างอิงลูกค้า')
                         : (isEnglish ? 'Ref No.' : 'เลขที่อ้างอิง'),
-                border: const OutlineInputBorder(), isDense: true),
-          ),
-        ),
-        if (_showInvoiceDate) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: InkWell(
-              onTap: _canEditBilling ? _pickInvoiceDate : null,
-              child: InputDecorator(
-                decoration: InputDecoration(
-                    labelText: _isApCnDnDoc
-                        ? (_isApDnMode
-                            ? (isEnglish ? 'Vendor Debit Note Date' : 'วันที่ใบเพิ่มหนี้ผู้ขาย')
-                            : (isEnglish ? 'Vendor Credit Note Date' : 'วันที่ใบลดหนี้ผู้ขาย'))
-                        : (isEnglish ? 'Vendor Invoice Date *' : 'วันที่ใบกำกับ *'),
-                    border: const OutlineInputBorder(), isDense: true),
-                child: Text(_dateFmt.format(_invoiceDate)),
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 1,
-          child: _fkField(
-            label: _isTransferMode ? (isEnglish ? 'From Warehouse *' : 'คลังต้นทาง *') : (isEnglish ? 'Warehouse *' : 'คลังสินค้า *'),
-            hasValue: _warehouseId != null,
-            displayText: _warehouseLabel,
-            onSearch: _isReadOnly ? null : () => ImWarehouseListWidget.search(context, onSelected: _selectWarehouse),
-          ),
-        ),
-        if (_isTransferMode) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: _fkField(
-              label: isEnglish ? 'To Warehouse *' : 'คลังปลายทาง *',
-              hasValue: _toWarehouseId != null,
-              displayText: _toWarehouseLabel,
-              onSearch: _isReadOnly ? null : () => ImWarehouseListWidget.search(context, onSelected: _selectToWarehouse),
-            ),
-          ),
-        ],
-        if (_isApVendorMode) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: _fkField(
-              label: _isCashPurchaseMode
-                  ? (isEnglish ? 'Vendor (blank = cash vendor)' : 'ผู้ขาย (ว่าง = ผู้ขายเงินสด)')
-                  : (isEnglish ? 'Vendor *' : 'ผู้ขาย *'),
-              hasValue: _vendorId != null,
-              displayText: _vendorLabel,
-              onSearch: _isReadOnly ? null : () => ApVendorListWidget.search(context, onSelected: _selectVendor),
-            ),
-          ),
-        ],
-        if (_isArCustomerMode) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: _fkField(
-              label: _isCashSaleMode
-                  ? (isEnglish ? 'Customer (blank = cash customer)' : 'ลูกค้า (ว่าง = ลูกค้าเงินสด)')
-                  : (isEnglish ? 'Customer *' : 'ลูกค้า *'),
-              hasValue: _customerId != null,
-              displayText: _customerLabel,
-              onSearch: _isReadOnly ? null : () => ArCustomerListWidget.search(context, onSelected: _selectCustomer),
-            ),
-          ),
-        ],
-        if (_isReturnSourceDocMode) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: _fkField(
-              label: isEnglish ? 'Source Document *' : 'เอกสารต้นฉบับ *',
-              hasValue: _refImTransactionId != null,
-              displayText: _refImTransactionLabel,
-              onSearch: _isReadOnly ? null : _pickReturnSourceDoc,
-            ),
-          ),
-        ],
-        if (_isPoReceiveMode) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: Row(children: [
-              Expanded(
-                child: _fkField(
-                  label: isEnglish ? 'PO Reference' : 'อ้างอิงใบสั่งซื้อ',
-                  hasValue: _refPoId != null,
-                  displayText: _refPoDocNoLabel ?? '',
-                ),
-              ),
-              if (!_isReadOnly && _vendorId != null) ...[
-                const SizedBox(width: 4),
-                IconButton(
+        editable: _canEditBilling,
+      ),
+    );
+    final invDateW = !_showInvoiceDate
+        ? null
+        : _datePickField(
+            label: _isApCnDnDoc
+                ? (_isApDnMode
+                    ? (isEnglish ? 'Vendor Debit Note Date' : 'วันที่ใบเพิ่มหนี้ผู้ขาย')
+                    : (isEnglish ? 'Vendor Credit Note Date' : 'วันที่ใบลดหนี้ผู้ขาย'))
+                : (isEnglish ? 'Vendor Invoice Date *' : 'วันที่ใบกำกับ *'),
+            text: _dateFmt.format(_invoiceDate),
+            onTap: _canEditBilling ? _pickInvoiceDate : null,
+          );
+    final partyW = _isApVendorMode
+        ? _fkField(
+            label: _isCashPurchaseMode
+                ? (isEnglish ? 'Vendor (blank = cash vendor)' : 'ผู้ขาย (ว่าง = ผู้ขายเงินสด)')
+                : (isEnglish ? 'Vendor *' : 'ผู้ขาย *'),
+            hasValue: _vendorId != null,
+            displayText: _vendorLabel,
+            editable: !_isReadOnly,
+            onSearch: _isReadOnly ? null : () => ApVendorListWidget.search(context, onSelected: _selectVendor),
+          )
+        : _isArCustomerMode
+            ? _fkField(
+                label: _isCashSaleMode
+                    ? (isEnglish ? 'Customer (blank = cash customer)' : 'ลูกค้า (ว่าง = ลูกค้าเงินสด)')
+                    : (isEnglish ? 'Customer *' : 'ลูกค้า *'),
+                hasValue: _customerId != null,
+                displayText: _customerLabel,
+                editable: !_isReadOnly,
+                onSearch: _isReadOnly ? null : () => ArCustomerListWidget.search(context, onSelected: _selectCustomer),
+              )
+            : null;
+    final srcDocW = !_isReturnSourceDocMode
+        ? null
+        : _fkField(
+            label: isEnglish ? 'Source Document *' : 'เอกสารต้นฉบับ *',
+            hasValue: _refImTransactionId != null,
+            displayText: _refImTransactionLabel,
+            editable: !_isReadOnly,
+            onSearch: _isReadOnly ? null : _pickReturnSourceDoc,
+          );
+    Widget orderRef(String label, bool hasValue, String text, bool canAdd, String tip, VoidCallback onAdd) => _fkField(
+          label: label,
+          hasValue: hasValue,
+          displayText: text,
+          editable: false,
+          trailing: canAdd
+              ? IconButton(
                   icon: const Icon(Icons.playlist_add, size: 20, color: Colors.teal),
-                  tooltip: isEnglish ? 'Add lines from PO' : 'เพิ่มรายการจากใบสั่งซื้อ',
-                  onPressed: _pickPoLines,
-                ),
-              ],
-            ]),
-          ),
-        ],
-        if (_isDeliverMode) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: Row(children: [
-              Expanded(
-                child: _fkField(
-                  label: isEnglish ? 'SO Reference' : 'อ้างอิงใบสั่งขาย',
-                  hasValue: _refSoId != null,
-                  displayText: _refSoDocNoLabel ?? '',
-                ),
-              ),
-              if (!_isReadOnly && _customerId != null) ...[
-                const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.playlist_add, size: 20, color: Colors.teal),
-                  tooltip: isEnglish ? 'Add lines from SO' : 'เพิ่มรายการจากใบสั่งขาย',
-                  onPressed: _pickSoLines,
-                ),
-              ],
-            ]),
-          ),
-        ],
-      ]),
-      if (_isDeliverMode) ...[
-        const SizedBox(height: 6),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-            flex: 1,
-            child: TextField(
-              controller: _poNoCtrl,
-              readOnly: !_canEditBilling,
-              maxLength: 50,
-              decoration: InputDecoration(
-                labelText: isEnglish ? 'Customer PO No.' : 'เลขที่ใบสั่งซื้อลูกค้า',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                counterText: '',
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: InkWell(
-              onTap: !_canEditBilling
-                  ? null
-                  : () async {
-                      final picked = await showDatePicker(
-                          context: context, initialDate: _poDate ?? _docDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
-                      if (picked != null) setState(() => _poDate = picked);
-                    },
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: isEnglish ? 'Customer PO Date' : 'วันที่ใบสั่งซื้อลูกค้า',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: (_poDate == null || !_canEditBilling)
-                      ? null
-                      : IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () => setState(() => _poDate = null)),
-                ),
-                child: Text(_poDate != null ? _dateFmt.format(_poDate!) : '-'),
-              ),
-            ),
-          ),
-          const Spacer(flex: 2),
-        ]),
+                  tooltip: tip,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: onAdd,
+                )
+              : null,
+        );
+    final poRefW = !_isPoReceiveMode
+        ? null
+        : orderRef(isEnglish ? 'PO Reference' : 'อ้างอิงใบสั่งซื้อ', _refPoId != null, _refPoDocNoLabel ?? '',
+            !_isReadOnly && _vendorId != null, isEnglish ? 'Add lines from PO' : 'เพิ่มรายการจากใบสั่งซื้อ', _pickPoLines);
+    final soRefW = !_isDeliverMode
+        ? null
+        : orderRef(isEnglish ? 'SO Reference' : 'อ้างอิงใบสั่งขาย', _refSoId != null, _refSoDocNoLabel ?? '',
+            !_isReadOnly && _customerId != null, isEnglish ? 'Add lines from SO' : 'เพิ่มรายการจากใบสั่งขาย', _pickSoLines);
+    final custPoNoW = !_isDeliverMode
+        ? null
+        : TextField(
+            controller: _poNoCtrl,
+            readOnly: !_canEditBilling,
+            maxLength: 50,
+            decoration: _hDec(isEnglish ? 'Customer PO No.' : 'เลขที่ PO ลูกค้า', editable: _canEditBilling, counterText: ''),
+          );
+    final custPoDateW = !_isDeliverMode
+        ? null
+        : _datePickField(
+            label: isEnglish ? 'Customer PO Date' : 'วันที่ PO ลูกค้า',
+            text: _poDate != null ? _dateFmt.format(_poDate!) : '-',
+            onTap: !_canEditBilling
+                ? null
+                : () async {
+                    final picked = await showDatePicker(context: context, initialDate: _poDate ?? _docDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
+                    if (picked != null) setState(() => _poDate = picked);
+                  },
+            suffixIcon: (_poDate == null || !_canEditBilling)
+                ? null
+                : IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () => setState(() => _poDate = null)),
+          );
+    final hasCurrency = _isApVendorMode || _isArCustomerMode;
+    final rateEditable = !_isReadOnly || (_isDlnDeferredMode && _status == 'Delivered' && _canEditBilling && _isForeignCurrency);
+
+    // ── ② ③ มีหรือไม่ ──
+    final partyRow1 = <Widget>[if (partyW != null) partyW, if (srcDocW != null) srcDocW, if (poRefW != null) poRefW, if (soRefW != null) soRefW];
+    final partyMode = partyRow1.isNotEmpty;
+    final finMode = _showCreditTerm || hasCurrency;
+
+    // ── แถบหัวการ์ด ──
+    final titleRow = Row(children: [
+      Text(isEnglish ? 'Document Header' : 'ข้อมูลเอกสาร', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+      if (_docNo.isNotEmpty && _docNo != 'AUTO') ...[
+        const SizedBox(width: 10),
+        Text(_docNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F5C5C))),
       ],
-      if (_showCreditTerm) ...[
-        const SizedBox(height: 6),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-            flex: 1,
-            child: TextField(
-              controller: _creditMonthsCtrl,
-              readOnly: !_canEditBilling,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: isEnglish ? 'Credit term (months)' : 'ระยะเครดิต (เดือน)', border: const OutlineInputBorder(), isDense: true),
-              onChanged: (_) => setState(_recalcDueDate),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: TextField(
-              controller: _creditDaysCtrl,
-              readOnly: !_canEditBilling,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: isEnglish ? 'Credit term (days)' : 'ระยะเครดิต (วัน)', border: const OutlineInputBorder(), isDense: true),
-              onChanged: (_) => setState(_recalcDueDate),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: InkWell(
-              onTap: !_canEditBilling
-                  ? null
-                  : () async {
-                      final picked = await showDatePicker(
-                          context: context, initialDate: _dueDate ?? _docDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
-                      if (picked != null) setState(() => _dueDate = picked);
-                    },
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: isEnglish ? 'Due Date' : 'วันที่ครบกำหนด',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: _canEditBilling ? const Icon(Icons.calendar_today, size: 16) : null,
-                ),
-                child: Text(_dueDate != null ? _dateFmt.format(_dueDate!) : '-'),
-              ),
-            ),
-          ),
-          const Spacer(flex: 1),
-        ]),
-      ],
-      if (_isApVendorMode || _isArCustomerMode) ...[
-        const SizedBox(height: 6),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-            flex: 1,
-            child: DropdownButtonFormField<Currency>(
-              value: _currency,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: isEnglish ? 'Currency' : 'สกุลเงิน', border: const OutlineInputBorder(), isDense: true),
-              items: _currencies.map((c) => DropdownMenuItem(
-                    value: c,
-                    child: Text('${c.currencyCode} - ${_currencyLabel(c)}', overflow: TextOverflow.ellipsis),
-                  )).toList(),
-              onChanged: _isReadOnly ? null : (v) {
-                final changed = v?.currencyCode != _currency?.currencyCode;
-                setState(() { _currency = v; _exchangeRate = v?.baseRate ?? 1; });
-                if (changed) _loadAdvances(); // ใบมัดจำที่หักได้ต้องสกุลเงินเดียวกับเอกสาร
-                if (changed) _refreshListPrices(); // ตารางราคาสกุลเงินเดียวกับเอกสาร
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: TextFormField(
-              key: ValueKey('im_rate_${widget.resetKey}_$_id'),
-              initialValue: _exchangeRate.toStringAsFixed(6),
-              // '32' สถานะ Delivered: สกุลเงินคงเดิม แก้ได้แค่อัตรา ณ วันออกใบแจ้งหนี้
-              enabled: !_isReadOnly || (_isDlnDeferredMode && _status == 'Delivered' && _canEditBilling && _isForeignCurrency),
-              decoration: InputDecoration(labelText: isEnglish ? 'Exchange Rate' : 'อัตราแลกเปลี่ยน', border: const OutlineInputBorder(), isDense: true),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              onChanged: (v) => setState(() => _exchangeRate = double.tryParse(v) ?? 1),
-            ),
-          ),
-          const Expanded(flex: 2, child: SizedBox()),
-        ]),
-      ],
-      const SizedBox(height: 6),
-      TextField(
+      const SizedBox(width: 10),
+      Flexible(child: _statusBadges(isEnglish)),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Align(
+          alignment: Alignment.centerRight,
+          // วงเงินเครดิตของลูกค้า: อยู่ในวงเงิน = แถบสั้นบรรทัดเดียว, เกินวงเงิน/มีคำขอ = แผงขอ/อนุมัติเต็ม
+          child: _isArCustomerMode && _customerId != null && (_status == 'Draft' || _credit.status != null)
+              ? CreditLimitPanel(
+                  compact: true,
+                  service: _creditService,
+                  customerId: _customerId,
+                  docId: _id,
+                  docNo: _docNo,
+                  amount: _creditAmount,
+                  credit: _credit,
+                  isDraft: _status == 'Draft' && !widget.viewOnly,
+                  onChanged: () async {
+                    if (_id == null) return;
+                    await _loadExisting(_id!);
+                    if (mounted) setState(() {});
+                  },
+                )
+              : const SizedBox.shrink(),
+        ),
+      ),
+      const SizedBox(width: 8),
+      OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+            visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 10), foregroundColor: Colors.blueGrey.shade800),
+        icon: Icon(collapsed ? Icons.expand_more : Icons.expand_less, size: 18),
+        label: Text(collapsed ? (isEnglish ? 'Expand' : 'ขยาย') : (isEnglish ? 'Collapse' : 'ย่อ'), style: const TextStyle(fontSize: 12)),
+        onPressed: _toggleHeader,
+      ),
+    ]);
+
+    Widget body;
+    if (collapsed) {
+      body = _headerSummary(isEnglish);
+    } else {
+      // ① เอกสาร
+      final g1 = partyMode
+          ? _hGroup(1, isEnglish ? 'Document' : 'เอกสาร', _gDoc, [
+              docTypeW,
+              _hRow([dateW, whW, if (toWhW != null) toWhW]),
+            ])
+          : _hGroup(1, isEnglish ? 'Document' : 'เอกสาร', _gDoc, [
+              _hRow([docTypeW, dateW, whW, if (toWhW != null) toWhW, refNoW, if (invDateW != null) invDateW], [3, 2, 3, if (toWhW != null) 3, 3, if (invDateW != null) 2]),
+            ], inline: true);
+      // ② คู่ค้า / อ้างอิง
+      final g2 = !partyMode
+          ? null
+          : _hGroup(2, _isApVendorMode ? (isEnglish ? 'Vendor / Reference' : 'ผู้ขาย / อ้างอิง') : (isEnglish ? 'Customer / Reference' : 'ลูกค้า / อ้างอิง'), _gParty, [
+              _hRow(partyRow1, partyW != null && partyRow1.length > 1 ? [2, for (var i = 1; i < partyRow1.length; i++) 1] : null),
+              _hRow([if (custPoNoW != null) custPoNoW, if (custPoDateW != null) custPoDateW, refNoW, if (invDateW != null) invDateW]),
+            ]);
+      // ③ เงื่อนไขการเงิน
+      final g3 = !finMode
+          ? null
+          : _hGroup(3, isEnglish ? 'Terms / Currency' : 'เงื่อนไขการเงิน', _gFin, [
+              if (_showCreditTerm)
+                _hRow([
+                  TextField(
+                    controller: _creditMonthsCtrl,
+                    readOnly: !_canEditBilling,
+                    keyboardType: TextInputType.number,
+                    decoration: _hDec(isEnglish ? 'Credit (months)' : 'เครดิต (เดือน)', auto: true, editable: _canEditBilling),
+                    onChanged: (_) => setState(_recalcDueDate),
+                  ),
+                  TextField(
+                    controller: _creditDaysCtrl,
+                    readOnly: !_canEditBilling,
+                    keyboardType: TextInputType.number,
+                    decoration: _hDec(isEnglish ? 'Credit (days)' : 'เครดิต (วัน)', auto: true, editable: _canEditBilling),
+                    onChanged: (_) => setState(_recalcDueDate),
+                  ),
+                  _datePickField(
+                    label: isEnglish ? 'Due Date' : 'วันที่ครบกำหนด',
+                    text: _dueDate != null ? _dateFmt.format(_dueDate!) : '-',
+                    auto: true,
+                    onTap: !_canEditBilling
+                        ? null
+                        : () async {
+                            final picked = await showDatePicker(context: context, initialDate: _dueDate ?? _docDate, firstDate: DateTime(2000), lastDate: DateTime(2100));
+                            if (picked != null) setState(() => _dueDate = picked);
+                          },
+                    suffixIcon: _canEditBilling ? const Icon(Icons.calendar_today, size: 16) : null,
+                  ),
+                ], [2, 2, 3]),
+              if (hasCurrency)
+                _hRow([
+                  DropdownButtonFormField<Currency>(
+                    value: _currency,
+                    isExpanded: true,
+                    decoration: _hDec(isEnglish ? 'Currency' : 'สกุลเงิน', auto: true, editable: !_isReadOnly),
+                    items: _currencies
+                        .map((c) => DropdownMenuItem(value: c, child: Text('${c.currencyCode} - ${_currencyLabel(c)}', overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: _isReadOnly
+                        ? null
+                        : (v) {
+                            final changed = v?.currencyCode != _currency?.currencyCode;
+                            setState(() {
+                              _currency = v;
+                              _exchangeRate = v?.baseRate ?? 1;
+                            });
+                            if (changed) _loadAdvances(); // ใบมัดจำที่หักได้ต้องสกุลเงินเดียวกับเอกสาร
+                            if (changed) _refreshListPrices(); // ตารางราคาสกุลเงินเดียวกับเอกสาร
+                          },
+                  ),
+                  TextFormField(
+                    key: ValueKey('im_rate_${widget.resetKey}_${_id}_${_currency?.currencyCode}'),
+                    initialValue: _exchangeRate.toStringAsFixed(6),
+                    // '32' สถานะ Delivered: สกุลเงินคงเดิม แก้ได้แค่อัตรา ณ วันออกใบแจ้งหนี้
+                    enabled: rateEditable,
+                    decoration: _hDec(isEnglish ? 'Exchange Rate' : 'อัตราแลกเปลี่ยน', auto: true, editable: rateEditable),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (v) => setState(() => _exchangeRate = double.tryParse(v) ?? 1),
+                  ),
+                ], [3, 2]),
+            ]);
+      // ④ เพิ่มเติม: คำอธิบาย + พนักงานขาย (แก้ใน dialog) + มิติ
+      final descW = TextField(
         controller: _descCtrl,
         readOnly: _isReadOnly,
-        decoration: InputDecoration(labelText: isEnglish ? 'Description' : 'คำอธิบาย', border: const OutlineInputBorder(), isDense: true),
-      ),
-      // พนักงานขาย (รายชื่ออย่างเดียว — สัดส่วนอยู่ที่ข้อมูลลูกค้า)
-      if (_isArCustomerMode) ...[
-        const SizedBox(height: 6),
-        SalespersonSplitEditor(
-          items: _salespersons,
-          isEnglish: isEnglish,
-          readOnly: !_canEditBilling,
-          onChanged: (list) => setState(() => _salespersons = list),
-        ),
-        // วงเงินเครดิตของลูกค้า + ขอ/อนุมัติเกินวงเงิน
-        if (_customerId != null && (_status == 'Draft' || _credit.status != null))
-          CreditLimitPanel(
-            service: _creditService,
-            customerId: _customerId,
-            docId: _id,
-            docNo: _docNo,
-            amount: _creditAmount,
-            credit: _credit,
-            isDraft: _status == 'Draft' && !widget.viewOnly,
-            onChanged: () async {
-              if (_id == null) return;
-              await _loadExisting(_id!);
-              if (mounted) setState(() {});
-            },
+        decoration: _hDec(isEnglish ? 'Description' : 'คำอธิบาย', editable: !_isReadOnly),
+      );
+      final salesW = !_isArCustomerMode
+          ? null
+          : InkWell(
+              onTap: _canEditBilling ? () => _editSalespersons(isEnglish) : null,
+              child: InputDecorator(
+                decoration: _hDec(isEnglish ? 'Salespersons' : 'พนักงานขาย',
+                    auto: true, editable: _canEditBilling, suffixIcon: _canEditBilling ? const Icon(Icons.edit, size: 16, color: Colors.teal) : null),
+                child: Text(_salespersons.isEmpty ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —') : _salespersonNames(isEnglish),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: _salespersons.isEmpty ? Colors.grey.shade600 : null)),
+              ),
+            );
+      final dimWs = <Widget>[
+        for (final t in _dimTypes)
+          GlDimensionPickerField(
+            dimType: t,
+            values: _dimValues[t.typeCode] ?? const [],
+            selected: () {
+              final id = _dimSelections[t.slotNo];
+              for (final v in _dimValues[t.typeCode] ?? const <GlDimensionValue>[]) {
+                if (v.id == id) return v;
+              }
+              return null;
+            }(),
+            readOnly: _isReadOnly || _refDims != null,
+            onSelected: (v) => setState(() => _dimSelections[t.slotNo] = v?.id),
           ),
-      ],
-      if (_dimTypes.isNotEmpty) ...[
-        const SizedBox(height: 12),
-        Row(children: [
-          for (final t in _dimTypes) ...[
-            Expanded(child: GlDimensionPickerField(
-              dimType: t,
-              values: _dimValues[t.typeCode] ?? const [],
-              selected: () {
-                final id = _dimSelections[t.slotNo];
-                for (final v in _dimValues[t.typeCode] ?? const <GlDimensionValue>[]) {
-                  if (v.id == id) return v;
-                }
-                return null;
-              }(),
-              readOnly: _isReadOnly || _refDims != null,
-              onSelected: (v) => setState(() => _dimSelections[t.slotNo] = v?.id),
-            )),
-            const SizedBox(width: 8),
-          ],
-          if (_refDims != null)
-            Expanded(child: Text(
-                isEnglish ? 'Dimensions follow the referenced order' : 'มิติตามเอกสารต้นทางที่อ้างอิง (แก้ไขไม่ได้)',
-                style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic))),
+      ];
+      final moreFirst = <Widget>[descW, if (salesW != null) salesW];
+      final moreFlex = <int>[if (salesW != null) 5 else 6, if (salesW != null) 4];
+      final g4 = _hGroup(4, isEnglish ? 'More' : 'เพิ่มเติม', _gMore, [
+        if (dimWs.length <= 2)
+          _hRow([...moreFirst, ...dimWs], [...moreFlex, for (final _ in dimWs) 3])
+        else ...[
+          _hRow(moreFirst, moreFlex),
+          _hRow(dimWs),
+        ],
+        if (_refDims != null)
+          Text(isEnglish ? 'Dimensions follow the referenced order' : 'มิติตามเอกสารต้นทางที่อ้างอิง (แก้ไขไม่ได้)',
+              style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic)),
+      ], inline: true);
+
+      final top = <Widget>[g1, if (g2 != null) g2, if (g3 != null) g3];
+      final topFlex = <int>[30, if (g2 != null) (g3 != null ? 46 : 70), if (g3 != null) (g2 != null ? 34 : 70)];
+      body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        LayoutBuilder(builder: (ctx, c) {
+          if (top.length == 1) return top.first;
+          if (c.maxWidth < 1000) {
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              for (var i = 0; i < top.length; i++) ...[if (i > 0) const SizedBox(height: 10), top[i]],
+            ]);
+          }
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (var i = 0; i < top.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                Expanded(flex: topFlex[i], child: top[i]),
+              ],
+            ]);
+        }),
+        const SizedBox(height: 10),
+        g4,
+      ]);
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          titleRow,
+          const SizedBox(height: 10),
+          body,
         ]),
-      ],
-    ]);
+      ),
+    );
+  }
+
+  // แถบสรุปตอนย่อการ์ด — จุดสีบอกกลุ่มที่มา
+  Widget _headerSummary(bool isEnglish) {
+    Widget item(Color c, String label, String value) => Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(4))),
+          const SizedBox(width: 6),
+          Text('$label ', style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade700)),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Text(value, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+          ),
+        ]);
+    final party = _isApVendorMode ? _vendorLabel : _isArCustomerMode ? _customerLabel : null;
+    final refNo = _refNoCtrl.text.trim();
+    final terms = <String>[
+      if ((_creditMonths ?? 0) > 0) isEnglish ? '$_creditMonths mo' : '$_creditMonths เดือน',
+      if ((_creditDays ?? 0) > 0) isEnglish ? '$_creditDays d' : '$_creditDays วัน',
+    ].join(' ');
+    final desc = _descCtrl.text.trim();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: const Color(0xFFF6F8FA), borderRadius: BorderRadius.circular(4)),
+      child: Wrap(spacing: 22, runSpacing: 6, children: [
+        item(_gDoc, isEnglish ? 'Date' : 'วันที่', _dateFmt.format(_docDate)),
+        if (_warehouseId != null) item(_gDoc, _isTransferMode ? (isEnglish ? 'From' : 'จากคลัง') : (isEnglish ? 'Warehouse' : 'คลัง'), _warehouseLabel ?? ''),
+        if (_isTransferMode && _toWarehouseId != null) item(_gDoc, isEnglish ? 'To' : 'ไปคลัง', _toWarehouseLabel ?? ''),
+        if (party != null && party.isNotEmpty) item(_gParty, _isApVendorMode ? (isEnglish ? 'Vendor' : 'ผู้ขาย') : (isEnglish ? 'Customer' : 'ลูกค้า'), party),
+        if (_isReturnSourceDocMode && _refImTransactionId != null) item(_gParty, isEnglish ? 'Source' : 'ต้นฉบับ', _refImTransactionLabel ?? ''),
+        if (_isPoReceiveMode && (_refPoDocNoLabel ?? '').isNotEmpty) item(_gParty, 'PO', _refPoDocNoLabel!),
+        if (_isDeliverMode && (_refSoDocNoLabel ?? '').isNotEmpty) item(_gParty, 'SO', _refSoDocNoLabel!),
+        if (refNo.isNotEmpty) item(_gParty, isEnglish ? 'Ref' : 'อ้างอิง', refNo),
+        if (_showCreditTerm && (terms.isNotEmpty || _dueDate != null))
+          item(_gFin, isEnglish ? 'Credit' : 'เครดิต',
+              [if (terms.isNotEmpty) terms, if (_dueDate != null) '${isEnglish ? 'due' : 'ครบ'} ${_dateFmt.format(_dueDate!)}'].join(' · ')),
+        if ((_isApVendorMode || _isArCustomerMode) && _currency != null)
+          item(_gFin, isEnglish ? 'Currency' : 'สกุลเงิน',
+              _isForeignCurrency ? '${_currency!.currencyCode} @ ${_exchangeRate.toStringAsFixed(4)}' : _currency!.currencyCode),
+        if (_isArCustomerMode && _salespersons.isNotEmpty) item(_gMore, isEnglish ? 'Salespersons' : 'พนักงานขาย', _salespersonNames(isEnglish)),
+        if (desc.isNotEmpty) item(_gMore, isEnglish ? 'Description' : 'คำอธิบาย', desc),
+      ]),
+    );
   }
 
   // ป้ายสถานะ + ใบตั้งหนี้/ใบแจ้งหนี้ที่สร้างแล้ว — แสดงต่อท้ายหัวข้อ "ข้อมูลเอกสาร"

@@ -88,6 +88,8 @@ class CreditLimitPanel extends StatefulWidget {
   final DocCreditState credit;
   final bool isDraft;
   final VoidCallback onChanged; // หลังขอ/ถอน/อนุมัติ/ปฏิเสธ — ให้หน้าจอโหลดเอกสารใหม่
+  // true = อยู่ในวงเงินและไม่มีคำขอ แสดงเป็นแถบสั้นบรรทัดเดียว (หัวการ์ด IM) — เกินวงเงิน/มีคำขอ แสดงแผงเต็มเหมือนเดิม
+  final bool compact;
 
   const CreditLimitPanel({
     super.key,
@@ -99,6 +101,7 @@ class CreditLimitPanel extends StatefulWidget {
     required this.credit,
     required this.isDraft,
     required this.onChanged,
+    this.compact = false,
   });
 
   @override
@@ -225,6 +228,30 @@ class _CreditLimitPanelState extends State<CreditLimitPanel> {
     // ถึงคิวผู้ใช้นี้ (ตามลำดับ / คนใดคนหนึ่ง)
     final canAct = credit.isPending && canApproveMenu && isMyApprovalTurn(steps, userId, credit.approvalMode);
     final color = !exceeded ? Colors.green[700]! : covered ? Colors.blue[700]! : Colors.red[700]!;
+    if (widget.compact && !exceeded && credit.status == null && steps.isEmpty) {
+      return Tooltip(
+        message: isEnglish
+            ? 'Credit limit ${_fmt.format(info.creditLimit)} · outstanding ${_fmt.format(info.outstanding)} · this document ${_fmt.format(widget.amount)}'
+            : 'วงเงิน ${_fmt.format(info.creditLimit)} · ยอดคงค้าง ${_fmt.format(info.outstanding)} · เอกสารนี้ ${_fmt.format(widget.amount)}',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(13)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.check_circle_outline, size: 15, color: color),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                isEnglish
+                    ? 'Limit ${_fmt.format(info.creditLimit)} · outstanding ${_fmt.format(info.outstanding)} · remaining after ${_fmt.format(info.creditLimit - after)}'
+                    : 'วงเงิน ${_fmt.format(info.creditLimit)} · คงค้าง ${_fmt.format(info.outstanding)} · คงเหลือหลังเอกสารนี้ ${_fmt.format(info.creditLimit - after)}',
+                style: TextStyle(fontSize: 12, color: color),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ]),
+        ),
+      );
+    }
 
     Widget cell(String label, double v, {Color? c, bool bold = false}) => Padding(
           padding: const EdgeInsets.only(right: 20),
