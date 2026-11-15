@@ -25,6 +25,7 @@ class Company {
   String? website;
   String? primaryContactPerson;
   bool isActive;
+  String uiFont; // ฟอนต์หลักของระบบ: 'tahoma' | 'IBMPlexSansThai'
 
   Company({
     this.id,
@@ -50,6 +51,7 @@ class Company {
     this.website,
     this.primaryContactPerson,
     this.isActive = true, // Default to true
+    this.uiFont = 'tahoma',
   });
 
   factory Company.fromJson(Map<String, dynamic> json) {
@@ -77,6 +79,7 @@ class Company {
       website: json['website'] as String?,
       primaryContactPerson: json['primary_contact_person'] as String?,
       isActive: json['is_active'] as bool? ?? true,
+      uiFont: (json['ui_font'] as String?) ?? 'tahoma',
     );
   }
 
@@ -109,6 +112,7 @@ class Company {
       'website': website ?? '',
       'primary_contact_person': primaryContactPerson ?? '',
       'is_active': isActive.toString(), // แปลง bool เป็น String
+      'ui_font': uiFont,
     };
   }
 }

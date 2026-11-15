@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../models/sa_company.dart';
 import '../services/sa_company_service.dart';
 import '../services/sa_language_provider.dart';
+import '../services/sa_font_provider.dart';
 import '../utils/sa_platform_file_picker.dart';
 import '../../cd/models/cd_zipcode.dart';
 import '../../cd/widgets/cd_zipcode_list_widget.dart';
@@ -34,6 +35,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
   PickedPlatformFile? _pickedLogoFile;
   bool _isLoading = true;
   bool _isSaving = false;
+  String _uiFont = FontProvider.defaultFont;
 
   final TextEditingController _thaiNameController = TextEditingController();
   final TextEditingController _englishNameController = TextEditingController();
@@ -119,6 +121,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
           _emailController.text                   = _company!.email ?? '';
           _websiteController.text                 = _company!.website ?? '';
           _primaryContactPersonController.text    = _company!.primaryContactPerson ?? '';
+          _uiFont = FontProvider.normalize(_company!.uiFont);
         }
       });
     } catch (e) {
@@ -190,6 +193,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
         email:                  _emailController.text.isEmpty ? null : _emailController.text,
         website:                _websiteController.text.isEmpty ? null : _websiteController.text,
         primaryContactPerson:   _primaryContactPersonController.text.isEmpty ? null : _primaryContactPersonController.text,
+        uiFont:                 _uiFont,
       );
 
       if (_company == null || _company!.id == null) {
@@ -203,6 +207,8 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
             isEnglish ? 'Company updated successfully' : 'อัปเดตข้อมูลบริษัทสำเร็จ',
             Colors.green);
       }
+      // ใช้ฟอนต์ใหม่ทันทีในเครื่องนี้ (เครื่องอื่นเปลี่ยนตามเมื่อเปิดแอป/login ใหม่)
+      await FontProvider().apply(_uiFont);
       await _fetchCompanyInfo();
     } catch (e) {
       _showSnackBar(
@@ -211,6 +217,32 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
     } finally {
       setState(() => _isSaving = false);
     }
+  }
+
+  // ฟอนต์หลักของระบบ — แต่ละตัวเลือกแสดงตัวอย่างด้วยฟอนต์นั้นเอง
+  Widget _buildFontPicker(bool isEnglish) {
+    const sample = 'ข้อมูลเอกสาร 1,234,567.89  ABC abc';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final e in FontProvider.fonts.entries)
+          RadioListTile<String>(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: e.key,
+            groupValue: _uiFont,
+            onChanged: (v) => setState(() => _uiFont = v ?? FontProvider.defaultFont),
+            title: Text(e.value, style: TextStyle(fontFamily: e.key, fontWeight: FontWeight.w600)),
+            subtitle: Text(sample, style: TextStyle(fontFamily: e.key, fontSize: 14, color: Colors.black87)),
+          ),
+        Text(
+          isEnglish
+              ? 'Applies to every screen for all users (PDF reports keep their own font). Other users see the change after reopening the app or logging in again.'
+              : 'ใช้กับทุกหน้าจอของผู้ใช้ทุกคน (รายงาน PDF ใช้ฟอนต์ของตัวเองเหมือนเดิม) ผู้ใช้อื่นจะเห็นฟอนต์ใหม่เมื่อเปิดแอปหรือ login ใหม่',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+        ),
+      ],
+    );
   }
 
   void _showZipcodeSearchCard(bool isEnglish) {
@@ -651,6 +683,13 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen>
                         prefixIcon: const Icon(Icons.qr_code),
                       ),
                     ),
+                    const SizedBox(height: 20),
+
+                    // ── Display ───────────────────────────────────────────
+                    Text(isEnglish ? 'Display' : 'การแสดงผล',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Divider(),
+                    _buildFontPicker(isEnglish),
                     const SizedBox(height: 30),
 
                     // ── Buttons ───────────────────────────────────────────

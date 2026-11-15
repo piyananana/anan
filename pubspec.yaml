@@ -117,6 +117,16 @@ flutter:
           - asset: assets/fonts/tahoma.ttf
           - asset: assets/fonts/tahomabd.ttf
             weight: 900
+      # ฟอนต์หลักของระบบที่เลือกได้ในหน้าข้อมูลบริษัท (SIL OFL — ดู assets/fonts/IBMPlexSansThai-OFL.txt)
+      - family: IBMPlexSansThai
+        fonts:
+          - asset: assets/fonts/IBMPlexSansThai-Regular.ttf
+          - asset: assets/fonts/IBMPlexSansThai-Medium.ttf
+            weight: 500
+          - asset: assets/fonts/IBMPlexSansThai-SemiBold.ttf
+            weight: 600
+          - asset: assets/fonts/IBMPlexSansThai-Bold.ttf
+            weight: 700
       - family: THSarabun
         fonts:
           - asset: assets/fonts/THSarabun.ttf

@@ -11,6 +11,7 @@ import '../models/sa_menu.dart';
 import '../models/sa_user.dart';
 import '../models/sa_user_branch.dart';
 import 'sa_company_service.dart';
+import 'sa_font_provider.dart';
 
 class AuthService with ChangeNotifier {
   static const String baseUrl = AppConfig.apiSa;
@@ -124,6 +125,14 @@ class AuthService with ChangeNotifier {
         if (_allowedBranches.isEmpty) {
           await _loadBranchesFromCache(prefs);
         }
+        // เปิดแอปใหม่ (มี token เดิม) — โหลดข้อมูลบริษัทเบื้องหลัง เพื่อใช้ฟอนต์ล่าสุดที่บริษัทตั้งไว้
+        if (_company == null) {
+          CompanyService().fetchCompany().then((c) {
+            if (c == null) return;
+            _company ??= c;
+            FontProvider().apply(c.uiFont);
+          }).catchError((_) {});
+        }
         return true;
       } else {
         await prefs.remove(_authTokenKey);
@@ -165,6 +174,7 @@ class AuthService with ChangeNotifier {
       final CompanyService companyService = CompanyService();
       final company = await companyService.fetchCompany();
       _company = company;
+      await FontProvider().apply(company?.uiFont);
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_authTokenKey, token);
@@ -240,6 +250,7 @@ class AuthService with ChangeNotifier {
       try {
         final company = await CompanyService().fetchCompany();
         _company = company;
+        await FontProvider().apply(company?.uiFont);
       } catch (_) {}
 
       // โหลด branches

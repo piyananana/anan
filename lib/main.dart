@@ -6,6 +6,7 @@ import 'sa/screens/sa_login_screen.dart';
 
 import 'sa/services/sa_auth_service.dart';
 import 'sa/services/sa_language_provider.dart';
+import 'sa/services/sa_font_provider.dart';
 import 'sa/services/sa_backup_service.dart';
 import 'sa/services/sa_company_service.dart';
 import 'sa/services/sa_group_menu_service.dart';
@@ -59,6 +60,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider<AuthService>(create: (_) => AuthService()),
         ChangeNotifierProvider<LanguageProvider>(create: (_) => LanguageProvider()),
+        ChangeNotifierProvider<FontProvider>.value(value: FontProvider()),
         Provider<BackupService>(create: (_) => BackupService()),
         Provider<CompanyService>(create: (_) => CompanyService()),
         Provider<GroupMenuService>(create: (_) => GroupMenuService()),
@@ -98,35 +100,46 @@ class MyApp extends StatelessWidget {
         Provider<CmPaymentMethodService>(create: (_) => CmPaymentMethodService()),
         // Add other providers if needed
       ],
-      child: MaterialApp(
-        title: 'ANAN System',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          fontFamily: 'tahoma',
-        ),
-        home: Consumer<AuthService>(
-          builder: (context, authService, child) {
-            // return FutureBuilder<String>(
-            return FutureBuilder<bool>(
-              future:
-                  Provider.of<AuthService>(context, listen: false).isLoggedIn(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Scaffold(
-                    body: Center(child: CircularProgressIndicator()),
-                  );
-                } else if (snapshot.hasData && snapshot.data == true) {
-                  // มี Token อยู่แล้ว, แสดง HomeScreen
-                  return const HomeScreen();
-                } else {
-                  // ไม่มี Token, แสดง LoginScreen
-                  return const LoginScreen();
-                }
-              },
-            );
-          },
+      // ฟอนต์หลักมาจากข้อมูลบริษัท (FontProvider) — เปลี่ยนแล้วทั้งแอปเปลี่ยนตามทันที
+      child: Consumer<FontProvider>(
+        builder: (context, font, _) => MaterialApp(
+          title: 'ANAN System',
+          theme: ThemeData(
+            primarySwatch: Colors.blue,
+            fontFamily: font.fontFamily,
+          ),
+          // const — เปลี่ยนฟอนต์ (rebuild MaterialApp) ต้องไม่สร้าง FutureBuilder ใหม่ ไม่งั้น HomeScreen/แท็บที่เปิดอยู่จะหาย
+          home: const _AuthGate(),
         ),
       ),
+    );
+  }
+}
+
+class _AuthGate extends StatelessWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthService>(
+      builder: (context, authService, child) {
+        return FutureBuilder<bool>(
+          future: Provider.of<AuthService>(context, listen: false).isLoggedIn(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            } else if (snapshot.hasData && snapshot.data == true) {
+              // มี Token อยู่แล้ว, แสดง HomeScreen
+              return const HomeScreen();
+            } else {
+              // ไม่มี Token, แสดง LoginScreen
+              return const LoginScreen();
+            }
+          },
+        );
+      },
     );
   }
 }
