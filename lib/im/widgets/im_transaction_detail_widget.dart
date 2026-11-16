@@ -2478,16 +2478,23 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
-    return Column(
+    // การ์ดข้อมูลเอกสารล็อคอยู่ด้านบน (ไม่เลื่อนตามเนื้อหา) — สูงตามสภาพย่อ/ขยาย
+    // จอเตี้ย: จำกัดไม่เกิน 60% ของพื้นที่ แล้วเลื่อนภายในการ์ดแทน
+    return LayoutBuilder(builder: (context, box) => Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: box.maxHeight.isFinite ? box.maxHeight * 0.6 : double.infinity),
+            child: SingleChildScrollView(child: _buildHeaderCard(isEnglish)),
+          ),
+        ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeaderCard(isEnglish),
-                const SizedBox(height: 12),
                 _buildDetailCard(isEnglish),
                 const SizedBox(height: 12),
                 _buildTotalsCard(isEnglish),
@@ -2544,7 +2551,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         ),
         _buildActionBar(isEnglish),
       ],
-    );
+    ));
   }
 
   // ── การ์ดมาตรฐาน: หัวการ์ด (ชื่อ · ชิป · สรุปด้านขวา · ปุ่ม · ย่อ/ขยาย) — แบบเดียวกับการ์ดข้อมูลเอกสาร ──
@@ -3445,7 +3452,6 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _LCol('price', (isEnglish ? 'Unit Price' : 'ราคาขาย/หน่วย') + (_isForeignCurrency ? ' ($cur)' : ''), 100, 3, right: true),
       if (_isVatMode) const _LCol('vat', 'VAT', 100, 3, required: true),
       if (_showDiscount) _LCol('disc', isEnglish ? 'Disc. %' : 'ส่วนลด %', _salesDiscountMode ? 78 : 68, 3),
-      if (_salesDiscountMode) _LCol('discAmt', isEnglish ? 'Disc. amt' : 'ส่วนลด (เงิน)', 88, 3, right: true),
       if (_salesDiscountMode)
         _LCol('net', (isEnglish ? 'Net price/unit' : 'ราคาสุทธิ/หน่วย') + (_inclVat ? (isEnglish ? ' incl. VAT' : ' รวม VAT') : ''), 104, 3, right: true),
       if (_salesDiscountMode || _showDiscount)
@@ -3816,16 +3822,6 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
               onChanged: (_) => setState(() {}));
         }
         return _cField(line.discPctCtrl, ro: !_canEditBilling || line.isFree, onChanged: (_) => setState(() {}));
-      case 'discAmt':
-        if (_netEntered(line)) {
-          return _cBox(_fmtMoney.format(_lineDiscOf(line)),
-              fill: _hRo,
-              tip: isEnglish
-                  ? 'Calculated from the net price/unit entered (clear that field to type the amount)'
-                  : 'คำนวณจากราคาสุทธิ/หน่วยที่กรอก (ล้างช่องราคาสุทธิเพื่อกรอกส่วนลดเอง)');
-        }
-        return _cField(line.lineDiscAmtCtrl,
-            ro: !_canEditBilling || line.isFree, err: _lineDiscNegative(line), onChanged: (_) => setState(() {}));
       case 'net':
         final ro = !_canEditBilling || line.isFree;
         return Tooltip(
@@ -3920,17 +3916,6 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
     return _hGroup(4, isEnglish ? 'More' : 'เพิ่มเติม', _gMore, [
       Wrap(spacing: 8, runSpacing: 8, children: [
-        if (sd != null) ...[
-          ro(isEnglish ? 'Bill disc. share' : 'ส่วนลดท้ายบิล (ปันส่วน)', _fmtMoney.format(sd[line]?.bill ?? 0),
-              tip: isEnglish ? 'Share of the bill discount % and bill cash discount' : 'ส่วนลดท้ายบิล % และส่วนลดเงินสดท้ายบิล ที่ปันส่วนมาที่รายการนี้'),
-          ro(isEnglish ? 'Net discount' : 'ส่วนลดสุทธิ', _fmtMoney.format(sd[line]?.total ?? 0),
-              tip: isEnglish ? 'Line discount + share of bill discounts' : 'ส่วนลดของรายการ + ส่วนลดท้ายบิลที่ปันส่วนมา'),
-          ro((isEnglish ? 'Net unit price' : 'ราคา/หน่วยสุทธิ') + (_inclVat ? (isEnglish ? ' (incl. VAT)' : ' (รวม VAT)') : ''),
-              _fmt4.format(_salesNetUnit(line, sd[line])),
-              width: 170,
-              tip: isEnglish ? 'Unit price after all discounts (line + bill)' : 'ราคาขายต่อหน่วยหลังหักส่วนลดทั้งหมด (ของรายการ + ท้ายบิล)'),
-          if (_showDiscount) ro(isEnglish ? 'Amount before VAT' : 'ยอดก่อน VAT', _fmtMoney.format(_amt(line).net)),
-        ],
         SizedBox(
           width: 380,
           child: TextField(
@@ -3949,6 +3934,21 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             ),
           ),
         ),
+        if (sd != null) ...[
+          ro(isEnglish ? 'Bill disc. share' : 'ส่วนลดท้ายบิล (ปันส่วน)', _fmtMoney.format(sd[line]?.bill ?? 0),
+              tip: isEnglish ? 'Share of the bill discount % and bill cash discount' : 'ส่วนลดท้ายบิล % และส่วนลดเงินสดท้ายบิล ที่ปันส่วนมาที่รายการนี้'),
+          ro(isEnglish ? 'Disc. amt' : 'ส่วนลด (เงิน)', _fmtMoney.format(_lineDiscOf(line)),
+              tip: isEnglish
+                  ? 'Calculated from the net price/unit entered (read-only)'
+                  : 'คำนวณจากราคาสุทธิ/หน่วยที่กรอก (แก้ไขไม่ได้)'),
+          ro(isEnglish ? 'Net discount' : 'ส่วนลดสุทธิ', _fmtMoney.format(sd[line]?.total ?? 0),
+              tip: isEnglish ? 'Line discount + share of bill discounts' : 'ส่วนลดของรายการ + ส่วนลดท้ายบิลที่ปันส่วนมา'),
+          ro((isEnglish ? 'Net unit price' : 'ราคา/หน่วยสุทธิ') + (_inclVat ? (isEnglish ? ' (incl. VAT)' : ' (รวม VAT)') : ''),
+              _fmt4.format(_salesNetUnit(line, sd[line])),
+              width: 170,
+              tip: isEnglish ? 'Unit price after all discounts (line + bill)' : 'ราคาขายต่อหน่วยหลังหักส่วนลดทั้งหมด (ของรายการ + ท้ายบิล)'),
+          if (_showDiscount) ro(isEnglish ? 'Amount before VAT' : 'ยอดก่อน VAT', _fmtMoney.format(_amt(line).net)),
+        ],
       ]),
     ]);
   }
