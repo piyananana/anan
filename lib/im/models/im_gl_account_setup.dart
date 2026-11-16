@@ -225,7 +225,10 @@ class ImItemGlAccts {
 class ImGlAccounts {
   final String mode; // โหมดเริ่มต้นของบริษัท — โหมดจริงต่อสินค้าอยู่ที่ items[id].mode
   final Map<int, ImItemGlAccts> items;
-  const ImGlAccounts({required this.mode, required this.items});
+  final ImGlAcct? arAccount; // บัญชีลูกหนี้: ลูกค้า > กลุ่มลูกค้า > ประเภทเอกสาร AR ที่สร้าง
+  final ImGlAcct? receiptWht; // ขายเงินสด: ภาษีถูกหัก ณ ที่จ่าย ของประเภทเอกสารรับชำระ
+  final List<ImGlAcct?> receiptPayments; // ขายเงินสด: บัญชีของแต่ละวิธีรับเงิน (ลำดับเดียวกับที่ส่งไป)
+  const ImGlAccounts({required this.mode, required this.items, this.arAccount, this.receiptWht, this.receiptPayments = const []});
 
   factory ImGlAccounts.fromJson(Map<String, dynamic> j) => ImGlAccounts(
         mode: j['mode'] ?? 'PERPETUAL',
@@ -233,5 +236,10 @@ class ImGlAccounts {
           for (final e in ((j['items'] ?? {}) as Map<String, dynamic>).entries)
             int.parse(e.key): ImItemGlAccts.fromJson(e.value as Map<String, dynamic>),
         },
+        arAccount: ImGlAcct.fromJson(j['ar_account']),
+        receiptWht: ImGlAcct.fromJson((j['receipt'] as Map<String, dynamic>?)?['wht']),
+        receiptPayments: [
+          for (final p in ((j['receipt'] as Map<String, dynamic>?)?['payments'] as List? ?? const [])) ImGlAcct.fromJson(p),
+        ],
       );
 }

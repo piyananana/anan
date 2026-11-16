@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
+import '../../sa/models/sa_user.dart';
+import '../../sa/services/sa_user_service.dart';
 import '../models/cd_salesperson.dart';
 import '../models/cd_sales_territory.dart';
 import '../models/cd_branch.dart';
@@ -49,6 +51,9 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
   String _salespersonType = 'EMPLOYEE';
   int? _branchId;
   String? _branchNameThai;
+  // ผู้ใช้ระบบที่ผูกกับพนักงานขาย — ใช้เป็นพนักงานขายเริ่มต้นของเอกสารขายที่ผู้ใช้นั้นสร้าง
+  int? _userId;
+  String? _userName;
   DateTime? _effectiveDateFrom;
   DateTime? _effectiveDateTo;
   bool _isActive = true;
@@ -69,6 +74,8 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
     _taxIdCtrl = TextEditingController(text: d?.taxId ?? '');
     _branchId = d?.branchId;
     _branchNameThai = d?.branchNameThai;
+    _userId = d?.userId;
+    _userName = d?.userNameRef;
     _phoneCtrl = TextEditingController(text: d?.phone ?? '');
     _emailCtrl = TextEditingController(text: d?.email ?? '');
     _addressCtrl = TextEditingController(text: d?.address ?? '');
@@ -93,6 +100,8 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
       _taxIdCtrl.text = widget.selected?.taxId ?? '';
       _branchId = widget.selected?.branchId;
       _branchNameThai = widget.selected?.branchNameThai;
+      _userId = widget.selected?.userId;
+      _userName = widget.selected?.userNameRef;
       _phoneCtrl.text = widget.selected?.phone ?? '';
       _emailCtrl.text = widget.selected?.email ?? '';
       _addressCtrl.text = widget.selected?.address ?? '';
@@ -201,6 +210,82 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
     );
   }
 
+  Future<void> _pickUser(bool isEnglish) async {
+    final List<User> all;
+    try {
+      all = await UserService().fetchUsers();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Failed to load users: $e' : 'โหลดข้อมูลผู้ใช้ล้มเหลว: $e')));
+      }
+      return;
+    }
+    final choices = all.where((u) => u.status.toLowerCase() == 'active').toList()
+      ..sort((a, b) => a.userName.compareTo(b.userName));
+    if (!mounted) return;
+    String q = '';
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setD) {
+        final ql = q.toLowerCase();
+        final list = choices
+            .where((u) => ql.isEmpty ||
+                u.userName.toLowerCase().contains(ql) ||
+                '${u.firstName ?? ''} ${u.lastName ?? ''}'.toLowerCase().contains(ql))
+            .toList();
+        return AlertDialog(
+          title: Text(isEnglish ? 'Select User' : 'เลือกผู้ใช้', style: const TextStyle(fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: 500,
+            height: 500,
+            child: Column(children: [
+              TextField(
+                autofocus: true,
+                decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: isEnglish ? 'Search user name' : 'ค้นหาชื่อผู้ใช้',
+                    isDense: true,
+                    border: const OutlineInputBorder()),
+                onChanged: (v) => setD(() => q = v.trim()),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: list.isEmpty
+                    ? Center(child: Text(isEnglish ? 'No users found' : 'ไม่พบผู้ใช้'))
+                    : ListView.builder(
+                        itemCount: list.length,
+                        itemBuilder: (_, i) {
+                          final u = list[i];
+                          final full = '${u.firstName ?? ''} ${u.lastName ?? ''}'.trim();
+                          return ListTile(
+                            dense: true,
+                            selected: u.id == _userId,
+                            title: Text(u.userName),
+                            subtitle: full.isEmpty ? null : Text(full),
+                            onTap: () {
+                              setState(() {
+                                _userId = u.id;
+                                _userName = u.userName;
+                              });
+                              Navigator.of(ctx).pop();
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(isEnglish ? 'Cancel' : 'ยกเลิก', style: const TextStyle(color: Colors.red))),
+          ],
+        );
+      }),
+    );
+  }
+
   Future<void> _addTerritory(bool isEnglish) async {
     final List<SalesTerritory> all;
     try {
@@ -300,6 +385,7 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
         salespersonType: _salespersonType,
         taxId: _taxIdCtrl.text.trim().isEmpty ? null : _taxIdCtrl.text.trim(),
         branchId: _branchId,
+        userId: _userId,
         phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
         email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
         address: _addressCtrl.text.trim().isEmpty
@@ -435,6 +521,38 @@ class SalespersonDetailWidgetState extends State<SalespersonDetailWidget> {
                     onChanged: ro
                         ? null
                         : (v) => setState(() => _salespersonType = v!),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: InkWell(
+                    onTap: ro ? null : () => _pickUser(isEnglish),
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: isEnglish ? 'System User' : 'ผู้ใช้',
+                        helperText: isEnglish
+                            ? 'Default salesperson on sales documents this user creates'
+                            : 'ใช้เป็นพนักงานขายเริ่มต้นในเอกสารขายที่ผู้ใช้นี้สร้าง',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_userId != null && !ro)
+                              IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () => setState(() {
+                                  _userId = null;
+                                  _userName = null;
+                                }),
+                              ),
+                            const Icon(Icons.search),
+                          ],
+                        ),
+                      ),
+                      child: Text(_userId == null
+                          ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
+                          : (_userName ?? '#$_userId')),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),

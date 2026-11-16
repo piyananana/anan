@@ -7,6 +7,7 @@ import '../models/sa_user.dart';
 import '../services/sa_menu_service.dart';
 import '../services/sa_auth_service.dart';
 import '../services/sa_language_provider.dart';
+import '../services/sa_font_provider.dart';
 import '../utils/sa_menu_scope.dart';
 import '../services/sa_inactivity_service.dart';
 import '../services/sa_password_policy_service.dart';
@@ -681,6 +682,36 @@ class HomeScreenState extends State<HomeScreen> {
                         lang.isEnglish ? 'ไทย' : 'ENG',
                         style: const TextStyle(color: Colors.orange, fontSize: 16,),
                       ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // ── Font size ─────────────────────────────────────────────
+              Consumer<FontProvider>(
+                builder: (context, font, _) => PopupMenuButton<double>(
+                  tooltip: lang.isEnglish ? 'Font size' : 'ขนาดตัวอักษร',
+                  initialValue: font.textScale,
+                  onSelected: font.setTextScale,
+                  itemBuilder: (_) => [
+                    for (final s in FontProvider.scales)
+                      CheckedPopupMenuItem<double>(
+                        value: s,
+                        checked: s == font.textScale,
+                        child: Text(
+                          '${s == 0.9 ? (lang.isEnglish ? 'Small' : 'เล็ก') : s == 1.0 ? (lang.isEnglish ? 'Normal' : 'ปกติ') : s == 1.1 ? (lang.isEnglish ? 'Large' : 'ใหญ่') : (lang.isEnglish ? 'Extra large' : 'ใหญ่มาก')} (${(s * 100).round()}%)',
+                        ),
+                      ),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 9),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.orange),
+                      borderRadius: BorderRadius.circular(6.0),
+                    ),
+                    child: Text(
+                      font.textScale == 1.0 ? 'Aa' : 'Aa ${(font.textScale * 100).round()}%',
+                      style: const TextStyle(color: Colors.orange, fontSize: 16),
                     ),
                   ),
                 ),

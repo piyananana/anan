@@ -113,7 +113,9 @@ class ImCashSaleController {
   double get cashTotal => payments.where((p) => p.paymentMethodType == 'CASH').fold(0.0, (t, p) => t + p.amount);
   double get whtTotal => whts.fold(0.0, (t, w) => t + w.whtAmount);
   double get cashReceived => _num(cashReceivedCtrl.text);
+  // เงินทอน = เงินที่รับมา − ยอดรับชำระด้วยเงินสด (วิธีชำระประเภท CASH เท่านั้น ไม่รวมโอน/บัตร/เช็ค)
   double get change => cashReceived > 0 ? cashReceived - cashTotal : 0;
+  bool get receivedWithoutCash => cashReceived > 0 && cashTotal <= 0.005;
 
   void clear() {
     for (final c in [billToNameCtrl, billToAddressCtrl, billToTaxIdCtrl, billToBranchCtrl, cashReceivedCtrl]) {
@@ -188,6 +190,11 @@ class ImCashSaleController {
         return isEnglish ? 'Please select the withholding tax type' : 'กรุณาเลือกประเภทภาษีหัก ณ ที่จ่าย';
       }
     }
+    if (!purchase && receivedWithoutCash) {
+      return isEnglish
+          ? 'Cash received is entered but there is no cash payment method — add a cash line or clear Cash received'
+          : 'กรอกรับเงินมาแล้ว แต่ไม่มีวิธีรับชำระเป็นเงินสด — เพิ่มรายการเงินสด หรือล้างช่องรับเงินมา';
+    }
     if (!purchase && cashReceived > 0 && cashReceived < cashTotal - 0.005) {
       return isEnglish
           ? 'Cash received (${fmt.format(cashReceived)}) is less than the cash payment (${fmt.format(cashTotal)})'
@@ -229,6 +236,8 @@ class ImCashSalePanel extends StatefulWidget {
   final String? customerLabel; // ลูกค้า/ผู้ขายในเอกสาร — ใช้เป็นคำแนะนำของช่องชื่อผู้ซื้อ/ผู้ขาย
   final bool purchase; // ซื้อเงินสด ('14')
   final VoidCallback? onTaxInvoiceKindChanged;
+  // ทุกครั้งที่วิธีรับชำระ/ภาษีหัก ณ ที่จ่าย/ยอดเปลี่ยน — ให้หน้าหลักสร้างตัวอย่างรายการบัญชี (ใบเสร็จ) ใหม่
+  final VoidCallback? onChanged;
 
   const ImCashSalePanel({
     super.key,
@@ -242,6 +251,7 @@ class ImCashSalePanel extends StatefulWidget {
     this.customerLabel,
     this.purchase = false,
     this.onTaxInvoiceKindChanged,
+    this.onChanged,
   });
 
   @override
@@ -249,6 +259,12 @@ class ImCashSalePanel extends StatefulWidget {
 }
 
 class _ImCashSalePanelState extends State<ImCashSalePanel> {
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    widget.onChanged?.call();
+  }
+
   final _fmt = NumberFormat('#,##0.00');
   static final _numInput = [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))];
 
@@ -257,11 +273,20 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
   bool get _en => widget.isEnglish;
   bool get _buy => widget.purchase;
 
-  InputDecoration _deco(String label, {String? hint}) =>
-      InputDecoration(labelText: label, hintText: hint, isDense: true, border: const OutlineInputBorder());
+  // สีช่องตามการ์ดข้อมูลเอกสาร: ขาว = กรอกเอง, ฟ้า = ระบบเติมให้ (แก้ได้), เทา = อ่านอย่างเดียว
+  static const _fillAuto = Color(0xFFE3EEFA);
+  static const _fillRo = Color(0xFFEEF0F2);
+  InputDecoration _deco(String label, {String? hint, bool auto = false, bool ro = false}) => InputDecoration(
+        labelText: label,
+        hintText: hint,
+        isDense: true,
+        border: const OutlineInputBorder(),
+        filled: ro || _ro || auto,
+        fillColor: ro || _ro ? _fillRo : _fillAuto,
+      );
 
   Widget _field(String label, TextEditingController ctrl,
-      {double? width, bool numeric = false, String? hint, int? maxLength, int maxLines = 1}) {
+      {double? width, bool numeric = false, String? hint, int? maxLength, int maxLines = 1, bool auto = false}) {
     final f = TextFormField(
       controller: ctrl,
       readOnly: _ro,
@@ -269,7 +294,7 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
       maxLength: maxLength,
       textAlign: numeric ? TextAlign.right : TextAlign.start,
       inputFormatters: numeric ? _numInput : null,
-      decoration: _deco(label, hint: hint).copyWith(counterText: ''),
+      decoration: _deco(label, hint: hint, auto: auto).copyWith(counterText: ''),
       onChanged: (_) => setState(() {}),
     );
     return width == null ? f : SizedBox(width: width, child: f);
@@ -330,7 +355,7 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
               child: DropdownButtonFormField<String>(
                 value: _c.taxInvoiceKind,
                 isExpanded: true,
-                decoration: _deco(_en ? 'Tax invoice received' : 'เอกสารที่ได้รับจากผู้ขาย'),
+                decoration: _deco(_en ? 'Tax invoice received' : 'เอกสารที่ได้รับจากผู้ขาย', auto: true),
                 items: _taxKinds.map((k) => DropdownMenuItem(value: k, child: Text(_taxKindLabel(k)))).toList(),
                 onChanged: _ro
                     ? null
@@ -355,7 +380,7 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
           const SizedBox(height: 10),
         ],
         Wrap(spacing: 8, runSpacing: 8, children: [
-          _field(partyName, _c.billToNameCtrl, width: 320,
+          _field(partyName, _c.billToNameCtrl, width: 320, auto: _c.billToNameCtrl.text.trim().isEmpty,
               hint: widget.customerLabel != null ? (_en ? 'Blank = ${widget.customerLabel}' : 'ว่าง = ${widget.customerLabel}') : null),
           _field(_en ? 'Tax ID' : 'เลขประจำตัวผู้เสียภาษี', _c.billToTaxIdCtrl, width: 200, maxLength: 13),
           _field(_en ? 'Branch (5 digits)' : 'สาขา (5 หลัก)', _c.billToBranchCtrl, width: 140, maxLength: 5,
@@ -447,22 +472,31 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
         if (!_buy) ...[
         const SizedBox(height: 10),
         Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-          _field('${_en ? 'Cash received' : 'รับเงินมา'} ($cur)', _c.cashReceivedCtrl, width: 180, numeric: true),
-          InputDecorator(
-            decoration: _deco('${_en ? 'Change' : 'เงินทอน'} ($cur)'),
-            child: SizedBox(
-              width: 140,
+          SizedBox(
+            width: 170,
+            child: InputDecorator(
+              decoration: _deco('${_en ? 'Cash portion' : 'ยอดที่รับเป็นเงินสด'} ($cur)', ro: true),
+              child: Text(_fmt.format(_c.cashTotal), textAlign: TextAlign.right),
+            ),
+          ),
+          _field('${_en ? 'Cash received' : 'รับเงินมา'} ($cur)', _c.cashReceivedCtrl, width: 170, numeric: true),
+          SizedBox(
+            width: 170,
+            child: InputDecorator(
+              decoration: _deco('${_en ? 'Change' : 'เงินทอน'} ($cur)', ro: true),
               child: Text(
-                _fmt.format(change),
+                _c.receivedWithoutCash ? '—' : _fmt.format(change),
                 textAlign: TextAlign.right,
                 style: TextStyle(fontWeight: FontWeight.bold, color: change < -0.005 ? Colors.red.shade700 : Colors.green.shade800),
               ),
             ),
           ),
-          Text(
-            '${_en ? 'Cash portion' : 'ยอดที่รับเป็นเงินสด'}: ${_fmt.format(_c.cashTotal)}',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-          ),
+          if (_c.receivedWithoutCash)
+            Text(_en ? 'No cash payment method — change is not calculated' : 'ไม่มีวิธีรับชำระเป็นเงินสด — ไม่คิดเงินทอน',
+                style: TextStyle(fontSize: 12, color: Colors.red.shade700))
+          else if (_c.cashReceived > 0 && change < -0.005)
+            Text(_en ? 'Cash received is less than the cash portion' : 'รับเงินมาน้อยกว่ายอดที่รับเป็นเงินสด',
+                style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
         ]),
         ],
       ],
@@ -481,12 +515,12 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
         SizedBox(
           width: 240,
           child: InputDecorator(
-            decoration: _deco(cmMethodTypeLabel(type, _en)),
+            decoration: _deco(cmMethodTypeLabel(type, _en), ro: true),
             child: Text('${r.paymentMethodCode ?? ''} ${r.paymentMethodName ?? ''}'.trim(),
                 overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
         ),
-        _field('${_en ? 'Amount' : 'จำนวนเงิน'} (${widget.currencyCode})', r.amountCtrl, width: 150, numeric: true),
+        _field('${_en ? 'Amount' : 'จำนวนเงิน'} (${widget.currencyCode})', r.amountCtrl, width: 150, numeric: true, auto: true),
         if (needRef)
           _field(
               isCheck
@@ -596,7 +630,7 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
         SizedBox(
           width: 80,
           child: InputDecorator(
-            decoration: _deco(_en ? 'Rate' : 'อัตรา'),
+            decoration: _deco(_en ? 'Rate' : 'อัตรา', ro: true),
             child: Text(rate > 0 ? '${rate.toStringAsFixed(2)}%' : '-', textAlign: TextAlign.right),
           ),
         ),
@@ -607,11 +641,11 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
             readOnly: _ro,
             textAlign: TextAlign.right,
             inputFormatters: _numInput,
-            decoration: _deco('${_en ? 'Tax base' : 'ฐานภาษี'} ($cur)'),
+            decoration: _deco('${_en ? 'Tax base' : 'ฐานภาษี'} ($cur)', auto: true),
             onChanged: (_) => setState(w.recalc),
           ),
         ),
-        _field('${_en ? 'WHT' : 'ภาษีที่หัก'} ($cur)', w.whtCtrl, width: 140, numeric: true),
+        _field('${_en ? 'WHT' : 'ภาษีที่หัก'} ($cur)', w.whtCtrl, width: 140, numeric: true, auto: true),
         _field(_en ? 'Certificate no.' : 'เลขที่หนังสือรับรอง', w.certCtrl, width: 160),
         _field(_en ? 'Description' : 'คำอธิบาย', w.descCtrl, width: 200),
         if (!_ro)

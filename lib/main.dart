@@ -108,6 +108,14 @@ class MyApp extends StatelessWidget {
             primarySwatch: Colors.blue,
             fontFamily: font.fontFamily,
           ),
+          // ขนาดตัวอักษรที่ผู้ใช้เลือก (ปุ่ม Aa) — คูณกับค่าของระบบ/เบราว์เซอร์ ใช้กับทุกหน้าจอ
+          builder: (context, child) {
+            final mq = MediaQuery.of(context);
+            return MediaQuery(
+              data: mq.copyWith(textScaler: TextScaler.linear(mq.textScaler.scale(1) * font.textScale)),
+              child: child!,
+            );
+          },
           // const — เปลี่ยนฟอนต์ (rebuild MaterialApp) ต้องไม่สร้าง FutureBuilder ใหม่ ไม่งั้น HomeScreen/แท็บที่เปิดอยู่จะหาย
           home: const _AuthGate(),
         ),
