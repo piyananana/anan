@@ -61,6 +61,11 @@ class _PoTransactionScreenState extends State<PoTransactionScreen> with SingleTi
     _tabController.animateTo(1);
   }
 
+  void _backToList() {
+    setState(() => _currentTabIndex = 0);
+    _tabController.animateTo(0);
+  }
+
   void _onSaveSuccess() {
     setState(() {
       _shouldRefreshList = true;
@@ -81,7 +86,22 @@ class _PoTransactionScreenState extends State<PoTransactionScreen> with SingleTi
     final canDelete = perm?.canDelete ?? true;
     return Scaffold(
       appBar: AppBar(
-        title: const MenuTitle(),
+        // ไม่มีแถบแท็บ (เพิ่มพื้นที่หน้าจอ): หน้ารายละเอียดใช้ปุ่มย้อนกลับบน AppBar กลับไปหน้ารายการ
+        leading: _currentTabIndex == 1
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: isEnglish ? 'Back to list' : 'กลับไปรายการ',
+                onPressed: _backToList,
+              )
+            : null,
+        automaticallyImplyLeading: false,
+        title: _currentTabIndex == 1
+            ? Row(mainAxisSize: MainAxisSize.min, children: [
+                const Flexible(child: MenuTitle()),
+                Text('  >  ${isEnglish ? 'PO Details' : 'รายละเอียดใบสั่งซื้อ'}',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.normal)),
+              ])
+            : const MenuTitle(),
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
         actions: [
@@ -100,20 +120,6 @@ class _PoTransactionScreenState extends State<PoTransactionScreen> with SingleTi
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TabBar(
-            controller: _tabController,
-            onTap: (index) {
-              if (index == 1) _tabController.animateTo(_currentTabIndex, duration: Duration.zero);
-            },
-            dividerColor: Colors.grey,
-            labelColor: Colors.teal[800],
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            tabs: [
-              Tab(text: isEnglish ? 'Search / Add PO' : 'ค้นหา/เพิ่มใบสั่งซื้อ'),
-              Tab(text: isEnglish ? 'PO Details' : 'รายละเอียดใบสั่งซื้อ'),
-            ],
-          ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -136,10 +142,7 @@ class _PoTransactionScreenState extends State<PoTransactionScreen> with SingleTi
                   viewOnly: _isViewOnly || !canEdit,
                   resetKey: _detailResetKey,
                   onSaveSuccess: _onSaveSuccess,
-                  onCancel: () {
-                    setState(() => _currentTabIndex = 0);
-                    _tabController.animateTo(0);
-                  },
+                  onCancel: _backToList,
                   canDelete: canDelete,
                   copyFromId: _copyFromId,
                   onCopyRequested: (id) => _openDetailTab(copyFromId: id),
