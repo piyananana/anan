@@ -31,14 +31,15 @@ class BranchService {
       authService.logout();
       throw Exception('Unauthorized. Please login again.');
     } else {
-      throw Exception('การโหลดข้อมูลโครงการล้มเหลว: ${response.statusCode}');
+      throw Exception('การโหลดข้อมูลสาขาล้มเหลว: ${response.statusCode}');
     }
   }
 
   Future<List<Branch>> fetchActiveRows() async {
     final headers = await authService.getAuthHeader();
     final response = await http.get(
-      Uri.parse('$baseUrl/cd_branch/active'),
+      // backend ไม่มี /cd_branch/active — /cd_branch คืนเฉพาะสาขาที่ใช้งานอยู่แล้ว
+      Uri.parse('$baseUrl/cd_branch'),
       headers: headers,
     );
 
@@ -51,7 +52,7 @@ class BranchService {
       authService.logout();
       throw Exception('Unauthorized. Please login again.');
     } else {
-      throw Exception('การโหลดข้อมูลโครงการล้มเหลว: ${response.statusCode}');
+      throw Exception('การโหลดข้อมูลสาขาล้มเหลว: ${response.statusCode}');
     }
   }
 
