@@ -33,6 +33,9 @@ import 'im_payment_approval_panel.dart';
 import '../../ar/models/ar_customer.dart';
 import '../../ar/widgets/ar_customer_list_widget.dart';
 import '../../cd/models/cd_vat_rate.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
+import '../../cd/widgets/cd_user_branch_picker.dart';
 import '../../cd/services/cd_vat_rate_service.dart';
 import '../../cd/models/cd_currency.dart';
 import '../../cd/services/cd_currency_service.dart';
@@ -265,6 +268,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   List<GlDimensionType> _dimTypes = [];
   final Map<String, List<GlDimensionValue>> _dimValues = {};
   Map<int, int?> _dimSelections = {};
+  // สาขาของเอกสาร (user-approved 2026-11-18): เริ่มต้น = สาขาหลักของผู้ใช้ → สาขาของคลัง → ผู้ใช้เลือกเอง
+  int? _branchId;
+  List<Branch> _branches = [];
   Map<int, int?>? _refDims;
   int? _refMoId;
   List<VatRate> _vatRates = [];
@@ -704,6 +710,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refSoDocNoLabel = null;
     _refMoId = null;
     _dimSelections = {};
+    _branchId = null;
     _refDims = null;
     _refNoCtrl.clear();
     _poNoCtrl.clear();
@@ -751,7 +758,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         _accountService.fetchRows(),
         _dimService.fetchActiveTypes(),
         ImWarehouseService().fetchActiveRows(),
+        BranchService().fetchActiveRows(),
       ]);
+      _branches = results[7] as List<Branch>;
       _mainWarehouse = (results[6] as List<ImWarehouse>).cast<ImWarehouse?>().firstWhere((w) => w!.isDefault, orElse: () => null);
       _accounts = results[4] as List<Account>;
       _dimTypes = results[5] as List<GlDimensionType>;
@@ -774,9 +783,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
       if (widget.transactionId != null) {
         await _loadExisting(widget.transactionId!);
-      } else if (_mainWarehouse != null) {
-        _warehouseId = _mainWarehouse!.id;
-        _warehouseLabel = '${_mainWarehouse!.warehouseCode} ${_mainWarehouse!.warehouseNameTh}';
+      } else {
+        if (_mainWarehouse != null) {
+          _warehouseId = _mainWarehouse!.id;
+          _warehouseLabel = '${_mainWarehouse!.warehouseCode} ${_mainWarehouse!.warehouseNameTh}';
+        }
+        _branchId = defaultDocBranchId(warehouseBranchId: _mainWarehouse?.branchId);
       }
     } catch (e) {
       if (mounted) {
@@ -819,6 +831,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _refSoDocNoLabel = h.refSoDocNo;
     _refMoId = h.refMoId;
     _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
+    _branchId = h.branchId;
     _refNoCtrl.text = h.refNo ?? '';
     _poNoCtrl.text = h.customerPoNo ?? '';
     _billDiscPctCtrl.text = h.billDiscountPercent != 0 ? _CountLine._fmtInput(h.billDiscountPercent) : '';
@@ -995,6 +1008,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     setState(() {
       _warehouseId = w.id;
       _warehouseLabel = '${w.warehouseCode} ${w.warehouseNameTh}';
+      // ยังไม่มีสาขา (ผู้ใช้ไม่มีสาขาหลัก) → ใช้สาขาของคลัง
+      if (_branchId == null && w.branchId != null) _branchId = w.branchId;
       if (changed) {
         for (final l in _lines) {
           l.locationId = null;
@@ -2048,6 +2063,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       warn(isEnglish ? 'Please select a customer' : 'กรุณาเลือกลูกค้า');
       return;
     }
+    if (action == 'Post' && _glDimMissing.isNotEmpty) {
+      warn('${isEnglish ? 'Branch/dimensions incomplete' : 'สาขา/มิติไม่ครบ'}: ${_glDimMissing.join(', ')}');
+      return;
+    }
     if (_isReturnSourceDocMode && _refImTransactionId == null) {
       warn(isEnglish ? 'Please select a source document' : 'กรุณาเลือกเอกสารต้นฉบับ');
       return;
@@ -2181,6 +2200,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
         dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
+        branchId: _branchId,
       );
       final details = _lines.map((l) => ImTransactionDetail(
             id: l.id,
@@ -2630,7 +2650,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
               ],
             ),
           ),
-          if (!collapsed) ...[const SizedBox(height: 8), ...children]
+          if (!collapsed) ...[const SizedBox(height: 8), ...(glPreview ? _glTable(children) : children)]
           else if (summary != null) ...[const SizedBox(height: 8), summary],
         ]),
       ),
@@ -3158,7 +3178,28 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                     style: TextStyle(color: _salespersons.isEmpty ? Colors.grey.shade600 : null)),
               ),
             );
+      final branch = findBranch(_branches, _branchId);
+      final branchW = InkWell(
+        onTap: _isReadOnly
+            ? null
+            : () async {
+                final r = await showUserBranchPicker(context, branches: _branches, selectedId: _branchId, isEnglish: isEnglish);
+                if (r != null && mounted) setState(() => _branchId = r.$2?.id);
+              },
+        child: InputDecorator(
+          decoration: _hDec(isEnglish ? 'Branch' : 'สาขา',
+              editable: !_isReadOnly, suffixIcon: _isReadOnly ? null : const Icon(Icons.search, size: 18)),
+          child: Text(
+            _branchId == null
+                ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
+                : (branch != null ? branchLabel(branch, isEnglish) : '#$_branchId'),
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: _branchId == null ? Colors.grey.shade600 : null),
+          ),
+        ),
+      );
       final dimWs = <Widget>[
+        branchW,
         for (final t in _dimTypes)
           GlDimensionPickerField(
             dimType: t,
@@ -3186,6 +3227,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         if (_refDims != null)
           Text(isEnglish ? 'Dimensions follow the referenced order' : 'มิติตามเอกสารต้นทางที่อ้างอิง (แก้ไขไม่ได้)',
               style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade600, fontStyle: FontStyle.italic)),
+        if (_glDimMissingSlots.isNotEmpty)
+          Text(
+              '${isEnglish ? 'Required by the posting accounts:' : 'บัญชีที่ลงรายการบังคับระบุ:'} '
+              '${[
+                if (_glDimMissingSlots.contains(0)) isEnglish ? 'Branch' : 'สาขา',
+                ..._dimTypes.where((t) => _glDimMissingSlots.contains(t.slotNo)).map((t) => _dimTypeName(t, isEnglish)),
+              ].join(', ')}',
+              style: TextStyle(fontSize: 12, color: Colors.red.shade700, fontWeight: FontWeight.bold)),
       ], inline: true);
 
       final top = <Widget>[g1, if (g2 != null) g2, if (g3 != null) g3];
@@ -4188,7 +4237,34 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
   // เอกสารที่สร้าง AR/AP อัตโนมัติ ต้องตั้งประเภทเอกสาร AR/AP ในหน้าตั้งค่าบัญชี IM ก่อน Post (resolveTargetDoc ฝั่ง backend)
   Widget _buildGlCard(bool isEnglish) {
-    final card = _arLinkedPreview ? _buildCombinedGlCard(isEnglish) : _buildGlCardInner(isEnglish);
+    _glDimMissing.clear();
+    _glDimMissingSlotsBuild.clear();
+    final card0 = _arLinkedPreview ? _buildCombinedGlCard(isEnglish) : _buildGlCardInner(isEnglish);
+    // การ์ดข้อมูลเอกสารสร้างก่อนการ์ดนี้ — ช่องมิติที่ขาดเปลี่ยนเมื่อไหร่ สร้างหน้าจอใหม่อีกรอบ
+    if (_glDimMissingSlotsBuild.length != _glDimMissingSlots.length || !_glDimMissingSlots.containsAll(_glDimMissingSlotsBuild)) {
+      _glDimMissingSlots = {..._glDimMissingSlotsBuild};
+      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) setState(() {}); });
+    }
+    final card = _glDimMissing.isEmpty
+        ? card0
+        : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: const Color(0xFFFDECEA), borderRadius: BorderRadius.circular(4)),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(Icons.warning_amber_rounded, size: 18, color: Colors.red.shade700),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${isEnglish ? 'Branch/dimensions required before Post (set them in the document card):' : 'ต้องระบุสาขา/มิติก่อน Post (เลือกที่การ์ดข้อมูลเอกสาร):'} ${_glDimMissing.join(', ')}',
+                    style: TextStyle(fontSize: 12, color: Colors.red.shade800),
+                  ),
+                ),
+              ]),
+            ),
+            card0,
+          ]);
     final s = _docSetup;
     if (s == null || !s.targetAuto || s.targetDocId != null || _status == 'Posted') return card;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -4640,7 +4716,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           if (chip != null) chip,
         ]),
       ),
-      ...children,
+      ..._glTable(children),
     ]);
   }
 
@@ -4745,18 +4821,131 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     );
   }
 
+  // ── มิติในตัวอย่างรายการบัญชี: ทุกบรรทัดใช้มิติหัวเอกสาร (ตาม backend utils/glDims.js) จึงแสดงมิติที่เลือกไว้ทุกบรรทัด ──
+  // บัญชีที่บังคับมิติ (gl_account_dim_rule) แต่หัวเอกสารยังไม่เลือก = แสดง "ต้องระบุ" สีแดง + เตือนที่การ์ด + ช่องมิติในการ์ดข้อมูลเอกสาร และห้าม Post
+  // เบิกใช้ ('issue') มีมิติรายบรรทัดและตรวจที่ช่องมิติของบรรทัดอยู่แล้ว จึงไม่แสดง/ไม่ตรวจซ้ำที่นี่
+  final Set<String> _glDimMissing = {};
+  final Set<int> _glDimMissingSlotsBuild = {};
+  Set<int> _glDimMissingSlots = {};
+  bool get _glDimCheck =>
+      !_isIssueMode && _postedGlDetails == null && _status != 'Posted' && _status != 'Void' && _status != 'Deleted';
+
+  String _dimTypeName(GlDimensionType t, bool isEnglish) =>
+      isEnglish && (t.nameEng ?? '').isNotEmpty ? t.nameEng! : t.nameThai;
+
+  // ช่อง "มิติ/ชื่อ": 1 บรรทัดต่อมิติ = รหัส ชื่อค่า (ชี้เมาส์ = ประเภทมิติ)
+  Widget? _glLineDims(String? code) {
+    final isEnglish = _isEnglish;
+    Account? acc;
+    if (code != null) {
+      for (final a in _accounts) {
+        if (a.accountCode == code) { acc = a; break; }
+      }
+    }
+    final items = <Widget>[];
+    // บัญชีบังคับสาขา (gl_account.branch_required) แต่เอกสารยังไม่มีสาขา — ทุกประเภทเอกสาร (backend ตรวจตอน Post)
+    // แสดง/ตรวจเฉพาะเอกสารที่ยังไม่ Post (เอกสารเก่าที่ Post ก่อนตั้งบังคับไม่ต้องขึ้นสีแดง)
+    if ((acc?.branchRequired ?? false) && _branchId == null &&
+        (_glDimCheck || (_isIssueMode && _postedGlDetails == null && _status == 'Draft'))) {
+      _glDimMissing.add(isEnglish ? 'Account $code requires a branch' : 'บัญชี $code ต้องระบุสาขา');
+      _glDimMissingSlotsBuild.add(0);
+      items.add(Text(isEnglish ? 'Branch: required' : 'สาขา: ต้องระบุ',
+          style: TextStyle(fontSize: 12, color: Colors.red.shade700, fontWeight: FontWeight.bold)));
+    }
+    if (_isIssueMode || _dimTypes.isEmpty) return items.isEmpty ? null : Column(crossAxisAlignment: CrossAxisAlignment.start, children: items);
+    final req = requiredDimSlots(acc, _dimTypes);
+    for (final t in _dimTypes) {
+      final id = _dimSelections[t.slotNo];
+      if (id != null) {
+        GlDimensionValue? v;
+        for (final x in _dimValues[t.typeCode] ?? const <GlDimensionValue>[]) {
+          if (x.id == id) { v = x; break; }
+        }
+        final vName = v == null ? '#$id' : '${v.valueCode} ${isEnglish && (v.valueNameEng ?? '').isNotEmpty ? v.valueNameEng! : v.valueNameThai}';
+        items.add(Tooltip(
+          message: _dimTypeName(t, isEnglish),
+          child: Text(vName, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+        ));
+      } else if (req.contains(t.slotNo)) {
+        if (_glDimCheck) {
+          _glDimMissing.add(isEnglish ? 'Account $code requires ${_dimTypeName(t, true)}' : 'บัญชี $code ต้องระบุ${t.nameThai}');
+          _glDimMissingSlotsBuild.add(t.slotNo);
+        }
+        items.add(Text(isEnglish ? '${_dimTypeName(t, true)}: required' : '${t.nameThai}: ต้องระบุ',
+            style: TextStyle(fontSize: 12, color: Colors.red.shade700, fontWeight: FontWeight.bold)));
+      }
+    }
+    if (items.isEmpty) return null;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: items);
+  }
+
+  // ── ตารางตัวอย่างรายการบัญชี: รหัสบัญชี | ชื่อบัญชี | มิติ/ชื่อ | เดบิต | เครดิต + แถวรวม (ตามแบบ Gl.dc) ──
+  static const _glColCode = 76.0;
+  static const _glHeadStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF4A5562));
+
+  Widget _glCells(Widget code, Widget name, Widget? dims, Widget dr, Widget cr) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: _glColCode, child: code),
+          const SizedBox(width: 8),
+          Expanded(flex: 4, child: name),
+          const SizedBox(width: 8),
+          Expanded(flex: 3, child: dims ?? const SizedBox.shrink()),
+          const SizedBox(width: 8),
+          Expanded(flex: 2, child: dr),
+          const SizedBox(width: 8),
+          Expanded(flex: 2, child: cr),
+        ],
+      );
+
+  // แทรกหัวคอลัมน์ก่อนบรรทัดแรก และแถวรวมหลังบรรทัดสุดท้าย (ยอดรวม = ที่ _glLine สะสมของการ์ด/ส่วนนี้)
+  List<Widget> _glTable(List<Widget> children) {
+    final first = children.indexWhere((w) => w is _GlLineRow);
+    if (first < 0) return children;
+    final last = children.lastIndexWhere((w) => w is _GlLineRow);
+    final isEnglish = _isEnglish;
+    final head = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: const BoxDecoration(color: Color(0xFFF4F6F8), border: Border(bottom: BorderSide(color: Color(0xFFDDE3EA)))),
+      child: _glCells(
+        Text(isEnglish ? 'Account' : 'รหัสบัญชี', style: _glHeadStyle),
+        Text(isEnglish ? 'Account name' : 'ชื่อบัญชี', style: _glHeadStyle),
+        Text(isEnglish ? 'Dimension / name' : 'มิติ/ชื่อ', style: _glHeadStyle),
+        Text(isEnglish ? 'Debit' : 'เดบิต', style: _glHeadStyle, textAlign: TextAlign.right),
+        Text(isEnglish ? 'Credit' : 'เครดิต', style: _glHeadStyle, textAlign: TextAlign.right),
+      ),
+    );
+    const bold = TextStyle(fontSize: 13, fontWeight: FontWeight.w700);
+    final total = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      child: _glCells(
+        const SizedBox.shrink(),
+        Text(isEnglish ? 'Total' : 'รวม', style: bold),
+        null,
+        Text(_fmtMoney.format(_glSumDr), style: bold, textAlign: TextAlign.right),
+        Text(_fmtMoney.format(_glSumCr), style: bold, textAlign: TextAlign.right),
+      ),
+    );
+    return [...children.sublist(0, first), head, ...children.sublist(first, last + 1), total, ...children.sublist(last + 1)];
+  }
+
   Widget _glLine(String? code, String? name, double debit, double credit) {
     _glSumDr += debit;
     _glSumCr += credit;
     _glSumLines.add((code, name, debit, credit));
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(children: [
-        Expanded(flex: 3, child: Text('${code ?? '-'} ${name ?? ''}', style: const TextStyle(fontSize: 13))),
-        Expanded(flex: 1, child: Text(debit != 0 ? _fmtMoney.format(debit) : '', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
-        Expanded(flex: 1, child: Text(credit != 0 ? _fmtMoney.format(credit) : '', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
-      ]),
-    );
+    final dims = (debit.abs() >= 0.005 || credit.abs() >= 0.005) ? _glLineDims(code) : null;
+    const st = TextStyle(fontSize: 13);
+    return _GlLineRow(Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFEEF1F4)))),
+      child: _glCells(
+        Text(code ?? '-', style: st),
+        Text(name ?? '', style: st),
+        dims,
+        Text(debit != 0 ? _fmtMoney.format(debit) : '', textAlign: TextAlign.right, style: st),
+        Text(credit != 0 ? _fmtMoney.format(credit) : '', textAlign: TextAlign.right, style: st),
+      ),
+    ));
   }
 
   // ── ③ สรุปยอด: ส่วนลดท้ายบิล + หักเงินมัดจำ (ซ้าย) | ยอดไล่ลงจนถึงยอดสุทธิ (ขวา) — อยู่ต่อจากรายการ ──
@@ -5022,4 +5211,12 @@ class _LCol {
   final bool right;
   final bool required;
   const _LCol(this.key, this.label, this.width, this.group, {this.right = false, this.required = false});
+}
+
+// บรรทัดของตารางตัวอย่างรายการบัญชี — _glTable ใช้หาตำแหน่งแทรกหัวคอลัมน์/แถวรวม
+class _GlLineRow extends StatelessWidget {
+  const _GlLineRow(this.child);
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => child;
 }

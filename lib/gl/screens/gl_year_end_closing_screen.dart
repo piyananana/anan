@@ -490,6 +490,12 @@ class _YearEndClosingScreenState extends State<YearEndClosingScreen> {
                 const SizedBox(height: 8),
                 _ResultRow(isEnglish ? 'Net Income/Loss' : 'กำไร/ขาดทุนสุทธิ',
                     _fmt.format(_step4Preview!['net_income'] ?? 0)),
+                // แยกตามสาขา (โอนเข้ากำไรสะสมแยกสาขา) — แสดงเมื่อมีมากกว่าหนึ่งสาขา หรือมีสาขาระบุ
+                for (final b in (_step4Preview!['by_branch'] as List? ?? const []))
+                  if ((_step4Preview!['by_branch'] as List).length > 1 || (b['branch_code'] ?? '').toString().isNotEmpty)
+                    _ResultRow(
+                        '   ${isEnglish ? 'Branch' : 'สาขา'} ${(b['branch_code'] ?? '').toString().isEmpty ? (isEnglish ? '(none)' : '(ไม่ระบุ)') : b['branch_code']}',
+                        _fmt.format(b['net_income'] ?? 0)),
                 const SizedBox(height: 8),
               ],
               if (closing.step4TransferOk != true) ...[
@@ -719,25 +725,38 @@ class _PreviewTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // คอลัมน์สาขาแสดงเมื่อมียอดที่มีสาขา (ปิดบัญชี/ยกยอดแยกตามสาขา)
+    final hasBranch = lines.any((l) => l.branchCode.isNotEmpty);
     return Container(
       decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300)),
       child: Table(
-        columnWidths: const {
-          0: FixedColumnWidth(100),
-          1: FlexColumnWidth(3),
-          2: FixedColumnWidth(120),
-          3: FixedColumnWidth(120),
-        },
+        columnWidths: hasBranch
+            ? const {
+                0: FixedColumnWidth(100),
+                1: FlexColumnWidth(3),
+                2: FixedColumnWidth(80),
+                3: FixedColumnWidth(120),
+                4: FixedColumnWidth(120),
+              }
+            : const {
+                0: FixedColumnWidth(100),
+                1: FlexColumnWidth(3),
+                2: FixedColumnWidth(120),
+                3: FixedColumnWidth(120),
+              },
         children: [
           TableRow(
             decoration: BoxDecoration(color: Colors.grey.shade200),
             children: [
-              _TH(isEnglish ? 'Code' : 'รหัส'), _TH(isEnglish ? 'Account Name' : 'ชื่อบัญชี'), _TH(isEnglish ? 'Debit' : 'เดบิต'), _TH(isEnglish ? 'Credit' : 'เครดิต'),
+              _TH(isEnglish ? 'Code' : 'รหัส'), _TH(isEnglish ? 'Account Name' : 'ชื่อบัญชี'),
+              if (hasBranch) _TH(isEnglish ? 'Branch' : 'สาขา'),
+              _TH(isEnglish ? 'Debit' : 'เดบิต'), _TH(isEnglish ? 'Credit' : 'เครดิต'),
             ],
           ),
           ...lines.map((l) => TableRow(children: [
             _TD(l.accountCode),
             _TD(l.accountName),
+            if (hasBranch) _TD(l.branchCode),
             _TDR(l.debit > 0 ? fmt.format(l.debit) : ''),
             _TDR(l.credit > 0 ? fmt.format(l.credit) : ''),
           ])),

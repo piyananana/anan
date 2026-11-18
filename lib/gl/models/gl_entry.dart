@@ -174,6 +174,9 @@ class GlEntryDetail {
   int? dim4Id; String? dim4Code; String? dim4Name;
   int? dim5Id; String? dim5Code; String? dim5Name;
 
+  // สาขาของบรรทัด — มีเฉพาะรายการจากงานประมวลผลที่แยกหลายสาขา (ปกติว่าง = ใช้สาขาที่หัวรายการ)
+  int? branchId; String? branchCode; String? branchName; String? branchNameEng;
+
   GlEntryDetail({
     this.id = 0,
     required this.accountId,
@@ -190,6 +193,7 @@ class GlEntryDetail {
     this.dim3Id, this.dim3Code, this.dim3Name,
     this.dim4Id, this.dim4Code, this.dim4Name,
     this.dim5Id, this.dim5Code, this.dim5Name,
+    this.branchId, this.branchCode, this.branchName, this.branchNameEng,
   });
 
   factory GlEntryDetail.fromJson(Map<String, dynamic> json) {
@@ -209,6 +213,8 @@ class GlEntryDetail {
       dim3Id:   json['dim3_id'] as int?,   dim3Code: json['dim3_code'] as String?, dim3Name: json['dim3_name'] as String?,
       dim4Id:   json['dim4_id'] as int?,   dim4Code: json['dim4_code'] as String?, dim4Name: json['dim4_name'] as String?,
       dim5Id:   json['dim5_id'] as int?,   dim5Code: json['dim5_code'] as String?, dim5Name: json['dim5_name'] as String?,
+      branchId: json['branch_id'] as int?, branchCode: json['line_branch_code'] as String?,
+      branchName: json['line_branch_name_thai'] as String?, branchNameEng: json['line_branch_name_eng'] as String?,
     );
   }
 
@@ -224,5 +230,6 @@ class GlEntryDetail {
         'dim3_id':     dim3Id,
         'dim4_id':     dim4Id,
         'dim5_id':     dim5Id,
+        'branch_id':   branchId,
       };
 }

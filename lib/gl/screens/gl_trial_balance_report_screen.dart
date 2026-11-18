@@ -194,6 +194,26 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
 
   // --- Excel Export ---
 
+  // แถวสาขา/มิติของงบทดลอง — backend ส่งมาเฉพาะบัญชีที่ผังบัญชีบังคับสาขา/มิติ และเฉพาะช่องที่บังคับ
+  // (user-approved 2026-11-17) — แถวที่ข้อมูลไม่ครบ (missing) = รายการเก่าที่ลงก่อนตั้งบังคับ
+  String _tbDimText(Map d, bool isEnglish) {
+    final parts = <String>[];
+    final br = d['branch_code'] as String? ?? '';
+    if (br.isNotEmpty) parts.add(br);
+    for (int slot = 1; slot <= 5; slot++) {
+      final code = d['dim${slot}_code'] as String? ?? '';
+      if (code.isEmpty) continue;
+      final name = d['dim${slot}_name'] as String? ?? '';
+      parts.add(name.isEmpty ? code : '$code $name');
+    }
+    final text = parts.join(' / ');
+    if (d['missing'] == true) {
+      final ns = isEnglish ? '(not specified)' : '(ไม่ระบุ)';
+      return text.isEmpty ? ns : '$text $ns';
+    }
+    return text;
+  }
+
   Future<void> _exportExcel() async {
     _isExporting = true;
     setState(() {});
@@ -253,6 +273,18 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
         _xlCell(s, r, 5, endDr  == 0 ? TextCellValue('') : DoubleCellValue(endDr),  align: HorizontalAlign.Right, bold: isHeader);
         _xlCell(s, r, 6, endCr  == 0 ? TextCellValue('') : DoubleCellValue(endCr),  align: HorizontalAlign.Right, bold: isHeader);
         r++;
+        if (_showDimensions && !isHeader && row['dimension_rows'] is List) {
+          for (final d in row['dimension_rows'] as List) {
+            double n(String k) => double.tryParse(d[k].toString()) ?? 0;
+            final end = n('beg_dr') - n('beg_cr') + n('mvmt_dr') - n('mvmt_cr');
+            final vals = [n('beg_dr'), n('beg_cr'), n('mvmt_dr'), n('mvmt_cr'), end > 0 ? end : 0.0, end < 0 ? -end : 0.0];
+            _xlCell(s, r, 0, '      ${_tbDimText(d as Map, isEnglish)}');
+            for (int c = 0; c < 6; c++) {
+              _xlCell(s, r, c + 1, vals[c] == 0 ? TextCellValue('') : DoubleCellValue(vals[c]), align: HorizontalAlign.Right);
+            }
+            r++;
+          }
+        }
       }
 
       // Grand total row
@@ -309,9 +341,9 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
         : "${isEnglish ? "Year" : "ปี"} ${_selectedYear?.fyCode}";
 
     List<String> conditions = [];
-    if (!_showDimensions) {
-      conditions.add(isEnglish ? "No Branch/Dim" : "ไม่แสดงสาขา/มิติ");
-    }
+    conditions.add(_showDimensions
+        ? (isEnglish ? "Branch/Dim for required accounts only" : "แสดงสาขา/มิติเฉพาะบัญชีที่บังคับ")
+        : (isEnglish ? "No Branch/Dim" : "ไม่แสดงสาขา/มิติ"));
     if (_hideZero) {
       conditions.add(isEnglish ? "Hide zero-balance accounts" : "ซ่อนบัญชีที่ยอดเป็นศูนย์");
     }
@@ -714,18 +746,8 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
               !_showOnlyHeaders) {
             final dims = row['dimension_rows'] as List;
             for (var d in dims) {
-              final String brCode = d['branch_code'] as String? ?? '';
-              final dimParts = <String>[];
-              if (brCode.isNotEmpty) dimParts.add(brCode);
-              // backend ส่ง dim1_code, dim2_code กลับมา
-              for (int slot = 1; slot <= 2; slot++) {
-                final code = d['dim${slot}_code'] as String? ?? '';
-                if (code.isNotEmpty) dimParts.add(code);
-              }
-              bool hasDim = dimParts.isNotEmpty;
-              String dimText = dimParts.join(' / ');
-
-              if (hasDim) {
+              final String dimText = _tbDimText(d, isEnglish);
+              {
                 double dEnd = (double.tryParse(d['beg_dr'].toString()) ?? 0) -
                     (double.tryParse(d['beg_cr'].toString()) ?? 0) +
                     (double.tryParse(d['mvmt_dr'].toString()) ?? 0) -
@@ -1028,6 +1050,9 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
                     if (_activeDimTypes.isNotEmpty)
                       SwitchListTile(
                         title: Text(isEnglish ? 'Show Branch/Dimension' : 'แสดงสาขา/มิติ'),
+                        subtitle: Text(isEnglish
+                            ? 'Only accounts whose chart of accounts requires a branch/dimension, by the required ones'
+                            : 'เฉพาะบัญชีที่ผังบัญชีบังคับสาขา/มิติ แยกตามที่บังคับ บัญชีอื่นแสดงยอดรวม'),
                         value: _showDimensions,
                         onChanged: (v) => setState(() => _showDimensions = v),
                         contentPadding: EdgeInsets.zero,

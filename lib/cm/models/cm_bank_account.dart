@@ -13,6 +13,11 @@ class CmBankAccount {
   // เลขประจำตัวผู้เสียภาษี/สาขาของธนาคาร — ผู้ขายในรายงานภาษีซื้อของค่าธรรมเนียมธนาคาร (CM 70)
   final String? taxId;
   final String? taxBranchCode;
+  // สาขาของบัญชีธนาคาร (cd_branch) — ตีราคา FX ธนาคารลงรายการบัญชีที่สาขานี้
+  final int? branchId;
+  final String? branchCode;
+  final String? branchNameTh;
+  final String? branchNameEn;
   final String accountType;     // SAVING / CURRENT / FIXED (ประเภทบัญชีธนาคาร)
   final String cmType;          // BANK / PETTY_CASH (ประเภทหลัก)
   final String currencyCode;    // THB / USD / ...
@@ -39,6 +44,10 @@ class CmBankAccount {
     this.accountNumber,
     this.taxId,
     this.taxBranchCode,
+    this.branchId,
+    this.branchCode,
+    this.branchNameTh,
+    this.branchNameEn,
     required this.accountType,
     this.cmType = 'BANK',
     this.currencyCode = 'THB',
@@ -66,6 +75,10 @@ class CmBankAccount {
         accountNumber: json['account_number'],
         taxId: json['tax_id'],
         taxBranchCode: json['tax_branch_code'],
+        branchId: json['branch_id'],
+        branchCode: json['branch_code'],
+        branchNameTh: json['branch_name_thai'],
+        branchNameEn: json['branch_name_eng'],
         accountType: json['account_type'] ?? 'SAVING',
         cmType: json['cm_type'] ?? 'BANK',
         currencyCode: json['currency_code'] ?? CurrencyService.baseCode,
@@ -90,6 +103,7 @@ class CmBankAccount {
         'account_number': accountNumber,
         'tax_id': taxId,
         'tax_branch_code': taxBranchCode,
+        'branch_id': branchId,
         'account_type': accountType,
         'cm_type': cmType,
         'currency_code': currencyCode,

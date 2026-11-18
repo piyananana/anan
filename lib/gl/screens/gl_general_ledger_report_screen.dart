@@ -23,6 +23,8 @@ import '../../gl/services/gl_general_ledger_report_service.dart';
 import '../../cd/services/cd_branch_service.dart';
 import '../../gl/models/gl_dimension.dart';
 import '../../gl/services/gl_dimension_service.dart';
+import '../../gl/widgets/gl_line_account_dims.dart' show requiredDimSlots;
+import '../../gl/utils/gl_ledger_split.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
 
@@ -69,6 +71,8 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   Account? _accountTo;
   
   bool _pageBreakPerAccount = false;
+  // แยกตามสาขา/มิติ เฉพาะบัญชีที่ผังบัญชีบังคับ (user-approved 2026-11-17) — ปิด = ทุกบัญชีรวมเป็นก้อนเดียว
+  bool _splitByDim = true;
   bool _hideZero = true;
   bool _isLoading = false;
   bool _reportGenerated = false;
@@ -82,6 +86,20 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
   // Report Data
   List<Map<String, dynamic>> _beginningBalances = [];
   List<Map<String, dynamic>> _transactions = [];
+  // ข้อมูลดิบจาก API (สาขา/มิติครบทุกช่อง) — _applySplit() สร้าง 2 รายการข้างบนตามตัวเลือกแยกสาขา/มิติ
+  List<Map<String, dynamic>> _rawBeginningBalances = [];
+  List<Map<String, dynamic>> _rawTransactions = [];
+
+  // แยกก้อนตามสาขา/มิติเฉพาะบัญชีที่ผังบัญชีบังคับ — ดู lib/gl/utils/gl_ledger_split.dart
+  void _applySplit() {
+    final r = glSplitLedger(_rawBeginningBalances, _rawTransactions, (id) {
+      if (!_splitByDim) return glNoSplit;
+      final acc = _accountMap[id];
+      return (branch: acc?.branchRequired ?? false, slots: requiredDimSlots(acc, _activeDimTypes));
+    });
+    _beginningBalances = r.beginning;
+    _transactions = r.transactions;
+  }
 
   @override
   void initState() {
@@ -278,20 +296,22 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
 
     try {
       // 1. ดึงยอดยกมา (สะสมตั้งแต่ต้นปีถึงก่อนหน้างวดที่เลือก)
-      _beginningBalances = await _reportService.fetchBeginningBalance(
+      _rawBeginningBalances = await _reportService.fetchBeginningBalance(
         fiscalYearId: _selectedYear!.id,
         periodId: _selectedPeriod?.id,
         branchId: _selectedBranchId,
       );
 
       // 2. ดึงรายการเคลื่อนไหวจาก API
-      _transactions = await _reportService.getGlTransactions(
+      _rawTransactions = await _reportService.getGlTransactions(
         periodId: _selectedPeriod?.id,
         fiscalYearId: _selectedYear!.id,
         accountFrom: _accountFrom?.accountCode,
         accountTo: _accountTo?.accountCode,
         branchId: _selectedBranchId,
       );
+
+      _applySplit();
 
       if (_beginningBalances.isEmpty && _transactions.isEmpty) {
         if (mounted) {
@@ -1060,6 +1080,21 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
                     ),
                     const SizedBox(height: 16),
 
+                    SwitchListTile(
+                      title: Text(isEnglish ? 'Split by branch/dimension' : 'แยกตามสาขา/มิติ'),
+                      subtitle: Text(isEnglish
+                          ? 'Only accounts whose chart of accounts requires a branch/dimension; other accounts show one combined ledger'
+                          : 'เฉพาะบัญชีที่ผังบัญชีบังคับสาขา/มิติ บัญชีอื่นรวมรายการที่มี/ไม่มีมิติเป็นก้อนเดียว'),
+                      value: _splitByDim,
+                      onChanged: (v) => setState(() {
+                        _splitByDim = v;
+                        if (_reportGenerated) {
+                          _applySplit();
+                          _pdfKey++;
+                        }
+                      }),
+                      contentPadding: EdgeInsets.zero,
+                    ),
                     SwitchListTile(
                       title: Text(isEnglish ? 'Show only accounts with balance or transactions' : 'พิมพ์เฉพาะที่มียอดยกมาหรือมีรายการเคลื่อนไหว'),
                       value: _hideZero,

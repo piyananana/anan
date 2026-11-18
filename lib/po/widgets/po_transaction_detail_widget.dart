@@ -33,6 +33,9 @@ import '../../sa/widgets/sa_doc_approval_panel.dart';
 import '../../utils/order_ref_picker.dart';
 import '../../gl/models/gl_dimension.dart';
 import '../../gl/widgets/gl_line_account_dims.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
+import '../../cd/widgets/cd_user_branch_picker.dart';
 
 class PoTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -115,6 +118,9 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
   List<GlDimensionType> _dimTypes = [];
   Map<String, List<GlDimensionValue>> _dimValues = {};
   Map<int, int?> _dimSelections = {};
+  // สาขา (user-approved 2026-11-18): ค่าเริ่มต้น สาขาของผู้ใช้ → สาขาของคลัง; ส่งต่อให้เอกสารที่อ้างอิง
+  int? _branchId;
+  List<Branch> _branches = [];
   bool _dimsLoaded = false;
 
   // รองรับสั่งซื้อสินค้าต่างประเทศเป็นสกุลเงินต่างประเทศ — unit_price_fc ต่อบรรทัดคือราคาในสกุลเงินนี้ (FC),
@@ -226,6 +232,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
     _refPrId = null;
     _refPrDocNoLabel = null;
     _dimSelections = {};
+    _branchId = defaultDocBranchId();
     _currency = _currencies.cast<Currency?>().firstWhere((c) => c!.baseCurrencyFlag, orElse: () => null);
     _exchangeRate = _currency?.baseRate ?? 1;
     _priceIncludesVat = false;
@@ -252,6 +259,11 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         _dimValues = dims.$2;
         _dimsLoaded = true;
       }
+      if (_branches.isEmpty) {
+        try {
+          _branches = await BranchService().fetchActiveRows();
+        } catch (_) {}
+      }
       if (widget.transactionId == null && widget.copyFromId != null) {
         final h = await _service.fetchRow(widget.copyFromId!);
         _id = null;
@@ -272,6 +284,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         _refPrId = null;
         _refPrDocNoLabel = null;
         _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
+        _branchId = h.branchId;
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
@@ -319,6 +332,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         _refPrId = h.refPrId;
         _refPrDocNoLabel = h.refPrDocNo;
         _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
+        _branchId = h.branchId;
         _currency = _currencies.cast<Currency?>().firstWhere(
             (c) => c?.id == h.currencyId || c?.currencyCode == h.currencyCode, orElse: () => null);
         _exchangeRate = h.exchangeRate;
@@ -535,6 +549,8 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       if (!_dimSelections.values.any((v) => v != null)) {
         _dimSelections = {for (var i = 1; i <= 5; i++) i: pickedLines.first['dim${i}_id'] as int?};
       }
+      // สาขา: ใช้สาขาของเอกสารต้นทางที่เลือก (ถ้ามี)
+      _branchId = (pickedLines.first['branch_id'] as int?) ?? _branchId;
     });
   }
 
@@ -558,6 +574,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
         refPrId: _refPrId,
         dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
         dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
+        branchId: _branchId,
       );
       final details = _lines
           .map((l) => PoTransactionDetail(
@@ -803,7 +820,10 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                     label: isEnglish ? 'Warehouse *' : 'คลังปลายทาง *',
                     hasValue: _warehouse != null,
                     displayText: '${_warehouse?.warehouseCode ?? ''}  ${_warehouse?.warehouseNameTh ?? ''}',
-                    onSearch: _isReadOnly ? null : () => ImWarehouseListWidget.search(context, onSelected: (w) => setState(() => _warehouse = w)),
+                    onSearch: _isReadOnly ? null : () => ImWarehouseListWidget.search(context, onSelected: (w) => setState(() {
+                      _warehouse = w;
+                      _branchId ??= w.branchId; // ยังไม่มีสาขา → ใช้สาขาของคลัง
+                    })),
                   ),
                 ),
               ]),
@@ -845,6 +865,17 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                   ),
                 ),
               ]),
+              // สาขา — อยู่หน้ามิติ
+              const SizedBox(height: 12),
+              _fkField(
+                label: isEnglish ? 'Branch' : 'สาขา',
+                hasValue: _branchId != null,
+                displayText: branchLabel(findBranch(_branches, _branchId), isEnglish),
+                onSearch: _isReadOnly ? null : () async {
+                  final r = await showUserBranchPicker(context, branches: _branches, selectedId: _branchId, isEnglish: isEnglish);
+                  if (r != null && mounted) setState(() => _branchId = r.$2?.id);
+                },
+              ),
               if (_dimTypes.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 GlHeaderDimsRow(

@@ -1,7 +1,8 @@
 // lib/gl/widgets/gl_journal_preview.dart
 // ตารางรายการบัญชี (ดูอย่างเดียว) ที่ backend คำนวณให้ — ก่อนโพสต์คือรายการที่จะเกิด, หลังโพสต์คือรายการจริง
 // รูปแบบบรรทัดจาก backend utils/glJournalPreview.js:
-//   { account_code, account_name_th, account_name_en, description, debit, credit }
+//   { account_code, account_name_th, account_name_en, description, debit, credit, branch_code }
+// คอลัมน์สาขาแสดงเมื่อมีบรรทัดที่มีสาขา (งานประมวลผลที่แยกตามสาขาของเอกสารต้นทาง)
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -12,6 +13,7 @@ class GlJournalLine {
   final String description;
   final double debit;
   final double credit;
+  final String branchCode;
 
   const GlJournalLine({
     required this.accountCode,
@@ -20,6 +22,7 @@ class GlJournalLine {
     required this.description,
     required this.debit,
     required this.credit,
+    this.branchCode = '',
   });
 
   factory GlJournalLine.fromJson(Map<String, dynamic> j) => GlJournalLine(
@@ -29,6 +32,7 @@ class GlJournalLine {
         description:   j['description']?.toString() ?? '',
         debit:  double.tryParse(j['debit']?.toString() ?? '') ?? 0,
         credit: double.tryParse(j['credit']?.toString() ?? '') ?? 0,
+        branchCode: j['branch_code']?.toString() ?? '',
       );
 
   static List<GlJournalLine> listFromJson(dynamic list) => (list as List? ?? const [])
@@ -66,6 +70,17 @@ class GlJournalPreview extends StatelessWidget {
     final totalCr = lines.fold<double>(0, (s, l) => s + l.credit);
     final balanced = (totalDr - totalCr).abs() < 0.005;
     final hasDesc = lines.any((l) => l.description.isNotEmpty);
+    final hasBranch = lines.any((l) => l.branchCode.isNotEmpty);
+    // คอลัมน์: [สาขา] รหัสบัญชี ชื่อบัญชี [คำอธิบาย] เดบิต เครดิต
+    var col = 0;
+    final widths = <int, TableColumnWidth>{
+      if (hasBranch) col++: const FixedColumnWidth(70),
+      col++: const FixedColumnWidth(100),
+      col++: const FlexColumnWidth(2),
+      if (hasDesc) col++: const FlexColumnWidth(2),
+      col++: const FixedColumnWidth(120),
+      col++: const FixedColumnWidth(120),
+    };
     const small = TextStyle(fontSize: 12);
     const bold = TextStyle(fontSize: 12, fontWeight: FontWeight.bold);
 
@@ -103,17 +118,12 @@ class GlJournalPreview extends StatelessWidget {
           else
             Table(
               border: TableBorder.all(color: Colors.grey.shade300),
-              columnWidths: {
-                0: const FixedColumnWidth(100),
-                1: const FlexColumnWidth(2),
-                if (hasDesc) 2: const FlexColumnWidth(2),
-                (hasDesc ? 3 : 2): const FixedColumnWidth(120),
-                (hasDesc ? 4 : 3): const FixedColumnWidth(120),
-              },
+              columnWidths: widths,
               children: [
                 TableRow(
                   decoration: BoxDecoration(color: Colors.teal.shade50),
                   children: [
+                    if (hasBranch) cell(isEnglish ? 'Branch' : 'สาขา', style: bold),
                     cell(isEnglish ? 'Account' : 'รหัสบัญชี', style: bold),
                     cell(isEnglish ? 'Account Name' : 'ชื่อบัญชี', style: bold),
                     if (hasDesc) cell(isEnglish ? 'Description' : 'คำอธิบาย', style: bold),
@@ -123,6 +133,7 @@ class GlJournalPreview extends StatelessWidget {
                 ),
                 for (final l in lines)
                   TableRow(children: [
+                    if (hasBranch) cell(l.branchCode),
                     cell(l.accountCode),
                     cell(l.accountName(isEnglish)),
                     if (hasDesc) cell(l.description),
@@ -132,6 +143,7 @@ class GlJournalPreview extends StatelessWidget {
                 TableRow(
                   decoration: BoxDecoration(color: Colors.grey.shade100),
                   children: [
+                    if (hasBranch) const SizedBox(),
                     cell(isEnglish ? 'Total' : 'รวม', style: bold),
                     const SizedBox(),
                     if (hasDesc) const SizedBox(),

@@ -233,6 +233,9 @@ class _ImPeriodClosingScreenState extends State<ImPeriodClosingScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   child: Row(children: [
+                    // สาขาของบรรทัด (ปิดงวดแยกตามสาขา — สาขาของคลัง/เอกสาร)
+                    if (p.journal.any((x) => (x.raw['branch_code'] ?? '').toString().isNotEmpty))
+                      SizedBox(width: 70, child: Text((j.raw['branch_code'] ?? '').toString(), style: const TextStyle(fontSize: 12))),
                     Expanded(child: Text('${j.accountCode} ${j.name(isEnglish)}', style: const TextStyle(fontSize: 12))),
                     SizedBox(width: 120, child: Text(j.num('debit') > 0 ? money(j.num('debit')) : '', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12))),
                     SizedBox(width: 120, child: Text(j.num('credit') > 0 ? money(j.num('credit')) : '', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12))),

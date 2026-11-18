@@ -38,6 +38,9 @@ import '../../cd/models/cd_wht_type.dart';
 import '../../cd/services/cd_wht_type_service.dart';
 import '../../utils/vat_calc.dart';
 import '../models/cm_checkbook.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
+import '../../cd/widgets/cd_user_branch_picker.dart';
 import '../services/cm_checkbook_service.dart';
 
 class CmTransactionDetailWidget extends StatefulWidget {
@@ -278,6 +281,9 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   Map<String, List<GlDimensionValue>> _dimValues = {};
   Map<int, int?> _dimSelections = {};
   Map<int, String?> _dimNames = {};
+  // สาขา (user-approved 2026-11-18): ค่าเริ่มต้น สาขาของผู้ใช้ → สาขาของบัญชีธนาคารที่เลือก; รายการบัญชีลงสาขานี้
+  int? _branchId;
+  List<Branch> _branches = [];
 
   ModuleDocument? _selectedDocType;
   bool _isReadOnly = false;
@@ -442,6 +448,9 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         CdWhtTypeService().fetchActiveRows(),
         ApVendorService().fetchActiveRows(),
       ]);
+      try {
+        _branches = await BranchService().fetchActiveRows();
+      } catch (_) {}
       _vatRates = (results[6] as List<VatRate>).where((v) => v.isActive).toList();
       _whtTypes = results[7] as List<CdWhtType>;
       _vendors = results[8] as List<ApVendor>;
@@ -594,6 +603,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         }
         _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
         _dimNames = {1: h.dim1Name, 2: h.dim2Name, 3: h.dim3Name, 4: h.dim4Name, 5: h.dim5Name};
+        _branchId = h.branchId;
 
         if (_allowedDocTypes.isNotEmpty) {
           try { _selectedDocType = _allowedDocTypes.firstWhere((d) => d.id == h.docId); } catch (_) {}
@@ -625,6 +635,14 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ยังไม่มีสาขา → ใช้สาขาของบัญชีธนาคารที่เลือก (ตั้งที่หน้าบัญชีธนาคาร)
+  void _fillBranchFromBank(int? bankAccountId) {
+    if (_branchId != null || bankAccountId == null) return;
+    for (final b in _bankAccounts) {
+      if (b.id == bankAccountId) { _branchId = b.branchId; return; }
     }
   }
 
@@ -667,6 +685,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       _exchangeRate = 1.0;
       _dimSelections = {};
       _dimNames = {};
+      _branchId = defaultDocBranchId();
       for (final r in _detailRows) r.dispose(); _detailRows = [];
       for (final r in _paymentRows) r.dispose(); _paymentRows = [];
       for (final r in _glEditRows) r.dispose(); _glEditRows = [];
@@ -873,6 +892,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       status: _status,
       dim1Id: _dimSelections[1], dim2Id: _dimSelections[2],
       dim3Id: _dimSelections[3], dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
+      branchId: _branchId,
       createdBy: _transactionId == 0 ? userName : null,
       updatedBy: _transactionId != 0 ? userName : null,
     );
@@ -1486,6 +1506,24 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
           )),
           const Expanded(flex: 2, child: SizedBox()),
         ]),
+        // สาขา — อยู่หน้ามิติ
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(flex: 1, child: InkWell(
+            onTap: _isReadOnly ? null : () async {
+              final r = await showUserBranchPicker(context, branches: _branches, selectedId: _branchId, isEnglish: isEnglish);
+              if (r != null && mounted) setState(() => _branchId = r.$2?.id);
+            },
+            child: InputDecorator(
+              decoration: _fieldDeco(isEnglish ? 'Branch' : 'สาขา').copyWith(
+                  suffixIcon: _isReadOnly ? null : const Icon(Icons.search, size: 18)),
+              child: Text(_branchId == null
+                  ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
+                  : branchLabel(findBranch(_branches, _branchId), isEnglish)),
+            ),
+          )),
+          const Expanded(flex: 2, child: SizedBox()),
+        ]),
         if (_dimTypes.isNotEmpty) ...[
           const SizedBox(height: 12),
           Row(children: [
@@ -1519,7 +1557,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
               items: _bankAccounts.where((b) => b.cmType == 'PETTY_CASH').map((b) => DropdownMenuItem(
                     value: b.id, child: Text(_bankAcctLabel(b), overflow: TextOverflow.ellipsis))).toList(),
               onChanged: _isReadOnly ? null : (v) {
-                setState(() => _bankAccountId = v);
+                setState(() { _bankAccountId = v; _fillBranchFromBank(v); });
                 if (_isReplenishment && v != null) _loadOpenVouchers(v);
               },
               validator: (v) => v == null ? (isEnglish ? 'Required' : 'กรุณาเลือก') : null,
@@ -1531,7 +1569,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
               decoration: _fieldDeco(isEnglish ? 'From Account *' : 'บัญชีต้นทาง *'),
               items: _bankAccounts.where((b) => b.cmType == 'BANK').map((b) => DropdownMenuItem(
                     value: b.id, child: Text(_bankAcctLabel(b), overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: _isReadOnly ? null : (v) => setState(() => _fromBankAccountId = v),
+              onChanged: _isReadOnly ? null : (v) => setState(() { _fromBankAccountId = v; _fillBranchFromBank(v); }),
               validator: (v) => v == null ? (isEnglish ? 'Required' : 'กรุณาเลือก') : null,
             )),
             const SizedBox(width: 8),
@@ -1541,7 +1579,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
               decoration: _fieldDeco(isEnglish ? 'To Account *' : 'บัญชีปลายทาง *'),
               items: _bankAccounts.where((b) => b.cmType == 'BANK').map((b) => DropdownMenuItem(
                     value: b.id, child: Text(_bankAcctLabel(b), overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: _isReadOnly ? null : (v) => setState(() => _toBankAccountId = v),
+              onChanged: _isReadOnly ? null : (v) => setState(() { _toBankAccountId = v; _fillBranchFromBank(v); }),
               validator: (v) => v == null ? (isEnglish ? 'Required' : 'กรุณาเลือก') : null,
             )),
           ],
@@ -1554,6 +1592,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
                     value: b.id, child: Text(_bankAcctLabel(b), overflow: TextOverflow.ellipsis))).toList(),
               onChanged: _isReadOnly ? null : (v) => setState(() {
                 _bankAccountId = v;
+                _fillBranchFromBank(v);
                 if (_isBankCharge && _chargeVatType != 'NOVAT') _fillBankSeller();
               }),
               validator: (v) => v == null ? (isEnglish ? 'Required' : 'กรุณาเลือก') : null,

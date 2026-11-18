@@ -29,6 +29,9 @@ import '../widgets/mo_bom_list_widget.dart';
 import '../widgets/mo_work_center_list_widget.dart';
 import '../../gl/models/gl_dimension.dart';
 import '../../gl/widgets/gl_line_account_dims.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
+import '../../cd/widgets/cd_user_branch_picker.dart';
 
 // ---------------------------------------------------------------------------
 // Add/Edit component dialog
@@ -416,6 +419,9 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
   Map<String, List<GlDimensionValue>> _dimValues = {};
   Map<int, int?> _dimSelections = {};
   bool _dimsLoaded = false;
+  // สาขา (user-approved 2026-11-18): ค่าเริ่มต้น สาขาของผู้ใช้ → สาขาของคลัง; รายการบัญชีของใบสั่งผลิตลงสาขานี้
+  int? _branchId;
+  List<Branch> _branches = [];
 
   static const _moSysDocType = '10';
   List<ModuleDocument> _allowedDocTypes = [];
@@ -475,6 +481,7 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
     _overheadPercentCtrl.text = '0';
     _descCtrl.clear();
     _dimSelections = {};
+    _branchId = defaultDocBranchId();
     _components = [];
     _outputs = [];
     _operations = [];
@@ -493,6 +500,11 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         _dimTypes = dims.$1;
         _dimValues = dims.$2;
         _dimsLoaded = true;
+      }
+      if (_branches.isEmpty) {
+        try {
+          _branches = await BranchService().fetchActiveRows();
+        } catch (_) {}
       }
       if (widget.transactionId == null) {
         _resetForm();
@@ -524,6 +536,7 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         _overheadPercentCtrl.text = '${h.overheadPercent}';
         _descCtrl.text = h.description ?? '';
         _dimSelections = {1: h.dim1Id, 2: h.dim2Id, 3: h.dim3Id, 4: h.dim4Id, 5: h.dim5Id};
+        _branchId = h.branchId;
         _components = List.from(h.components);
         _outputs = List.from(h.outputs);
         _operations = List.from(h.operations);
@@ -704,6 +717,7 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         dueDate: _dueDate, description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
         dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
+        branchId: _branchId,
       );
       if (_id == null) {
         await _service.createTransaction(header: header, components: _components, outputs: _outputs, operations: _operations);
@@ -986,7 +1000,10 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
                     label: isEnglish ? 'Warehouse *' : 'คลังปลายทาง *',
                     hasValue: _warehouse != null,
                     displayText: '${_warehouse?.warehouseCode ?? ''}  ${_warehouse?.warehouseNameTh ?? ''}',
-                    onSearch: _isReadOnly ? null : () => ImWarehouseListWidget.search(context, onSelected: (w) => setState(() => _warehouse = w)),
+                    onSearch: _isReadOnly ? null : () => ImWarehouseListWidget.search(context, onSelected: (w) => setState(() {
+                      _warehouse = w;
+                      _branchId ??= w.branchId; // ยังไม่มีสาขา → ใช้สาขาของคลัง
+                    })),
                   ),
                 ),
               ]),
@@ -1017,6 +1034,17 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
                 readOnly: _isReadOnly,
                 controller: _descCtrl,
                 decoration: InputDecoration(labelText: isEnglish ? 'Description' : 'คำอธิบาย', border: const OutlineInputBorder(), isDense: true),
+              ),
+              // สาขา — อยู่หน้ามิติ
+              const SizedBox(height: 12),
+              _fkField(
+                label: isEnglish ? 'Branch' : 'สาขา',
+                hasValue: _branchId != null,
+                displayText: branchLabel(findBranch(_branches, _branchId), isEnglish),
+                onSearch: _isReadOnly ? null : () async {
+                  final r = await showUserBranchPicker(context, branches: _branches, selectedId: _branchId, isEnglish: isEnglish);
+                  if (r != null && mounted) setState(() => _branchId = r.$2?.id);
+                },
               ),
               if (_dimTypes.isNotEmpty) ...[
                 const SizedBox(height: 12),

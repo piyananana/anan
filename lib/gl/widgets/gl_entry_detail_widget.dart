@@ -932,6 +932,8 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     final currency = _selectedCurrency?.currencyCode ?? _baseCurrency;
     final fmt = NumberFormat('#,##0.00', 'en_US');
     final balanced = (_header.totalDebitFc - _header.totalCreditFc).abs() < 0.005;
+    // คอลัมน์สาขาของบรรทัด — แสดงเฉพาะเมื่อมีบรรทัดที่ระบุสาขาเอง (รายการจากงานประมวลผลที่แยกสาขา)
+    final showLineBranch = _details.any((d) => d.branchId != null);
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -948,6 +950,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
             columns: [
               const DataColumn(label: Text('#')),
               DataColumn(label: Text(isEnglish ? 'Account Code' : 'รหัสบัญชี')),
+              if (showLineBranch) DataColumn(label: Text(isEnglish ? 'Branch' : 'สาขา')),
               ..._dimTypes.map((t) => DataColumn(
                   label: Text(isEnglish && (t.nameEng?.isNotEmpty ?? false) ? t.nameEng! : t.nameThai))),
               DataColumn(label: Text('${isEnglish ? 'Debit' : 'เดบิต'} ($currency)')),
@@ -1032,6 +1035,19 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                     ],
                   ),
                 )),
+                // สาขาของบรรทัด (อ่านอย่างเดียว) — ว่าง = ใช้สาขาที่หัวรายการ
+                if (showLineBranch)
+                  DataCell(Tooltip(
+                    message: detail.branchId == null
+                        ? (isEnglish ? 'Header branch' : 'ใช้สาขาที่หัวรายการ')
+                        : (isEnglish && (detail.branchNameEng?.isNotEmpty ?? false)
+                            ? detail.branchNameEng!
+                            : detail.branchName ?? ''),
+                    child: Text(detail.branchCode ?? _header.branchCode ?? '—',
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: detail.branchId == null ? Colors.grey : Colors.black87)),
+                  )),
                 // Dim cells
                 ..._dimTypes.map((dimType) {
                   final hasDimRule = accountInfo.id != 0 &&
@@ -1202,6 +1218,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
                             color: balanced ? Colors.teal[700] : Colors.red))),
+                    if (showLineBranch) const DataCell(SizedBox()),
                     ..._dimTypes.map((_) => const DataCell(SizedBox())),
                     DataCell(SizedBox(
                       width: 110,

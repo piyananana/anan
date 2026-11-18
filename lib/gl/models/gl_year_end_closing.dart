@@ -182,6 +182,8 @@ class ClosingPreviewLine {
   final String accountName;
   final String accountType;
   final double netBalance; // positive = Dr balance, negative = Cr balance
+  // สาขาของยอด (ปิดบัญชีแยกตามสาขา) — ว่าง = ไม่ระบุสาขา
+  final String branchCode;
 
   ClosingPreviewLine({
     required this.accountId,
@@ -189,6 +191,7 @@ class ClosingPreviewLine {
     required this.accountName,
     required this.accountType,
     required this.netBalance,
+    this.branchCode = '',
   });
 
   factory ClosingPreviewLine.fromJson(Map<String, dynamic> json) {
@@ -198,6 +201,7 @@ class ClosingPreviewLine {
       accountName: json['account_name_thai'] ?? '',
       accountType: json['account_type'] ?? '',
       netBalance: double.tryParse(json['net_balance']?.toString() ?? '0') ?? 0,
+      branchCode: json['branch_code']?.toString() ?? '',
     );
   }
 

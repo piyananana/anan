@@ -12,6 +12,9 @@ import '../../cd/services/cd_bank_service.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../cd/models/cd_branch.dart';
+import '../../cd/services/cd_branch_service.dart';
+import '../../cd/widgets/cd_user_branch_picker.dart';
 
 class CmBankAccountDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -59,6 +62,10 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
   String? _glAccountName;
   bool _isActive = true;
   bool _isSaving = false;
+  // สาขาของบัญชีธนาคาร — ตีราคา FX ธนาคารลงรายการบัญชีที่สาขานี้
+  int? _branchId;
+  String? _branchLabel;
+  List<Branch> _branches = [];
 
   @override
   void initState() {
@@ -84,6 +91,33 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
     _glAccountCode = d?.glAccountCode;
     _glAccountName = d?.glAccountName;
     _isActive = d?.isActive ?? true;
+    _setBranch(d);
+  }
+
+  void _setBranch(CmBankAccount? d) {
+    _branchId = d?.branchId;
+    _branchLabel = d?.branchCode == null ? null : '${d!.branchCode} ${d.branchNameTh ?? ''}';
+  }
+
+  Future<void> _pickBranch() async {
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    try {
+      if (_branches.isEmpty) _branches = await BranchService().fetchActiveRows();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${isEnglish ? 'Failed to load branches' : 'โหลดสาขาล้มเหลว'}: $e')));
+      }
+      return;
+    }
+    if (!mounted) return;
+    final r = await showUserBranchPicker(context,
+        branches: _branches, selectedId: _branchId, isEnglish: isEnglish, userFilter: false);
+    if (r == null || !mounted) return;
+    setState(() {
+      _branchId = r.$2?.id;
+      _branchLabel = r.$2 == null ? null : branchLabel(r.$2, isEnglish);
+    });
   }
 
   @override
@@ -111,6 +145,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
       _glAccountCode = widget.selected?.glAccountCode;
       _glAccountName = widget.selected?.glAccountName;
       _isActive = widget.selected?.isActive ?? true;
+      _setBranch(widget.selected);
       if (mounted) setState(() {});
     }
   }
@@ -333,6 +368,7 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
         currencyCode: _currencyCode,
         isCheckAccount: _isCheckAccount,
         glAccountId: _glAccountId,
+        branchId: _branchId,
         isActive: _isActive,
         remark: _remarkCtrl.text.trim().isEmpty ? null : _remarkCtrl.text.trim(),
       );
@@ -590,6 +626,25 @@ class CmBankAccountDetailWidgetState extends State<CmBankAccountDetailWidget> {
                       ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
                       : '${_glAccountCode ?? ''} ${_glAccountName ?? ''}',
                 ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // สาขา — ตีราคา FX ธนาคารลงรายการบัญชีที่สาขานี้
+            InkWell(
+              onTap: ro ? null : _pickBranch,
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: isEnglish ? 'Branch (GL posting)' : 'สาขา (ลงรายการบัญชี)',
+                  helperText: isEnglish
+                      ? 'Used for bank FX revaluation entries'
+                      : 'ใช้ลงรายการบัญชีตีราคา FX ธนาคาร',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: ro ? null : const Icon(Icons.search),
+                ),
+                child: Text(_branchId == null
+                    ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
+                    : (_branchLabel ?? '')),
               ),
             ),
             const SizedBox(height: 12),

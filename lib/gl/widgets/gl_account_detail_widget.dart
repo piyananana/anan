@@ -523,6 +523,19 @@ class AccountDetailWidgetState extends State<AccountDetailWidget> {
                         ),
                       ],
                     ),
+                    // สาขา: ต้องระบุ = เอกสารที่ลงบัญชีนี้ต้องมีสาขาที่หัวเอกสาร (ตรวจตอน Post) และรายงาน GL แยกยอดตามสาขา
+                    const SizedBox(height: 16),
+                    Row(children: [
+                      Expanded(
+                        child: Text(isEnglish
+                            ? 'Branch: ${_branchRequired ? 'Required when posting' : 'Not required when posting'}'
+                            : 'สาขา: ${_branchRequired ? 'ต้องระบุเมื่อทำรายการ' : 'ไม่ต้องระบุเมื่อทำรายการ'}'),
+                      ),
+                      Switch(
+                        value: _branchRequired,
+                        onChanged: readOnly ? null : (v) => setState(() => _branchRequired = v),
+                      ),
+                    ]),
                     ..._dimTypes.expand((t) {
                       final enabled = _dimRules[t.typeCode] ?? false;
                       final dimName = isEnglish && (t.nameEng?.isNotEmpty ?? false)
