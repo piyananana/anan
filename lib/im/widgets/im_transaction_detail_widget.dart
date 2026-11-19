@@ -3040,11 +3040,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         Text(_docNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F5C5C))),
       ],
       const SizedBox(width: 10),
-      Flexible(child: _statusBadges(isEnglish)),
-      const SizedBox(width: 8),
+      // ป้ายสถานะชิดซ้าย / วงเงินชิดขวา (spaceBetween) — ปุ่มย่ออยู่ขอบขวาสุดเหมือนการ์ดอื่น
+      // (เดิม Flexible+Expanded แบ่งพื้นที่ว่างคนละครึ่ง ส่วนที่ป้ายสถานะไม่ใช้เหลือค้างหลังปุ่ม → ปุ่มอยู่กลางแถว)
       Expanded(
-        child: Align(
-          alignment: Alignment.centerRight,
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Flexible(child: _statusBadges(isEnglish)),
+          const SizedBox(width: 8),
+          Flexible(
           // วงเงินเครดิตของลูกค้า: อยู่ในวงเงิน = แถบสั้นบรรทัดเดียว, เกินวงเงิน/มีคำขอ = แผงขอ/อนุมัติเต็ม
           child: _isArCustomerMode && _customerId != null && (_status == 'Draft' || _credit.status != null)
               ? CreditLimitPanel(
@@ -3063,7 +3065,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                   },
                 )
               : const SizedBox.shrink(),
-        ),
+          ),
+        ]),
       ),
       const SizedBox(width: 8),
       OutlinedButton.icon(
