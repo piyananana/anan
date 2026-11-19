@@ -345,6 +345,7 @@ class SalesTerritoryListWidgetState extends State<SalesTerritoryListWidget>
                 ),
               Expanded(
                 child: TextField(
+                  autofocus: ModalRoute.of(context) is PopupRoute,
                   controller: _searchController,
                   decoration: InputDecoration(
                     hintText: isEnglish ? 'Search (Code / Territory Name)' : 'ค้นหา (รหัส / ชื่อเขต)',

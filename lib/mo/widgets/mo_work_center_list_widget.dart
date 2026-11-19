@@ -124,6 +124,7 @@ class MoWorkCenterListWidgetState extends State<MoWorkCenterListWidget> with Aut
             IconButton(icon: const Icon(Icons.add), tooltip: isEnglish ? 'Add new work center' : 'เพิ่มศูนย์งานใหม่', onPressed: widget.onAdd),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchCtrl,
               decoration: InputDecoration(
                 hintText: isEnglish ? 'Search (code / name)' : 'ค้นหา (รหัส / ชื่อ)',

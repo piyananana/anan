@@ -174,6 +174,7 @@ class VatRateListWidgetState extends State<VatRateListWidget>
           ),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: isEnglish ? 'Search (Code / VAT Name)' : 'ค้นหา (รหัส / ชื่อภาษี)',

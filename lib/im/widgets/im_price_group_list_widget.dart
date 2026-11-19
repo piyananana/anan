@@ -123,6 +123,7 @@ class ImPriceGroupListWidgetState extends State<ImPriceGroupListWidget> with Aut
             IconButton(icon: const Icon(Icons.add), tooltip: isEnglish ? 'Add new price group' : 'เพิ่มกลุ่มราคาใหม่', onPressed: widget.onAdd),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchCtrl,
               decoration: InputDecoration(
                 hintText: isEnglish ? 'Search (code / name)' : 'ค้นหา (รหัส / ชื่อ)',

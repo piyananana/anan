@@ -143,6 +143,7 @@ class ApVendorListWidgetState extends State<ApVendorListWidget>
           ),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchCtrl,
               decoration: InputDecoration(
                 hintText: isEnglish ? 'Search (code / name / tax ID)' : 'ค้นหา (รหัส / ชื่อ / เลขผู้เสียภาษี)',

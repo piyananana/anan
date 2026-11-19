@@ -66,7 +66,7 @@ class _ImWarehouseScreenState extends State<ImWarehouseScreen> with AutomaticKee
       builder: (context) => AlertDialog(
         title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
         content: Text(isEnglish
-            ? 'Are you sure you want to delete warehouse "${row.warehouseCode} ${row.warehouseNameTh}" ?'
+            ? 'Are you sure you want to delete warehouse "${row.warehouseCode} ${row.warehouseName(true)}" ?'
             : 'คุณแน่ใจหรือไม่ที่จะลบคลังสินค้า "${row.warehouseCode} ${row.warehouseNameTh}" ?'),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),

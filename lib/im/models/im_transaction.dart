@@ -45,6 +45,7 @@ class ImTransactionHeader {
   final int? toWarehouseId;
   final String? toWarehouseCode;
   final String? toWarehouseNameTh;
+  final String? toWarehouseNameEn;
   final int? vendorId; // GRN ('10'/'11'/'12') เท่านั้น
   final String? vendorCode;
   final String? vendorNameTh;
@@ -138,6 +139,7 @@ class ImTransactionHeader {
     this.toWarehouseId,
     this.toWarehouseCode,
     this.toWarehouseNameTh,
+    this.toWarehouseNameEn,
     this.vendorId,
     this.vendorCode,
     this.vendorNameTh,
@@ -217,6 +219,7 @@ class ImTransactionHeader {
       toWarehouseId: json['to_warehouse_id'],
       toWarehouseCode: json['to_warehouse_code'],
       toWarehouseNameTh: json['to_warehouse_name_th'],
+      toWarehouseNameEn: json['to_warehouse_name_en'],
       vendorId: json['vendor_id'],
       vendorCode: json['vendor_code'],
       vendorNameTh: json['vendor_name_th'],

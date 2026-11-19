@@ -182,6 +182,7 @@ class CdWhtTypeListWidgetState extends State<CdWhtTypeListWidget>
             ),
             Expanded(
               child: TextField(
+                autofocus: ModalRoute.of(context) is PopupRoute,
                 controller: _searchCtrl,
                 decoration: InputDecoration(
                   hintText: isEnglish

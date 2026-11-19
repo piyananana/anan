@@ -177,7 +177,7 @@ class _ImStockCountCreateScreenState extends State<ImStockCountCreateScreen> {
                                         ),
                                       ]),
                                       const SizedBox(height: 4),
-                                      Text('${_dateFmt.format(r.countDate)}   ${r.warehouseCode ?? ''} ${r.warehouseNameTh ?? ''}', style: const TextStyle(fontSize: 12)),
+                                      Text('${_dateFmt.format(r.countDate)}   ${r.warehouseCode ?? ''} ${isEnglish && (r.warehouseNameEn ?? '').isNotEmpty ? r.warehouseNameEn : (r.warehouseNameTh ?? '')}', style: const TextStyle(fontSize: 12)),
                                       if ((r.description ?? '').isNotEmpty)
                                         Padding(
                                           padding: const EdgeInsets.only(top: 2),
@@ -247,7 +247,13 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
   int? _id;
   String _countNo = '';
   int? _warehouseId;
-  String? _warehouseLabel;
+  // เก็บรหัส + ชื่อทั้ง 2 ภาษา — ป้ายชื่อคำนวณตามภาษาตอนแสดง (สลับภาษาแล้วเปลี่ยนตาม)
+  String? _warehouseCode, _warehouseNameTh, _warehouseNameEn;
+  String? get _warehouseLabel {
+    if (_warehouseId == null) return null;
+    final name = _isEnglish && (_warehouseNameEn ?? '').isNotEmpty ? _warehouseNameEn : _warehouseNameTh;
+    return '${_warehouseCode ?? ''} ${name ?? ''}'.trim();
+  }
   DateTime _countDate = DateTime.now();
   String _status = 'Draft';
   List<ImStockCountDetail> _lines = [];
@@ -293,7 +299,7 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
     _id = h.id;
     _countNo = h.countNo;
     _warehouseId = h.warehouseId;
-    _warehouseLabel = '${h.warehouseCode ?? ''} ${h.warehouseNameTh ?? ''}'.trim();
+    _warehouseCode = h.warehouseCode; _warehouseNameTh = h.warehouseNameTh; _warehouseNameEn = h.warehouseNameEn;
     _countDate = h.countDate;
     _descCtrl.text = h.description ?? '';
     _status = h.status;
@@ -581,7 +587,7 @@ class _CreateDetailPanelState extends State<_CreateDetailPanel> {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: () => ImWarehouseListWidget.search(context, onSelected: (ImWarehouse w) {
-                        setState(() { _warehouseId = w.id; _warehouseLabel = '${w.warehouseCode} ${w.warehouseNameTh}'; });
+                        setState(() { _warehouseId = w.id; _warehouseCode = w.warehouseCode; _warehouseNameTh = w.warehouseNameTh; _warehouseNameEn = w.warehouseNameEn; });
                       }),
                     ),
                 ]),

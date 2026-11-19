@@ -99,8 +99,7 @@ class _QuoteTransactionScreenState extends State<QuoteTransactionScreen> with Si
         title: _currentTabIndex == 1
             ? Row(mainAxisSize: MainAxisSize.min, children: [
                 const Flexible(child: MenuTitle()),
-                Text('  >  ${isEnglish ? 'Quote Details' : 'รายละเอียดใบเสนอราคา'}',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.normal)),
+                Text('  >  ${isEnglish ? 'Quote Details' : 'รายละเอียดใบเสนอราคา'}'),
               ])
             : const MenuTitle(),
         backgroundColor: Colors.teal[800],

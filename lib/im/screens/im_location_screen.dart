@@ -299,7 +299,7 @@ class _ImLocationScreenState extends State<ImLocationScreen>
                                   items: _warehouses
                                       .map((w) => DropdownMenuItem(
                                             value: w.id,
-                                            child: Text('${w.warehouseCode} — ${w.warehouseNameTh}', overflow: TextOverflow.ellipsis),
+                                            child: Text('${w.warehouseCode} — ${isEnglish && (w.warehouseNameEn ?? '').isNotEmpty ? w.warehouseNameEn! : w.warehouseNameTh}', overflow: TextOverflow.ellipsis),
                                           ))
                                       .toList(),
                                   onChanged: (v) => setState(() {

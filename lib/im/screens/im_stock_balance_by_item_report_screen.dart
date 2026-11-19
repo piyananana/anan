@@ -632,7 +632,8 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
     );
     if (result == null || !mounted) return;
     setState(() {
-      final name = (result.locationName ?? '').isNotEmpty ? '${result.locationCode}  ${result.locationName}' : result.locationCode;
+      final locName = result.displayName(_isEnglish);
+      final name = locName.isNotEmpty ? '${result.locationCode}  $locName' : result.locationCode;
       if (isFrom) {
         _locationCodeFrom = result.locationCode;
         _locFromLabel = name;
@@ -1089,6 +1090,7 @@ class _LocationPickerDialogState extends State<_LocationPickerDialog> {
           : widget.locations.where((l) =>
               l.locationCode.toLowerCase().contains(query) ||
               (l.locationName ?? '').toLowerCase().contains(query) ||
+              (l.locationNameEn ?? '').toLowerCase().contains(query) ||
               (l.warehouseCode ?? '').toLowerCase().contains(query)).toList();
     });
   }
@@ -1144,7 +1146,7 @@ class _LocationPickerDialogState extends State<_LocationPickerDialog> {
                           child: Row(children: [
                             SizedBox(width: 70, child: Text(loc.warehouseCode ?? '', style: const TextStyle(fontSize: 12, color: Colors.black54))),
                             SizedBox(width: 90, child: Text(loc.locationCode, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-                            Expanded(child: Text(loc.locationName ?? '', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                            Expanded(child: Text(loc.displayName(isEnglish), style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
                           ]),
                         ),
                       );

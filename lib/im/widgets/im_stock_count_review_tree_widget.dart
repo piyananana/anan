@@ -74,7 +74,7 @@ class _ImStockCountReviewTreeWidgetState extends State<ImStockCountReviewTreeWid
                 const SizedBox(width: 24),
               Icon(isGroup ? Icons.folder_outlined : Icons.inventory_2_outlined, color: Colors.black54, size: 20),
               const SizedBox(width: 8),
-              Expanded(child: Text('${item.locationCode}  ${item.locationName ?? ''}', style: const TextStyle(fontSize: 15))),
+              Expanded(child: Text('${item.locationCode}  ${item.displayName(isEnglish)}', style: const TextStyle(fontSize: 15))),
               if (!isGroup)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

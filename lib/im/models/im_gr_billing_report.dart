@@ -14,6 +14,10 @@ class ImGrBillingReportDoc {
   final String status; // 'Received' | 'Posted'
   final String? warehouseCode;
   final String? warehouseNameTh;
+  final String? warehouseNameEn;
+
+  String warehouseName(bool isEnglish) =>
+      (isEnglish && (warehouseNameEn ?? '').isNotEmpty ? warehouseNameEn : warehouseNameTh) ?? '';
   final String? refNo;
   final int? linkedApTransactionId;
   final int? daysOutstanding; // non-null only when status == 'Received'
@@ -28,6 +32,7 @@ class ImGrBillingReportDoc {
     required this.status,
     this.warehouseCode,
     this.warehouseNameTh,
+    this.warehouseNameEn,
     this.refNo,
     this.linkedApTransactionId,
     this.daysOutstanding,
@@ -43,6 +48,7 @@ class ImGrBillingReportDoc {
         status: json['status'] ?? '',
         warehouseCode: json['warehouse_code'],
         warehouseNameTh: json['warehouse_name_th'],
+        warehouseNameEn: json['warehouse_name_en'],
         refNo: json['ref_no'],
         linkedApTransactionId: json['linked_ap_transaction_id'],
         daysOutstanding: json['days_outstanding'] == null ? null : (json['days_outstanding'] as num).toInt(),

@@ -101,8 +101,7 @@ class _PrTransactionScreenState extends State<PrTransactionScreen> with SingleTi
         title: _currentTabIndex == 1
             ? Row(mainAxisSize: MainAxisSize.min, children: [
                 const Flexible(child: MenuTitle()),
-                Text('  >  ${isEnglish ? 'PR Details' : 'รายละเอียดใบขอซื้อ'}',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.normal)),
+                Text('  >  ${isEnglish ? 'PR Details' : 'รายละเอียดใบขอซื้อ'}'),
               ])
             : const MenuTitle(),
         backgroundColor: Colors.teal[800],

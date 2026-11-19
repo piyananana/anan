@@ -228,7 +228,14 @@ class ImGlAccounts {
   final ImGlAcct? arAccount; // บัญชีลูกหนี้: ลูกค้า > กลุ่มลูกค้า > ประเภทเอกสาร AR ที่สร้าง
   final ImGlAcct? receiptWht; // ขายเงินสด: ภาษีถูกหัก ณ ที่จ่าย ของประเภทเอกสารรับชำระ
   final List<ImGlAcct?> receiptPayments; // ขายเงินสด: บัญชีของแต่ละวิธีรับเงิน (ลำดับเดียวกับที่ส่งไป)
-  const ImGlAccounts({required this.mode, required this.items, this.arAccount, this.receiptWht, this.receiptPayments = const []});
+  // ฝั่งซื้อ (เอกสาร AP อัตโนมัติ): บัญชีเจ้าหนี้ (ผู้ขาย > กลุ่ม > ประเภทเอกสาร AP), ภาษีซื้อ, ส่วนลดรับ
+  final ImGlAcct? apAccount;
+  final ImGlAcct? apVat;
+  final ImGlAcct? apDiscount;
+  final ImGlAcct? paymentWht; // ซื้อเงินสด: ภาษีหัก ณ ที่จ่ายค้างจ่าย ของประเภทเอกสารจ่ายชำระ
+  final List<ImGlAcct?> paymentPayments; // ซื้อเงินสด: บัญชีของแต่ละวิธีจ่าย (ลำดับเดียวกับที่ส่งไป)
+  const ImGlAccounts({required this.mode, required this.items, this.arAccount, this.receiptWht, this.receiptPayments = const [],
+      this.apAccount, this.apVat, this.apDiscount, this.paymentWht, this.paymentPayments = const []});
 
   factory ImGlAccounts.fromJson(Map<String, dynamic> j) => ImGlAccounts(
         mode: j['mode'] ?? 'PERPETUAL',
@@ -240,6 +247,13 @@ class ImGlAccounts {
         receiptWht: ImGlAcct.fromJson((j['receipt'] as Map<String, dynamic>?)?['wht']),
         receiptPayments: [
           for (final p in ((j['receipt'] as Map<String, dynamic>?)?['payments'] as List? ?? const [])) ImGlAcct.fromJson(p),
+        ],
+        apAccount: ImGlAcct.fromJson(j['ap_account']),
+        apVat: ImGlAcct.fromJson(j['ap_vat']),
+        apDiscount: ImGlAcct.fromJson(j['ap_discount']),
+        paymentWht: ImGlAcct.fromJson((j['payment'] as Map<String, dynamic>?)?['wht']),
+        paymentPayments: [
+          for (final p in ((j['payment'] as Map<String, dynamic>?)?['payments'] as List? ?? const [])) ImGlAcct.fromJson(p),
         ],
       );
 }

@@ -545,6 +545,7 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
                 DataColumn(label: Text('ตำแหน่งแม่')),
                 DataColumn(label: Text('ชนิด')),
                 DataColumn(label: Text('ชื่อตำแหน่ง')),
+                DataColumn(label: Text('ชื่อตำแหน่ง (อังกฤษ)')),
                 DataColumn(label: Text('หมวดหมู่')),
                 DataColumn(label: Text('ระดับ')),
                 DataColumn(label: Text('ใช้งาน')),
@@ -559,6 +560,11 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
                         DataCell(ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 200),
                           child: Text(r['location_name']?.toString() ?? '',
+                              overflow: TextOverflow.ellipsis),
+                        )),
+                        DataCell(ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 200),
+                          child: Text(r['location_name_en']?.toString() ?? '',
                               overflow: TextOverflow.ellipsis),
                         )),
                         DataCell(Text(_fmt(r['category_code']))),

@@ -93,6 +93,7 @@ class _MoIssueScreenState extends State<MoIssueScreen> {
             height: 480,
             child: Column(children: [
               TextField(
+                autofocus: true,
                 controller: searchCtrl,
                 decoration: InputDecoration(
                   hintText: isEnglish ? 'Search (MO No. / Item)' : 'ค้นหา (เลขที่ / สินค้า)',

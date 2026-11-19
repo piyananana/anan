@@ -220,7 +220,7 @@ class _ImStockCountRecordScreenState extends State<ImStockCountRecordScreen> {
                       _fkField(
                         label: isEnglish ? 'Location *' : 'ตำแหน่งจัดเก็บ *',
                         hasValue: _selectedLocation != null,
-                        displayText: _selectedLocation != null ? '${_selectedLocation!.locationCode} ${_selectedLocation!.locationName ?? ''}' : null,
+                        displayText: _selectedLocation != null ? '${_selectedLocation!.locationCode} ${_selectedLocation!.displayName(_isEnglish)}' : null,
                         onSearch: _selectedCount == null
                             ? null
                             : () => ImLocationTreeWidget.search(context, warehouseId: _selectedCount!.warehouseId, onSelected: (loc) => setState(() => _selectedLocation = loc)),

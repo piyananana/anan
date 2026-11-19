@@ -123,6 +123,7 @@ class MoBomListWidgetState extends State<MoBomListWidget> with AutomaticKeepAliv
             IconButton(icon: const Icon(Icons.add), tooltip: isEnglish ? 'Add new BOM' : 'เพิ่มสูตรการผลิตใหม่', onPressed: widget.onAdd),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchCtrl,
               decoration: InputDecoration(
                 hintText: isEnglish ? 'Search (item code / name)' : 'ค้นหา (รหัส / ชื่อสินค้า)',

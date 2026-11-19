@@ -448,13 +448,13 @@ class ImTransactionService {
 
   // บัญชีที่ตอน Post จะใช้ต่อสินค้า — ใช้ทำตัวอย่างรายการบัญชีให้ตรงกับ backend (null = โหลดไม่ได้ ใช้ค่าจากการตั้งค่าแทน)
   Future<ImGlAccounts?> fetchGlAccounts({required String docCode, int? warehouseId, int? toWarehouseId, required List<int> itemIds,
-      int? customerId, List<Map<String, dynamic>> payments = const []}) async {
+      int? customerId, int? vendorId, List<Map<String, dynamic>> payments = const []}) async {
     final headers = await authService.getAuthHeader();
     final res = await http.post(
       Uri.parse('$baseUrl/im_transaction/gl_accounts'),
       headers: headers,
       body: json.encode({'doc_code': docCode, 'warehouse_id': warehouseId, 'to_warehouse_id': toWarehouseId, 'item_ids': itemIds,
-        'customer_id': customerId, 'payments': payments}),
+        'customer_id': customerId, 'vendor_id': vendorId, 'payments': payments}),
     );
     if (res.statusCode == 200) return ImGlAccounts.fromJson(json.decode(res.body) as Map<String, dynamic>);
     return null;

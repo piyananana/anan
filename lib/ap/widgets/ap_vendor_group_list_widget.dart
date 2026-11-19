@@ -141,6 +141,7 @@ class ApVendorGroupListWidgetState extends State<ApVendorGroupListWidget>
             ),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchCtrl,
               decoration: InputDecoration(
                 hintText: isEnglish ? 'Search (code / vendor group name)' : 'ค้นหา (รหัส / ชื่อกลุ่มผู้ขาย)',

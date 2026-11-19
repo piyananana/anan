@@ -2112,6 +2112,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             child: Column(
               children: [
                 TextField(
+                  autofocus: true,
                   controller: searchCtrl,
                   decoration: InputDecoration(
                     hintText: isEnglish ? 'Search (code / territory name)' : 'ค้นหา (รหัส / ชื่อเขต)',

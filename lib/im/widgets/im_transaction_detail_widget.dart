@@ -294,9 +294,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   bool _hdrPrefDraft = false;
   DateTime _docDate = DateTime.now();
   int? _warehouseId;
-  String? _warehouseLabel;
+  // เก็บรหัส + ชื่อทั้ง 2 ภาษาของคลัง/คลังปลายทาง — ป้ายชื่อคำนวณตามภาษาตอนแสดง (สลับภาษาแล้วเปลี่ยนตาม)
+  String? _whCode, _whNameTh, _whNameEn;
   int? _toWarehouseId;
-  String? _toWarehouseLabel;
+  String? _toWhCode, _toWhNameTh, _toWhNameEn;
+  String _whLabel(String? code, String? th, String? en) =>
+      '${code ?? ''} ${(_isEnglish && (en ?? '').isNotEmpty ? en : th) ?? ''}'.trim();
+  String? get _warehouseLabel => _warehouseId == null ? null : _whLabel(_whCode, _whNameTh, _whNameEn);
+  String? get _toWarehouseLabel => _toWarehouseId == null ? null : _whLabel(_toWhCode, _toWhNameTh, _toWhNameEn);
   int? _vendorId;
   String? _vendorLabel;
   int? _linkedApTransactionId;
@@ -691,9 +696,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _docNo = 'AUTO';
     _docDate = DateTime.now();
     _warehouseId = null;
-    _warehouseLabel = null;
+    _whCode = _whNameTh = _whNameEn = null;
     _toWarehouseId = null;
-    _toWarehouseLabel = null;
+    _toWhCode = _toWhNameTh = _toWhNameEn = null;
     _vendorId = null;
     _vendorLabel = null;
     _linkedApTransactionId = null;
@@ -786,7 +791,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       } else {
         if (_mainWarehouse != null) {
           _warehouseId = _mainWarehouse!.id;
-          _warehouseLabel = '${_mainWarehouse!.warehouseCode} ${_mainWarehouse!.warehouseNameTh}';
+          _whCode = _mainWarehouse!.warehouseCode; _whNameTh = _mainWarehouse!.warehouseNameTh; _whNameEn = _mainWarehouse!.warehouseNameEn;
         }
         _branchId = defaultDocBranchId(warehouseBranchId: _mainWarehouse?.branchId);
       }
@@ -812,9 +817,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     _docNo = h.docNo;
     _docDate = h.docDate;
     _warehouseId = h.warehouseId;
-    _warehouseLabel = '${h.warehouseCode ?? ''} ${h.warehouseNameTh ?? ''}'.trim();
+    _whCode = h.warehouseCode; _whNameTh = h.warehouseNameTh; _whNameEn = h.warehouseNameEn;
     _toWarehouseId = h.toWarehouseId;
-    _toWarehouseLabel = '${h.toWarehouseCode ?? ''} ${h.toWarehouseNameTh ?? ''}'.trim();
+    _toWhCode = h.toWarehouseCode; _toWhNameTh = h.toWarehouseNameTh; _toWhNameEn = h.toWarehouseNameEn;
     _vendorId = h.vendorId;
     _vendorLabel = '${h.vendorCode ?? ''} ${h.vendorNameTh ?? ''}'.trim();
     _linkedApTransactionId = h.linkedApTransactionId;
@@ -943,6 +948,46 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     });
   }
 
+  // เปลี่ยนประเภทเอกสารระหว่างป้อน (เอกสารใหม่): ล้างทุกฟิลด์เหมือนเริ่มเอกสารใหม่ แล้วค่อยตั้งประเภทใหม่
+  // (ค่าเริ่มต้นเหมือนเปิดเอกสารใหม่: คลังหลัก + สาขา) — มีรายการสินค้าแล้วถามยืนยันก่อน
+  int _docTypeFieldSeq = 0; // เปลี่ยน key ของ dropdown เพื่อดึงค่ากลับเมื่อผู้ใช้ยกเลิก
+  Future<void> _changeDocType(int? newId) async {
+    if (newId == null || newId == _docId) return;
+    final d = _docTypes.firstWhere((e) => e.id == newId);
+    if (_docId != null && _lines.isNotEmpty) {
+      final isEnglish = _isEnglish;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(isEnglish ? 'Change Document Type' : 'เปลี่ยนประเภทเอกสาร'),
+          content: Text(isEnglish
+              ? 'Changing the document type clears everything entered so far (header and lines). Continue?'
+              : 'การเปลี่ยนประเภทเอกสารจะล้างข้อมูลที่ป้อนไว้ทั้งหมด (หัวเอกสารและรายการ) ต้องการดำเนินการต่อหรือไม่?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isEnglish ? 'Change and clear' : 'เปลี่ยนและล้างข้อมูล')),
+          ],
+        ),
+      );
+      if (ok != true) {
+        if (mounted) setState(() => _docTypeFieldSeq++);
+        return;
+      }
+    }
+    if (!mounted) return;
+    if (_docId != null) {
+      setState(() {
+        _resetForm();
+        if (_mainWarehouse != null) {
+          _warehouseId = _mainWarehouse!.id;
+          _whCode = _mainWarehouse!.warehouseCode; _whNameTh = _mainWarehouse!.warehouseNameTh; _whNameEn = _mainWarehouse!.warehouseNameEn;
+        }
+        _branchId = defaultDocBranchId(warehouseBranchId: _mainWarehouse?.branchId);
+      });
+    }
+    await _selectDocType(d);
+  }
+
   Future<void> _selectDocType(ModuleDocument d) async {
     setState(() {
       _docId = d.id;
@@ -1007,7 +1052,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     final changed = _warehouseId != w.id;
     setState(() {
       _warehouseId = w.id;
-      _warehouseLabel = '${w.warehouseCode} ${w.warehouseNameTh}';
+      _whCode = w.warehouseCode; _whNameTh = w.warehouseNameTh; _whNameEn = w.warehouseNameEn;
       // ยังไม่มีสาขา (ผู้ใช้ไม่มีสาขาหลัก) → ใช้สาขาของคลัง
       if (_branchId == null && w.branchId != null) _branchId = w.branchId;
       if (changed) {
@@ -1028,7 +1073,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     final changed = _toWarehouseId != w.id;
     setState(() {
       _toWarehouseId = w.id;
-      _toWarehouseLabel = '${w.warehouseCode} ${w.warehouseNameTh}';
+      _toWhCode = w.warehouseCode; _toWhNameTh = w.warehouseNameTh; _toWhNameEn = w.warehouseNameEn;
       if (changed) {
         for (final l in _lines) {
           l.toLocationId = null;
@@ -1383,6 +1428,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
               height: 420,
               child: Column(children: [
                 TextField(
+                  autofocus: true,
                   controller: searchCtrl,
                   decoration: InputDecoration(
                     labelText: isEnglish ? 'Search doc no.' : 'ค้นหาเลขที่เอกสาร',
@@ -2884,6 +2930,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     // ── ฟิลด์ ──
     final docTypeW = canEditDocType && _docTypes.length > 1
         ? DropdownButtonFormField<int>(
+            key: ValueKey('docType$_docTypeFieldSeq'),
             value: _docId,
             isExpanded: true,
             decoration: _hDec(isEnglish ? 'Document Type *' : 'ประเภทเอกสาร *'),
@@ -2892,7 +2939,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                     value: d.id,
                     child: Text('${d.docCode} ${isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai}', overflow: TextOverflow.ellipsis)))
                 .toList(),
-            onChanged: (v) => _selectDocType(_docTypes.firstWhere((e) => e.id == v)),
+            onChanged: _changeDocType,
           )
         : _fkField(
             label: isEnglish ? 'Document Type' : 'ประเภทเอกสาร',
@@ -4102,10 +4149,139 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // (backend imPurchaseDiscountLine ต้องตั้งไว้เมื่อมีส่วนลด) หน้าจอนี้ไม่รู้รหัสบัญชีจึงแสดงชื่อแทน
   List<Widget> _purchaseDiscountLine(double amount, bool isEnglish) {
     if (amount.abs() < 0.005) return const [];
+    final d = _glAccts?.apDiscount;
     return [
-      _glLine(null, isEnglish ? 'Discount received (AP document type discount account)' : 'ส่วนลดรับ (บัญชีส่วนลดของประเภทเอกสาร AP)',
+      _glLine(
+          d?.code ?? (_glAccts == null ? null : '!'),
+          d != null
+              ? '${d.name(isEnglish)} (${isEnglish ? 'discount received' : 'ส่วนลดรับ'})'
+              : (_glAccts == null
+                  ? (isEnglish ? 'Discount received' : 'ส่วนลดรับ')
+                  : (isEnglish ? 'Discount account not configured (AP document type)' : 'ยังไม่ตั้งบัญชีส่วนลดรับ (ประเภทเอกสาร AP)')),
           amount < 0 ? -amount : 0, amount > 0 ? amount : 0),
     ];
+  }
+
+  // ── ฝั่งซื้อ (เอกสาร AP อัตโนมัติ) ── บัญชีเจ้าหนี้/ภาษีซื้อตามที่ backend จะใช้ตอน Post (resolveApAccountId ฯลฯ)
+  bool get _apLinkedPreview => _isGrnBillingMode || _isGrDeferredMode || _isApReturnCnMode || _isApDnMode;
+
+  _Acct _apAcct(bool isEnglish) {
+    final a = _glAccts?.apAccount;
+    if (a != null) return (code: a.code, name: a.name(isEnglish));
+    if (_glAccts == null) return (code: null, name: isEnglish ? 'Accounts Payable' : 'เจ้าหนี้การค้า');
+    return (
+      code: '!',
+      name: isEnglish
+          ? 'AP account not configured (vendor / vendor group / AP document type)'
+          : 'ยังไม่ตั้งบัญชีเจ้าหนี้ (ผู้ขาย / กลุ่มผู้ขาย / ประเภทเอกสาร AP)',
+    );
+  }
+
+  _Acct _apVatAcct(bool isEnglish) {
+    final a = _glAccts?.apVat;
+    if (a != null) return (code: a.code, name: a.name(isEnglish));
+    if (_glAccts == null) return (code: _docSetup?.vatInputAccountCode, name: _docSetup?.vatInputAccountName ?? (isEnglish ? 'VAT Input' : 'ภาษีซื้อ'));
+    return (code: '!', name: isEnglish ? 'VAT input account not configured' : 'ยังไม่ตั้งบัญชีภาษีซื้อ');
+  }
+
+  // ใบจ่ายชำระ AP ของซื้อเงินสด — Dr เจ้าหนี้ / Cr เงินสด-ธนาคารตามวิธีจ่าย + ภาษีหัก ณ ที่จ่ายค้างจ่าย
+  // (มิเรอร์ postApPaymentForCashPurchase) — ยอดคงค้าง 0 (มัดจำครอบคลุมทั้งหมด) = ไม่มีใบจ่าย
+  Widget? _buildCashPaymentSection(bool isEnglish) {
+    _glSumReset();
+    final rate = _exchangeRate;
+    final dueLc = _cashDueFc * rate;
+    if (dueLc <= 0.005) return null;
+    final whtLc = _cash.whtTotal * rate;
+    final cashLc = dueLc - whtLc;
+    final accts = _glAccts?.paymentPayments ?? const <ImGlAcct?>[];
+    final ap = _apAcct(isEnglish);
+    final lines = <Widget>[_glLine(ap.code, ap.name, dueLc, 0)];
+    final paid = <int>[for (var i = 0; i < _cash.payments.length; i++) if (_cash.payments[i].amount > 0) i];
+    double rest = cashLc;
+    for (var k = 0; k < paid.length; k++) {
+      final i = paid[k];
+      final p = _cash.payments[i];
+      final lc = k == paid.length - 1 ? rest : p.amount * rate; // บรรทัดสุดท้ายรับเศษปัด (เหมือน backend)
+      rest -= lc;
+      final a = i < accts.length ? accts[i] : null;
+      final label = p.paymentMethodName ?? p.paymentMethodCode ?? p.paymentMethodType;
+      lines.add(_glLine(
+          a?.code ?? (_glAccts == null ? null : '!'),
+          a != null
+              ? '${a.name(isEnglish)} ($label)'
+              : (_glAccts == null ? label : (isEnglish ? 'Payment account not configured ($label)' : 'ยังไม่ตั้งบัญชีจ่ายเงิน ($label)')),
+          0,
+          lc));
+    }
+    if (paid.isEmpty) {
+      lines.add(_glLine(null, isEnglish ? 'Cash / bank (no payment method yet)' : 'เงินสด/ธนาคาร (ยังไม่ระบุวิธีจ่าย)', 0, cashLc));
+    }
+    if (whtLc.abs() >= 0.005) {
+      final w = _glAccts?.paymentWht;
+      lines.add(_glLine(w?.code ?? '!',
+          w?.name(isEnglish) ?? (isEnglish ? 'Withholding tax payable account not configured' : 'ยังไม่ตั้งบัญชีภาษีหัก ณ ที่จ่ายค้างจ่าย'), 0, whtLc));
+    }
+    return _glSection(isEnglish ? 'AP Payment' : 'ใบจ่ายชำระเจ้าหนี้', lines);
+  }
+
+  // การ์ดตัวอย่างรายการบัญชีของเอกสารที่สร้างเอกสาร AP อัตโนมัติ — ① ใบตั้งหนี้/ใบลด-เพิ่มหนี้ AP ② ใบจ่ายชำระ (ซื้อเงินสด)
+  Widget _buildCombinedApCard(bool isEnglish) {
+    _glSectionMode = true;
+    double dr = 0, cr = 0;
+    final all = <(String?, String?, double, double)>[];
+    final sections = <Widget>[];
+    var n = 0;
+    void take(Widget? w) {
+      if (w == null) return;
+      dr += _glSumDr;
+      cr += _glSumCr;
+      all.addAll(_glSumLines);
+      if (sections.isNotEmpty) sections.add(const SizedBox(height: 14));
+      sections.add(w);
+      n++;
+    }
+
+    final docLabel = _isApReturnCnMode
+        ? (isEnglish ? 'AP Credit Note' : 'ใบลดหนี้เจ้าหนี้')
+        : _isApDnMode
+            ? (isEnglish ? 'AP Debit Note' : 'ใบเพิ่มหนี้เจ้าหนี้')
+            : (isEnglish ? 'AP Invoice' : 'ใบตั้งหนี้เจ้าหนี้');
+    try {
+      _glSectionTitle = _isGrDeferredMode && _status != 'Posted'
+          ? '$docLabel (${isEnglish ? 'created at Post AP/GL' : 'สร้างตอน Post AP/GL'})'
+          : docLabel;
+      take(_buildGlCardInner(isEnglish));
+      _glSectionTitle = null;
+      if (_isCashPurchaseMode) take(_buildCashPaymentSection(isEnglish));
+    } finally {
+      _glSectionMode = false;
+      _glSectionTitle = null;
+    }
+    _glSumReset();
+    _glSumDr = dr;
+    _glSumCr = cr;
+    _glSumLines.addAll(all);
+    return _card(
+      collapseKey: 'gl',
+      glPreview: true,
+      title: _status == 'Posted' ? (isEnglish ? 'GL Entries' : 'รายการบัญชี') : (isEnglish ? 'GL Preview' : 'ตัวอย่างรายการบัญชี'),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            isEnglish
+                ? (n > 1
+                    ? 'Posting creates $n separate journal entries in AP, shown as sections below. Accounts follow the current settings of the IM/AP document types, items and vendor.'
+                    : 'This document posts no GL entry of its own — the entry below belongs to the AP document created automatically. Accounts follow the current settings of the IM/AP document types, items and vendor.')
+                : (n > 1
+                    ? 'เมื่อ Post ระบบลงบัญชีในโมดูล AP แยกเป็น $n รายการตามส่วนด้านล่าง — บัญชีมาจากการตั้งค่าปัจจุบันของประเภทเอกสาร IM/AP สินค้า และผู้ขาย'
+                    : 'เอกสารนี้ไม่ลงบัญชีของตัวเอง — รายการด้านล่างเป็นของเอกสาร AP ที่สร้างอัตโนมัติ บัญชีมาจากการตั้งค่าปัจจุบันของประเภทเอกสาร IM/AP สินค้า และผู้ขาย'),
+            style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade700),
+          ),
+        ),
+        ...sections,
+      ],
+    );
   }
 
   (List<Widget>, double) _advancePreview(bool isEnglish, {required bool ap}) {
@@ -4152,11 +4328,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     if (code == null) return;
     final ids = _lines.map((l) => l.item.id).whereType<int>().toSet().toList()..sort();
     final customerId = _arLinkedPreview ? _customerId : null;
-    final pays = _isCashSaleMode
+    final vendorId = _apLinkedPreview ? _vendorId : null;
+    final pays = _isCashMode
         ? [for (final p in _cash.payments) {'payment_method_type': p.paymentMethodType, 'gl_account_id': p.glAccountId, 'cm_bank_account_id': p.cmBankAccountId}]
         : <Map<String, dynamic>>[];
     final paySig = pays.map((p) => '${p['payment_method_type']}:${p['gl_account_id']}:${p['cm_bank_account_id']}').join(';');
-    final key = '$code|$_warehouseId|$_toWarehouseId|${ids.join(',')}|$customerId|$paySig';
+    final key = '$code|$_warehouseId|$_toWarehouseId|${ids.join(',')}|$customerId|$vendorId|$paySig';
     if (key == _glAcctsKey) return;
     _glAcctsKey = key;
     _glAccts = null; // ไม่ใช้บัญชีของชุดเดิมระหว่างรอโหลด (เรียกจาก build จึงไม่ต้อง setState)
@@ -4164,7 +4341,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       ImGlAccounts? r;
       try {
         r = await _service.fetchGlAccounts(docCode: code, warehouseId: _warehouseId, toWarehouseId: _toWarehouseId, itemIds: ids,
-            customerId: customerId, payments: pays);
+            customerId: customerId, vendorId: vendorId, payments: pays);
       } catch (_) {}
       if (!mounted || key != _glAcctsKey) return;
       setState(() => _glAccts = r);
@@ -4242,7 +4419,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   Widget _buildGlCard(bool isEnglish) {
     _glDimMissing.clear();
     _glDimMissingSlotsBuild.clear();
-    final card0 = _arLinkedPreview ? _buildCombinedGlCard(isEnglish) : _buildGlCardInner(isEnglish);
+    final card0 = _arLinkedPreview
+        ? _buildCombinedGlCard(isEnglish)
+        : _apLinkedPreview
+            ? _buildCombinedApCard(isEnglish)
+            : _buildGlCardInner(isEnglish);
     // การ์ดข้อมูลเอกสารสร้างก่อนการ์ดนี้ — ช่องมิติที่ขาดเปลี่ยนเมื่อไหร่ สร้างหน้าจอใหม่อีกรอบ
     if (_glDimMissingSlotsBuild.length != _glDimMissingSlots.length || !_glDimMissingSlots.containsAll(_glDimMissingSlotsBuild)) {
       _glDimMissingSlots = {..._glDimMissingSlotsBuild};
@@ -4299,16 +4480,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     // _docSetup ด้านล่าง — และ gl_entry_id ของ im_transaction เองก็เป็น null เสมอแม้ Posted แล้ว (entry อยู่ที่
     // ap_transaction ที่สร้างให้ เหมือน '11') จึงแสดงตัวอย่างที่คำนวณจากค่าปัจจุบันแทนของจริงจาก server เสมอ
     if (_isGrDeferredMode) {
-      if (_status == 'Draft') {
-        return _card(collapseKey: 'gl', glPreview: true, title: isEnglish ? 'GL Preview' : 'ตัวอย่างรายการบัญชี', children: [
-          Text(
-            isEnglish
-                ? 'No GL posts at "Post IM" — GL is only posted later when this document is billed via "Post AP/GL".'
-                : 'ตอน "Post IM" จะยังไม่มีการโพสต์บัญชี — จะโพสต์บัญชีก็ต่อเมื่อ "Post AP/GL" ภายหลังเมื่อได้รับใบกำกับ',
-            style: TextStyle(color: Colors.grey.shade700, fontStyle: FontStyle.italic),
-          ),
-        ]);
-      }
+      final isDraft = _status == 'Draft';
       // ช่องต้นทุน/ต้นทุนตามใบกำกับเป็นสกุลเงินของเอกสาร — แปลงเป็นบาทด้วยอัตราแลกเปลี่ยนของเอกสาร; จำนวนที่รับ
       // คือ variance (counted คือยอดคงเหลือหลังรับ ไม่ใช่จำนวนที่รับ) — สินค้าคงคลังลงตามมูลค่าสต็อกตอนรับ
       // ส่วนต่างกับราคาใบกำกับลงบัญชีผลต่างต้นทุน (มิเรอร์ postApBillFromGrn; Periodic ลงบัญชีซื้อเต็มจำนวน)
@@ -4337,21 +4509,24 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             ? (isEnglish ? 'GL Preview (Posted reference)' : 'ตัวอย่างรายการบัญชี (อ้างอิงยอดที่ Posted แล้ว)')
             : (isEnglish ? 'GL Preview (not posted yet)' : 'ตัวอย่างรายการบัญชี (ยังไม่ได้ Post)'),
         children: [
-          ..._groupedGlLines(invEntries, suffix: isEnglish ? ' (on the AP bill)' : ' (บนใบตั้งหนี้ AP)'),
+          ..._groupedGlLines(invEntries),
           if (hasVariance)
             _glLine(_docSetup?.varianceAccountCode,
                 isEnglish ? 'Cost variance (billed price vs received cost)' : 'ผลต่างต้นทุน (ราคาใบกำกับ - ต้นทุนตอนรับ)',
                 priceVariance > 0 ? priceVariance : 0, priceVariance < 0 ? -priceVariance : 0),
-          if (vatValue > 0)
-            _glLine(_docSetup?.vatInputAccountCode, isEnglish ? '${_docSetup?.vatInputAccountName ?? 'VAT Input'} (on the AP bill)' : '${_docSetup?.vatInputAccountName ?? 'VAT ซื้อ'} (บนใบตั้งหนี้ AP)', vatValue, 0),
+          if (vatValue > 0) _glLine(_apVatAcct(isEnglish).code, _apVatAcct(isEnglish).name, vatValue, 0),
           ..._purchaseDiscountLine(discValue, isEnglish),
-          _glLine(null, isEnglish ? 'AP payable' : 'เจ้าหนี้การค้า', 0, billedValue - discValue + vatValue - advReduce),
+          _glLine(_apAcct(isEnglish).code, _apAcct(isEnglish).name, 0, billedValue - discValue + vatValue - advReduce),
           ...advLines,
           _modeSideNote(isEnglish),
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              isPostedYet
+              isDraft
+                  ? (isEnglish
+                      ? 'No GL posts at "Post IM" — this AP invoice entry is posted later via "Post AP/GL" when the vendor invoice arrives (amounts here use the current prices).'
+                      : 'ตอน "Post IM" ยังไม่ลงบัญชี — รายการตั้งหนี้นี้จะลงบัญชีเมื่อกด "Post AP/GL" ภายหลังที่ได้รับใบกำกับ (ยอดนี้คำนวณจากราคาปัจจุบัน)')
+                  : isPostedYet
                   ? (isEnglish
                       ? 'This reflects the billed cost currently saved on this document — it should match what was actually posted to AP/GL.'
                       : 'ยอดนี้คำนวณจากต้นทุนตามใบกำกับที่บันทึกไว้ในเอกสารนี้ — ควรตรงกับยอดที่ Post จริงในโมดูล AP/GL')
@@ -4438,16 +4613,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         final stockValue = invEntries.fold<double>(0, (s, e) => s + e.$2);
         final priceVariance = billValue - stockValue;
         return _card(collapseKey: 'gl', glPreview: true, title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
-          ..._groupedGlLines(invEntries, suffix: isEnglish ? ' (on the AP bill)' : ' (บนใบตั้งหนี้ AP)'),
+          ..._groupedGlLines(invEntries),
           if (priceVariance.abs() >= 0.005)
             _glLine(_docSetup!.varianceAccountCode,
                 isEnglish ? 'Cost variance (purchase price vs standard cost)' : 'ผลต่างต้นทุน (ราคาซื้อ - ต้นทุนมาตรฐาน)',
                 priceVariance > 0 ? priceVariance : 0, priceVariance < 0 ? -priceVariance : 0),
-          if (vatValue > 0)
-            _glLine(_docSetup!.vatInputAccountCode, isEnglish ? '${_docSetup!.vatInputAccountName ?? 'VAT Input'} (on the AP bill)' : '${_docSetup!.vatInputAccountName ?? 'VAT ซื้อ'} (บนใบตั้งหนี้ AP)',
-                vatValue, 0),
+          if (vatValue > 0) _glLine(_apVatAcct(isEnglish).code, _apVatAcct(isEnglish).name, vatValue, 0),
           ..._purchaseDiscountLine(discValue, isEnglish),
-          _glLine(null, isEnglish ? 'AP payable (auto-created)' : 'เจ้าหนี้การค้า (สร้างอัตโนมัติ)', 0, billValue - discValue + vatValue - advReduce),
+          _glLine(_apAcct(isEnglish).code, _apAcct(isEnglish).name, 0, billValue - discValue + vatValue - advReduce),
           ...advLines,
           _modeSideNote(isEnglish),
           Padding(
@@ -4518,14 +4691,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           : (isEnglish ? 'AP Debit Note' : 'ใบเพิ่มหนี้ AP');
       final grandValue = value - discSigned + (value >= 0 ? vatValue : -vatValue);
       return _card(collapseKey: 'gl', glPreview: true, title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
-        ..._groupedGlLines(invEntries, suffix: isEnglish ? ' (on the $noteLabel)' : ' (บน$noteLabel)'),
+        ..._groupedGlLines(invEntries),
         _modeSideNote(isEnglish),
         if (vatValue > 0)
-          _glLine(_docSetup!.vatInputAccountCode,
-              isEnglish ? '${_docSetup!.vatInputAccountName ?? 'VAT Input'} (on the $noteLabel)' : '${_docSetup!.vatInputAccountName ?? 'VAT ซื้อ'} (บน$noteLabel)',
-              value > 0 ? vatValue : 0, value < 0 ? vatValue : 0),
+          _glLine(_apVatAcct(isEnglish).code, _apVatAcct(isEnglish).name, value > 0 ? vatValue : 0, value < 0 ? vatValue : 0),
         ..._purchaseDiscountLine(discSigned, isEnglish),
-        _glLine(null, isEnglish ? '$noteLabel (auto-created)' : '$noteLabel (สร้างอัตโนมัติ)',
+        _glLine(_apAcct(isEnglish).code, _apAcct(isEnglish).name,
             grandValue < 0 ? -grandValue : 0, grandValue > 0 ? grandValue : 0),
         if (undetermined > 0)
           Padding(

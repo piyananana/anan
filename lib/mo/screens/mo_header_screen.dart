@@ -96,8 +96,7 @@ class _MoHeaderScreenState extends State<MoHeaderScreen> with SingleTickerProvid
         title: _currentTabIndex == 1
             ? Row(mainAxisSize: MainAxisSize.min, children: [
                 const Flexible(child: MenuTitle()),
-                Text('  >  ${isEnglish ? 'MO Details' : 'รายละเอียดใบสั่งผลิต'}',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.normal)),
+                Text('  >  ${isEnglish ? 'MO Details' : 'รายละเอียดใบสั่งผลิต'}'),
               ])
             : const MenuTitle(),
         backgroundColor: Colors.teal[800],

@@ -164,7 +164,7 @@ class _ImStockCountPrintScreenState extends State<ImStockCountPrintScreen> {
       return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
         pw.Container(
           padding: const pw.EdgeInsets.symmetric(vertical: 4),
-          child: pw.Text('${isEnglish ? 'Bin' : 'ตำแหน่ง'}: ${bin.locationCode}  ${bin.locationName ?? ''}',
+          child: pw.Text('${isEnglish ? 'Bin' : 'ตำแหน่ง'}: ${bin.locationCode}  ${bin.displayName(isEnglish)}',
               style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
         ),
         pw.Table(

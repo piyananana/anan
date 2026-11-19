@@ -98,8 +98,7 @@ class _PoTransactionScreenState extends State<PoTransactionScreen> with SingleTi
         title: _currentTabIndex == 1
             ? Row(mainAxisSize: MainAxisSize.min, children: [
                 const Flexible(child: MenuTitle()),
-                Text('  >  ${isEnglish ? 'PO Details' : 'รายละเอียดใบสั่งซื้อ'}',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.normal)),
+                Text('  >  ${isEnglish ? 'PO Details' : 'รายละเอียดใบสั่งซื้อ'}'),
               ])
             : const MenuTitle(),
         backgroundColor: Colors.teal[800],

@@ -189,7 +189,7 @@ class ImLocationTreeWidgetState extends State<ImLocationTreeWidget>
                 child: Row(children: [
                   Flexible(
                     child: Text(
-                      '${item.locationCode}  ${item.locationName ?? ''}',
+                      '${item.locationCode}  ${item.displayName(isEnglish)}',
                       style: TextStyle(
                         fontSize: 16,
                         color: textColor,

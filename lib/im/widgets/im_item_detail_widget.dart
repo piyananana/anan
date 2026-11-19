@@ -289,7 +289,7 @@ Future<ImItemWarehouse?> _showItemWarehouseDialog(BuildContext context, ImItemWa
                   decoration: InputDecoration(labelText: isEnglish ? 'Default Location' : 'ตำแหน่งจัดเก็บเริ่มต้น', border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                   items: [
                     DropdownMenuItem(value: null, child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
-                    ...availableLocations.map((l) => DropdownMenuItem(value: l.id, child: Text('${l.locationCode}  ${l.locationName ?? ''}'))),
+                    ...availableLocations.map((l) => DropdownMenuItem(value: l.id, child: Text('${l.locationCode}  ${l.displayName(isEnglish)}'))),
                   ],
                   onChanged: (v) => setDlg(() {
                     locationId = v;

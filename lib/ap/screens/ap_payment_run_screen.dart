@@ -2148,6 +2148,7 @@ class _InvoicePickerDialogState extends State<_InvoicePickerDialog> {
               SizedBox(
                 width: 180,
                 child: TextField(
+                  autofocus: true,
                   controller: _vendorCtrl,
                   decoration: InputDecoration(
                       labelText: isEnglish ? 'Vendor Code' : 'รหัสเจ้าหนี้',

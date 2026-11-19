@@ -182,6 +182,7 @@ class BusinessTypeListWidgetState extends State<BusinessTypeListWidget>
             ),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: isEnglish

@@ -211,6 +211,7 @@ class CurrencyListWidgetState extends State<CurrencyListWidget>
               : const SizedBox.shrink(),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: isEnglish

@@ -152,6 +152,7 @@ class ImItemListWidgetState extends State<ImItemListWidget> with AutomaticKeepAl
           ),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchCtrl,
               decoration: InputDecoration(
                 hintText: isEnglish ? 'Search (code / name / barcode)' : 'ค้นหา (รหัส / ชื่อ / บาร์โค้ด)',

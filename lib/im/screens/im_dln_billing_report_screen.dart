@@ -61,7 +61,9 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
   DateTime? _dateFrom;
   DateTime? _dateTo;
   int?      _warehouseId;
-  String?   _warehouseLabel;
+  ImWarehouse? _warehouse; // เก็บทั้งแถว — ป้ายชื่อคำนวณตามภาษาตอนแสดง
+  String? get _warehouseLabel =>
+      _warehouse == null ? null : '${_warehouse!.warehouseCode}  ${_warehouse!.warehouseName(_isEnglish)}';
   int?      _customerId;
   String?   _customerLabel;
   String    _statusFilter = 'all'; // 'all' | 'Delivered' | 'Posted'
@@ -201,7 +203,7 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
           _xlCell(s, r, 0, '');
           _xlCell(s, r, 1, d.docNo);
           _xlCell(s, r, 2, DateFormat('dd/MM/yyyy').format(d.docDate));
-          _xlCell(s, r, 3, '${d.warehouseCode ?? ''} ${d.warehouseNameTh ?? ''}'.trim());
+          _xlCell(s, r, 3, '${d.warehouseCode ?? ''} ${d.warehouseName(_isEnglish)}'.trim());
           _xlCell(s, r, 4, d.refNo ?? '');
           _xlCell(s, r, 5, _statusLabel(d.status, isEnglish));
           _xlCell(s, r, 6, d.daysOutstanding?.toString() ?? '-', align: HorizontalAlign.Right);
@@ -400,7 +402,7 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
                 dCell(''),
                 dCell(d.docNo),
                 dCell(DateFormat('dd/MM/yyyy').format(d.docDate), a: pw.TextAlign.center),
-                dCell('${d.warehouseCode ?? ''} ${d.warehouseNameTh ?? ''}'.trim()),
+                dCell('${d.warehouseCode ?? ''} ${d.warehouseName(_isEnglish)}'.trim()),
                 dCell(d.refNo ?? ''),
                 dCell(_statusLabel(d.status, isEnglish), a: pw.TextAlign.center),
                 dCell(d.daysOutstanding?.toString() ?? '-', a: pw.TextAlign.center),
@@ -554,12 +556,12 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
                                 onPick: () => ImWarehouseListWidget.search(context, onSelected: (ImWarehouse w) {
                                   setState(() {
                                     _warehouseId = w.id;
-                                    _warehouseLabel = '${w.warehouseCode}  ${w.warehouseNameTh}';
+                                    _warehouse = w;
                                   });
                                 }),
                                 onClear: () => setState(() {
                                   _warehouseId = null;
-                                  _warehouseLabel = null;
+                                  _warehouse = null;
                                 }),
                               ),
 

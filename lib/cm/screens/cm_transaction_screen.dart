@@ -92,8 +92,7 @@ class _CmTransactionScreenState extends State<CmTransactionScreen>
         title: _currentTabIndex == 1
             ? Row(mainAxisSize: MainAxisSize.min, children: [
                 const Flexible(child: MenuTitle()),
-                Text('  >  ${isEnglish ? 'Transaction Details' : 'รายละเอียดธุรกรรม'}',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.normal)),
+                Text('  >  ${isEnglish ? 'Transaction Details' : 'รายละเอียดธุรกรรม'}'),
               ])
             : const MenuTitle(),
         backgroundColor: Colors.blue[800],

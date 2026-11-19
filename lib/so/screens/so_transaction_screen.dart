@@ -98,8 +98,7 @@ class _SoTransactionScreenState extends State<SoTransactionScreen> with SingleTi
         title: _currentTabIndex == 1
             ? Row(mainAxisSize: MainAxisSize.min, children: [
                 const Flexible(child: MenuTitle()),
-                Text('  >  ${isEnglish ? 'SO Details' : 'รายละเอียดใบสั่งขาย'}',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.normal)),
+                Text('  >  ${isEnglish ? 'SO Details' : 'รายละเอียดใบสั่งขาย'}'),
               ])
             : const MenuTitle(),
         backgroundColor: Colors.teal[800],

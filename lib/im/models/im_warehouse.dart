@@ -46,6 +46,10 @@ class ImWarehouse {
     this.purchasesAccountId, this.purchasesAccountCode, this.purchasesAccountName,
   });
 
+  // ชื่อคลังตามภาษาที่เลือก — ไม่มีชื่ออังกฤษใช้ชื่อไทย
+  String warehouseName(bool isEnglish) =>
+      isEnglish && (warehouseNameEn ?? '').isNotEmpty ? warehouseNameEn! : warehouseNameTh;
+
   factory ImWarehouse.fromJson(Map<String, dynamic> json) => ImWarehouse(
         id: json['id'] as int,
         warehouseCode: json['warehouse_code'] ?? '',

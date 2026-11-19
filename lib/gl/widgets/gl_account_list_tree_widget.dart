@@ -91,6 +91,67 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
   bool _isLoading = false;
   final Map<int, bool> _expandedState = {};
 
+  // ค้นหารหัส/ชื่อบัญชี (ไทย/อังกฤษ): แสดงเฉพาะบัญชีที่ตรง + โหนดแม่ทุกชั้น (แตกออกให้อัตโนมัติ) + บัญชีย่อยของหัวบัญชีที่ตรง
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+  Set<int> _matchedIds = {};
+  Set<int>? _visibleIds; // null = แสดงทั้งหมด (ไม่ได้ค้นหา)
+  Map<int, bool>? _expandedBeforeSearch; // สถานะแตก/หุบก่อนค้นหา — คืนให้เมื่อล้างคำค้น
+
+  bool _matches(Account a, String q) =>
+      a.accountCode.toLowerCase().contains(q) ||
+      a.accountNameThai.toLowerCase().contains(q) ||
+      a.accountNameEng.toLowerCase().contains(q);
+
+  void _onSearchChanged(String raw) {
+    final q = raw.trim().toLowerCase();
+    setState(() {
+      if (q.isEmpty) {
+        if (_expandedBeforeSearch != null) {
+          _expandedState
+            ..clear()
+            ..addAll(_expandedBeforeSearch!);
+          _expandedBeforeSearch = null;
+        }
+        _query = '';
+        _matchedIds = {};
+        _visibleIds = null;
+        return;
+      }
+      _expandedBeforeSearch ??= Map.of(_expandedState);
+      _query = q;
+      _recomputeSearch();
+    });
+  }
+
+  void _recomputeSearch() {
+    if (_query.isEmpty) return;
+    final byId = {for (final a in _lists) a.id: a};
+    final childrenOf = <int?, List<int>>{};
+    for (final a in _lists) {
+      childrenOf.putIfAbsent(a.parentId, () => []).add(a.id);
+    }
+    _matchedIds = _lists.where((a) => _matches(a, _query)).map((a) => a.id).toSet();
+    final visible = <int>{..._matchedIds};
+    for (final id in _matchedIds) {
+      // โหนดแม่ทุกชั้นของบัญชีที่ตรง: แสดงและแตกออก
+      var p = byId[id]?.parentId;
+      final seen = <int>{};
+      while (p != null && byId.containsKey(p) && seen.add(p)) {
+        visible.add(p);
+        _expandedState[p] = true;
+        p = byId[p]!.parentId;
+      }
+      // บัญชีย่อยของหัวบัญชีที่ตรง: แสดงได้ (หุบไว้ตามเดิม)
+      final stack = [...?childrenOf[id]];
+      while (stack.isNotEmpty) {
+        final c = stack.removeLast();
+        if (visible.add(c)) stack.addAll(childrenOf[c] ?? const []);
+      }
+    }
+    _visibleIds = visible;
+  }
+
   Future<void> _fetchLists() async {
     setState(() => _isLoading = true);
     try {
@@ -101,6 +162,7 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
       setState(() {
         _lists = fetched;
         _isLoading = false;
+        _recomputeSearch();
       });
     } catch (e) {
       setState(() => _isLoading = false);
@@ -127,30 +189,65 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
 
   @override
   void dispose() {
+    _searchCtrl.dispose();
     super.dispose();
   }
 
   Widget _buildListHeader(bool isEnglish) {
     return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          widget.enableAddRootButton
-              ? Expanded(child:
-                  ElevatedButton.icon(
-                    onPressed: () => widget.onAddRoot(),
-                    icon: const Icon(Icons.add),
-                    label: Text(isEnglish ? 'Add Root Account' : 'เพิ่มหมวดหลัก')
-                  )
-              )
-              : const SizedBox.shrink(),
+          TextField(
+            autofocus: ModalRoute.of(context) is PopupRoute,
+            controller: _searchCtrl,
+            onChanged: _onSearchChanged,
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: isEnglish ? 'Search account code / name' : 'ค้นหารหัส/ชื่อบัญชี',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      tooltip: isEnglish ? 'Clear' : 'ล้าง',
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        _onSearchChanged('');
+                      },
+                    ),
+              border: const OutlineInputBorder(),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+          ),
+          if (_query.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                isEnglish ? 'Found ${_matchedIds.length} account(s)' : 'พบ ${_matchedIds.length} บัญชี',
+                style: TextStyle(fontSize: 12, color: _matchedIds.isEmpty ? Colors.red : Colors.black54),
+              ),
+            ),
+          if (widget.enableAddRootButton) ...[
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: () => widget.onAddRoot(),
+              icon: const Icon(Icons.add),
+              label: Text(isEnglish ? 'Add Root Account' : 'เพิ่มหมวดหลัก'),
+            ),
+          ],
         ],
       ),
     );
   }
 
   List<Account> _buildTree(List<Account> lists, int? parentId) {
-    return lists.where((list) => list.parentId == parentId).toList()
+    final visible = _visibleIds;
+    return lists
+        .where((list) => list.parentId == parentId && (visible == null || visible.contains(list.id)))
+        .toList()
       ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
   }
 
@@ -207,6 +304,9 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
                       fontSize: 16,
                       color: textColor,
                       fontStyle: isInactive ? FontStyle.italic : FontStyle.normal,
+                      // บัญชีที่ตรงกับคำค้น: ตัวหนา + พื้นเหลือง
+                      fontWeight: _matchedIds.contains(item.id) ? FontWeight.bold : null,
+                      backgroundColor: _matchedIds.contains(item.id) ? Colors.yellow.shade200 : null,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -286,13 +386,11 @@ class AccountListTreeWidgetState extends State<AccountListTreeWidget>
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : Expanded(
-                  child: ListView.builder(
-                    itemCount: topLevelLists.length,
-                    itemBuilder: (context, index) {
-                      return _buildNode(topLevelLists[index], 0, isEnglish);
-                    },
-                  ),
+              : ListView.builder(
+                  itemCount: topLevelLists.length,
+                  itemBuilder: (context, index) {
+                    return _buildNode(topLevelLists[index], 0, isEnglish);
+                  },
                 ),
           // ListView.builder(
           //     itemCount: _searchResult.length,

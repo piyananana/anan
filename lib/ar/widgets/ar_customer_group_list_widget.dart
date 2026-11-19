@@ -197,6 +197,7 @@ class ArCustomerGroupListWidgetState extends State<ArCustomerGroupListWidget>
             ),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: isEnglish

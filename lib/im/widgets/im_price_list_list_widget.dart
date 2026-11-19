@@ -125,6 +125,7 @@ class ImPriceListListWidgetState extends State<ImPriceListListWidget> with Autom
             IconButton(icon: const Icon(Icons.add), tooltip: isEnglish ? 'Add new price list' : 'เพิ่มตารางราคาใหม่', onPressed: widget.onAdd),
           Expanded(
             child: TextField(
+              autofocus: ModalRoute.of(context) is PopupRoute,
               controller: _searchCtrl,
               decoration: InputDecoration(
                 hintText: isEnglish ? 'Search (code / name)' : 'ค้นหา (รหัส / ชื่อ)',

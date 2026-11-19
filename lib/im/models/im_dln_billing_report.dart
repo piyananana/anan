@@ -16,6 +16,10 @@ class ImDlnBillingReportDoc {
   final String status; // 'Delivered' | 'Posted'
   final String? warehouseCode;
   final String? warehouseNameTh;
+  final String? warehouseNameEn;
+
+  String warehouseName(bool isEnglish) =>
+      (isEnglish && (warehouseNameEn ?? '').isNotEmpty ? warehouseNameEn : warehouseNameTh) ?? '';
   final String? refNo;
   final int? linkedArTransactionId;
   final int? daysOutstanding; // non-null only when status == 'Delivered'
@@ -30,6 +34,7 @@ class ImDlnBillingReportDoc {
     required this.status,
     this.warehouseCode,
     this.warehouseNameTh,
+    this.warehouseNameEn,
     this.refNo,
     this.linkedArTransactionId,
     this.daysOutstanding,
@@ -45,6 +50,7 @@ class ImDlnBillingReportDoc {
         status: json['status'] ?? '',
         warehouseCode: json['warehouse_code'],
         warehouseNameTh: json['warehouse_name_th'],
+        warehouseNameEn: json['warehouse_name_en'],
         refNo: json['ref_no'],
         linkedArTransactionId: json['linked_ar_transaction_id'],
         daysOutstanding: json['days_outstanding'] == null ? null : (json['days_outstanding'] as num).toInt(),

@@ -16,7 +16,8 @@ class ImLocation {
   final int? parentId;
   final int level;
   final String locationCode;
-  final String? locationName;
+  final String? locationName; // ชื่อภาษาไทย (คอลัมน์ location_name เดิม)
+  final String? locationNameEn;
   final String locationType; // 'GROUP' / 'BIN'
   final int? categoryId;
   final String? categoryCode;
@@ -36,6 +37,7 @@ class ImLocation {
     this.level = 1,
     required this.locationCode,
     this.locationName,
+    this.locationNameEn,
     this.locationType = 'BIN',
     this.categoryId,
     this.categoryCode,
@@ -56,6 +58,7 @@ class ImLocation {
         level: json['level'] ?? 1,
         locationCode: json['location_code'] ?? '',
         locationName: json['location_name'],
+        locationNameEn: json['location_name_en'],
         locationType: json['location_type'] ?? 'BIN',
         categoryId: json['category_id'],
         categoryCode: json['category_code'],
@@ -66,12 +69,17 @@ class ImLocation {
         isDefault: json['is_default'] ?? false,
       );
 
+  // ชื่อตามภาษาที่เลือก — ไม่มีชื่ออังกฤษใช้ชื่อไทย
+  String displayName(bool isEnglish) =>
+      (isEnglish && (locationNameEn ?? '').isNotEmpty ? locationNameEn : locationName) ?? '';
+
   Map<String, dynamic> toJson() => {
         if (id != 0) 'id': id,
         'warehouse_id': warehouseId,
         'parent_id': parentId,
         'location_code': locationCode,
         'location_name': locationName,
+        'location_name_en': locationNameEn,
         'location_type': locationType,
         'category_id': categoryId,
         'is_active': isActive,

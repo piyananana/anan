@@ -180,6 +180,7 @@ class CmBankAccountListWidgetState extends State<CmBankAccountListWidget>
               ),
               Expanded(
                 child: TextField(
+                  autofocus: ModalRoute.of(context) is PopupRoute,
                   controller: _searchController,
                   decoration: InputDecoration(
                     hintText: isEnglish ? 'Search (code / name / account no. / bank)' : 'ค้นหา (รหัส / ชื่อ / เลขบัญชี / ธนาคาร)',

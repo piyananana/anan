@@ -206,6 +206,7 @@ class CmPaymentMethodListWidgetState extends State<CmPaymentMethodListWidget>
               ),
               Expanded(
                 child: TextField(
+                  autofocus: ModalRoute.of(context) is PopupRoute,
                   controller: _searchController,
                   decoration: InputDecoration(
                     hintText: isEnglish ? 'Search (code / name / type)' : 'ค้นหา (รหัส / ชื่อ / ประเภท)',

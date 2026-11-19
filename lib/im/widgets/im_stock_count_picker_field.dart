@@ -90,6 +90,7 @@ class _ImStockCountPickerFieldState extends State<ImStockCountPickerField> {
         Padding(
           padding: const EdgeInsets.all(8),
           child: TextField(
+            autofocus: true,
             controller: _searchCtrl,
             decoration: InputDecoration(
               hintText: isEnglish ? 'Search count no. / warehouse' : 'ค้นหาเลขที่ใบตรวจนับ / คลัง',

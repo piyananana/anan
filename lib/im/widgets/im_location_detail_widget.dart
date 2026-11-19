@@ -35,6 +35,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _codeCtrl;
   late TextEditingController _nameCtrl;
+  late TextEditingController _nameEnCtrl;
   late TextEditingController _sortOrderCtrl;
   bool _isActive = true;
   bool _isDefault = false;
@@ -51,6 +52,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
     super.initState();
     _codeCtrl = TextEditingController();
     _nameCtrl = TextEditingController();
+    _nameEnCtrl = TextEditingController();
     _sortOrderCtrl = TextEditingController();
     _populate(widget.selected, widget.mode);
   }
@@ -67,6 +69,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
   void dispose() {
     _codeCtrl.dispose();
     _nameCtrl.dispose();
+    _nameEnCtrl.dispose();
     _sortOrderCtrl.dispose();
     super.dispose();
   }
@@ -76,6 +79,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
     final isNewNode = mode == Mode.addRoot || mode == Mode.addChild;
     _codeCtrl.text = isNewNode ? '' : (l?.locationCode ?? '');
     _nameCtrl.text = isNewNode ? '' : (l?.locationName ?? '');
+    _nameEnCtrl.text = isNewNode ? '' : (l?.locationNameEn ?? '');
     _sortOrderCtrl.text = isNewNode ? '' : (l?.sortOrder?.toString() ?? '');
     _isActive = isNewNode ? true : (l?.isActive ?? true);
     _isDefault = isNewNode ? false : (l?.isDefault ?? false);
@@ -101,6 +105,7 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
                 : widget.selected!.parentId,
         locationCode: _codeCtrl.text.trim().toUpperCase(),
         locationName: _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
+        locationNameEn: _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
         locationType: _locationType,
         categoryId: _locationType == 'BIN' ? _categoryId : null,
         isActive: _isActive,
@@ -234,7 +239,13 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
             TextFormField(
               readOnly: _isReadOnly,
               controller: _nameCtrl,
-              decoration: InputDecoration(labelText: isEnglish ? 'Location Name' : 'ชื่อตำแหน่ง', border: const OutlineInputBorder()),
+              decoration: InputDecoration(labelText: isEnglish ? 'Location Name (Thai)' : 'ชื่อตำแหน่ง (ไทย)', border: const OutlineInputBorder()),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              readOnly: _isReadOnly,
+              controller: _nameEnCtrl,
+              decoration: InputDecoration(labelText: isEnglish ? 'Location Name (English)' : 'ชื่อตำแหน่ง (อังกฤษ)', border: const OutlineInputBorder()),
             ),
             const SizedBox(height: 16),
             TextFormField(
