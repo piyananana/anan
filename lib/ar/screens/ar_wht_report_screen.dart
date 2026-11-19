@@ -15,6 +15,7 @@ import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/date_utils.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // รายงานภาษีถูกหัก ณ ที่จ่าย (ลูกค้าหักเรา) — ใบเสร็จรับชำระ AR + รายรับ CM ที่ Post แล้ว
 // ใช้กระทบยอดบัญชีภาษีถูกหัก ณ ที่จ่าย และติดตามหนังสือรับรอง (50 ทวิ) จากลูกค้า
@@ -268,7 +269,7 @@ class _ArWhtReportScreenState extends State<ArWhtReportScreen> {
 
     final period = '${_dateFmt.format(_dateFrom)} - ${_dateFmt.format(_dateTo)}';
     doc.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4.landscape,
+      pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
       theme: pw.ThemeData.withFont(base: font, bold: fontBold),
       margin: const pw.EdgeInsets.all(mg),
       header: (ctx) => pw.Column(children: [

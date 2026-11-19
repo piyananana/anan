@@ -22,6 +22,7 @@ import '../services/im_warehouse_service.dart';
 import '../services/im_location_service.dart';
 import '../services/im_stock_aging_report_service.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // รายงานอายุสินค้าคงคลัง — มิเรอร์โครงสร้าง im_stock_balance_by_item_report_screen.dart (filter panel, PDF
 // preview, Excel export, category-group linear-pass) แต่แยกความหมาย "อายุ" ออกเป็น 2 คอลัมน์ที่ไม่ปนกัน:
@@ -493,7 +494,7 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

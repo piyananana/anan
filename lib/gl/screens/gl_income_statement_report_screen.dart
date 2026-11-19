@@ -18,6 +18,7 @@ import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class IncomeStatementReportScreen extends StatefulWidget {
   const IncomeStatementReportScreen({super.key});
@@ -518,7 +519,7 @@ class _IncomeStatementReportScreenState
     }
 
     doc.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
+      pageFormat: dotMatrixPage(PdfPageFormat.a4),
       theme: pw.ThemeData.withFont(base: font, bold: fontBold),
       margin: const pw.EdgeInsets.all(24),
       header: (context) => pw.Column(children: [

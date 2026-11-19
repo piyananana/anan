@@ -19,6 +19,7 @@ import '../../sa/services/sa_company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
 import '../widgets/ap_vendor_group_multi_picker.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class ApCreditLimitReportScreen extends StatefulWidget {
   const ApCreditLimitReportScreen({super.key});
@@ -327,7 +328,7 @@ class _ApCreditLimitReportScreenState
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(20),
         header: pageHeader(),

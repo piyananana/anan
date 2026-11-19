@@ -37,6 +37,7 @@ import '../models/po_pr_transaction.dart';
 import '../services/po_pr_transaction_service.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class PoReplenishmentReportScreen extends StatefulWidget {
   const PoReplenishmentReportScreen({super.key});
@@ -406,7 +407,7 @@ class _PoReplenishmentReportScreenState extends State<PoReplenishmentReportScree
     );
 
     doc.addPage(pw.MultiPage(
-      pageFormat: format,
+      pageFormat: dotMatrixPage(format),
       margin: const pw.EdgeInsets.all(mg),
       header: (ctx) => pw.Column(children: [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [

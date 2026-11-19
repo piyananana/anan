@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
@@ -15,6 +14,7 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/date_utils.dart';
+import '../../utils/dot_matrix_pdf.dart';
 import '../../cd/services/cd_currency_service.dart';
 
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -109,7 +109,7 @@ class _ApRemittanceAdviceScreenState extends State<ApRemittanceAdviceScreen>
       final data = json.decode(r.body) as Map<String, dynamic>;
       final pdfBytes = await _buildPdf(data);
       if (!mounted) return;
-      await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
+      await printPdfWithTarget(context, 'ap_remittance_advice', pdfBytes, isEnglish: l.isEnglish);
     } catch (e) { _showErr('$e'); }
     finally { if (mounted) setState(() => _generating = false); }
   }
@@ -140,7 +140,8 @@ class _ApRemittanceAdviceScreenState extends State<ApRemittanceAdviceScreen>
         await _addPageToDoc(doc, d as Map<String, dynamic>);
       }
       final bytes = await doc.save();
-      await Printing.layoutPdf(onLayout: (_) async => bytes);
+      if (!mounted) return;
+      await printPdfWithTarget(context, 'ap_remittance_advice', bytes, isEnglish: l.isEnglish);
     } catch (e) { _showErr('$e'); }
     finally { if (mounted) setState(() => _generating = false); }
   }

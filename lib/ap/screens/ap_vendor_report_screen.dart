@@ -19,6 +19,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../utils/file_download.dart';
 import '../../cd/widgets/cd_tax_branch_field.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // ---------------------------------------------------------------------------
 // Category enum
@@ -443,7 +444,7 @@ class _ApVendorReportScreenState extends State<ApVendorReportScreen> {
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

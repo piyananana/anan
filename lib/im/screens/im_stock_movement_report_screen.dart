@@ -20,6 +20,7 @@ import '../services/im_item_category_service.dart';
 import '../services/im_warehouse_service.dart';
 import '../services/im_stock_movement_report_service.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // รายงานสินค้าคงเหลือและการเคลื่อนไหว — 1 "การ์ด" ต่อ (คลัง, สินค้า) จัดกลุ่ม คลัง > หมวดหมู่ > สินค้า
 // (backend ORDER BY มาให้ถูกต้องแล้ว เดินลิสต์ตามลำดับที่ได้รับมาเป็น linear pass เดียว ห้าม re-sort/regroup)
@@ -608,7 +609,7 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

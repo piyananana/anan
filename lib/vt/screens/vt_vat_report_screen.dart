@@ -12,6 +12,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // ─── ประเภทภาษีที่แสดงใน dropdown ────────────────────────────────────────────
 enum _VatChoice { output, input }
@@ -287,7 +288,7 @@ class _VatReportScreenState extends State<VatReportScreen> {
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(20),
         header: pageHeader(),

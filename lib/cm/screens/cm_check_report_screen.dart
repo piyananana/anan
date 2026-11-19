@@ -18,6 +18,7 @@ import '../widgets/cm_bank_account_list_widget.dart';
 import '../services/cm_report_service.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt     = NumberFormat('#,##0.00', 'en_US');
@@ -304,7 +305,7 @@ class _State extends State<CmCheckReportScreen>
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(20),
         header: pageHeader(),

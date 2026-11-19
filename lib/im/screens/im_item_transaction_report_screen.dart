@@ -20,6 +20,7 @@ import '../services/im_item_service.dart';
 import '../services/im_item_category_service.dart';
 import '../services/im_item_transaction_report_service.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // รายงานสินค้าในธุรกรรม — flat list ระดับบรรทัดสินค้า (ต่างจาก im_transaction_report_screen ซึ่งเป็นระดับเอกสาร)
 // รวมทุก sys_doc_type ของ IM ในรายงานเดียว จัดกลุ่ม+แสดงยอดรวมย่อยตามฟีลด์ที่เลือกเรียง — backend ORDER BY มาให้ถูก
@@ -406,7 +407,7 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

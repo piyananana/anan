@@ -23,6 +23,7 @@ import '../../utils/file_download.dart';
 import '../models/mo_header.dart';
 import '../models/mo_work_center.dart';
 import '../services/mo_work_center_service.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class MoWorkCenterEfficiencyReportScreen extends StatefulWidget {
   const MoWorkCenterEfficiencyReportScreen({super.key});
@@ -285,7 +286,7 @@ class _MoWorkCenterEfficiencyReportScreenState extends State<MoWorkCenterEfficie
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

@@ -18,6 +18,7 @@ import '../services/gl_account_service.dart';
 import '../models/gl_dimension.dart';
 import '../services/gl_dimension_service.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class ChartOfAccountsReportScreen extends StatefulWidget {
   const ChartOfAccountsReportScreen({super.key});
@@ -606,7 +607,7 @@ class _ChartOfAccountsReportScreenState
     final int totalAccounts = _reportData.length;
 
     doc.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4.landscape,
+      pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
       theme: pw.ThemeData.withFont(base: font, bold: fontBold),
       margin: const pw.EdgeInsets.all(20),
       header: (context) {

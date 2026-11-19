@@ -18,6 +18,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class ImStockCountVarianceReportScreen extends StatefulWidget {
   const ImStockCountVarianceReportScreen({super.key});
@@ -132,7 +133,7 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
     pw.Alignment num0 = pw.Alignment.centerRight;
 
     doc.addPage(pw.MultiPage(
-      pageFormat: format.landscape,
+      pageFormat: dotMatrixPage(format.landscape),
       theme: pw.ThemeData.withFont(base: font, bold: fontBold),
       margin: const pw.EdgeInsets.all(24),
       header: buildHeader,

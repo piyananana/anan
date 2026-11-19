@@ -27,6 +27,7 @@ import '../../gl/widgets/gl_line_account_dims.dart' show requiredDimSlots;
 import '../../gl/utils/gl_ledger_split.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class GeneralLedgerReportScreen extends StatefulWidget {
   const GeneralLedgerReportScreen({super.key});
@@ -859,7 +860,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
       // ขึ้นหน้าใหม่ทุกบัญชี: วนลูปทีละ 4 Widget (หัว, ดีเทล, ท้าย, Space) ไปเป็นหน้าใหม่
       for (int i = 0; i < accountBlocks.length; i += 4) { 
         doc.addPage(pw.MultiPage(
-          pageFormat: PdfPageFormat.a4.landscape,
+          pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
           theme: pw.ThemeData.withFont(base: font, bold: fontBold),
           margin: const pw.EdgeInsets.all(20),
           header: buildPageHeader,
@@ -873,7 +874,7 @@ class _GeneralLedgerReportScreenState extends State<GeneralLedgerReportScreen> {
     } else {
       // พิมพ์ต่อกันไปเรื่อยๆ
       doc.addPage(pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(20),
         header: buildPageHeader,

@@ -18,6 +18,7 @@ import '../../gl/services/gl_balance_sheet_report_service.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class BalanceSheetReportScreen extends StatefulWidget {
   const BalanceSheetReportScreen({super.key});
@@ -520,7 +521,7 @@ class _BalanceSheetReportScreenState extends State<BalanceSheetReportScreen> {
     }
 
     doc.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
+      pageFormat: dotMatrixPage(PdfPageFormat.a4),
       theme: pw.ThemeData.withFont(base: font, bold: fontBold),
       margin: const pw.EdgeInsets.all(24),
       header: (context) => pw.Column(children: [

@@ -23,6 +23,7 @@ import '../../utils/file_download.dart';
 import '../models/mo_bom.dart';
 import '../services/mo_bom_service.dart';
 import '../widgets/mo_bom_list_widget.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 enum _ReportMode { costRollup, whereUsed }
 
@@ -296,7 +297,7 @@ class _MoBomCostReportScreenState extends State<MoBomCostReportScreen> {
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

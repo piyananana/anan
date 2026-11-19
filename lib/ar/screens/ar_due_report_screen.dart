@@ -24,6 +24,7 @@ import 'package:excel/excel.dart';
 import 'package:provider/provider.dart';
 import '../../utils/file_download.dart';
 import '../widgets/ar_customer_group_multi_picker.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class ArDueReportScreen extends StatefulWidget {
   const ArDueReportScreen({super.key});
@@ -507,7 +508,7 @@ class _ArDueReportScreenState extends State<ArDueReportScreen> {
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(20),
         header: (ctx) => pw.Column(

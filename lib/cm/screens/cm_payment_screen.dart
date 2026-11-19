@@ -6,7 +6,6 @@ import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import '../models/cm_bank_account.dart';
 import '../models/cm_checkbook.dart';
 import '../models/cm_payment.dart';
@@ -15,6 +14,7 @@ import '../services/cm_bank_account_service.dart';
 import '../services/cm_checkbook_service.dart';
 import '../services/cm_payment_service.dart';
 import '../../utils/date_utils.dart';
+import '../../utils/dot_matrix_pdf.dart';
 import '../../cd/services/cd_currency_service.dart';
 
 class CmPaymentScreen extends StatefulWidget {
@@ -285,7 +285,10 @@ class _CmPaymentScreenState extends State<CmPaymentScreen>
       },
     ));
 
-    await Printing.layoutPdf(onLayout: (_) async => pdf.save());
+    final bytes = await pdf.save();
+    if (!mounted) return;
+    // เช็คพิมพ์ตามตำแหน่งจริง — dot matrix เริ่มต้น "ตามเอกสาร" (ไม่ย่อ)
+    await printPdfWithTarget(context, 'cm_check_print', bytes, isEnglish: _isEnglish, defaultPaper: 'DOC');
   }
 
   String _thaiAmountText(double amount) {

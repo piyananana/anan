@@ -569,6 +569,8 @@ class _ImPrintFormDesignerScreenState extends State<ImPrintFormDesignerScreen> {
             Expanded(
               child: ZoomablePdfPreview(
                 documentVersion: DateTime.now().millisecondsSinceEpoch,
+                printKey: 'print_form_${form.id}',
+                defaultDotMatrixPaper: 'DOC',
                 initialPageFormat: PdfPageFormat(form.paperWidth * PdfPageFormat.mm, form.paperHeight * PdfPageFormat.mm),
                 build: (_) => PrintFormPdf.build(form: form, source: src, data: data, printedBy: '', showBackground: true),
                 // พิมพ์จากหน้าจอนี้ได้เฉพาะข้อมูลตัวอย่าง (พิมพ์เอกสารจริงต้องผ่านหน้าจอพิมพ์เพื่อบันทึกประวัติ)

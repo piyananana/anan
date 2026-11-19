@@ -23,6 +23,7 @@ import '../../sa/services/sa_company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
 import '../widgets/ar_customer_group_multi_picker.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // ─── sys_doc_type → column index mapping ──────────────────────────────────────
 // 0=แจ้งหนี้(10)  1=เพิ่มหนี้(30/35)  2=ลดหนี้(50/55)
@@ -423,7 +424,7 @@ class _ArTransactionReportScreenState
     // ─── Build page ───────────────────────────────────────────────────────────
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(20),
         header: pageHeader(),

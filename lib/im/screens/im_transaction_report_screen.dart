@@ -16,6 +16,7 @@ import '../../sa/services/sa_company_service.dart';
 import '../models/im_transaction.dart';
 import '../services/im_transaction_report_service.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // ---------------------------------------------------------------------------
 // sys_doc_type family — ตัดสินว่าบรรทัดรายละเอียด item ของเอกสารประเภทนี้ควรมีหัวคอลัมน์แบบไหน และคอลัมน์
@@ -436,7 +437,7 @@ class _ImTransactionReportScreenState extends State<ImTransactionReportScreen> {
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

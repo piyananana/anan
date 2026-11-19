@@ -25,6 +25,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // ---------------------------------------------------------------------------
 // Generic multi-select picker dialog — มิเรอร์ im_item_report_screen.dart ทุกจุด
@@ -639,7 +640,7 @@ class _ImPriceChangeReportScreenState extends State<ImPriceChangeReportScreen> {
     ));
 
     doc.addPage(pw.MultiPage(
-      pageFormat: format,
+      pageFormat: dotMatrixPage(format),
       theme: pw.ThemeData.withFont(base: font, bold: fontBold),
       margin: const pw.EdgeInsets.all(mg),
       header: pageHeader(),

@@ -24,6 +24,7 @@ import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_auth_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class FinancialReportScreen extends StatefulWidget {
   const FinancialReportScreen({super.key});
@@ -486,7 +487,7 @@ String _replaceVars(String text, pw.Context? context) {
     final footerRows = allRows.where((r) => r['row_type'] == 'FOOTER').toList();
 
     doc.addPage(pw.MultiPage(
-      pageFormat: pageFormat,
+      pageFormat: dotMatrixPage(pageFormat),
       theme: pw.ThemeData.withFont(base: fontNormal, bold: fontBold),
       header: (context) => pw.Column(
         children: headerRows.map((row) => _buildPdfRow(row, context, fontNormal, fontBold, fontItalic)).toList(),

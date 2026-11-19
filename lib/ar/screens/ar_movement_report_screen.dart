@@ -21,6 +21,7 @@ import '../../sa/services/sa_language_provider.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
 import '../widgets/ar_customer_group_multi_picker.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class ArMovementReportScreen extends StatefulWidget {
   const ArMovementReportScreen({super.key});
@@ -669,7 +670,7 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
         final customer = _reportData[i];
         doc.addPage(
           pw.MultiPage(
-            pageFormat: PdfPageFormat.a4.landscape,
+            pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
             theme: pw.ThemeData.withFont(base: font, bold: fontBold),
             margin: const pw.EdgeInsets.all(20),
             header: pageHeader(),
@@ -691,7 +692,7 @@ class _ArMovementReportScreenState extends State<ArMovementReportScreen> {
       // MultiPage เดียวทั้งหมด
       doc.addPage(
         pw.MultiPage(
-          pageFormat: PdfPageFormat.a4.landscape,
+          pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
           theme: pw.ThemeData.withFont(base: font, bold: fontBold),
           margin: const pw.EdgeInsets.all(20),
           header: pageHeader(),

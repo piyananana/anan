@@ -23,6 +23,7 @@ import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
 import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class TrialBalanceReportScreen extends StatefulWidget {
   const TrialBalanceReportScreen({super.key});
@@ -418,7 +419,7 @@ class _TrialBalanceReportScreenState extends State<TrialBalanceReportScreen> {
     }
 
     doc.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4.landscape,
+      pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
       theme: pw.ThemeData.withFont(base: font, bold: fontBold, italic: fontItalic),
       margin: const pw.EdgeInsets.all(20),
       header: (context) {

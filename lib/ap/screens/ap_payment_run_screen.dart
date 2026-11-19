@@ -30,6 +30,7 @@ import '../../utils/date_utils.dart';
 import '../../utils/file_download.dart';
 import '../../sa/widgets/sa_doc_approval_panel.dart';
 import '../../cd/services/cd_currency_service.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // ── Column widths ────────────────────────────────────────────────────────────
 const double _wVendor   = 130.0;
@@ -704,7 +705,7 @@ class _DetailPanelState extends State<_DetailPanel> {
       final vendorDisplayName = _vendorLabel(first.vendorId, first.vendorNameTh);
 
       doc.addPage(pw.Page(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4),
         theme: theme,
         margin: const pw.EdgeInsets.fromLTRB(20, 20, 20, 20),
         build: (ctx) => pw.Column(

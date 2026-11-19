@@ -16,6 +16,7 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class ImStockCountPrintScreen extends StatefulWidget {
   const ImStockCountPrintScreen({super.key});
@@ -196,7 +197,7 @@ class _ImStockCountPrintScreenState extends State<ImStockCountPrintScreen> {
     if (_pageBreakPerBin) {
       for (final bin in binsToPrint) {
         doc.addPage(pw.MultiPage(
-          pageFormat: format,
+          pageFormat: dotMatrixPage(format),
           theme: pw.ThemeData.withFont(base: font, bold: fontBold),
           margin: const pw.EdgeInsets.all(24),
           header: buildHeader,
@@ -205,7 +206,7 @@ class _ImStockCountPrintScreenState extends State<ImStockCountPrintScreen> {
       }
       if (binsToPrint.isEmpty) {
         doc.addPage(pw.MultiPage(
-          pageFormat: format,
+          pageFormat: dotMatrixPage(format),
           theme: pw.ThemeData.withFont(base: font, bold: fontBold),
           margin: const pw.EdgeInsets.all(24),
           header: buildHeader,
@@ -214,7 +215,7 @@ class _ImStockCountPrintScreenState extends State<ImStockCountPrintScreen> {
       }
     } else {
       doc.addPage(pw.MultiPage(
-        pageFormat: format,
+        pageFormat: dotMatrixPage(format),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(24),
         header: buildHeader,

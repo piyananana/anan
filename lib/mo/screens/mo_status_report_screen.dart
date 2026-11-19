@@ -22,6 +22,7 @@ import '../../im/services/im_warehouse_service.dart';
 import '../../utils/file_download.dart';
 import '../models/mo_header.dart';
 import '../services/mo_header_service.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 String _uomName(String? code, String? nameTh, String? nameEn, bool isEnglish) {
   if (isEnglish && (nameEn ?? '').isNotEmpty) return nameEn!;
@@ -284,7 +285,7 @@ class _MoStatusReportScreenState extends State<MoStatusReportScreen> {
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

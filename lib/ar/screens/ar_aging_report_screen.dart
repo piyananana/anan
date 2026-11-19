@@ -25,6 +25,7 @@ import '../../sa/services/sa_company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
 import '../widgets/ar_customer_group_multi_picker.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class ArAgingReportScreen extends StatefulWidget {
   const ArAgingReportScreen({super.key});
@@ -476,7 +477,7 @@ class _ArAgingReportScreenState extends State<ArAgingReportScreen> {
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(20),
         header: (ctx) => pw.Column(

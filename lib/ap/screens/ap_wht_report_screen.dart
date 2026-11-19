@@ -15,6 +15,7 @@ import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/date_utils.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // ---------------------------------------------------------------------------
 // Data model (lightweight, only what the screen needs)
@@ -327,7 +328,7 @@ class _ApWhtReportScreenState extends State<ApWhtReportScreen> {
     ));
 
     doc.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4.landscape,
+      pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
       theme: pw.ThemeData.withFont(base: font, bold: fontBold),
       margin: const pw.EdgeInsets.all(mg),
       header: (ctx) => pw.Column(children: [

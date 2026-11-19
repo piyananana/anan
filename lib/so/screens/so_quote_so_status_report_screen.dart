@@ -21,6 +21,7 @@ import '../../po/widgets/po_search_multi_picker.dart';
 import '../models/so_quote_so_status_report.dart';
 import '../services/so_quote_so_status_report_service.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class _StatusOption {
   final int id;
@@ -366,7 +367,7 @@ class _QuoteSoStatusReportScreenState extends State<QuoteSoStatusReportScreen> {
         );
 
     doc.addPage(pw.MultiPage(
-      pageFormat: format,
+      pageFormat: dotMatrixPage(format),
       margin: const pw.EdgeInsets.all(mg),
       header: (ctx) => pw.Column(children: [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [

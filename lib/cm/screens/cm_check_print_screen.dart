@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
@@ -15,6 +14,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/models/cm_bank_account.dart';
 import '../../utils/thai_amount_words.dart';
 import '../../utils/date_utils.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt      = NumberFormat('#,##0.00', 'en_US');
@@ -503,7 +503,8 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
     try {
       final pdfBytes = await _buildPdf(toprint, _selConfig!);
       if (!mounted) return;
-      await Printing.layoutPdf(onLayout: (_) => pdfBytes, name: 'checks');
+      // เช็คพิมพ์ตามตำแหน่งจริง — dot matrix เริ่มต้น "ตามเอกสาร" (ไม่ย่อ)
+      await printPdfWithTarget(context, 'cm_check_print', pdfBytes, isEnglish: _isEnglish, name: 'checks', defaultPaper: 'DOC');
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString());

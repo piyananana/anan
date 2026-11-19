@@ -24,6 +24,7 @@ import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import 'package:provider/provider.dart';
 import '../widgets/ar_customer_group_multi_picker.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class ArFxGainLossReportScreen extends StatefulWidget {
   const ArFxGainLossReportScreen({super.key});
@@ -405,7 +406,7 @@ class _ArFxGainLossReportScreenState
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(20),
         header: pageHeader(),

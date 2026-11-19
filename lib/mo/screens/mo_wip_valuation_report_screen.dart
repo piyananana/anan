@@ -22,6 +22,7 @@ import '../../im/services/im_warehouse_service.dart';
 import '../../utils/file_download.dart';
 import '../models/mo_header.dart';
 import '../services/mo_header_service.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class MoWipValuationReportScreen extends StatefulWidget {
   const MoWipValuationReportScreen({super.key});
@@ -295,7 +296,7 @@ class _MoWipValuationReportScreenState extends State<MoWipValuationReportScreen>
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

@@ -23,6 +23,7 @@ import '../../sa/services/sa_company_service.dart';
 import 'package:excel/excel.dart';
 import '../../utils/file_download.dart';
 import '../widgets/ap_vendor_group_multi_picker.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // ─── sys_doc_type → column index mapping ──────────────────────────────────────
 // 0=PI(10)  1=CN(30)  2=DN(50)
@@ -353,7 +354,7 @@ class _ApTransactionReportScreenState
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(20),
         header: pageHeader(),

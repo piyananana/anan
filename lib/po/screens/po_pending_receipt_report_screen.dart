@@ -20,6 +20,7 @@ import '../widgets/po_search_multi_picker.dart';
 import '../models/po_pending_receipt_report.dart';
 import '../services/po_pending_receipt_report_service.dart';
 import '../../widgets/zoomable_pdf_preview.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class PoPendingReceiptReportScreen extends StatefulWidget {
   const PoPendingReceiptReportScreen({super.key});
@@ -197,7 +198,7 @@ class _PoPendingReceiptReportScreenState
     );
 
     doc.addPage(pw.MultiPage(
-      pageFormat: format,
+      pageFormat: dotMatrixPage(format),
       margin: const pw.EdgeInsets.all(mg),
       header: (ctx) => pw.Column(children: [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [

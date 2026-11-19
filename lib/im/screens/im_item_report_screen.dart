@@ -23,6 +23,7 @@ import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_company_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // ---------------------------------------------------------------------------
 // Detail section enum — เนื้อหารายละเอียดต่อสินค้า 1 บรรทัด (มิเรอร์ _Category ของ
@@ -656,7 +657,7 @@ class _ImItemReportScreenState extends State<ImItemReportScreen> {
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

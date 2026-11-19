@@ -15,6 +15,7 @@ import '../../sa/services/sa_language_provider.dart';
 import '../services/im_print_form_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../utils/im_print_form_pdf.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class ImPrintFormPrintScreen extends StatefulWidget {
   final String dataSource;
@@ -218,9 +219,13 @@ class _ImPrintFormPrintScreenState extends State<ImPrintFormPrintScreen> {
     final keys = _selectedKeys;
     final reprints = _rows.where((r) => keys.contains(r.key) && r.printCount > 0).length;
     final copies = f.isPreprinted ? <int>[] : _printCopies!;
+    // เครื่องพิมพ์: ฟอร์มพิมพ์ทับ (dot matrix) เริ่มต้น "ตามเอกสาร" (ไม่ย่อ — ตำแหน่งต้องตรงฟอร์ม)
+    final targetKey = 'print_form_${f.id}';
+    var target = await PrintTargetSetting.load(targetKey, defaultPaper: 'DOC');
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setD) => AlertDialog(
         title: Text(t('ยืนยันการพิมพ์', 'Confirm printing')),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(t('พิมพ์ ${keys.length} เอกสาร ด้วยแบบฟอร์ม "${f.nameTh}"', 'Print ${keys.length} documents with form "${f.name(true)}"')),
@@ -233,6 +238,8 @@ class _ImPrintFormPrintScreenState extends State<ImPrintFormPrintScreen> {
               child: Text(t('มี $reprints เอกสารที่เคยพิมพ์แล้ว — จะบันทึกเป็นการพิมพ์ซ้ำ', '$reprints documents were printed before — they will be logged as reprints'),
                   style: TextStyle(color: Colors.orange[800])),
             ),
+          const SizedBox(height: 12),
+          PrintTargetSelector(value: target, isEnglish: _isEnglish, onChanged: (v) => setD(() => target = v)),
           const SizedBox(height: 8),
           Text(t('ในหน้าต่างพิมพ์ให้ตั้งขนาดเป็น "ขนาดจริง / 100%" (ห้ามย่อให้พอดีหน้า)', 'In the print dialog set scale to "Actual size / 100%" (not "Fit to page")'),
               style: const TextStyle(fontSize: 12)),
@@ -241,15 +248,17 @@ class _ImPrintFormPrintScreenState extends State<ImPrintFormPrintScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t('ยกเลิก', 'Cancel'))),
           ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t('พิมพ์', 'Print'))),
         ],
-      ),
+      )),
     );
     if (ok != true) return;
+    await target.save(targetKey);
     setState(() => _busy = true);
     try {
       final copyNames = f.isPreprinted ? null : copies.map((n) => f.copies[n - 1].nameTh).join(', ');
       final data = await _svc.fetchPrintData(_source!.key, keys, formId: f.id, log: true, copies: copyNames);
       final user = await _userName();
-      final bytes = await PrintFormPdf.build(form: f, source: _source!, data: data, printedBy: user, copyNos: _printCopies);
+      final bytes = await applyPrintTarget(
+          await PrintFormPdf.build(form: f, source: _source!, data: data, printedBy: user, copyNos: _printCopies), target);
       await Printing.layoutPdf(onLayout: (_) async => bytes, name: '${f.code}_${DateTime.now().millisecondsSinceEpoch}', format: _pageFormat(f));
       await _search();
     } catch (e) {
@@ -279,6 +288,8 @@ class _ImPrintFormPrintScreenState extends State<ImPrintFormPrintScreen> {
             Expanded(
               child: ZoomablePdfPreview(
                 documentVersion: DateTime.now().millisecondsSinceEpoch,
+                printKey: 'print_form_${f.id}',
+                defaultDotMatrixPaper: 'DOC',
                 initialPageFormat: _pageFormat(f),
                 build: build,
                 allowPrinting: allowPrinting,

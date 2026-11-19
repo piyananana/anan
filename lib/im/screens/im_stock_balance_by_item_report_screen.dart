@@ -22,6 +22,7 @@ import '../services/im_warehouse_service.dart';
 import '../services/im_location_service.dart';
 import '../services/im_stock_balance_by_item_report_service.dart';
 import '../../utils/file_download.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 // รายงานสินค้าคงเหลือตามตำแหน่งที่เก็บ — flat list ระดับ (สินค้า, คลัง, ตำแหน่ง, ล็อต/ซีเรียล) จัดกลุ่ม+ยอดรวมย่อย
 // ตามหมวดหมู่ ยอดคงเหลือคำนวณ ณ วันที่สิ้นสุดที่เลือกด้วยการ SUM จาก im_transaction_detail ตรงๆ ฝั่ง backend
@@ -432,7 +433,7 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
 
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
         theme: pw.ThemeData.withFont(base: font, bold: fontBold),
         margin: const pw.EdgeInsets.all(mg),
         header: pageHeader(),

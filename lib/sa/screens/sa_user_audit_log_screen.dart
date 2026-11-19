@@ -12,6 +12,7 @@ import '../services/sa_auth_service.dart';
 import '../services/sa_company_service.dart';
 import '../services/sa_user_audit_log_service.dart';
 import '../services/sa_language_provider.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class SaUserAuditLogScreen extends StatefulWidget {
   const SaUserAuditLogScreen({super.key});
@@ -211,7 +212,7 @@ class _SaUserAuditLogScreenState extends State<SaUserAuditLogScreen> {
     const fs12 = pw.TextStyle(fontSize: 12);
 
     doc.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4.landscape,
+      pageFormat: dotMatrixPage(PdfPageFormat.a4.landscape),
       theme:      pw.ThemeData.withFont(base: font, bold: fontBold),
       margin:     const pw.EdgeInsets.all(20),
       header: (ctx) => pw.Column(children: [

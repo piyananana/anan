@@ -21,6 +21,7 @@ import '../../po/widgets/po_search_multi_picker.dart';
 import '../models/so_pending_delivery_report.dart';
 import '../services/so_pending_delivery_report_service.dart';
 import '../../widgets/zoomable_pdf_preview.dart';
+import '../../utils/dot_matrix_pdf.dart';
 
 class SoPendingDeliveryReportScreen extends StatefulWidget {
   const SoPendingDeliveryReportScreen({super.key});
@@ -200,7 +201,7 @@ class _SoPendingDeliveryReportScreenState
     );
 
     doc.addPage(pw.MultiPage(
-      pageFormat: format,
+      pageFormat: dotMatrixPage(format),
       margin: const pw.EdgeInsets.all(mg),
       header: (ctx) => pw.Column(children: [
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
