@@ -507,25 +507,28 @@ class _ImGlSetupFormState extends State<_ImGlSetupForm> {
   Future<void> _submit() async {
     setState(() => _isSaving = true);
     try {
+      // ช่องที่ซ่อนอยู่ (ประเภทเอกสารนี้ไม่ใช้) บันทึกเป็นค่าว่างเสมอ — ไม่งั้นค่าเก่าค้างในฐานข้อมูลโดยผู้ใช้มองไม่เห็น
+      // และทำให้ลบบัญชีนั้นออกจากผังบัญชีไม่ได้ (เช่น 511900 ค้างในช่องผลต่างของ DLN/RTC)
+      T? shown<T>(bool show, T? v) => show ? v : null;
       final updated = ImGlAccountSetup(
         docCode: widget.setup.docCode,
         targetModule: widget.setup.targetModule,
         targetDocCode: widget.setup.targetDocCode,
-        glDocId: _glDocId, glDocCode: _glDocCode, glDocName: _glDocName,
+        glDocId: shown(_showGlDoc, _glDocId), glDocCode: shown(_showGlDoc, _glDocCode), glDocName: shown(_showGlDoc, _glDocName),
         targetAuto: widget.setup.targetAuto,
         targetDocId: _targetDocId, targetDocCodeSel: _targetDocCode, targetDocNameTh: _targetDocName,
         receiptDocCode: widget.setup.receiptDocCode,
         receiptTargetDocId: _receiptDocId, receiptTargetDocCode: _receiptDocCode, receiptTargetDocNameTh: _receiptDocName,
         defaultCustomerId: _defaultCustomerId, defaultCustomerCode: _defaultCustomerCode, defaultCustomerNameTh: _defaultCustomerName,
         defaultVendorId: _defaultVendorId, defaultVendorCode: _defaultVendorCode, defaultVendorNameTh: _defaultVendorName,
-        inventoryAccountId: _inventoryAccountId, inventoryAccountCode: _inventoryAccountCode, inventoryAccountName: _inventoryAccountName,
-        cogsAccountId: _cogsAccountId, cogsAccountCode: _cogsAccountCode, cogsAccountName: _cogsAccountName,
-        varianceAccountId: _varianceAccountId, varianceAccountCode: _varianceAccountCode, varianceAccountName: _varianceAccountName,
-        wipAccountId: _wipAccountId, wipAccountCode: _wipAccountCode, wipAccountName: _wipAccountName,
-        grirAccountId: _grirAccountId, grirAccountCode: _grirAccountCode, grirAccountName: _grirAccountName,
-        vatOutputAccountId: _vatOutputAccountId, vatOutputAccountCode: _vatOutputAccountCode, vatOutputAccountName: _vatOutputAccountName,
-        vatInputAccountId: _vatInputAccountId, vatInputAccountCode: _vatInputAccountCode, vatInputAccountName: _vatInputAccountName,
-        consignmentPayableAccountId: _consignmentPayableAccountId, consignmentPayableAccountCode: _consignmentPayableAccountCode, consignmentPayableAccountName: _consignmentPayableAccountName,
+        inventoryAccountId: shown(_showInv, _inventoryAccountId), inventoryAccountCode: shown(_showInv, _inventoryAccountCode), inventoryAccountName: shown(_showInv, _inventoryAccountName),
+        cogsAccountId: shown(_showCogs, _cogsAccountId), cogsAccountCode: shown(_showCogs, _cogsAccountCode), cogsAccountName: shown(_showCogs, _cogsAccountName),
+        varianceAccountId: shown(_showVariance, _varianceAccountId), varianceAccountCode: shown(_showVariance, _varianceAccountCode), varianceAccountName: shown(_showVariance, _varianceAccountName),
+        wipAccountId: shown(_showWip, _wipAccountId), wipAccountCode: shown(_showWip, _wipAccountCode), wipAccountName: shown(_showWip, _wipAccountName),
+        grirAccountId: shown(_showGrir, _grirAccountId), grirAccountCode: shown(_showGrir, _grirAccountCode), grirAccountName: shown(_showGrir, _grirAccountName),
+        vatOutputAccountId: shown(_showVatOut, _vatOutputAccountId), vatOutputAccountCode: shown(_showVatOut, _vatOutputAccountCode), vatOutputAccountName: shown(_showVatOut, _vatOutputAccountName),
+        vatInputAccountId: shown(_showVatIn, _vatInputAccountId), vatInputAccountCode: shown(_showVatIn, _vatInputAccountCode), vatInputAccountName: shown(_showVatIn, _vatInputAccountName),
+        consignmentPayableAccountId: shown(_showConsign, _consignmentPayableAccountId), consignmentPayableAccountCode: shown(_showConsign, _consignmentPayableAccountCode), consignmentPayableAccountName: shown(_showConsign, _consignmentPayableAccountName),
       );
       await widget.onSave(updated);
     } finally {
