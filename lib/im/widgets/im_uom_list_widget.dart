@@ -155,6 +155,11 @@ class ImUomListWidgetState extends State<ImUomListWidget> with AutomaticKeepAliv
                             '${item.uomCode}  ${_uomName(item, isEnglish)}',
                             style: TextStyle(fontWeight: FontWeight.bold, color: item.isActive ? null : Colors.grey),
                           ),
+                          subtitle: Text(
+                            '${uomDimensionLabel(item.uomDimension, isEnglish)} · '
+                            '${isEnglish ? 'Decimals' : 'ทศนิยม'} ${item.decimalPlaces}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [

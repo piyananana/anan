@@ -630,6 +630,12 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
     ['barcode', 'บาร์โค้ด'],
     ['is_purchase_default', 'หน่วยซื้อตั้งต้น'],
     ['is_sales_default', 'หน่วยขายตั้งต้น'],
+    ['is_production_default', 'หน่วยผลิตตั้งต้น'],
+    ['is_count_default', 'หน่วยตรวจนับตั้งต้น'],
+    ['is_report_default', 'หน่วยรายงานตั้งต้น'],
+    ['allow_purchase', 'ใช้ซื้อ'],
+    ['allow_sales', 'ใช้ขาย'],
+    ['allow_production', 'ใช้ผลิต'],
   ];
 
   static const _itemWarehouseColumns = [

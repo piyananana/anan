@@ -4,6 +4,7 @@ import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../models/im_uom.dart';
+import 'im_uom_std_conversion_section.dart';
 
 class ImUomDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -35,6 +36,8 @@ class ImUomDetailWidgetState extends State<ImUomDetailWidget> {
   late TextEditingController _nameThCtrl;
   late TextEditingController _nameEnCtrl;
   bool _isActive = true;
+  String _dimension = 'COUNT';
+  int _decimals = 0;
   bool _isSaving = false;
 
   bool get _isReadOnly => widget.mode == Mode.view;
@@ -46,6 +49,8 @@ class ImUomDetailWidgetState extends State<ImUomDetailWidget> {
     _nameThCtrl = TextEditingController(text: widget.selected?.uomNameTh ?? '');
     _nameEnCtrl = TextEditingController(text: widget.selected?.uomNameEn ?? '');
     _isActive = widget.selected?.isActive ?? true;
+    _dimension = widget.selected?.uomDimension ?? 'COUNT';
+    _decimals = widget.selected?.decimalPlaces ?? 0;
   }
 
   @override
@@ -56,6 +61,8 @@ class ImUomDetailWidgetState extends State<ImUomDetailWidget> {
       _nameThCtrl.text = widget.mode == Mode.add ? '' : (widget.selected?.uomNameTh ?? '');
       _nameEnCtrl.text = widget.mode == Mode.add ? '' : (widget.selected?.uomNameEn ?? '');
       _isActive = widget.mode == Mode.add ? true : (widget.selected?.isActive ?? true);
+      _dimension = widget.mode == Mode.add ? 'COUNT' : (widget.selected?.uomDimension ?? 'COUNT');
+      _decimals = widget.mode == Mode.add ? 0 : (widget.selected?.decimalPlaces ?? 0);
     }
   }
 
@@ -77,6 +84,8 @@ class ImUomDetailWidgetState extends State<ImUomDetailWidget> {
         uomNameTh: _nameThCtrl.text.trim(),
         uomNameEn: _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
         isActive: _isActive,
+        uomDimension: _dimension,
+        decimalPlaces: _decimals,
       );
       await widget.onSubmit(row);
     } catch (e) {
@@ -144,9 +153,51 @@ class ImUomDetailWidgetState extends State<ImUomDetailWidget> {
             ),
             const SizedBox(height: 16),
             Row(children: [
+              Expanded(
+                flex: 3,
+                child: DropdownButtonFormField<String>(
+                  value: _dimension,
+                  decoration: InputDecoration(labelText: isEnglish ? 'UOM Type' : 'ประเภทหน่วย', border: const OutlineInputBorder()),
+                  items: kUomDimensions
+                      .map((d) => DropdownMenuItem(value: d, child: Text(uomDimensionLabel(d, isEnglish))))
+                      .toList(),
+                  onChanged: _isReadOnly ? null : (v) => setState(() => _dimension = v ?? 'COUNT'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<int>(
+                  value: _decimals,
+                  decoration: InputDecoration(labelText: isEnglish ? 'Decimal Places' : 'ทศนิยม (ตำแหน่ง)', border: const OutlineInputBorder()),
+                  items: [0, 1, 2, 3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$d'))).toList(),
+                  onChanged: _isReadOnly ? null : (v) => setState(() => _decimals = v ?? 0),
+                ),
+              ),
+            ]),
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 4),
+              child: Text(
+                // กฎ (2026-11-21): หน่วยนับจำนวนต้องลงตัว, หน่วยอื่นปัดตามทศนิยม
+                _dimension == 'COUNT'
+                    ? (isEnglish
+                        ? 'Count unit: quantities must fit $_decimals decimal place(s) exactly — a conversion that does not fit is rejected. Use 0 for whole pieces.'
+                        : 'หน่วยนับจำนวน: จำนวนต้องลงตัวไม่เกิน $_decimals ตำแหน่ง ถ้าแปลงหน่วยแล้วไม่ลงตัวจะไม่ให้บันทึก หน่วยที่นับเป็นชิ้นให้ตั้ง 0')
+                    : (isEnglish
+                        ? 'Quantities in this unit (including converted ones) are rounded to $_decimals decimal place(s).'
+                        : 'จำนวนในหน่วยนี้ (รวมจำนวนที่แปลงมาจากหน่วยอื่น) จะปัดเป็น $_decimals ตำแหน่ง'),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(children: [
               Expanded(child: Text(isEnglish ? 'Status: ${_isActive ? 'Active' : 'Inactive'}' : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
               Switch(value: _isActive, activeColor: Colors.teal, onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v)),
             ]),
+            if (widget.mode != Mode.add && widget.selected != null) ...[
+              const SizedBox(height: 16),
+              ImUomStdConversionSection(uom: widget.selected!, readOnly: _isReadOnly),
+            ],
             const SizedBox(height: 32),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,

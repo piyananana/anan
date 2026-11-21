@@ -289,6 +289,9 @@ class ApTransactionDetail {
   final String? itemName;
   final String? description;
   final double quantity;
+  // หน่วยของบรรทัด (บรรทัดที่สร้างจากเอกสาร IM) — ชื่อหน่วยอ่านอย่างเดียว ไม่ส่งกลับ
+  final String? unitCode;
+  final String? unitNameTh, unitNameEn;
   final double unitPriceFc;
   final double discountPercent;
   final double discountAmountFc;
@@ -314,6 +317,7 @@ class ApTransactionDetail {
     this.itemName,
     this.description,
     this.quantity = 1,
+    this.unitCode, this.unitNameTh, this.unitNameEn,
     this.unitPriceFc = 0,
     this.discountPercent = 0,
     this.discountAmountFc = 0,
@@ -341,6 +345,9 @@ class ApTransactionDetail {
       itemName: json['item_name'],
       description: json['description'],
       quantity: toDouble(json['quantity']) == 0 ? 1 : toDouble(json['quantity']),
+      unitCode: json['unit_code']?.toString(),
+      unitNameTh: json['unit_name_th']?.toString(),
+      unitNameEn: json['unit_name_en']?.toString(),
       unitPriceFc: toDouble(json['unit_price_fc']),
       discountPercent: toDouble(json['discount_percent']),
       discountAmountFc: toDouble(json['discount_amount_fc']),
@@ -369,6 +376,7 @@ class ApTransactionDetail {
         if (itemName != null) 'item_name': itemName,
         'description': description,
         'quantity': quantity,
+        if (unitCode != null) 'unit_code': unitCode,
         'unit_price_fc': unitPriceFc,
         'discount_percent': discountPercent,
         'discount_amount_fc': discountAmountFc,
@@ -395,6 +403,7 @@ class ApTransactionDetail {
         id: id ?? this.id, headerId: headerId ?? this.headerId,
         lineNo: lineNo ?? this.lineNo, description: description ?? this.description,
         quantity: quantity ?? this.quantity, unitPriceFc: unitPriceFc ?? this.unitPriceFc,
+        unitCode: unitCode, unitNameTh: unitNameTh, unitNameEn: unitNameEn,
         discountPercent: discountPercent ?? this.discountPercent,
         discountAmountFc: discountAmountFc ?? this.discountAmountFc,
         subtotalFc: subtotalFc ?? this.subtotalFc, vatType: vatType ?? this.vatType,

@@ -81,6 +81,12 @@ class _CountLine {
   String? toLocationCode;
   int? uomId;
   String? uomCode;
+  String? uomNameTh, uomNameEn; // ชื่อหน่วยของบรรทัด (จากเอกสารที่บันทึก) — ใช้แสดงเมื่อยังไม่ได้โหลดรายการหน่วย
+  // หน่วยนับหลายหน่วย: factor = จำนวนหน่วยหลักต่อ 1 หน่วยของบรรทัด (จำนวน/ราคาที่กรอกเป็นหน่วยของบรรทัด, ยอดระบบ/
+  // คงเหลือเป็นหน่วยหลัก) uoms = หน่วยที่เลือกได้ของสินค้า (null = ยังไม่โหลด) uomLocked = บรรทัดจากเอกสารอ้างอิงใช้หน่วยหลัก
+  double factor = 1;
+  ImItemUoms? uoms;
+  bool uomLocked = false;
   double systemQty;
   bool loadingSystemQty = false;
   final bool isIssueMode;
@@ -137,6 +143,8 @@ class _CountLine {
     this.toLocationCode,
     this.uomId,
     this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
     this.systemQty = 0,
     this.isIssueMode = false,
     this.isTransferMode = false,
@@ -189,9 +197,14 @@ class _CountLine {
   bool get isIncreaseMode => isReceiveMode || isApDnMode || isArReturnCnMode;
   double get counted {
     if (!isDeltaMode) return _parseNum(countedQtyCtrl.text);
-    final delta = _parseNum(issueQtyCtrl.text);
+    final delta = baseDelta;
     return isIncreaseMode ? systemQty + delta : systemQty - delta;
   }
+
+  // จำนวนที่กรอก แปลงเป็นหน่วยหลัก (ตัวอย่างบนหน้าจอ — backend ปัดตามทศนิยมของหน่วยหลักตอนบันทึก)
+  double get baseDelta => ((_parseNum(issueQtyCtrl.text) * factor) * 1e6).roundToDouble() / 1e6;
+  // จำนวนตามหน่วยของบรรทัด — ใช้คิดยอดเงิน (ราคาที่กรอกเป็นต่อหน่วยของบรรทัด)
+  double get docQty => isDeltaMode ? _parseNum(issueQtyCtrl.text) : variance.abs();
 
   double get variance => counted - systemQty;
 
@@ -447,7 +460,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     final res = computeSalesDiscounts([
       for (final l in _lines)
         SalesDiscountInput(
-          entered: l.variance.abs() * _parseNum(l.unitPriceCtrl.text),
+          entered: l.docQty * _parseNum(l.unitPriceCtrl.text),
           stepText: l.discPctCtrl.text,
           lineAmount: _lineDiscOf(l),
           isFree: l.isFree,
@@ -459,7 +472,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   LineAmounts _amt(_CountLine l, {bool billed = false}) {
     if (_salesDiscountMode) {
       return calcLineAmounts(
-        qty: l.variance.abs(),
+        qty: l.docQty,
         price: _parseNum(l.unitPriceCtrl.text),
         discountAmount: _salesDiscounts()[l]?.total ?? 0,
         vatRate: l.vatRate,
@@ -471,7 +484,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         ? l.unitPriceCtrl
         : (billed && l.billedUnitCostCtrl.text.trim().isNotEmpty ? l.billedUnitCostCtrl : l.unitCostCtrl);
     return calcLineAmounts(
-      qty: l.variance.abs(),
+      qty: l.docQty,
       price: _parseNum(ctrl.text),
       discountPercent: _showDiscount ? _parseNum(l.discPctCtrl.text) : 0,
       vatRate: l.vatRate,
@@ -483,27 +496,27 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // เอกสารขาย: ราคาขาย/หน่วยสุทธิหลังส่วนลดทั้งหมด (ของรายการ + ท้ายบิลที่ปันส่วน) ในหน่วยเดียวกับราคาที่กรอก
   // (ราคารวม VAT = สุทธิรวม VAT) — แสดงบนบรรทัดเท่านั้น
   double _salesNetUnit(_CountLine l, SalesLineDiscount? d) {
-    final qty = l.variance.abs();
+    final qty = l.docQty;
     if (qty == 0) return 0;
     return (qty * _parseNum(l.unitPriceCtrl.text) - (d?.total ?? 0)) / qty;
   }
 
   // ราคาสุทธิ/หน่วยก่อนส่วนลดท้ายบิล (หลังส่วนลดของรายการ) — ค่าที่ผู้ใช้กรอกเองได้ในช่อง netPriceCtrl
   double _netBeforeBill(_CountLine l, SalesLineDiscount? d) {
-    final qty = l.variance.abs();
+    final qty = l.docQty;
     if (qty == 0) return 0;
     return (qty * _parseNum(l.unitPriceCtrl.text) - (d?.own ?? 0)) / qty;
   }
 
   // จำนวนเงินของรายการ = จำนวน × ราคาขายสุทธิ/หน่วย (หลังส่วนลดทั้งหมด) ในหน่วยเดียวกับราคาที่กรอก
   double _salesLineAmount(_CountLine l, SalesLineDiscount? d) =>
-      l.variance.abs() * _parseNum(l.unitPriceCtrl.text) - (d?.total ?? 0);
+      l.docQty * _parseNum(l.unitPriceCtrl.text) - (d?.total ?? 0);
 
   static double _round2(double v) => (v * 100).roundToDouble() / 100; // ส่วนลดเป็นเงิน 2 ตำแหน่ง (backend เก็บแบบเดียวกัน)
   bool _netEntered(_CountLine l) => _salesDiscountMode && !l.isFree && l.netPriceCtrl.text.trim().isNotEmpty;
   // ส่วนลด (เงิน) ที่ให้ได้ราคาสุทธิที่กรอก = จำนวน × ราคาหลังหักส่วนลด % − จำนวน × ราคาสุทธิ (ติดลบ = ราคาสุทธิสูงเกิน)
   double _netBackSolveDisc(_CountLine l) {
-    final qty = l.variance.abs();
+    final qty = l.docQty;
     final afterStep = _parseNum(l.unitPriceCtrl.text) * parseStepDiscount(l.discPctCtrl.text).factor;
     return _round2(qty * afterStep - qty * _parseNum(l.netPriceCtrl.text));
   }
@@ -527,7 +540,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       if (!l.isDeltaMode || l.isIncreaseMode || l.isNonStock) continue;
       final serial = l.item.costingMethod == 'SPECIFIC' ? l.serialNoCtrl.text.trim() : '';
       final key = '${l.item.id}|${l.locationId ?? ''}|${l.lotNoCtrl.text.trim()}|$serial';
-      need[key] = (need[key] ?? 0) + _parseNum(l.issueQtyCtrl.text);
+      need[key] = (need[key] ?? 0) + l.baseDelta;
       onHand[key] = l.systemQty;
       code[key] = l.item.itemCode;
     }
@@ -544,7 +557,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
   // ราคาต่อหน่วยหลังส่วนลด ก่อน VAT — ใช้เทียบกับราคาในใบสั่งซื้อ/ใบสั่งขาย
   double _netUnit(_CountLine l, {bool billed = false}) {
-    final qty = l.variance.abs();
+    final qty = l.docQty;
     return qty == 0 ? 0 : _amt(l, billed: billed).net / qty;
   }
 
@@ -877,6 +890,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         toLocationCode: d.toLocationCode,
         uomId: d.uomId,
         uomCode: d.uomCode,
+        uomNameTh: d.uomNameTh,
+        uomNameEn: d.uomNameEn,
         systemQty: d.systemQty,
         isIssueMode: _isIssueMode,
         isTransferMode: _isTransferMode,
@@ -892,12 +907,19 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         soUnitPrice: d.refSoUnitPriceFc,
         refSoDetailId: d.refSoDetailId,
         countedQty: d.countedQty,
-        issueQty: isIncrease ? (d.countedQty - d.systemQty) : isDecrease ? (d.systemQty - d.countedQty) : 0,
+        // บรรทัดที่บันทึกเป็นหน่วยอื่น: จำนวน/ราคาแสดงตามหน่วยนั้น (uom_*) — ยอดระบบ/คงเหลือยังเป็นหน่วยหลัก
+        issueQty: d.isConverted
+            ? d.uomQty!
+            : isIncrease ? (d.countedQty - d.systemQty) : isDecrease ? (d.systemQty - d.countedQty) : 0,
         // _isApVendorMode: unitCostCtrl แสดงราคาที่กรอกจริงในสกุลเงินของ header (unitCostFc) ไม่ใช่ unitCost (LC) —
         // fallback เป็น unitCost เดิมสำหรับแถวเก่าก่อนมีฟีเจอร์นี้ (ถือว่าเป็น THB, unitCostFc == unitCost พอดี)
-        unitCost: _isApVendorMode ? (d.unitCostFc ?? d.unitCost) : d.unitCost,
-        billedUnitCost: _isApVendorMode ? (d.billedUnitCostFc ?? d.billedUnitCost) : d.billedUnitCost,
-        unitPrice: d.unitPrice,
+        unitCost: d.isConverted
+            ? (_isApVendorMode ? (d.uomUnitCostFc ?? d.uomUnitCost) : d.uomUnitCost)
+            : (_isApVendorMode ? (d.unitCostFc ?? d.unitCost) : d.unitCost),
+        billedUnitCost: d.isConverted
+            ? (_isApVendorMode ? (d.uomBilledUnitCostFc ?? d.uomBilledUnitCost) : d.uomBilledUnitCost)
+            : (_isApVendorMode ? (d.billedUnitCostFc ?? d.billedUnitCost) : d.billedUnitCost),
+        unitPrice: d.isConverted ? d.uomUnitPrice : d.unitPrice,
         discountPercent: d.discountPercent ?? 0,
         vatType: d.vatType,
         vatRate: d.vatRate ?? 0,
@@ -907,12 +929,16 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         remark: d.description ?? '',
         discountText: d.discountText,
         lineDiscountAmount: d.lineDiscountAmount,
-        netUnitPrice: d.netUnitPrice,
+        netUnitPrice: d.isConverted ? d.uomNetUnitPrice : d.netUnitPrice,
       )
+        ..factor = d.isConverted ? d.conversionFactor : 1
+        ..uomLocked = d.refPoDetailId != null || d.refSoDetailId != null || d.refImTransactionDetailId != null ||
+            d.refMoComponentDetailId != null || d.refMoOutputDetailId != null
         ..glAccountId = d.glAccountId
         ..dims = {1: d.dim1Id, 2: d.dim2Id, 3: d.dim3Id, 4: d.dim4Id, 5: d.dim5Id});
     }
     _lines = lines;
+    if (_status == 'Draft') await Future.wait(lines.map((l) => _loadLineUoms(l)));
     if (_isCashMode) {
       if (_whtTypes.isEmpty) {
         try { _whtTypes = await CdWhtTypeService().fetchActiveRows(); } catch (_) {}
@@ -1286,6 +1312,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       );
       setState(() => _lines.add(line));
       _applyMainLocation(line);
+      await _loadLineUoms(line, applyDefault: true);
       await _maybeResolveDirectLinePrice(line);
     });
   }
@@ -1301,7 +1328,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     final docDate = DateFormat('yyyy-MM-dd').format(_docDate);
     if ((_isGrnBillingMode || _isGrDeferredMode) && _vendorId != null) {
       final resolved = await _poService.resolvePrice(
-        itemId: itemId, vendorId: _vendorId!, qty: 1, docDate: docDate, uomId: line.item.baseUomId,
+        itemId: itemId, vendorId: _vendorId!, qty: 1, docDate: docDate, uomId: line.uomId ?? line.item.baseUomId,
         currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat,
         vatRate: (line.vatType == null || line.vatType == 'NOVAT') ? 0 : line.vatRate,
         fallbackLastPurchase: true,
@@ -1356,7 +1383,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       final itemId = l.item.id;
       if (itemId == null || l.refSoDetailId != null || l.isFree || l.priceOverridden) return;
       final seq = ++l.priceSeq;
-      final qty = l.variance.abs();
+      final qty = l.docQty; // จำนวนตามหน่วยของบรรทัด — backend เทียบขั้นจำนวนของตารางราคาเป็นหน่วยหลักให้เอง
       Map<String, dynamic> resolved;
       try {
         resolved = await _soService.resolvePrice(itemId: itemId, customerId: customerId, qty: qty == 0 ? 1 : qty,
@@ -1586,7 +1613,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         final line = _CountLine(
           item: items[i],
           locationId: l.locationId, locationCode: l.locationCode,
-          uomId: l.uomId, uomCode: l.uomCode,
+          // จำนวนคืนได้/ต้นทุนของบรรทัดต้นฉบับเป็นหน่วยหลัก — บรรทัดคืนใช้หน่วยหลัก
+          uomId: items[i].baseUomId, uomCode: items[i].baseUomCode,
           isApReturnCnMode: _isApReturnCnMode, isApDnMode: _isApDnMode,
           isArReturnCnMode: _isArReturnCnMode, isArDnMode: _isArDnMode,
           issueQty: qty.toDouble(),
@@ -1717,7 +1745,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         }
         final line = _CountLine(
           item: items[i],
-          uomId: l['uom_id'] as int?, uomCode: l['uom_code'] as String?,
+          // บรรทัดใบสั่งซื้อยังเป็นหน่วยหลัก (หน่วยนับหลายหน่วย ขั้นที่ 4)
+          uomId: items[i].baseUomId, uomCode: items[i].baseUomCode,
           isReceiveMode: true,
           issueQty: qty.toDouble(),
           // GRN เก็บ unitCostCtrl เป็นราคาในสกุลเงินของ header (_currency) เสมอ — ตั้ง header ให้ตรงกับ PO ต้นทางไว้
@@ -1872,7 +1901,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         }
         final line = _CountLine(
           item: items[i],
-          uomId: l['uom_id'] as int?, uomCode: l['uom_code'] as String?,
+          // บรรทัดใบสั่งขายยังเป็นหน่วยหลัก (หน่วยนับหลายหน่วย ขั้นที่ 3)
+          uomId: items[i].baseUomId, uomCode: items[i].baseUomCode,
           isDeliverMode: true,
           issueQty: qty.toDouble(),
           // DLN เก็บ unitPriceCtrl เป็นราคาในสกุลเงินของ header (_currency) เสมอ — ตั้ง header ให้ตรงกับ SO ต้นทางไว้
@@ -2258,6 +2288,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             lotNo: l.lotNoCtrl.text.trim().isEmpty ? null : l.lotNoCtrl.text.trim(),
             serialNo: l.serialNoCtrl.text.trim().isEmpty ? null : l.serialNoCtrl.text.trim(),
             uomId: l.uomId,
+            // จำนวนตามหน่วยของบรรทัด — backend แปลงเป็นหน่วยหลัก (counted_qty) และราคาต่อหน่วยหลักเอง
+            uomQty: l.isDeltaMode ? _parseNum(l.issueQtyCtrl.text) : null,
             systemQty: l.systemQty,
             countedQty: l.counted,
             // _isApVendorMode: unitCostCtrl คือราคาที่กรอกในสกุลเงินของ header (_currency) เสมอ ส่งเป็น unitCostFc
@@ -3540,6 +3572,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       if (anySerial) const _LCol('serial', 'Serial No.', 110, 1),
       if (anyStock) _LCol('sys', isEnglish ? 'System Qty' : 'ยอดระบบ', 72, 2, right: true),
       _LCol('qty', qtyLabel, 80, 2, right: true, required: true),
+      if (_lines.any((l) => l.isDeltaMode)) _LCol('uom', isEnglish ? 'Unit' : 'หน่วย', 76, 2),
       if (anyStock) _LCol('after', afterLabel, 80, 2, right: true),
       if ((_isReceiveMode && !_isConsignmentReceiveMode) || _isDeliverMode) _LCol('free', isEnglish ? 'Free' : 'ของแถม', 46, 2),
       if (showCost)
@@ -3725,6 +3758,126 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     return tip == null ? box : Tooltip(message: tip, child: box);
   }
 
+  // ── หน่วยนับหลายหน่วย ──────────────────────────────────────────────────────────────────────────────────────
+  // งานของประเภทเอกสาร — หน่วยที่สินค้าอนุญาตให้ใช้ (null = เบิก/โอน ใช้ได้ทุกหน่วยที่เปิดใช้งาน)
+  String? get _uomPurpose {
+    const purchase = ['10', '11', '12', '13', '14', '15', '20', '25'];
+    const sales = ['30', '31', '32', '33', '35', '40', '45'];
+    final t = _selectedSysDocType;
+    if (purchase.contains(t)) return 'PURCHASE';
+    if (sales.contains(t)) return 'SALES';
+    if (t == '90' || t == '95') return 'PRODUCTION';
+    return null;
+  }
+
+  Future<void> _loadLineUoms(_CountLine l, {bool applyDefault = false}) async {
+    final id = l.item.id;
+    if (id == null || !l.isDeltaMode) return;
+    try {
+      final u = await _itemService.fetchItemUoms(id, purpose: _uomPurpose);
+      if (!mounted || !_lines.contains(l)) return;
+      l.uoms = u;
+      final def = u.byId(u.defaultUomId);
+      if (applyDefault && !l.uomLocked && def != null && def.uomId != l.uomId) {
+        _setLineUom(l, def, scalePrices: false);
+      } else {
+        // หน่วยที่บันทึกไว้แต่ไม่อยู่ในรายการแล้ว (ปิดใช้งาน/ไม่อนุญาต) — คงอัตราเดิมไว้ backend แจ้งเตือนตอนบันทึก
+        final cur = u.byId(l.uomId);
+        if (cur != null && l.uomCode == null) l.uomCode = cur.uomCode;
+        setState(() {});
+      }
+    } catch (_) {}
+  }
+
+  // เปลี่ยนหน่วยของบรรทัด — ราคาที่กรอกไว้คูณตามอัตราใหม่ (ราคาต่อหน่วยหลักคงเดิม) แล้วดึงราคาตามตารางราคาใหม่
+  void _setLineUom(_CountLine l, ImItemUomOption opt, {bool scalePrices = true}) {
+    final ratio = l.factor == 0 ? 1.0 : opt.factor / l.factor;
+    setState(() {
+      if (scalePrices && ratio != 1) {
+        for (final c in [l.unitCostCtrl, l.billedUnitCostCtrl, l.unitPriceCtrl, l.netPriceCtrl]) {
+          if (c.text.trim().isEmpty) continue;
+          c.text = _CountLine._fmtInput((_parseNum(c.text) * ratio * 1e6).roundToDouble() / 1e6);
+        }
+      }
+      l.uomId = opt.uomId;
+      l.uomCode = opt.uomCode;
+      l.uomNameTh = opt.uomNameTh;
+      l.uomNameEn = opt.uomNameEn;
+      l.factor = opt.factor;
+    });
+    if (!scalePrices) return; // ตั้งหน่วยเริ่มต้นตอนเพิ่มรายการ — ผู้เรียกดึงราคาต่อเอง
+    if (_isSalesPriceMode) {
+      _refreshListPrices([l]);
+    } else if (l.purchasePriceAuto != null) {
+      _maybeResolveDirectLinePrice(l); // ราคาที่ระบบเติม (ตารางราคา/ราคาซื้อล่าสุด) — ดึงใหม่ตามหน่วยใหม่
+    }
+  }
+
+  // ชื่อหน่วยไทย/อังกฤษ (ไม่มีชื่อ = แสดงรหัส)
+  String _nameOr(String? th, String? en, String? code) {
+    final n = _isEnglish && (en ?? '').isNotEmpty ? en! : (th ?? '');
+    return n.isNotEmpty ? n : (code ?? '');
+  }
+
+  String _baseUomName(_CountLine line) =>
+      _nameOr(line.item.baseUomNameTh, line.item.baseUomNameEn, line.item.baseUomCode);
+
+  String _lineUomName(_CountLine line) {
+    final o = line.uoms?.byId(line.uomId);
+    if (o != null) return o.displayName(_isEnglish);
+    if (line.uomId == null || line.uomId == line.item.baseUomId) return _baseUomName(line);
+    return _nameOr(line.uomNameTh, line.uomNameEn, line.uomCode);
+  }
+
+  Widget _uomCell(_CountLine line, Widget empty) {
+    if (!line.isDeltaMode) return empty;
+    final base = _baseUomName(line);
+    final cur = _lineUomName(line);
+    final tip = line.factor != 1 ? '1 $cur = ${_fmtQty.format(line.factor)} $base' : null;
+    final opts = line.uoms?.units ?? const <ImItemUomOption>[];
+    final canPick = !_isReadOnly && !line.uomLocked && opts.length > 1;
+    if (!canPick) {
+      return _cBox(cur, fill: _hRo, right: false, tip: tip);
+    }
+    final box = Container(
+      height: 36,
+      padding: const EdgeInsets.only(left: 7, right: 2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey.shade500),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          isExpanded: true,
+          isDense: true,
+          value: opts.any((u) => u.uomId == line.uomId) ? line.uomId : null,
+          hint: Text(cur, style: const TextStyle(fontSize: 13)),
+          iconSize: 18,
+          // style ต้องต่อจากธีม — TextStyle เปล่าไม่มี fontFamily ทำให้ไม่ใช้ฟอนต์ที่ตั้งไว้ในข้อมูลบริษัท
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13, color: Colors.black87),
+          // ช่องที่เลือกแล้วแสดงชื่อหน่วยอย่างเดียว รายการในเมนูแสดงอัตราแปลงต่อหน่วยหลักด้วย
+          selectedItemBuilder: (_) => [
+            for (final u in opts)
+              Align(alignment: Alignment.centerLeft, child: Text(u.displayName(_isEnglish), overflow: TextOverflow.ellipsis)),
+          ],
+          items: [
+            for (final u in opts)
+              DropdownMenuItem(
+                value: u.uomId,
+                child: Text(u.isBase ? u.displayName(_isEnglish) : '${u.displayName(_isEnglish)} (= ${_fmtQty.format(u.factor)} $base)', overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (v) {
+            final o = line.uoms?.byId(v);
+            if (o != null && o.uomId != line.uomId) _setLineUom(line, o);
+          },
+        ),
+      ),
+    );
+    return tip == null ? box : Tooltip(message: tip, child: box);
+  }
+
   Widget _cPick(String? text, VoidCallback? onTap) => InkWell(
         onTap: onTap,
         child: Container(
@@ -3841,12 +3994,16 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
             if (_isSalesPriceMode) _refreshListPrices([line]); // ราคาตามขั้นจำนวน
           },
         );
+      case 'uom':
+        return _uomCell(line, empty);
       case 'after':
         if (line.isNonStock) return empty;
         final variance = line.variance;
         final varianceColor = variance > 0 ? Colors.green.shade700 : (variance < 0 ? Colors.red.shade700 : Colors.black87);
         return _cBox(_fmtQty.format(line.isDeltaMode ? line.counted : variance),
-            fill: _hRo, bold: true, color: line.isDeltaMode ? Colors.black87 : varianceColor, err: _lineShortage(line));
+            fill: _hRo, bold: true, color: line.isDeltaMode ? Colors.black87 : varianceColor, err: _lineShortage(line),
+            // ยอดระบบ/คงเหลือเป็นหน่วยหลักเสมอ
+            tip: line.factor != 1 ? '${_baseUomName(line)} (${_isEnglish ? 'base unit' : 'หน่วยหลัก'})' : null);
       case 'free':
         if (!((line.isReceiveMode && !_isConsignmentReceiveMode) || line.isDeliverMode)) return empty;
         return Center(
@@ -4560,7 +4717,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       final srcEntries = <(_Acct, double)>[];
       int skipped = 0, active = 0;
       for (final l in _lines) {
-        final qty = _parseNum(l.issueQtyCtrl.text);
+        final qty = l.baseDelta;
         if (qty <= 0) continue;
         if (_linePeriodic(l) && _lineToPeriodic(l)) {
           skipped++;
@@ -4640,7 +4797,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       double grirValue = 0, grirStockValue = 0;
       final invEntries = <(_Acct, double)>[];
       for (final l in _lines) {
-        final qty = _parseNum(l.issueQtyCtrl.text);
+        final qty = l.baseDelta;
         if (qty <= 0 || l.isFree) continue;
         final value = _amt(l).gross * _exchangeRate; // ก่อนส่วนลด — ส่วนลดรับลงตอนตั้งหนี้ AP (Dr GR/IR / Cr ส่วนลดรับ)
         grirValue += value;
@@ -4746,14 +4903,14 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       final v = l.variance;
       if (v == 0) continue;
       if (!alwaysPost && _linePeriodic(l)) continue;
-      final cost = l.item.costingMethod == 'STANDARD'
-          ? l.item.standardCost
-          : (v > 0 ? _parseNum(l.unitCostCtrl.text) : null);
+      // ต้นทุนมาตรฐานเป็นต่อหน่วยหลัก × จำนวนหน่วยหลัก, ต้นทุนที่กรอกเป็นต่อหน่วยของบรรทัด × จำนวนตามหน่วยของบรรทัด
+      final isStd = l.item.costingMethod == 'STANDARD';
+      final cost = isStd ? l.item.standardCost : (v > 0 ? _parseNum(l.unitCostCtrl.text) : null);
       if (cost == null) {
         undetermined += v.abs();
         continue;
       }
-      invEntries.add((_receiveInvAcct(l, isEnglish), v * cost));
+      invEntries.add((_receiveInvAcct(l, isEnglish), isStd ? v * cost : v.sign * l.docQty * cost));
       final lineAcc = _isIssueMode ? findAccount(_accounts, l.glAccountId) : null;
       final _Acct counter = lineAcc != null
           ? (code: lineAcc.accountCode, name: isEnglish && lineAcc.accountNameEng.isNotEmpty ? lineAcc.accountNameEng : lineAcc.accountNameThai)
@@ -5277,7 +5434,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     double remaining = 0;
     for (final l in _lines) {
       if (l.isFree) continue;
-      final entered = l.variance.abs() * _parseNum(l.unitPriceCtrl.text);
+      final entered = l.docQty * _parseNum(l.unitPriceCtrl.text);
       final own = entered * (1 - parseStepDiscount(l.discPctCtrl.text).factor) + _lineDiscOf(l);
       if (own > entered + 0.005) {
         warn('${l.item.itemCode}: ${isEnglish ? 'line discount exceeds the line amount' : 'ส่วนลดของรายการมากกว่ายอดของรายการ'}');

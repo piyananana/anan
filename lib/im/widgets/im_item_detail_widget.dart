@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
@@ -77,100 +78,184 @@ class _SectionState extends State<_Section> {
 // ---------------------------------------------------------------------------
 // Add/Edit alternate unit dialog
 // ---------------------------------------------------------------------------
-Future<ImUomConversion?> _showUomConversionDialog(BuildContext context, ImUomConversion? existing) async {
+/// เพิ่ม/แก้หน่วยของสินค้า: 1 [หน่วยนี้] = อัตรา × [หน่วยหลัก]
+/// [baseUomId]/[baseLabel] = หน่วยหลักของสินค้า, [usedUomIds] = หน่วยที่มีในรายการแล้ว (ไม่รวมแถวที่กำลังแก้)
+Future<ImUomConversion?> _showUomConversionDialog(
+  BuildContext context,
+  ImUomConversion? existing, {
+  required int? baseUomId,
+  required String baseLabel,
+  required Set<int> usedUomIds,
+}) async {
   final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
   int? uomId = existing?.uomId;
   String? uomCode = existing?.uomCode;
-  String? uomName = isEnglish && (existing?.uomNameEn ?? '').isNotEmpty ? existing?.uomNameEn : existing?.uomNameTh;
-  final factorCtrl = TextEditingController(text: existing != null ? '${existing.conversionFactor}' : '1');
+  String? uomNameTh = existing?.uomNameTh;
+  String? uomNameEn = existing?.uomNameEn;
+  final factorCtrl = TextEditingController(
+      text: existing != null ? NumberFormat('0.######').format(existing.conversionFactor) : '');
   final barcodeCtrl = TextEditingController(text: existing?.barcode ?? '');
+  bool allowPurchase = existing?.allowPurchase ?? true;
+  bool allowSales = existing?.allowSales ?? true;
+  bool allowProduction = existing?.allowProduction ?? true;
+  bool isActive = existing?.isActive ?? true;
   bool isPurchaseDefault = existing?.isPurchaseDefault ?? false;
   bool isSalesDefault = existing?.isSalesDefault ?? false;
+  bool isProductionDefault = existing?.isProductionDefault ?? false;
+  bool isCountDefault = existing?.isCountDefault ?? false;
+  bool isReportDefault = existing?.isReportDefault ?? false;
 
-  return showDialog<ImUomConversion>(
+  String unitName() => isEnglish && (uomNameEn ?? '').isNotEmpty ? uomNameEn! : (uomNameTh ?? '');
+
+  Widget check(String label, bool value, ValueChanged<bool> onChanged, {bool enabled = true}) => SizedBox(
+        width: 180,
+        child: CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text(label, style: TextStyle(fontSize: 13, color: enabled ? null : Colors.grey)),
+          value: value,
+          onChanged: enabled ? (v) => onChanged(v ?? false) : null,
+        ),
+      );
+
+  final result = await showDialog<ImUomConversion>(
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
+      final factor = double.tryParse(factorCtrl.text);
       return AlertDialog(
-        title: Text(existing == null ? (isEnglish ? 'Add Alternate Unit' : 'เพิ่มหน่วยนับทางเลือก') : (isEnglish ? 'Edit Alternate Unit' : 'แก้ไขหน่วยนับทางเลือก')),
+        title: Text(existing == null ? (isEnglish ? 'Add Unit' : 'เพิ่มหน่วยของสินค้า') : (isEnglish ? 'Edit Unit' : 'แก้ไขหน่วยของสินค้า')),
         content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: InputDecorator(
-                  decoration: InputDecoration(labelText: isEnglish ? 'Unit *' : 'หน่วยนับ *', border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                  child: Row(children: [
-                    Expanded(
-                      child: uomId != null
-                          ? Text('$uomCode — $uomName', style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)
-                          : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —', style: TextStyle(color: Colors.grey.shade600)),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.search, color: Colors.teal),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () => ImUomListWidget.search(ctx, onSelected: (ImUom u) {
-                        setDlg(() {
-                          uomId = u.id; uomCode = u.uomCode;
-                          uomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
-                        });
-                      }),
-                    ),
-                  ]),
+          width: 440,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: InputDecorator(
+                    decoration: InputDecoration(labelText: isEnglish ? 'Unit *' : 'หน่วยนับ *', border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                    child: Row(children: [
+                      Expanded(
+                        child: uomId != null
+                            ? Text('$uomCode — ${unitName()}', style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)
+                            : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —', style: TextStyle(color: Colors.grey.shade600)),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.search, color: Colors.teal),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => ImUomListWidget.search(ctx, onSelected: (ImUom u) {
+                          setDlg(() { uomId = u.id; uomCode = u.uomCode; uomNameTh = u.uomNameTh; uomNameEn = u.uomNameEn; });
+                        }),
+                      ),
+                    ]),
+                  ),
                 ),
-              ),
-              TextField(
-                controller: factorCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                decoration: InputDecoration(
-                  labelText: isEnglish ? 'Conversion Factor (per base unit) *' : 'อัตราแปลงหน่วย (ต่อหน่วยหลัก) *',
-                  border: const OutlineInputBorder(),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: Text('1 ${uomId != null ? unitName() : (isEnglish ? 'unit' : 'หน่วยนี้')} =', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 120,
+                    child: TextField(
+                      controller: factorCtrl,
+                      textAlign: TextAlign.right,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                      onChanged: (_) => setDlg(() {}),
+                      decoration: InputDecoration(labelText: isEnglish ? 'Factor *' : 'อัตรา *', border: const OutlineInputBorder(), isDense: true),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: Text(baseLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ]),
+                if (factor != null && factor > 0 && factor < 1)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      isEnglish ? 'Smaller than the base unit — check the factor is not reversed' : 'หน่วยนี้เล็กกว่าหน่วยหลัก — ตรวจว่าไม่ได้ป้อนอัตรากลับด้าน',
+                      style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: barcodeCtrl,
+                  decoration: InputDecoration(labelText: isEnglish ? 'Barcode of this unit' : 'บาร์โค้ดของหน่วยนี้', border: const OutlineInputBorder(), isDense: true),
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: barcodeCtrl,
-                decoration: InputDecoration(labelText: isEnglish ? 'Barcode' : 'บาร์โค้ด', border: const OutlineInputBorder()),
-              ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: Text(isEnglish ? 'Default purchase unit' : 'หน่วยซื้อเริ่มต้น'),
-                value: isPurchaseDefault,
-                onChanged: (v) => setDlg(() => isPurchaseDefault = v ?? false),
-              ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: Text(isEnglish ? 'Default sales unit' : 'หน่วยขายเริ่มต้น'),
-                value: isSalesDefault,
-                onChanged: (v) => setDlg(() => isSalesDefault = v ?? false),
-              ),
-            ],
+                const SizedBox(height: 10),
+                Text(isEnglish ? 'Used for' : 'ใช้ในงาน', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Wrap(children: [
+                  check(isEnglish ? 'Purchasing' : 'ซื้อ', allowPurchase, (v) => setDlg(() { allowPurchase = v; if (!v) isPurchaseDefault = false; })),
+                  check(isEnglish ? 'Sales' : 'ขาย', allowSales, (v) => setDlg(() { allowSales = v; if (!v) isSalesDefault = false; })),
+                  check(isEnglish ? 'Production' : 'ผลิต', allowProduction, (v) => setDlg(() { allowProduction = v; if (!v) isProductionDefault = false; })),
+                ]),
+                const SizedBox(height: 4),
+                Text(isEnglish ? 'Default unit for' : 'เป็นหน่วยเริ่มต้นของ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Wrap(children: [
+                  check(isEnglish ? 'Purchasing' : 'ซื้อ', isPurchaseDefault, (v) => setDlg(() => isPurchaseDefault = v), enabled: allowPurchase && isActive),
+                  check(isEnglish ? 'Sales' : 'ขาย', isSalesDefault, (v) => setDlg(() => isSalesDefault = v), enabled: allowSales && isActive),
+                  check(isEnglish ? 'Production' : 'ผลิต', isProductionDefault, (v) => setDlg(() => isProductionDefault = v), enabled: allowProduction && isActive),
+                  check(isEnglish ? 'Stock count' : 'ตรวจนับ', isCountDefault, (v) => setDlg(() => isCountDefault = v), enabled: isActive),
+                  check(isEnglish ? 'Reports' : 'รายงาน', isReportDefault, (v) => setDlg(() => isReportDefault = v), enabled: isActive),
+                ]),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(isEnglish ? 'Active (usable on new documents)' : 'ใช้งาน (เลือกได้ในเอกสารใหม่)'),
+                  value: isActive,
+                  activeColor: Colors.teal,
+                  onChanged: (v) => setDlg(() {
+                    isActive = v;
+                    if (!v) { isPurchaseDefault = false; isSalesDefault = false; isProductionDefault = false; isCountDefault = false; isReportDefault = false; }
+                  }),
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
           ElevatedButton(
             onPressed: () {
+              String? err;
+              final f = double.tryParse(factorCtrl.text);
               if (uomId == null) {
-                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a unit' : 'กรุณาเลือกหน่วยนับ')));
+                err = isEnglish ? 'Please select a unit' : 'กรุณาเลือกหน่วยนับ';
+              } else if (uomId == baseUomId) {
+                err = isEnglish ? 'This is already the base unit' : 'หน่วยนี้เป็นหน่วยหลักของสินค้าอยู่แล้ว';
+              } else if (usedUomIds.contains(uomId)) {
+                err = isEnglish ? 'This unit is already in the list' : 'หน่วยนี้มีในรายการแล้ว';
+              } else if (f == null || f <= 0) {
+                err = isEnglish ? 'Factor must be greater than 0' : 'อัตราแปลงต้องมากกว่า 0';
+              }
+              if (err != null) {
+                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(err), backgroundColor: Colors.red));
                 return;
               }
               Navigator.of(ctx).pop(ImUomConversion(
                 id: existing?.id,
                 uomId: uomId!,
                 uomCode: uomCode,
-                uomNameTh: isEnglish ? null : uomName,
-                uomNameEn: isEnglish ? uomName : null,
-                conversionFactor: double.tryParse(factorCtrl.text) ?? 1,
+                uomNameTh: uomNameTh,
+                uomNameEn: uomNameEn,
+                conversionFactor: f!,
                 barcode: barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim(),
                 isPurchaseDefault: isPurchaseDefault,
                 isSalesDefault: isSalesDefault,
+                isProductionDefault: isProductionDefault,
+                isCountDefault: isCountDefault,
+                isReportDefault: isReportDefault,
+                allowPurchase: allowPurchase,
+                allowSales: allowSales,
+                allowProduction: allowProduction,
+                isActive: isActive,
               ));
             },
             child: Text(isEnglish ? 'OK' : 'ตกลง'),
@@ -179,6 +264,9 @@ Future<ImUomConversion?> _showUomConversionDialog(BuildContext context, ImUomCon
       );
     }),
   );
+  factorCtrl.dispose();
+  barcodeCtrl.dispose();
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -394,6 +482,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
 
   int? _categoryId; String? _categoryCode; String? _categoryName;
   int? _baseUomId; String? _baseUomCode; String? _baseUomName;
+  bool _baseUomLocked = false; List<String> _baseUomUsedIn = const [];
   int? _defaultWarehouseId; String? _defaultWarehouseCode; String? _defaultWarehouseName;
   int? _inventoryAccountId; String? _inventoryAccountCode; String? _inventoryAccountName;
   int? _cogsAccountId; String? _cogsAccountCode; String? _cogsAccountName;
@@ -532,6 +621,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _categoryId = item.categoryId; _categoryCode = item.categoryCode; _categoryName = item.categoryName;
     _isCodeAutoGenerated = item.isCodeAutoGenerated;
     _baseUomId = item.baseUomId; _baseUomCode = item.baseUomCode;
+    _baseUomLocked = item.baseUomLocked; _baseUomUsedIn = item.baseUomUsedIn;
     _baseUomName = _isEnglish && (item.baseUomNameEn ?? '').isNotEmpty ? item.baseUomNameEn : item.baseUomNameTh;
     _defaultWarehouseId = item.defaultWarehouseId; _defaultWarehouseCode = item.defaultWarehouseCode;
     _defaultWarehouseName = _isEnglish && (item.defaultWarehouseNameEn ?? '').isNotEmpty ? item.defaultWarehouseNameEn : item.defaultWarehouseNameTh;
@@ -556,6 +646,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _categoryId = null; _categoryCode = null; _categoryName = null; _categoryIsAutoNumber = false;
     _isCodeAutoGenerated = false;
     _baseUomId = null; _baseUomCode = null; _baseUomName = null;
+    _baseUomLocked = false; _baseUomUsedIn = const [];
     _defaultWarehouseId = null; _defaultWarehouseCode = null; _defaultWarehouseName = null;
     _inventoryAccountId = null; _inventoryAccountCode = null; _inventoryAccountName = null;
     _cogsAccountId = null; _cogsAccountCode = null; _cogsAccountName = null;
@@ -568,14 +659,45 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
     _itemWarehouses = [];
   }
 
+  String get _baseUomLabel => _baseUomId == null
+      ? (_isEnglish ? 'base unit' : 'หน่วยหลัก')
+      : (_baseUomName ?? _baseUomCode ?? '');
+
+  Future<ImUomConversion?> _openUomConversionDialog(int? index) {
+    final used = <int>{
+      for (var i = 0; i < _uomConversions.length; i++)
+        if (i != index) _uomConversions[i].uomId,
+    };
+    return _showUomConversionDialog(context, index == null ? null : _uomConversions[index],
+        baseUomId: _baseUomId, baseLabel: _baseUomLabel, usedUomIds: used);
+  }
+
+  // หน่วยเริ่มต้นแต่ละงานมีได้หน่วยเดียว — ตั้งที่แถวใหม่แล้วล้างของแถวอื่น
+  void _putUomConversion(int? index, ImUomConversion row) {
+    setState(() {
+      _uomConversions = [
+        for (var i = 0; i < _uomConversions.length; i++)
+          if (i == index) row
+          else _uomConversions[i].copyWith(
+            isPurchaseDefault: row.isPurchaseDefault ? false : null,
+            isSalesDefault: row.isSalesDefault ? false : null,
+            isProductionDefault: row.isProductionDefault ? false : null,
+            isCountDefault: row.isCountDefault ? false : null,
+            isReportDefault: row.isReportDefault ? false : null,
+          ),
+        if (index == null) row,
+      ];
+    });
+  }
+
   Future<void> _addUomConversion() async {
-    final result = await _showUomConversionDialog(context, null);
-    if (result != null) setState(() => _uomConversions.add(result));
+    final result = await _openUomConversionDialog(null);
+    if (result != null) _putUomConversion(null, result);
   }
 
   Future<void> _editUomConversion(int index) async {
-    final result = await _showUomConversionDialog(context, _uomConversions[index]);
-    if (result != null) setState(() => _uomConversions[index] = result);
+    final result = await _openUomConversionDialog(index);
+    if (result != null) _putUomConversion(index, result);
   }
 
   void _removeUomConversion(int index) => setState(() => _uomConversions.removeAt(index));
@@ -711,7 +833,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
         ),
       );
 
-  Widget _buildFkField({required String label, required String? displayText, required bool hasValue, required VoidCallback onSearch, VoidCallback? onClear, bool locked = false}) =>
+  Widget _buildFkField({required String label, required String? displayText, required bool hasValue, required VoidCallback onSearch, VoidCallback? onClear, bool locked = false, String? lockedTooltip}) =>
       Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: InputDecorator(
@@ -728,7 +850,7 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
             ),
             if (locked)
               Tooltip(
-                message: _isEnglish ? 'Locked — code was auto-generated at creation' : 'ล็อก — รหัสถูกออกอัตโนมัติตอนสร้างข้อมูล',
+                message: lockedTooltip ?? (_isEnglish ? 'Locked — code was auto-generated at creation' : 'ล็อก — รหัสถูกออกอัตโนมัติตอนสร้างข้อมูล'),
                 child: Icon(Icons.lock, color: Colors.grey.shade500, size: 16),
               )
             else if (!_isReadOnly) ...[
@@ -906,6 +1028,11 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
           displayText: '$_baseUomCode — $_baseUomName',
           onSearch: _pickUom,
           onClear: () => setState(() { _baseUomId = null; _baseUomCode = null; _baseUomName = null; }),
+          // ใช้งานแล้ว = สต็อก/ต้นทุน/เอกสารเก่าคิดเป็นหน่วยนี้ เปลี่ยนไม่ได้
+          locked: widget.mode == Mode.edit && _baseUomLocked,
+          lockedTooltip: _isEnglish
+              ? 'Locked — this item is already used in: ${_baseUomUsedIn.join(', ')}'
+              : 'ล็อก — สินค้านี้ใช้งานแล้วใน: ${_baseUomUsedIn.join(', ')}',
         )),
       ]),
       if (_costingMethod == 'STANDARD')
@@ -991,35 +1118,47 @@ class ImItemDetailWidgetState extends State<ImItemDetailWidget> {
   Widget _buildUomConversionSection() {
     final isEnglish = _isEnglish;
     return _Section(
-      title: isEnglish ? 'Alternate Units (${_uomConversions.length})' : 'หน่วยนับทางเลือก (${_uomConversions.length})',
+      title: isEnglish ? 'Item Units (${_uomConversions.length})' : 'หน่วยของสินค้า (${_uomConversions.length})',
       initiallyExpanded: false,
-      trailing: _isReadOnly ? null : IconButton(icon: const Icon(Icons.add_circle, color: Colors.teal), tooltip: isEnglish ? 'Add alternate unit' : 'เพิ่มหน่วยนับทางเลือก', onPressed: _addUomConversion),
+      trailing: _isReadOnly ? null : IconButton(icon: const Icon(Icons.add_circle, color: Colors.teal), tooltip: isEnglish ? 'Add unit' : 'เพิ่มหน่วยของสินค้า', onPressed: _addUomConversion),
       children: [
         if (_uomConversions.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(isEnglish ? 'No alternate units — only the base unit is used' : 'ยังไม่มีหน่วยนับทางเลือก — ใช้หน่วยหลักเท่านั้น', style: TextStyle(color: Colors.grey.shade600)),
+            child: Text(isEnglish ? 'No other units — only the base unit is used. Add pack/box/carton sizes here.' : 'ยังไม่มีหน่วยอื่น — ใช้หน่วยหลักเท่านั้น เพิ่มขนาดแพ็ค/กล่อง/ลังได้ที่นี่', style: TextStyle(color: Colors.grey.shade600)),
           )
         else
           ..._uomConversions.asMap().entries.map((entry) {
             final i = entry.key;
             final c = entry.value;
-            final name = isEnglish && (c.uomNameEn ?? '').isNotEmpty ? c.uomNameEn : c.uomNameTh;
-            final tags = [
-              if (c.isPurchaseDefault) (isEnglish ? 'Purchase default' : 'ค่าเริ่มต้นซื้อ'),
-              if (c.isSalesDefault) (isEnglish ? 'Sales default' : 'ค่าเริ่มต้นขาย'),
-            ].join('  ·  ');
+            final name = c.displayName(isEnglish);
+            final factorText = NumberFormat('#,##0.######').format(c.conversionFactor);
+            final uses = [
+              if (c.allowPurchase) (isEnglish ? 'Buy' : 'ซื้อ'),
+              if (c.allowSales) (isEnglish ? 'Sell' : 'ขาย'),
+              if (c.allowProduction) (isEnglish ? 'Make' : 'ผลิต'),
+            ].join('/');
+            final defaults = [
+              if (c.isPurchaseDefault) (isEnglish ? 'buy' : 'ซื้อ'),
+              if (c.isSalesDefault) (isEnglish ? 'sell' : 'ขาย'),
+              if (c.isProductionDefault) (isEnglish ? 'make' : 'ผลิต'),
+              if (c.isCountDefault) (isEnglish ? 'count' : 'ตรวจนับ'),
+              if (c.isReportDefault) (isEnglish ? 'report' : 'รายงาน'),
+            ].join(', ');
+            final parts = [
+              '1 $name = $factorText $_baseUomLabel',
+              if (uses.isNotEmpty) (isEnglish ? 'Used: $uses' : 'ใช้: $uses') else (isEnglish ? 'Not used anywhere' : 'ไม่ได้ใช้ในงานใด'),
+              if (defaults.isNotEmpty) (isEnglish ? 'Default: $defaults' : 'เริ่มต้น: $defaults'),
+              if (c.barcode != null) (isEnglish ? 'Barcode: ${c.barcode}' : 'บาร์โค้ด: ${c.barcode}'),
+              if (!c.isActive) (isEnglish ? 'Inactive' : 'ปิดใช้งาน'),
+            ];
             return Card(
               margin: const EdgeInsets.symmetric(vertical: 3),
               child: ListTile(
                 dense: true,
-                leading: const Icon(Icons.straighten, color: Colors.teal, size: 20),
-                title: Text('${c.uomCode}  $name'),
-                subtitle: Text(
-                  isEnglish
-                      ? '1 $name = ${c.conversionFactor} base unit${c.barcode != null ? '  ·  Barcode: ${c.barcode}' : ''}${tags.isNotEmpty ? '  ·  $tags' : ''}'
-                      : '1 $name = ${c.conversionFactor} หน่วยหลัก${c.barcode != null ? '  ·  บาร์โค้ด: ${c.barcode}' : ''}${tags.isNotEmpty ? '  ·  $tags' : ''}',
-                ),
+                leading: Icon(Icons.straighten, color: c.isActive ? Colors.teal : Colors.grey, size: 20),
+                title: Text('${c.uomCode}  $name', style: TextStyle(color: c.isActive ? null : Colors.grey)),
+                subtitle: Text(parts.join('  ·  ')),
                 trailing: _isReadOnly
                     ? null
                     : Row(mainAxisSize: MainAxisSize.min, children: [

@@ -134,6 +134,8 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
 
   // Detail rows (for PI, CN, DN)
   List<_DetailRow> _detailRows = [];
+  // คอลัมน์หน่วย — แสดงเมื่อมีบรรทัดที่มีหน่วย (ใบตั้งหนี้/ลดหนี้/เพิ่มหนี้ที่สร้างจากเอกสาร IM)
+  bool get _showUnitCol => _detailRows.any((r) => (r.unitCode ?? '').isNotEmpty);
 
   // Apply rows (for Payment 80, RA 70)
   List<_ApplyRow> _applyRows = [];
@@ -996,7 +998,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
         itemCode: r.itemCodeCtrl.text.isEmpty ? null : r.itemCodeCtrl.text,
         itemName: itemName,
         description: itemName,
-        quantity: qty, unitPriceFc: price,
+        quantity: qty, unitCode: r.unitCode, unitPriceFc: price,
         discountPercent: discPct, discountAmountFc: disc,
         subtotalFc: afterDisc, vatType: r.vatType, vatRate: r.vatRate,
         vatAmountFc: vat, totalAmountFc: afterDisc + vat,
@@ -1789,6 +1791,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                       DataColumn(label: Text(isEnglish ? 'Item Code' : 'รหัสสินค้า', style: const TextStyle(fontWeight: FontWeight.bold))),
                       DataColumn(label: Text(isEnglish ? 'Item / Service Name' : 'ชื่อสินค้า/บริการ', style: const TextStyle(fontWeight: FontWeight.bold))),
                       DataColumn(label: Text(isEnglish ? 'Qty' : 'จำนวน', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                      if (_showUnitCol) DataColumn(label: Text(isEnglish ? 'Unit' : 'หน่วย', style: const TextStyle(fontWeight: FontWeight.bold))),
                       DataColumn(label: Text(isEnglish ? 'Unit Price' : 'ราคา/หน่วย', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       DataColumn(label: Text(isEnglish ? 'Disc%' : 'ส่วนลด%', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       DataColumn(label: Text(isEnglish ? 'Net Amount' : 'ยอดสุทธิ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
@@ -1839,6 +1842,7 @@ class _ApTransactionDetailWidgetState extends State<ApTransactionDetailWidget> {
                           readOnly: _isReadOnly,
                           onChanged: (_) => _onDetailFieldChanged(r),
                         ))),
+                        if (_showUnitCol) DataCell(SizedBox(width: 70, child: Text(r.unitLabel(isEnglish), style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis))),
                         DataCell(SizedBox(width: 100, child: TextFormField(
                           controller: r.priceCtrl,
                           decoration: InputDecoration(
@@ -3123,6 +3127,8 @@ class _DetailRow {
   int? expenseAccountId;
   bool isDeferredVat;
   Map<int, int?> dims; // มิติของบรรทัด slot → value id (ว่าง = ใช้มิติหัวเอกสาร)
+  // หน่วยของบรรทัด (บรรทัดที่สร้างจากเอกสาร IM) — แสดงอย่างเดียว ส่งรหัสกลับตอนบันทึกเพื่อไม่ให้หาย
+  String? unitCode, unitNameTh, unitNameEn;
 
   _DetailRow({
     String? itemCode,
@@ -3137,6 +3143,9 @@ class _DetailRow {
     this.isDeferredVat = false,
     double totalFc = 0,
     Map<int, int?>? dims,
+    this.unitCode,
+    this.unitNameTh,
+    this.unitNameEn,
   })  : dims = dims ?? {},
         itemCodeCtrl = TextEditingController(text: itemCode ?? ''),
         itemNameCtrl = TextEditingController(text: itemName ?? ''),
@@ -3155,7 +3164,13 @@ class _DetailRow {
         expenseAccountId: d.expenseAccountId, isDeferredVat: d.isDeferredVat,
         totalFc: d.totalAmountFc,
         dims: {1: d.dim1Id, 2: d.dim2Id, 3: d.dim3Id, 4: d.dim4Id, 5: d.dim5Id},
+        unitCode: d.unitCode, unitNameTh: d.unitNameTh, unitNameEn: d.unitNameEn,
       );
+
+  String unitLabel(bool isEnglish) {
+    final n = isEnglish && (unitNameEn ?? '').isNotEmpty ? unitNameEn! : (unitNameTh ?? '');
+    return n.isNotEmpty ? n : (unitCode ?? '');
+  }
 
   void dispose() {
     itemCodeCtrl.dispose(); itemNameCtrl.dispose(); descCtrl.dispose();

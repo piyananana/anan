@@ -352,6 +352,7 @@ class ImTransactionDetail {
   final String? serialNo;
   final int? uomId;
   final String? uomCode;
+  final String? uomNameTh, uomNameEn;
   final double systemQty;
   final double countedQty;
   final double? qty; // variance — null until Posted (server computes from live balance at Post time)
@@ -383,6 +384,11 @@ class ImTransactionDetail {
   // บัญชีที่ใช้ลงบัญชีของบรรทัด (เบิกสินค้า '60' — null = สินค้า → หมวด → ตั้งค่า) + มิติของบรรทัด (ว่าง = หัวเอกสาร)
   final int? glAccountId;
   final int? dim1Id, dim2Id, dim3Id, dim4Id, dim5Id;
+  // หน่วยนับหลายหน่วย: จำนวน/ราคาตามหน่วยในเอกสาร (uom_id) — systemQty/countedQty/qty/unitCost/unitPrice เป็นหน่วยหลัก
+  // conversionFactor = อัตราแปลง snapshot (1 = หน่วยหลัก/ข้อมูลเก่า), uom* = ค่าที่กรอกตามหน่วยในเอกสาร (null = ข้อมูลเก่า)
+  final double? uomQty;
+  final double conversionFactor;
+  final double? uomUnitCost, uomUnitCostFc, uomUnitPrice, uomNetUnitPrice, uomBilledUnitCost, uomBilledUnitCostFc;
 
   const ImTransactionDetail({
     this.id,
@@ -399,6 +405,7 @@ class ImTransactionDetail {
     this.serialNo,
     this.uomId,
     this.uomCode,
+    this.uomNameTh, this.uomNameEn,
     this.systemQty = 0,
     this.countedQty = 0,
     this.qty,
@@ -428,9 +435,14 @@ class ImTransactionDetail {
     this.netUnitPrice,
     this.glAccountId,
     this.dim1Id, this.dim2Id, this.dim3Id, this.dim4Id, this.dim5Id,
+    this.uomQty,
+    this.conversionFactor = 1,
+    this.uomUnitCost, this.uomUnitCostFc, this.uomUnitPrice, this.uomNetUnitPrice, this.uomBilledUnitCost, this.uomBilledUnitCostFc,
   });
 
   double get variance => countedQty - systemQty;
+  // บรรทัดที่บันทึกเป็นหน่วยอื่นที่ไม่ใช่หน่วยหลัก
+  bool get isConverted => conversionFactor != 1 && uomQty != null;
 
   factory ImTransactionDetail.fromJson(Map<String, dynamic> json) {
     double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
@@ -450,6 +462,8 @@ class ImTransactionDetail {
       serialNo: json['serial_no'],
       uomId: json['uom_id'],
       uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th']?.toString(),
+      uomNameEn: json['uom_name_en']?.toString(),
       systemQty: toDouble(json['system_qty']),
       countedQty: toDouble(json['counted_qty']),
       qty: toDoubleN(json['qty']),
@@ -480,6 +494,14 @@ class ImTransactionDetail {
       glAccountId: json['gl_account_id'],
       dim1Id: json['dim1_id'], dim2Id: json['dim2_id'], dim3Id: json['dim3_id'],
       dim4Id: json['dim4_id'], dim5Id: json['dim5_id'],
+      uomQty: toDoubleN(json['uom_qty']),
+      conversionFactor: toDoubleN(json['conversion_factor']) ?? 1,
+      uomUnitCost: toDoubleN(json['uom_unit_cost']),
+      uomUnitCostFc: toDoubleN(json['uom_unit_cost_fc']),
+      uomUnitPrice: toDoubleN(json['uom_unit_price']),
+      uomNetUnitPrice: toDoubleN(json['uom_net_unit_price']),
+      uomBilledUnitCost: toDoubleN(json['uom_billed_unit_cost']),
+      uomBilledUnitCostFc: toDoubleN(json['uom_billed_unit_cost_fc']),
     );
   }
 
@@ -494,6 +516,7 @@ class ImTransactionDetail {
         if (lotNo != null) 'lot_no': lotNo,
         if (serialNo != null) 'serial_no': serialNo,
         if (uomId != null) 'uom_id': uomId,
+        if (uomQty != null) 'uom_qty': uomQty,
         'system_qty': systemQty,
         'counted_qty': countedQty,
         if (unitCost != null) 'unit_cost': unitCost,

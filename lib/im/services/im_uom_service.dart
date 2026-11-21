@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/im_uom.dart';
+import '../models/im_uom_standard_conversion.dart';
 
 class ImUomService {
   final String baseUrl = AppConfig.apiIm;
@@ -94,5 +95,45 @@ class ImUomService {
       final err = json.decode(response.body);
       throw Exception(err['message'] ?? 'ลบข้อมูลล้มเหลว');
     }
+  }
+
+  // ── อัตราแปลงมาตรฐาน (ไม่ขึ้นกับสินค้า) ──────────────────────────────
+  Never _fail(http.Response r, String fallback) {
+    if (r.statusCode == 401 || r.statusCode == 403) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    }
+    String? msg;
+    try { msg = (json.decode(r.body) as Map)['message']?.toString(); } catch (_) {}
+    throw Exception(msg ?? '$fallback: ${r.statusCode}');
+  }
+
+  Future<List<ImUomStandardConversion>> fetchStdConversions({int? uomId}) async {
+    final headers = await authService.getAuthHeader();
+    final q = uomId != null ? '?uom_id=$uomId' : '';
+    final r = await http.get(Uri.parse('$baseUrl/im_uom_standard_conversion$q'), headers: headers);
+    if (r.statusCode == 200) {
+      return (json.decode(r.body) as List).map((e) => ImUomStandardConversion.fromJson(e)).toList();
+    }
+    _fail(r, 'โหลดอัตราแปลงมาตรฐานล้มเหลว');
+  }
+
+  Future<ImUomStandardConversion> saveStdConversion(ImUomStandardConversion row) async {
+    final headers = await authService.getAuthHeader();
+    final body = jsonEncode(row.toJson());
+    final r = row.id == 0
+        ? await http.post(Uri.parse('$baseUrl/im_uom_standard_conversion'), headers: headers, body: body)
+        : await http.put(Uri.parse('$baseUrl/im_uom_standard_conversion/${row.id}'), headers: headers, body: body);
+    if (r.statusCode == 200 || r.statusCode == 201) {
+      return ImUomStandardConversion.fromJson(json.decode(r.body));
+    }
+    _fail(r, 'บันทึกอัตราแปลงมาตรฐานล้มเหลว');
+  }
+
+  Future<void> deleteStdConversion(int id) async {
+    final headers = await authService.getAuthHeader();
+    final r = await http.delete(Uri.parse('$baseUrl/im_uom_standard_conversion/$id'), headers: headers);
+    if (r.statusCode == 204) return;
+    _fail(r, 'ลบอัตราแปลงมาตรฐานล้มเหลว');
   }
 }

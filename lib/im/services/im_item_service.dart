@@ -39,6 +39,19 @@ class ImItemService {
     }
   }
 
+  // หน่วยที่เลือกได้ในบรรทัดเอกสาร — purpose: PURCHASE | SALES | PRODUCTION | COUNT | REPORT (null = ทุกหน่วยที่เปิดใช้งาน)
+  Future<ImItemUoms> fetchItemUoms(int itemId, {String? purpose}) async {
+    final headers = await authService.getAuthHeader();
+    final uri = Uri.parse('$baseUrl/im_item/$itemId/uoms').replace(queryParameters: purpose == null ? null : {'purpose': purpose});
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) return ImItemUoms.fromJson(json.decode(response.body));
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    }
+    throw Exception('โหลดหน่วยของสินค้าล้มเหลว: ${response.statusCode}');
+  }
+
   Future<ImItem> addRow(ImItem row) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(

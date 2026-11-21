@@ -314,6 +314,7 @@ class ArTransactionDetail {
   final String? description;
   final double quantity;
   final String? unitCode;
+  final String? unitNameTh, unitNameEn; // ชื่อของ unit_code (อ่านอย่างเดียว ไม่ส่งกลับ)
   final double unitPriceFc;
   final double discountPercent;
   final double discountAmountFc;
@@ -344,6 +345,8 @@ class ArTransactionDetail {
     this.description,
     this.quantity = 1,
     this.unitCode,
+    this.unitNameTh,
+    this.unitNameEn,
     this.unitPriceFc = 0,
     this.discountPercent = 0,
     this.discountAmountFc = 0,
@@ -373,6 +376,8 @@ class ArTransactionDetail {
       description: j['description'],
       quantity: _toDouble(j['quantity']) ?? 1,
       unitCode: j['unit_code'],
+      unitNameTh: j['unit_name_th']?.toString(),
+      unitNameEn: j['unit_name_en']?.toString(),
       unitPriceFc: _toDouble(j['unit_price_fc']) ?? 0,
       discountPercent: _toDouble(j['discount_percent']) ?? 0,
       discountAmountFc: _toDouble(j['discount_amount_fc']) ?? 0,
@@ -466,6 +471,8 @@ class ArTransactionDetail {
       vatAmountLc: vatAmountLc ?? this.vatAmountLc,
       totalAmountLc: totalAmountLc ?? this.totalAmountLc,
       isDeferredVat: isDeferredVat ?? this.isDeferredVat,
+      unitNameTh: this.unitNameTh,
+      unitNameEn: this.unitNameEn,
       discountText: discountText,
       lineDiscountAmount: lineDiscountAmount,
       billDiscountAmount: billDiscountAmount,
