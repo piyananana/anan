@@ -210,6 +210,8 @@ class PoTransactionDetail {
   final String? itemName;
   final int? uomId;
   final String? uomCode;
+  final String? uomNameTh, uomNameEn;
+  final double conversionFactor; // จำนวนหน่วยหลักต่อ 1 หน่วยของบรรทัด ณ ตอนบันทึก (1 = หน่วยหลัก/ใบเก่า)
   final double qtyOrdered;
   final double unitPriceFc;
   final double discountPercent;
@@ -231,6 +233,9 @@ class PoTransactionDetail {
     this.itemName,
     this.uomId,
     this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
+    this.conversionFactor = 1,
     this.qtyOrdered = 0,
     this.unitPriceFc = 0,
     this.discountPercent = 0,
@@ -253,6 +258,9 @@ class PoTransactionDetail {
       itemName: json['item_name'],
       uomId: json['uom_id'],
       uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th']?.toString(),
+      uomNameEn: json['uom_name_en']?.toString(),
+      conversionFactor: double.tryParse(json['conversion_factor']?.toString() ?? '') ?? 1,
       qtyOrdered: toDouble(json['qty_ordered']),
       unitPriceFc: toDouble(json['unit_price_fc']),
       discountPercent: toDouble(json['discount_percent']),

@@ -186,6 +186,8 @@ class PrTransactionDetail {
   final String? itemName;
   final int? uomId;
   final String? uomCode;
+  final String? uomNameTh, uomNameEn;
+  final double conversionFactor; // จำนวนหน่วยหลักต่อ 1 หน่วยของบรรทัด ณ ตอนบันทึก (1 = หน่วยหลัก/ใบเก่า)
   final double qtyRequested;
   final DateTime? neededByDate;
   final double estimatedUnitCost;
@@ -204,6 +206,9 @@ class PrTransactionDetail {
     this.itemName,
     this.uomId,
     this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
+    this.conversionFactor = 1,
     this.qtyRequested = 0,
     this.neededByDate,
     this.estimatedUnitCost = 0,
@@ -223,6 +228,9 @@ class PrTransactionDetail {
       itemName: json['item_name'],
       uomId: json['uom_id'],
       uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th']?.toString(),
+      uomNameEn: json['uom_name_en']?.toString(),
+      conversionFactor: double.tryParse(json['conversion_factor']?.toString() ?? '') ?? 1,
       qtyRequested: toDouble(json['qty_requested']),
       neededByDate: json['needed_by_date'] != null ? parseLocalDate(json['needed_by_date']) : null,
       estimatedUnitCost: toDouble(json['estimated_unit_cost']),

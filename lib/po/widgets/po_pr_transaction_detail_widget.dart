@@ -66,7 +66,14 @@ class _LineForm {
   DateTime? neededByDate;
   double estimatedUnitCost;
   double qtyConverted;
-  _LineForm({this.id, this.item, this.qtyRequested = 0, this.neededByDate, this.estimatedUnitCost = 0, this.qtyConverted = 0});
+  // หน่วยของบรรทัด — จำนวน/ราคาประมาณตามหน่วยนี้ (ไม่ระบุ = หน่วยหลัก) factor = จำนวนหน่วยหลักต่อ 1 หน่วย
+  // uoms = หน่วยที่สินค้าอนุญาตให้ซื้อ (null = ยังไม่โหลด)
+  int? uomId;
+  String? uomCode, uomNameTh, uomNameEn;
+  double factor;
+  ImItemUoms? uoms;
+  _LineForm({this.id, this.item, this.qtyRequested = 0, this.neededByDate, this.estimatedUnitCost = 0, this.qtyConverted = 0,
+      this.uomId, this.uomCode, this.uomNameTh, this.uomNameEn, this.factor = 1});
   double get totalValueLc => qtyRequested * estimatedUnitCost;
 }
 
@@ -210,8 +217,14 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
               qtyRequested: h.details[i].qtyRequested,
               neededByDate: h.details[i].neededByDate,
               estimatedUnitCost: h.details[i].estimatedUnitCost,
+              uomId: h.details[i].uomId ?? items[i].baseUomId,
+              uomCode: h.details[i].uomCode ?? items[i].baseUomCode,
+              uomNameTh: h.details[i].uomId != null ? h.details[i].uomNameTh : items[i].baseUomNameTh,
+              uomNameEn: h.details[i].uomId != null ? h.details[i].uomNameEn : items[i].baseUomNameEn,
+              factor: h.details[i].conversionFactor,
             ),
         ];
+        for (final l in _lines) { _loadLineUoms(l); }
         if (_vendor != null) _selectVendor(_vendor!);
       } else if (widget.transactionId == null) {
         _resetForm();
@@ -251,8 +264,14 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
               neededByDate: h.details[i].neededByDate,
               estimatedUnitCost: h.details[i].estimatedUnitCost,
               qtyConverted: h.details[i].qtyConverted,
+              uomId: h.details[i].uomId ?? items[i].baseUomId,
+              uomCode: h.details[i].uomCode ?? items[i].baseUomCode,
+              uomNameTh: h.details[i].uomId != null ? h.details[i].uomNameTh : items[i].baseUomNameTh,
+              uomNameEn: h.details[i].uomId != null ? h.details[i].uomNameEn : items[i].baseUomNameEn,
+              factor: h.details[i].conversionFactor,
             ),
         ];
+        for (final l in _lines) { _loadLineUoms(l); }
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
@@ -278,7 +297,85 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
   Future<void> _addLine() async {
     final result = await showDialog<ImItem>(context: context, builder: (_) => const _PrItemPickerDialog());
     if (result == null || !mounted) return;
-    setState(() => _lines.add(_LineForm(item: result, qtyRequested: 1, estimatedUnitCost: 0)));
+    final line = _LineForm(item: result, qtyRequested: 1, estimatedUnitCost: 0,
+        uomId: result.baseUomId, uomCode: result.baseUomCode, uomNameTh: result.baseUomNameTh, uomNameEn: result.baseUomNameEn);
+    setState(() => _lines.add(line));
+    await _loadLineUoms(line, applyDefault: true); // หน่วยซื้อตั้งต้นของสินค้า
+  }
+
+  // หน่วยที่เลือกได้ของบรรทัด (หน่วยที่สินค้าอนุญาตให้ซื้อ) — applyDefault = ตั้งหน่วยซื้อตั้งต้นของสินค้า (บรรทัดใหม่)
+  Future<void> _loadLineUoms(_LineForm l, {bool applyDefault = false}) async {
+    final id = l.item?.id;
+    if (id == null || _isReadOnly) return;
+    try {
+      final u = await _itemService.fetchItemUoms(id, purpose: 'PURCHASE');
+      if (!mounted || !_lines.contains(l)) return;
+      l.uoms = u;
+      final def = u.byId(u.defaultUomId);
+      if (applyDefault && def != null && def.uomId != l.uomId) {
+        _setLineUom(l, def);
+      } else {
+        setState(() {});
+      }
+    } catch (_) {}
+  }
+
+  // เปลี่ยนหน่วยของบรรทัด — ราคาประมาณคูณตามอัตราใหม่ (ราคาต่อหน่วยหลักคงเดิม)
+  void _setLineUom(_LineForm l, ImItemUomOption opt) {
+    final ratio = l.factor == 0 ? 1.0 : opt.factor / l.factor;
+    setState(() {
+      if (ratio != 1 && l.estimatedUnitCost != 0) {
+        l.estimatedUnitCost = (l.estimatedUnitCost * ratio * 1e4).roundToDouble() / 1e4;
+      }
+      l.uomId = opt.uomId;
+      l.uomCode = opt.uomCode;
+      l.uomNameTh = opt.uomNameTh;
+      l.uomNameEn = opt.uomNameEn;
+      l.factor = opt.factor;
+    });
+  }
+
+  String _lineUomName(_LineForm l) {
+    final o = l.uoms?.byId(l.uomId);
+    if (o != null) return o.displayName(_isEnglish);
+    final n = _isEnglish && (l.uomNameEn ?? '').isNotEmpty ? l.uomNameEn! : (l.uomNameTh ?? '');
+    return n.isNotEmpty ? n : (l.uomCode ?? '');
+  }
+
+  Widget _uomField(_LineForm l, bool isEnglish) {
+    final opts = l.uoms?.units ?? const <ImItemUomOption>[];
+    final it = l.item;
+    final base = isEnglish && (it?.baseUomNameEn ?? '').isNotEmpty ? it!.baseUomNameEn! : (it?.baseUomNameTh ?? it?.baseUomCode ?? '');
+    final tip = l.factor != 1 ? '1 ${_lineUomName(l)} = ${_fmtQty.format(l.factor)} $base' : null;
+    final deco = InputDecoration(labelText: isEnglish ? 'Unit' : 'หน่วย', isDense: true, border: const OutlineInputBorder());
+    final style = Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13);
+    Widget w;
+    if (_isReadOnly || opts.length <= 1 || l.qtyConverted > 0) {
+      w = InputDecorator(decoration: deco, child: Text(_lineUomName(l), style: style, overflow: TextOverflow.ellipsis));
+    } else {
+      w = DropdownButtonFormField<int>(
+        value: opts.any((u) => u.uomId == l.uomId) ? l.uomId : null,
+        isExpanded: true,
+        isDense: true,
+        decoration: deco,
+        style: style?.copyWith(color: Colors.black87),
+        hint: Text(_lineUomName(l), style: style),
+        selectedItemBuilder: (_) => [for (final u in opts) Text(u.displayName(isEnglish), overflow: TextOverflow.ellipsis)],
+        items: [
+          for (final u in opts)
+            DropdownMenuItem(
+              value: u.uomId,
+              child: Text(u.isBase ? u.displayName(isEnglish) : '${u.displayName(isEnglish)} (= ${_fmtQty.format(u.factor)} $base)',
+                  overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        onChanged: (v) {
+          final o = l.uoms?.byId(v);
+          if (o != null && o.uomId != l.uomId) _setLineUom(l, o);
+        },
+      );
+    }
+    return tip == null ? w : Tooltip(message: tip, child: w);
   }
 
   Future<void> _save() async {
@@ -302,7 +399,7 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
       final details = _lines
           .map((l) => PrTransactionDetail(
                 id: l.id, lineNo: 0, itemId: l.item!.id!, itemCode: l.item!.itemCode, itemName: l.item!.itemNameTh,
-                qtyRequested: l.qtyRequested, neededByDate: l.neededByDate, estimatedUnitCost: l.estimatedUnitCost,
+                uomId: l.uomId, qtyRequested: l.qtyRequested, neededByDate: l.neededByDate, estimatedUnitCost: l.estimatedUnitCost,
               ))
           .toList();
       if (_id == null) {
@@ -684,9 +781,13 @@ class _PrTransactionDetailWidgetState extends State<PrTransactionDetailWidget> {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    SizedBox(width: 110, child: _uomField(l, isEnglish)),
+                    const SizedBox(width: 8),
                     SizedBox(
                       width: 100,
                       child: TextFormField(
+                        // ราคาที่คูณตามหน่วยใหม่ต้องแสดงในช่อง — initialValue ไม่อัปเดตเอง จึงสร้างช่องใหม่เมื่อหน่วยเปลี่ยน
+                        key: ValueKey('cost_${identityHashCode(l)}_${l.uomId}'),
                         initialValue: _fmtValue.format(l.estimatedUnitCost),
                         enabled: !_isReadOnly,
                         textAlign: TextAlign.right,

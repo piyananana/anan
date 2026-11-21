@@ -1685,7 +1685,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       Expanded(flex: 3, child: Text('${l['item_code'] ?? ''} ${l['item_name'] ?? ''}', overflow: TextOverflow.ellipsis)),
                       Expanded(
                         flex: 2,
-                        child: Text(isEnglish ? 'Remaining: ${_fmtQty.format(remaining)}' : 'คงเหลือรับได้: ${_fmtQty.format(remaining)}', style: const TextStyle(fontSize: 12)),
+                        child: Text('${isEnglish ? 'Remaining' : 'คงเหลือรับได้'}: ${_fmtQty.format(remaining)} ${_pickUomName(l)}', style: const TextStyle(fontSize: 12)),
                       ),
                       // ราคา/หน่วยของ PO เป็นสกุลเงินต่างประเทศได้ (unit_price_fc) — ต้นทุน/หน่วยของ GRN เก็บเป็น
                       // บาทเสมอ (im_transaction ไม่มีแนวคิดสกุลเงินต่างประเทศ) จึงต้องแปลงด้วย exchange_rate ของ PO
@@ -1745,8 +1745,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         }
         final line = _CountLine(
           item: items[i],
-          // บรรทัดใบสั่งซื้อยังเป็นหน่วยหลัก (หน่วยนับหลายหน่วย ขั้นที่ 4)
-          uomId: items[i].baseUomId, uomCode: items[i].baseUomCode,
+          // หน่วยตามบรรทัดใบสั่งซื้อ (จำนวนคงเหลือ/ราคาเป็นหน่วยนี้) — ใบเก่าไม่มีหน่วย = หน่วยหลัก
+          uomId: (l['uom_id'] as int?) ?? items[i].baseUomId,
+          uomCode: (l['uom_code'] as String?) ?? items[i].baseUomCode,
+          uomNameTh: l['uom_id'] != null ? l['uom_name_th'] as String? : items[i].baseUomNameTh,
+          uomNameEn: l['uom_id'] != null ? l['uom_name_en'] as String? : items[i].baseUomNameEn,
           isReceiveMode: true,
           issueQty: qty.toDouble(),
           // GRN เก็บ unitCostCtrl เป็นราคาในสกุลเงินของ header (_currency) เสมอ — ตั้ง header ให้ตรงกับ PO ต้นทางไว้
@@ -1757,7 +1760,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           // ราคาใบสั่งซื้อหลังส่วนลด ก่อน VAT — เทียบกับ _netUnit ของบรรทัดตอน Post
           poUnitPrice: _poNum(l['net_unit_price_fc'] ?? l['unit_price_fc']),
           vatType: vatType, vatRate: vatRate,
-        );
+        )
+          ..factor = l['conversion_factor'] == null ? 1 : _poNum(l['conversion_factor'])
+          ..uomLocked = true;
         _lines.add(line);
         _applyMainLocation(line);
       }

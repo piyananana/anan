@@ -82,8 +82,15 @@ class _LineForm {
   double discountPercent;
   String? vatType; // ว่าง = ใบสั่งซื้อเก่าก่อนมี VAT ต่อบรรทัด
   double vatRate;
+  // หน่วยของบรรทัด — จำนวน/ราคาตามหน่วยนี้ (ไม่ระบุ = หน่วยหลัก) factor = จำนวนหน่วยหลักต่อ 1 หน่วย
+  // uoms = หน่วยที่สินค้าอนุญาตให้ซื้อ (null = ยังไม่โหลด) บรรทัดจากใบขอซื้อใช้หน่วยของใบขอซื้อ (เปลี่ยนไม่ได้)
+  int? uomId;
+  String? uomCode, uomNameTh, uomNameEn;
+  double factor;
+  ImItemUoms? uoms;
   _LineForm({this.id, this.item, this.qtyOrdered = 0, this.unitPriceFc = 0, this.qtyReceived = 0, this.refPrDetailId,
-      this.discountPercent = 0, this.vatType, this.vatRate = 0});
+      this.discountPercent = 0, this.vatType, this.vatRate = 0,
+      this.uomId, this.uomCode, this.uomNameTh, this.uomNameEn, this.factor = 1});
 }
 
 class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
@@ -299,8 +306,14 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
               discountPercent: h.details[i].discountPercent,
               vatType: h.details[i].vatType,
               vatRate: h.details[i].vatRate,
+              uomId: h.details[i].uomId ?? items[i].baseUomId,
+              uomCode: h.details[i].uomCode ?? items[i].baseUomCode,
+              uomNameTh: h.details[i].uomId != null ? h.details[i].uomNameTh : items[i].baseUomNameTh,
+              uomNameEn: h.details[i].uomId != null ? h.details[i].uomNameEn : items[i].baseUomNameEn,
+              factor: h.details[i].conversionFactor,
             ),
         ];
+        for (final l in _lines) { _loadLineUoms(l); }
         // ใบเก่าก่อนมี VAT ต่อบรรทัด — ใบใหม่ใช้ VAT ตั้งต้นของสินค้า
         for (final l in _lines) {
           if (l.vatType == null) _applyDefaultVat(l);
@@ -353,8 +366,14 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
               discountPercent: h.details[i].discountPercent,
               vatType: h.details[i].vatType,
               vatRate: h.details[i].vatRate,
+              uomId: h.details[i].uomId ?? items[i].baseUomId,
+              uomCode: h.details[i].uomCode ?? items[i].baseUomCode,
+              uomNameTh: h.details[i].uomId != null ? h.details[i].uomNameTh : items[i].baseUomNameTh,
+              uomNameEn: h.details[i].uomId != null ? h.details[i].uomNameEn : items[i].baseUomNameEn,
+              factor: h.details[i].conversionFactor,
             ),
         ];
+        for (final l in _lines) { _loadLineUoms(l); }
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
@@ -397,7 +416,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       if (line.item == null || line.unitPriceFc != line.lastResolvedPrice) continue;
       final resolved = await _service.resolvePrice(
         itemId: line.item!.id!, vendorId: vendor.id!, qty: line.qtyOrdered,
-        docDate: DateFormat('yyyy-MM-dd').format(_docDate), uomId: line.item!.baseUomId,
+        docDate: DateFormat('yyyy-MM-dd').format(_docDate), uomId: line.uomId ?? line.item!.baseUomId,
         currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line), fallbackLastPurchase: true,
       );
       if (!mounted || _vendor != vendor) return;
@@ -411,13 +430,16 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
   Future<void> _addLine() async {
     final result = await showDialog<ImItem>(context: context, builder: (_) => const _ItemPickerDialog());
     if (result == null || !mounted) return;
-    final line = _LineForm(item: result, qtyOrdered: 1, unitPriceFc: 0);
+    final line = _LineForm(item: result, qtyOrdered: 1, unitPriceFc: 0,
+        uomId: result.baseUomId, uomCode: result.baseUomCode, uomNameTh: result.baseUomNameTh, uomNameEn: result.baseUomNameEn);
     _applyDefaultVat(line);
     setState(() => _lines.add(line));
+    await _loadLineUoms(line, applyDefault: true); // หน่วยซื้อตั้งต้นของสินค้า
+    if (!mounted) return;
     if (_vendor != null) {
       final resolved = await _service.resolvePrice(
         itemId: result.id!, vendorId: _vendor!.id!, qty: 1, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
-        uomId: result.baseUomId,
+        uomId: line.uomId ?? result.baseUomId,
         currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line), fallbackLastPurchase: true,
       );
       if (resolved['unit_price_fc'] != null && mounted) {
@@ -438,7 +460,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       if (!mounted || line.unitPriceFc != line.lastResolvedPrice) return;
       final resolved = await _service.resolvePrice(
         itemId: line.item!.id!, vendorId: _vendor!.id!, qty: line.qtyOrdered, docDate: DateFormat('yyyy-MM-dd').format(_docDate),
-        uomId: line.item!.baseUomId,
+        uomId: line.uomId ?? line.item!.baseUomId,
         currencyCode: _currency?.currencyCode, priceIncludesVat: _priceIncludesVat, vatRate: _lineVatRate(line), fallbackLastPurchase: true,
       );
       if (resolved['unit_price_fc'] != null && mounted && line.unitPriceFc == line.lastResolvedPrice) {
@@ -493,7 +515,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                       Expanded(flex: 3, child: Text('${l['item_code'] ?? ''} ${l['item_name'] ?? ''}', overflow: TextOverflow.ellipsis)),
                       Expanded(
                         flex: 2,
-                        child: Text(isEnglish ? 'Remaining: ${_fmtQty.format(remaining)}' : 'คงเหลือแปลงได้: ${_fmtQty.format(remaining)}', style: const TextStyle(fontSize: 12)),
+                        child: Text('${isEnglish ? 'Remaining' : 'คงเหลือแปลงได้'}: ${_fmtQty.format(remaining)} ${_pickUomName(l)}', style: const TextStyle(fontSize: 12)),
                       ),
                       // ราคาประมาณของ PR เป็นสกุลเงินของ PR เอง ซึ่งอาจไม่ตรงกับสกุลเงินที่เลือกไว้ในใบสั่งซื้อนี้ —
                       // แสดงกำกับไว้เป็น hint เท่านั้น ผู้ใช้ต้องตรวจสอบ/แก้ราคาเองหลังเพิ่มรายการ ไม่ auto-convert ให้
@@ -539,6 +561,12 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
           qtyOrdered: qty.toDouble(),
           unitPriceFc: _prNum(l['estimated_unit_cost']),
           refPrDetailId: id,
+          // หน่วยตามใบขอซื้อ (ใบเก่าไม่มีหน่วย = หน่วยหลัก)
+          uomId: (l['uom_id'] as int?) ?? items[i].baseUomId,
+          uomCode: (l['uom_code'] as String?) ?? items[i].baseUomCode,
+          uomNameTh: l['uom_id'] != null ? l['uom_name_th'] as String? : items[i].baseUomNameTh,
+          uomNameEn: l['uom_id'] != null ? l['uom_name_en'] as String? : items[i].baseUomNameEn,
+          factor: l['conversion_factor'] == null ? 1 : _prNum(l['conversion_factor']),
         );
         _applyDefaultVat(line);
         _lines.add(line);
@@ -552,6 +580,91 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       // สาขา: ใช้สาขาของเอกสารต้นทางที่เลือก (ถ้ามี)
       _branchId = (pickedLines.first['branch_id'] as int?) ?? _branchId;
     });
+  }
+
+  // ชื่อหน่วยของบรรทัดใน picker (map จาก API)
+  String _pickUomName(Map<String, dynamic> l) {
+    final th = l['uom_name_th']?.toString() ?? '', en = l['uom_name_en']?.toString() ?? '';
+    final n = _isEnglish && en.isNotEmpty ? en : th;
+    return n.isNotEmpty ? n : (l['uom_code']?.toString() ?? '');
+  }
+
+  // หน่วยที่เลือกได้ของบรรทัด (หน่วยที่สินค้าอนุญาตให้ซื้อ) — applyDefault = ตั้งหน่วยซื้อตั้งต้นของสินค้า (บรรทัดใหม่)
+  Future<void> _loadLineUoms(_LineForm l, {bool applyDefault = false}) async {
+    final id = l.item?.id;
+    if (id == null || _isReadOnly || l.refPrDetailId != null) return;
+    try {
+      final u = await _itemService.fetchItemUoms(id, purpose: 'PURCHASE');
+      if (!mounted || !_lines.contains(l)) return;
+      l.uoms = u;
+      final def = u.byId(u.defaultUomId);
+      if (applyDefault && def != null && def.uomId != l.uomId) {
+        _setLineUom(l, def, reresolve: false);
+      } else {
+        setState(() {});
+      }
+    } catch (_) {}
+  }
+
+  // เปลี่ยนหน่วยของบรรทัด — ราคาคูณตามอัตราใหม่ (ราคาต่อหน่วยหลักคงเดิม) แล้วดึงราคาตามตารางราคา/ราคาซื้อล่าสุดของหน่วยใหม่
+  void _setLineUom(_LineForm l, ImItemUomOption opt, {bool reresolve = true}) {
+    final ratio = l.factor == 0 ? 1.0 : opt.factor / l.factor;
+    setState(() {
+      final auto = l.unitPriceFc == l.lastResolvedPrice;
+      if (ratio != 1 && l.unitPriceFc != 0) {
+        l.unitPriceFc = (l.unitPriceFc * ratio * 1e4).roundToDouble() / 1e4;
+        if (auto) l.lastResolvedPrice = l.unitPriceFc;
+      }
+      l.uomId = opt.uomId;
+      l.uomCode = opt.uomCode;
+      l.uomNameTh = opt.uomNameTh;
+      l.uomNameEn = opt.uomNameEn;
+      l.factor = opt.factor;
+    });
+    if (reresolve) _maybeReresolvePrice(l);
+  }
+
+  String _lineUomName(_LineForm l) {
+    final o = l.uoms?.byId(l.uomId);
+    if (o != null) return o.displayName(_isEnglish);
+    final n = _isEnglish && (l.uomNameEn ?? '').isNotEmpty ? l.uomNameEn! : (l.uomNameTh ?? '');
+    return n.isNotEmpty ? n : (l.uomCode ?? '');
+  }
+
+  Widget _uomField(_LineForm l, bool isEnglish) {
+    final opts = l.uoms?.units ?? const <ImItemUomOption>[];
+    final it = l.item;
+    final base = isEnglish && (it?.baseUomNameEn ?? '').isNotEmpty ? it!.baseUomNameEn! : (it?.baseUomNameTh ?? it?.baseUomCode ?? '');
+    final tip = l.factor != 1 ? '1 ${_lineUomName(l)} = ${_fmtQty.format(l.factor)} $base' : null;
+    final deco = InputDecoration(labelText: isEnglish ? 'Unit' : 'หน่วย', isDense: true, border: const OutlineInputBorder());
+    final style = Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13);
+    Widget w;
+    if (_isReadOnly || opts.length <= 1 || l.qtyReceived > 0 || l.refPrDetailId != null) {
+      w = InputDecorator(decoration: deco, child: Text(_lineUomName(l), style: style, overflow: TextOverflow.ellipsis));
+    } else {
+      w = DropdownButtonFormField<int>(
+        value: opts.any((u) => u.uomId == l.uomId) ? l.uomId : null,
+        isExpanded: true,
+        isDense: true,
+        decoration: deco,
+        style: style?.copyWith(color: Colors.black87),
+        hint: Text(_lineUomName(l), style: style),
+        selectedItemBuilder: (_) => [for (final u in opts) Text(u.displayName(isEnglish), overflow: TextOverflow.ellipsis)],
+        items: [
+          for (final u in opts)
+            DropdownMenuItem(
+              value: u.uomId,
+              child: Text(u.isBase ? u.displayName(isEnglish) : '${u.displayName(isEnglish)} (= ${_fmtQty.format(u.factor)} $base)',
+                  overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        onChanged: (v) {
+          final o = l.uoms?.byId(v);
+          if (o != null && o.uomId != l.uomId) _setLineUom(l, o);
+        },
+      );
+    }
+    return tip == null ? w : Tooltip(message: tip, child: w);
   }
 
   Future<void> _save() async {
@@ -579,7 +692,7 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
       final details = _lines
           .map((l) => PoTransactionDetail(
                 id: l.id, lineNo: 0, itemId: l.item!.id!, itemCode: l.item!.itemCode, itemName: l.item!.itemNameTh,
-                qtyOrdered: l.qtyOrdered, unitPriceFc: l.unitPriceFc, refPrDetailId: l.refPrDetailId,
+                uomId: l.uomId, qtyOrdered: l.qtyOrdered, unitPriceFc: l.unitPriceFc, refPrDetailId: l.refPrDetailId,
                 discountPercent: l.discountPercent, vatType: l.vatType, vatRate: l.vatRate,
               ))
           .toList();
@@ -951,11 +1064,14 @@ class _PoTransactionDetailWidgetState extends State<PoTransactionDetailWidget> {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    SizedBox(width: 110, child: _uomField(l, isEnglish)),
+                    const SizedBox(width: 8),
                     SizedBox(
                       width: 100,
                       child: TextFormField(
-                        // ราคาที่ระบบเติมให้ภายหลัง (ตารางราคา) ต้องแสดงในช่อง — initialValue ไม่อัปเดตเอง จึงสร้างช่องใหม่
-                        key: ValueKey('price_${identityHashCode(l)}_${l.lastResolvedPrice}'),
+                        // ราคาที่ระบบเติมให้ภายหลัง (ตารางราคา) / ราคาที่คูณตามหน่วยใหม่ ต้องแสดงในช่อง — initialValue
+                        // ไม่อัปเดตเอง จึงสร้างช่องใหม่เมื่อราคาตั้งต้นหรือหน่วยเปลี่ยน
+                        key: ValueKey('price_${identityHashCode(l)}_${l.lastResolvedPrice}_${l.uomId}'),
                         initialValue: _fmtValue.format(l.unitPriceFc),
                         enabled: !_isReadOnly,
                         textAlign: TextAlign.right,
