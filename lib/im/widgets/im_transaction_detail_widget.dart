@@ -1844,7 +1844,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
                       Expanded(flex: 3, child: Text('${l['item_code'] ?? ''} ${l['item_name'] ?? ''}', overflow: TextOverflow.ellipsis)),
                       Expanded(
                         flex: 2,
-                        child: Text(isEnglish ? 'Remaining: ${_fmtQty.format(remaining)}' : 'คงเหลือส่งได้: ${_fmtQty.format(remaining)}', style: const TextStyle(fontSize: 12)),
+                        child: Text('${isEnglish ? 'Remaining' : 'คงเหลือส่งได้'}: ${_fmtQty.format(remaining)} ${_pickUomName(l)}', style: const TextStyle(fontSize: 12)),
                       ),
                       Expanded(
                         flex: 2,
@@ -1901,8 +1901,11 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
         }
         final line = _CountLine(
           item: items[i],
-          // บรรทัดใบสั่งขายยังเป็นหน่วยหลัก (หน่วยนับหลายหน่วย ขั้นที่ 3)
-          uomId: items[i].baseUomId, uomCode: items[i].baseUomCode,
+          // หน่วยตามบรรทัดใบสั่งขาย (จำนวนคงเหลือ/ราคาเป็นหน่วยนี้) — ใบเก่าไม่มีหน่วย = หน่วยหลัก
+          uomId: (l['uom_id'] as int?) ?? items[i].baseUomId,
+          uomCode: (l['uom_code'] as String?) ?? items[i].baseUomCode,
+          uomNameTh: l['uom_id'] != null ? l['uom_name_th'] as String? : items[i].baseUomNameTh,
+          uomNameEn: l['uom_id'] != null ? l['uom_name_en'] as String? : items[i].baseUomNameEn,
           isDeliverMode: true,
           issueQty: qty.toDouble(),
           // DLN เก็บ unitPriceCtrl เป็นราคาในสกุลเงินของ header (_currency) เสมอ — ตั้ง header ให้ตรงกับ SO ต้นทางไว้
@@ -1913,7 +1916,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
           // ราคาใบสั่งขายหลังส่วนลด ก่อน VAT — เทียบกับ _netUnit ของบรรทัดตอน Post
           soUnitPrice: _poNum(l['net_unit_price_fc'] ?? l['unit_price_fc']),
           vatType: vatType, vatRate: vatRate,
-        );
+        )
+          ..factor = l['conversion_factor'] == null ? 1 : _poNum(l['conversion_factor'])
+          ..uomLocked = true;
         _lines.add(line);
         _applyMainLocation(line);
       }
@@ -1938,6 +1943,13 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
       }
     });
     if (_currency?.currencyCode != curBefore) _loadAdvances();
+  }
+
+  // ชื่อหน่วยของบรรทัดใน picker (map จาก API) — ไม่มีชื่อ = รหัส
+  String _pickUomName(Map<String, dynamic> l) {
+    final th = l['uom_name_th']?.toString() ?? '', en = l['uom_name_en']?.toString() ?? '';
+    final n = _isEnglish && en.isNotEmpty ? en : th;
+    return n.isNotEmpty ? n : (l['uom_code']?.toString() ?? '');
   }
 
   // ที่มาของราคาขาย: ล็อก = ตารางราคา/ใบสั่งขาย, ปลดล็อก = ผู้ดูแลระบบแก้ได้, ดินสอ = ผู้ดูแลระบบแก้ราคาเองแล้ว

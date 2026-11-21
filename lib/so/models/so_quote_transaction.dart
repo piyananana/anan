@@ -211,6 +211,8 @@ class QuoteTransactionDetail {
   final String? itemName;
   final int? uomId;
   final String? uomCode;
+  final String? uomNameTh, uomNameEn;
+  final double conversionFactor; // จำนวนหน่วยหลักต่อ 1 หน่วยของบรรทัด ณ ตอนบันทึก (1 = หน่วยหลัก/ใบเก่า)
   final double qtyQuoted;
   final double unitPriceFc;
   final double discountPercent; // % เทียบเท่าของส่วนลดรวม (ใบสั่งขายที่ดึงจากใบเสนอราคาใช้ค่านี้)
@@ -236,6 +238,9 @@ class QuoteTransactionDetail {
     this.itemName,
     this.uomId,
     this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
+    this.conversionFactor = 1,
     this.qtyQuoted = 0,
     this.unitPriceFc = 0,
     this.discountPercent = 0,
@@ -261,6 +266,9 @@ class QuoteTransactionDetail {
       itemName: json['item_name'],
       uomId: json['uom_id'],
       uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th']?.toString(),
+      uomNameEn: json['uom_name_en']?.toString(),
+      conversionFactor: json['conversion_factor'] == null ? 1 : toDouble(json['conversion_factor']),
       qtyQuoted: toDouble(json['qty_quoted']),
       unitPriceFc: toDouble(json['unit_price_fc']),
       discountPercent: toDouble(json['discount_percent']),

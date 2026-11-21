@@ -64,25 +64,24 @@ class _SectionState extends State<_Section> {
   }
 }
 
-// หน่วยนับที่เลือกได้สำหรับบรรทัดราคา = หน่วยหลักของสินค้า + หน่วยทางเลือก (uom_conversions) ของสินค้านั้นๆ
-// เท่านั้น ไม่ใช่ค้นหาทุกหน่วยนับในระบบ เพราะบรรทัดราคาผูกกับสินค้าตัวเดียวเสมอ
-List<({int id, String code, String nameTh, String? nameEn})> _allowedUomsFor(ImItem? item) {
-  if (item == null) return [];
-  final list = <({int id, String code, String nameTh, String? nameEn})>[];
-  if (item.baseUomId != null) {
-    list.add((id: item.baseUomId!, code: item.baseUomCode ?? '', nameTh: item.baseUomNameTh ?? '', nameEn: item.baseUomNameEn));
-  }
-  for (final c in item.uomConversions) {
-    if (list.any((o) => o.id == c.uomId)) continue;
-    list.add((id: c.uomId, code: c.uomCode ?? '', nameTh: c.uomNameTh ?? '', nameEn: c.uomNameEn));
-  }
+// หน่วยนับที่เลือกได้สำหรับบรรทัดราคา = หน่วยของสินค้าที่อนุญาตสำหรับงานของตารางราคา (ขาย/ซื้อ) จาก
+// GET /im_item/:id/uoms?purpose= (หน่วยหลัก + หน่วยของสินค้า + อัตรามาตรฐาน) — keep = หน่วยเดิมของบรรทัดที่แก้ไข
+// ซึ่งอาจถูกปิดสิทธิ์ภายหลัง ยังแสดงไว้ให้เลือกคงเดิมได้ (backend ตรวจเฉพาะบรรทัดใหม่/ที่เปลี่ยนหน่วย)
+List<({int id, String code, String nameTh, String? nameEn})> _allowedUomsFor(ImItemUoms? u,
+    {({int id, String code, String nameTh, String? nameEn})? keep}) {
+  final list = <({int id, String code, String nameTh, String? nameEn})>[
+    for (final o in u?.units ?? const <ImItemUomOption>[])
+      (id: o.uomId, code: o.uomCode, nameTh: o.uomNameTh ?? '', nameEn: o.uomNameEn),
+  ];
+  if (keep != null && !list.any((o) => o.id == keep.id)) list.add(keep);
   return list;
 }
 
 // ---------------------------------------------------------------------------
 // Add/Edit price line dialog
 // ---------------------------------------------------------------------------
-Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceListDetail? existing) async {
+Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceListDetail? existing, String listType) async {
+  final purpose = listType == 'PURCHASE' ? 'PURCHASE' : 'SALES';
   final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
   int? itemId = existing?.itemId;
   String? itemCode = existing?.itemCode;
@@ -98,10 +97,15 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
 
   // โหลดข้อมูลสินค้าแบบเต็ม (รวม uom_conversions) ล่วงหน้า — fetchRows (list picker) ไม่ส่ง uom_conversions มาให้
   // ต้องใช้ fetchRow(id) เท่านั้นถึงจะได้หน่วยทางเลือกของสินค้านั้นมาจำกัดตัวเลือกหน่วยนับ
-  ImItem? fullItem;
+  ImItemUoms? fullItem;
   if (itemId != null) {
-    try { fullItem = await ImItemService().fetchRow(itemId); } catch (_) {}
+    try { fullItem = await ImItemService().fetchItemUoms(itemId, purpose: purpose); } catch (_) {}
   }
+  final keep = existing?.uomId != null
+      ? (id: existing!.uomId!, code: existing.uomCode ?? '', nameTh: existing.uomNameTh ?? '', nameEn: existing.uomNameEn)
+      : null;
+  List<({int id, String code, String nameTh, String? nameEn})> allowed() =>
+      _allowedUomsFor(fullItem, keep: itemId == existing?.itemId ? keep : null);
   if (!context.mounted) return null;
 
   String fmtDate(DateTime? d) => d == null ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —') : '${d.day}/${d.month}/${d.year}';
@@ -140,20 +144,20 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
                   onSearch: () => ImItemListWidget.search(ctx, onSelected: (ImItem i) async {
                     // รายการจาก list picker ไม่มี uom_conversions ติดมาด้วย — ต้อง fetchRow(id) ซ้ำเพื่อให้ได้
                     // หน่วยทางเลือกของสินค้าที่เพิ่งเลือกมาจำกัดตัวเลือกหน่วยนับ
-                    ImItem? full = i;
+                    ImItemUoms? full;
                     if (i.id != null) {
-                      try { full = await ImItemService().fetchRow(i.id!); } catch (_) {}
+                      try { full = await ImItemService().fetchItemUoms(i.id!, purpose: purpose); } catch (_) {}
                     }
                     setDlg(() {
                       itemId = i.id; itemCode = i.itemCode;
                       itemName = isEnglish && (i.itemNameEn ?? '').isNotEmpty ? i.itemNameEn : i.itemNameTh;
                       fullItem = full;
-                      final allowed = _allowedUomsFor(fullItem);
+                      final opts = allowed();
                       // เปลี่ยนสินค้าแล้วหน่วยนับเดิมอาจใช้กับสินค้าใหม่ไม่ได้ — reset ไปหน่วยหลักของสินค้าใหม่
-                      if (uomId == null || !allowed.any((o) => o.id == uomId)) {
-                        if (allowed.isNotEmpty) {
-                          uomId = allowed.first.id; uomCode = allowed.first.code;
-                          uomName = isEnglish && (allowed.first.nameEn ?? '').isNotEmpty ? allowed.first.nameEn! : allowed.first.nameTh;
+                      if (uomId == null || !opts.any((o) => o.id == uomId)) {
+                        if (opts.isNotEmpty) {
+                          uomId = opts.first.id; uomCode = opts.first.code;
+                          uomName = isEnglish && (opts.first.nameEn ?? '').isNotEmpty ? opts.first.nameEn! : opts.first.nameTh;
                         } else {
                           uomId = null; uomCode = null; uomName = null;
                         }
@@ -166,7 +170,7 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: DropdownButtonFormField<int>(
-                        value: _allowedUomsFor(fullItem).any((o) => o.id == uomId) ? uomId : null,
+                        value: allowed().any((o) => o.id == uomId) ? uomId : null,
                         isExpanded: true,
                         decoration: InputDecoration(
                           labelText: isEnglish ? 'UOM' : 'หน่วยนับ',
@@ -179,7 +183,7 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
                               : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
                           style: TextStyle(color: Colors.grey.shade600),
                         ),
-                        items: _allowedUomsFor(fullItem)
+                        items: allowed()
                             .map((o) => DropdownMenuItem(
                                   value: o.id,
                                   child: Text(
@@ -191,7 +195,7 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
                         onChanged: itemId == null
                             ? null
                             : (v) => setDlg(() {
-                                  final sel = _allowedUomsFor(fullItem).firstWhere((o) => o.id == v);
+                                  final sel = allowed().firstWhere((o) => o.id == v);
                                   uomId = sel.id; uomCode = sel.code;
                                   uomName = isEnglish && (sel.nameEn ?? '').isNotEmpty ? sel.nameEn! : sel.nameTh;
                                 }),
@@ -434,12 +438,12 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
   }
 
   Future<void> _addLine() async {
-    final result = await _showPriceLineDialog(context, null);
+    final result = await _showPriceLineDialog(context, null, _listType);
     if (result != null) setState(() => _details.add(result));
   }
 
   Future<void> _editLine(int index) async {
-    final result = await _showPriceLineDialog(context, _details[index]);
+    final result = await _showPriceLineDialog(context, _details[index], _listType);
     if (result != null) setState(() => _details[index] = result);
   }
 
