@@ -101,8 +101,9 @@ Future<ImPriceListDetail?> _showPriceLineDialog(BuildContext context, ImPriceLis
   if (itemId != null) {
     try { fullItem = await ImItemService().fetchItemUoms(itemId, purpose: purpose); } catch (_) {}
   }
-  final keep = existing?.uomId != null
-      ? (id: existing!.uomId!, code: existing.uomCode ?? '', nameTh: existing.uomNameTh ?? '', nameEn: existing.uomNameEn)
+  final ex = existing; // local — promotion ของพารามิเตอร์ข้าม closure ไม่ผ่านใน dart2js
+  final keep = ex != null && ex.uomId != null
+      ? (id: ex.uomId!, code: ex.uomCode ?? '', nameTh: ex.uomNameTh ?? '', nameEn: ex.uomNameEn)
       : null;
   List<({int id, String code, String nameTh, String? nameEn})> allowed() =>
       _allowedUomsFor(fullItem, keep: itemId == existing?.itemId ? keep : null);
