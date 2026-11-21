@@ -23,6 +23,7 @@ import '../services/im_location_service.dart';
 import '../services/im_stock_aging_report_service.dart';
 import '../../utils/file_download.dart';
 import '../../utils/dot_matrix_pdf.dart';
+import '../widgets/im_report_uom_mode_field.dart';
 
 // รายงานอายุสินค้าคงคลัง — มิเรอร์โครงสร้าง im_stock_balance_by_item_report_screen.dart (filter panel, PDF
 // preview, Excel export, category-group linear-pass) แต่แยกความหมาย "อายุ" ออกเป็น 2 คอลัมน์ที่ไม่ปนกัน:
@@ -104,6 +105,7 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
   String    _locToLabel   = '';
   String    _sortField = ''; // '' | qty | value | age | location | lot_serial
   String    _sortDir   = 'asc';
+  String    _uomMode   = 'base'; // หน่วยแสดงผล: base | report
 
   List<Map<String, dynamic>> _reportData = [];
 
@@ -178,6 +180,7 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
         locationCodeTo:    _locationCodeTo,
         sort:              _sortField.isEmpty ? null : _sortField,
         sortDir:           _sortField.isEmpty ? null : _sortDir,
+        uomMode:           _uomMode,
       );
       if (raw.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -883,6 +886,8 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
                 const Divider(height: 1),
                 const SizedBox(height: 12),
 
+                ImReportUomModeField(value: _uomMode, isEnglish: isEnglish, onChanged: (v) => setState(() => _uomMode = v)),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   value: _sortField,

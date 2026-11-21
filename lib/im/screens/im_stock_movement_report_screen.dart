@@ -21,6 +21,7 @@ import '../services/im_warehouse_service.dart';
 import '../services/im_stock_movement_report_service.dart';
 import '../../utils/file_download.dart';
 import '../../utils/dot_matrix_pdf.dart';
+import '../widgets/im_report_uom_mode_field.dart';
 
 // รายงานสินค้าคงเหลือและการเคลื่อนไหว — 1 "การ์ด" ต่อ (คลัง, สินค้า) จัดกลุ่ม คลัง > หมวดหมู่ > สินค้า
 // (backend ORDER BY มาให้ถูกต้องแล้ว เดินลิสต์ตามลำดับที่ได้รับมาเป็น linear pass เดียว ห้าม re-sort/regroup)
@@ -74,6 +75,7 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
   String  _toLabel   = '';
   bool _showMovement = true; // true=แสดงการเคลื่อนไหว, false=แสดงเฉพาะยอดรวม
   bool _showValue    = true; // true=แสดงมูลค่า(default), false=แสดงจำนวน
+  String _uomMode = 'base'; // หน่วยแสดงผล: base | report
   bool _newPagePerItem = false; // true=ขึ้นหน้าใหม่ทุกสินค้า, false=แสดงต่อเนื่อง(default)
 
   List<Map<String, dynamic>> _reportData = [];
@@ -110,6 +112,7 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
         categoryIds:  _selectedCategoryIds,
         itemCodeFrom: _selectedCategoryIds.isEmpty ? _itemCodeFrom : null,
         itemCodeTo:   _selectedCategoryIds.isEmpty ? _itemCodeTo : null,
+        uomMode:      _uomMode,
       );
       if (raw.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1216,6 +1219,8 @@ class _ImStockMovementReportScreenState extends State<ImStockMovementReportScree
                                   onChanged: (v) => setState(() => _newPagePerItem = v),
                                 ),
                               ]),
+                              const SizedBox(height: 8),
+                              ImReportUomModeField(value: _uomMode, isEnglish: isEnglish, onChanged: (v) => setState(() => _uomMode = v)),
                             ],
                           ),
                         ),

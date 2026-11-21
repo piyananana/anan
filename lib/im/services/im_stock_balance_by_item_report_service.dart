@@ -12,6 +12,7 @@ class ImStockBalanceByItemReportService {
     List<int>? categoryIds,
     String? itemCodeFrom,
     String? itemCodeTo,
+    String? uomMode, // base (ค่าเริ่มต้น) | report | doc
     String? costingMethod,
     List<int>? warehouseIds,
     String? locationCodeFrom,
@@ -37,6 +38,7 @@ class ImStockBalanceByItemReportService {
     if (sort != null && sort.isNotEmpty) params['sort'] = sort;
     if (sortDir != null && sortDir.isNotEmpty) params['sort_dir'] = sortDir;
 
+    if (uomMode != null && uomMode.isNotEmpty && uomMode != 'base') params['uom_mode'] = uomMode;
     final uri = Uri.parse('$baseUrl/im_stock_balance_by_item_report').replace(queryParameters: params);
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {

@@ -3,7 +3,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../models/im_item.dart';
 import '../models/im_stock_count.dart';
+import '../services/im_item_service.dart';
 import '../models/im_location.dart';
 import '../services/im_stock_count_service.dart';
 import '../widgets/im_stock_count_picker_field.dart';
@@ -12,17 +14,17 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 
 double _parseNum(String s) => double.tryParse(s.trim()) ?? 0;
+String _fmtNum(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : double.parse(v.toStringAsFixed(6)).toString();
 
 class _RecordLine {
   final ImStockCountDetail detail;
   final TextEditingController countedQtyCtrl;
+  // นับหลายหน่วย — ว่าง = กรอกยอดหน่วยหลักตรง ๆ, มีค่า = ยอดตรวจนับคำนวณจากผลรวม (ช่องยอดอ่านอย่างเดียว)
+  List<ImStockCountUomCount> uomCounts;
 
   _RecordLine(this.detail)
-      : countedQtyCtrl = TextEditingController(
-          text: detail.countedQty != null
-              ? (detail.countedQty == detail.countedQty!.roundToDouble() ? detail.countedQty!.toStringAsFixed(0) : detail.countedQty.toString())
-              : '',
-        );
+      : countedQtyCtrl = TextEditingController(text: detail.countedQty != null ? _fmtNum(detail.countedQty!) : ''),
+        uomCounts = List.of(detail.uomCounts);
 
   void dispose() => countedQtyCtrl.dispose();
 }
@@ -93,8 +95,10 @@ class _ImStockCountRecordScreenState extends State<ImStockCountRecordScreen> {
     setState(() => _isSaving = true);
     try {
       final payload = _lines
-          .where((l) => l.countedQtyCtrl.text.trim().isNotEmpty)
-          .map((l) => {'id': l.detail.id, 'counted_qty': _parseNum(l.countedQtyCtrl.text)})
+          .where((l) => l.uomCounts.isNotEmpty || l.countedQtyCtrl.text.trim().isNotEmpty)
+          .map((l) => l.uomCounts.isNotEmpty
+              ? {'id': l.detail.id, 'uom_counts': l.uomCounts.map((u) => u.toJson()).toList()}
+              : {'id': l.detail.id, 'counted_qty': _parseNum(l.countedQtyCtrl.text)})
           .toList();
       await _service.updateCounts(id: _selectedCount!.id, lines: payload);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Saved' : 'บันทึกสำเร็จ')));
@@ -315,13 +319,133 @@ class _ImStockCountRecordScreenState extends State<ImStockCountRecordScreen> {
         Expanded(flex: 1, child: Text(uomName ?? '', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
         Expanded(
           flex: 2,
-          child: TextField(
-            controller: line.countedQtyCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: line.countedQtyCtrl,
+                  readOnly: line.uomCounts.isNotEmpty,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    isDense: true, border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    filled: line.uomCounts.isNotEmpty, fillColor: Colors.grey.shade100,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.calculate_outlined, size: 20, color: line.uomCounts.isNotEmpty ? Colors.teal : Colors.grey.shade600),
+                tooltip: _isEnglish ? 'Count in several units' : 'นับหลายหน่วย',
+                padding: const EdgeInsets.only(left: 4),
+                constraints: const BoxConstraints(),
+                onPressed: () => _editUomCounts(line),
+              ),
+            ]),
+            if (line.uomCounts.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  line.uomCounts.map((u) => '${_fmtNum(u.qty)} ${u.displayName(_isEnglish)}').join(' + '),
+                  style: TextStyle(fontSize: 11, color: Colors.teal.shade800),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ]),
         ),
       ]),
     );
+  }
+
+  // นับหลายหน่วย: กรอกจำนวนแยกตามหน่วยที่ใช้ตรวจนับได้ของสินค้า แล้วรวมเป็นยอดหน่วยหลัก (backend คำนวณซ้ำตอนบันทึก)
+  Future<void> _editUomCounts(_RecordLine line) async {
+    final isEnglish = _isEnglish;
+    final messenger = ScaffoldMessenger.of(context);
+    ImItemUoms u;
+    try {
+      u = await ImItemService().fetchItemUoms(line.detail.itemId, purpose: 'COUNT');
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      return;
+    }
+    if (!mounted) return;
+    final units = [...u.units]..sort((a, b) => b.factor.compareTo(a.factor));
+    final base = units.where((o) => o.isBase).firstOrNull;
+    final baseDp = base?.decimalPlaces ?? 6;
+    final ctrls = {
+      for (final o in units)
+        o.uomId: TextEditingController(
+          text: line.uomCounts.where((c) => c.uomId == o.uomId).map((c) => _fmtNum(c.qty)).firstOrNull ??
+              (line.uomCounts.isEmpty && o.isBase ? line.countedQtyCtrl.text.trim() : ''),
+        ),
+    };
+    double total() {
+      var t = 0.0;
+      for (final o in units) {
+        t += _parseNum(ctrls[o.uomId]!.text) * o.factor;
+      }
+      return double.parse(t.toStringAsFixed(baseDp.clamp(0, 6)));
+    }
+    final result = await showDialog<List<ImStockCountUomCount>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) => AlertDialog(
+        title: Text('${isEnglish ? 'Count in several units' : 'นับหลายหน่วย'} — ${line.detail.itemCode ?? ''}'),
+        content: SizedBox(
+          width: 380,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            for (final o in units)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: TextField(
+                  controller: ctrls[o.uomId],
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setDlg(() {}),
+                  decoration: InputDecoration(
+                    labelText: o.isBase
+                        ? '${o.displayName(isEnglish)} (${o.uomCode})'
+                        : '${o.displayName(isEnglish)} (${o.uomCode}) = ${_fmtNum(o.factor)} ${base?.displayName(isEnglish) ?? ''}',
+                    border: const OutlineInputBorder(), isDense: true,
+                  ),
+                ),
+              ),
+            const Divider(),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text('${isEnglish ? 'Total' : 'รวม'}: ${_fmtNum(total())} ${base?.displayName(isEnglish) ?? ''}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, [
+              for (final o in units)
+                if (_parseNum(ctrls[o.uomId]!.text) > 0)
+                  ImStockCountUomCount(uomId: o.uomId, uomCode: o.uomCode, uomNameTh: o.uomNameTh, uomNameEn: o.uomNameEn,
+                      qty: _parseNum(ctrls[o.uomId]!.text), factor: o.factor),
+            ]),
+            child: Text(isEnglish ? 'OK' : 'ตกลง'),
+          ),
+        ],
+      )),
+    );
+    for (final c in ctrls.values) {
+      c.dispose();
+    }
+    if (result == null || !mounted) return;
+    setState(() {
+      // หน่วยหลักหน่วยเดียว = กรอกยอดตรง ๆ ไม่ต้องเก็บแยกหน่วย
+      if (result.length == 1 && result.first.uomId == base?.uomId) {
+        line.uomCounts = [];
+        line.countedQtyCtrl.text = _fmtNum(result.first.qty);
+      } else {
+        line.uomCounts = result;
+        var t = 0.0;
+        for (final c in result) {
+          t += c.qty * c.factor;
+        }
+        line.countedQtyCtrl.text = result.isEmpty ? '' : _fmtNum(double.parse(t.toStringAsFixed(baseDp.clamp(0, 6))));
+      }
+    });
   }
 }

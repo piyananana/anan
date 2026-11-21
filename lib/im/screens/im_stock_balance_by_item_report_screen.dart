@@ -23,6 +23,7 @@ import '../services/im_location_service.dart';
 import '../services/im_stock_balance_by_item_report_service.dart';
 import '../../utils/file_download.dart';
 import '../../utils/dot_matrix_pdf.dart';
+import '../widgets/im_report_uom_mode_field.dart';
 
 // รายงานสินค้าคงเหลือตามตำแหน่งที่เก็บ — flat list ระดับ (สินค้า, คลัง, ตำแหน่ง, ล็อต/ซีเรียล) จัดกลุ่ม+ยอดรวมย่อย
 // ตามหมวดหมู่ ยอดคงเหลือคำนวณ ณ วันที่สิ้นสุดที่เลือกด้วยการ SUM จาก im_transaction_detail ตรงๆ ฝั่ง backend
@@ -98,6 +99,7 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
   String    _balanceFilter = 'has'; // 'has' | 'none' | 'all'
   String    _sortField = ''; // '' (ไม่ระบุ) | qty | value | location | lot_serial — secondary sort ภายในแต่ละหมวดหมู่
   String    _sortDir   = 'asc'; // 'asc' | 'desc' — แสดง dropdown นี้เฉพาะเมื่อ _sortField ไม่ใช่ ''
+  String    _uomMode   = 'base'; // หน่วยแสดงผล: base | report
 
   List<Map<String, dynamic>> _reportData = [];
 
@@ -143,6 +145,7 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
         balanceFilter:     _balanceFilter,
         sort:              _sortField.isEmpty ? null : _sortField,
         sortDir:           _sortField.isEmpty ? null : _sortDir,
+        uomMode:           _uomMode,
       );
       if (raw.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -798,6 +801,8 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
                 const Divider(height: 1),
                 const SizedBox(height: 12),
 
+                ImReportUomModeField(value: _uomMode, isEnglish: isEnglish, onChanged: (v) => setState(() => _uomMode = v)),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   value: _sortField,

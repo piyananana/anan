@@ -103,6 +103,32 @@ class ImStockCountHeader {
 }
 
 // ── Detail (count line) ──────────────────────────────────────────────────────
+// ยอดนับของบรรทัดแยกตามหน่วย (เช่น 2 ลัง + 5 ชิ้น) — ยอดตรวจนับของบรรทัด = ผลรวม qty × อัตราแปลง (หน่วยหลัก)
+class ImStockCountUomCount {
+  final int uomId;
+  final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
+  final double qty;
+  final double factor;
+
+  const ImStockCountUomCount({required this.uomId, this.uomCode, this.uomNameTh, this.uomNameEn, required this.qty, this.factor = 1});
+
+  String displayName(bool isEnglish) =>
+      isEnglish && (uomNameEn ?? '').isNotEmpty ? uomNameEn! : ((uomNameTh ?? '').isNotEmpty ? uomNameTh! : (uomCode ?? ''));
+
+  factory ImStockCountUomCount.fromJson(Map<String, dynamic> json) => ImStockCountUomCount(
+        uomId: json['uom_id'] as int,
+        uomCode: json['uom_code'],
+        uomNameTh: json['uom_name_th'],
+        uomNameEn: json['uom_name_en'],
+        qty: double.tryParse('${json['qty']}') ?? 0,
+        factor: double.tryParse('${json['conversion_factor']}') ?? 1,
+      );
+
+  Map<String, dynamic> toJson() => {'uom_id': uomId, 'qty': qty};
+}
+
 class ImStockCountDetail {
   final int? id;
   final int? headerId;
@@ -128,6 +154,7 @@ class ImStockCountDetail {
   final String? countedBy;
   final DateTime? countedAt;
   final String? remark;
+  final List<ImStockCountUomCount> uomCounts;
 
   const ImStockCountDetail({
     this.id,
@@ -154,6 +181,7 @@ class ImStockCountDetail {
     this.countedBy,
     this.countedAt,
     this.remark,
+    this.uomCounts = const [],
   });
 
   double get variance => (countedQty ?? 0) - (systemQty ?? 0);
@@ -186,6 +214,9 @@ class ImStockCountDetail {
       countedBy: json['counted_by'],
       countedAt: json['counted_at'] != null ? DateTime.tryParse(json['counted_at'].toString())?.toLocal() : null,
       remark: json['remark'],
+      uomCounts: (json['uom_counts'] as List? ?? [])
+          .map((e) => ImStockCountUomCount.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
     );
   }
 }

@@ -14,6 +14,7 @@ class ImStockMovementReportService {
     List<int>? categoryIds,
     String? itemCodeFrom,
     String? itemCodeTo,
+    String? uomMode, // base (ค่าเริ่มต้น) | report | doc
   }) async {
     final headers = await _authService.getAuthHeader();
     final params = <String, String>{
@@ -32,6 +33,7 @@ class ImStockMovementReportService {
     if (itemCodeTo != null && itemCodeTo.isNotEmpty) {
       params['item_code_to'] = itemCodeTo;
     }
+    if (uomMode != null && uomMode.isNotEmpty && uomMode != 'base') params['uom_mode'] = uomMode;
     final uri = Uri.parse('$baseUrl/im_stock_movement_report').replace(queryParameters: params);
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {

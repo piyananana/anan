@@ -15,6 +15,7 @@ class ImItemTransactionReportService {
     List<int>? categoryIds,
     String? itemCodeFrom,
     String? itemCodeTo,
+    String? uomMode, // base (ค่าเริ่มต้น) | report | doc
     String sort = 'doc_date', // 'doc_date' | 'doc_type' | 'item_code' | 'party_code'
   }) async {
     final headers = await _authService.getAuthHeader();
@@ -38,6 +39,7 @@ class ImItemTransactionReportService {
     if (itemCodeTo != null && itemCodeTo.isNotEmpty) {
       params['item_code_to'] = itemCodeTo;
     }
+    if (uomMode != null && uomMode.isNotEmpty && uomMode != 'base') params['uom_mode'] = uomMode;
     final uri = Uri.parse('$baseUrl/im_item_transaction_report').replace(queryParameters: params);
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {

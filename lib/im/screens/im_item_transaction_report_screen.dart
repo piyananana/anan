@@ -21,6 +21,7 @@ import '../services/im_item_category_service.dart';
 import '../services/im_item_transaction_report_service.dart';
 import '../../utils/file_download.dart';
 import '../../utils/dot_matrix_pdf.dart';
+import '../widgets/im_report_uom_mode_field.dart';
 
 // รายงานสินค้าในธุรกรรม — flat list ระดับบรรทัดสินค้า (ต่างจาก im_transaction_report_screen ซึ่งเป็นระดับเอกสาร)
 // รวมทุก sys_doc_type ของ IM ในรายงานเดียว จัดกลุ่ม+แสดงยอดรวมย่อยตามฟีลด์ที่เลือกเรียง — backend ORDER BY มาให้ถูก
@@ -81,6 +82,7 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
   String  _fromLabel = '';
   String  _toLabel   = '';
   String _sort = 'doc_date'; // 'doc_date' | 'doc_type' | 'item_code' | 'party_code'
+  String _uomMode = 'base'; // หน่วยแสดงผล: base | report | doc
 
   List<Map<String, dynamic>> _reportData = [];
 
@@ -116,6 +118,7 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
         itemCodeFrom:  _itemCodeFrom,
         itemCodeTo:    _itemCodeTo,
         sort:          _sort,
+        uomMode:       _uomMode,
       );
       if (raw.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -837,6 +840,8 @@ class _ImItemTransactionReportScreenState extends State<ImItemTransactionReportS
                               const Divider(height: 1),
                               const SizedBox(height: 12),
 
+                              ImReportUomModeField(value: _uomMode, isEnglish: isEnglish, allowDocUnit: true, onChanged: (v) => setState(() => _uomMode = v)),
+                              const SizedBox(height: 12),
                               DropdownButtonFormField<String>(
                                 value: _sort,
                                 decoration: InputDecoration(labelText: isEnglish ? 'Sort By' : 'การจัดเรียง', border: const OutlineInputBorder(), isDense: true),
