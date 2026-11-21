@@ -14,10 +14,9 @@ import '../../sa/widgets/sa_document_reverse_widgets.dart';
 import '../../sa/models/sa_doc_approval.dart';
 import '../../sa/widgets/sa_doc_approval_panel.dart';
 import '../../im/models/im_item.dart';
-import '../../im/models/im_uom.dart';
 import '../../im/models/im_warehouse.dart';
 import '../../im/widgets/im_item_list_widget.dart';
-import '../../im/widgets/im_uom_list_widget.dart';
+import '../../im/services/im_item_service.dart';
 import '../../im/widgets/im_warehouse_list_widget.dart';
 import '../models/mo_header.dart';
 import '../models/mo_bom.dart';
@@ -27,6 +26,7 @@ import '../../gl/widgets/gl_journal_preview.dart';
 import '../services/mo_bom_service.dart';
 import '../widgets/mo_bom_list_widget.dart';
 import '../widgets/mo_work_center_list_widget.dart';
+import 'mo_uom_picker.dart';
 import '../../gl/models/gl_dimension.dart';
 import '../../gl/widgets/gl_line_account_dims.dart';
 import '../../cd/models/cd_branch.dart';
@@ -77,10 +77,9 @@ Future<MoComponentDetail?> _showComponentDialog(BuildContext context, MoComponen
                 setDlg(() {
                   itemId = i.id; itemCode = i.itemCode;
                   itemName = isEnglish && (i.itemNameEn ?? '').isNotEmpty ? i.itemNameEn : i.itemNameTh;
-                  if (uomId == null && i.baseUomId != null) {
-                    uomId = i.baseUomId; uomCode = i.baseUomCode;
-                    uomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
-                  }
+                  // เปลี่ยนสินค้าแล้วหน่วยเดิมอาจไม่ใช่หน่วยของสินค้าใหม่ — ตั้งเป็นหน่วยหลักของสินค้าใหม่
+                  uomId = i.baseUomId; uomCode = i.baseUomCode;
+                  uomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
                 });
               }),
             ),
@@ -102,12 +101,12 @@ Future<MoComponentDetail?> _showComponentDialog(BuildContext context, MoComponen
                   label: isEnglish ? 'UOM' : 'หน่วยนับ',
                   hasValue: uomId != null,
                   displayText: '$uomCode — $uomName',
-                  onSearch: () => ImUomListWidget.search(ctx, onSelected: (ImUom u) {
-                    setDlg(() {
-                      uomId = u.id; uomCode = u.uomCode;
-                      uomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
-                    });
-                  }),
+                  onSearch: () async {
+                    final o = await pickProductionUom(ctx, itemId, isEnglish);
+                    if (o != null) {
+                      setDlg(() { uomId = o.uomId; uomCode = o.uomCode; uomName = o.displayName(isEnglish); });
+                    }
+                  },
                 ),
               ),
             ]),
@@ -187,10 +186,9 @@ Future<MoOutputDetail?> _showOutputDialog(BuildContext context, MoOutputDetail? 
                 setDlg(() {
                   itemId = i.id; itemCode = i.itemCode;
                   itemName = isEnglish && (i.itemNameEn ?? '').isNotEmpty ? i.itemNameEn : i.itemNameTh;
-                  if (uomId == null && i.baseUomId != null) {
-                    uomId = i.baseUomId; uomCode = i.baseUomCode;
-                    uomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
-                  }
+                  // เปลี่ยนสินค้าแล้วหน่วยเดิมอาจไม่ใช่หน่วยของสินค้าใหม่ — ตั้งเป็นหน่วยหลักของสินค้าใหม่
+                  uomId = i.baseUomId; uomCode = i.baseUomCode;
+                  uomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
                 });
               }),
             ),
@@ -212,12 +210,12 @@ Future<MoOutputDetail?> _showOutputDialog(BuildContext context, MoOutputDetail? 
                   label: isEnglish ? 'UOM' : 'หน่วยนับ',
                   hasValue: uomId != null,
                   displayText: '$uomCode — $uomName',
-                  onSearch: () => ImUomListWidget.search(ctx, onSelected: (ImUom u) {
-                    setDlg(() {
-                      uomId = u.id; uomCode = u.uomCode;
-                      uomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
-                    });
-                  }),
+                  onSearch: () async {
+                    final o = await pickProductionUom(ctx, itemId, isEnglish);
+                    if (o != null) {
+                      setDlg(() { uomId = o.uomId; uomCode = o.uomCode; uomName = o.displayName(isEnglish); });
+                    }
+                  },
                 ),
               ),
             ]),
@@ -586,9 +584,25 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
     setState(() => _isLoadingBom = true);
     try {
       final bom = await _bomService.fetchRow(_bomHeaderId!);
-      final orderQty = double.tryParse(_orderQtyCtrl.text) ?? 0;
-      final scale = (bom.bomQty == 0 ? 1 : (orderQty <= 0 ? bom.bomQty : orderQty) / bom.bomQty);
-      if (orderQty <= 0) _orderQtyCtrl.text = '${bom.bomQty}';
+      // หน่วยสั่งผลิตอาจต่างจากหน่วยผลผลิตของสูตร (เช่น สั่งเป็นชิ้น สูตรเป็นลัง) — สเกลด้วยจำนวนหน่วยหลัก
+      // หน่วยสั่งผลิตที่ไม่อนุญาตให้ผลิตของสินค้านี้ (หรือยังไม่เลือก) = ใช้หน่วยผลผลิตของสูตร
+      final units = (await ImItemService().fetchItemUoms(bom.parentItemId, purpose: 'PRODUCTION')).units;
+      ImItemUomOption? unitOf(int? id) {
+        for (final u in units) {
+          if (id == null ? u.isBase : u.uomId == id) return u;
+        }
+        return null;
+      }
+      final bomUnit = unitOf(bom.outputUomId);
+      final orderUnit = (_uomId != null ? unitOf(_uomId) : null) ?? bomUnit;
+      final outFactor = bomUnit?.factor ?? 1;
+      final orderFactor = orderUnit?.factor ?? outFactor;
+      var orderQty = double.tryParse(_orderQtyCtrl.text) ?? 0;
+      if (orderQty <= 0) {
+        orderQty = bom.bomQty * outFactor / orderFactor;
+        _orderQtyCtrl.text = '$orderQty';
+      }
+      final scale = bom.bomQty == 0 ? 1.0 : orderQty * orderFactor / (bom.bomQty * outFactor);
 
       final newComponents = bom.details.map((d) => MoComponentDetail(
             componentItemId: d.componentItemId,
@@ -604,8 +618,11 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
           outputItemId: bom.parentItemId,
           itemCode: bom.parentItemCode,
           itemName: isEnglish && (bom.parentItemNameEn ?? '').isNotEmpty ? bom.parentItemNameEn : bom.parentItemNameTh,
-          plannedQty: bom.bomQty * scale,
-          uomId: bom.outputUomId, uomCode: bom.outputUomCode, uomNameTh: bom.outputUomNameTh, uomNameEn: bom.outputUomNameEn,
+          plannedQty: orderQty,
+          uomId: orderUnit?.uomId ?? bom.outputUomId,
+          uomCode: orderUnit?.uomCode ?? bom.outputUomCode,
+          uomNameTh: orderUnit != null ? orderUnit.uomNameTh : bom.outputUomNameTh,
+          uomNameEn: orderUnit != null ? orderUnit.uomNameEn : bom.outputUomNameEn,
           isPrimaryOutput: true,
           lineNo: 1,
         ),
@@ -639,7 +656,11 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
         _costingMethod = bom.costingMethod;
         _costingMode = bom.costingMode;
         _overheadPercentCtrl.text = '${bom.overheadPercent}';
-        if (_uomId == null) {
+        if (orderUnit != null) {
+          _uomId = orderUnit.uomId;
+          _uomCode = orderUnit.uomCode;
+          _uomName = orderUnit.displayName(isEnglish);
+        } else if (_uomId == null) {
           _uomId = bom.outputUomId;
           _uomCode = bom.outputUomCode;
           _uomName = isEnglish && (bom.outputUomNameEn ?? '').isNotEmpty ? bom.outputUomNameEn : bom.outputUomNameTh;
@@ -652,15 +673,13 @@ class _MoHeaderDetailWidgetState extends State<MoHeaderDetailWidget> {
     }
   }
 
+  // หน่วยสั่งผลิต = หน่วยของสินค้าผลผลิตหลักที่อนุญาตให้ใช้ผลิต
   Future<void> _pickUom() async {
     final isEnglish = _isEnglish;
-    await ImUomListWidget.search(context, onSelected: (ImUom u) {
-      setState(() {
-        _uomId = u.id;
-        _uomCode = u.uomCode;
-        _uomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
-      });
-    });
+    final primary = _outputs.where((o) => o.isPrimaryOutput).firstOrNull ?? _outputs.firstOrNull;
+    final o = await pickProductionUom(context, primary?.outputItemId, isEnglish);
+    if (o == null || !mounted) return;
+    setState(() { _uomId = o.uomId; _uomCode = o.uomCode; _uomName = o.displayName(isEnglish); });
   }
 
   Future<void> _addComponent() async {

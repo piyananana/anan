@@ -7,10 +7,9 @@ import '../models/mo_bom.dart';
 import '../models/mo_work_center.dart';
 import '../services/mo_bom_service.dart';
 import '../widgets/mo_work_center_list_widget.dart';
+import 'mo_uom_picker.dart';
 import '../../im/models/im_item.dart';
-import '../../im/models/im_uom.dart';
 import '../../im/widgets/im_item_list_widget.dart';
-import '../../im/widgets/im_uom_list_widget.dart';
 
 // ---------------------------------------------------------------------------
 // Collapsible section — same look used across the other IM detail widgets
@@ -194,10 +193,9 @@ Future<MoBomDetail?> _showComponentDialog(BuildContext context, MoBomDetail? exi
                     // เปลี่ยนสินค้าแล้ว ลิงก์สูตรเดิม (ถ้ามี) ใช้กับสินค้าใหม่ไม่ได้ ต้องเช็คใหม่เสมอ
                     componentBomHeaderId = null; componentBomVersion = null;
                     suggestedBomHeaderId = null; suggestedBomVersion = null;
-                    if (uomId == null && i.baseUomId != null) {
-                      uomId = i.baseUomId; uomCode = i.baseUomCode;
-                      uomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
-                    }
+                    // เปลี่ยนสินค้าแล้วหน่วยเดิมอาจไม่ใช่หน่วยของสินค้าใหม่ — ตั้งเป็นหน่วยหลักของสินค้าใหม่
+                    uomId = i.baseUomId; uomCode = i.baseUomCode;
+                    uomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
                   });
                   if (i.id != null) checkSubBom(i.id!);
                 }),
@@ -221,12 +219,12 @@ Future<MoBomDetail?> _showComponentDialog(BuildContext context, MoBomDetail? exi
                     label: isEnglish ? 'UOM' : 'หน่วยนับ',
                     hasValue: uomId != null,
                     displayText: '$uomCode — $uomName',
-                    onSearch: () => ImUomListWidget.search(ctx, onSelected: (ImUom u) {
-                      setDlg(() {
-                        uomId = u.id; uomCode = u.uomCode;
-                        uomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
-                      });
-                    }),
+                    onSearch: () async {
+                      final o = await pickProductionUom(ctx, componentItemId, isEnglish);
+                      if (o != null) {
+                        setDlg(() { uomId = o.uomId; uomCode = o.uomCode; uomName = o.displayName(isEnglish); });
+                      }
+                    },
                   ),
                 ),
               ]),
@@ -321,10 +319,9 @@ Future<MoBomOutputDetail?> _showOutputDialog(BuildContext context, MoBomOutputDe
                   setDlg(() {
                     outputItemId = i.id; outputItemCode = i.itemCode;
                     outputItemName = isEnglish && (i.itemNameEn ?? '').isNotEmpty ? i.itemNameEn : i.itemNameTh;
-                    if (uomId == null && i.baseUomId != null) {
-                      uomId = i.baseUomId; uomCode = i.baseUomCode;
-                      uomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
-                    }
+                    // เปลี่ยนสินค้าแล้วหน่วยเดิมอาจไม่ใช่หน่วยของสินค้าใหม่ — ตั้งเป็นหน่วยหลักของสินค้าใหม่
+                    uomId = i.baseUomId; uomCode = i.baseUomCode;
+                    uomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
                   });
                 }),
               ),
@@ -346,12 +343,12 @@ Future<MoBomOutputDetail?> _showOutputDialog(BuildContext context, MoBomOutputDe
                     label: isEnglish ? 'UOM' : 'หน่วยนับ',
                     hasValue: uomId != null,
                     displayText: '$uomCode — $uomName',
-                    onSearch: () => ImUomListWidget.search(ctx, onSelected: (ImUom u) {
-                      setDlg(() {
-                        uomId = u.id; uomCode = u.uomCode;
-                        uomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
-                      });
-                    }),
+                    onSearch: () async {
+                      final o = await pickProductionUom(ctx, outputItemId, isEnglish);
+                      if (o != null) {
+                        setDlg(() { uomId = o.uomId; uomCode = o.uomCode; uomName = o.displayName(isEnglish); });
+                      }
+                    },
                   ),
                 ),
               ]),
@@ -666,22 +663,18 @@ class MoBomDetailWidgetState extends State<MoBomDetailWidget> {
       setState(() {
         _parentItemId = i.id; _parentItemCode = i.itemCode;
         _parentItemName = isEnglish && (i.itemNameEn ?? '').isNotEmpty ? i.itemNameEn : i.itemNameTh;
-        if (_outputUomId == null && i.baseUomId != null) {
-          _outputUomId = i.baseUomId; _outputUomCode = i.baseUomCode;
-          _outputUomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
-        }
+        // เปลี่ยนสินค้าที่ผลิตแล้ว หน่วยผลผลิตเดิมอาจไม่ใช่หน่วยของสินค้าใหม่ — ตั้งเป็นหน่วยหลักของสินค้าใหม่
+        _outputUomId = i.baseUomId; _outputUomCode = i.baseUomCode;
+        _outputUomName = isEnglish && (i.baseUomNameEn ?? '').isNotEmpty ? i.baseUomNameEn : i.baseUomNameTh;
       });
     });
   }
 
   Future<void> _pickOutputUom() async {
     final isEnglish = _isEnglish;
-    await ImUomListWidget.search(context, onSelected: (ImUom u) {
-      setState(() {
-        _outputUomId = u.id; _outputUomCode = u.uomCode;
-        _outputUomName = isEnglish && (u.uomNameEn ?? '').isNotEmpty ? u.uomNameEn : u.uomNameTh;
-      });
-    });
+    final o = await pickProductionUom(context, _parentItemId, isEnglish);
+    if (o == null || !mounted) return;
+    setState(() { _outputUomId = o.uomId; _outputUomCode = o.uomCode; _outputUomName = o.displayName(isEnglish); });
   }
 
   Future<void> _addComponent() async {
