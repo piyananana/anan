@@ -423,7 +423,7 @@ class _ImCashSalePanelState extends State<ImCashSalePanel> {
             children: [
               Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
                 Text(_buy ? (_en ? 'Payment' : 'จ่ายชำระ') : (_en ? 'Receipt' : 'รับชำระ'),
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 if (_buy) _chip(_taxKindLabel(_c.taxInvoiceKind), const Color(0xFF33404D), const Color(0xFFEEF0F2)),
                 for (final s in linked) _chip(s, const Color(0xFF1E4F8F), const Color(0xFFE3EEFA)),
               ]),

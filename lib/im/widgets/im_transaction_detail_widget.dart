@@ -2748,7 +2748,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
               runSpacing: 6,
               children: [
                 Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: _cardTitleSize)),
                   ...chips,
                 ]),
                 Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -2845,6 +2845,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
   static const double _hFieldH = 40; // 40 + ตัวอักษร 13 (user 2026-11-22) — ตารางรายการคง 36
   // ขนาดตัวอักษรค่าในฟิลด์หัวเอกสาร — ทุกชนิดเท่ากัน (ช่องพิมพ์/dropdown/ค้นหา/วันที่/มิติ); ป้ายลอยบนกรอบ = 12
   static const double _hFontSize = 13;
+  // ชื่อหัวข้อการ์ด (ข้อมูลเอกสาร / รายการสินค้า / รับชำระ / สรุปยอด / ตัวอย่างรายการบัญชี) — ใหญ่กว่าค่าในช่อง (13) ให้เห็นโครงหน้าชัด
+  static const double _cardTitleSize = 16;
 
   InputDecoration _hDec(String label, {bool auto = false, bool editable = true, Widget? suffixIcon, String? counterText}) {
     final req = label.endsWith(' *');
@@ -3158,10 +3160,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
 
     // ── แถบหัวการ์ด ──
     final titleRow = Row(children: [
-      Text(isEnglish ? 'Document Header' : 'ข้อมูลเอกสาร', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+      Text(isEnglish ? 'Document Header' : 'ข้อมูลเอกสาร', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: _cardTitleSize)),
       if (_docNo.isNotEmpty && _docNo != 'AUTO') ...[
         const SizedBox(width: 10),
-        Text(_docNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F5C5C))),
+        Text(_docNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: _cardTitleSize, color: Color(0xFF0F5C5C))),
       ],
       const SizedBox(width: 10),
       // ป้ายสถานะชิดซ้าย / วงเงินชิดขวา (spaceBetween) — ปุ่มย่ออยู่ขอบขวาสุดเหมือนการ์ดอื่น
