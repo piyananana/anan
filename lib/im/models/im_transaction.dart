@@ -49,10 +49,12 @@ class ImTransactionHeader {
   final int? vendorId; // GRN ('10'/'11'/'12') เท่านั้น
   final String? vendorCode;
   final String? vendorNameTh;
+  final String? vendorNameEn; // จากรายการ (list) — ชื่ออังกฤษของผู้ขาย
   final int? linkedApTransactionId; // GRN Billing ('11'/'12' หลัง Post AP/GL) เท่านั้น — ใบตั้งหนี้ AP ที่ระบบสร้างให้อัตโนมัติ
   final int? customerId; // DLN ('30'/'31'/'32') เท่านั้น
   final String? customerCode;
   final String? customerNameTh;
+  final String? customerNameEn; // จากรายการ (list) — ชื่ออังกฤษของลูกค้า
   final int? linkedArTransactionId; // DLN Billing ('31'/'32' หลัง Post AR/GL) เท่านั้น — ใบแจ้งหนี้ AR ที่ระบบสร้างให้อัตโนมัติ
   final String? refNo;
   final int? refDocId;
@@ -143,10 +145,12 @@ class ImTransactionHeader {
     this.vendorId,
     this.vendorCode,
     this.vendorNameTh,
+    this.vendorNameEn,
     this.linkedApTransactionId,
     this.customerId,
     this.customerCode,
     this.customerNameTh,
+    this.customerNameEn,
     this.linkedArTransactionId,
     this.refNo,
     this.refDocId,
@@ -223,10 +227,12 @@ class ImTransactionHeader {
       vendorId: json['vendor_id'],
       vendorCode: json['vendor_code'],
       vendorNameTh: json['vendor_name_th'],
+      vendorNameEn: json['vendor_name_en'],
       linkedApTransactionId: json['linked_ap_transaction_id'],
       customerId: json['customer_id'],
       customerCode: json['customer_code'],
       customerNameTh: json['customer_name_th'],
+      customerNameEn: json['customer_name_en'],
       linkedArTransactionId: json['linked_ar_transaction_id'],
       refNo: json['ref_no'],
       refDocId: json['ref_doc_id'],

@@ -42,6 +42,7 @@ class ImTransactionService {
     String? dateFrom,
     String? dateTo,
     String? search,
+    bool includeDeleted = false, // ทุกสถานะรวมที่ลบแล้ว (หน้ารายการกรองสถานะเอง)
   }) async {
     final headers = await authService.getAuthHeader();
     final queryParams = <String, String>{};
@@ -51,6 +52,7 @@ class ImTransactionService {
     if (dateFrom != null && dateFrom.isNotEmpty) queryParams['date_from'] = dateFrom;
     if (dateTo != null && dateTo.isNotEmpty) queryParams['date_to'] = dateTo;
     if (search != null && search.isNotEmpty) queryParams['search'] = search;
+    if (includeDeleted) queryParams['include_deleted'] = '1';
 
     final uri = Uri.parse('$baseUrl/im_transaction').replace(queryParameters: queryParams);
     final response = await http.get(uri, headers: headers);
