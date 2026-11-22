@@ -42,6 +42,7 @@ import '../../cd/models/cd_branch.dart';
 import '../../cd/services/cd_branch_service.dart';
 import '../../cd/widgets/cd_user_branch_picker.dart';
 import '../services/cm_checkbook_service.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 
 class CmTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -51,6 +52,8 @@ class CmTransactionDetailWidget extends StatefulWidget {
   final VoidCallback onSaveSuccess;
   final VoidCallback onCancel;
   final bool canDelete;
+  /// ปุ่มของเอกสารแสดงบน AppBar ของหน้าจอแม่ (แทนแถบปุ่มเดิม)
+  final DocAppBarActions? actions;
 
   const CmTransactionDetailWidget({
     super.key,
@@ -61,6 +64,7 @@ class CmTransactionDetailWidget extends StatefulWidget {
     required this.onSaveSuccess,
     required this.onCancel,
     this.canDelete = true,
+    this.actions,
   });
 
   @override
@@ -249,7 +253,7 @@ class _GlEditRow {
   }
 }
 
-class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
+class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> implements DocAppBarActionsHost {
   final _formKey = GlobalKey<FormState>();
   final CmTransactionService _service = CmTransactionService();
   final CmTransactionGlSetupService _glSetupSvc = CmTransactionGlSetupService();
@@ -400,11 +404,13 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   @override
   void initState() {
     super.initState();
+    widget.actions?.attach(this);
     _initMasterData();
   }
 
   @override
   void dispose() {
+    widget.actions?.detach(this);
     _refNoCtrl.dispose();
     _descCtrl.dispose();
     _counterpartyCtrl.dispose();
@@ -427,10 +433,14 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   @override
   void didUpdateWidget(covariant CmTransactionDetailWidget old) {
     super.didUpdateWidget(old);
+    if (widget.actions != old.actions) {
+      old.actions?.detach(this);
+      widget.actions?.attach(this);
+    }
     if (widget.transactionId != old.transactionId ||
         widget.viewOnly != old.viewOnly ||
         widget.resetKey != old.resetKey) {
-      _loadTransactionData().then((_) { if (mounted) _loadDocSetup(); });
+      _loadTransactionData().then((_) async { if (mounted) await _loadDocSetup(); _markClean(); });
     }
   }
 
@@ -484,6 +494,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading master: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+      _markClean();
     }
   }
 
@@ -787,78 +798,9 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
   String _currencyLabel(Currency c) =>
       _isEnglish && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai;
 
-  Future<void> _save(String action) async {
-    final isEnglish = _isEnglish;
-    if (!_formKey.currentState!.validate()) return;
-    if (_selectedDocType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a document type' : 'กรุณาเลือกประเภทเอกสาร')));
-      return;
-    }
-    if (_isTransfer && (_fromBankAccountId == null || _toBankAccountId == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select both accounts' : 'กรุณาเลือกบัญชีต้นทางและปลายทาง')));
-      return;
-    }
-    if (_isTransfer && _fromBankAccountId == _toBankAccountId) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Source and destination accounts must differ' : 'บัญชีต้นทางและปลายทางต้องไม่ใช่บัญชีเดียวกัน')));
-      return;
-    }
-    if (_isTransfer) {
-      // ยังไม่รองรับโอนข้ามสกุลเงิน (เหมือน backend)
-      final from = _bankAccounts.where((b) => b.id == _fromBankAccountId);
-      final to = _bankAccounts.where((b) => b.id == _toBankAccountId);
-      if (from.isNotEmpty && to.isNotEmpty && from.first.currencyCode != to.first.currencyCode) {
-        final pair = '${from.first.currencyCode} → ${to.first.currencyCode}';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
-            ? 'Transfers between accounts in different currencies are not supported yet ($pair)'
-            : 'ยังไม่รองรับการโอนเงินระหว่างบัญชีต่างสกุลเงิน ($pair)')));
-        return;
-      }
-    }
-    if (_hasBankChargeFields && _bankAccountId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a bank account' : 'กรุณาเลือกบัญชีธนาคาร')));
-      return;
-    }
-    if (_isInterest && (_chargeType == null || _chargeType!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select income or expense' : 'กรุณาเลือกดอกเบี้ยรับหรือดอกเบี้ยจ่าย')));
-      return;
-    }
-    _recalcTotals();
-    if (_hasTaxLines && _detailRows.isNotEmpty) {
-      final payFc = _paymentRows.fold(0.0, (t, r) => t + (double.tryParse(r.amountCtrl.text) ?? 0));
-      if ((payFc - _netPayFc).abs() > 0.005) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
-            ? 'Payment channels (${_fmt.format(payFc)}) must equal the net amount (${_fmt.format(_netPayFc)})'
-            : 'ยอดช่องทางรับ/จ่ายเงิน (${_fmt.format(payFc)}) ต้องเท่ากับยอดสุทธิ (${_fmt.format(_netPayFc)})')));
-        return;
-      }
-      if (action == 'Post' && _isPayment && _vatFc.abs() > 0.005 && _taxInvNoCtrl.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
-            ? 'Please enter the vendor tax invoice no. (this document has input VAT)'
-            : 'กรุณาระบุเลขที่ใบกำกับภาษีของผู้ขาย (เอกสารมีภาษีซื้อ)')));
-        return;
-      }
-    }
-    if (action == 'Post' && _isBankCharge && _vatFc.abs() > 0.005 &&
-        (_taxInvNoCtrl.text.trim().isEmpty || _counterpartyCtrl.text.trim().isEmpty || _partyTaxIdCtrl.text.trim().isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
-          ? 'The bank charge has input VAT — enter the bank name, tax ID and tax invoice no.'
-          : 'ค่าธรรมเนียมมีภาษีซื้อ กรุณาระบุชื่อธนาคาร เลขประจำตัวผู้เสียภาษี และเลขที่ใบกำกับภาษี')));
-      return;
-    }
-    if (action == 'Post' && _isVoucher) {
-      final bad = _detailRows.indexWhere((r) => _lineAmt(r).vat.abs() > 0.005 &&
-          (r.sellerNameCtrl.text.trim().isEmpty || r.sellerTaxIdCtrl.text.trim().isEmpty || r.taxInvNoCtrl.text.trim().isEmpty));
-      if (bad >= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
-            ? 'Line ${bad + 1}: has input VAT — enter the seller name, tax ID and tax invoice no.'
-            : 'บรรทัดที่ ${bad + 1}: มีภาษีซื้อ กรุณาระบุชื่อผู้ขาย เลขประจำตัวผู้เสียภาษี และเลขที่ใบกำกับภาษี')));
-        return;
-      }
-    }
-    if (action == 'Post' && !(await CmPeriodService.canPost(context, _docDate))) {
-      return;
-    }
-
+  // ข้อมูลที่บันทึก — ใช้ทั้งตอนบันทึกและตรวจการแก้ไขค้าง
+  ({CmTransactionHeader header, List<CmTransactionDetail> details, List<CmTransactionApply> applies,
+    List<CmTransactionPayment> payments, List<CmTransactionWht> whts}) _savePayload() {
     final userName = _authService.currentUser?.userName ?? '';
     final lc = _exchangeRate;
 
@@ -979,6 +921,84 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
               )]
             : <CmTransactionWht>[];
 
+    return (header: header, details: details, applies: applies, payments: payments, whts: whts);
+  }
+
+  Future<void> _save(String action) async {
+    final isEnglish = _isEnglish;
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedDocType == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a document type' : 'กรุณาเลือกประเภทเอกสาร')));
+      return;
+    }
+    if (_isTransfer && (_fromBankAccountId == null || _toBankAccountId == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select both accounts' : 'กรุณาเลือกบัญชีต้นทางและปลายทาง')));
+      return;
+    }
+    if (_isTransfer && _fromBankAccountId == _toBankAccountId) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Source and destination accounts must differ' : 'บัญชีต้นทางและปลายทางต้องไม่ใช่บัญชีเดียวกัน')));
+      return;
+    }
+    if (_isTransfer) {
+      // ยังไม่รองรับโอนข้ามสกุลเงิน (เหมือน backend)
+      final from = _bankAccounts.where((b) => b.id == _fromBankAccountId);
+      final to = _bankAccounts.where((b) => b.id == _toBankAccountId);
+      if (from.isNotEmpty && to.isNotEmpty && from.first.currencyCode != to.first.currencyCode) {
+        final pair = '${from.first.currencyCode} → ${to.first.currencyCode}';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+            ? 'Transfers between accounts in different currencies are not supported yet ($pair)'
+            : 'ยังไม่รองรับการโอนเงินระหว่างบัญชีต่างสกุลเงิน ($pair)')));
+        return;
+      }
+    }
+    if (_hasBankChargeFields && _bankAccountId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select a bank account' : 'กรุณาเลือกบัญชีธนาคาร')));
+      return;
+    }
+    if (_isInterest && (_chargeType == null || _chargeType!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Please select income or expense' : 'กรุณาเลือกดอกเบี้ยรับหรือดอกเบี้ยจ่าย')));
+      return;
+    }
+    _recalcTotals();
+    if (_hasTaxLines && _detailRows.isNotEmpty) {
+      final payFc = _paymentRows.fold(0.0, (t, r) => t + (double.tryParse(r.amountCtrl.text) ?? 0));
+      if ((payFc - _netPayFc).abs() > 0.005) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+            ? 'Payment channels (${_fmt.format(payFc)}) must equal the net amount (${_fmt.format(_netPayFc)})'
+            : 'ยอดช่องทางรับ/จ่ายเงิน (${_fmt.format(payFc)}) ต้องเท่ากับยอดสุทธิ (${_fmt.format(_netPayFc)})')));
+        return;
+      }
+      if (action == 'Post' && _isPayment && _vatFc.abs() > 0.005 && _taxInvNoCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+            ? 'Please enter the vendor tax invoice no. (this document has input VAT)'
+            : 'กรุณาระบุเลขที่ใบกำกับภาษีของผู้ขาย (เอกสารมีภาษีซื้อ)')));
+        return;
+      }
+    }
+    if (action == 'Post' && _isBankCharge && _vatFc.abs() > 0.005 &&
+        (_taxInvNoCtrl.text.trim().isEmpty || _counterpartyCtrl.text.trim().isEmpty || _partyTaxIdCtrl.text.trim().isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+          ? 'The bank charge has input VAT — enter the bank name, tax ID and tax invoice no.'
+          : 'ค่าธรรมเนียมมีภาษีซื้อ กรุณาระบุชื่อธนาคาร เลขประจำตัวผู้เสียภาษี และเลขที่ใบกำกับภาษี')));
+      return;
+    }
+    if (action == 'Post' && _isVoucher) {
+      final bad = _detailRows.indexWhere((r) => _lineAmt(r).vat.abs() > 0.005 &&
+          (r.sellerNameCtrl.text.trim().isEmpty || r.sellerTaxIdCtrl.text.trim().isEmpty || r.taxInvNoCtrl.text.trim().isEmpty));
+      if (bad >= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish
+            ? 'Line ${bad + 1}: has input VAT — enter the seller name, tax ID and tax invoice no.'
+            : 'บรรทัดที่ ${bad + 1}: มีภาษีซื้อ กรุณาระบุชื่อผู้ขาย เลขประจำตัวผู้เสียภาษี และเลขที่ใบกำกับภาษี')));
+        return;
+      }
+    }
+    if (action == 'Post' && !(await CmPeriodService.canPost(context, _docDate))) {
+      return;
+    }
+
+    final p = _savePayload();
+    final header = p.header, details = p.details, applies = p.applies, payments = p.payments, whts = p.whts;
+
     setState(() => _isLoading = true);
     try {
       if (_transactionId == 0) {
@@ -986,6 +1006,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
       } else {
         await _service.updateTransaction(id: _transactionId, header: header, details: details, applies: applies, payments: payments, whts: whts, action: action);
       }
+      _markClean();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(action == 'Post'
@@ -1227,6 +1248,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    widget.actions?.scheduleRefresh();
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
     if (_isLoading) return const Center(child: CircularProgressIndicator());
@@ -1234,7 +1256,6 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
     return Form(
       key: _formKey,
       child: Column(children: [
-        _buildActionButtons(),
         Expanded(child: SingleChildScrollView(
           padding: const EdgeInsets.all(12),
           child: Column(children: [
@@ -1285,8 +1306,6 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
           const SizedBox(width: 6),
           Text(isEnglish ? 'Read-only — created automatically by AR/AP posting' : 'อ่านอย่างเดียว — สร้างอัตโนมัติจากการ Post ฝั่ง AR/AP',
               style: TextStyle(fontSize: 12, color: Colors.blue[800])),
-          const Spacer(),
-          TextButton(onPressed: widget.onCancel, child: Text(isEnglish ? 'Back' : 'กลับ')),
         ]),
       ),
       if (r != null)
@@ -1318,96 +1337,70 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> {
         ]),
       );
 
-  Widget _buildActionButtons() {
-    final isEnglish = _isEnglish;
+  // ── ปุ่มของเอกสาร (แสดงบน AppBar ของหน้าจอ แทนแถบปุ่มเดิม) — ปุ่ม "กลับ" ตัดออก (ใช้ลูกศรย้อนกลับ) ──
+  List<DocBarAction> _barActions(bool en) {
+    final a = <DocBarAction>[];
+    if (_isReadOnlyView) return a;
     final isDraft = _status == 'Draft';
     final isPosted = _status == 'Posted';
     final canEditNow = !widget.viewOnly && isDraft;
-    return Container(
-      color: Colors.blue[50],
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(children: [
-        if (canEditNow) ...[
-          ElevatedButton.icon(
-            onPressed: () => _save('Draft'),
-            icon: const Icon(Icons.save_outlined, size: 16),
-            label: Text(isEnglish ? 'Save Draft' : 'บันทึก Draft'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700], foregroundColor: Colors.white),
-          ),
-          const SizedBox(width: 8),
-          // 20/30/40/50 ต้องส่งขออนุมัติก่อน (บันทึกร่างก่อน) — Post ได้หลังอนุมัติแล้วเท่านั้น
-          if (!_requiresApproval) ...[
-            ElevatedButton.icon(
-              onPressed: () => _save('Post'),
-              icon: const Icon(Icons.check_circle_outline, size: 16),
-              label: Text(isEnglish ? 'Post Document' : 'Post เอกสาร'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
-            ),
-            const SizedBox(width: 8),
-          ],
-          if (_requiresApproval && _transactionId != 0) ...[
-            OutlinedButton.icon(
-              onPressed: _submitForApproval,
-              icon: const Icon(Icons.how_to_reg_outlined, size: 16),
-              label: Text(isEnglish ? 'Request Approval' : 'ขออนุมัติ'),
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
-            ),
-            const SizedBox(width: 8),
-          ],
-          if (_transactionId != 0 && widget.canDelete)
-            OutlinedButton.icon(
-              onPressed: _delete,
-              icon: const Icon(Icons.delete_outline, size: 16),
-              label: Text(isEnglish ? 'Delete' : 'ลบ'),
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-            ),
-        ],
-        if (_status == 'Approved' && !widget.viewOnly) ...[
-          ElevatedButton.icon(
-            onPressed: _postApproved,
-            icon: const Icon(Icons.check_circle_outline, size: 16),
-            label: Text(isEnglish ? 'Post Document' : 'Post เอกสาร'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700], foregroundColor: Colors.white),
-          ),
-          const SizedBox(width: 8),
-        ],
-        if ((_status == 'Submitted' || _status == 'Approved') && widget.canDelete && !widget.viewOnly) ...[
-          ElevatedButton.icon(
-            onPressed: _reverse,
-            icon: const Icon(Icons.undo, size: 16),
-            label: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
-          ),
-          const SizedBox(width: 8),
-        ],
-        if (isPosted && widget.canDelete && !widget.viewOnly) ...[
-          Builder(builder: (_) {
-            final blockMsg = _reverseBlockMessage(isEnglish);
-            final btn = ElevatedButton.icon(
-              onPressed: blockMsg == null ? _reverse : null,
-              icon: Icon(blockMsg == null ? Icons.undo : Icons.lock_outline, size: 16),
-              label: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
-            );
-            return blockMsg == null ? btn : Tooltip(message: blockMsg, child: btn);
-          }),
-          const SizedBox(width: 8),
-        ],
-        if (isPosted && widget.canDelete)
-          Builder(builder: (_) {
-            final blockMsg = _voidBlockMessage(isEnglish);
-            final btn = ElevatedButton.icon(
-              onPressed: blockMsg == null ? _void : null,
-              icon: Icon(blockMsg == null ? Icons.cancel_outlined : Icons.lock_outline, size: 16),
-              label: Text(isEnglish ? 'Void' : 'ยกเลิก (Void)'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
-            );
-            return blockMsg == null ? btn : Tooltip(message: blockMsg, child: btn);
-          }),
-        const Spacer(),
-        TextButton(onPressed: widget.onCancel, child: Text(isEnglish ? 'Back' : 'กลับ')),
-      ]),
-    );
+    if (canEditNow && _transactionId != 0 && widget.canDelete) {
+      a.add(DocBarAction.secondary(en ? 'Delete' : 'ลบ', _delete, DocBarColors.delete));
+    }
+    if ((_status == 'Submitted' || _status == 'Approved') && widget.canDelete && !widget.viewOnly) {
+      a.add(DocBarAction.secondary(en ? 'Reverse to Draft' : 'ถอยเป็นร่าง', _reverse, DocBarColors.reverse));
+    }
+    if (isPosted && widget.canDelete && !widget.viewOnly) {
+      final msg = _reverseBlockMessage(en);
+      a.add(DocBarAction.secondary(en ? 'Reverse to Draft' : 'ถอยเป็นร่าง', msg == null ? _reverse : null, DocBarColors.reverse, tooltip: msg));
+    }
+    if (canEditNow) {
+      a.add(DocBarAction.secondary(en ? 'Save Draft' : 'บันทึก Draft', () => _save('Draft'), DocBarColors.save));
+      // 20/30/40/50 ต้องส่งขออนุมัติก่อน (บันทึกร่างก่อน) — Post ได้หลังอนุมัติแล้วเท่านั้น
+      if (_requiresApproval && _transactionId != 0) {
+        a.add(DocBarAction.primary(en ? 'Request Approval' : 'ขออนุมัติ', _submitForApproval, DocBarColors.submit));
+      }
+      if (!_requiresApproval) {
+        a.add(DocBarAction.primary(en ? 'Post Document' : 'Post เอกสาร', () => _save('Post'), DocBarColors.post));
+      }
+    }
+    if (_status == 'Approved' && !widget.viewOnly) {
+      a.add(DocBarAction.primary(en ? 'Post Document' : 'Post เอกสาร', _postApproved, DocBarColors.post));
+    }
+    if (isPosted && widget.canDelete) {
+      final msg = _voidBlockMessage(en);
+      a.add(DocBarAction.primary(en ? 'Void' : 'ยกเลิก (Void)', msg == null ? _void : null, DocBarColors.voidBg, tooltip: msg));
+    }
+    return a;
+  }
+
+  @override
+  Widget buildAppBarActions(BuildContext context, bool en) =>
+      _isLoading ? const SizedBox.shrink() : buildDocBarActions(context, _barActions(en), isEnglish: en);
+
+  // ── มีการแก้ไขค้าง — ข้อมูลที่จะบันทึกต่างจากตอนโหลดเสร็จ (เฉพาะร่างที่แก้ไขได้) ──
+  String? _cleanFingerprint;
+
+  String _formFingerprint() {
+    if (_selectedDocType == null) return 'incomplete|${_amountCtrl.text}';
+    try {
+      final p = _savePayload();
+      return docFingerprint([p.header, p.details, p.applies, p.payments, p.whts]);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  void _markClean() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _cleanFingerprint = _formFingerprint();
+    });
+  }
+
+  @override
+  bool get isDirty {
+    if (_isLoading || widget.viewOnly || _isReadOnlyView || _status != 'Draft') return false;
+    return _cleanFingerprint != null && _cleanFingerprint != _formFingerprint();
   }
 
   Widget _buildHeaderSection() {

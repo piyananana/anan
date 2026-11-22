@@ -44,6 +44,7 @@ import '../../gl/widgets/gl_line_account_dims.dart';
 import '../../cd/models/cd_branch.dart';
 import '../../cd/services/cd_branch_service.dart';
 import '../../cd/widgets/cd_user_branch_picker.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 
 class SoTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -52,6 +53,8 @@ class SoTransactionDetailWidget extends StatefulWidget {
   final VoidCallback onSaveSuccess;
   final VoidCallback onCancel;
   final bool canDelete;
+  /// ปุ่มของเอกสารแสดงบน AppBar ของหน้าจอแม่ (แทนแถบปุ่มเดิม)
+  final DocAppBarActions? actions;
   // คัดลอกใบสั่งขายเดิมเป็นฉบับร่างใหม่ — ใช้ได้เฉพาะตอน transactionId เป็น null (โหมดสร้างใหม่) เท่านั้น
   // ดู _load()/onCopyRequested สำหรับตรรกะเต็ม (มิเรอร์ po_transaction_detail_widget.dart ทุกประการ)
   final int? copyFromId;
@@ -65,6 +68,7 @@ class SoTransactionDetailWidget extends StatefulWidget {
     required this.onSaveSuccess,
     required this.onCancel,
     this.canDelete = true,
+    this.actions,
     this.copyFromId,
     this.onCopyRequested,
   });
@@ -106,7 +110,7 @@ class _LineForm {
   static String _fmtPct(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
 }
 
-class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
+class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> implements DocAppBarActionsHost {
   final _service = SoTransactionService();
   final _quoteService = QuoteTransactionService();
   final _itemService = ImItemService();
@@ -228,12 +232,17 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   @override
   void initState() {
     super.initState();
+    widget.actions?.attach(this);
     _load();
   }
 
   @override
   void didUpdateWidget(covariant SoTransactionDetailWidget old) {
     super.didUpdateWidget(old);
+    if (widget.actions != old.actions) {
+      old.actions?.detach(this);
+      widget.actions?.attach(this);
+    }
     if (widget.transactionId != old.transactionId || widget.resetKey != old.resetKey) {
       _load();
     }
@@ -243,6 +252,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
 
   @override
   void dispose() {
+    widget.actions?.detach(this);
     _descCtrl.dispose();
     _poNoCtrl.dispose();
     _billDiscPctCtrl.dispose();
@@ -454,6 +464,7 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+      _markClean();
     }
   }
 
@@ -781,6 +792,34 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     return tip == null ? w : Tooltip(message: tip, child: w);
   }
 
+  // ข้อมูลที่บันทึก — ใช้ทั้งตอนบันทึกและตรวจการแก้ไขค้าง
+  ({SoTransactionHeader header, List<SoTransactionDetail> details}) _savePayload() {
+    final header = SoTransactionHeader(
+      id: _id ?? 0, docId: _docId ?? 0, docNo: _docNo, docDate: _docDate,
+      customerId: _customer!.id!, warehouseId: _warehouse!.id, dueDate: _dueDate,
+      customerPoNo: _poNoCtrl.text.trim().isEmpty ? null : _poNoCtrl.text.trim(), customerPoDate: _poDate,
+      currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? CurrencyService.baseCode, exchangeRate: _exchangeRate,
+      description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+      refQuoteId: _refQuoteId,
+      priceIncludesVat: _priceIncludesVat,
+      billDiscountPercent: _billDiscPct,
+      cashDiscountAmount: _cashDisc,
+      dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
+      dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
+      branchId: _branchId,
+    );
+    final details = _lines
+        .map((l) => SoTransactionDetail(
+              id: l.id, lineNo: 0, itemId: l.item!.id!, itemCode: l.item!.itemCode, itemName: l.item!.itemNameTh,
+              uomId: l.uomId, qtyOrdered: l.qtyOrdered, unitPriceFc: l.unitPriceFc, refQuoteDetailId: l.refQuoteDetailId,
+              discountPercent: l.discountPercent, vatType: l.vatType, vatRate: l.vatRate,
+              discountText: parseStepDiscount(l.discountText).factor == 1 ? '' : l.discountText.trim(),
+              lineDiscountAmount: l.lineDiscountAmount,
+            ))
+        .toList();
+    return (header: header, details: details);
+  }
+
   Future<void> _save() async {
     final isEnglish = _isEnglish;
     if (_docType == null) { _warn(isEnglish ? 'Please select a document type' : 'กรุณาเลือกประเภทเอกสาร'); return; }
@@ -794,34 +833,14 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
     if (discErr != null) { _warn(discErr); return; }
     setState(() => _isSaving = true);
     try {
-      final header = SoTransactionHeader(
-        id: _id ?? 0, docId: _docId ?? 0, docNo: _docNo, docDate: _docDate,
-        customerId: _customer!.id!, warehouseId: _warehouse!.id, dueDate: _dueDate,
-        customerPoNo: _poNoCtrl.text.trim().isEmpty ? null : _poNoCtrl.text.trim(), customerPoDate: _poDate,
-        currencyId: _currency?.id, currencyCode: _currency?.currencyCode ?? CurrencyService.baseCode, exchangeRate: _exchangeRate,
-        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        refQuoteId: _refQuoteId,
-        priceIncludesVat: _priceIncludesVat,
-        billDiscountPercent: _billDiscPct,
-        cashDiscountAmount: _cashDisc,
-        dim1Id: _dimSelections[1], dim2Id: _dimSelections[2], dim3Id: _dimSelections[3],
-        dim4Id: _dimSelections[4], dim5Id: _dimSelections[5],
-        branchId: _branchId,
-      );
-      final details = _lines
-          .map((l) => SoTransactionDetail(
-                id: l.id, lineNo: 0, itemId: l.item!.id!, itemCode: l.item!.itemCode, itemName: l.item!.itemNameTh,
-                uomId: l.uomId, qtyOrdered: l.qtyOrdered, unitPriceFc: l.unitPriceFc, refQuoteDetailId: l.refQuoteDetailId,
-                discountPercent: l.discountPercent, vatType: l.vatType, vatRate: l.vatRate,
-                discountText: parseStepDiscount(l.discountText).factor == 1 ? '' : l.discountText.trim(),
-                lineDiscountAmount: l.lineDiscountAmount,
-              ))
-          .toList();
+      final p = _savePayload();
+      final header = p.header, details = p.details;
       if (_id == null) {
         await _service.createTransaction(header: header, details: details, salespersons: _salespersons);
       } else {
         await _service.updateTransaction(id: _id!, header: header, details: details, salespersons: _salespersons);
       }
+      _markClean();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved' : 'บันทึกสำเร็จ')));
         widget.onSaveSuccess();
@@ -965,9 +984,75 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
   }
 
   // ปุ่มที่ทำไม่ได้: ล็อกและแสดงเหตุผลเมื่อชี้เมาส์
-  Widget _lockable(DocBlock? block, Widget Function(VoidCallback? onPressed) builder, VoidCallback action) {
-    final button = builder(block == null && !_isSaving ? action : null);
-    return block == null ? button : Tooltip(message: block.text(_isEnglish), child: button);
+  // ── ปุ่มของเอกสาร (แสดงบน AppBar ของหน้าจอ แทนแถวปุ่มท้ายหน้าเดิม) — ปุ่ม "ปิด" ตัดออก (ใช้ลูกศรย้อนกลับ) ──
+  List<DocBarAction> _barActions(BuildContext context, bool en) {
+    final perm = MenuScope.of(context);
+    final canApprove = perm?.canApprove ?? false;
+    final canCreate = perm?.canCreate ?? false;
+    final busy = _isSaving;
+    VoidCallback? guard(DocBlock? b, VoidCallback f) => b != null || busy ? null : f;
+    final canSubmit = _isEditable && _id != null && !widget.viewOnly && perm?.id != null;
+    final a = <DocBarAction>[];
+    if (_id != null && canCreate) {
+      a.add(DocBarAction.secondary(en ? 'Copy as New' : 'คัดลอกเป็นใบใหม่', busy ? null : () => widget.onCopyRequested?.call(_id!), DocBarColors.neutral));
+    }
+    if (_isEditable && _id != null && widget.canDelete && !widget.viewOnly) {
+      a.add(DocBarAction.secondary(en ? 'Delete' : 'ลบ', guard(_actions.deleteBlock, _deleteDoc), DocBarColors.delete, tooltip: _actions.deleteBlock?.text(en)));
+    }
+    if ((['Approved', 'PartiallyDelivered', 'FullyDelivered', 'Closed'].contains(_status) && canApprove ||
+            _status == 'Submitted') && _id != null && !widget.viewOnly) {
+      a.add(DocBarAction.secondary(
+          _status == 'Closed' ? (en ? 'Reopen' : 'ถอยการปิด') : (en ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
+          guard(_actions.reverseBlock, _reverse), DocBarColors.reverse, tooltip: _actions.reverseBlock?.text(en)));
+    }
+    if (_isEditable && !widget.viewOnly) {
+      a.add(canSubmit
+          ? DocBarAction.secondary(en ? 'Save' : 'บันทึก', busy ? null : _save, DocBarColors.save)
+          : DocBarAction.primary(en ? 'Save' : 'บันทึก', busy ? null : _save, DocBarColors.post));
+    }
+    // ส่งอนุมัติ — เข้าคิวผู้อนุมัติของเมนู (ไม่มีผู้อนุมัติ: ตามตัวเลือกของเมนู ให้ผ่าน/ไม่ให้ผ่าน)
+    if (canSubmit) {
+      a.add(DocBarAction.primary(en ? 'Submit' : 'ส่งอนุมัติ', busy ? null : () => _submit(perm!.id), DocBarColors.submit));
+    }
+    if (['Approved', 'PartiallyDelivered', 'FullyDelivered'].contains(_status) && canApprove && !widget.viewOnly) {
+      a.add(DocBarAction.primary(en ? 'Close' : 'ปิดใบสั่งขาย', busy ? null : () => _confirmAction(
+          'ยืนยันปิดใบสั่งขาย', 'Close Sale Order',
+          'ปิดใบสั่งขายนี้? ใช้เมื่อไม่มีการส่งสินค้าเพิ่มแล้ว (แม้ยังส่งไม่ครบ 100%)${orderDepositCloseNote(_deposits, false)}',
+          'Close this SO? Use this when no more delivery is expected (even if not 100% delivered).${orderDepositCloseNote(_deposits, true)}',
+          () => _service.closeTransaction(_id!)), DocBarColors.post));
+    }
+    if (['Approved', 'PartiallyDelivered', 'FullyDelivered'].contains(_status) && _id != null && canApprove && !widget.viewOnly) {
+      a.add(DocBarAction.primary(en ? 'Void' : 'ยกเลิก', guard(_actions.voidBlock, _voidDoc), DocBarColors.voidBg, tooltip: _actions.voidBlock?.text(en)));
+    }
+    return a;
+  }
+
+  @override
+  Widget buildAppBarActions(BuildContext context, bool en) =>
+      _isLoading ? const SizedBox.shrink() : buildDocBarActions(context, _barActions(context, en), busy: _isSaving, isEnglish: en);
+
+  // ── มีการแก้ไขค้าง — ข้อมูลที่จะบันทึกต่างจากตอนโหลดเสร็จ (เฉพาะสถานะที่แก้ไขได้) ──
+  String? _cleanFingerprint;
+
+  String _formFingerprint() {
+    try {
+      final p = _savePayload();
+      return docFingerprint([p.header, p.details, _salespersons]);
+    } catch (_) {
+      return 'incomplete|${docFingerprint([_customer?.id, _warehouse?.id, _lines.length, _descCtrl.text])}';
+    }
+  }
+
+  void _markClean() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _cleanFingerprint = _formFingerprint();
+    });
+  }
+
+  @override
+  bool get isDirty {
+    if (_isLoading || _isSaving || widget.viewOnly || !(_isEditable)) return false;
+    return _cleanFingerprint != null && _cleanFingerprint != _formFingerprint();
   }
 
   void _warn(String msg) {
@@ -994,11 +1079,9 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    widget.actions?.scheduleRefresh();
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
-    final perm = MenuScope.of(context);
-    final canApprove = perm?.canApprove ?? false;
-    final canCreate = perm?.canCreate ?? false;
 
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
@@ -1399,80 +1482,6 @@ class _SoTransactionDetailWidgetState extends State<SoTransactionDetailWidget> {
             ]),
           ),
         ),
-        const SizedBox(height: 16),
-        Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          TextButton(onPressed: widget.onCancel, child: Text(isEnglish ? 'Close' : 'ปิด')),
-          const SizedBox(width: 8),
-          if (_id != null && canCreate) ...[
-            OutlinedButton.icon(
-              onPressed: _isSaving ? null : () => widget.onCopyRequested?.call(_id!),
-              icon: const Icon(Icons.copy, size: 18),
-              label: Text(isEnglish ? 'Copy as New' : 'คัดลอกเป็นใบใหม่'),
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.teal[800]),
-            ),
-            const SizedBox(width: 8),
-          ],
-          if (_isEditable && !widget.viewOnly)
-            ElevatedButton.icon(
-              onPressed: _isSaving ? null : _save,
-              icon: const Icon(Icons.save, size: 18),
-              label: Text(isEnglish ? 'Save' : 'บันทึก'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[800], foregroundColor: Colors.white),
-            ),
-          // ส่งอนุมัติ — เข้าคิวผู้อนุมัติของเมนู (ไม่มีผู้อนุมัติ: ตามตัวเลือกของเมนู ให้ผ่าน/ไม่ให้ผ่าน)
-          if (_isEditable && _id != null && !widget.viewOnly && perm?.id != null) ...[
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: _isSaving ? null : () => _submit(perm!.id),
-              icon: const Icon(Icons.send, size: 18),
-              label: Text(isEnglish ? 'Submit' : 'ส่งอนุมัติ'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white),
-            ),
-          ],
-          if (['Approved', 'PartiallyDelivered', 'FullyDelivered'].contains(_status) && canApprove && !widget.viewOnly) ...[
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: _isSaving ? null : () => _confirmAction(
-                  'ยืนยันปิดใบสั่งขาย', 'Close Sale Order',
-                  'ปิดใบสั่งขายนี้? ใช้เมื่อไม่มีการส่งสินค้าเพิ่มแล้ว (แม้ยังส่งไม่ครบ 100%)${orderDepositCloseNote(_deposits, false)}',
-                  'Close this SO? Use this when no more delivery is expected (even if not 100% delivered).${orderDepositCloseNote(_deposits, true)}',
-                  () => _service.closeTransaction(_id!)),
-              icon: const Icon(Icons.lock_outline, size: 18),
-              label: Text(isEnglish ? 'Close' : 'ปิดใบสั่งขาย'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white),
-            ),
-          ],
-          if (_isEditable && _id != null && widget.canDelete && !widget.viewOnly) ...[
-            const SizedBox(width: 8),
-            _lockable(_actions.deleteBlock, (onPressed) => OutlinedButton.icon(
-                  onPressed: onPressed,
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  label: Text(isEnglish ? 'Delete' : 'ลบ'),
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
-                ), _deleteDoc),
-          ],
-          if ((['Approved', 'PartiallyDelivered', 'FullyDelivered', 'Closed'].contains(_status) && canApprove ||
-                  _status == 'Submitted') && _id != null && !widget.viewOnly) ...[
-            const SizedBox(width: 8),
-            _lockable(_actions.reverseBlock, (onPressed) => OutlinedButton.icon(
-                  onPressed: onPressed,
-                  icon: const Icon(Icons.undo, size: 18),
-                  label: Text(_status == 'Closed'
-                      ? (isEnglish ? 'Reopen' : 'ถอยการปิด')
-                      : (isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง')),
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[800]),
-                ), _reverse),
-          ],
-          if (['Approved', 'PartiallyDelivered', 'FullyDelivered'].contains(_status) && _id != null && canApprove && !widget.viewOnly) ...[
-            const SizedBox(width: 8),
-            _lockable(_actions.voidBlock, (onPressed) => OutlinedButton.icon(
-                  onPressed: onPressed,
-                  icon: const Icon(Icons.cancel_outlined, size: 18),
-                  label: Text(isEnglish ? 'Void' : 'ยกเลิก'),
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red[700]),
-                ), _voidDoc),
-          ],
-        ]),
         // วงเงินเครดิตของลูกค้า + ขอ/อนุมัติเกินวงเงิน
         if (_customer?.id != null && (_isEditable || _credit.status != null))
           CreditLimitPanel(

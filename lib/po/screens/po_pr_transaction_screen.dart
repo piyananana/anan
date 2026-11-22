@@ -7,6 +7,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../widgets/po_pr_transaction_list_widget.dart';
 import '../widgets/po_pr_transaction_detail_widget.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 
 class PrTransactionScreen extends StatefulWidget {
   // เปิดตรงไปที่แท็บรายละเอียดของ id นี้ทันที (เช่น จากกระดิ่งแจ้งเตือนรายการรออนุมัติ) แทนที่จะเปิดแท็บค้นหา/รายการ
@@ -20,6 +21,7 @@ class PrTransactionScreen extends StatefulWidget {
 
 class _PrTransactionScreenState extends State<PrTransactionScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final _detailActions = DocAppBarActions(); // ปุ่มของเอกสารบน AppBar
   int _currentTabIndex = 0;
 
   int? _selectedTransactionId;
@@ -50,6 +52,7 @@ class _PrTransactionScreenState extends State<PrTransactionScreen> with SingleTi
   void dispose() {
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    _detailActions.dispose();
     super.dispose();
   }
 
@@ -62,6 +65,12 @@ class _PrTransactionScreenState extends State<PrTransactionScreen> with SingleTi
       _currentTabIndex = 1;
     });
     _tabController.animateTo(1);
+  }
+
+  // ลูกศรย้อนกลับบน AppBar — มีการแก้ไขที่ยังไม่บันทึก ต้องยืนยันก่อนออกจากหน้ารายละเอียด
+  Future<void> _confirmBackToList(bool isEnglish) async {
+    if (_detailActions.isDirty && !await confirmDiscardChanges(context, isEnglish)) return;
+    if (mounted) _backToList();
   }
 
   void _backToList() {
@@ -94,7 +103,7 @@ class _PrTransactionScreenState extends State<PrTransactionScreen> with SingleTi
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
                 tooltip: isEnglish ? 'Back to list' : 'กลับไปรายการ',
-                onPressed: _backToList,
+                onPressed: () => _confirmBackToList(isEnglish),
               )
             : null,
         automaticallyImplyLeading: false,
@@ -107,6 +116,14 @@ class _PrTransactionScreenState extends State<PrTransactionScreen> with SingleTi
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
         actions: [
+          // ปุ่มของเอกสาร (บันทึก/Post/ถอย/ยกเลิก ...) — แสดงเฉพาะหน้ารายละเอียด (แทนแถบปุ่มเดิม)
+          if (_currentTabIndex == 1)
+            AnimatedBuilder(
+              animation: _detailActions,
+              builder: (ctx, _) => _detailActions.build(ctx, isEnglish),
+            ),
+          // หน้ารายละเอียดซ่อนปุ่มรีเฟรช (กดพลาดแล้วการแก้ไขหาย) — กลับรายการด้วยลูกศรย้อนกลับ
+          if (_currentTabIndex == 0)
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
@@ -145,6 +162,7 @@ class _PrTransactionScreenState extends State<PrTransactionScreen> with SingleTi
                   onSaveSuccess: _onSaveSuccess,
                   onCancel: _backToList,
                   canDelete: canDelete,
+                  actions: _detailActions,
                   copyFromId: _copyFromId,
                   onCopyRequested: (id) => _openDetailTab(copyFromId: id),
                 ),

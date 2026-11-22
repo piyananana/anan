@@ -43,6 +43,7 @@ import '../../sa/services/sa_credit_approval_service.dart';
 import '../../sa/widgets/sa_credit_limit_panel.dart';
 import '../../so/services/so_transaction_service.dart';
 import '../../utils/order_ref_picker.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 
 class ArTransactionDetailWidget extends StatefulWidget {
   final int? transactionId;
@@ -51,6 +52,8 @@ class ArTransactionDetailWidget extends StatefulWidget {
   final VoidCallback onSaveSuccess;
   final VoidCallback onCancel;
   final bool canDelete;
+  /// ปุ่มของเอกสารแสดงบน AppBar ของหน้าจอแม่ (แทนแถบปุ่มเดิม)
+  final DocAppBarActions? actions;
 
   const ArTransactionDetailWidget({
     super.key,
@@ -60,13 +63,14 @@ class ArTransactionDetailWidget extends StatefulWidget {
     required this.onSaveSuccess,
     required this.onCancel,
     this.canDelete = true,
+    this.actions,
   });
 
   @override
   State<ArTransactionDetailWidget> createState() => _ArTransactionDetailWidgetState();
 }
 
-class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
+class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> implements DocAppBarActionsHost {
   final _formKey = GlobalKey<FormState>();
   final ArTransactionService _service = ArTransactionService();
   final ArCustomerService _customerService = ArCustomerService();
@@ -239,12 +243,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   @override
   void initState() {
     super.initState();
+    widget.actions?.attach(this);
     _glBodyHScroll.addListener(_syncGlHScroll);
     _initMasterData();
   }
 
   @override
   void dispose() {
+    widget.actions?.detach(this);
     _refNoCtrl.dispose();
     _poNoCtrl.dispose();
     _descCtrl.dispose();
@@ -267,10 +273,14 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
   @override
   void didUpdateWidget(covariant ArTransactionDetailWidget old) {
     super.didUpdateWidget(old);
+    if (widget.actions != old.actions) {
+      old.actions?.detach(this);
+      widget.actions?.attach(this);
+    }
     if (widget.transactionId != old.transactionId ||
         widget.viewOnly != old.viewOnly ||
         widget.resetKey != old.resetKey) {
-      _loadTransactionData().then((_) { if (mounted) _loadDocSetup(); });
+      _loadTransactionData().then((_) async { if (mounted) await _loadDocSetup(); _markClean(); });
     }
   }
 
@@ -323,6 +333,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading master: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+      _markClean();
     }
   }
 
@@ -1376,46 +1387,9 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     await _save('Post');
   }
 
-  Future<void> _save(String action, {bool notify = true}) async {
-    _lastSavedId = null;
-    if (!_formKey.currentState!.validate()) return;
-    if (_selectedDocType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Please select a document type' : 'กรุณาเลือกประเภทเอกสาร')));
-      return;
-    }
-    if (_selectedCustomer == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Please select a customer' : 'กรุณาเลือกลูกค้า')));
-      return;
-    }
-    // BC ไม่ลงบัญชี จึงไม่ต้องตรวจสอบงวดบัญชี
-    if (action == 'Post' && !_isBillCollection && !_validatePeriod(_docDate)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Document date is not within an open accounting period' : 'วันที่เอกสารไม่อยู่ในงวดบัญชีที่เปิด')));
-      return;
-    }
-
-    // ตรวจสอบวันที่เอกสารอ้างอิงต้องไม่เกินวันที่เอกสาร
-    final hasInvalidRef = [
-      ..._applyRows, ..._advanceRows, ..._cnRows, ..._advanceRefundRows,
-    ].any((a) => !_isInvoiceDateValid(a.appliedToDocDate));
-    if (hasInvalidRef) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_isEnglish
-            ? 'There are referenced documents dated after the document date. Please check the rows highlighted in red.'
-            : 'มีเอกสารอ้างอิงที่มีวันที่หลังวันที่เอกสาร กรุณาตรวจสอบรายการที่ไฮไลท์สีแดง'),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 5),
-      ));
-      return;
-    }
-
-    if (_salesDiscountMode && !_checkSalesDiscountTotals()) return;
-    _recalcTotals();
-    if (_isInvoice && _invAdvanceTotal > _totalAmountFc + 0.005) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish
-          ? 'Deposit deducted exceeds the invoice total'
-          : 'ยอดหักเงินมัดจำเกินยอดรวมของใบแจ้งหนี้')));
-      return;
-    }
+  // ข้อมูลที่บันทึก (หัวเอกสาร/บรรทัด/ตัดชำระ/รับชำระ/ภาษีหัก ณ ที่จ่าย) — ใช้ทั้งตอนบันทึกและตรวจการแก้ไขค้าง
+  ({ArTransactionHeader header, List<ArTransactionDetail> details, List<ArTransactionApply> applies,
+    List<ArTransactionPayment> payments, List<ArTransactionWht> whts}) _savePayload() {
     final userName = _authService.currentUser?.userName ?? '';
     final lc = _exchangeRate;
 
@@ -1579,6 +1553,52 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
       );
     }).toList();
 
+    return (header: header, details: details, applies: applies, payments: payments, whts: whts);
+  }
+
+  Future<void> _save(String action, {bool notify = true}) async {
+    _lastSavedId = null;
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedDocType == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Please select a document type' : 'กรุณาเลือกประเภทเอกสาร')));
+      return;
+    }
+    if (_selectedCustomer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Please select a customer' : 'กรุณาเลือกลูกค้า')));
+      return;
+    }
+    // BC ไม่ลงบัญชี จึงไม่ต้องตรวจสอบงวดบัญชี
+    if (action == 'Post' && !_isBillCollection && !_validatePeriod(_docDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish ? 'Document date is not within an open accounting period' : 'วันที่เอกสารไม่อยู่ในงวดบัญชีที่เปิด')));
+      return;
+    }
+
+    // ตรวจสอบวันที่เอกสารอ้างอิงต้องไม่เกินวันที่เอกสาร
+    final hasInvalidRef = [
+      ..._applyRows, ..._advanceRows, ..._cnRows, ..._advanceRefundRows,
+    ].any((a) => !_isInvoiceDateValid(a.appliedToDocDate));
+    if (hasInvalidRef) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_isEnglish
+            ? 'There are referenced documents dated after the document date. Please check the rows highlighted in red.'
+            : 'มีเอกสารอ้างอิงที่มีวันที่หลังวันที่เอกสาร กรุณาตรวจสอบรายการที่ไฮไลท์สีแดง'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 5),
+      ));
+      return;
+    }
+
+    if (_salesDiscountMode && !_checkSalesDiscountTotals()) return;
+    _recalcTotals();
+    if (_isInvoice && _invAdvanceTotal > _totalAmountFc + 0.005) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isEnglish
+          ? 'Deposit deducted exceeds the invoice total'
+          : 'ยอดหักเงินมัดจำเกินยอดรวมของใบแจ้งหนี้')));
+      return;
+    }
+    final p = _savePayload();
+    final header = p.header, details = p.details, applies = p.applies, payments = p.payments, whts = p.whts;
+
     setState(() => _isLoading = true);
     try {
       if (_transactionId == 0) {
@@ -1594,6 +1614,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
         );
         _lastSavedId = _transactionId;
       }
+      _markClean();
       if (mounted && notify) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(action == 'Post'
@@ -2084,13 +2105,13 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    widget.actions?.scheduleRefresh();
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     return Form(
       key: _formKey,
       child: Column(children: [
-        _buildActionButtons(),
         // Scrollable content
         Expanded(
           child: SingleChildScrollView(
@@ -3862,76 +3883,61 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> {
     return [_totalRow('VAT', _vatAmountFc)];
   }
 
-  Widget _buildActionButtons() {
-    final isEnglish = _isEnglish;
+  // ── ปุ่มของเอกสาร (แสดงบน AppBar ของหน้าจอ แทนแถบปุ่มเดิม) — ปุ่ม "กลับ" ตัดออก (ใช้ลูกศรย้อนกลับ) ──
+  List<DocBarAction> _barActions(bool en) {
+    final a = <DocBarAction>[];
     final isDraft = _status == 'Draft';
     final isPosted = _status == 'Posted';
-    return Container(
-      color: Colors.teal[50],
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(children: [
-      if (!_isReadOnly && isDraft) ...[
-        ElevatedButton.icon(
-          onPressed: () => _save('Draft'),
-          icon: const Icon(Icons.save_outlined, size: 16),
-          label: Text(isEnglish ? 'Save Draft' : 'บันทึก Draft'),
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[700], foregroundColor: Colors.white),
-        ),
-        const SizedBox(width: 8),
-        ElevatedButton.icon(
-          onPressed: _onPost,
-          icon: const Icon(Icons.check_circle_outline, size: 16),
-          label: Text(isEnglish ? 'Post Document' : 'Post เอกสาร'),
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
-        ),
-        const SizedBox(width: 8),
-        if (_transactionId != 0 && widget.canDelete)
-          OutlinedButton.icon(
-            onPressed: _delete,
-            icon: const Icon(Icons.delete_outline, size: 16),
-            label: Text(isEnglish ? 'Delete' : 'ลบ'),
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-          ),
-      ],
-      if (isPosted && widget.canDelete && !widget.viewOnly) ...[
-        Builder(builder: (_) {
-          final blockMsg = _reverseBlockMessage(isEnglish);
-          final btn = ElevatedButton.icon(
-            onPressed: blockMsg == null ? _reverse : null,
-            icon: Icon(blockMsg == null ? Icons.undo : Icons.lock_outline, size: 16),
-            label: Text(isEnglish ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
-          );
-          return blockMsg == null ? btn : Tooltip(message: blockMsg, child: btn);
-        }),
-        const SizedBox(width: 8),
-      ],
-      if (isPosted && widget.canDelete)
-        Builder(builder: (_) {
-          final blockMsg = _voidBlockMessage(isEnglish);
-          final btn = ElevatedButton.icon(
-            onPressed: blockMsg == null ? _void : null,
-            icon: Icon(blockMsg == null ? Icons.cancel_outlined : Icons.lock_outline, size: 16),
-            label: Text(isEnglish ? 'Void' : 'ยกเลิก (Void)'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
-          );
-          return blockMsg == null ? btn : Tooltip(message: blockMsg, child: btn);
-        }),
-      const Spacer(),
-      if (_selectedDocType != null && _selectedCustomer != null && !_isBillCollection) ...[
-        OutlinedButton.icon(
-          onPressed: _showGlEntryDialog,
-          icon: const Icon(Icons.account_balance_outlined, size: 16),
-          label: Text(isPosted ? 'GL Entry' : (isEnglish ? 'GL Preview' : 'ตัวอย่าง GL')),
-          style: OutlinedButton.styleFrom(foregroundColor: Colors.indigo[700]),
-        ),
-        const SizedBox(width: 8),
-      ],
-      TextButton(
-        onPressed: widget.onCancel,
-        child: Text(isEnglish ? 'Back' : 'กลับ'),
-      ),
-    ]));
+    if (_selectedDocType != null && _selectedCustomer != null && !_isBillCollection) {
+      a.add(DocBarAction.secondary(isPosted ? 'GL Entry' : (en ? 'GL Preview' : 'ตัวอย่าง GL'), _showGlEntryDialog, Colors.indigo[700]!));
+    }
+    if (!_isReadOnly && isDraft) {
+      if (_transactionId != 0 && widget.canDelete) {
+        a.add(DocBarAction.secondary(en ? 'Delete' : 'ลบ', _delete, DocBarColors.delete));
+      }
+      a.add(DocBarAction.secondary(en ? 'Save Draft' : 'บันทึก Draft', () => _save('Draft'), DocBarColors.save));
+      a.add(DocBarAction.primary(en ? 'Post Document' : 'Post เอกสาร', _onPost, DocBarColors.post));
+    }
+    if (isPosted && widget.canDelete && !widget.viewOnly) {
+      final msg = _reverseBlockMessage(en);
+      a.add(DocBarAction.secondary(en ? 'Reverse to Draft' : 'ถอยเป็นร่าง', msg == null ? _reverse : null, DocBarColors.reverse, tooltip: msg));
+    }
+    if (isPosted && widget.canDelete) {
+      final msg = _voidBlockMessage(en);
+      a.add(DocBarAction.primary(en ? 'Void' : 'ยกเลิก (Void)', msg == null ? _void : null, DocBarColors.voidBg, tooltip: msg));
+    }
+    return a;
+  }
+
+  @override
+  Widget buildAppBarActions(BuildContext context, bool en) =>
+      _isLoading ? const SizedBox.shrink() : buildDocBarActions(context, _barActions(en), isEnglish: en);
+
+  // ── มีการแก้ไขค้าง — ข้อมูลที่จะบันทึกต่างจากตอนโหลดเสร็จ (เฉพาะร่างที่แก้ไขได้) ──
+  String? _cleanFingerprint;
+
+  String _formFingerprint() {
+    if (_selectedDocType == null || _selectedCustomer == null) {
+      return 'incomplete|${_selectedDocType?.id}|${_selectedCustomer?.id}|${docFingerprint(_detailRows.length)}|${_descCtrl.text}|${_refNoCtrl.text}';
+    }
+    try {
+      final p = _savePayload();
+      return docFingerprint([p.header, p.details, p.applies, p.payments, p.whts, _hasSalespersons ? _salespersons : null]);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  void _markClean() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _cleanFingerprint = _formFingerprint();
+    });
+  }
+
+  @override
+  bool get isDirty {
+    if (_isLoading || _isReadOnly || widget.viewOnly || _status != 'Draft') return false;
+    return _cleanFingerprint != null && _cleanFingerprint != _formFingerprint();
   }
 
   Widget _sectionHeader(String title, bool expanded, VoidCallback onToggle, {Widget? trailing, IconData? icon}) {

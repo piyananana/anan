@@ -4,6 +4,7 @@ import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../widgets/im_transaction_list_widget.dart';
 import '../widgets/im_transaction_detail_widget.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 
 class ImTransactionScreen extends StatefulWidget {
   // เปิดตรงไปที่แท็บรายละเอียดของ id นี้ทันที (เช่น จากกระดิ่งรายการรออนุมัติเกินวงเงิน)
@@ -17,7 +18,7 @@ class ImTransactionScreen extends StatefulWidget {
 class _ImTransactionScreenState extends State<ImTransactionScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _detailActions = ImTransactionDetailActions(); // ปุ่มของเอกสารบน AppBar
+  final _detailActions = DocAppBarActions(); // ปุ่มของเอกสารบน AppBar
   int _currentTabIndex = 0;
 
   int? _selectedTransactionId;
@@ -69,27 +70,8 @@ class _ImTransactionScreenState extends State<ImTransactionScreen>
 
   // ลูกศรย้อนกลับบน AppBar — มีการแก้ไขที่ยังไม่บันทึก ต้องยืนยันก่อนออกจากหน้ารายละเอียด
   Future<void> _confirmBackToList(bool isEnglish) async {
-    if (_detailActions.isDirty) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(isEnglish ? 'Discard changes?' : 'ยกเลิกการแก้ไข?'),
-          content: Text(isEnglish
-              ? 'This document has unsaved changes. Going back to the list will discard them.'
-              : 'เอกสารนี้มีการแก้ไขที่ยังไม่ได้บันทึก ถ้ากลับไปหน้ารายการ การแก้ไขจะหายไป'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Keep editing' : 'แก้ไขต่อ')),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
-              child: Text(isEnglish ? 'Discard and go back' : 'ไม่บันทึก และกลับ'),
-            ),
-          ],
-        ),
-      );
-      if (ok != true || !mounted) return;
-    }
-    _backToList();
+    if (_detailActions.isDirty && !await confirmDiscardChanges(context, isEnglish)) return;
+    if (mounted) _backToList();
   }
 
   void _refreshList() {

@@ -19,6 +19,7 @@ import '../services/gl_period_service.dart';
 import 'gl_dimension_picker_field.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 
 class GlEntryDetailWidget extends StatefulWidget {
   final int? entryId;
@@ -27,6 +28,8 @@ class GlEntryDetailWidget extends StatefulWidget {
   final VoidCallback onSaveSuccess;
   final VoidCallback onCancel;
   final bool canDelete;
+  /// ปุ่มของเอกสารแสดงบน AppBar ของหน้าจอแม่ (แทนแถบปุ่มเดิม)
+  final DocAppBarActions? actions;
 
   const GlEntryDetailWidget({
     super.key,
@@ -36,13 +39,14 @@ class GlEntryDetailWidget extends StatefulWidget {
     required this.onSaveSuccess,
     required this.onCancel,
     this.canDelete = true,
+    this.actions,
   });
 
   @override
   State<GlEntryDetailWidget> createState() => _GlEntryDetailWidgetState();
 }
 
-class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
+class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> implements DocAppBarActionsHost {
   bool _isEnglish = false;
   final _formKey = GlobalKey<FormState>();
   final GlEntryService _service = GlEntryService();
@@ -88,11 +92,13 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   @override
   void initState() {
     super.initState();
+    widget.actions?.attach(this);
     _initMasterData();
   }
 
   @override
   void dispose() {
+    widget.actions?.detach(this);
     for (final c in _debitCtrls) c.dispose();
     for (final c in _creditCtrls) c.dispose();
     for (final c in _descCtrls) c.dispose();
@@ -143,6 +149,10 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
   @override
   void didUpdateWidget(covariant GlEntryDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.actions != oldWidget.actions) {
+      oldWidget.actions?.detach(this);
+      widget.actions?.attach(this);
+    }
     if (widget.entryId != oldWidget.entryId ||
         widget.viewOnly != oldWidget.viewOnly ||
         widget.resetKey != oldWidget.resetKey) {
@@ -235,6 +245,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+      _markClean();
     }
   }
 
@@ -352,6 +363,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     setState(() => _isLoading = true);
     try {
       await _service.saveEntry(_header, _details, action);
+      _markClean();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
@@ -713,6 +725,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   ),
                   readOnly: _isReadOnly || (_selectedDocType?.isAutoNumbering ?? false),
                   onSaved: (v) => _header.docNo = v ?? '',
+                  onChanged: (v) => _header.docNo = v,
                   validator: (v) => (v == null || v.isEmpty) ? (isEnglish ? 'Please enter doc no.' : 'ระบุเลขที่') : null,
                 ),
               ),
@@ -787,6 +800,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
                   decoration: _fieldDeco(isEnglish ? 'Description' : 'คำอธิบายรายการ'),
                   readOnly: _isReadOnly,
                   onSaved: (v) => _header.description = v ?? '',
+                  onChanged: (v) => _header.description = v,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1290,53 +1304,52 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> {
     );
   }
 
-  // ── Action buttons ───────────────────────────────────────────────────────
-  Widget _buildActionButtons(bool isEnglish) {
-    return Container(
-      color: Colors.deepOrange[50],
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(children: [
-        if (!_isReadOnly && _header.status == 'Draft') ...[
-          OutlinedButton(onPressed: () => _save('Draft'), child: Text(isEnglish ? 'Draft' : 'ดราฟท์')),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange[900]),
-            onPressed: () => _save('Post'),
-            child: Text(isEnglish ? 'Post' : 'โพสต์', style: const TextStyle(color: Colors.white)),
-          ),
-        ] else if (_header.status == 'Posted') ...[
-          if (_reverseBlockMessage(isEnglish) != null)
-            Tooltip(
-              message: _reverseBlockMessage(isEnglish)!,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[400]),
-                onPressed: null,
-                icon: const Icon(Icons.lock_outline, size: 14),
-                label: Text(isEnglish ? 'Reverse' : 'ถอย', style: const TextStyle(color: Colors.white)),
-              ),
-            )
-          else if (widget.canDelete)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              onPressed: _reverse,
-              child: Text(isEnglish ? 'Reverse' : 'ถอย', style: const TextStyle(color: Colors.white)),
-            ),
-        ],
-        const Spacer(),
-        TextButton(onPressed: widget.onCancel, child: Text(isEnglish ? 'Back' : 'กลับ')),
-      ]),
-    );
+  // ── ปุ่มของเอกสาร (แสดงบน AppBar ของหน้าจอ แทนแถบปุ่มเดิม) — ปุ่ม "กลับ" ตัดออก (ใช้ลูกศรย้อนกลับ) ──
+  List<DocBarAction> _barActions(bool en) {
+    final a = <DocBarAction>[];
+    if (!_isReadOnly && _header.status == 'Draft') {
+      a.add(DocBarAction.secondary(en ? 'Draft' : 'ดราฟท์', () => _save('Draft'), DocBarColors.save));
+      a.add(DocBarAction.primary(en ? 'Post' : 'โพสต์', () => _save('Post'), DocBarColors.post));
+    } else if (_header.status == 'Posted') {
+      final msg = _reverseBlockMessage(en);
+      if (msg != null) {
+        a.add(DocBarAction.primary(en ? 'Reverse' : 'ถอย', null, DocBarColors.voidBg, tooltip: msg));
+      } else if (widget.canDelete) {
+        a.add(DocBarAction.primary(en ? 'Reverse' : 'ถอย', _reverse, DocBarColors.voidBg));
+      }
+    }
+    return a;
+  }
+
+  @override
+  Widget buildAppBarActions(BuildContext context, bool en) =>
+      _isLoading ? const SizedBox.shrink() : buildDocBarActions(context, _barActions(en), isEnglish: en);
+
+  // ── มีการแก้ไขค้าง — หัวเอกสาร/บรรทัดต่างจากตอนโหลดเสร็จ (เฉพาะร่างที่แก้ไขได้) ──
+  String? _cleanFingerprint;
+  String _formFingerprint() => docFingerprint([_header, _details]);
+
+  void _markClean() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _cleanFingerprint = _formFingerprint();
+    });
+  }
+
+  @override
+  bool get isDirty {
+    if (_isLoading || _isReadOnly || widget.viewOnly || _header.status != 'Draft') return false;
+    return _cleanFingerprint != null && _cleanFingerprint != _formFingerprint();
   }
 
   @override
   Widget build(BuildContext context) {
+    widget.actions?.scheduleRefresh();
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     return Form(
       key: _formKey,
       child: Column(children: [
-        _buildActionButtons(isEnglish),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(8),

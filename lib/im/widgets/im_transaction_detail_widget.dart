@@ -57,6 +57,7 @@ import '../../gl/widgets/gl_line_account_dims.dart';
 import '../../cd/models/cd_wht_type.dart';
 import '../../cd/services/cd_wht_type_service.dart';
 import 'im_cash_sale_panel.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 
 double _parseNum(String s) => double.tryParse(s.trim()) ?? 0;
 
@@ -251,7 +252,7 @@ class ImTransactionDetailWidget extends StatefulWidget {
   final VoidCallback onCancel;
   final bool canDelete;
   /// ปุ่มของเอกสารแสดงบน AppBar ของหน้าจอแม่ (แทนแถบปุ่มด้านล่างเดิม)
-  final ImTransactionDetailActions? actions;
+  final DocAppBarActions? actions;
 
   const ImTransactionDetailWidget({
     super.key,
@@ -268,7 +269,7 @@ class ImTransactionDetailWidget extends StatefulWidget {
   State<ImTransactionDetailWidget> createState() => _ImTransactionDetailWidgetState();
 }
 
-class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
+class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> implements DocAppBarActionsHost {
   final ImTransactionService _service = ImTransactionService();
   final ImItemService _itemService = ImItemService();
   final PoTransactionService _poService = PoTransactionService();
@@ -296,7 +297,6 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
   bool _isEnglish = false;
   bool _isLoading = false;
-  bool _actionsRefreshScheduled = false;
   String? _cleanFingerprint; // ค่าที่บันทึกได้ ณ ตอนโหลดเสร็จ/บันทึกสำเร็จ — เทียบหาการแก้ไขค้าง (isDirty)
   bool _isSaving = false;
 
@@ -674,7 +674,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   @override
   void initState() {
     super.initState();
-    widget.actions?._state = this;
+    widget.actions?.attach(this);
     _loadHeaderPrefs();
     _load();
   }
@@ -683,8 +683,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   void didUpdateWidget(covariant ImTransactionDetailWidget old) {
     super.didUpdateWidget(old);
     if (widget.actions != old.actions) {
-      if (old.actions?._state == this) old.actions?._state = null;
-      widget.actions?._state = this;
+      old.actions?.detach(this);
+      widget.actions?.attach(this);
     }
     if (widget.resetKey != old.resetKey || widget.transactionId != old.transactionId) {
       _load();
@@ -693,7 +693,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
 
   @override
   void dispose() {
-    if (widget.actions?._state == this) widget.actions?._state = null;
+    widget.actions?.detach(this);
     _lineHScroll.dispose();
     _refNoCtrl.dispose();
     _poNoCtrl.dispose();
@@ -2603,7 +2603,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
-    _scheduleActionsRefresh();
+    widget.actions?.scheduleRefresh();
 
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
@@ -5483,99 +5483,44 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
   // ปุ่มที่ทำไม่ได้: ล็อกไว้ และชี้เมาส์แล้วเห็นเหตุผล
   // ── ปุ่มของเอกสาร (แสดงบน AppBar ของหน้าจอ หน้าปุ่มรีเฟรช — เดิมเป็นแถบด้านล่าง) ──
   // ปุ่ม "ปิด" เดิมตัดออก (ซ้ำกับลูกศรย้อนกลับบน AppBar) ตรรกะของแต่ละปุ่มเหมือนเดิมทุกประการ
-  List<_BarAction> _barActions(bool en) {
-    final a = <_BarAction>[];
+  List<DocBarAction> _barActions(bool en) {
+    final a = <DocBarAction>[];
     VoidCallback? guard(ImDocBlock? b, VoidCallback f) => b != null || _isSaving ? null : f;
     final busy = _isSaving;
-    final saveFg = Colors.teal[800]!;
-    final postBg = Colors.green[600]!;
     if (_status == 'Draft' && !widget.viewOnly) {
       if (_id != null && widget.canDelete) {
-        a.add(_BarAction(en ? 'Delete' : 'ลบ', guard(_deleteBlock, _delete), fg: Colors.red[700]!, tooltip: _deleteBlock?.text(en)));
+        a.add(DocBarAction.secondary(en ? 'Delete' : 'ลบ', guard(_deleteBlock, _delete), DocBarColors.delete, tooltip: _deleteBlock?.text(en)));
       }
-      a.add(_BarAction(en ? 'Save Draft' : 'บันทึกร่าง', busy ? null : () => _save('Draft'), fg: saveFg));
-      a.add(_BarAction((_isGrDeferredMode || _isDlnDeferredMode) ? 'Post IM' : 'Post', busy ? null : _onPost,
-          fg: Colors.white, bg: postBg, primary: true));
+      a.add(DocBarAction.secondary(en ? 'Save Draft' : 'บันทึกร่าง', busy ? null : () => _save('Draft'), DocBarColors.save));
+      a.add(DocBarAction.primary((_isGrDeferredMode || _isDlnDeferredMode) ? 'Post IM' : 'Post', busy ? null : _onPost, DocBarColors.post));
     }
     if (_status == 'Received' && _isGrDeferredMode && !widget.viewOnly) {
-      a.add(_BarAction(en ? 'Save' : 'บันทึก', busy ? null : _saveBillingInfo, fg: saveFg));
-      a.add(_BarAction('Post AP/GL', busy ? null : _postBilling, fg: Colors.white, bg: postBg, primary: true));
+      a.add(DocBarAction.secondary(en ? 'Save' : 'บันทึก', busy ? null : _saveBillingInfo, DocBarColors.save));
+      a.add(DocBarAction.primary('Post AP/GL', busy ? null : _postBilling, DocBarColors.post));
     }
     if (_status == 'Delivered' && _isDlnDeferredMode && !widget.viewOnly) {
-      a.add(_BarAction(en ? 'Save' : 'บันทึก', busy ? null : _saveBillingInfoDln, fg: saveFg));
-      a.add(_BarAction('Post AR/GL', busy ? null : _postBillingDln, fg: Colors.white, bg: postBg, primary: true));
+      a.add(DocBarAction.secondary(en ? 'Save' : 'บันทึก', busy ? null : _saveBillingInfoDln, DocBarColors.save));
+      a.add(DocBarAction.primary('Post AR/GL', busy ? null : _postBillingDln, DocBarColors.post));
     }
     if ((_status == 'Posted' || _status == 'Received' || _status == 'Delivered') && !widget.viewOnly) {
-      a.add(_BarAction(
+      a.add(DocBarAction.secondary(
         _reverseTo == 'Received' || _reverseTo == 'Delivered'
             ? (en ? 'Reverse Billing' : 'ถอยการตั้งหนี้')
             : (en ? 'Reverse to Draft' : 'ถอยเป็นร่าง'),
-        guard(_reverseBlock, _reverseToDraft), fg: Colors.orange[800]!, tooltip: _reverseBlock?.text(en)));
-      a.add(_BarAction(en ? 'Void' : 'ยกเลิก', guard(_voidBlock, _void),
-          fg: Colors.white, bg: Colors.red[600]!, primary: true, tooltip: _voidBlock?.text(en)));
+        guard(_reverseBlock, _reverseToDraft), DocBarColors.reverse, tooltip: _reverseBlock?.text(en)));
+      a.add(DocBarAction.primary(en ? 'Void' : 'ยกเลิก', guard(_voidBlock, _void), DocBarColors.voidBg, tooltip: _voidBlock?.text(en)));
     }
     return a;
   }
 
-  // จอกว้าง = ปุ่มครบ, จอแคบ = ปุ่มหลัก (Post/ยกเลิก) + ปุ่มรองในเมนู ⋮ (กันชื่อเมนูกับปุ่มล้น AppBar)
-  Widget buildAppBarActions(BuildContext context, bool en) {
-    if (_isLoading) return const SizedBox.shrink();
-    final acts = _barActions(en);
-    final narrow = MediaQuery.sizeOf(context).width < 900;
-    final shown = narrow ? acts.where((x) => x.primary).toList() : acts;
-    final menu = narrow ? acts.where((x) => !x.primary).toList() : <_BarAction>[];
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      if (_isSaving)
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8),
-          child: SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-        ),
-      for (final x in shown) Padding(padding: const EdgeInsets.only(left: 6), child: _barButton(context, x)),
-      if (menu.isNotEmpty)
-        PopupMenuButton<int>(
-          icon: const Icon(Icons.more_vert, color: Colors.white),
-          tooltip: en ? 'More actions' : 'คำสั่งอื่น',
-          onSelected: (i) => menu[i].onPressed?.call(),
-          itemBuilder: (_) => [
-            for (var i = 0; i < menu.length; i++)
-              PopupMenuItem<int>(
-                value: i,
-                enabled: menu[i].onPressed != null,
-                child: Text(menu[i].tooltip == null ? menu[i].label : '${menu[i].label} — ${menu[i].tooltip}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: menu[i].onPressed == null ? Colors.grey : menu[i].fg)),
-              ),
-          ],
-        ),
-      if (acts.isNotEmpty) const SizedBox(width: 8),
-    ]);
-  }
-
-  // ปุ่มพื้นทึบตัดกับสี AppBar — พื้นขาวสำหรับปุ่มรอง, พื้นเขียว/แดงขอบขาวสำหรับปุ่มหลัก
-  Widget _barButton(BuildContext context, _BarAction x) {
-    final filled = x.bg != Colors.white;
-    final btn = ElevatedButton(
-      onPressed: x.onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: x.bg,
-        foregroundColor: x.fg,
-        disabledBackgroundColor: Colors.white24,
-        disabledForegroundColor: Colors.white70,
-        elevation: 0,
-        side: filled ? const BorderSide(color: Colors.white70) : null,
-        minimumSize: const Size(0, 34),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        visualDensity: VisualDensity.compact,
-        // ฟอนต์ตามที่ตั้งไว้ในหน้าจอองค์กร/บริษัท (theme) — TextStyle เปล่าจะตกไปใช้ฟอนต์ระบบ
-        textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      child: Text(x.label),
-    );
-    return x.tooltip == null ? btn : Tooltip(message: x.tooltip!, child: btn);
-  }
+  @override
+  Widget buildAppBarActions(BuildContext context, bool en) =>
+      _isLoading ? const SizedBox.shrink() : buildDocBarActions(context, _barActions(en), busy: _isSaving, isEnglish: en);
 
   // ── มีการแก้ไขค้าง (ยังไม่บันทึก) — หน้าจอถามยืนยันก่อนกดย้อนกลับไปหน้ารายการ ──
   // เอกสารใหม่: มีบรรทัด/คำอธิบาย/เลขที่อ้างอิงแล้ว, เอกสารเดิม: ค่าที่บันทึกได้ต่างจากตอนโหลดเสร็จ
   // (เฉพาะสถานะที่แก้ไขได้: ร่าง, '12' Received, '32' Delivered)
+  @override
   bool get isDirty {
     if (_isLoading || _isSaving || widget.viewOnly) return false;
     final editable = _status == 'Draft' || (_status == 'Received' && _isGrDeferredMode) || (_status == 'Delivered' && _isDlnDeferredMode);
@@ -5609,39 +5554,6 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> {
     });
   }
 
-  // แจ้งหน้าจอให้วาดปุ่มบน AppBar ใหม่หลัง build (สถานะ/กำลังบันทึก/สิทธิ์เปลี่ยน) — ครั้งเดียวต่อเฟรม
-  void _scheduleActionsRefresh() {
-    if (_actionsRefreshScheduled || widget.actions == null) return;
-    _actionsRefreshScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _actionsRefreshScheduled = false;
-      if (mounted) widget.actions?._changed();
-    });
-  }
-}
-
-// ปุ่มบน AppBar ของหน้าจอธุรกรรม IM — หน้าจอแม่สร้าง แล้วส่งให้ ImTransactionDetailWidget ลงทะเบียนชุดปุ่ม
-class ImTransactionDetailActions extends ChangeNotifier {
-  _ImTransactionDetailWidgetState? _state;
-
-  /// ปุ่มของเอกสารที่เปิดอยู่ (ว่างถ้ายังไม่มีหน้ารายละเอียด)
-  Widget build(BuildContext context, bool isEnglish) =>
-      _state?.mounted == true ? _state!.buildAppBarActions(context, isEnglish) : const SizedBox.shrink();
-
-  /// มีการแก้ไขที่ยังไม่บันทึก
-  bool get isDirty => _state?.mounted == true && _state!.isDirty;
-
-  void _changed() => notifyListeners();
-}
-
-class _BarAction {
-  final String label;
-  final VoidCallback? onPressed;
-  final Color fg;
-  final Color bg;
-  final bool primary;
-  final String? tooltip;
-  const _BarAction(this.label, this.onPressed, {required this.fg, this.bg = Colors.white, this.primary = false, this.tooltip});
 }
 
 // คอลัมน์ของตารางรายการ — width 0 = ยืดตามพื้นที่ (ชื่อสินค้า), group 1-4 = สีกลุ่ม (0 = ไม่มี)
