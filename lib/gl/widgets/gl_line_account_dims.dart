@@ -153,6 +153,15 @@ Future<Account?> showGlLineAccountPicker(BuildContext context, List<Account> acc
   );
 }
 
+// แบบกล่อง (boxed): กรอบสูง 36 บรรทัดเดียว ตัวอักษร 13 — เท่ากับช่องอื่นในตารางรายการของ IM
+const double _boxH = 36;
+BoxDecoration _boxDeco({required bool readOnly, bool err = false}) => BoxDecoration(
+      color: err ? const Color(0xFFFDECEA) : (readOnly ? const Color(0xFFEEF0F2) : Colors.white),
+      border: Border.all(
+          color: err ? const Color(0xFFC62828) : (readOnly ? const Color(0xFFC3C9D0) : Colors.grey.shade500), width: err ? 1.4 : 1),
+      borderRadius: BorderRadius.circular(4),
+    );
+
 /// ช่องบัญชีที่ใช้ลงบัญชีของบรรทัด (กดเพื่อเลือก)
 class GlLineAccountCell extends StatelessWidget {
   final List<Account> accounts;
@@ -162,6 +171,8 @@ class GlLineAccountCell extends StatelessWidget {
   final double width;
   final String? placeholder; // ข้อความเมื่อยังไม่เลือก (null = แจ้งให้เลือกบัญชี)
   final VoidCallback? onClear; // ล้างบัญชีที่เลือก (กลับไปใช้ค่าตั้งต้น)
+  /// true = กรอบสูง 36 บรรทัดเดียว "รหัส ชื่อ" (ชื่อเต็มใน tooltip) / false = แบบเดิม 2 บรรทัดมีเส้นใต้
+  final bool boxed;
 
   const GlLineAccountCell({
     super.key,
@@ -172,12 +183,14 @@ class GlLineAccountCell extends StatelessWidget {
     this.width = 150,
     this.placeholder,
     this.onClear,
+    this.boxed = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final acc = findAccount(accounts, accountId);
+    if (boxed) return _buildBoxed(context, isEnglish, acc);
     final content = acc == null
         ? Text(placeholder ?? (isEnglish ? '— Select —' : '— เลือกบัญชี —'),
             style: TextStyle(fontSize: 12, color: readOnly || placeholder != null ? Colors.grey : Colors.red[400],
@@ -209,6 +222,45 @@ class GlLineAccountCell extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildBoxed(BuildContext context, bool isEnglish, Account? acc) {
+    final missing = acc == null && placeholder == null && !readOnly;
+    final text = acc == null
+        ? Text(placeholder ?? (isEnglish ? '— Select —' : '— เลือกบัญชี —'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 13, color: missing ? Colors.red[400] : Colors.grey.shade600,
+                fontStyle: placeholder != null ? FontStyle.italic : FontStyle.normal))
+        : Text.rich(
+            TextSpan(children: [
+              TextSpan(text: acc.accountCode, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal[700])),
+              TextSpan(text: '  ${_accName(acc, isEnglish)}', style: const TextStyle(color: Color(0xFF4A5562))),
+            ]),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13));
+    final box = SizedBox(
+      width: width,
+      child: InkWell(
+        onTap: readOnly ? null : () async {
+          final a = await showGlLineAccountPicker(context, accounts);
+          if (a != null) onChanged(a);
+        },
+        child: Container(
+          height: _boxH,
+          padding: const EdgeInsets.only(left: 7, right: 4),
+          decoration: _boxDeco(readOnly: readOnly, err: missing),
+          child: Row(children: [
+            Expanded(child: text),
+            if (!readOnly && acc != null && onClear != null)
+              InkWell(onTap: onClear, child: const Icon(Icons.clear, size: 14, color: Colors.grey)),
+            if (!readOnly) const Icon(Icons.search, size: 16, color: Color(0xFF0F6E6E)),
+          ]),
+        ),
+      ),
+    );
+    return acc == null ? box : Tooltip(message: '${acc.accountCode} — ${_accName(acc, isEnglish)}', child: box);
+  }
 }
 
 /// ช่องมิติของบรรทัด: แสดงมิติที่ใช้จริง (ค่าจากหัวเอกสารเป็นตัวเอียงสีเทา) กดเพื่อแก้ในหน้าต่าง
@@ -221,6 +273,8 @@ class GlLineDimsCell extends StatelessWidget {
   final bool readOnly;
   final ValueChanged<Map<int, int?>> onChanged;
   final double width;
+  /// true = กรอบสูง 36 บรรทัดเดียว "ค่า · ค่า" (ชื่อมิติ/ชื่อค่าเต็มใน tooltip) / false = แบบเดิมเรียงลงมีเส้นใต้
+  final bool boxed;
 
   const GlLineDimsCell({
     super.key,
@@ -232,6 +286,7 @@ class GlLineDimsCell extends StatelessWidget {
     required this.onChanged,
     this.readOnly = false,
     this.width = 140,
+    this.boxed = false,
   });
 
   GlDimensionValue? _value(GlDimensionType t, int? id) {
@@ -279,8 +334,8 @@ class GlLineDimsCell extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 2, left: 4),
                   child: Text(
-                      '${isEnglish ? 'Header' : 'หัวเอกสาร'}: ${_value(t, headerDims[t.slotNo])!.valueCode} ${_value(t, headerDims[t.slotNo])!.valueNameThai}',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      '${isEnglish ? 'Header' : 'หัวเอกสาร'}: ${_value(t, headerDims[t.slotNo])!.valueCode} ${_dimValName(_value(t, headerDims[t.slotNo])!, isEnglish)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ),
               const SizedBox(height: 10),
             ],
@@ -299,6 +354,7 @@ class GlLineDimsCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     final missing = missingLineDims(account, dimTypes, lineDims, headerDims);
+    if (boxed) return _buildBoxed(context, isEnglish, missing);
     final parts = <Widget>[];
     for (final t in dimTypes) {
       final own = _value(t, lineDims[t.slotNo]);
@@ -340,4 +396,55 @@ class GlLineDimsCell extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildBoxed(BuildContext context, bool isEnglish, List<GlDimensionType> missing) {
+    final spans = <InlineSpan>[];
+    final tips = <String>[];
+    for (final t in dimTypes) {
+      final own = _value(t, lineDims[t.slotNo]);
+      final inherited = own == null ? _value(t, headerDims[t.slotNo]) : null;
+      final v = own ?? inherited;
+      if (v == null) continue;
+      if (spans.isNotEmpty) spans.add(const TextSpan(text: ' · ', style: TextStyle(color: Colors.grey)));
+      spans.add(TextSpan(
+          text: v.valueCode,
+          style: TextStyle(
+              color: own != null ? Colors.teal[700] : Colors.grey.shade600,
+              fontStyle: own != null ? FontStyle.normal : FontStyle.italic,
+              fontWeight: own != null ? FontWeight.bold : FontWeight.normal)));
+      final typeName = isEnglish && (t.nameEng ?? '').isNotEmpty ? t.nameEng! : t.nameThai;
+      tips.add('$typeName: ${v.valueCode} ${_dimValName(v, isEnglish)}'
+          '${own == null ? (isEnglish ? ' (header)' : ' (ตามหัวเอกสาร)') : ''}');
+    }
+    if (missing.isNotEmpty) {
+      tips.add('${isEnglish ? 'Required' : 'ต้องระบุ'}: ${missing.map((t) => isEnglish ? (t.nameEng ?? t.nameThai) : t.nameThai).join(', ')}');
+    }
+    final box = SizedBox(
+      width: width,
+      child: InkWell(
+        onTap: readOnly ? null : () => _openDialog(context),
+        child: Container(
+          height: _boxH,
+          padding: const EdgeInsets.only(left: 7, right: 4),
+          decoration: _boxDeco(readOnly: readOnly, err: missing.isNotEmpty),
+          child: Row(children: [
+            Expanded(
+              child: spans.isEmpty
+                  ? Text('—', style: TextStyle(fontSize: 13, color: Colors.grey[500]))
+                  : Text.rich(TextSpan(children: spans), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+            ),
+            if (missing.isNotEmpty)
+              Icon(Icons.error_outline, size: 16, color: Colors.red[700])
+            else if (!readOnly)
+              const Icon(Icons.tune, size: 16, color: Color(0xFF0F6E6E)),
+          ]),
+        ),
+      ),
+    );
+    return tips.isEmpty ? box : Tooltip(message: tips.join('\n'), child: box);
+  }
 }
+
+// ชื่อค่ามิติตามภาษา — ไม่มีชื่ออังกฤษ = ชื่อไทย
+String _dimValName(GlDimensionValue v, bool isEnglish) =>
+    isEnglish && (v.valueNameEng ?? '').isNotEmpty ? v.valueNameEng! : v.valueNameThai;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1708,7 +1709,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
                           _poCurrencyCode(l) == CurrencyService.baseCode
                               ? '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))}'
                               : '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))} ${_poCurrencyCode(l)} (≈${_fmtQty.format(_poUnitCostLc(l))} ${CurrencyService.baseCode})',
-                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                       ),
                       SizedBox(
@@ -1869,7 +1870,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
                           _soCurrencyCode(l) == CurrencyService.baseCode
                               ? '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))}'
                               : '@ ${_fmtQty.format(_poNum(l['unit_price_fc']))} ${_soCurrencyCode(l)} (≈${_fmtQty.format(_soUnitPriceLc(l))} ${CurrencyService.baseCode})',
-                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                       ),
                       SizedBox(
@@ -2609,7 +2610,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
 
     // การ์ดข้อมูลเอกสารล็อคอยู่ด้านบน (ไม่เลื่อนตามเนื้อหา) — สูงตามสภาพย่อ/ขยาย
     // จอเตี้ย: จำกัดไม่เกิน 60% ของพื้นที่ แล้วเลื่อนภายในการ์ดแทน
-    return LayoutBuilder(builder: (context, box) => Column(
+    return _sizedTheme(context, LayoutBuilder(builder: (context, box) => Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -2679,7 +2680,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
           ),
         ),
       ],
-    ));
+    )));
   }
 
   // ── การ์ดมาตรฐาน: หัวการ์ด (ชื่อ · ชิป · สรุปด้านขวา · ปุ่ม · ย่อ/ขยาย) — แบบเดียวกับการ์ดข้อมูลเอกสาร ──
@@ -2821,8 +2822,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
       child: Row(children: [
         Expanded(
           child: hasValue
-              ? Text(displayText ?? '', style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)
-              : Text(_isEnglish ? '— Not specified —' : '— ไม่ระบุ —', style: TextStyle(color: Colors.grey.shade600)),
+              ? Text(displayText ?? '', style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)
+              : Text(_isEnglish ? '— Not specified —' : '— ไม่ระบุ —', style: TextStyle(color: Colors.grey.shade600), maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
         if (onSearch != null)
           IconButton(icon: const Icon(Icons.search, color: Colors.teal, size: 18), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: onSearch),
@@ -2840,6 +2841,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
   static const _gParty = Color(0xFF1F7A4D);
   static const _gFin = Color(0xFFB45309);
   static const _gMore = Color(0xFF5B6B7C);
+  // ความสูงกรอบของทุกฟิลด์ในหัวเอกสาร (ช่องพิมพ์/dropdown/วันที่/ค้นหา/มิติ) — ให้แถวตรงกันทุกกลุ่ม
+  static const double _hFieldH = 40; // 40 + ตัวอักษร 13 (user 2026-11-22) — ตารางรายการคง 36
+  // ขนาดตัวอักษรค่าในฟิลด์หัวเอกสาร — ทุกชนิดเท่ากัน (ช่องพิมพ์/dropdown/ค้นหา/วันที่/มิติ); ป้ายลอยบนกรอบ = 12
+  static const double _hFontSize = 13;
 
   InputDecoration _hDec(String label, {bool auto = false, bool editable = true, Widget? suffixIcon, String? counterText}) {
     final req = label.endsWith(' *');
@@ -2848,8 +2853,17 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
       label: req
           ? Text.rich(TextSpan(text: text, children: const [TextSpan(text: ' *', style: TextStyle(color: Color(0xFFC62828)))]))
           : Text(text),
+      // ป้ายในช่องว่าง 13 / ลอยบนกรอบ 12 (Flutter ย่อป้ายลอยเหลือ 0.75 เท่า → 16 × 0.75)
+      labelStyle: const TextStyle(fontSize: _hFontSize),
+      floatingLabelStyle: const TextStyle(fontSize: 16),
       border: const OutlineInputBorder(),
-      isDense: true,
+      // กรอบสูงเท่ากันทุกฟิลด์: กรอบ (container) ของ InputDecorator สูงตามเนื้อหา — isDense ทำให้ไม่มีขั้นต่ำ จึงสูงไม่เท่ากัน
+      // ไม่ dense = กรอบขั้นต่ำ 48 (ข้อความจัดกึ่งกลาง) แล้วจำกัดความสูงไว้ _hFieldH — กรอบถูกบีบลงเหลือ _hFieldH พอดีทุกช่อง
+      // ห้ามมีข้อความใต้ช่อง (counter/helper) ไม่งั้นกรอบเตี้ยลง — ช่องจำกัดความยาวใช้ inputFormatters แทน maxLength
+      isDense: false,
+      constraints: const BoxConstraints.tightFor(height: _hFieldH),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), // ระยะบนล่างน้อย: ข้อความจัดกึ่งกลางกรอบอยู่แล้ว — ระยะมากจะบีบกล่องข้อความจนสระบน/วรรณยุกต์ถูกตัดที่ Aa 110–125%
+      suffixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 24, maxHeight: 24),
       filled: !editable || auto,
       fillColor: !editable ? _hRo : _hAuto,
       suffixIcon: suffixIcon,
@@ -2995,6 +3009,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
             key: ValueKey('docType$_docTypeFieldSeq'),
             value: _docId,
             isExpanded: true,
+            isDense: true,
             decoration: _hDec(isEnglish ? 'Document Type *' : 'ประเภทเอกสาร *'),
             items: _docTypes
                 .map((d) => DropdownMenuItem(
@@ -3115,8 +3130,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
         : TextField(
             controller: _poNoCtrl,
             readOnly: !_canEditBilling,
-            maxLength: 50,
-            decoration: _hDec(isEnglish ? 'Customer PO No.' : 'เลขที่ PO ลูกค้า', editable: _canEditBilling, counterText: ''),
+            inputFormatters: [LengthLimitingTextInputFormatter(50)], // ไม่ใช้ maxLength — ตัวนับใต้ช่องทำให้กรอบเตี้ยกว่าช่องอื่น
+            decoration: _hDec(isEnglish ? 'Customer PO No.' : 'เลขที่ PO ลูกค้า', editable: _canEditBilling),
           );
     final custPoDateW = !_isDeliverMode
         ? null
@@ -3245,6 +3260,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
                   DropdownButtonFormField<Currency>(
                     value: _currency,
                     isExpanded: true,
+                    isDense: true,
                     decoration: _hDec(isEnglish ? 'Currency' : 'สกุลเงิน', auto: true, editable: !_isReadOnly),
                     items: _currencies
                         .map((c) => DropdownMenuItem(value: c, child: Text('${c.currencyCode} - ${_currencyLabel(c)}', overflow: TextOverflow.ellipsis)))
@@ -3325,6 +3341,9 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
             }(),
             readOnly: _isReadOnly || _refDims != null,
             onSelected: (v) => setState(() => _dimSelections[t.slotNo] = v?.id),
+            fontSize: _hFontSize,
+            decoration: _hDec(isEnglish && (t.nameEng ?? '').isNotEmpty ? t.nameEng! : t.nameThai,
+                editable: !(_isReadOnly || _refDims != null)),
           ),
       ];
       final moreFirst = <Widget>[descW, if (salesW != null) salesW];
@@ -3380,6 +3399,29 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
           body,
         ]),
       ),
+    );
+  }
+
+  // ขนาดตัวอักษรของทั้งหน้ารายละเอียด (หัวเอกสาร / รายการสินค้า / รับชำระ / สรุปยอด) — ค่าเริ่มต้นของ Flutter ต่างกันตามชนิดฟิลด์
+  // (ช่องพิมพ์/dropdown 16, InputDecorator 14) ตั้งที่เดียวให้เท่ากัน (_hFontSize); ป้ายลอยบนกรอบ 12 (16 × 0.75)
+  // ข้อความที่ตั้งขนาดเอง (ตาราง 13, คำอธิบาย 12) ไม่เปลี่ยน; dialog ที่เปิดจากหน้านี้ไม่อยู่ใต้ Theme นี้
+  Widget _sizedTheme(BuildContext context, Widget child) {
+    final theme = Theme.of(context);
+    TextStyle? sz(TextStyle? s) => (s ?? const TextStyle()).copyWith(fontSize: _hFontSize);
+    return Theme(
+      data: theme.copyWith(
+        textTheme: theme.textTheme.copyWith(
+          bodyLarge: sz(theme.textTheme.bodyLarge),
+          bodyMedium: sz(theme.textTheme.bodyMedium),
+          titleMedium: sz(theme.textTheme.titleMedium),
+          titleSmall: sz(theme.textTheme.titleSmall),
+        ),
+        inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+          labelStyle: const TextStyle(fontSize: _hFontSize),
+          floatingLabelStyle: const TextStyle(fontSize: 16),
+        ),
+      ),
+      child: child,
     );
   }
 
@@ -3664,7 +3706,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
         ));
         i = j + 1;
       }
-      const hdStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4A5562));
+      const hdStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4A5562));
       final table = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: groupRow),
         Container(
@@ -3747,9 +3789,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
 
   Color? _inFill(bool ro, {bool auto = false}) => ro ? _hRo : (auto ? _hAuto : null);
 
+  // ช่องในตารางรายการ: กรอบสูง 36 เท่ากับ _cBox/_cPick — ไม่ dense (กรอบขั้นต่ำ 48) + จำกัดความสูง 36 = กรอบ 36 พอดีทุกช่อง
+  static const double _cellH = 36;
   InputDecoration _cDec({Color? fill, bool err = false, String? hint, Widget? suffix}) => InputDecoration(
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 7, vertical: 10),
+        isDense: false,
+        constraints: const BoxConstraints.tightFor(height: _cellH),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4), // เหมือน _hDec — ระยะ 8 บีบกล่องข้อความต่ำกว่าความสูงบรรทัดที่ Aa 110%+
         border: const OutlineInputBorder(),
         enabledBorder: err ? const OutlineInputBorder(borderSide: BorderSide(color: _errRed, width: 1.4)) : null,
         filled: fill != null,
@@ -3958,7 +4003,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
               margin: const EdgeInsets.only(left: 6),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
-              child: Text(t, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: fg)),
+              child: Text(t, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: fg)),
             );
         return Tooltip(
           message: '${line.item.itemCode} — $name',
@@ -3969,7 +4014,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
               if (line.isFree) tag(isEnglish ? 'Free' : 'ของแถม', const Color(0xFF1E6B3A), const Color(0xFFE6F4EA)),
             ]),
             Text(line.isNonStock ? name : '$name · ${line.item.costingMethod}',
-                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade700)),
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade700)),
           ]),
         );
       case 'loc':
@@ -4086,7 +4131,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
           isDense: true,
           decoration: _cDec(fill: _isReadOnly ? _hRo : null, err: line.vatType == null && !_isReadOnly),
           items: _vatRates
-              .map((v) => DropdownMenuItem(value: v.vatCode, child: Text(_vatLabel(v.vatCode), style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)))
+              .map((v) => DropdownMenuItem(value: v.vatCode, child: Text(_vatLabel(v.vatCode), style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)))
               .toList(),
           onChanged: _isReadOnly
               ? null
@@ -4138,6 +4183,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
             accountId: line.glAccountId,
             readOnly: _isReadOnly,
             width: 196,
+            boxed: true,
             placeholder: isEnglish ? 'From item / category / setup' : 'ตามสินค้า / หมวด / ตั้งค่า',
             onChanged: (a) => setState(() => line.glAccountId = a.id),
             onClear: () => setState(() => line.glAccountId = null),
@@ -4154,6 +4200,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
             account: findAccount(_accounts, line.glAccountId),
             readOnly: _isReadOnly,
             width: 146,
+            boxed: true,
             onChanged: (d) => setState(() => line.dims = d),
           ),
         );
@@ -4194,7 +4241,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
         width: width,
         child: InputDecorator(
           decoration: _hDec(label, editable: false),
-          child: Text(value, textAlign: TextAlign.right, style: _numStyle),
+          child: Text(value, textAlign: TextAlign.right, style: _numStyle.copyWith(fontSize: _hFontSize)),
         ),
       );
       return tip == null ? w : Tooltip(message: tip, child: w);
@@ -4204,21 +4251,21 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
       Wrap(spacing: 8, runSpacing: 8, children: [
         SizedBox(
           width: 380,
-          child: TextField(
-            controller: line.remarkCtrl,
-            readOnly: _isReadOnly,
-            maxLength: 500,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              labelText: isEnglish ? 'Line remark' : 'หมายเหตุรายการ',
-              helperText: line.isNonStock ? (isEnglish ? 'Printed instead of the item name' : 'พิมพ์แทนชื่อสินค้าในใบกำกับ') : null,
-              counterText: '',
-              border: const OutlineInputBorder(),
-              isDense: true,
-              filled: _isReadOnly,
-              fillColor: _hRo,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: line.remarkCtrl,
+              readOnly: _isReadOnly,
+              inputFormatters: [LengthLimitingTextInputFormatter(500)],
+              onChanged: (_) => setState(() {}),
+              decoration: _hDec(isEnglish ? 'Line remark' : 'หมายเหตุรายการ', editable: !_isReadOnly),
             ),
-          ),
+            if (line.isNonStock)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, top: 3),
+                child: Text(isEnglish ? 'Printed instead of the item name' : 'พิมพ์แทนชื่อสินค้าในใบกำกับ',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              ),
+          ]),
         ),
         if (sd != null) ...[
           ro(isEnglish ? 'Bill disc. share' : 'ส่วนลดท้ายบิล (ปันส่วน)', _fmtMoney.format(sd[line]?.bill ?? 0),
@@ -4364,10 +4411,20 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
     );
   }
 
+  // ชื่อบัญชีจากการตั้งค่าประเภทเอกสาร (เก็บชื่อไทย) — ภาษาอังกฤษใช้ชื่อจากผังบัญชีตามรหัส (ไม่มีชื่ออังกฤษ = ชื่อเดิม)
+  String? _setupAcctName(String? code, String? name) {
+    if (code != null && _isEnglish) {
+      for (final a in _accounts) {
+        if (a.accountCode == code) return a.accountNameEng.isNotEmpty ? a.accountNameEng : (name ?? a.accountNameThai);
+      }
+    }
+    return name;
+  }
+
   _Acct _apVatAcct(bool isEnglish) {
     final a = _glAccts?.apVat;
     if (a != null) return (code: a.code, name: a.name(isEnglish));
-    if (_glAccts == null) return (code: _docSetup?.vatInputAccountCode, name: _docSetup?.vatInputAccountName ?? (isEnglish ? 'VAT Input' : 'ภาษีซื้อ'));
+    if (_glAccts == null) return (code: _docSetup?.vatInputAccountCode, name: _setupAcctName(_docSetup?.vatInputAccountCode, _docSetup?.vatInputAccountName) ?? (isEnglish ? 'VAT Input' : 'ภาษีซื้อ'));
     return (code: '!', name: isEnglish ? 'VAT input account not configured' : 'ยังไม่ตั้งบัญชีภาษีซื้อ');
   }
 
@@ -4553,7 +4610,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
           ? (code: '!', name: isEnglish ? 'Purchases account not configured' : 'ยังไม่ตั้งค่าบัญชีซื้อสินค้า')
           : (code: p.code, name: p.name(isEnglish));
     }
-    return _lineAcct(l, (a) => destination ? a.toInventory : a.inventory, _docSetup?.inventoryAccountCode, _docSetup?.inventoryAccountName, isEnglish);
+    return _lineAcct(l, (a) => destination ? a.toInventory : a.inventory, _docSetup?.inventoryAccountCode, _setupAcctName(_docSetup?.inventoryAccountCode, _docSetup?.inventoryAccountName), isEnglish);
   }
 
   // หมายเหตุใต้ตัวอย่าง: ฝั่งสินค้าของบรรทัด Perpetual/Periodic ใช้บัญชีต่างกัน
@@ -4845,8 +4902,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
               grirVariance > 0 ? grirVariance : 0, grirVariance < 0 ? -grirVariance : 0),
         // '13' รับฝากขาย: Cr เจ้าหนี้ฝากขาย / '10': Cr พักรอใบกำกับ (GR/IR) — เหมือน resolveCounterAccount ฝั่ง backend
         _isConsignmentReceiveMode
-            ? _glLine(_docSetup!.consignmentPayableAccountCode, _docSetup!.consignmentPayableAccountName, 0, grirValue)
-            : _glLine(_docSetup!.grirAccountCode, _docSetup!.grirAccountName, 0, grirValue),
+            ? _glLine(_docSetup!.consignmentPayableAccountCode, _setupAcctName(_docSetup!.consignmentPayableAccountCode, _docSetup!.consignmentPayableAccountName), 0, grirValue)
+            : _glLine(_docSetup!.grirAccountCode, _setupAcctName(_docSetup!.grirAccountCode, _docSetup!.grirAccountName), 0, grirValue),
         _modeSideNote(isEnglish),
       ]);
     }
@@ -4945,10 +5002,10 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
       final _Acct counter = lineAcc != null
           ? (code: lineAcc.accountCode, name: isEnglish && lineAcc.accountNameEng.isNotEmpty ? lineAcc.accountNameEng : lineAcc.accountNameThai)
           : isCogsCounter
-          ? _lineAcct(l, (a) => a.cogs, _docSetup!.cogsAccountCode, _docSetup!.cogsAccountName, isEnglish)
+          ? _lineAcct(l, (a) => a.cogs, _docSetup!.cogsAccountCode, _setupAcctName(_docSetup!.cogsAccountCode, _docSetup!.cogsAccountName), isEnglish)
           : isWipCounter
-              ? (code: _docSetup!.wipAccountCode, name: _docSetup!.wipAccountName)
-              : (code: _docSetup!.varianceAccountCode, name: _docSetup!.varianceAccountName);
+              ? (code: _docSetup!.wipAccountCode, name: _setupAcctName(_docSetup!.wipAccountCode, _docSetup!.wipAccountName))
+              : (code: _docSetup!.varianceAccountCode, name: _setupAcctName(_docSetup!.varianceAccountCode, _docSetup!.varianceAccountName));
       counterEntries.add((counter, -v * cost));
     }
     return _card(collapseKey: 'gl', glPreview: true, title: isEnglish ? 'GL Preview (Draft)' : 'ตัวอย่างรายการบัญชี (Draft)', children: [
@@ -4994,7 +5051,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
     final (advLines, advReduce) = _advancePreview(isEnglish, ap: false);
     final total = subtotal + vat - advReduce;
     final vatAcctCode = _docSetup?.vatOutputAccountCode;
-    final vatAcctName = isEnglish ? (_docSetup?.vatOutputAccountName ?? 'VAT Output') : (_docSetup?.vatOutputAccountName ?? 'ภาษีขาย');
+    final vatAcctName = _setupAcctName(_docSetup?.vatOutputAccountCode, _docSetup?.vatOutputAccountName) ?? (isEnglish ? 'VAT Output' : 'ภาษีขาย');
     final arAcct = _arAcct(isEnglish);
     final docLabel = isCredit
         ? (isEnglish ? 'AR Credit Note' : 'ใบลดหนี้ลูกหนี้')
@@ -5242,7 +5299,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
 
   // ── ตารางตัวอย่างรายการบัญชี: รหัสบัญชี | ชื่อบัญชี | มิติ/ชื่อ | เดบิต | เครดิต + แถวรวม (ตามแบบ Gl.dc) ──
   static const _glColCode = 76.0;
-  static const _glHeadStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF4A5562));
+  static const _glHeadStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4A5562));
 
   Widget _glCells(Widget code, Widget name, Widget? dims, Widget dr, Widget cr) => Row(
         crossAxisAlignment: CrossAxisAlignment.start,

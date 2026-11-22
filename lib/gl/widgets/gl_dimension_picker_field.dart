@@ -5,6 +5,10 @@ import '../../sa/services/sa_language_provider.dart';
 
 /// Reusable dimension picker field with searchable dialog.
 /// ใช้แทน DropdownButtonFormField สำหรับ GL/AR dimension ทุกหน้าจอ
+// ชื่อค่ามิติตามภาษา — ไม่มีชื่ออังกฤษ = ชื่อไทย
+String _vName(GlDimensionValue v, bool isEnglish) =>
+    isEnglish && (v.valueNameEng ?? '').isNotEmpty ? v.valueNameEng! : v.valueNameThai;
+
 class GlDimensionPickerField extends StatelessWidget {
   final GlDimensionType dimType;
   final List<GlDimensionValue> values;
@@ -12,6 +16,10 @@ class GlDimensionPickerField extends StatelessWidget {
   final ValueChanged<GlDimensionValue?> onSelected;
   final bool readOnly;
   final bool isDense;         // true = ใน table row / false = ใน card header
+  /// กรอบของหัวเอกสาร (ใช้แทนกรอบมาตรฐานเมื่อ isDense = false) — ให้สูง/สีเท่ากับฟิลด์อื่นของหน้าจอนั้น
+  final InputDecoration? decoration;
+  /// ขนาดตัวอักษรของค่าที่เลือก (แบบไม่ dense) — ให้เท่ากับฟิลด์อื่นของหัวเอกสาร
+  final double fontSize;
 
   const GlDimensionPickerField({
     super.key,
@@ -21,6 +29,8 @@ class GlDimensionPickerField extends StatelessWidget {
     required this.onSelected,
     this.readOnly = false,
     this.isDense = false,
+    this.decoration,
+    this.fontSize = 13,
   });
 
   Future<void> _openDialog(BuildContext context) async {
@@ -44,6 +54,7 @@ class GlDimensionPickerField extends StatelessWidget {
               filtered = sorted.where((v) =>
                   v.valueCode.toLowerCase().contains(lq) ||
                   v.valueNameThai.toLowerCase().contains(lq) ||
+                  (v.valueNameEng ?? '').toLowerCase().contains(lq) ||
                   (v.valueNameEng?.toLowerCase().contains(lq) ?? false)).toList();
             }
           });
@@ -108,7 +119,7 @@ class GlDimensionPickerField extends StatelessWidget {
                                     ? const Icon(Icons.check_circle, color: Colors.teal, size: 18)
                                     : const SizedBox(width: 18),
                                 title: Text(
-                                  '${v.valueCode}  ${v.valueNameThai}',
+                                  '${v.valueCode}  ${_vName(v, isEnglish)}',
                                   style: const TextStyle(fontSize: 14),
                                 ),
                                 onTap: () {
@@ -140,7 +151,7 @@ class GlDimensionPickerField extends StatelessWidget {
 
     if (readOnly) {
       return InputDecorator(
-        decoration: InputDecoration(
+        decoration: !isDense && decoration != null ? decoration! : InputDecoration(
           labelText: isDense ? null : dimType.nameThai,
           border: isDense ? InputBorder.none : const OutlineInputBorder(),
           isDense: true,
@@ -155,15 +166,15 @@ class GlDimensionPickerField extends StatelessWidget {
                 children: [
                   Text(selected!.valueCode,
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal[700])),
-                  Text(selected!.valueNameThai,
+                  Text(_vName(selected!, isEnglish),
                       style: const TextStyle(fontSize: 11, color: Colors.grey),
                       overflow: TextOverflow.ellipsis),
                 ],
               )
             : Text(
-                hasValue ? '${selected!.valueCode} — ${selected!.valueNameThai}' : '—',
+                hasValue ? '${selected!.valueCode} — ${_vName(selected!, isEnglish)}' : '—',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: fontSize,
                   color: hasValue ? Colors.teal[700] : Colors.grey,
                 ),
               ),
@@ -172,7 +183,7 @@ class GlDimensionPickerField extends StatelessWidget {
 
     // Editable
     return InputDecorator(
-      decoration: InputDecoration(
+      decoration: !isDense && decoration != null ? decoration! : InputDecoration(
         labelText: isDense ? null : dimType.nameThai,
         border: isDense ? const UnderlineInputBorder() : const OutlineInputBorder(),
         enabledBorder: isDense
@@ -197,15 +208,15 @@ class GlDimensionPickerField extends StatelessWidget {
                     children: [
                       Text(selected!.valueCode,
                           style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal[700])),
-                      Text(selected!.valueNameThai,
+                      Text(_vName(selected!, isEnglish),
                           style: const TextStyle(fontSize: 11, color: Colors.grey),
                           overflow: TextOverflow.ellipsis),
                     ],
                   )
                 : Text(
-                    hasValue ? '${selected!.valueCode} — ${selected!.valueNameThai}' : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
+                    hasValue ? '${selected!.valueCode} — ${_vName(selected!, isEnglish)}' : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: fontSize,
                       color: hasValue ? Colors.teal[700] : Colors.grey[500],
                       fontWeight: hasValue ? FontWeight.w500 : FontWeight.normal,
                     ),
