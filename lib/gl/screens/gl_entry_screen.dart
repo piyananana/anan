@@ -111,6 +111,13 @@ class _GlEntryScreenState extends State<GlEntryScreen>
               animation: _detailActions,
               builder: (ctx, _) => _detailActions.build(ctx, isEnglish),
             ),
+          // หน้ารายการ: ปุ่มเพิ่มเอกสารบน AppBar (ปุ่มทึบแบบเดียวกับปุ่มของหน้ารายละเอียด)
+          if (_currentTabIndex == 0 && canCreate)
+            buildDocBarActions(
+              context,
+              [DocBarAction.primary(isEnglish ? 'Add Document' : 'เพิ่มเอกสาร', () => _openDetailTab(id: null, viewOnly: false), DocBarColors.submit)],
+              isEnglish: isEnglish,
+            ),
           // หน้ารายละเอียดซ่อนปุ่มรีเฟรช (กดพลาดแล้วการแก้ไขหาย) — กลับรายการด้วยลูกศรย้อนกลับ
           if (_currentTabIndex == 0)
           IconButton(
@@ -133,8 +140,6 @@ class _GlEntryScreenState extends State<GlEntryScreen>
               index: _currentTabIndex,
               children: [
                 GlEntryListWidget(
-                  onAddPressed: () =>
-                      _openDetailTab(id: null, viewOnly: false),
                   onEditPressed: (id) =>
                       _openDetailTab(id: id, viewOnly: false),
                   onViewPressed: (id) =>
@@ -142,7 +147,6 @@ class _GlEntryScreenState extends State<GlEntryScreen>
                   shouldRefresh: _shouldRefreshList,
                   onRefreshComplete: () =>
                       setState(() => _shouldRefreshList = false),
-                  enableAddButton: canCreate,
                   enableEditButton: canEdit,
                   enableDeleteButton: canDelete,
                 ),

@@ -117,6 +117,13 @@ class _MoHeaderScreenState extends State<MoHeaderScreen> with SingleTickerProvid
               animation: _detailActions,
               builder: (ctx, _) => _detailActions.build(ctx, isEnglish),
             ),
+          // หน้ารายการ: ปุ่มเพิ่มเอกสารบน AppBar (ปุ่มทึบแบบเดียวกับปุ่มของหน้ารายละเอียด)
+          if (_currentTabIndex == 0 && canCreate)
+            buildDocBarActions(
+              context,
+              [DocBarAction.primary(isEnglish ? 'Add Document' : 'เพิ่มเอกสาร', () => _openDetailTab(), DocBarColors.submit)],
+              isEnglish: isEnglish,
+            ),
           // หน้ารายละเอียดซ่อนปุ่มรีเฟรช (กดพลาดแล้วการแก้ไขหาย) — กลับรายการด้วยลูกศรย้อนกลับ
           if (_currentTabIndex == 0)
           IconButton(
@@ -140,12 +147,10 @@ class _MoHeaderScreenState extends State<MoHeaderScreen> with SingleTickerProvid
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 MoHeaderListWidget(
-                  onAddPressed: () => _openDetailTab(),
                   onEditPressed: (id) => _openDetailTab(id: id),
                   onViewPressed: (id) => _openDetailTab(id: id),
                   shouldRefresh: _shouldRefreshList,
                   onRefreshComplete: () => setState(() => _shouldRefreshList = false),
-                  enableAddButton: canCreate,
                   enableEditButton: canEdit,
                 ),
                 MoHeaderDetailWidget(

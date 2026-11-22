@@ -43,6 +43,7 @@ class QuoteTransactionHeader {
   final int? customerId;
   final String? customerCode;
   final String? customerNameTh;
+  final String? customerNameEn; // จากรายการ (list) — ชื่อภาษาอังกฤษ
   final int? warehouseId;
   final String? warehouseCode;
   final String? warehouseNameTh;
@@ -94,6 +95,7 @@ class QuoteTransactionHeader {
     this.customerId,
     this.customerCode,
     this.customerNameTh,
+    this.customerNameEn,
     this.warehouseId,
     this.warehouseCode,
     this.warehouseNameTh,
@@ -142,6 +144,7 @@ class QuoteTransactionHeader {
       customerId: json['customer_id'],
       customerCode: json['customer_code'] ?? json['c_customer_code'],
       customerNameTh: json['customer_name_th'] ?? json['c_customer_name_th'],
+      customerNameEn: json['customer_name_en'],
       warehouseId: json['warehouse_id'],
       warehouseCode: json['warehouse_code'],
       warehouseNameTh: json['warehouse_name_th'],

@@ -10,26 +10,26 @@ import '../../sa/models/sa_module_document.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/widgets/sa_doc_list_kit.dart';
 import '../../cd/models/cd_branch.dart';
 import '../../cd/services/cd_branch_service.dart';
+import '../../cd/services/cd_currency_service.dart';
 
+// หน้ารายการธุรกรรม AR — แบบเดียวกับหน้ารายการ IM (sa_doc_list_kit.dart):
+// ① เอกสาร ② ลูกค้า/สาขา ③ สถานะ ④ ค้นหาเพิ่มเติม (+ มิติ) / ตาราง: เอกสาร | ลูกค้า/อ้างอิง | ยอด
 class ArTransactionListWidget extends StatefulWidget {
-  final VoidCallback onAddPressed;
   final Function(int) onEditPressed;
   final Function(int) onViewPressed;
   final bool shouldRefresh;
   final VoidCallback onRefreshComplete;
-  final bool enableAddButton;
   final bool enableEditButton;
 
   const ArTransactionListWidget({
     super.key,
-    required this.onAddPressed,
     required this.onEditPressed,
     required this.onViewPressed,
     required this.shouldRefresh,
     required this.onRefreshComplete,
-    this.enableAddButton = true,
     this.enableEditButton = true,
   });
 
@@ -37,51 +37,57 @@ class ArTransactionListWidget extends StatefulWidget {
   State<ArTransactionListWidget> createState() => _ArTransactionListWidgetState();
 }
 
-class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
-    with AutomaticKeepAliveClientMixin {
+class _ArTransactionListWidgetState extends State<ArTransactionListWidget> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
   final ArTransactionService _service = ArTransactionService();
   final GlDimensionService _dimService = GlDimensionService();
   final BranchService _branchService = BranchService();
   final _fmt = NumberFormat('#,##0.00');
-  final _dateFmt = DateFormat('dd/MM/yyyy');
+  final _dateFmt = DocListKit.dateFmt;
   bool _isEnglish = false;
 
-  // _rows = ข้อมูลทั้งหมดจาก server (กรองตาม docType + ช่วงวันที่ + branch + dims)
-  // _filteredRows = ข้อมูลหลัง client-side filter (status + search)
+  // _rows = จาก server (ประเภท + ช่วงวันที่ + สาขา + มิติ) / _filteredRows = หลังกรองในหน้าจอ (สถานะ + ลูกค้า + คำค้น)
   List<ArTransactionHeader> _rows = [];
   List<ArTransactionHeader> _filteredRows = [];
   List<ModuleDocument> _docTypes = [];
   bool _isLoading = false;
 
   final _searchCtrl = TextEditingController();
-  String? _selectedStatus;
+  final _partyCtrl = TextEditingController();
+  final Set<String> _statuses = {};
   String? _selectedDocType;
   List<UserBranch> _allowedBranches = [];
-  UserBranch? _selectedBranchFilter;
+  int? _selectedBranchId;
   List<Branch> _allBranches = [];
   List<GlDimensionType> _dimTypes = [];
-  Map<String, List<GlDimensionValue>> _dimValues = {};
-  Map<int, int?> _dimSelections = {}; // slotNo → selected dimValueId
-
-  final DateTime _defaultDateFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
-  final DateTime _defaultDateTo   = DateTime(DateTime.now().year, DateTime.now().month + 1, 0);
+  final Map<String, List<GlDimensionValue>> _dimValues = {};
+  final Map<int, int?> _dimSelections = {}; // slotNo → dimValueId
 
   late DateTime _dateFrom;
   late DateTime _dateTo;
+  String? _preset = 'month';
+
+  String _sortKey = 'date';
+  bool _sortAsc = false;
+  bool _collapsed = false;
+  static const _collapsedPrefKey = 'ar_list_filter_collapsed';
+  static const _statusOrder = ['Draft', 'Posted', 'Void', 'Deleted'];
 
   @override
   void initState() {
     super.initState();
-    _dateFrom = _defaultDateFrom;
-    _dateTo   = _defaultDateTo;
+    _applyPreset('month');
+    DocListPrefs.loadCollapsed(_collapsedPrefKey).then((v) {
+      if (mounted && v != _collapsed) setState(() => _collapsed = v);
+    });
     _initialLoad();
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _partyCtrl.dispose();
     super.dispose();
   }
 
@@ -96,26 +102,23 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
     }
   }
 
+  int? get _defaultBranchId => _allowedBranches.length == 1 ? _allowedBranches.first.branchId : null;
+
   Future<void> _initialLoad() async {
     final isEnglish = _isEnglish;
     setState(() => _isLoading = true);
     _allowedBranches = AuthService().allowedBranches;
-    if (_allowedBranches.length == 1) {
-      _selectedBranchFilter = _allowedBranches.first;
-    }
+    _selectedBranchId = _defaultBranchId;
     try {
       final results = await Future.wait([
         _service.fetchDocTypesByUser(),
         _dimService.fetchActiveTypes(),
         _branchService.fetchRows(),
       ]);
-      final docTypes = results[0] as List<ModuleDocument>;
       final types = results[1] as List<GlDimensionType>;
-      final valResults = await Future.wait(
-        types.map((t) => _dimService.fetchValuesByType(t.typeCode)),
-      );
+      final valResults = await Future.wait(types.map((t) => _dimService.fetchValuesByType(t.typeCode)));
       setState(() {
-        _docTypes = docTypes.where((d) => d.isDocType).toList();
+        _docTypes = (results[0] as List<ModuleDocument>).where((d) => d.isDocType).toList();
         _dimTypes = types;
         for (int i = 0; i < types.length; i++) {
           _dimValues[types[i].typeCode] = valResults[i];
@@ -124,74 +127,92 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
       });
       await _fetchRows();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // โหลดจาก server ด้วย primary filter เท่านั้น (docType + ช่วงวันที่)
-  // แล้ว _applyFilter() จะกรอง status + search แบบ client-side
   Future<void> _fetchRows() async {
     final isEnglish = _isEnglish;
     setState(() => _isLoading = true);
     try {
       final rows = await _service.fetchRows(
         docType: _selectedDocType,
-        // backend ซ่อนเอกสารที่ลบแล้วเมื่อไม่ระบุสถานะ — ดึงเฉพาะเมื่อกรองสถานะ Deleted
-        status: _selectedStatus == 'Deleted' ? 'Deleted' : null,
         dateFrom: DateFormat('yyyy-MM-dd').format(_dateFrom),
         dateTo: DateFormat('yyyy-MM-dd').format(_dateTo),
-        branchId: _selectedBranchFilter?.branchId,
+        branchId: _selectedBranchId,
         dim1Id: _dimSelections[1],
         dim2Id: _dimSelections[2],
         dim3Id: _dimSelections[3],
         dim4Id: _dimSelections[4],
         dim5Id: _dimSelections[5],
+        includeDeleted: _statuses.contains('Deleted'),
       );
       setState(() {
         _rows = rows;
         _applyFilter();
       });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // กรอง client-side: status + search text จาก _rows → _filteredRows
+  String _customerName(ArTransactionHeader r) =>
+      _isEnglish && (r.customerNameEn ?? '').isNotEmpty ? r.customerNameEn! : (r.customerNameTh ?? '');
+
+  bool _baseMatch(ArTransactionHeader r) {
+    final party = _partyCtrl.text.trim().toLowerCase();
+    if (party.isNotEmpty && ![r.customerCode, r.customerNameTh, r.customerNameEn].any((s) => (s ?? '').toLowerCase().contains(party))) {
+      return false;
+    }
+    return docKeywordMatch(_searchCtrl.text, [
+      r.docNo, r.docCode, r.docNameThai, r.docNameEng, _dateFmt.format(r.docDate),
+      r.dueDate != null ? _dateFmt.format(r.dueDate!) : null,
+      r.customerCode, r.customerNameTh, r.customerNameEn, r.refNo, r.refDocNo, r.customerPoNo, r.description, r.status,
+    ]);
+  }
+
+  bool _statusMatch(ArTransactionHeader r) => _statuses.isEmpty ? r.status != 'Deleted' : _statuses.contains(r.status);
+
   void _applyFilter() {
-    final query = _searchCtrl.text.trim().toLowerCase();
-    Iterable<ArTransactionHeader> base = _rows;
+    final list = _rows.where((r) => _baseMatch(r) && _statusMatch(r)).toList();
+    list.sort((a, b) {
+      final c = switch (_sortKey) {
+        'docNo' => a.docNo.compareTo(b.docNo),
+        'due' => (a.dueDate ?? DateTime(1900)).compareTo(b.dueDate ?? DateTime(1900)),
+        'total' => a.totalAmountLc.compareTo(b.totalAmountLc),
+        'balance' => a.balanceAmountLc.compareTo(b.balanceAmountLc),
+        _ => a.docDate.compareTo(b.docDate),
+      };
+      return c != 0 ? (_sortAsc ? c : -c) : b.docNo.compareTo(a.docNo);
+    });
+    _filteredRows = list;
+  }
 
-    if (_selectedStatus != null) {
-      base = base.where((r) => r.status == _selectedStatus);
-    }
+  void _setSort(String key) {
+    setState(() {
+      if (_sortKey == key) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortKey = key;
+        _sortAsc = key == 'docNo';
+      }
+      _applyFilter();
+    });
+  }
 
-    if (query.isEmpty) {
-      _filteredRows = base.toList();
-      return;
-    }
-
-    final keywords = query.split(RegExp(r'\s+'));
-    _filteredRows = base.where((r) {
-      final fields = [
-        r.docNo,
-        r.docCode ?? '',
-        r.docNameThai ?? '',
-        _dateFmt.format(r.docDate),
-        r.dueDate != null ? _dateFmt.format(r.dueDate!) : '',
-        r.customerCode ?? '',
-        r.customerNameTh ?? '',
-        r.customerNameEn ?? '',
-        r.refNo ?? '',
-        r.status,
-      ].map((f) => f.toLowerCase()).toList();
-      return keywords.every((kw) => fields.any((f) => f.contains(kw)));
-    }).toList();
+  void _applyPreset(String p) {
+    final (a, b) = DocDatePresets.range(p);
+    _dateFrom = a;
+    _dateTo = b;
+    _preset = p;
   }
 
   Future<void> _pickDate(bool isFrom) async {
@@ -203,357 +224,288 @@ class _ArTransactionListWidgetState extends State<ArTransactionListWidget>
     );
     if (picked != null) {
       setState(() {
-        if (isFrom) _dateFrom = picked;
-        else _dateTo = picked;
+        if (isFrom) {
+          _dateFrom = picked;
+        } else {
+          _dateTo = picked;
+        }
+        _preset = null;
       });
       _fetchRows();
     }
   }
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'Draft':  return Colors.orange;
-      case 'Posted': return Colors.green;
-      case 'Void':   return Colors.red;
-      default:       return Colors.grey;
-    }
+  bool get _hasActiveFilters {
+    final (a, b) = DocDatePresets.range('month');
+    return _statuses.isNotEmpty ||
+        _selectedDocType != null ||
+        _selectedBranchId != _defaultBranchId ||
+        _dimSelections.values.any((v) => v != null) ||
+        _dateFrom != a ||
+        _dateTo != b ||
+        _searchCtrl.text.isNotEmpty ||
+        _partyCtrl.text.isNotEmpty;
   }
 
-  // UserBranch (allowed branches) has no English name — resolve it from the
-  // full bilingual Branch list (loaded in _initialLoad) by branchId.
-  String _resolveBranchName(int? branchId, String fallbackThai) {
+  void _clearFilters() {
+    setState(() {
+      _applyPreset('month');
+      _statuses.clear();
+      _selectedDocType = null;
+      _selectedBranchId = _defaultBranchId;
+      _dimSelections.clear();
+      _searchCtrl.clear();
+      _partyCtrl.clear();
+      _applyFilter();
+    });
+    _fetchRows();
+  }
+
+  void _toggleStatus(String s) {
+    final before = _statuses.contains('Deleted');
+    setState(() {
+      _statuses.contains(s) ? _statuses.remove(s) : _statuses.add(s);
+      _applyFilter();
+    });
+    if (_statuses.contains('Deleted') != before) _fetchRows();
+  }
+
+  // UserBranch ไม่มีชื่ออังกฤษ — หาจากรายการสาขาเต็มตามรหัส
+  String _branchLabel(UserBranch b) {
+    var name = b.branchNameThai;
     if (_isEnglish) {
-      final match = _allBranches.where((b) => b.id == branchId);
-      if (match.isNotEmpty && match.first.branchNameEng.isNotEmpty) {
-        return match.first.branchNameEng;
+      for (final x in _allBranches) {
+        if (x.id == b.branchId && x.branchNameEng.isNotEmpty) name = x.branchNameEng;
       }
     }
-    return fallbackThai;
+    return '${b.branchCode} $name';
   }
 
-  String _docTypeNameFromHeader(ArTransactionHeader row) {
+  String _docTypeLabel(ModuleDocument d) => '${d.docCode} ${_isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai}';
+
+  String _rowDocTypeName(ArTransactionHeader row) {
+    final name = _isEnglish && (row.docNameEng ?? '').isNotEmpty ? row.docNameEng! : (row.docNameThai ?? '');
     final code = row.docCode ?? '';
-    final name = _isEnglish && (row.docNameEng ?? '').isNotEmpty
-        ? row.docNameEng!
-        : (row.docNameThai ?? '');
     return code.isNotEmpty ? '$code $name' : name;
   }
 
-  bool get _hasActiveFilters =>
-      _selectedStatus != null ||
-      _selectedDocType != null ||
-      _selectedBranchFilter != null ||
-      _dimSelections.values.any((v) => v != null) ||
-      _dateFrom != _defaultDateFrom ||
-      _dateTo != _defaultDateTo ||
-      _searchCtrl.text.isNotEmpty;
+  String _dimTypeName(GlDimensionType t) => _isEnglish && (t.nameEng ?? '').isNotEmpty ? t.nameEng! : t.nameThai;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
-    return Column(
-      children: [
-        _buildFilterRow(isEnglish),
-        const Divider(height: 1),
-        if (!_isLoading)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _hasActiveFilters
-                    ? (isEnglish
-                        ? 'Found ${_filteredRows.length} of ${_rows.length} rows'
-                        : 'พบ ${_filteredRows.length} รายการ จาก ${_rows.length} รายการ')
-                    : (isEnglish
-                        ? '${_filteredRows.length} rows'
-                        : '${_filteredRows.length} รายการ'),
-                style: const TextStyle(fontSize: 12, color: Colors.black87),
-              ),
-            ),
+    return docListLayout(context, filterCard: _buildFilterCard(isEnglish), listCard: _buildListCard(isEnglish));
+  }
+
+  Widget _buildFilterCard(bool isEnglish) {
+    final visibleAll = _rows.where((r) => r.status != 'Deleted').length;
+    final countText = _isLoading
+        ? (isEnglish ? 'Loading…' : 'กำลังโหลด…')
+        : _hasActiveFilters
+            ? (isEnglish ? 'Found ${_filteredRows.length} of $visibleAll' : 'พบ ${_filteredRows.length} จาก $visibleAll รายการ')
+            : (isEnglish ? '${_filteredRows.length} rows' : '${_filteredRows.length} รายการ');
+    final base = _rows.where(_baseMatch).toList();
+
+    String? docType;
+    for (final d in _docTypes) {
+      if (d.sysDocType == _selectedDocType) docType = _docTypeLabel(d);
+    }
+    String? branch;
+    for (final b in _allowedBranches) {
+      if (b.branchId == _selectedBranchId) branch = _branchLabel(b);
+    }
+    final dimSummary = <String>[];
+    for (final t in _dimTypes) {
+      final id = _dimSelections[t.slotNo];
+      for (final v in _dimValues[t.typeCode] ?? const <GlDimensionValue>[]) {
+        if (v.id == id) dimSummary.add('${_dimTypeName(t)}: ${v.valueCode}');
+      }
+    }
+
+    return DocFilterCard(
+      isEnglish: isEnglish,
+      countText: countText,
+      hasActive: _hasActiveFilters,
+      onClear: _clearFilters,
+      collapsed: _collapsed,
+      onToggleCollapse: () {
+        setState(() => _collapsed = !_collapsed);
+        DocListPrefs.saveCollapsed(_collapsedPrefKey, _collapsed);
+      },
+      flexes: const [12, 10, 10, 11],
+      groups: [
+        docFilterGroup(1, isEnglish ? 'Document' : 'เอกสาร', [
+          docDropdown<String>(
+            label: isEnglish ? 'Document Type' : 'ประเภทเอกสาร',
+            value: _selectedDocType,
+            allLabel: isEnglish ? 'All' : 'ทั้งหมด',
+            items: [for (final d in _docTypes) (d.sysDocType, _docTypeLabel(d))],
+            onChanged: (v) {
+              setState(() => _selectedDocType = v);
+              _fetchRows();
+            },
           ),
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _buildTable(isEnglish),
-        ),
+          Row(children: [
+            Expanded(child: docDateField(isEnglish ? 'From Date' : 'จากวันที่', _dateFrom, () => _pickDate(true))),
+            const SizedBox(width: 8),
+            Expanded(child: docDateField(isEnglish ? 'To Date' : 'ถึงวันที่', _dateTo, () => _pickDate(false))),
+          ]),
+          docPresetRow(
+            selected: _preset,
+            isEnglish: isEnglish,
+            onPick: (p) {
+              setState(() => _applyPreset(p));
+              _fetchRows();
+            },
+          ),
+        ]),
+        docFilterGroup(2, isEnglish ? 'Customer / Branch' : 'ลูกค้า / สาขา', [
+          docSearchField(_partyCtrl, isEnglish ? 'Customer (code / name)' : 'ลูกค้า (รหัส / ชื่อ)', () => setState(_applyFilter)),
+          if (_allowedBranches.length > 1)
+            docDropdown<int>(
+              label: isEnglish ? 'Branch' : 'สาขา',
+              value: _selectedBranchId,
+              allLabel: isEnglish ? 'All Branches' : 'ทุกสาขา',
+              items: [for (final b in _allowedBranches) (b.branchId, _branchLabel(b))],
+              onChanged: (v) {
+                setState(() => _selectedBranchId = v);
+                _fetchRows();
+              },
+            ),
+        ]),
+        docFilterGroup(3, isEnglish ? 'Status' : 'สถานะ', [
+          docStatusToggles(
+            statuses: _statusOrder,
+            selected: _statuses,
+            isEnglish: isEnglish,
+            count: (s) => s == 'Deleted' && !_statuses.contains(s) ? null : base.where((r) => r.status == s).length,
+            onToggle: _toggleStatus,
+          ),
+        ]),
+        docFilterGroup(4, isEnglish ? 'More' : 'ค้นหาเพิ่มเติม', [
+          docSearchField(
+            _searchCtrl,
+            isEnglish ? 'Search (doc no. / ref / PO)' : 'ค้นหา (เลขที่ / อ้างอิง / PO)',
+            () => setState(_applyFilter),
+            tooltip: isEnglish ? 'Doc no. / reference / customer PO / description' : 'เลขที่เอกสาร / เลขที่อ้างอิง / ใบสั่งซื้อลูกค้า / คำอธิบาย',
+          ),
+          for (final t in _dimTypes) _dimPicker(t),
+        ]),
+      ],
+      summary: [
+        DocSummaryItem(DocListKit.gDoc, isEnglish ? 'Type' : 'ประเภท', docType ?? (isEnglish ? 'All' : 'ทั้งหมด')),
+        DocSummaryItem(DocListKit.gDoc, isEnglish ? 'Date' : 'วันที่', '${_dateFmt.format(_dateFrom)} – ${_dateFmt.format(_dateTo)}'),
+        if (_partyCtrl.text.trim().isNotEmpty) DocSummaryItem(DocListKit.gParty, isEnglish ? 'Customer' : 'ลูกค้า', _partyCtrl.text.trim()),
+        if (_allowedBranches.length > 1)
+          DocSummaryItem(DocListKit.gParty, isEnglish ? 'Branch' : 'สาขา', branch ?? (isEnglish ? 'All' : 'ทุกสาขา')),
+        DocSummaryItem(DocListKit.gFin, isEnglish ? 'Status' : 'สถานะ',
+            _statuses.isEmpty ? (isEnglish ? 'All' : 'ทุกสถานะ') : _statusOrder.where(_statuses.contains).join(', ')),
+        if (_searchCtrl.text.trim().isNotEmpty) DocSummaryItem(DocListKit.gMore, isEnglish ? 'Search' : 'ค้นหา', _searchCtrl.text.trim()),
+        if (dimSummary.isNotEmpty) DocSummaryItem(DocListKit.gMore, isEnglish ? 'Dimensions' : 'มิติ', dimSummary.join(', ')),
       ],
     );
   }
 
-  Widget _buildFilterRow(bool isEnglish) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Row 1: ประเภทเอกสาร | สถานะ | จากวันที่ | ถึงวันที่
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String?>(
-                  value: _selectedDocType,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                      labelText: isEnglish ? 'Document Type' : 'ประเภทเอกสาร', isDense: true, border: const OutlineInputBorder()),
-                  items: [
-                    DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
-                    ..._docTypes.map((d) => DropdownMenuItem(
-                        value: d.sysDocType,
-                        child: Text('${d.docCode} ${isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai}',
-                            overflow: TextOverflow.ellipsis))),
-                  ],
-                  onChanged: (v) {
-                    setState(() => _selectedDocType = v);
-                    _fetchRows(); // server fetch เมื่อเปลี่ยนประเภทเอกสาร
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: DropdownButtonFormField<String?>(
-                  value: _selectedStatus,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                      labelText: isEnglish ? 'Status' : 'สถานะ', isDense: true, border: const OutlineInputBorder()),
-                  items: [
-                    DropdownMenuItem(value: null, child: Text(isEnglish ? 'All' : 'ทั้งหมด')),
-                    const DropdownMenuItem(value: 'Draft', child: Text('Draft')),
-                    const DropdownMenuItem(value: 'Posted', child: Text('Posted')),
-                    const DropdownMenuItem(value: 'Void', child: Text('Void')),
-                    const DropdownMenuItem(value: 'Deleted', child: Text('Deleted')),
-                  ],
-                  onChanged: (v) {
-                    final refetch = v == 'Deleted' || _selectedStatus == 'Deleted';
-                    setState(() {
-                      _selectedStatus = v;
-                      _applyFilter();
-                    });
-                    if (refetch) _fetchRows();
-                  },
-                ),
-              ),
-              if (_allowedBranches.length > 1) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonFormField<UserBranch?>(
-                    value: _selectedBranchFilter,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                        labelText: isEnglish ? 'Branch' : 'สาขา', isDense: true, border: const OutlineInputBorder()),
-                    items: [
-                      DropdownMenuItem<UserBranch?>(value: null, child: Text(isEnglish ? 'All Branches' : 'ทุกสาขา')),
-                      ..._allowedBranches.map((b) => DropdownMenuItem(
-                            value: b,
-                            child: Text('${b.branchCode} ${_resolveBranchName(b.branchId, b.branchNameThai)}',
-                                overflow: TextOverflow.ellipsis),
-                          )),
-                    ],
-                    onChanged: (v) {
-                      setState(() => _selectedBranchFilter = v);
-                      _fetchRows(); // server-side filter
-                    },
-                  ),
-                ),
-              ],
-              const SizedBox(width: 8),
-              Expanded(
-                child: InkWell(
-                  onTap: () => _pickDate(true),
-                  child: InputDecorator(
-                    decoration: InputDecoration(
-                        labelText: isEnglish ? 'From Date' : 'จากวันที่', isDense: true, border: const OutlineInputBorder()),
-                    child: Text(
-                        _dateFmt.format(_dateFrom),
-                        style: const TextStyle(fontSize: 13)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: InkWell(
-                  onTap: () => _pickDate(false),
-                  child: InputDecorator(
-                    decoration: InputDecoration(
-                        labelText: isEnglish ? 'To Date' : 'ถึงวันที่', isDense: true, border: const OutlineInputBorder()),
-                    child: Text(
-                        _dateFmt.format(_dateTo),
-                        style: const TextStyle(fontSize: 13)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (_dimTypes.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: _dimTypes.expand((t) {
-                final vals = _dimValues[t.typeCode] ?? [];
-                final selId = _dimSelections[t.slotNo];
-                final selVal = vals.cast<GlDimensionValue?>()
-                    .firstWhere((v) => v?.id == selId, orElse: () => null);
-                return [
-                  if (_dimTypes.first != t) const SizedBox(width: 8),
-                  Expanded(
-                    child: GlDimensionPickerField(
-                      dimType: t,
-                      values: vals,
-                      selected: selVal,
-                      isDense: false,
-                      onSelected: (val) {
-                        setState(() => _dimSelections[t.slotNo] = val?.id);
-                        _fetchRows();
-                      },
-                    ),
-                  ),
-                ];
-              }).toList(),
-            ),
-          ],
-          const SizedBox(height: 6),
-          // Row 2: ค้นหา | เพิ่มเอกสาร | ล้าง
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    labelText: isEnglish
-                        ? 'Search (Doc No. / Customer / Ref No.)'
-                        : 'ค้นหา (เลขที่เอกสาร / ลูกค้า / เลขที่อ้างอิง)',
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    suffixIcon: const Icon(Icons.search, size: 16),
-                  ),
-                  onChanged: (_) => setState(() => _applyFilter()),
-                ),
-              ),
-              const SizedBox(width: 8),
-              if (widget.enableAddButton)
-                ElevatedButton.icon(
-                  onPressed: widget.onAddPressed,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: Text(isEnglish ? 'Add Document' : 'เพิ่มเอกสาร'),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
-                ),
-              if (_hasActiveFilters) ...[
-                const SizedBox(width: 4),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _dateFrom = _defaultDateFrom;
-                      _dateTo   = _defaultDateTo;
-                      _selectedStatus = null;
-                      _selectedDocType = null;
-                      _selectedBranchFilter = null;
-                      _dimSelections.clear();
-                      _searchCtrl.clear();
-                    });
-                    _fetchRows();
-                  },
-                  child: Text(isEnglish ? 'Clear' : 'ล้าง'),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
+  Widget _dimPicker(GlDimensionType t) {
+    final vals = _dimValues[t.typeCode] ?? const <GlDimensionValue>[];
+    GlDimensionValue? sel;
+    for (final v in vals) {
+      if (v.id == _dimSelections[t.slotNo]) sel = v;
+    }
+    return GlDimensionPickerField(
+      dimType: t,
+      values: vals,
+      selected: sel,
+      fontSize: DocListKit.fontSize,
+      decoration: docFieldDec(_dimTypeName(t)),
+      onSelected: (v) {
+        setState(() => _dimSelections[t.slotNo] = v?.id);
+        _fetchRows();
+      },
     );
   }
 
-  Widget _buildTable(bool isEnglish) {
-    if (_filteredRows.isEmpty) {
-      return Center(
-        child: Text(_rows.isEmpty
-            ? (isEnglish ? 'No records found' : 'ไม่พบรายการ')
-            : (isEnglish ? 'No records match your search' : 'ไม่พบรายการที่ตรงกับคำค้น')),
-      );
-    }
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minWidth: constraints.maxWidth),
-          child: DataTable(
-            headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
-            columnSpacing: 12,
-            dataRowMinHeight: 32,
-            dataRowMaxHeight: 42,
-            columns: [
-              DataColumn(label: Text(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Type' : 'ประเภท', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Due Date' : 'ครบกำหนด', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Customer' : 'ลูกค้า', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Total' : 'ยอดรวม', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-              DataColumn(label: Text(isEnglish ? 'Paid' : 'ชำระแล้ว', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-              DataColumn(label: Text(isEnglish ? 'Balance' : 'คงเหลือ', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-              DataColumn(label: Text(isEnglish ? 'Status' : 'สถานะ', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Actions' : 'จัดการ', style: const TextStyle(fontWeight: FontWeight.bold))),
-            ],
-            rows: _filteredRows.map((row) {
-              final isDraft = row.status == 'Draft';
-              return DataRow(
-                cells: [
-                  DataCell(
-                    Text(row.docNo,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                    onTap: () => isDraft
-                        ? widget.onEditPressed(row.id)
-                        : widget.onViewPressed(row.id),
-                  ),
-                  DataCell(Text(_docTypeNameFromHeader(row), style: const TextStyle(fontSize: 12))),
-                  DataCell(Text(_dateFmt.format(row.docDate), style: const TextStyle(fontSize: 12))),
-                  DataCell(Text(
-                      row.sysDocType == arDocTypeInvoice && row.dueDate != null
-                          ? _dateFmt.format(row.dueDate!)
-                          : '',
-                      style: const TextStyle(fontSize: 12))),
-                  DataCell(Text(
-                      '${row.customerCode ?? ''} ${isEnglish && (row.customerNameEn ?? '').isNotEmpty ? row.customerNameEn! : (row.customerNameTh ?? '')}'.trim(),
-                      style: const TextStyle(fontSize: 12))),
-                  DataCell(Text(_fmt.format(row.totalAmountLc),
-                      style: const TextStyle(fontSize: 12))),
-                  DataCell(Text(_fmt.format(row.paidAmountLc),
-                      style: const TextStyle(fontSize: 12))),
-                  DataCell(Text(_fmt.format(row.balanceAmountLc),
-                      style: const TextStyle(fontSize: 12, color: Colors.blue))),
-                  DataCell(Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _statusColor(row.status).withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(row.status,
-                        style: TextStyle(
-                            color: _statusColor(row.status),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600)),
-                  )),
-                  DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
-                    if (isDraft && widget.enableEditButton)
-                      IconButton(
-                        icon: const Icon(Icons.edit, size: 16),
-                        tooltip: isEnglish ? 'Edit' : 'แก้ไข',
-                        onPressed: () => widget.onEditPressed(row.id),
-                        visualDensity: VisualDensity.compact,
-                      )
-                    else
-                      IconButton(
-                        icon: const Icon(Icons.visibility, size: 16),
-                        tooltip: isEnglish ? 'View' : 'ดู',
-                        onPressed: () => widget.onViewPressed(row.id),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ])),
-                ],
-              );
-            }).toList(),
-          ),
-        ),
-      ),
+  Widget _buildListCard(bool isEnglish) {
+    final counted = _filteredRows.where((r) => r.status != 'Void' && r.status != 'Deleted').toList();
+    double sum(double Function(ArTransactionHeader) f) => counted.fold<double>(0, (s, r) => s + f(r));
+    final total = sum((r) => r.totalAmountLc), paid = sum((r) => r.paidAmountLc), balance = sum((r) => r.balanceAmountLc);
+    final drafts = _filteredRows.where((r) => r.status == 'Draft').length;
+    final base = CurrencyService.baseCode;
+
+    return DocListCard(
+      title: isEnglish ? 'Documents' : 'รายการเอกสาร',
+      chips: [if (drafts > 0) docChip(isEnglish ? 'Draft $drafts' : 'ร่าง $drafts', const Color(0xFFE65100), const Color(0xFFFFF0D9))],
+      trailing: counted.isEmpty ? null : docTotalLabel(isEnglish ? 'Balance' : 'คงเหลือรวม', balance, base),
+      columns: [
+        DocListColumn('doc', isEnglish ? 'Doc No. / Type' : 'เลขที่ / ประเภท', 200, 1, sortKey: 'docNo'),
+        DocListColumn('date', isEnglish ? 'Date' : 'วันที่', 92, 1, sortKey: 'date'),
+        DocListColumn('due', isEnglish ? 'Due Date' : 'ครบกำหนด', 92, 1, sortKey: 'due'),
+        DocListColumn('party', isEnglish ? 'Customer' : 'ลูกค้า', 0, 2),
+        DocListColumn('ref', isEnglish ? 'Reference' : 'อ้างอิง', 130, 2),
+        DocListColumn('total', '${isEnglish ? 'Total' : 'ยอดรวม'} ($base)', 124, 3, right: true, sortKey: 'total'),
+        DocListColumn('paid', isEnglish ? 'Paid' : 'ชำระแล้ว', 112, 3, right: true),
+        DocListColumn('balance', isEnglish ? 'Balance' : 'คงเหลือ', 120, 3, right: true, sortKey: 'balance'),
+        DocListColumn('status', isEnglish ? 'Status' : 'สถานะ', 84, 0),
+        const DocListColumn('act', '', 40, 0),
+      ],
+      groupTitle: (g) => switch (g) {
+        1 => isEnglish ? 'Document' : 'เอกสาร',
+        2 => isEnglish ? 'Customer / Reference' : 'ลูกค้า / อ้างอิง',
+        _ => isEnglish ? 'Amounts' : 'ยอด',
+      },
+      rowCount: _filteredRows.length,
+      loading: _isLoading,
+      emptyText: _rows.isEmpty
+          ? (isEnglish ? 'No documents in this date range' : 'ไม่พบเอกสารในช่วงวันที่นี้')
+          : (isEnglish ? 'No documents match the criteria — try a wider date range or clear filters'
+              : 'ไม่พบเอกสารที่ตรงกับเงื่อนไข — ลองขยายช่วงวันที่หรือล้างเงื่อนไข'),
+      sortKey: _sortKey,
+      sortAsc: _sortAsc,
+      onSort: _setSort,
+      onTap: (n) {
+        final r = _filteredRows[n];
+        r.status == 'Draft' && widget.enableEditButton ? widget.onEditPressed(r.id) : widget.onViewPressed(r.id);
+      },
+      cell: (n, key) => _cell(_filteredRows[n], key, isEnglish),
+      footer: {
+        'doc': docFooterCount(counted.length, isEnglish, exclude: isEnglish ? '(excl. Void / deleted)' : '(ไม่นับ Void / ลบแล้ว)'),
+        'total': docNum(total, _fmt, bold: true),
+        'paid': docNum(paid, _fmt, bold: true),
+        'balance': docNum(balance, _fmt, bold: true),
+      },
     );
+  }
+
+  Widget _cell(ArTransactionHeader r, String key, bool isEnglish) {
+    switch (key) {
+      case 'doc':
+        return docTwoLine(r.docNo, _rowDocTypeName(r), aColor: DocListKit.docNoColor);
+      case 'date':
+        return Text(_dateFmt.format(r.docDate), style: DocListKit.numStyle);
+      case 'due':
+        return r.sysDocType == arDocTypeInvoice && r.dueDate != null ? Text(_dateFmt.format(r.dueDate!), style: DocListKit.numStyle) : docDash;
+      case 'party':
+        return (r.customerCode ?? '').isEmpty ? docDash : docTwoLine(r.customerCode!, _customerName(r));
+      case 'ref':
+        final ref = (r.refNo ?? '').trim();
+        return ref.isEmpty ? docDash : Text(ref, maxLines: 1, overflow: TextOverflow.ellipsis);
+      case 'total':
+        return docNum(r.totalAmountLc, _fmt);
+      case 'paid':
+        return docNum(r.paidAmountLc, _fmt, dashZero: true);
+      case 'balance':
+        return docNum(r.balanceAmountLc, _fmt, bold: r.balanceAmountLc != 0, color: r.balanceAmountLc > 0 ? const Color(0xFF1E4F8F) : null);
+      case 'status':
+        return docStatusBadge(r.status);
+      case 'act':
+        final editable = r.status == 'Draft' && widget.enableEditButton;
+        return Tooltip(
+          message: editable ? (isEnglish ? 'Edit' : 'แก้ไข') : (isEnglish ? 'View' : 'ดู'),
+          child: Icon(editable ? Icons.edit_outlined : Icons.visibility_outlined, size: 18, color: DocListKit.accent),
+        );
+    }
+    return const SizedBox.shrink();
   }
 }

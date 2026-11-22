@@ -43,6 +43,7 @@ class PrTransactionHeader {
   final int? vendorId;
   final String? vendorCode;
   final String? vendorNameTh;
+  final String? vendorNameEn; // จากรายการ (list) — ชื่อภาษาอังกฤษ
   final int? warehouseId;
   final String? warehouseCode;
   final String? warehouseNameTh;
@@ -85,6 +86,7 @@ class PrTransactionHeader {
     this.vendorId,
     this.vendorCode,
     this.vendorNameTh,
+    this.vendorNameEn,
     this.warehouseId,
     this.warehouseCode,
     this.warehouseNameTh,
@@ -127,6 +129,7 @@ class PrTransactionHeader {
       vendorId: json['vendor_id'],
       vendorCode: json['vendor_code'] ?? json['v_vendor_code'],
       vendorNameTh: json['vendor_name_th'] ?? json['v_vendor_name_th'],
+      vendorNameEn: json['vendor_name_en'],
       warehouseId: json['warehouse_id'],
       warehouseCode: json['warehouse_code'],
       warehouseNameTh: json['warehouse_name_th'],

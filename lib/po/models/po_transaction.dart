@@ -39,6 +39,7 @@ class PoTransactionHeader {
   final int vendorId;
   final String? vendorCode;
   final String? vendorNameTh;
+  final String? vendorNameEn; // จากรายการ (list) — ชื่อภาษาอังกฤษ
   final int warehouseId;
   final String? warehouseCode;
   final String? warehouseNameTh;
@@ -90,6 +91,7 @@ class PoTransactionHeader {
     required this.vendorId,
     this.vendorCode,
     this.vendorNameTh,
+    this.vendorNameEn,
     required this.warehouseId,
     this.warehouseCode,
     this.warehouseNameTh,
@@ -139,6 +141,7 @@ class PoTransactionHeader {
       vendorId: json['vendor_id'] ?? 0,
       vendorCode: json['vendor_code'] ?? json['v_vendor_code'],
       vendorNameTh: json['vendor_name_th'] ?? json['v_vendor_name_th'],
+      vendorNameEn: json['vendor_name_en'],
       warehouseId: json['warehouse_id'] ?? 0,
       warehouseCode: json['warehouse_code'],
       warehouseNameTh: json['warehouse_name_th'],

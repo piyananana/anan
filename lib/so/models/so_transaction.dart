@@ -42,6 +42,7 @@ class SoTransactionHeader {
   final int customerId;
   final String? customerCode;
   final String? customerNameTh;
+  final String? customerNameEn; // จากรายการ (list) — ชื่อภาษาอังกฤษ
   final int warehouseId;
   final String? warehouseCode;
   final String? warehouseNameTh;
@@ -101,6 +102,7 @@ class SoTransactionHeader {
     required this.customerId,
     this.customerCode,
     this.customerNameTh,
+    this.customerNameEn,
     required this.warehouseId,
     this.warehouseCode,
     this.warehouseNameTh,
@@ -156,6 +158,7 @@ class SoTransactionHeader {
       customerId: json['customer_id'] ?? 0,
       customerCode: json['customer_code'] ?? json['c_customer_code'],
       customerNameTh: json['customer_name_th'] ?? json['c_customer_name_th'],
+      customerNameEn: json['customer_name_en'],
       warehouseId: json['warehouse_id'] ?? 0,
       warehouseCode: json['warehouse_code'],
       warehouseNameTh: json['warehouse_name_th'],

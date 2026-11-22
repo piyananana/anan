@@ -35,6 +35,7 @@ class PrTransactionService {
     String? dateFrom,
     String? dateTo,
     String? search,
+    bool includeDeleted = false, // ทุกสถานะรวมที่ลบแล้ว (หน้ารายการกรองสถานะเอง)
   }) async {
     final headers = await authService.getAuthHeader();
     final params = <String, String>{};
@@ -43,6 +44,7 @@ class PrTransactionService {
     if (dateFrom != null && dateFrom.isNotEmpty) params['date_from'] = dateFrom;
     if (dateTo != null && dateTo.isNotEmpty) params['date_to'] = dateTo;
     if (search != null && search.isNotEmpty) params['search'] = search;
+    if (includeDeleted) params['include_deleted'] = '1';
     final uri = Uri.parse('$baseUrl/pr_transaction').replace(queryParameters: params.isEmpty ? null : params);
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {

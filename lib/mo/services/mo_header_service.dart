@@ -31,6 +31,7 @@ class MoHeaderService {
     String? dateFrom,
     String? dateTo,
     String? search,
+    bool includeDeleted = false, // ทุกสถานะรวมที่ลบแล้ว (หน้ารายการกรองสถานะเอง)
   }) async {
     final headers = await authService.getAuthHeader();
     final params = <String, String>{};
@@ -39,6 +40,7 @@ class MoHeaderService {
     if (dateFrom != null && dateFrom.isNotEmpty) params['date_from'] = dateFrom;
     if (dateTo != null && dateTo.isNotEmpty) params['date_to'] = dateTo;
     if (search != null && search.isNotEmpty) params['search'] = search;
+    if (includeDeleted) params['include_deleted'] = '1';
     final uri = Uri.parse('$baseUrl/mo_header').replace(queryParameters: params.isEmpty ? null : params);
     final response = await http.get(uri, headers: headers);
     if (response.statusCode == 200) {

@@ -67,6 +67,7 @@ class ArTransactionService {
     int? dim3Id,
     int? dim4Id,
     int? dim5Id,
+    bool includeDeleted = false, // ทุกสถานะรวมที่ลบแล้ว (หน้ารายการกรองสถานะเอง)
   }) async {
     final headers = await authService.getAuthHeader();
     final queryParams = <String, String>{};
@@ -82,6 +83,7 @@ class ArTransactionService {
     if (dim3Id != null) queryParams['dim3_id'] = dim3Id.toString();
     if (dim4Id != null) queryParams['dim4_id'] = dim4Id.toString();
     if (dim5Id != null) queryParams['dim5_id'] = dim5Id.toString();
+    if (includeDeleted) queryParams['include_deleted'] = '1';
 
     final uri = Uri.parse('$baseUrl/ar_transaction').replace(queryParameters: queryParams);
     final response = await http.get(uri, headers: headers);

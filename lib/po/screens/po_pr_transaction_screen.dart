@@ -122,6 +122,13 @@ class _PrTransactionScreenState extends State<PrTransactionScreen> with SingleTi
               animation: _detailActions,
               builder: (ctx, _) => _detailActions.build(ctx, isEnglish),
             ),
+          // หน้ารายการ: ปุ่มเพิ่มเอกสารบน AppBar (ปุ่มทึบแบบเดียวกับปุ่มของหน้ารายละเอียด)
+          if (_currentTabIndex == 0 && canCreate)
+            buildDocBarActions(
+              context,
+              [DocBarAction.primary(isEnglish ? 'Add Document' : 'เพิ่มเอกสาร', () => _openDetailTab(), DocBarColors.submit)],
+              isEnglish: isEnglish,
+            ),
           // หน้ารายละเอียดซ่อนปุ่มรีเฟรช (กดพลาดแล้วการแก้ไขหาย) — กลับรายการด้วยลูกศรย้อนกลับ
           if (_currentTabIndex == 0)
           IconButton(
@@ -145,14 +152,12 @@ class _PrTransactionScreenState extends State<PrTransactionScreen> with SingleTi
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 PrTransactionListWidget(
-                  onAddPressed: () => _openDetailTab(),
                   onEditPressed: (id) => _openDetailTab(id: id),
                   // ไม่บังคับ viewOnly:true สำหรับเอกสารที่ไม่ใช่ Draft — จะซ่อนปุ่ม Submit/Approve/Reject/Close/Void
                   // ไปด้วย ซึ่งไม่ใช่เจตนา (มิเรอร์ po_transaction_screen.dart ทุกประการ — ดู comment เดียวกันที่นั่น)
                   onViewPressed: (id) => _openDetailTab(id: id),
                   shouldRefresh: _shouldRefreshList,
                   onRefreshComplete: () => setState(() => _shouldRefreshList = false),
-                  enableAddButton: canCreate,
                   enableEditButton: canEdit,
                 ),
                 PrTransactionDetailWidget(

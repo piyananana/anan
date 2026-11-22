@@ -72,6 +72,10 @@ class CmTransactionHeader {
   final int? bankAccountId;
   final String? bankName;
   final String? bankAccountNumber;
+  // จากรายการ (list) — ชื่อธนาคารภาษาอังกฤษ (cd_bank.bank_name_eng)
+  final String? bankNameEng;
+  final String? fromBankNameEng;
+  final String? toBankNameEng;
   final int? glAccountId;
   final String? chargeType; // BANK_CHARGE / INTEREST_INCOME / INTEREST_EXPENSE (doc type 70/90)
   final String? counterpartyName; // doc type 10/20
@@ -131,6 +135,7 @@ class CmTransactionHeader {
     this.fromBankAccountId, this.fromBankName, this.fromAccountNumber,
     this.toBankAccountId, this.toBankName, this.toAccountNumber,
     this.bankAccountId, this.bankName, this.bankAccountNumber,
+    this.bankNameEng, this.fromBankNameEng, this.toBankNameEng,
     this.glAccountId,
     this.chargeType,
     this.counterpartyName,
@@ -181,6 +186,9 @@ class CmTransactionHeader {
       bankAccountId: json['bank_account_id'],
       bankName: json['bank_name'],
       bankAccountNumber: json['bank_account_number'],
+      bankNameEng: json['bank_name_eng'],
+      fromBankNameEng: json['from_bank_name_eng'],
+      toBankNameEng: json['to_bank_name_eng'],
       glAccountId: json['gl_account_id'],
       chargeType: json['charge_type'],
       counterpartyName: json['counterparty_name'],

@@ -6,6 +6,8 @@ import '../../sa/services/sa_language_provider.dart';
 import '../../sa/models/sa_module_document.dart';
 import '../../sa/models/sa_user_branch.dart';
 import '../../sa/services/sa_auth_service.dart';
+import '../../sa/widgets/sa_doc_list_kit.dart';
+import '../../cd/services/cd_currency_service.dart';
 import '../models/gl_dimension.dart';
 import '../models/gl_entry.dart';
 import '../models/gl_period.dart';
@@ -15,24 +17,23 @@ import '../services/gl_period_service.dart';
 import '../widgets/gl_dimension_picker_field.dart';
 import '../../sa/widgets/sa_document_reverse_widgets.dart';
 
+// หน้ารายการบันทึกบัญชี (GL) — แบบเดียวกับหน้ารายการ IM (sa_doc_list_kit.dart):
+// ① เอกสาร/งวด ② สาขา/อ้างอิง ③ สถานะ ④ ค้นหาเพิ่มเติม (+ มิติ) / ตาราง: เอกสาร | อ้างอิง/คำอธิบาย | เดบิต/เครดิต
+// GL เลือกตามปีบัญชี/งวด (ไม่ใช่ช่วงวันที่) และ backend ส่งรายการที่ลบแล้วมาด้วย — กรองสถานะในหน้าจอทั้งหมด
 class GlEntryListWidget extends StatefulWidget {
-  final VoidCallback onAddPressed;
   final Function(int) onEditPressed;
   final Function(int) onViewPressed;
   final bool shouldRefresh;
   final VoidCallback onRefreshComplete;
-  final bool enableAddButton;
   final bool enableEditButton;
   final bool enableDeleteButton;
 
   const GlEntryListWidget({
     super.key,
-    required this.onAddPressed,
     required this.onEditPressed,
     required this.onViewPressed,
     required this.shouldRefresh,
     required this.onRefreshComplete,
-    this.enableAddButton = true,
     this.enableEditButton = true,
     this.enableDeleteButton = true,
   });
@@ -47,12 +48,13 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
   final PeriodService _periodService = PeriodService();
   final GlDimensionService _dimService = GlDimensionService();
   final _fmt = NumberFormat('#,##0.00');
-  final _dateFmt = DateFormat('dd/MM/yyyy');
+  final _dateFmt = DocListKit.dateFmt;
 
   List<GlEntryHeader> _entries = [];
   List<GlEntryHeader> _filteredEntries = [];
   bool _isLoading = false;
 
+  List<ModuleDocument> _allowedDocs = [];
   Set<String> _allowedDocCodes = {};
 
   List<FiscalYear> _fiscalYears = [];
@@ -60,23 +62,36 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
 
   FiscalYear? _selectedFiscalYear;
   PostingPeriod? _selectedPeriod;
-  String? _selectedStatus;
+  PostingPeriod? _defaultPeriod;
+  String? _selectedDocCode;
+  final Set<String> _statuses = {};
   List<UserBranch> _allowedBranches = [];
-  UserBranch? _selectedBranchFilter;
+  int? _selectedBranchId;
   List<GlDimensionType> _dimTypes = [];
-  Map<String, List<GlDimensionValue>> _dimValues = {};
-  Map<int, int?> _dimSelections = {}; // slotNo → selected dimValueId
+  final Map<String, List<GlDimensionValue>> _dimValues = {};
+  final Map<int, int?> _dimSelections = {}; // slotNo → dimValueId
   final TextEditingController _searchCtrl = TextEditingController();
+  final TextEditingController _refCtrl = TextEditingController();
+
+  String _sortKey = 'date';
+  bool _sortAsc = false;
+  bool _collapsed = false;
+  static const _collapsedPrefKey = 'gl_list_filter_collapsed';
+  static const _statusOrder = ['Draft', 'Posted', 'Void', 'Deleted'];
 
   @override
   void initState() {
     super.initState();
+    DocListPrefs.loadCollapsed(_collapsedPrefKey).then((v) {
+      if (mounted && v != _collapsed) setState(() => _collapsed = v);
+    });
     _initialLoad();
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _refCtrl.dispose();
     super.dispose();
   }
 
@@ -101,17 +116,12 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
         _dimService.fetchActiveTypes(),
       ]);
       final fys = results[0] as List<FiscalYear>;
-      final allowedDocs = results[1] as List<ModuleDocument>;
+      final allowedDocs = (results[1] as List<ModuleDocument>).where((d) => d.isDocType).toList();
       final types = results[2] as List<GlDimensionType>;
-      _allowedDocCodes = allowedDocs
-          .where((d) => d.isDocType)
-          .map((d) => d.docCode)
-          .toSet();
-      // โหลด dimension values
-      final valResults = await Future.wait(
-        types.map((t) => _dimService.fetchValuesByType(t.typeCode)),
-      );
+      final valResults = await Future.wait(types.map((t) => _dimService.fetchValuesByType(t.typeCode)));
       setState(() {
+        _allowedDocs = allowedDocs;
+        _allowedDocCodes = allowedDocs.map((d) => d.docCode).toSet();
         _fiscalYears = fys;
         _dimTypes = types;
         for (int i = 0; i < types.length; i++) {
@@ -121,25 +131,20 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
 
       if (fys.isNotEmpty) {
         final now = DateTime.now();
-        try {
-          _selectedFiscalYear = fys.firstWhere((fy) =>
-              now.isAfter(fy.yearStartDate.subtract(const Duration(days: 1))) &&
-              now.isBefore(fy.yearEndDate.add(const Duration(days: 1))));
-        } catch (_) {
-          _selectedFiscalYear = fys.first;
-        }
-        if (_selectedFiscalYear != null) {
-          await _fetchPeriods(_selectedFiscalYear!.id);
-        }
+        _selectedFiscalYear = fys.firstWhere(
+            (fy) =>
+                now.isAfter(fy.yearStartDate.subtract(const Duration(days: 1))) &&
+                now.isBefore(fy.yearEndDate.add(const Duration(days: 1))),
+            orElse: () => fys.first);
+        await _fetchPeriods(_selectedFiscalYear!.id);
+        _defaultPeriod = _selectedPeriod;
       }
       await _fetchEntries();
     } catch (e) {
       if (mounted) {
         final isEnglish = _isEnglish;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish
-                ? 'Error loading master data: $e'
-                : 'เกิดข้อผิดพลาดในการโหลดข้อมูลหลัก: $e')));
+            content: Text(isEnglish ? 'Error loading master data: $e' : 'เกิดข้อผิดพลาดในการโหลดข้อมูลหลัก: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -152,21 +157,16 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
       setState(() {
         _periods = periods;
         final now = DateTime.now();
-        try {
-          _selectedPeriod = periods.firstWhere((p) =>
-              now.isAfter(p.periodStartDate.subtract(const Duration(days: 1))) &&
-              now.isBefore(p.periodEndDate.add(const Duration(days: 1))));
-        } catch (_) {
-          _selectedPeriod = periods.isNotEmpty ? periods.first : null;
-        }
+        final current = periods.where((p) =>
+            now.isAfter(p.periodStartDate.subtract(const Duration(days: 1))) &&
+            now.isBefore(p.periodEndDate.add(const Duration(days: 1))));
+        _selectedPeriod = current.isNotEmpty ? current.first : (periods.isNotEmpty ? periods.first : null);
       });
     } catch (e) {
       if (mounted) {
         final isEnglish = _isEnglish;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish
-                ? 'Error fetching periods: $e'
-                : 'เกิดข้อผิดพลาดในการโหลดงวดบัญชี: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Error fetching periods: $e' : 'เกิดข้อผิดพลาดในการโหลดงวดบัญชี: $e')));
       }
     }
   }
@@ -190,53 +190,55 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
     } catch (e) {
       if (mounted) {
         final isEnglish = _isEnglish;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish
-                ? 'Error fetching entries: $e'
-                : 'เกิดข้อผิดพลาดในการโหลดรายการ: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(isEnglish ? 'Error fetching entries: $e' : 'เกิดข้อผิดพลาดในการโหลดรายการ: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // ประเภทเอกสารที่ผู้ใช้มีสิทธิ์ + สาขา + เลขที่อ้างอิง + คำค้น (ไม่รวมสถานะ — ใช้นับจำนวนบนชิปสถานะ)
+  bool _baseMatch(GlEntryHeader item) {
+    if (_allowedDocCodes.isNotEmpty && !_allowedDocCodes.contains(item.docCode)) return false;
+    if (_selectedDocCode != null && item.docCode != _selectedDocCode) return false;
+    if (_selectedBranchId != null && item.branchId != _selectedBranchId) return false;
+    final ref = _refCtrl.text.trim().toLowerCase();
+    if (ref.isNotEmpty && ![item.refNo, item.refDocCode, item.refDocName, item.refDocNo].any((s) => (s ?? '').toLowerCase().contains(ref))) {
+      return false;
+    }
+    return docKeywordMatch(_searchCtrl.text, [
+      item.docCode, item.docName, item.docNo, _dateFmt.format(item.docDate),
+      item.refNo, item.refDocCode, item.refDocName, item.refDocNo,
+      item.refDocDate != null ? _dateFmt.format(item.refDocDate!) : null, item.description, item.status,
+    ]);
+  }
+
+  bool _statusMatch(GlEntryHeader r) => _statuses.isEmpty ? r.status != 'Deleted' : _statuses.contains(r.status);
+
   void _applyFilter() {
-    final query = _searchCtrl.text.trim();
-    Iterable<GlEntryHeader> base = _entries;
+    final list = _entries.where((r) => _baseMatch(r) && _statusMatch(r)).toList();
+    list.sort((a, b) {
+      final c = switch (_sortKey) {
+        'docNo' => a.docNo.compareTo(b.docNo),
+        'amount' => a.totalDebitLc.compareTo(b.totalDebitLc),
+        _ => a.docDate.compareTo(b.docDate),
+      };
+      return c != 0 ? (_sortAsc ? c : -c) : b.docNo.compareTo(a.docNo);
+    });
+    _filteredEntries = list;
+  }
 
-    if (_allowedDocCodes.isNotEmpty) {
-      base = base.where((item) => _allowedDocCodes.contains(item.docCode));
-    }
-    if (_selectedStatus != null) {
-      base = base.where((item) => item.status == _selectedStatus);
-    } else {
-      base = base.where((item) => item.status != 'Deleted');
-    }
-    if (_selectedBranchFilter != null) {
-      base = base.where((item) => item.branchId == _selectedBranchFilter!.branchId);
-    }
-
-    if (query.isEmpty) {
-      _filteredEntries = base.toList();
-      return;
-    }
-
-    final keywords = query.toLowerCase().split(RegExp(r'\s+'));
-    _filteredEntries = base.where((item) {
-      final fields = [
-        item.docCode,
-        item.docName,
-        item.docNo,
-        _dateFmt.format(item.docDate),
-        item.refDocCode ?? '',
-        item.refDocName ?? '',
-        item.refDocNo ?? '',
-        item.refDocDate != null ? _dateFmt.format(item.refDocDate!) : '',
-        item.description,
-        item.status,
-      ].map((f) => f.toLowerCase()).toList();
-      return keywords.every((kw) => fields.any((f) => f.contains(kw)));
-    }).toList();
+  void _setSort(String key) {
+    setState(() {
+      if (_sortKey == key) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortKey = key;
+        _sortAsc = key == 'docNo';
+      }
+      _applyFilter();
+    });
   }
 
   Future<void> _deleteEntry(GlEntryHeader item) async {
@@ -256,28 +258,13 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
       await _entryService.deleteEntry(item.id, reason);
       _fetchEntries();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish ? 'Deleted successfully' : 'ลบรายการสำเร็จ')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบรายการสำเร็จ')));
       }
     } catch (e) {
       if (mounted) {
         final msg = e.toString().replaceFirst('Exception: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish ? 'Delete failed: $msg' : 'ลบไม่สำเร็จ: $msg')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Delete failed: $msg' : 'ลบไม่สำเร็จ: $msg')));
       }
-    }
-  }
-
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'Draft':
-        return Colors.orange;
-      case 'Posted':
-        return Colors.green;
-      case 'Void':
-        return Colors.red;
-      default:
-        return Colors.grey;
     }
   }
 
@@ -285,317 +272,293 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
       '${p.periodName} (${_dateFmt.format(p.periodStartDate)} - ${_dateFmt.format(p.periodEndDate)})';
 
   bool get _hasActiveFilters =>
-      _selectedStatus != null ||
-      _selectedBranchFilter != null ||
+      _statuses.isNotEmpty ||
+      _selectedDocCode != null ||
+      _selectedBranchId != null ||
+      _selectedPeriod?.id != _defaultPeriod?.id ||
       _dimSelections.values.any((v) => v != null) ||
-      _searchCtrl.text.isNotEmpty;
+      _searchCtrl.text.isNotEmpty ||
+      _refCtrl.text.isNotEmpty;
+
+  Future<void> _clearFilters() async {
+    final serverChanged = _selectedPeriod?.id != _defaultPeriod?.id || _dimSelections.values.any((v) => v != null);
+    setState(() {
+      _statuses.clear();
+      _selectedDocCode = null;
+      _selectedBranchId = null;
+      _dimSelections.clear();
+      _searchCtrl.clear();
+      _refCtrl.clear();
+      _applyFilter();
+    });
+    if (!serverChanged) return;
+    final fy = _fiscalYears.where((f) => _defaultPeriod != null && f.id == _defaultPeriod!.fiscalYearId);
+    if (fy.isNotEmpty && fy.first.id != _selectedFiscalYear?.id) {
+      setState(() => _selectedFiscalYear = fy.first);
+      await _fetchPeriods(fy.first.id);
+    }
+    setState(() => _selectedPeriod = _periods.where((p) => p.id == _defaultPeriod?.id).firstOrNull ?? _selectedPeriod);
+    _fetchEntries();
+  }
+
+  String _docLabel(ModuleDocument d) => '${d.docCode} ${_isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai}';
+
+  // ชื่อประเภทเอกสารของรายการ: ชื่ออังกฤษจากรายการประเภทที่มีสิทธิ์ (รายการบัญชีมีแค่ชื่อเดียว)
+  String _rowDocName(GlEntryHeader item) {
+    if (_isEnglish) {
+      for (final d in _allowedDocs) {
+        if (d.docCode == item.docCode && d.docNameEng.isNotEmpty) return '${item.docCode} ${d.docNameEng}';
+      }
+    }
+    return '${item.docCode} ${item.docName}';
+  }
+
+  String _dimTypeName(GlDimensionType t) => _isEnglish && (t.nameEng ?? '').isNotEmpty ? t.nameEng! : t.nameThai;
 
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
-    return Column(
-      children: [
-        _buildFilterRow(),
-        const Divider(height: 1),
-        if (!_isLoading)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _hasActiveFilters
-                    ? (isEnglish
-                        ? 'Found ${_filteredEntries.length} of ${_entries.length} entries'
-                        : 'พบ ${_filteredEntries.length} รายการ จาก ${_entries.length} รายการ')
-                    : (isEnglish
-                        ? '${_filteredEntries.length} entries'
-                        : '${_filteredEntries.length} รายการ'),
-                style: const TextStyle(fontSize: 12, color: Colors.black87),
+    return docListLayout(context, filterCard: _buildFilterCard(isEnglish), listCard: _buildListCard(isEnglish));
+  }
+
+  Widget _buildFilterCard(bool isEnglish) {
+    final visibleAll = _entries.where((r) => r.status != 'Deleted' && (_allowedDocCodes.isEmpty || _allowedDocCodes.contains(r.docCode))).length;
+    final countText = _isLoading
+        ? (isEnglish ? 'Loading…' : 'กำลังโหลด…')
+        : _hasActiveFilters
+            ? (isEnglish ? 'Found ${_filteredEntries.length} of $visibleAll' : 'พบ ${_filteredEntries.length} จาก $visibleAll รายการ')
+            : (isEnglish ? '${_filteredEntries.length} entries' : '${_filteredEntries.length} รายการ');
+    final base = _entries.where(_baseMatch).toList();
+
+    String? branch;
+    for (final b in _allowedBranches) {
+      if (b.branchId == _selectedBranchId) branch = '${b.branchCode} ${b.branchNameThai}';
+    }
+    final dimSummary = <String>[];
+    for (final t in _dimTypes) {
+      final id = _dimSelections[t.slotNo];
+      for (final v in _dimValues[t.typeCode] ?? const <GlDimensionValue>[]) {
+        if (v.id == id) dimSummary.add('${_dimTypeName(t)}: ${v.valueCode}');
+      }
+    }
+
+    return DocFilterCard(
+      isEnglish: isEnglish,
+      countText: countText,
+      hasActive: _hasActiveFilters,
+      onClear: _clearFilters,
+      collapsed: _collapsed,
+      onToggleCollapse: () {
+        setState(() => _collapsed = !_collapsed);
+        DocListPrefs.saveCollapsed(_collapsedPrefKey, _collapsed);
+      },
+      flexes: const [13, 10, 10, 11],
+      groups: [
+        docFilterGroup(1, isEnglish ? 'Document / Period' : 'เอกสาร / งวด', [
+          docDropdown<String>(
+            label: isEnglish ? 'Document Type' : 'ประเภทเอกสาร',
+            value: _selectedDocCode,
+            allLabel: isEnglish ? 'All' : 'ทั้งหมด',
+            items: [for (final d in _allowedDocs) (d.docCode, _docLabel(d))],
+            onChanged: (v) => setState(() {
+              _selectedDocCode = v;
+              _applyFilter();
+            }),
+          ),
+          Row(children: [
+            SizedBox(
+              width: 110,
+              child: DropdownButtonFormField<FiscalYear>(
+                value: _selectedFiscalYear,
+                isExpanded: true,
+                isDense: true,
+                decoration: docFieldDec(isEnglish ? 'Fiscal Year' : 'ปีบัญชี'),
+                items: [for (final fy in _fiscalYears) DropdownMenuItem(value: fy, child: Text(fy.fyCode, overflow: TextOverflow.ellipsis))],
+                onChanged: (val) {
+                  if (val == null) return;
+                  setState(() {
+                    _selectedFiscalYear = val;
+                    _selectedPeriod = null;
+                    _periods = [];
+                  });
+                  _fetchPeriods(val.id).then((_) => _fetchEntries());
+                },
               ),
             ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: docDropdown<int>(
+                label: isEnglish ? 'Period' : 'งวด',
+                value: _selectedPeriod?.id,
+                allLabel: isEnglish ? 'Whole year' : 'ทั้งปี',
+                items: [for (final p in _periods) (p.id, _formatPeriodLabel(p))],
+                onChanged: (id) {
+                  setState(() => _selectedPeriod = _periods.where((p) => p.id == id).firstOrNull);
+                  _fetchEntries();
+                },
+              ),
+            ),
+          ]),
+        ]),
+        docFilterGroup(2, isEnglish ? 'Branch / Reference' : 'สาขา / อ้างอิง', [
+          docSearchField(_refCtrl, isEnglish ? 'Reference doc / ref no.' : 'เอกสารอ้างอิง / เลขที่อ้างอิง', () => setState(_applyFilter)),
+          if (_allowedBranches.length > 1)
+            docDropdown<int>(
+              label: isEnglish ? 'Branch' : 'สาขา',
+              value: _selectedBranchId,
+              allLabel: isEnglish ? 'All Branches' : 'ทุกสาขา',
+              items: [for (final b in _allowedBranches) (b.branchId, '${b.branchCode} ${b.branchNameThai}')],
+              onChanged: (v) => setState(() {
+                _selectedBranchId = v;
+                _applyFilter();
+              }),
+            ),
+        ]),
+        docFilterGroup(3, isEnglish ? 'Status' : 'สถานะ', [
+          docStatusToggles(
+            statuses: _statusOrder,
+            selected: _statuses,
+            isEnglish: isEnglish,
+            count: (s) => base.where((r) => r.status == s).length,
+            onToggle: (s) => setState(() {
+              _statuses.contains(s) ? _statuses.remove(s) : _statuses.add(s);
+              _applyFilter();
+            }),
           ),
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _buildTable(),
-        ),
+        ]),
+        docFilterGroup(4, isEnglish ? 'More' : 'ค้นหาเพิ่มเติม', [
+          docSearchField(
+            _searchCtrl,
+            isEnglish ? 'Search (doc no. / description)' : 'ค้นหา (เลขที่ / คำอธิบาย)',
+            () => setState(_applyFilter),
+            tooltip: isEnglish ? 'Doc no. / reference / description' : 'เลขที่เอกสาร / เอกสารอ้างอิง / คำอธิบาย',
+          ),
+          for (final t in _dimTypes) _dimPicker(t),
+        ]),
+      ],
+      summary: [
+        DocSummaryItem(DocListKit.gDoc, isEnglish ? 'Type' : 'ประเภท',
+            _selectedDocCode == null ? (isEnglish ? 'All' : 'ทั้งหมด') : _allowedDocs.where((d) => d.docCode == _selectedDocCode).map(_docLabel).join()),
+        DocSummaryItem(DocListKit.gDoc, isEnglish ? 'Period' : 'งวด',
+            '${_selectedFiscalYear?.fyCode ?? ''} ${_selectedPeriod?.periodName ?? (isEnglish ? 'whole year' : 'ทั้งปี')}'),
+        if (_refCtrl.text.trim().isNotEmpty) DocSummaryItem(DocListKit.gParty, isEnglish ? 'Reference' : 'อ้างอิง', _refCtrl.text.trim()),
+        if (_allowedBranches.length > 1)
+          DocSummaryItem(DocListKit.gParty, isEnglish ? 'Branch' : 'สาขา', branch ?? (isEnglish ? 'All' : 'ทุกสาขา')),
+        DocSummaryItem(DocListKit.gFin, isEnglish ? 'Status' : 'สถานะ',
+            _statuses.isEmpty ? (isEnglish ? 'All' : 'ทุกสถานะ') : _statusOrder.where(_statuses.contains).join(', ')),
+        if (_searchCtrl.text.trim().isNotEmpty) DocSummaryItem(DocListKit.gMore, isEnglish ? 'Search' : 'ค้นหา', _searchCtrl.text.trim()),
+        if (dimSummary.isNotEmpty) DocSummaryItem(DocListKit.gMore, isEnglish ? 'Dimensions' : 'มิติ', dimSummary.join(', ')),
       ],
     );
   }
 
-  Widget _buildFilterRow() {
-    final isEnglish = _isEnglish;
-    final l = AppL10n(isEnglish);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Row 1: ปีบัญชี | งวด | สถานะ
-          Row(
-            children: [
-              SizedBox(
-                width: 110,
-                child: DropdownButtonFormField<FiscalYear>(
-                  value: _selectedFiscalYear,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                      labelText: isEnglish ? 'Fiscal Year' : 'ปีบัญชี', isDense: true, border: const OutlineInputBorder()),
-                  items: _fiscalYears
-                      .map((fy) => DropdownMenuItem(
-                          value: fy,
-                          child: Text(fy.fyCode, overflow: TextOverflow.ellipsis)))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _selectedFiscalYear = val;
-                        _selectedPeriod = null;
-                        _periods = [];
-                      });
-                      _fetchPeriods(val.id).then((_) => _fetchEntries());
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 3,
-                child: DropdownButtonFormField<PostingPeriod>(
-                  value: _selectedPeriod,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                      labelText: isEnglish ? 'Period' : 'งวด', isDense: true, border: const OutlineInputBorder()),
-                  items: _periods
-                      .map((p) => DropdownMenuItem(
-                          value: p,
-                          child: Text(_formatPeriodLabel(p), overflow: TextOverflow.ellipsis)))
-                      .toList(),
-                  onChanged: (val) {
-                    setState(() => _selectedPeriod = val);
-                    _fetchEntries();
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 1,
-                child: DropdownButtonFormField<String?>(
-                  value: _selectedStatus,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                      labelText: isEnglish ? 'Status' : 'สถานะ', isDense: true, border: const OutlineInputBorder()),
-                  items: [
-                    DropdownMenuItem(value: null, child: Text(l.all)),
-                    const DropdownMenuItem(value: 'Draft', child: Text('Draft')),
-                    const DropdownMenuItem(value: 'Posted', child: Text('Posted')),
-                    const DropdownMenuItem(value: 'Void', child: Text('Void')),
-                    const DropdownMenuItem(value: 'Deleted', child: Text('Deleted')),
-                  ],
-                  onChanged: (v) => setState(() {
-                    _selectedStatus = v;
-                    _applyFilter();
-                  }),
-                ),
-              ),
-              if (_allowedBranches.length > 1) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 2,
-                  child: DropdownButtonFormField<UserBranch?>(
-                    value: _selectedBranchFilter,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                        labelText: isEnglish ? 'Branch' : 'สาขา', isDense: true, border: const OutlineInputBorder()),
-                    items: [
-                      DropdownMenuItem<UserBranch?>(
-                          value: null, child: Text(isEnglish ? 'All Branches' : 'ทุกสาขา')),
-                      ..._allowedBranches.map((b) => DropdownMenuItem(
-                            value: b,
-                            child: Text('${b.branchCode} ${b.branchNameThai}',
-                                overflow: TextOverflow.ellipsis),
-                          )),
-                    ],
-                    onChanged: (v) => setState(() {
-                      _selectedBranchFilter = v;
-                      _applyFilter();
-                    }),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          if (_dimTypes.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: _dimTypes.expand((t) {
-                final vals = _dimValues[t.typeCode] ?? [];
-                final selId = _dimSelections[t.slotNo];
-                final selVal = vals.cast<GlDimensionValue?>()
-                    .firstWhere((v) => v?.id == selId, orElse: () => null);
-                return [
-                  if (_dimTypes.first != t) const SizedBox(width: 8),
-                  Expanded(
-                    child: GlDimensionPickerField(
-                      dimType: t,
-                      values: vals,
-                      selected: selVal,
-                      isDense: false,
-                      onSelected: (val) {
-                        setState(() => _dimSelections[t.slotNo] = val?.id);
-                        _fetchEntries();
-                      },
-                    ),
-                  ),
-                ];
-              }).toList(),
-            ),
-          ],
-          const SizedBox(height: 6),
-          // Row 2: ค้นหา | เพิ่มรายการ | ล้าง
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    labelText: isEnglish
-                        ? 'Search (Doc No. / Description / Reference No.)'
-                        : 'ค้นหา (เลขที่เอกสาร / คำอธิบาย / เลขที่อ้างอิง)',
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    suffixIcon: const Icon(Icons.search, size: 16),
-                  ),
-                  onChanged: (_) => setState(() => _applyFilter()),
-                  onSubmitted: (_) => setState(() => _applyFilter()),
-                ),
-              ),
-              const SizedBox(width: 8),
-              if (widget.enableAddButton)
-                ElevatedButton.icon(
-                  onPressed: widget.onAddPressed,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: Text(isEnglish ? 'Add Entry' : 'เพิ่มรายการ'),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal[700], foregroundColor: Colors.white),
-                ),
-              if (_hasActiveFilters) ...[
-                const SizedBox(width: 4),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _selectedStatus = null;
-                      _selectedBranchFilter = null;
-                      _dimSelections.clear();
-                      _searchCtrl.clear();
-                    });
-                    _fetchEntries();
-                  },
-                  child: Text(l.clear),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
+  Widget _dimPicker(GlDimensionType t) {
+    final vals = _dimValues[t.typeCode] ?? const <GlDimensionValue>[];
+    GlDimensionValue? sel;
+    for (final v in vals) {
+      if (v.id == _dimSelections[t.slotNo]) sel = v;
+    }
+    return GlDimensionPickerField(
+      dimType: t,
+      values: vals,
+      selected: sel,
+      fontSize: DocListKit.fontSize,
+      decoration: docFieldDec(_dimTypeName(t)),
+      onSelected: (v) {
+        setState(() => _dimSelections[t.slotNo] = v?.id);
+        _fetchEntries();
+      },
     );
   }
 
-  Widget _buildTable() {
-    final isEnglish = _isEnglish;
-    if (_filteredEntries.isEmpty) {
-      return Center(
-        child: Text(_entries.isEmpty
-            ? (isEnglish ? 'No entries match the conditions' : 'ไม่พบรายการบัญชีตามเงื่อนไข')
-            : (isEnglish ? 'No entries match the search' : 'ไม่พบรายการที่ตรงกับคำค้น')),
-      );
-    }
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minWidth: constraints.maxWidth),
-          child: DataTable(
-            headingRowColor: WidgetStateProperty.all(Colors.teal[50]),
-            columnSpacing: 12,
-            dataRowMinHeight: 32,
-            dataRowMaxHeight: 42,
-            columns: [
-              DataColumn(label: Text(isEnglish ? 'Doc No.' : 'เลขที่เอกสาร', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Type' : 'ประเภท', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Date' : 'วันที่', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Reference' : 'อ้างอิง', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Description' : 'คำอธิบาย', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Debit Amount' : 'ยอดเดบิต', style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-              DataColumn(label: Text(isEnglish ? 'Status' : 'สถานะ', style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text(isEnglish ? 'Actions' : 'จัดการ', style: const TextStyle(fontWeight: FontWeight.bold))),
-            ],
-            rows: _filteredEntries.map((item) {
-              final isDraft = item.status == 'Draft';
-              return DataRow(
-                cells: [
-                  DataCell(
-                    Text(item.docNo,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                    onTap: () => widget.onViewPressed(item.id),
-                  ),
-                  DataCell(Text('${item.docCode} ${item.docName}', style: const TextStyle(fontSize: 12))),
-                  DataCell(Text(_dateFmt.format(item.docDate), style: const TextStyle(fontSize: 12))),
-                  DataCell(Text(
-                    item.refDocNo != null
-                        ? '${item.refDocCode ?? ''} ${item.refDocNo}'.trim()
-                        : '-',
-                    style: const TextStyle(fontSize: 12),
-                  )),
-                  DataCell(SizedBox(
-                    width: 200,
-                    child: Text(item.description,
-                        style: const TextStyle(fontSize: 12),
-                        overflow: TextOverflow.ellipsis),
-                  )),
-                  DataCell(Text(_fmt.format(item.totalDebitLc),
-                      style: const TextStyle(fontSize: 12))),
-                  DataCell(Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _statusColor(item.status).withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(item.status,
-                        style: TextStyle(
-                            color: _statusColor(item.status),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600)),
-                  )),
-                  DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
-                    if (isDraft && widget.enableEditButton)
-                      IconButton(
-                        icon: const Icon(Icons.edit, size: 16),
-                        tooltip: isEnglish ? 'Edit' : 'แก้ไข',
-                        onPressed: () => widget.onEditPressed(item.id),
-                        visualDensity: VisualDensity.compact,
-                      )
-                    else
-                      IconButton(
-                        icon: const Icon(Icons.visibility, size: 16),
-                        tooltip: isEnglish ? 'View' : 'ดู',
-                        onPressed: () => widget.onViewPressed(item.id),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    if (isDraft && widget.enableDeleteButton)
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                        tooltip: isEnglish ? 'Delete' : 'ลบ',
-                        onPressed: () => _deleteEntry(item),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ])),
-                ],
-              );
-            }).toList(),
-          ),
-        ),
-      ),
+  Widget _buildListCard(bool isEnglish) {
+    final counted = _filteredEntries.where((r) => r.status != 'Void' && r.status != 'Deleted').toList();
+    final debit = counted.fold<double>(0, (s, r) => s + r.totalDebitLc);
+    final credit = counted.fold<double>(0, (s, r) => s + r.totalCreditLc);
+    final drafts = _filteredEntries.where((r) => r.status == 'Draft').length;
+    final base = CurrencyService.baseCode;
+
+    return DocListCard(
+      title: isEnglish ? 'Journal Entries' : 'รายการบันทึกบัญชี',
+      chips: [if (drafts > 0) docChip(isEnglish ? 'Draft $drafts' : 'ร่าง $drafts', const Color(0xFFE65100), const Color(0xFFFFF0D9))],
+      trailing: counted.isEmpty ? null : docTotalLabel(isEnglish ? 'Total debit' : 'เดบิตรวม', debit, base),
+      columns: [
+        DocListColumn('doc', isEnglish ? 'Doc No. / Type' : 'เลขที่ / ประเภท', 210, 1, sortKey: 'docNo'),
+        DocListColumn('date', isEnglish ? 'Date' : 'วันที่', 92, 1, sortKey: 'date'),
+        DocListColumn('ref', isEnglish ? 'Reference' : 'อ้างอิง', 170, 2),
+        DocListColumn('desc', isEnglish ? 'Description' : 'คำอธิบาย', 0, 2),
+        DocListColumn('debit', '${isEnglish ? 'Debit' : 'เดบิต'} ($base)', 128, 3, right: true, sortKey: 'amount'),
+        DocListColumn('credit', isEnglish ? 'Credit' : 'เครดิต', 128, 3, right: true),
+        DocListColumn('status', isEnglish ? 'Status' : 'สถานะ', 84, 0),
+        const DocListColumn('act', '', 68, 0),
+      ],
+      groupTitle: (g) => switch (g) {
+        1 => isEnglish ? 'Document' : 'เอกสาร',
+        2 => isEnglish ? 'Reference / Description' : 'อ้างอิง / คำอธิบาย',
+        _ => isEnglish ? 'Amounts' : 'ยอด',
+      },
+      rowCount: _filteredEntries.length,
+      loading: _isLoading,
+      emptyText: _entries.isEmpty
+          ? (isEnglish ? 'No entries in this period' : 'ไม่พบรายการในงวดนี้')
+          : (isEnglish ? 'No entries match the criteria — try another period or clear filters'
+              : 'ไม่พบรายการที่ตรงกับเงื่อนไข — ลองเลือกงวดอื่นหรือล้างเงื่อนไข'),
+      sortKey: _sortKey,
+      sortAsc: _sortAsc,
+      onSort: _setSort,
+      onTap: (n) {
+        final r = _filteredEntries[n];
+        r.status == 'Draft' && widget.enableEditButton ? widget.onEditPressed(r.id) : widget.onViewPressed(r.id);
+      },
+      cell: (n, key) => _cell(_filteredEntries[n], key, isEnglish),
+      footer: {
+        'doc': docFooterCount(counted.length, isEnglish, exclude: isEnglish ? '(excl. Void / deleted)' : '(ไม่นับ Void / ลบแล้ว)'),
+        'debit': docNum(debit, _fmt, bold: true),
+        'credit': docNum(credit, _fmt, bold: true),
+      },
     );
+  }
+
+  Widget _cell(GlEntryHeader item, String key, bool isEnglish) {
+    switch (key) {
+      case 'doc':
+        return docTwoLine(item.docNo, _rowDocName(item), aColor: DocListKit.docNoColor);
+      case 'date':
+        return Text(_dateFmt.format(item.docDate), style: DocListKit.numStyle);
+      case 'ref':
+        final doc = (item.refDocNo ?? '').isNotEmpty ? '${item.refDocCode ?? ''} ${item.refDocNo}'.trim() : '';
+        final ref = item.refNo.trim();
+        if (doc.isEmpty && ref.isEmpty) return docDash;
+        if (doc.isNotEmpty && ref.isNotEmpty && ref != item.refDocNo) return docTwoLine(doc, ref);
+        return Text(doc.isNotEmpty ? doc : ref, maxLines: 1, overflow: TextOverflow.ellipsis);
+      case 'desc':
+        return item.description.trim().isEmpty ? docDash : Text(item.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.25));
+      case 'debit':
+        return docNum(item.totalDebitLc, _fmt);
+      case 'credit':
+        return docNum(item.totalCreditLc, _fmt);
+      case 'status':
+        return docStatusBadge(item.status);
+      case 'act':
+        final draft = item.status == 'Draft';
+        final editable = draft && widget.enableEditButton;
+        return Row(mainAxisSize: MainAxisSize.min, children: [
+          Tooltip(
+            message: editable ? (isEnglish ? 'Edit' : 'แก้ไข') : (isEnglish ? 'View' : 'ดู'),
+            child: Icon(editable ? Icons.edit_outlined : Icons.visibility_outlined, size: 18, color: DocListKit.accent),
+          ),
+          if (draft && widget.enableDeleteButton)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+              tooltip: isEnglish ? 'Delete' : 'ลบ',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+              onPressed: () => _deleteEntry(item),
+            ),
+        ]);
+    }
+    return const SizedBox.shrink();
   }
 }
