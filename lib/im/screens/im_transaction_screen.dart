@@ -17,6 +17,7 @@ class ImTransactionScreen extends StatefulWidget {
 class _ImTransactionScreenState extends State<ImTransactionScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final _detailActions = ImTransactionDetailActions(); // ปุ่มของเอกสารบน AppBar
   int _currentTabIndex = 0;
 
   int? _selectedTransactionId;
@@ -47,6 +48,7 @@ class _ImTransactionScreenState extends State<ImTransactionScreen>
   void dispose() {
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    _detailActions.dispose();
     super.dispose();
   }
 
@@ -63,6 +65,40 @@ class _ImTransactionScreenState extends State<ImTransactionScreen>
   void _backToList() {
     setState(() => _currentTabIndex = 0);
     _tabController.animateTo(0);
+  }
+
+  // ลูกศรย้อนกลับบน AppBar — มีการแก้ไขที่ยังไม่บันทึก ต้องยืนยันก่อนออกจากหน้ารายละเอียด
+  Future<void> _confirmBackToList(bool isEnglish) async {
+    if (_detailActions.isDirty) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(isEnglish ? 'Discard changes?' : 'ยกเลิกการแก้ไข?'),
+          content: Text(isEnglish
+              ? 'This document has unsaved changes. Going back to the list will discard them.'
+              : 'เอกสารนี้มีการแก้ไขที่ยังไม่ได้บันทึก ถ้ากลับไปหน้ารายการ การแก้ไขจะหายไป'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(isEnglish ? 'Keep editing' : 'แก้ไขต่อ')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
+              child: Text(isEnglish ? 'Discard and go back' : 'ไม่บันทึก และกลับ'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    _backToList();
+  }
+
+  void _refreshList() {
+    setState(() {
+      _shouldRefreshList = true;
+      _selectedTransactionId = null;
+      _currentTabIndex = 0;
+      _tabController.animateTo(0);
+    });
   }
 
   void _onSaveSuccess() {
@@ -90,7 +126,7 @@ class _ImTransactionScreenState extends State<ImTransactionScreen>
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
                 tooltip: isEnglish ? 'Back to list' : 'กลับไปรายการ',
-                onPressed: _backToList,
+                onPressed: () => _confirmBackToList(isEnglish),
               )
             : null,
         automaticallyImplyLeading: false,
@@ -103,16 +139,19 @@ class _ImTransactionScreenState extends State<ImTransactionScreen>
         backgroundColor: Colors.teal[800],
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
-            onPressed: () => setState(() {
-              _shouldRefreshList = true;
-              _selectedTransactionId = null;
-              _currentTabIndex = 0;
-              _tabController.animateTo(0);
-            }),
-          ),
+          // ปุ่มของเอกสาร (บันทึกร่าง/Post/ถอย/ยกเลิก ...) — แสดงเฉพาะหน้ารายละเอียด (แทนแถบปุ่มด้านล่างเดิม)
+          if (_currentTabIndex == 1)
+            AnimatedBuilder(
+              animation: _detailActions,
+              builder: (ctx, _) => _detailActions.build(ctx, isEnglish),
+            ),
+          // หน้ารายละเอียดซ่อนปุ่มรีเฟรช (กดพลาดแล้วการแก้ไขหาย) — กลับรายการด้วยลูกศรย้อนกลับ
+          if (_currentTabIndex == 0)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: isEnglish ? 'Refresh list' : 'รีเฟรชรายการ',
+              onPressed: _refreshList,
+            ),
         ],
       ),
       body: Column(
@@ -142,6 +181,7 @@ class _ImTransactionScreenState extends State<ImTransactionScreen>
                   onSaveSuccess: _onSaveSuccess,
                   onCancel: _backToList,
                   canDelete: canDelete,
+                  actions: _detailActions,
                 ),
               ],
             ),
