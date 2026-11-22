@@ -21,6 +21,10 @@ class PoPendingReceiptReportRow {
   final String? warehouseCode;
   final String? warehouseNameTh;
   final String? warehouseNameEn;
+  // หน่วยของบรรทัด (จำนวนค้างเป็นหน่วยนี้) — ใบเก่าไม่มีหน่วย = หน่วยหลักของสินค้า
+  final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
 
   const PoPendingReceiptReportRow({
     required this.poId,
@@ -42,7 +46,14 @@ class PoPendingReceiptReportRow {
     this.warehouseCode,
     this.warehouseNameTh,
     this.warehouseNameEn,
+    this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
   });
+
+  String uomName(bool isEnglish) => isEnglish && (uomNameEn ?? '').isNotEmpty
+      ? uomNameEn!
+      : ((uomNameTh ?? '').isNotEmpty ? uomNameTh! : (uomCode ?? ''));
 
   double get totalAmountLc => qtyOutstanding * unitPriceFc * exchangeRate;
 
@@ -76,6 +87,9 @@ class PoPendingReceiptReportRow {
       warehouseCode: json['warehouse_code'],
       warehouseNameTh: json['warehouse_name_th'],
       warehouseNameEn: json['warehouse_name_en'],
+      uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th'],
+      uomNameEn: json['uom_name_en'],
     );
   }
 }

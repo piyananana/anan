@@ -156,6 +156,7 @@ class _ImStockCountPrintScreenState extends State<ImStockCountPrintScreen> {
       1: const pw.FlexColumnWidth(2),
       2: const pw.FlexColumnWidth(3),
       3: const pw.FlexColumnWidth(1.2),
+      4: const pw.FlexColumnWidth(3),
     };
 
     pw.Widget buildBinTable(ImLocation bin) {
@@ -185,7 +186,19 @@ class _ImStockCountPrintScreenState extends State<ImStockCountPrintScreen> {
                     isEnglish && (l.uomNameEn ?? '').isNotEmpty ? l.uomNameEn! : (l.uomNameTh ?? l.uomCode ?? ''),
                     style: const pw.TextStyle(fontSize: 10),
                   )),
-                  pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('')),
+                  // สินค้าที่มีหลายหน่วย: เว้นช่องให้กรอกแยกหน่วย (หน่วยใหญ่ก่อน แล้วหน่วยของบรรทัด)
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(4),
+                    child: l.countUnits.isEmpty
+                        ? pw.Text('')
+                        : pw.Text(
+                            [
+                              ...l.countUnits.map((u) => u.displayName(isEnglish)),
+                              isEnglish && (l.uomNameEn ?? '').isNotEmpty ? l.uomNameEn! : (l.uomNameTh ?? l.uomCode ?? ''),
+                            ].map((n) => '........ $n').join('   '),
+                            style: const pw.TextStyle(fontSize: 9),
+                          ),
+                  ),
                   pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('')),
                 ])),
           ],

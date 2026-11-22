@@ -74,6 +74,12 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
 
   static num _num(dynamic v) => v is num ? v : (num.tryParse(v?.toString() ?? '') ?? 0);
   num _amount(Map<String, dynamic> r) => _num(r['qty']) * _num(r['unit_cost']);
+  // หน่วยหลักของสินค้า (จำนวนที่ขายไปเป็นหน่วยหลัก)
+  String _uomName(Map<String, dynamic> r) {
+    final en = r['uom_name_en'] as String?, th = r['uom_name_th'] as String?;
+    if (_isEnglish && (en ?? '').isNotEmpty) return en!;
+    return (th ?? '').isNotEmpty ? th! : (r['uom_code']?.toString() ?? '');
+  }
   num get _selectedTotal => _rows.where((r) => _selected.contains(r['consumption_id'] as int)).fold<num>(0, (s, r) => s + _amount(r));
 
   static String _fmtDate(String? raw) {
@@ -408,7 +414,7 @@ class _ImConsignmentSettlementScreenState extends State<ImConsignmentSettlementS
                     '${r['sale_doc_no'] ?? ''}\n${_fmtDate(r['sale_doc_date'] as String?)}',
                     style: const TextStyle(fontSize: 13))),
                 Expanded(flex: 2, child: Text(r['receipt_doc_no'] as String? ?? '', style: const TextStyle(fontSize: 13))),
-                Expanded(flex: 1, child: Text(fmtQty.format(_num(r['qty'])), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
+                Expanded(flex: 1, child: Text('${fmtQty.format(_num(r['qty']))} ${_uomName(r)}'.trim(), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
                 Expanded(flex: 1, child: Text(fmt.format(_num(r['unit_cost'])), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
                 Expanded(flex: 1, child: Text(fmt.format(_amount(r)), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
               ]),

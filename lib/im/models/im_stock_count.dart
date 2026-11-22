@@ -155,6 +155,8 @@ class ImStockCountDetail {
   final DateTime? countedAt;
   final String? remark;
   final List<ImStockCountUomCount> uomCounts;
+  // หน่วยอื่นของสินค้าที่ใช้ตรวจนับได้ (ไม่รวมหน่วยของบรรทัด) — ใบพิมพ์สำหรับนับเว้นช่องแยกหน่วย
+  final List<ImStockCountUomCount> countUnits;
 
   const ImStockCountDetail({
     this.id,
@@ -182,6 +184,7 @@ class ImStockCountDetail {
     this.countedAt,
     this.remark,
     this.uomCounts = const [],
+    this.countUnits = const [],
   });
 
   double get variance => (countedQty ?? 0) - (systemQty ?? 0);
@@ -215,6 +218,9 @@ class ImStockCountDetail {
       countedAt: json['counted_at'] != null ? DateTime.tryParse(json['counted_at'].toString())?.toLocal() : null,
       remark: json['remark'],
       uomCounts: (json['uom_counts'] as List? ?? [])
+          .map((e) => ImStockCountUomCount.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      countUnits: (json['count_units'] as List? ?? [])
           .map((e) => ImStockCountUomCount.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),
     );
@@ -316,6 +322,10 @@ class ImStockCountVarianceRow {
   final double varianceQty;
   final double unitCost;
   final double varianceValue;
+  final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
+  final List<ImStockCountUomCount> uomCounts; // ยอดนับแยกหน่วย (ถ้านับหลายหน่วย)
 
   const ImStockCountVarianceRow({
     required this.countId,
@@ -336,7 +346,19 @@ class ImStockCountVarianceRow {
     this.varianceQty = 0,
     this.unitCost = 0,
     this.varianceValue = 0,
+    this.uomCode,
+    this.uomNameTh,
+    this.uomNameEn,
+    this.uomCounts = const [],
   });
+
+  String uomName(bool isEnglish) => isEnglish && (uomNameEn ?? '').isNotEmpty
+      ? uomNameEn!
+      : ((uomNameTh ?? '').isNotEmpty ? uomNameTh! : (uomCode ?? ''));
+
+  // เช่น "2 ลัง + 1 แพ็ค + 5 ขวด" — ว่างถ้ากรอกยอดหน่วยหลักตรง ๆ
+  String countBreakdown(bool isEnglish, String Function(double) fmt) =>
+      uomCounts.map((u) => '${fmt(u.qty)} ${u.displayName(isEnglish)}').join(' + ');
 
   factory ImStockCountVarianceRow.fromJson(Map<String, dynamic> json) {
     double toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
@@ -359,6 +381,12 @@ class ImStockCountVarianceRow {
       varianceQty: toDouble(json['variance_qty']),
       unitCost: toDouble(json['unit_cost']),
       varianceValue: toDouble(json['variance_value']),
+      uomCode: json['uom_code'],
+      uomNameTh: json['uom_name_th'],
+      uomNameEn: json['uom_name_en'],
+      uomCounts: (json['uom_counts'] as List? ?? [])
+          .map((e) => ImStockCountUomCount.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
     );
   }
 }

@@ -356,9 +356,12 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
     String? curKey;
     String curLabel = '';
     double curSubtotalQty = 0;
+    // หน่วยของแถวในกลุ่ม — มีหลายหน่วย = ไม่แสดงยอดรวมจำนวน (บวกต่างหน่วยกันไม่ได้) แสดงเฉพาะมูลค่า
+    final curUnits = <String>{};
     double curSubtotalValue = 0;
     int curCount = 0;
     double grandQty = 0;
+    final grandUnits = <String>{};
     double grandValue = 0;
     int rowIdx = 0;
 
@@ -369,7 +372,7 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
           child: pw.Text('${isEnglish ? "Category" : "หมวดหมู่"}:  $label', style: tB(9)),
         );
 
-    pw.Widget totalsRow(PdfColor bg, String label, double qty, double value) => pw.Container(
+    pw.Widget totalsRow(PdfColor bg, String label, double? qty, double value) => pw.Container(
           width: pageW,
           color: bg,
           child: pw.Row(children: [
@@ -379,7 +382,7 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
                 child: pw.Text(label, style: tB(9)),
               ),
             ),
-            cell(cw['qty']!,   fmtQty.format(qty), bold: true, a: pw.TextAlign.right),
+            cell(cw['qty']!,   qty == null ? '' : fmtQty.format(qty), bold: true, a: pw.TextAlign.right),
             cell(cw['value']!, fmt.format(value),  bold: true, a: pw.TextAlign.right),
           ]),
         );
@@ -389,8 +392,9 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
       if (curKey != null && key != curKey) {
         content.add(totalsRow(cGroupTot,
             isEnglish ? 'Subtotal ($curCount line(s)):' : 'รวมยอด ($curCount รายการ):',
-            curSubtotalQty, curSubtotalValue));
+            curUnits.length > 1 ? null : curSubtotalQty, curSubtotalValue));
         curSubtotalQty = 0;
+        curUnits.clear();
         curSubtotalValue = 0;
         curCount = 0;
       }
@@ -402,8 +406,10 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
       final qty = _num(r['qty']).toDouble();
       final value = _num(r['value']).toDouble();
       curSubtotalQty += qty;
+      curUnits.add('${r['uom_code'] ?? ''}');
       curSubtotalValue += value;
       grandQty += qty;
+      grandUnits.add('${r['uom_code'] ?? ''}');
       grandValue += value;
       curCount++;
 
@@ -427,12 +433,12 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
     if (curKey != null) {
       content.add(totalsRow(cGroupTot,
           isEnglish ? 'Subtotal ($curCount line(s)):' : 'รวมยอด ($curCount รายการ):',
-          curSubtotalQty, curSubtotalValue));
+          curUnits.length > 1 ? null : curSubtotalQty, curSubtotalValue));
     }
 
     content.add(totalsRow(cTotal,
         isEnglish ? 'Grand total ${_reportData.length} line(s):' : 'รวมทั้งสิ้น ${_reportData.length} รายการ:',
-        grandQty, grandValue));
+        grandUnits.length > 1 ? null : grandQty, grandValue));
 
     doc.addPage(
       pw.MultiPage(
@@ -480,9 +486,12 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
       String? curKey;
       String curLabel = '';
       double curSubtotalQty = 0;
+      // หน่วยของแถวในกลุ่ม — มีหลายหน่วย = ไม่แสดงยอดรวมจำนวน (บวกต่างหน่วยกันไม่ได้) แสดงเฉพาะมูลค่า
+      final curUnits = <String>{};
       double curSubtotalValue = 0;
       int curCount = 0;
       double grandQty = 0;
+      final grandUnits = <String>{};
       double grandValue = 0;
 
       void writeGroupSubtotal() {
@@ -492,7 +501,7 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
         for (int c = 1; c < 6; c++) {
           _xl(s, row, c, '', bg: groupTotBg);
         }
-        _xl(s, row, 6, curSubtotalQty, bg: groupTotBg, bold: true, align: HorizontalAlign.Right);
+        _xl(s, row, 6, curUnits.length > 1 ? '' : curSubtotalQty, bg: groupTotBg, bold: true, align: HorizontalAlign.Right);
         _xl(s, row, 7, curSubtotalValue, bg: groupTotBg, bold: true, align: HorizontalAlign.Right);
         row++;
       }
@@ -502,6 +511,7 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
         if (curKey != null && key != curKey) {
           writeGroupSubtotal();
           curSubtotalQty = 0;
+          curUnits.clear();
           curSubtotalValue = 0;
           curCount = 0;
         }
@@ -516,8 +526,10 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
         final qty = _num(r['qty']).toDouble();
         final value = _num(r['value']).toDouble();
         curSubtotalQty += qty;
+        curUnits.add('${r['uom_code'] ?? ''}');
         curSubtotalValue += value;
         grandQty += qty;
+        grandUnits.add('${r['uom_code'] ?? ''}');
         grandValue += value;
         curCount++;
 
@@ -539,7 +551,7 @@ class _ImStockBalanceByItemReportScreenState extends State<ImStockBalanceByItemR
       for (int c = 1; c < 6; c++) {
         _xl(s, row, c, '', bg: totBg);
       }
-      _xl(s, row, 6, grandQty, bg: totBg, bold: true, align: HorizontalAlign.Right);
+      _xl(s, row, 6, grandUnits.length > 1 ? '' : grandQty, bg: totBg, bold: true, align: HorizontalAlign.Right);
       _xl(s, row, 7, grandValue, bg: totBg, bold: true, align: HorizontalAlign.Right);
 
       final bytes = ex.encode();

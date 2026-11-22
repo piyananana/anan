@@ -344,6 +344,34 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
 
   bool get _isReadOnly => widget.mode == Mode.view || widget.mode == Mode.none;
 
+  // เปลี่ยนประเภทตาราง (ขาย <-> ซื้อ) — หน่วยของบรรทัดต้องอนุญาตในงานใหม่ (backend ตรวจทุกบรรทัดอีกครั้งตอนบันทึก)
+  // แจ้งรายการที่หน่วยใช้ไม่ได้ไว้ก่อน ให้แก้หน่วยของบรรทัดเหล่านั้นก่อนบันทึก
+  Future<void> _onListTypeChanged(String v) async {
+    setState(() => _listType = v);
+    final isEnglish = context.read<LanguageProvider>().isEnglish;
+    final purpose = v == 'PURCHASE' ? 'PURCHASE' : 'SALES';
+    final messenger = ScaffoldMessenger.of(context);
+    final bad = <String>[];
+    final cache = <int, Set<int>>{};
+    for (final d in List.of(_details)) {
+      final uomId = d.uomId;
+      if (uomId == null) continue;
+      try {
+        final allowed = cache[d.itemId] ??=
+            (await ImItemService().fetchItemUoms(d.itemId, purpose: purpose)).units.map((u) => u.uomId).toSet();
+        if (!allowed.contains(uomId)) bad.add('${d.itemCode ?? d.itemId} (${d.uomCode ?? uomId})');
+      } catch (_) {}
+    }
+    if (!mounted || _listType != v || bad.isEmpty) return;
+    messenger.showSnackBar(SnackBar(
+      backgroundColor: Colors.orange,
+      duration: const Duration(seconds: 8),
+      content: Text(isEnglish
+          ? 'These lines use a unit not allowed for ${purpose == 'PURCHASE' ? 'purchasing' : 'sales'} — change the unit before saving: ${bad.join(', ')}'
+          : 'บรรทัดต่อไปนี้ใช้หน่วยที่ไม่ได้อนุญาตในงาน${purpose == 'PURCHASE' ? 'ซื้อ' : 'ขาย'} — แก้หน่วยก่อนบันทึก: ${bad.join(', ')}'),
+    ));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -508,7 +536,7 @@ class ImPriceListDetailWidgetState extends State<ImPriceListDetailWidget> {
             isExpanded: true,
             decoration: InputDecoration(labelText: isEnglish ? 'List Type' : 'ประเภทตารางราคา', border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
             items: imPriceListTypes.map((t) => DropdownMenuItem(value: t, child: Text(imPriceListTypeLabel(t, isEnglish)))).toList(),
-            onChanged: _isReadOnly ? null : (v) => setState(() => _listType = v ?? 'SALES'),
+            onChanged: _isReadOnly ? null : (v) => _onListTypeChanged(v ?? 'SALES'),
           ),
         ),
         const SizedBox(width: 10),

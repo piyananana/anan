@@ -405,9 +405,12 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
     String? curKey;
     String curLabel = '';
     double curSubtotalQty = 0;
+    // หน่วยของแถวในกลุ่ม — มีหลายหน่วย = ไม่แสดงยอดรวมจำนวน (บวกต่างหน่วยกันไม่ได้) แสดงเฉพาะมูลค่า
+    final curUnits = <String>{};
     double curSubtotalValue = 0;
     int curCount = 0;
     double grandQty = 0;
+    final grandUnits = <String>{};
     double grandValue = 0;
     int rowIdx = 0;
 
@@ -418,7 +421,7 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
           child: pw.Text('${isEnglish ? "Category" : "หมวดหมู่"}:  $label', style: tB(9)),
         );
 
-    pw.Widget totalsRow(PdfColor bg, String label, double qty, double value) => pw.Container(
+    pw.Widget totalsRow(PdfColor bg, String label, double? qty, double value) => pw.Container(
           width: pageW,
           color: bg,
           child: pw.Row(children: [
@@ -428,7 +431,7 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
                 child: pw.Text(label, style: tB(9)),
               ),
             ),
-            cell(cw['qty']!,      fmtQty.format(qty), bold: true, a: pw.TextAlign.right),
+            cell(cw['qty']!,      qty == null ? '' : fmtQty.format(qty), bold: true, a: pw.TextAlign.right),
             cell(cw['unitCost']!, '', bold: true),
             cell(cw['value']!,    fmt.format(value),  bold: true, a: pw.TextAlign.right),
             cell(cw['age']!,      '', bold: true),
@@ -442,8 +445,9 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
       if (curKey != null && key != curKey) {
         content.add(totalsRow(cGroupTot,
             isEnglish ? 'Subtotal ($curCount line(s)):' : 'รวมยอด ($curCount รายการ):',
-            curSubtotalQty, curSubtotalValue));
+            curUnits.length > 1 ? null : curSubtotalQty, curSubtotalValue));
         curSubtotalQty = 0;
+        curUnits.clear();
         curSubtotalValue = 0;
         curCount = 0;
       }
@@ -458,8 +462,10 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
       final ageDays = _intOrNull(r['age_days']);
       final noMoveDays = _intOrNull(r['no_movement_days']);
       curSubtotalQty += qty;
+      curUnits.add('${r['uom_code'] ?? ''}');
       curSubtotalValue += value;
       grandQty += qty;
+      grandUnits.add('${r['uom_code'] ?? ''}');
       grandValue += value;
       curCount++;
 
@@ -488,12 +494,12 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
     if (curKey != null) {
       content.add(totalsRow(cGroupTot,
           isEnglish ? 'Subtotal ($curCount line(s)):' : 'รวมยอด ($curCount รายการ):',
-          curSubtotalQty, curSubtotalValue));
+          curUnits.length > 1 ? null : curSubtotalQty, curSubtotalValue));
     }
 
     content.add(totalsRow(cTotal,
         isEnglish ? 'Grand total ${_reportData.length} line(s):' : 'รวมทั้งสิ้น ${_reportData.length} รายการ:',
-        grandQty, grandValue));
+        grandUnits.length > 1 ? null : grandQty, grandValue));
 
     doc.addPage(
       pw.MultiPage(
@@ -542,9 +548,12 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
       String? curKey;
       String curLabel = '';
       double curSubtotalQty = 0;
+      // หน่วยของแถวในกลุ่ม — มีหลายหน่วย = ไม่แสดงยอดรวมจำนวน (บวกต่างหน่วยกันไม่ได้) แสดงเฉพาะมูลค่า
+      final curUnits = <String>{};
       double curSubtotalValue = 0;
       int curCount = 0;
       double grandQty = 0;
+      final grandUnits = <String>{};
       double grandValue = 0;
 
       void writeGroupSubtotal() {
@@ -554,7 +563,7 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
         for (int c = 1; c < 7; c++) {
           _xl(s, row, c, '', bg: groupTotBg);
         }
-        _xl(s, row, 7, curSubtotalQty, bg: groupTotBg, bold: true, align: HorizontalAlign.Right);
+        _xl(s, row, 7, curUnits.length > 1 ? '' : curSubtotalQty, bg: groupTotBg, bold: true, align: HorizontalAlign.Right);
         _xl(s, row, 8, '', bg: groupTotBg);
         _xl(s, row, 9, curSubtotalValue, bg: groupTotBg, bold: true, align: HorizontalAlign.Right);
         for (int c = 10; c < 13; c++) {
@@ -568,6 +577,7 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
         if (curKey != null && key != curKey) {
           writeGroupSubtotal();
           curSubtotalQty = 0;
+          curUnits.clear();
           curSubtotalValue = 0;
           curCount = 0;
         }
@@ -585,8 +595,10 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
         final ageDays = _intOrNull(r['age_days']);
         final noMoveDays = _intOrNull(r['no_movement_days']);
         curSubtotalQty += qty;
+        curUnits.add('${r['uom_code'] ?? ''}');
         curSubtotalValue += value;
         grandQty += qty;
+        grandUnits.add('${r['uom_code'] ?? ''}');
         grandValue += value;
         curCount++;
 
@@ -613,7 +625,7 @@ class _ImStockAgingReportScreenState extends State<ImStockAgingReportScreen> {
       for (int c = 1; c < 7; c++) {
         _xl(s, row, c, '', bg: totBg);
       }
-      _xl(s, row, 7, grandQty, bg: totBg, bold: true, align: HorizontalAlign.Right);
+      _xl(s, row, 7, grandUnits.length > 1 ? '' : grandQty, bg: totBg, bold: true, align: HorizontalAlign.Right);
       _xl(s, row, 8, '', bg: totBg);
       _xl(s, row, 9, grandValue, bg: totBg, bold: true, align: HorizontalAlign.Right);
       for (int c = 10; c < 13; c++) {

@@ -149,9 +149,17 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
             ..._rows.map((r) => pw.TableRow(children: [
                   pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(r.warehouseCode ?? '', style: const pw.TextStyle(fontSize: 9))),
                   pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(r.locationCode ?? '', style: const pw.TextStyle(fontSize: 9))),
-                  pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('${r.itemCode ?? ''} ${r.itemName ?? ''}', style: const pw.TextStyle(fontSize: 9))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('${r.itemCode ?? ''} ${r.itemName ?? ''} (${r.uomName(isEnglish)})', style: const pw.TextStyle(fontSize: 9))),
                   pw.Container(padding: const pw.EdgeInsets.all(4), alignment: num0, child: pw.Text(_fmtQty.format(r.systemQty), style: const pw.TextStyle(fontSize: 9))),
-                  pw.Container(padding: const pw.EdgeInsets.all(4), alignment: num0, child: pw.Text(_fmtQty.format(r.countedQty), style: const pw.TextStyle(fontSize: 9))),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(4),
+                    alignment: num0,
+                    child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+                      pw.Text(_fmtQty.format(r.countedQty), style: const pw.TextStyle(fontSize: 9)),
+                      if (r.uomCounts.isNotEmpty)
+                        pw.Text(r.countBreakdown(isEnglish, (v) => _fmtQty.format(v)), style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.right),
+                    ]),
+                  ),
                   pw.Container(padding: const pw.EdgeInsets.all(4), alignment: num0, child: pw.Text(_fmtQty.format(r.varianceQty), style: const pw.TextStyle(fontSize: 9))),
                   pw.Container(padding: const pw.EdgeInsets.all(4), alignment: num0, child: pw.Text(_fmtMoney.format(r.varianceValue), style: const pw.TextStyle(fontSize: 9))),
                 ])),
@@ -201,6 +209,7 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
       final headers = [
         isEnglish ? 'Warehouse' : 'คลังสินค้า', isEnglish ? 'Bin' : 'ตำแหน่ง', isEnglish ? 'Item Code' : 'รหัสสินค้า', isEnglish ? 'Item Name' : 'ชื่อสินค้า',
         isEnglish ? 'System Qty' : 'ยอดในระบบ', isEnglish ? 'Counted Qty' : 'ยอดตรวจนับ', isEnglish ? 'Variance' : 'ผลต่าง', isEnglish ? 'Variance Value' : 'มูลค่าผลต่าง',
+        isEnglish ? 'Unit' : 'หน่วย', isEnglish ? 'Count by Unit' : 'ยอดนับแยกหน่วย',
       ];
       for (var i = 0; i < headers.length; i++) { _xlCell(s, r, i, headers[i], bg: hdrBg, bold: true); }
       r++;
@@ -213,6 +222,8 @@ class _ImStockCountVarianceReportScreenState extends State<ImStockCountVarianceR
         _xlCell(s, r, 5, DoubleCellValue(row.countedQty), align: HorizontalAlign.Right);
         _xlCell(s, r, 6, DoubleCellValue(row.varianceQty), align: HorizontalAlign.Right);
         _xlCell(s, r, 7, DoubleCellValue(row.varianceValue), align: HorizontalAlign.Right);
+        _xlCell(s, r, 8, row.uomName(isEnglish));
+        _xlCell(s, r, 9, row.countBreakdown(isEnglish, (v) => _fmtQty.format(v)));
         r++;
       }
       _xlCell(s, r, 0, isEnglish ? 'Grand Total' : 'รวมทั้งสิ้น', bold: true);
