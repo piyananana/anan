@@ -115,6 +115,9 @@ class ApTransactionHeader {
   // เลขที่/วันที่ใบกำกับภาษีของผู้ขาย — รายงานภาษีซื้อ (ว่าง = ใช้เลขที่/วันที่เอกสาร)
   final String? taxInvoiceNo;
   final DateTime? taxInvoiceDate;
+  // ระยะเครดิตของเอกสาร (ใบตั้งหนี้) — ค่าเริ่มต้นจากผู้ขาย แก้ได้, null = ไม่ระบุ
+  final int? creditTermMonths;
+  final int? creditTermDays;
   // Audit
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -171,6 +174,7 @@ class ApTransactionHeader {
     this.priceIncludesVat = false,
     this.refPoId, this.refPoDocNo,
     this.taxInvoiceNo, this.taxInvoiceDate,
+    this.creditTermMonths, this.creditTermDays,
     this.createdAt, this.updatedAt, this.createdBy, this.updatedBy,
   });
 
@@ -228,6 +232,8 @@ class ApTransactionHeader {
       refPoDocNo: json['ref_po_doc_no'] as String?,
       taxInvoiceNo: json['tax_invoice_no'] as String?,
       taxInvoiceDate: parseLocalDateNullable(json['tax_invoice_date']),
+      creditTermMonths: json['credit_term_months'] == null ? null : int.tryParse(json['credit_term_months'].toString()),
+      creditTermDays: json['credit_term_days'] == null ? null : int.tryParse(json['credit_term_days'].toString()),
       branchCode: json['branch_code'],
       branchNameThai: json['branch_name_thai'],
       branchNameEng: json['branch_name_eng'],
@@ -275,6 +281,8 @@ class ApTransactionHeader {
         'ref_po_id': refPoId,
         'tax_invoice_no': taxInvoiceNo,
         'tax_invoice_date': taxInvoiceDate != null ? formatLocalDate(taxInvoiceDate!) : null,
+        'credit_term_months': creditTermMonths,
+        'credit_term_days': creditTermDays,
         if (createdBy != null) 'created_by': createdBy,
         if (updatedBy != null) 'updated_by': updatedBy,
       };
@@ -481,6 +489,8 @@ class ApTransactionPayment {
   final String? drawerBankBranch;
   final String? drawerAccountNo;
   final int? checkbookId; // จ่ายด้วยเช็ค (60/80): สมุดเช็ค — เลขเช็คว่าง = ใช้เลขถัดไปตอน Post
+  final String? bankAccountCode; // แสดงอย่างเดียว (การ์ดจ่ายชำระ ซื้อเงินสด)
+  final String? bankAccountNameTh;
 
   ApTransactionPayment({
     this.id, this.headerId,
@@ -492,6 +502,7 @@ class ApTransactionPayment {
     this.refNo, this.paymentDate, this.remark,
     this.drawerBankName, this.drawerBankBranch, this.drawerAccountNo,
     this.checkbookId,
+    this.bankAccountCode, this.bankAccountNameTh,
   });
 
   factory ApTransactionPayment.fromJson(Map<String, dynamic> json) {
@@ -514,6 +525,8 @@ class ApTransactionPayment {
       drawerBankBranch: json['drawer_bank_branch'],
       drawerAccountNo: json['drawer_account_no'],
       checkbookId: json['checkbook_id'],
+      bankAccountCode: json['bank_account_code'] as String?,
+      bankAccountNameTh: json['bank_account_name_th'] as String?,
     );
   }
 
@@ -615,6 +628,8 @@ class ApTransaction {
   final String? voidBlock;
   final String? voidBlockRef;
   final List<DocReverseLog> reverseHistory;
+  // ใบตั้งหนี้ที่ซื้อเงินสด IM สร้าง: ใบจ่ายชำระคู่กัน (การ์ดจ่ายชำระแบบอ่านอย่างเดียว)
+  final ApCashPurchasePayment? cashPurchase;
 
   ApTransaction({
     required this.header,
@@ -629,6 +644,7 @@ class ApTransaction {
     this.voidBlock,
     this.voidBlockRef,
     this.reverseHistory = const [],
+    this.cashPurchase,
   });
 
   factory ApTransaction.fromJson(Map<String, dynamic> json) => ApTransaction(
@@ -648,7 +664,39 @@ class ApTransaction {
         voidBlock: json['void_block'] as String?,
         voidBlockRef: json['void_block_ref'] as String?,
         reverseHistory: DocReverseLog.listFromJson(json['reverse_history']),
+        cashPurchase: json['cash_purchase'] is Map<String, dynamic> ? ApCashPurchasePayment.fromJson(json['cash_purchase']) : null,
       );
+}
+
+// ── จ่ายชำระ (ซื้อเงินสด) — ใบจ่ายที่เอกสารซื้อเงินสด IM ('14') สร้างคู่กับใบตั้งหนี้ ──
+class ApCashPurchasePayment {
+  final String? imDocNo;
+  final String? taxInvoiceKind; // FULL / ABB / NONE
+  final int? paymentId;
+  final String? paymentDocNo;
+  final DateTime? paymentDate;
+  final String? paymentStatus;
+  final List<ApTransactionPayment> payments;
+  final List<ApTransactionWht> whts;
+
+  const ApCashPurchasePayment({
+    this.imDocNo, this.taxInvoiceKind, this.paymentId, this.paymentDocNo, this.paymentDate, this.paymentStatus,
+    this.payments = const [], this.whts = const [],
+  });
+
+  factory ApCashPurchasePayment.fromJson(Map<String, dynamic> j) {
+    final p = j['payment'] as Map<String, dynamic>?;
+    return ApCashPurchasePayment(
+      imDocNo: j['im_doc_no'] as String?,
+      taxInvoiceKind: j['tax_invoice_kind'] as String?,
+      paymentId: p?['id'] as int?,
+      paymentDocNo: p?['doc_no'] as String?,
+      paymentDate: parseLocalDateNullable(p?['doc_date']),
+      paymentStatus: p?['status'] as String?,
+      payments: (j['payments'] as List<dynamic>? ?? []).map((e) => ApTransactionPayment.fromJson(e)).toList(),
+      whts: (j['whts'] as List<dynamic>? ?? []).map((e) => ApTransactionWht.fromJson(e)).toList(),
+    );
+  }
 }
 
 // ── Open Invoice (for payment selection) ──────────────────────────────────
@@ -672,7 +720,9 @@ class ApOpenInvoice {
   // บัญชีเจ้าหนี้ที่ใบตั้งหนี้ลงไว้ — การจ่ายชำระล้างเข้าบัญชีนี้
   final int? apAccountId;
   final double invAdvanceAmountFc; // มัดจำที่ใบตั้งหนี้หักไปแล้วตอนตั้งหนี้
-  final String? refPoDocNo; // ใบมัดจำ: ใบสั่งซื้อที่อ้างอิง
+  final String? refPoDocNo; // ใบสั่งซื้อที่อ้างอิง (ใบมัดจำ / ใบตั้งหนี้ / GRN ที่สร้างใบตั้งหนี้)
+  final String? taxInvoiceNo; // เลขที่ใบกำกับภาษีของผู้ขาย
+  final String? refNo;
 
   ApOpenInvoice({
     required this.id, required this.docNo,
@@ -683,7 +733,7 @@ class ApOpenInvoice {
     this.currencyCode = 'THB', this.exchangeRate = 1,
     this.docCode, this.sysDocType, this.apAccountId,
     this.invAdvanceAmountFc = 0,
-    this.refPoDocNo,
+    this.refPoDocNo, this.taxInvoiceNo, this.refNo,
   });
 
   factory ApOpenInvoice.fromJson(Map<String, dynamic> json) {
@@ -707,6 +757,8 @@ class ApOpenInvoice {
       apAccountId: json['ap_account_id'] as int?,
       invAdvanceAmountFc: toDouble(json['inv_advance_amount_fc']),
       refPoDocNo: json['ref_po_doc_no'] as String?,
+      taxInvoiceNo: json['tax_invoice_no'] as String?,
+      refNo: json['ref_no'] as String?,
     );
   }
 }
