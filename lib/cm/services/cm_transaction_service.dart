@@ -97,6 +97,16 @@ class CmTransactionService {
     }
   }
 
+  // ยอดคงเหลือของบัญชีธนาคาร/เงินสดย่อย ณ วันที่ (สกุลเงินหลัก) — ป้ายช่องบัญชีของเอกสารโอนเงิน (50)
+  Future<double?> fetchBankBalance(int bankAccountId, String date) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/cm_transaction/bank_balance/$bankAccountId?date=$date'), headers: headers);
+    if (response.statusCode == 200) {
+      return double.tryParse('${json.decode(response.body)['balance_lc']}');
+    }
+    return null;
+  }
+
   Future<List<CmOpenVoucher>> fetchOpenVouchers({int? bankAccountId}) async {
     final headers = await authService.getAuthHeader();
     final params = <String, String>{};

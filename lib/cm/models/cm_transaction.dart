@@ -621,6 +621,19 @@ class CmLegacyMirrorRow {
   final String? checkNo;
   final DateTime? checkDate;
   final String? clearingNote;
+  // หน้าจออ่านอย่างเดียว (แบบหน้ารายละเอียด IM): ช่องทาง บัญชีธนาคาร และเอกสารต้นทาง AR/AP
+  final bool isReceipt;
+  final double amountFc;
+  final String? partyCode;
+  final String? drawerBank;
+  final String? bankAccountCode;
+  final String? bankAccountName;
+  final String? paymentMethodCode;
+  final String? paymentMethodName;
+  final int? sourceId;
+  final String? sourceDocNo;
+  final String? sourceDescription;
+  final int? sourceGlEntryId;
 
   CmLegacyMirrorRow({
     required this.id,
@@ -635,6 +648,18 @@ class CmLegacyMirrorRow {
     this.checkNo,
     this.checkDate,
     this.clearingNote,
+    this.isReceipt = true,
+    this.amountFc = 0,
+    this.partyCode,
+    this.drawerBank,
+    this.bankAccountCode,
+    this.bankAccountName,
+    this.paymentMethodCode,
+    this.paymentMethodName,
+    this.sourceId,
+    this.sourceDocNo,
+    this.sourceDescription,
+    this.sourceGlEntryId,
   });
 
   factory CmLegacyMirrorRow.fromJson(Map<String, dynamic> json, {required bool isReceipt}) {
@@ -652,6 +677,18 @@ class CmLegacyMirrorRow {
       checkNo: json['check_no'],
       checkDate: parseLocalDateNullable(json['check_date']),
       clearingNote: json['clearing_note'],
+      isReceipt: isReceipt,
+      amountFc: toDouble(json['amount_fc']),
+      partyCode: isReceipt ? json['customer_code'] : json['payee_code'],
+      drawerBank: json['drawer_bank'],
+      bankAccountCode: json['bank_account_code'],
+      bankAccountName: json['bank_account_name_th'],
+      paymentMethodCode: json['payment_method_code'],
+      paymentMethodName: json['payment_method_name_th'],
+      sourceId: json['source_id'] == null ? null : int.tryParse(json['source_id'].toString()),
+      sourceDocNo: json['source_doc_no'] ?? (isReceipt ? json['ar_doc_no'] : json['ap_doc_no']),
+      sourceDescription: json['source_description'],
+      sourceGlEntryId: json['source_gl_entry_id'] == null ? null : int.tryParse(json['source_gl_entry_id'].toString()),
     );
   }
 }
