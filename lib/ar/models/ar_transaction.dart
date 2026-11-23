@@ -45,6 +45,9 @@ class ArTransactionHeader {
   final DateTime? billingDate;
   final DateTime? expectedPaymentDate;
   final String? customerPoNo; // ใบแจ้งหนี้: เลขที่ใบสั่งซื้อของลูกค้า
+  // ระยะเครดิตของเอกสาร (ค่าเริ่มต้นจากลูกค้า แก้ได้) — ใช้คำนวณวันครบกำหนด (แบบธุรกรรม IM)
+  final int? creditTermMonths;
+  final int? creditTermDays;
   final DateTime? customerPoDate;
   final bool priceIncludesVat; // ราคาที่กรอกรวม VAT (ยอดที่เก็บเป็นยอดก่อน VAT เหมือนเดิม)
   // ส่วนลดท้ายบิลของเอกสารขาย: % ของยอดหลังส่วนลดรายการ แล้วตามด้วยส่วนลดเงินสด — ปันส่วนเข้าแต่ละรายการ
@@ -124,6 +127,8 @@ class ArTransactionHeader {
     this.expectedPaymentDate,
     this.customerPoNo,
     this.customerPoDate,
+    this.creditTermMonths,
+    this.creditTermDays,
     this.priceIncludesVat = false,
     this.billDiscountPercent = 0,
     this.cashDiscountAmount = 0,
@@ -193,6 +198,8 @@ class ArTransactionHeader {
       billingDate: parseLocalDateNullable(j['billing_date']),
       expectedPaymentDate: parseLocalDateNullable(j['expected_payment_date']),
       customerPoNo: j['customer_po_no'] as String?,
+      creditTermMonths: j['credit_term_months'] == null ? null : int.tryParse(j['credit_term_months'].toString()),
+      creditTermDays: j['credit_term_days'] == null ? null : int.tryParse(j['credit_term_days'].toString()),
       customerPoDate: parseLocalDateNullable(j['customer_po_date']),
       priceIncludesVat: j['price_includes_vat'] == true,
       billDiscountPercent: _toDouble(j['bill_discount_percent']) ?? 0,
@@ -263,6 +270,8 @@ class ArTransactionHeader {
         'billing_date': billingDate != null ? formatLocalDate(billingDate!) : null,
         'expected_payment_date': expectedPaymentDate != null ? formatLocalDate(expectedPaymentDate!) : null,
         'customer_po_no': customerPoNo,
+        'credit_term_months': creditTermMonths,
+        'credit_term_days': creditTermDays,
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate!) : null,
         'price_includes_vat': priceIncludesVat,
         'bill_discount_percent': billDiscountPercent,
@@ -770,6 +779,8 @@ class ArTransaction {
   final List<DocSalesperson> salespersons;
   // คำขออนุมัติเกินวงเงินเครดิต (credit_status / credit_amount + ขั้นตอนอนุมัติ)
   final DocCreditState credit;
+  // ใบแจ้งหนี้ที่ขายเงินสด IM สร้าง: ใบเสร็จคู่กัน + วิธีรับชำระ (null = ไม่ใช่)
+  final ArCashSaleReceipt? cashSale;
 
   const ArTransaction({
     required this.header,
@@ -784,6 +795,7 @@ class ArTransaction {
     this.reverseHistory = const [],
     this.salespersons = const [],
     this.credit = const DocCreditState(),
+    this.cashSale,
   });
 
   factory ArTransaction.fromJson(Map<String, dynamic> j) {
@@ -808,6 +820,38 @@ class ArTransaction {
       reverseHistory: DocReverseLog.listFromJson(j['reverse_history']),
       salespersons: DocSalesperson.listFromJson(j['salespersons']),
       credit: DocCreditState.fromJson(j['header'] as Map<String, dynamic>, j['credit_approvals']),
+      cashSale: j['cash_sale'] is Map<String, dynamic> ? ArCashSaleReceipt.fromJson(j['cash_sale'] as Map<String, dynamic>) : null,
+    );
+  }
+}
+
+// ---- ขายเงินสด IM ('33'): ใบเสร็จที่สร้างคู่กับใบแจ้งหนี้ (อ่านอย่างเดียว) ----
+class ArCashSaleReceipt {
+  final String? imDocNo;
+  final int? receiptId;
+  final String? receiptDocNo;
+  final DateTime? receiptDate;
+  final String? receiptStatus;
+  final double cashReceived;
+  final double changeAmount;
+  final List<ArTransactionPayment> payments;
+  final List<ArTransactionWht> whts;
+
+  const ArCashSaleReceipt({this.imDocNo, this.receiptId, this.receiptDocNo, this.receiptDate, this.receiptStatus,
+      this.cashReceived = 0, this.changeAmount = 0, this.payments = const [], this.whts = const []});
+
+  factory ArCashSaleReceipt.fromJson(Map<String, dynamic> j) {
+    final r = j['receipt'] as Map<String, dynamic>?;
+    return ArCashSaleReceipt(
+      imDocNo: j['im_doc_no'] as String?,
+      receiptId: r?['id'] as int?,
+      receiptDocNo: r?['doc_no'] as String?,
+      receiptDate: parseLocalDateNullable(r?['doc_date']),
+      receiptStatus: r?['status'] as String?,
+      cashReceived: _toDouble(j['cash_received']) ?? 0,
+      changeAmount: _toDouble(j['change_amount']) ?? 0,
+      payments: (j['payments'] as List<dynamic>? ?? []).map((p) => ArTransactionPayment.fromJson(p as Map<String, dynamic>)).toList(),
+      whts: (j['whts'] as List<dynamic>? ?? []).map((w) => ArTransactionWht.fromJson(w as Map<String, dynamic>)).toList(),
     );
   }
 }
