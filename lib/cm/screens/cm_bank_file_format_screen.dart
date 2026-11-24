@@ -813,7 +813,7 @@ class _FormatDetailPanelState extends State<_FormatDetailPanel> {
                   setState(() => col.align = idx == 0 ? 'L' : 'R'),
               constraints:
                   const BoxConstraints(minWidth: 28, minHeight: 32),
-              textStyle: const TextStyle(fontSize: 11),
+              textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 11),
               children: [Text(isEnglish ? 'Left' : 'ซ้าย'), Text(isEnglish ? 'Right' : 'ขวา')],
             ),
           ),

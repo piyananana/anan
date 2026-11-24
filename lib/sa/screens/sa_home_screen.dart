@@ -682,7 +682,8 @@ class HomeScreenState extends State<HomeScreen> {
               onMove: _reorderTab,
             ),
             Expanded(
-              child: Stack(children: [
+              // fit: expand — แท็บที่ซ่อน (Offstage) มีขนาด 0 ถ้าไม่บังคับ Stack เต็มพื้นที่ หน้าแรก (Positioned.fill) จะกว้าง 0 = หน้าว่าง
+              child: Stack(fit: StackFit.expand, children: [
                 // แท็บที่เปิดอยู่คงสถานะไว้ตลอด แม้กำลังดูหน้าแรก
                 if (_openTabs.isNotEmpty)
                   Offstage(

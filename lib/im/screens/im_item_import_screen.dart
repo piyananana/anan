@@ -24,6 +24,7 @@ class ImItemImportScreen extends StatefulWidget {
 }
 
 class _ImItemImportScreenState extends State<ImItemImportScreen> {
+  bool _isEnglish = false;
   // File state
   String? _fileName;
   Uint8List? _fileBytes;
@@ -144,10 +145,10 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
         });
       } else {
         final body = jsonDecode(response.body);
-        _showSnack(body['message'] ?? 'เกิดข้อผิดพลาด', isError: true);
+        _showSnack(body['message'] ?? (_isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -162,8 +163,8 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการนำเข้า'),
-        content: Text('ต้องการนำเข้าข้อมูลสินค้า $_validRows รายการใช่หรือไม่?'),
+        title: Text((_isEnglish ? 'Confirm import' : 'ยืนยันการนำเข้า')),
+        content: Text((_isEnglish ? 'Import $_validRows items?' : 'ต้องการนำเข้าข้อมูลสินค้า $_validRows รายการใช่หรือไม่?')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -198,9 +199,13 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
         final errs = (data['errors'] as List?)?.length ?? 0;
         if (mounted) {
           _showSnack(
-            'นำเข้าสำเร็จ $imported รายการ'
-            '${skipped > 0 ? '  |  ข้ามรหัสซ้ำ $skipped รายการ' : ''}'
-            '${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}',
+            _isEnglish
+                ? 'Imported $imported rows'
+                  '${skipped > 0 ? '  |  skipped $skipped duplicate codes' : ''}'
+                  '${errs > 0 ? '  |  $errs errors' : ''}'
+                : 'นำเข้าสำเร็จ $imported รายการ'
+                  '${skipped > 0 ? '  |  ข้ามรหัสซ้ำ $skipped รายการ' : ''}'
+                  '${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}',
           );
           setState(() {
             _fileName = null;
@@ -212,7 +217,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
           widget.onFieldsChanged();
         }
       } else {
-        String errMsg = 'เกิดข้อผิดพลาด (${response.statusCode})';
+        String errMsg = (_isEnglish ? 'Error (${response.statusCode})' : 'เกิดข้อผิดพลาด (${response.statusCode})');
         try {
           final body = jsonDecode(response.body);
           errMsg = body['message'] ?? errMsg;
@@ -222,7 +227,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
         _showSnack(errMsg, isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
@@ -240,7 +245,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    _isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _appColor.shade700,
@@ -249,7 +254,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'เริ่มใหม่',
+            tooltip: (_isEnglish ? 'Start over' : 'เริ่มใหม่'),
             onPressed: () => setState(() {
               _fileName = null;
               _fileBytes = null;
@@ -298,13 +303,13 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check_circle_outline),
                   label: Text(_isImporting
-                      ? 'กำลังนำเข้า...'
-                      : 'ยืนยันนำเข้าข้อมูล $_validRows รายการ'),
+                      ? (_isEnglish ? 'Importing...' : 'กำลังนำเข้า...')
+                      : (_isEnglish ? 'Confirm import of $_validRows rows' : 'ยืนยันนำเข้าข้อมูล $_validRows รายการ')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green.shade700,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -320,16 +325,16 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
       final authService = context.read<AuthService>();
       final headers = await authService.getAuthHeader();
       final response = await http.get(
-        Uri.parse('${AppConfig.apiIm}/im_item/import/template/download'),
+        Uri.parse('${AppConfig.apiIm}/im_item/import/template/download?lang=${_isEnglish ? 'en' : 'th'}'),
         headers: headers,
       );
       if (response.statusCode == 200) {
         await downloadFile(response.bodyBytes, 'im_item_template.xlsx');
       } else {
-        _showSnack('ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})', isError: true);
+        _showSnack((_isEnglish ? 'Template download failed (${response.statusCode})' : 'ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     }
   }
 
@@ -337,13 +342,13 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
     return Card(
       child: ExpansionTile(
         leading: Icon(Icons.table_chart_outlined, color: _appColor.shade700),
-        title: const Text('เทมเพลตนำเข้าข้อมูล',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: const Text('คลิกเพื่อดูรายละเอียดคอลัมน์ในแต่ละ sheet'),
+        title: Text((_isEnglish ? 'Import template' : 'เทมเพลตนำเข้าข้อมูล'),
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text((_isEnglish ? 'Click to see the columns of each sheet' : 'คลิกเพื่อดูรายละเอียดคอลัมน์ในแต่ละ sheet')),
         trailing: OutlinedButton.icon(
           onPressed: _downloadTemplate,
           icon: const Icon(Icons.download, size: 18),
-          label: const Text('ดาวน์โหลดเทมเพลต'),
+          label: Text((_isEnglish ? 'Download template' : 'ดาวน์โหลดเทมเพลต')),
           style: OutlinedButton.styleFrom(
             foregroundColor: _appColor.shade700,
             side: BorderSide(color: _appColor.shade700),
@@ -351,14 +356,19 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
         ),
         initiallyExpanded: false,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              'เทมเพลตประกอบด้วย 5 sheet ตามหัวข้อข้อมูลสินค้า (รวม "ตารางราคา" สำหรับตั้งราคาตั้งต้นให้สินค้าที่นำเข้า) '
+              _isEnglish
+                  ? 'The template has 5 sheets by item data topic (including "ตารางราคา" / Price list to set starting prices for the imported items). '
+                      'Every sheet (except "ข้อมูลพื้นฐาน" / General) uses the "old_item_code" column to link to its row in the "ข้อมูลพื้นฐาน" sheet\n'
+                      '"ตารางราคา" must use a price list code that already exists (no new price list is created), and the unit (if given) must be the item\'s base or alternate unit\n'
+                      '★ = required'
+                  : 'เทมเพลตประกอบด้วย 5 sheet ตามหัวข้อข้อมูลสินค้า (รวม "ตารางราคา" สำหรับตั้งราคาตั้งต้นให้สินค้าที่นำเข้า) '
               'ทุก sheet (ยกเว้น "ข้อมูลพื้นฐาน") ใช้คอลัมน์ "old_item_code" (รหัสสินค้าเก่า) เป็นตัวเชื่อมข้อมูลกับแถวใน sheet "ข้อมูลพื้นฐาน"\n'
               '"ตารางราคา" ต้องระบุรหัสตารางราคาที่มีอยู่แล้วในระบบ (ไม่สร้างตารางราคาใหม่) และหน่วยนับ (ถ้าระบุ) ต้องเป็นหน่วยหลักหรือหน่วยทางเลือกของสินค้านั้นเท่านั้น\n'
               '★ = จำเป็นต้องระบุ',
-              style: TextStyle(color: Colors.red, fontSize: 12),
+              style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),
           for (final sheet in _templateSheets) _buildTemplateSheetTile(sheet),
@@ -371,7 +381,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
   Widget _buildTemplateSheetTile(Map<String, dynamic> sheet) {
     final columns = List<Map<String, dynamic>>.from(sheet['columns'] ?? []);
     return ExpansionTile(
-      title: Text(sheet['name']?.toString() ?? '',
+      title: Text((_isEnglish ? (sheet['name_en'] ?? sheet['name']) : sheet['name'])?.toString() ?? '',
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
       children: [
         SingleChildScrollView(
@@ -380,17 +390,17 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
           child: DataTable(
             columnSpacing: 16,
             headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-            columns: const [
-              DataColumn(label: Text('ชื่อ Header', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ความหมาย',   style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('จำเป็น',      style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ตัวอย่าง',   style: TextStyle(fontWeight: FontWeight.bold))),
+            columns: [
+              DataColumn(label: Text((_isEnglish ? 'Header name' : 'ชื่อ Header'), style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Meaning' : 'ความหมาย'),   style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Required' : 'จำเป็น'),      style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Example' : 'ตัวอย่าง'),   style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
             rows: columns
                 .map((col) => DataRow(cells: [
                       DataCell(Text(col['key']?.toString() ?? '',
                           style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
-                      DataCell(Text(col['label']?.toString() ?? '')),
+                      DataCell(Text((_isEnglish ? (col['label_en'] ?? col['label']) : col['label'])?.toString() ?? '')),
                       DataCell((col['required'] as bool? ?? false)
                           ? const Icon(Icons.star, color: Colors.red, size: 14)
                           : const Text('-', style: TextStyle(color: Colors.grey))),
@@ -411,10 +421,14 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
   Widget _buildCodeModeBanner() {
     final auto = _autoNumbering == true;
     final text = auto
-        ? 'รหัสใหม่อัตโนมัติ แต่ระบบยังเก็บรหัสเก่าไว้ให้ด้วย'
-        : 'ใช้รหัสใหม่เหมือนรหัสเก่า ถ้าไม่ระบุรหัสเก่า จะนำข้อมูลเข้าไม่ได้';
+        ? (_isEnglish ? 'New codes are auto-numbered, but the old code is kept as well' : 'รหัสใหม่อัตโนมัติ แต่ระบบยังเก็บรหัสเก่าไว้ให้ด้วย')
+        : (_isEnglish
+            ? 'New codes are the same as the old codes; rows without an old code cannot be imported'
+            : 'ใช้รหัสใหม่เหมือนรหัสเก่า ถ้าไม่ระบุรหัสเก่า จะนำข้อมูลเข้าไม่ได้');
     final groupNote = !auto && _autoGroupCodes.isNotEmpty
-        ? '\n(ยกเว้นหมวดหมู่สินค้าที่ตั้งรหัสอัตโนมัติ: ${_autoGroupCodes.join(', ')})'
+        ? (_isEnglish
+            ? '\n(except auto-numbered item categories: ${_autoGroupCodes.join(', ')})'
+            : '\n(ยกเว้นหมวดหมู่สินค้าที่ตั้งรหัสอัตโนมัติ: ${_autoGroupCodes.join(', ')})')
         : '';
     return Container(
       width: double.infinity,
@@ -441,11 +455,11 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('เลือกไฟล์นำเข้า',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text((_isEnglish ? 'Select import file' : 'เลือกไฟล์นำเข้า'),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 4),
-          const Text('รองรับไฟล์ .xlsx, .xls, .csv',
-              style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Text((_isEnglish ? 'Supports .xlsx, .xls, .csv files' : 'รองรับไฟล์ .xlsx, .xls, .csv'),
+              style: const TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
@@ -457,7 +471,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
                   color: Colors.grey.shade50,
                 ),
                 child: Text(
-                  _fileName ?? 'ยังไม่ได้เลือกไฟล์',
+                  _fileName ?? (_isEnglish ? 'No file selected' : 'ยังไม่ได้เลือกไฟล์'),
                   style: TextStyle(
                       color: _fileName != null ? Colors.black87 : Colors.grey),
                   overflow: TextOverflow.ellipsis,
@@ -468,7 +482,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
             OutlinedButton.icon(
               onPressed: _pickFile,
               icon: const Icon(Icons.folder_open),
-              label: const Text('เลือกไฟล์'),
+              label: Text((_isEnglish ? 'Select file' : 'เลือกไฟล์')),
             ),
             const SizedBox(width: 8),
             ElevatedButton.icon(
@@ -478,7 +492,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
                       width: 16, height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.fact_check_outlined),
-              label: const Text('ตรวจสอบ'),
+              label: Text((_isEnglish ? 'Validate' : 'ตรวจสอบ')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _appColor.shade700,
                 foregroundColor: Colors.white,
@@ -509,8 +523,8 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
                 allOk
-                    ? 'ข้อมูลถูกต้องทั้งหมด พร้อมนำเข้า'
-                    : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่',
+                    ? (_isEnglish ? 'All data is valid and ready to import' : 'ข้อมูลถูกต้องทั้งหมด พร้อมนำเข้า')
+                    : (_isEnglish ? 'Invalid data found. Please fix the file and validate again' : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่'),
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
@@ -518,9 +532,9 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'ทั้งหมด: $_totalRows รายการ'
-                '   ถูกต้อง: $_validRows รายการ'
-                '   ไม่ถูกต้อง: $_errorRows รายการ',
+                _isEnglish
+                    ? 'Total: $_totalRows rows   Valid: $_validRows rows   Invalid: $_errorRows rows'
+                    : 'ทั้งหมด: $_totalRows รายการ   ถูกต้อง: $_validRows รายการ   ไม่ถูกต้อง: $_errorRows รายการ',
                 style: const TextStyle(fontSize: 13),
               ),
             ]),
@@ -530,19 +544,19 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
 
       if (_errors.isNotEmpty) ...[
         const SizedBox(height: 16),
-        const Text('รายการที่ไม่ถูกต้อง',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
+        Text((_isEnglish ? 'Invalid rows' : 'รายการที่ไม่ถูกต้อง'),
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
         const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
             columnSpacing: 16,
             headingRowColor: WidgetStateProperty.all(Colors.red.shade50),
-            columns: const [
-              DataColumn(label: Text('แถวที่')),
-              DataColumn(label: Text('รหัสสินค้า')),
-              DataColumn(label: Text('คอลัมน์')),
-              DataColumn(label: Text('ข้อผิดพลาด')),
+            columns: [
+              DataColumn(label: Text((_isEnglish ? 'Row' : 'แถวที่'))),
+              DataColumn(label: Text((_isEnglish ? 'Item code' : 'รหัสสินค้า'))),
+              DataColumn(label: Text((_isEnglish ? 'Column' : 'คอลัมน์'))),
+              DataColumn(label: Text((_isEnglish ? 'Error' : 'ข้อผิดพลาด'))),
             ],
             rows: [
               for (final e in _errors)
@@ -565,12 +579,14 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
       if (_validRows > 0) ...[
         const SizedBox(height: 16),
         Text(
-          'ตัวอย่างข้อมูลที่จะนำเข้า${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
+          _isEnglish
+              ? 'Preview of data to import${_validRows > 50 ? ' (showing 50 of $_validRows rows)' : ' ($_validRows rows)'}'
+              : 'ตัวอย่างข้อมูลที่จะนำเข้า${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         const SizedBox(height: 4),
-        const Text('คลิกแถวเพื่อดูรายละเอียดทุกหัวข้อของสินค้า',
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
+        Text((_isEnglish ? 'Click a row to see all item details' : 'คลิกแถวเพื่อดูรายละเอียดทุกหัวข้อของสินค้า'),
+            style: const TextStyle(color: Colors.grey, fontSize: 12)),
         const SizedBox(height: 8),
         Scrollbar(
           controller: _previewScrollCtrl,
@@ -581,22 +597,22 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
             child: DataTable(
               columnSpacing: 12,
               headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-              columns: const [
-                DataColumn(label: Text('รหัสสินค้า')),
-                DataColumn(label: Text('หมวดหมู่')),
-                DataColumn(label: Text('ชื่อ (ไทย)')),
-                DataColumn(label: Text('ชื่อ (อังกฤษ)')),
-                DataColumn(label: Text('ประเภทสินค้า')),
-                DataColumn(label: Text('หน่วยนับหลัก')),
-                DataColumn(label: Text('คลังตั้งต้น')),
-                DataColumn(label: Text('ใช้งาน')),
+              columns: [
+                DataColumn(label: Text((_isEnglish ? 'Item code' : 'รหัสสินค้า'))),
+                DataColumn(label: Text((_isEnglish ? 'Category' : 'หมวดหมู่'))),
+                DataColumn(label: Text((_isEnglish ? 'Name (Thai)' : 'ชื่อ (ไทย)'))),
+                DataColumn(label: Text((_isEnglish ? 'Name (English)' : 'ชื่อ (อังกฤษ)'))),
+                DataColumn(label: Text((_isEnglish ? 'Item type' : 'ประเภทสินค้า'))),
+                DataColumn(label: Text((_isEnglish ? 'Base unit' : 'หน่วยนับหลัก'))),
+                DataColumn(label: Text((_isEnglish ? 'Default warehouse' : 'คลังตั้งต้น'))),
+                DataColumn(label: Text((_isEnglish ? 'Active' : 'ใช้งาน'))),
               ],
               rows: _validatedData
                   .take(50)
                   .map((r) => DataRow(
                         onSelectChanged: (_) => _showItemDetailDialog(r),
                         cells: [
-                          DataCell(Text(r['item_code']?.toString() ?? '(อัตโนมัติ)')),
+                          DataCell(Text(r['item_code']?.toString() ?? (_isEnglish ? '(auto)' : '(อัตโนมัติ)'))),
                           DataCell(Text(_fmt(r['category_code']))),
                           DataCell(ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 200),
@@ -624,45 +640,45 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
 
   // ─── Item detail dialog (tabbed, per im_item_detail_widget sections) ─────
 
-  static const _uomConversionColumns = [
-    ['uom_code', 'หน่วยนับ'],
-    ['conversion_factor', 'อัตราแปลง'],
-    ['barcode', 'บาร์โค้ด'],
-    ['is_purchase_default', 'หน่วยซื้อตั้งต้น'],
-    ['is_sales_default', 'หน่วยขายตั้งต้น'],
-    ['is_production_default', 'หน่วยผลิตตั้งต้น'],
-    ['is_count_default', 'หน่วยตรวจนับตั้งต้น'],
-    ['is_report_default', 'หน่วยรายงานตั้งต้น'],
-    ['allow_purchase', 'ใช้ซื้อ'],
-    ['allow_sales', 'ใช้ขาย'],
-    ['allow_production', 'ใช้ผลิต'],
+  List<List<String>> get _uomConversionColumns => [
+    ['uom_code', (_isEnglish ? 'Unit' : 'หน่วยนับ')],
+    ['conversion_factor', (_isEnglish ? 'Conversion factor' : 'อัตราแปลง')],
+    ['barcode', (_isEnglish ? 'Barcode' : 'บาร์โค้ด')],
+    ['is_purchase_default', (_isEnglish ? 'Default purchase unit' : 'หน่วยซื้อตั้งต้น')],
+    ['is_sales_default', (_isEnglish ? 'Default sales unit' : 'หน่วยขายตั้งต้น')],
+    ['is_production_default', (_isEnglish ? 'Default production unit' : 'หน่วยผลิตตั้งต้น')],
+    ['is_count_default', (_isEnglish ? 'Default count unit' : 'หน่วยตรวจนับตั้งต้น')],
+    ['is_report_default', (_isEnglish ? 'Default report unit' : 'หน่วยรายงานตั้งต้น')],
+    ['allow_purchase', (_isEnglish ? 'Purchasing' : 'ใช้ซื้อ')],
+    ['allow_sales', (_isEnglish ? 'Sales' : 'ใช้ขาย')],
+    ['allow_production', (_isEnglish ? 'Production' : 'ใช้ผลิต')],
   ];
 
-  static const _itemWarehouseColumns = [
-    ['warehouse_code', 'คลังสินค้า'],
-    ['min_stock_qty', 'สต็อกขั้นต่ำ'],
-    ['max_stock_qty', 'สต็อกสูงสุด'],
-    ['reorder_point', 'จุดสั่งซื้อ'],
-    ['location_code', 'ตำแหน่งจัดเก็บ'],
+  List<List<String>> get _itemWarehouseColumns => [
+    ['warehouse_code', (_isEnglish ? 'Warehouse' : 'คลังสินค้า')],
+    ['min_stock_qty', (_isEnglish ? 'Minimum stock' : 'สต็อกขั้นต่ำ')],
+    ['max_stock_qty', (_isEnglish ? 'Maximum stock' : 'สต็อกสูงสุด')],
+    ['reorder_point', (_isEnglish ? 'Reorder point' : 'จุดสั่งซื้อ')],
+    ['location_code', (_isEnglish ? 'Location' : 'ตำแหน่งจัดเก็บ')],
   ];
 
-  static const _priceListColumns = [
-    ['price_list_code', 'รหัสตารางราคา'],
-    ['uom_code', 'หน่วยนับ'],
-    ['min_qty', 'จำนวนขั้นต่ำ'],
-    ['unit_price_fc', 'ราคาต่อหน่วย'],
-    ['price_type', 'ชนิดราคา'],
-    ['effective_from', 'มีผลตั้งแต่'],
-    ['effective_to', 'มีผลถึง'],
+  List<List<String>> get _priceListColumns => [
+    ['price_list_code', (_isEnglish ? 'Price list code' : 'รหัสตารางราคา')],
+    ['uom_code', (_isEnglish ? 'Unit' : 'หน่วยนับ')],
+    ['min_qty', (_isEnglish ? 'Minimum qty' : 'จำนวนขั้นต่ำ')],
+    ['unit_price_fc', (_isEnglish ? 'Unit price' : 'ราคาต่อหน่วย')],
+    ['price_type', (_isEnglish ? 'Price type' : 'ชนิดราคา')],
+    ['effective_from', (_isEnglish ? 'Effective from' : 'มีผลตั้งแต่')],
+    ['effective_to', (_isEnglish ? 'Effective to' : 'มีผลถึง')],
   ];
 
   void _showItemDetailDialog(Map<String, dynamic> row) {
-    const tabLabels = [
-      'ข้อมูลพื้นฐาน',
-      'หน่วยนับทางเลือก',
-      'คลังสินค้า',
-      'บัญชี GL',
-      'ตารางราคา',
+    final tabLabels = [
+      (_isEnglish ? 'General' : 'ข้อมูลพื้นฐาน'),
+      (_isEnglish ? 'Alternate units' : 'หน่วยนับทางเลือก'),
+      (_isEnglish ? 'Warehouse' : 'คลังสินค้า'),
+      (_isEnglish ? 'GL accounts' : 'บัญชี GL'),
+      (_isEnglish ? 'Price list' : 'ตารางราคา'),
     ];
 
     showDialog(
@@ -682,7 +698,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
                   backgroundColor: _appColor.shade700,
                   foregroundColor: Colors.white,
                   title: Text(
-                    '${row['item_code']?.toString() ?? '(อัตโนมัติ)'} - ${row['item_name_th']?.toString() ?? ''}',
+                    '${row['item_code']?.toString() ?? (_isEnglish ? '(auto)' : '(อัตโนมัติ)')} - ${row['item_name_th']?.toString() ?? ''}',
                     style: const TextStyle(fontSize: 15, color: Colors.white),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -719,41 +735,41 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
 
   Widget _buildGeneralTab(Map<String, dynamic> row) {
     final items = <List<String>>[
-      ['รหัสสินค้า', row['item_code']?.toString() ?? '(อัตโนมัติ)'],
-      ['หมวดหมู่', _fmt(row['category_code'])],
-      ['รหัสเก่า', _fmt(row['old_item_code'])],
-      ['ชื่อ (ไทย)', _fmt(row['item_name_th'])],
-      ['ชื่อ (อังกฤษ)', _fmt(row['item_name_en'])],
-      ['บาร์โค้ด', _fmt(row['barcode'])],
-      ['คำอธิบาย', _fmt(row['description'])],
-      ['ประเภทสินค้า', _fmt(row['item_type'])],
-      ['หน่วยนับหลัก', _fmt(row['base_uom_code'])],
-      ['วิธีคำนวณต้นทุน', _fmt(row['costing_method'])],
-      ['โหมดบัญชีสินค้า', _fmt(row['accounting_mode'])],
-      ['ต้นทุนมาตรฐาน', _fmt(row['standard_cost'])],
-      ['ซื้อได้', _fmt(row['is_purchase_item'])],
-      ['ขายได้', _fmt(row['is_sales_item'])],
-      ['ผลิตได้', _fmt(row['is_manufactured'])],
-      ['ติดตาม Lot', _fmt(row['is_lot_tracked'])],
-      ['ติดตาม Serial', _fmt(row['is_serial_tracked'])],
-      ['อายุสินค้า (วัน)', _fmt(row['shelf_life_days'])],
-      ['คลังสินค้าตั้งต้น', _fmt(row['default_warehouse_code'])],
-      ['สต็อกขั้นต่ำ', _fmt(row['min_stock_qty'])],
-      ['สต็อกสูงสุด', _fmt(row['max_stock_qty'])],
-      ['จุดสั่งซื้อ', _fmt(row['reorder_point'])],
-      ['ประเภทภาษี VAT ตั้งต้น', _fmt(row['default_vat_type'])],
-      ['ใช้งาน', _fmt(row['is_active'])],
+      [(_isEnglish ? 'Item code' : 'รหัสสินค้า'), row['item_code']?.toString() ?? '(อัตโนมัติ)'],
+      [(_isEnglish ? 'Category' : 'หมวดหมู่'), _fmt(row['category_code'])],
+      [(_isEnglish ? 'Old code' : 'รหัสเก่า'), _fmt(row['old_item_code'])],
+      [(_isEnglish ? 'Name (Thai)' : 'ชื่อ (ไทย)'), _fmt(row['item_name_th'])],
+      [(_isEnglish ? 'Name (English)' : 'ชื่อ (อังกฤษ)'), _fmt(row['item_name_en'])],
+      [(_isEnglish ? 'Barcode' : 'บาร์โค้ด'), _fmt(row['barcode'])],
+      [(_isEnglish ? 'Description' : 'คำอธิบาย'), _fmt(row['description'])],
+      [(_isEnglish ? 'Item type' : 'ประเภทสินค้า'), _fmt(row['item_type'])],
+      [(_isEnglish ? 'Base unit' : 'หน่วยนับหลัก'), _fmt(row['base_uom_code'])],
+      [(_isEnglish ? 'Costing method' : 'วิธีคำนวณต้นทุน'), _fmt(row['costing_method'])],
+      [(_isEnglish ? 'Inventory accounting mode' : 'โหมดบัญชีสินค้า'), _fmt(row['accounting_mode'])],
+      [(_isEnglish ? 'Standard cost' : 'ต้นทุนมาตรฐาน'), _fmt(row['standard_cost'])],
+      [(_isEnglish ? 'Purchasable' : 'ซื้อได้'), _fmt(row['is_purchase_item'])],
+      [(_isEnglish ? 'Sellable' : 'ขายได้'), _fmt(row['is_sales_item'])],
+      [(_isEnglish ? 'Manufactured' : 'ผลิตได้'), _fmt(row['is_manufactured'])],
+      [(_isEnglish ? 'Lot tracked' : 'ติดตาม Lot'), _fmt(row['is_lot_tracked'])],
+      [(_isEnglish ? 'Serial tracked' : 'ติดตาม Serial'), _fmt(row['is_serial_tracked'])],
+      [(_isEnglish ? 'Shelf life (days)' : 'อายุสินค้า (วัน)'), _fmt(row['shelf_life_days'])],
+      [(_isEnglish ? 'Default warehouse' : 'คลังสินค้าตั้งต้น'), _fmt(row['default_warehouse_code'])],
+      [(_isEnglish ? 'Minimum stock' : 'สต็อกขั้นต่ำ'), _fmt(row['min_stock_qty'])],
+      [(_isEnglish ? 'Maximum stock' : 'สต็อกสูงสุด'), _fmt(row['max_stock_qty'])],
+      [(_isEnglish ? 'Reorder point' : 'จุดสั่งซื้อ'), _fmt(row['reorder_point'])],
+      [(_isEnglish ? 'Default VAT type' : 'ประเภทภาษี VAT ตั้งต้น'), _fmt(row['default_vat_type'])],
+      [(_isEnglish ? 'Active' : 'ใช้งาน'), _fmt(row['is_active'])],
     ];
     return _buildKeyValueTable(items);
   }
 
   Widget _buildGlAccountTab(Map<String, dynamic> row) {
     final items = <List<String>>[
-      ['รหัสบัญชีสินค้าคงเหลือ', _fmt(row['inventory_account_code'])],
-      ['รหัสบัญชีต้นทุนขาย', _fmt(row['cogs_account_code'])],
-      ['รหัสบัญชีรายได้', _fmt(row['revenue_account_code'])],
-      ['รหัสบัญชีค่าใช้จ่าย', _fmt(row['expense_account_code'])],
-      ['รหัสบัญชีซื้อ', _fmt(row['purchases_account_code'])],
+      [(_isEnglish ? 'Inventory account code' : 'รหัสบัญชีสินค้าคงเหลือ'), _fmt(row['inventory_account_code'])],
+      [(_isEnglish ? 'COGS account code' : 'รหัสบัญชีต้นทุนขาย'), _fmt(row['cogs_account_code'])],
+      [(_isEnglish ? 'Revenue account code' : 'รหัสบัญชีรายได้'), _fmt(row['revenue_account_code'])],
+      [(_isEnglish ? 'Expense account code' : 'รหัสบัญชีค่าใช้จ่าย'), _fmt(row['expense_account_code'])],
+      [(_isEnglish ? 'Purchases account code' : 'รหัสบัญชีซื้อ'), _fmt(row['purchases_account_code'])],
     ];
     return _buildKeyValueTable(items);
   }
@@ -788,9 +804,9 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
 
   Widget _buildListTable(List<dynamic> rows, List<List<String>> columns) {
     if (rows.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('ไม่มีข้อมูล', style: TextStyle(color: Colors.grey)),
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Text((_isEnglish ? 'No data' : 'ไม่มีข้อมูล'), style: const TextStyle(color: Colors.grey)),
       );
     }
     return _DualScrollView(
@@ -823,7 +839,7 @@ class _ImItemImportScreenState extends State<ImItemImportScreen> {
 
   String _fmt(dynamic val) {
     if (val == null) return '';
-    if (val is bool) return val ? 'ใช่' : 'ไม่ใช่';
+    if (val is bool) return val ? (_isEnglish ? 'Yes' : 'ใช่') : (_isEnglish ? 'No' : 'ไม่ใช่');
     if (val is List) return val.map((e) => _fmtNum(e)).join(', ');
     if (val is num) return _fmtNum(val);
     return val.toString();

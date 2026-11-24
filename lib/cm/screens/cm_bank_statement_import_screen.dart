@@ -1,4 +1,4 @@
-﻿// lib/cm/screens/cm_bank_statement_import_screen.dart
+// lib/cm/screens/cm_bank_statement_import_screen.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -484,7 +484,7 @@ class _State extends State<CmBankStatementImportScreen> with AutomaticKeepAliveC
       child: Padding(
         padding: const EdgeInsets.all(10),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _kTheme)),
+          Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _kTheme)),
           const SizedBox(height: 8),
           ...children,
         ]),

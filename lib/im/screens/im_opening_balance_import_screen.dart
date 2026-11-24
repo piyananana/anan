@@ -29,6 +29,7 @@ class ImOpeningBalanceImportScreen extends StatefulWidget {
 }
 
 class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScreen> {
+  bool _isEnglish = false;
   final _dateFmt = DateFormat('dd/MM/yyyy');
   DateTime _asOfDate = DateTime.now();
   final _descCtrl = TextEditingController();
@@ -106,15 +107,18 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ถอยกลับการตั้งยอด'),
-        content: Text('ถอยกลับชุดข้อมูล "$desc" (${batch['line_count']} รายการ)? '
+        title: Text((_isEnglish ? 'Reverse opening balance' : 'ถอยกลับการตั้งยอด')),
+        content: Text(_isEnglish
+            ? 'Reverse batch "$desc" (${batch['line_count']} rows)? '
+                'All balances set by this batch will be reversed. Rows with movements after the opening balance cannot be reversed.'
+            : 'ถอยกลับชุดข้อมูล "$desc" (${batch['line_count']} รายการ)? '
             'ยอดคงเหลือที่ตั้งไว้จากชุดนี้จะถูกย้อนกลับทั้งหมด รายการที่มีการเคลื่อนไหวไปแล้วหลังตั้งยอดจะทำให้ถอยกลับไม่ได้'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text((_isEnglish ? 'Cancel' : 'ยกเลิก'))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
-            child: const Text('ยืนยันถอยกลับ'),
+            child: Text((_isEnglish ? 'Confirm reverse' : 'ยืนยันถอยกลับ')),
           ),
         ],
       ),
@@ -127,7 +131,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
       final headers = await authService.getAuthHeader();
       final response = await http.put(Uri.parse('${AppConfig.apiIm}/im_opening_balance/batch/$id/reverse'), headers: headers);
       if (response.statusCode == 200) {
-        _showSnack('ถอยกลับชุดข้อมูลสำเร็จ');
+        _showSnack((_isEnglish ? 'Batch reversed' : 'ถอยกลับชุดข้อมูลสำเร็จ'));
         await _loadBatches();
       } else {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -138,18 +142,18 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
             await showDialog<void>(
               context: context,
               builder: (ctx) => AlertDialog(
-                title: const Text('ถอยกลับไม่ได้'),
+                title: Text((_isEnglish ? 'Cannot reverse' : 'ถอยกลับไม่ได้')),
                 content: Text('${body['message']}\n\n$detail'),
-                actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ปิด'))],
+                actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text((_isEnglish ? 'Close' : 'ปิด')))],
               ),
             );
           }
         } else {
-          _showSnack(body['message'] ?? 'เกิดข้อผิดพลาด', isError: true);
+          _showSnack(body['message'] ?? (_isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'), isError: true);
         }
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       if (mounted) setState(() => _reversingBatchId = null);
     }
@@ -202,10 +206,10 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
         });
       } else {
         final body = jsonDecode(response.body);
-        _showSnack(body['message'] ?? 'เกิดข้อผิดพลาด', isError: true);
+        _showSnack(body['message'] ?? (_isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -218,8 +222,11 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการตั้งยอด'),
-        content: Text('ต้องการตั้งยอดคงเหลือเริ่มต้น $_validRows รายการ ณ วันที่ ${_dateFmt.format(_asOfDate)} ใช่หรือไม่?\n'
+        title: Text((_isEnglish ? 'Confirm opening balance' : 'ยืนยันการตั้งยอด')),
+        content: Text(_isEnglish
+            ? 'Set $_validRows opening balance rows as of ${_dateFmt.format(_asOfDate)}?\n'
+                'This creates no GL entries and no stock adjustment documents.'
+            : 'ต้องการตั้งยอดคงเหลือเริ่มต้น $_validRows รายการ ณ วันที่ ${_dateFmt.format(_asOfDate)} ใช่หรือไม่?\n'
             'การดำเนินการนี้จะไม่สร้างรายการบัญชี (GL) หรือใบปรับยอดสินค้าใดๆ'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
@@ -254,7 +261,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
         final imported = data['imported'] ?? 0;
         final errs = (data['errors'] as List?)?.length ?? 0;
         if (mounted) {
-          _showSnack('ตั้งยอดสำเร็จ $imported รายการ${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}');
+          _showSnack((_isEnglish ? 'Set $imported balance rows${errs > 0 ? '  |  $errs errors' : ''}' : 'ตั้งยอดสำเร็จ $imported รายการ${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}'));
           setState(() {
             _fileName = null;
             _fileBytes = null;
@@ -266,7 +273,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
           await _loadBatches();
         }
       } else {
-        String errMsg = 'เกิดข้อผิดพลาด (${response.statusCode})';
+        String errMsg = (_isEnglish ? 'Error (${response.statusCode})' : 'เกิดข้อผิดพลาด (${response.statusCode})');
         try {
           final body = jsonDecode(response.body);
           errMsg = body['message'] ?? errMsg;
@@ -276,7 +283,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
         _showSnack(errMsg, isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
@@ -291,19 +298,20 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
     try {
       final authService = context.read<AuthService>();
       final headers = await authService.getAuthHeader();
-      final response = await http.get(Uri.parse('${AppConfig.apiIm}/im_opening_balance/import/template/download'), headers: headers);
+      final response = await http.get(Uri.parse('${AppConfig.apiIm}/im_opening_balance/import/template/download?lang=${_isEnglish ? 'en' : 'th'}'), headers: headers);
       if (response.statusCode == 200) {
         await downloadFile(response.bodyBytes, 'im_opening_balance_template.xlsx');
       } else {
-        _showSnack('ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})', isError: true);
+        _showSnack((_isEnglish ? 'Template download failed (${response.statusCode})' : 'ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    _isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _appColor.shade700,
@@ -312,7 +320,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'เริ่มใหม่',
+            tooltip: (_isEnglish ? 'Start over' : 'เริ่มใหม่'),
             onPressed: () => setState(() {
               _fileName = null;
               _fileBytes = null;
@@ -334,16 +342,19 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Card(
             color: Colors.amber.shade50,
-            child: const Padding(
-              padding: EdgeInsets.all(12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
               child: Row(children: [
-                Icon(Icons.info_outline, color: Colors.orange),
-                SizedBox(width: 8),
+                const Icon(Icons.info_outline, color: Colors.orange),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'ใช้สำหรับตั้งยอดคงเหลือ+ต้นทุนสินค้าครั้งแรก (go-live) เท่านั้น — เขียนตรงลงยอดคงเหลือสินค้า '
+                    _isEnglish
+                        ? 'For the first-time (go-live) quantity + cost setup only — writes straight to stock balances. '
+                            'No GL posting and no stock adjustment document. Duplicate setups are not blocked; please check yourself.'
+                        : 'ใช้สำหรับตั้งยอดคงเหลือ+ต้นทุนสินค้าครั้งแรก (go-live) เท่านั้น — เขียนตรงลงยอดคงเหลือสินค้า '
                     'ไม่ผ่านบัญชี GL และไม่สร้างใบปรับยอดสินค้า ระบบไม่กันการตั้งยอดซ้ำ ผู้ใช้ต้องตรวจสอบเอง',
-                    style: TextStyle(color: Colors.brown, fontSize: 12),
+                    style: const TextStyle(color: Colors.brown, fontSize: 12),
                   ),
                 ),
               ]),
@@ -373,12 +384,12 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
                   icon: _isImporting
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check_circle_outline),
-                  label: Text(_isImporting ? 'กำลังตั้งยอด...' : 'ยืนยันตั้งยอด $_validRows รายการ'),
+                  label: Text(_isImporting ? (_isEnglish ? 'Setting balances...' : 'กำลังตั้งยอด...') : (_isEnglish ? 'Confirm $_validRows balance rows' : 'ยืนยันตั้งยอด $_validRows รายการ')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green.shade700,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -397,7 +408,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
             child: InkWell(
               onTap: _pickDate,
               child: InputDecorator(
-                decoration: const InputDecoration(labelText: 'ตั้งยอด ณ วันที่ *', border: OutlineInputBorder(), isDense: true),
+                decoration: InputDecoration(labelText: (_isEnglish ? 'Balance as of *' : 'ตั้งยอด ณ วันที่ *'), border: const OutlineInputBorder(), isDense: true),
                 child: Text(_dateFmt.format(_asOfDate)),
               ),
             ),
@@ -407,7 +418,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
             flex: 3,
             child: TextField(
               controller: _descCtrl,
-              decoration: const InputDecoration(labelText: 'คำอธิบาย (ไม่บังคับ)', border: OutlineInputBorder(), isDense: true),
+              decoration: InputDecoration(labelText: (_isEnglish ? 'Description (optional)' : 'คำอธิบาย (ไม่บังคับ)'), border: const OutlineInputBorder(), isDense: true),
             ),
           ),
         ]),
@@ -419,12 +430,12 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
     return Card(
       child: ExpansionTile(
         leading: Icon(Icons.table_chart_outlined, color: _appColor.shade700),
-        title: const Text('เทมเพลตนำเข้าข้อมูล', style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: const Text('คลิกเพื่อดูรายละเอียดคอลัมน์'),
+        title: Text((_isEnglish ? 'Import template' : 'เทมเพลตนำเข้าข้อมูล'), style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text((_isEnglish ? 'Click to see the column details' : 'คลิกเพื่อดูรายละเอียดคอลัมน์')),
         trailing: OutlinedButton.icon(
           onPressed: _downloadTemplate,
           icon: const Icon(Icons.download, size: 18),
-          label: const Text('ดาวน์โหลดเทมเพลต'),
+          label: Text((_isEnglish ? 'Download template' : 'ดาวน์โหลดเทมเพลต')),
           style: OutlinedButton.styleFrom(foregroundColor: _appColor.shade700, side: BorderSide(color: _appColor.shade700)),
         ),
         initiallyExpanded: false,
@@ -439,7 +450,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
   Widget _buildTemplateSheetTile(Map<String, dynamic> sheet) {
     final columns = List<Map<String, dynamic>>.from(sheet['columns'] ?? []);
     return ExpansionTile(
-      title: Text(sheet['name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+      title: Text((_isEnglish ? (sheet['name_en'] ?? sheet['name']) : sheet['name'])?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
       initiallyExpanded: true,
       children: [
         SingleChildScrollView(
@@ -448,16 +459,16 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
           child: DataTable(
             columnSpacing: 16,
             headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-            columns: const [
-              DataColumn(label: Text('ชื่อ Header', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ความหมาย', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('จำเป็น', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ตัวอย่าง', style: TextStyle(fontWeight: FontWeight.bold))),
+            columns: [
+              DataColumn(label: Text((_isEnglish ? 'Header name' : 'ชื่อ Header'), style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Meaning' : 'ความหมาย'), style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Required' : 'จำเป็น'), style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Example' : 'ตัวอย่าง'), style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
             rows: columns
                 .map((col) => DataRow(cells: [
                       DataCell(Text(col['key']?.toString() ?? '', style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
-                      DataCell(Text(col['label']?.toString() ?? '')),
+                      DataCell(Text((_isEnglish ? (col['label_en'] ?? col['label']) : col['label'])?.toString() ?? '')),
                       DataCell((col['required'] as bool? ?? false) ? const Icon(Icons.star, color: Colors.red, size: 14) : const Text('-', style: TextStyle(color: Colors.grey))),
                       DataCell(Text(col['example']?.toString() ?? '', style: const TextStyle(color: Colors.grey, fontSize: 12))),
                     ]))
@@ -474,27 +485,27 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('เลือกไฟล์นำเข้า', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text((_isEnglish ? 'Select import file' : 'เลือกไฟล์นำเข้า'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 4),
-          const Text('รองรับไฟล์ .xlsx, .xls, .csv', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Text((_isEnglish ? 'Supports .xlsx, .xls, .csv files' : 'รองรับไฟล์ .xlsx, .xls, .csv'), style: const TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                 decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4), color: Colors.grey.shade50),
-                child: Text(_fileName ?? 'ยังไม่ได้เลือกไฟล์', style: TextStyle(color: _fileName != null ? Colors.black87 : Colors.grey), overflow: TextOverflow.ellipsis),
+                child: Text(_fileName ?? (_isEnglish ? 'No file selected' : 'ยังไม่ได้เลือกไฟล์'), style: TextStyle(color: _fileName != null ? Colors.black87 : Colors.grey), overflow: TextOverflow.ellipsis),
               ),
             ),
             const SizedBox(width: 8),
-            OutlinedButton.icon(onPressed: _pickFile, icon: const Icon(Icons.folder_open), label: const Text('เลือกไฟล์')),
+            OutlinedButton.icon(onPressed: _pickFile, icon: const Icon(Icons.folder_open), label: Text((_isEnglish ? 'Select file' : 'เลือกไฟล์'))),
             const SizedBox(width: 8),
             ElevatedButton.icon(
               onPressed: _fileBytes == null || _isLoading ? null : _validate,
               icon: _isLoading
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.fact_check_outlined),
-              label: const Text('ตรวจสอบ'),
+              label: Text((_isEnglish ? 'Validate' : 'ตรวจสอบ')),
               style: ElevatedButton.styleFrom(backgroundColor: _appColor.shade700, foregroundColor: Colors.white),
             ),
           ]),
@@ -508,27 +519,27 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
     return Card(
       child: ExpansionTile(
         leading: Icon(Icons.history, color: _appColor.shade700),
-        title: const Text('ประวัติการตั้งยอด', style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(_isLoadingBatches ? 'กำลังโหลด...' : '${_batches.length} ชุดข้อมูล'),
+        title: Text((_isEnglish ? 'Opening balance history' : 'ประวัติการตั้งยอด'), style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(_isLoadingBatches ? (_isEnglish ? 'Loading...' : 'กำลังโหลด...') : '${_batches.length} ชุดข้อมูล'),
         initiallyExpanded: false,
         children: [
           if (_isLoadingBatches)
             const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
           else if (_batches.isEmpty)
-            const Padding(padding: EdgeInsets.all(16), child: Text('ยังไม่มีประวัติการตั้งยอด', style: TextStyle(color: Colors.grey)))
+            Padding(padding: const EdgeInsets.all(16), child: Text((_isEnglish ? 'No opening balance history yet' : 'ยังไม่มีประวัติการตั้งยอด'), style: const TextStyle(color: Colors.grey)))
           else
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 columnSpacing: 16,
                 headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-                columns: const [
-                  DataColumn(label: Text('วันที่ตั้งยอด', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('คำอธิบาย', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('จำนวนรายการ', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                  DataColumn(label: Text('โดย', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('สถานะ', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('')),
+                columns: [
+                  DataColumn(label: Text((_isEnglish ? 'Balance date' : 'วันที่ตั้งยอด'), style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text((_isEnglish ? 'Description' : 'คำอธิบาย'), style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text((_isEnglish ? 'Rows' : 'จำนวนรายการ'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                  DataColumn(label: Text((_isEnglish ? 'By' : 'โดย'), style: const TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text((_isEnglish ? 'Status' : 'สถานะ'), style: const TextStyle(fontWeight: FontWeight.bold))),
+                  const DataColumn(label: Text('')),
                 ],
                 rows: _batches.map((b) {
                   final isReversed = b['reversed_at'] != null;
@@ -544,7 +555,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
                         color: isReversed ? Colors.grey.shade300 : Colors.green.shade100,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text(isReversed ? 'ถอยกลับแล้ว' : 'ตั้งยอดแล้ว', style: const TextStyle(fontSize: 11)),
+                      child: Text(isReversed ? (_isEnglish ? 'Reversed' : 'ถอยกลับแล้ว') : (_isEnglish ? 'Set' : 'ตั้งยอดแล้ว'), style: const TextStyle(fontSize: 11)),
                     )),
                     DataCell(
                       (canApprove && !isReversed)
@@ -553,7 +564,7 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
                               icon: _reversingBatchId == id
                                   ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
                                   : const Icon(Icons.undo, size: 16),
-                              label: const Text('ถอยกลับ', style: TextStyle(fontSize: 12)),
+                              label: Text((_isEnglish ? 'Reverse' : 'ถอยกลับ'), style: const TextStyle(fontSize: 12)),
                               style: TextButton.styleFrom(foregroundColor: Colors.orange.shade800),
                             )
                           : const SizedBox.shrink(),
@@ -580,29 +591,29 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
             const SizedBox(width: 12),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
-                allOk ? 'ข้อมูลถูกต้องทั้งหมด พร้อมตั้งยอด' : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่',
+                allOk ? 'ข้อมูลถูกต้องทั้งหมด พร้อมตั้งยอด' : (_isEnglish ? 'Invalid data found. Please fix the file and validate again' : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่'),
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: allOk ? Colors.green.shade800 : Colors.orange.shade800),
               ),
               const SizedBox(height: 4),
-              Text('ทั้งหมด: $_totalRows รายการ   ถูกต้อง: $_validRows รายการ   ไม่ถูกต้อง: $_errorRows รายการ', style: const TextStyle(fontSize: 13)),
+              Text(_isEnglish ? 'Total: $_totalRows rows   Valid: $_validRows rows   Invalid: $_errorRows rows' : 'ทั้งหมด: $_totalRows รายการ   ถูกต้อง: $_validRows รายการ   ไม่ถูกต้อง: $_errorRows รายการ', style: const TextStyle(fontSize: 13)),
             ]),
           ]),
         ),
       ),
       if (_errors.isNotEmpty) ...[
         const SizedBox(height: 16),
-        const Text('รายการที่ไม่ถูกต้อง', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
+        Text((_isEnglish ? 'Invalid rows' : 'รายการที่ไม่ถูกต้อง'), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
         const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
             columnSpacing: 16,
             headingRowColor: WidgetStateProperty.all(Colors.red.shade50),
-            columns: const [
-              DataColumn(label: Text('แถวที่')),
-              DataColumn(label: Text('รหัสสินค้าเก่า')),
-              DataColumn(label: Text('คอลัมน์')),
-              DataColumn(label: Text('ข้อผิดพลาด')),
+            columns: [
+              DataColumn(label: Text((_isEnglish ? 'Row' : 'แถวที่'))),
+              DataColumn(label: Text((_isEnglish ? 'Old item code' : 'รหัสสินค้าเก่า'))),
+              DataColumn(label: Text((_isEnglish ? 'Column' : 'คอลัมน์'))),
+              DataColumn(label: Text((_isEnglish ? 'Error' : 'ข้อผิดพลาด'))),
             ],
             rows: [
               for (final e in _errors)
@@ -619,7 +630,9 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
       ],
       if (_validRows > 0) ...[
         const SizedBox(height: 16),
-        Text('ตัวอย่างข้อมูลที่จะตั้งยอด${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
+        Text(_isEnglish
+            ? 'Preview of balances to set${_validRows > 50 ? ' (showing 50 of $_validRows rows)' : ' ($_validRows rows)'}'
+            : 'ตัวอย่างข้อมูลที่จะตั้งยอด${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 8),
         SingleChildScrollView(
@@ -627,15 +640,15 @@ class _ImOpeningBalanceImportScreenState extends State<ImOpeningBalanceImportScr
           child: DataTable(
             columnSpacing: 12,
             headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-            columns: const [
-              DataColumn(label: Text('รหัสสินค้าเก่า')),
-              DataColumn(label: Text('รหัสสินค้า')),
-              DataColumn(label: Text('คลังสินค้า')),
-              DataColumn(label: Text('ตำแหน่ง')),
-              DataColumn(label: Text('ล็อต')),
-              DataColumn(label: Text('Serial')),
-              DataColumn(label: Text('จำนวน'), numeric: true),
-              DataColumn(label: Text('ต้นทุน/หน่วย'), numeric: true),
+            columns: [
+              DataColumn(label: Text((_isEnglish ? 'Old item code' : 'รหัสสินค้าเก่า'))),
+              DataColumn(label: Text((_isEnglish ? 'Item code' : 'รหัสสินค้า'))),
+              DataColumn(label: Text((_isEnglish ? 'Warehouse' : 'คลังสินค้า'))),
+              DataColumn(label: Text((_isEnglish ? 'Location' : 'ตำแหน่ง'))),
+              DataColumn(label: Text((_isEnglish ? 'Lot' : 'ล็อต'))),
+              const DataColumn(label: Text('Serial')),
+              DataColumn(label: Text((_isEnglish ? 'Qty' : 'จำนวน')), numeric: true),
+              DataColumn(label: Text((_isEnglish ? 'Unit cost' : 'ต้นทุน/หน่วย')), numeric: true),
             ],
             rows: _validatedData.take(50).map((r) => DataRow(cells: [
                   DataCell(Text(r['old_item_code']?.toString() ?? '')),

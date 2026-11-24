@@ -218,7 +218,7 @@ class _HomePageState extends State<HomePage> {
             foregroundColor: HomeColors.brand,
             padding: const EdgeInsets.symmetric(horizontal: 8),
             minimumSize: const Size(0, 30),
-            textStyle: const TextStyle(fontSize: 12.5)),
+            textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 12.5)),
         child: Text(text),
       );
 
@@ -327,7 +327,7 @@ class _HomePageState extends State<HomePage> {
   // ── Dashboard เดิม (ผู้ใช้งาน / ขนาดข้อมูล / Session) ─────────────────────
   Widget _dashboardCard() {
     return Container(
-      height: 420,
+      height: 560,
       decoration: BoxDecoration(
         color: HomeColors.card,
         border: Border.all(color: HomeColors.line),

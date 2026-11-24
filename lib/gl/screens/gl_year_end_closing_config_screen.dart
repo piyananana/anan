@@ -299,7 +299,7 @@ class _YearEndClosingConfigScreenState
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.indigo,
                             foregroundColor: Colors.white,
-                            textStyle: const TextStyle(
+                            textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, 
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold),
                           ),

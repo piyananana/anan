@@ -315,7 +315,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
                     backgroundColor: Colors.green.shade700,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -332,7 +332,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
       final authService = context.read<AuthService>();
       final headers = await authService.getAuthHeader();
       final response = await http.get(
-        Uri.parse('${AppConfig.apiGl}/gl_account/import/template/download'),
+        Uri.parse('${AppConfig.apiGl}/gl_account/import/template/download?lang=${_isEnglish ? 'en' : 'th'}'),
         headers: headers,
       );
       if (response.statusCode == 200) {
@@ -395,7 +395,7 @@ class _AccountImportScreenState extends State<AccountImportScreen> {
                   .map((col) => DataRow(cells: [
                         DataCell(Text(col['key']?.toString() ?? '',
                             style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
-                        DataCell(Text(col['label']?.toString() ?? '')),
+                        DataCell(Text((_isEnglish ? (col['label_en'] ?? col['label']) : col['label'])?.toString() ?? '')),
                         DataCell((col['required'] as bool? ?? false)
                             ? const Icon(Icons.star, color: Colors.red, size: 14)
                             : const Text('-', style: TextStyle(color: Colors.grey))),

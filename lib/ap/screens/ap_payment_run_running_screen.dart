@@ -426,7 +426,7 @@ class _ApPaymentRunRunningScreenState extends State<ApPaymentRunRunningScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue[700],
                             foregroundColor: Colors.white,
-                            textStyle: const TextStyle(
+                            textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, 
                                 fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ),

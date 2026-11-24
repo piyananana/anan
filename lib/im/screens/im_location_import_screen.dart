@@ -24,6 +24,7 @@ class ImLocationImportScreen extends StatefulWidget {
 }
 
 class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
+  bool _isEnglish = false;
   // File state
   String? _fileName;
   Uint8List? _fileBytes;
@@ -138,10 +139,10 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
         });
       } else {
         final body = jsonDecode(response.body);
-        _showSnack(body['message'] ?? 'เกิดข้อผิดพลาด', isError: true);
+        _showSnack(body['message'] ?? (_isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -156,8 +157,8 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการนำเข้า'),
-        content: Text('ต้องการนำเข้าข้อมูลตำแหน่งจัดเก็บ $_validRows รายการใช่หรือไม่?'),
+        title: Text((_isEnglish ? 'Confirm import' : 'ยืนยันการนำเข้า')),
+        content: Text((_isEnglish ? 'Import $_validRows storage location rows?' : 'ต้องการนำเข้าข้อมูลตำแหน่งจัดเก็บ $_validRows รายการใช่หรือไม่?')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -192,9 +193,13 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
         final errs = (data['errors'] as List?)?.length ?? 0;
         if (mounted) {
           _showSnack(
-            'นำเข้าสำเร็จ $imported รายการ'
-            '${skipped > 0 ? '  |  ข้ามรหัสซ้ำ $skipped รายการ' : ''}'
-            '${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}',
+            _isEnglish
+                ? 'Imported $imported rows'
+                  '${skipped > 0 ? '  |  skipped $skipped duplicate codes' : ''}'
+                  '${errs > 0 ? '  |  $errs errors' : ''}'
+                : 'นำเข้าสำเร็จ $imported รายการ'
+                  '${skipped > 0 ? '  |  ข้ามรหัสซ้ำ $skipped รายการ' : ''}'
+                  '${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}',
           );
           setState(() {
             _fileName = null;
@@ -206,7 +211,7 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
           widget.onFieldsChanged();
         }
       } else {
-        String errMsg = 'เกิดข้อผิดพลาด (${response.statusCode})';
+        String errMsg = (_isEnglish ? 'Error (${response.statusCode})' : 'เกิดข้อผิดพลาด (${response.statusCode})');
         try {
           final body = jsonDecode(response.body);
           errMsg = body['message'] ?? errMsg;
@@ -216,7 +221,7 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
         _showSnack(errMsg, isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
@@ -234,6 +239,7 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _isEnglish = context.watch<LanguageProvider>().isEnglish;
     context.watch<LanguageProvider>();
     return Scaffold(
       appBar: AppBar(
@@ -243,7 +249,7 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'เริ่มใหม่',
+            tooltip: (_isEnglish ? 'Start over' : 'เริ่มใหม่'),
             onPressed: () => setState(() {
               _fileName = null;
               _fileBytes = null;
@@ -287,13 +293,13 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check_circle_outline),
                   label: Text(_isImporting
-                      ? 'กำลังนำเข้า...'
-                      : 'ยืนยันนำเข้าข้อมูล $_validRows รายการ'),
+                      ? (_isEnglish ? 'Importing...' : 'กำลังนำเข้า...')
+                      : (_isEnglish ? 'Confirm import of $_validRows rows' : 'ยืนยันนำเข้าข้อมูล $_validRows รายการ')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green.shade700,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -309,16 +315,16 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
       final authService = context.read<AuthService>();
       final headers = await authService.getAuthHeader();
       final response = await http.get(
-        Uri.parse('${AppConfig.apiIm}/im_location/import/template/download'),
+        Uri.parse('${AppConfig.apiIm}/im_location/import/template/download?lang=${_isEnglish ? 'en' : 'th'}'),
         headers: headers,
       );
       if (response.statusCode == 200) {
         await downloadFile(response.bodyBytes, 'im_location_template.xlsx');
       } else {
-        _showSnack('ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})', isError: true);
+        _showSnack((_isEnglish ? 'Template download failed (${response.statusCode})' : 'ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     }
   }
 
@@ -326,13 +332,13 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
     return Card(
       child: ExpansionTile(
         leading: Icon(Icons.table_chart_outlined, color: _appColor.shade700),
-        title: const Text('เทมเพลตนำเข้าข้อมูล',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: const Text('คลิกเพื่อดูรายละเอียดคอลัมน์'),
+        title: Text((_isEnglish ? 'Import template' : 'เทมเพลตนำเข้าข้อมูล'),
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text((_isEnglish ? 'Click to see the column details' : 'คลิกเพื่อดูรายละเอียดคอลัมน์')),
         trailing: OutlinedButton.icon(
           onPressed: _downloadTemplate,
           icon: const Icon(Icons.download, size: 18),
-          label: const Text('ดาวน์โหลดเทมเพลต'),
+          label: Text((_isEnglish ? 'Download template' : 'ดาวน์โหลดเทมเพลต')),
           style: OutlinedButton.styleFrom(
             foregroundColor: _appColor.shade700,
             side: BorderSide(color: _appColor.shade700),
@@ -340,14 +346,19 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
         ),
         initiallyExpanded: false,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              'ตำแหน่งจัดเก็บเป็นผัง (tree) ต่อคลังสินค้า ใช้คอลัมน์ "parent_code" อ้างอิงรหัสตำแหน่งแม่ '
+              _isEnglish
+                  ? 'Storage locations form a tree per warehouse. Use the "parent_code" column for the parent location code '
+                      '(must be GROUP type) in the same warehouse — leave blank for the top level. Rows need not be ordered parent first; '
+                      'the system links them automatically.\n'
+                      '★ = required'
+                  : 'ตำแหน่งจัดเก็บเป็นผัง (tree) ต่อคลังสินค้า ใช้คอลัมน์ "parent_code" อ้างอิงรหัสตำแหน่งแม่ '
               '(ต้องเป็นชนิด GROUP) ในคลังเดียวกัน — เว้นว่างหากเป็นระดับบนสุด ลำดับแถวในไฟล์ไม่จำเป็นต้องเรียงจากแม่ไปลูก '
               'ระบบจะจับคู่ความสัมพันธ์ให้อัตโนมัติ\n'
               '★ = จำเป็นต้องระบุ',
-              style: TextStyle(color: Colors.red, fontSize: 12),
+              style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),
           for (final sheet in _templateSheets) _buildTemplateSheetTile(sheet),
@@ -360,7 +371,7 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
   Widget _buildTemplateSheetTile(Map<String, dynamic> sheet) {
     final columns = List<Map<String, dynamic>>.from(sheet['columns'] ?? []);
     return ExpansionTile(
-      title: Text(sheet['name']?.toString() ?? '',
+      title: Text((_isEnglish ? (sheet['name_en'] ?? sheet['name']) : sheet['name'])?.toString() ?? '',
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
       initiallyExpanded: true,
       children: [
@@ -370,17 +381,17 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
           child: DataTable(
             columnSpacing: 16,
             headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-            columns: const [
-              DataColumn(label: Text('ชื่อ Header', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ความหมาย',   style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('จำเป็น',      style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ตัวอย่าง',   style: TextStyle(fontWeight: FontWeight.bold))),
+            columns: [
+              DataColumn(label: Text((_isEnglish ? 'Header name' : 'ชื่อ Header'), style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Meaning' : 'ความหมาย'),   style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Required' : 'จำเป็น'),      style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Example' : 'ตัวอย่าง'),   style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
             rows: columns
                 .map((col) => DataRow(cells: [
                       DataCell(Text(col['key']?.toString() ?? '',
                           style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
-                      DataCell(Text(col['label']?.toString() ?? '')),
+                      DataCell(Text((_isEnglish ? (col['label_en'] ?? col['label']) : col['label'])?.toString() ?? '')),
                       DataCell((col['required'] as bool? ?? false)
                           ? const Icon(Icons.star, color: Colors.red, size: 14)
                           : const Text('-', style: TextStyle(color: Colors.grey))),
@@ -402,11 +413,11 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('เลือกไฟล์นำเข้า',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text((_isEnglish ? 'Select import file' : 'เลือกไฟล์นำเข้า'),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 4),
-          const Text('รองรับไฟล์ .xlsx, .xls, .csv',
-              style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Text((_isEnglish ? 'Supports .xlsx, .xls, .csv files' : 'รองรับไฟล์ .xlsx, .xls, .csv'),
+              style: const TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
@@ -418,7 +429,7 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
                   color: Colors.grey.shade50,
                 ),
                 child: Text(
-                  _fileName ?? 'ยังไม่ได้เลือกไฟล์',
+                  _fileName ?? (_isEnglish ? 'No file selected' : 'ยังไม่ได้เลือกไฟล์'),
                   style: TextStyle(
                       color: _fileName != null ? Colors.black87 : Colors.grey),
                   overflow: TextOverflow.ellipsis,
@@ -429,7 +440,7 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
             OutlinedButton.icon(
               onPressed: _pickFile,
               icon: const Icon(Icons.folder_open),
-              label: const Text('เลือกไฟล์'),
+              label: Text((_isEnglish ? 'Select file' : 'เลือกไฟล์')),
             ),
             const SizedBox(width: 8),
             ElevatedButton.icon(
@@ -439,7 +450,7 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
                       width: 16, height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.fact_check_outlined),
-              label: const Text('ตรวจสอบ'),
+              label: Text((_isEnglish ? 'Validate' : 'ตรวจสอบ')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _appColor.shade700,
                 foregroundColor: Colors.white,
@@ -470,8 +481,8 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
                 allOk
-                    ? 'ข้อมูลถูกต้องทั้งหมด พร้อมนำเข้า'
-                    : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่',
+                    ? (_isEnglish ? 'All data is valid and ready to import' : 'ข้อมูลถูกต้องทั้งหมด พร้อมนำเข้า')
+                    : (_isEnglish ? 'Invalid data found. Please fix the file and validate again' : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่'),
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
@@ -479,9 +490,9 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'ทั้งหมด: $_totalRows รายการ'
-                '   ถูกต้อง: $_validRows รายการ'
-                '   ไม่ถูกต้อง: $_errorRows รายการ',
+                _isEnglish
+                    ? 'Total: $_totalRows rows   Valid: $_validRows rows   Invalid: $_errorRows rows'
+                    : 'ทั้งหมด: $_totalRows รายการ   ถูกต้อง: $_validRows รายการ   ไม่ถูกต้อง: $_errorRows รายการ',
                 style: const TextStyle(fontSize: 13),
               ),
             ]),
@@ -491,19 +502,19 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
 
       if (_errors.isNotEmpty) ...[
         const SizedBox(height: 16),
-        const Text('รายการที่ไม่ถูกต้อง',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
+        Text((_isEnglish ? 'Invalid rows' : 'รายการที่ไม่ถูกต้อง'),
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
         const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
             columnSpacing: 16,
             headingRowColor: WidgetStateProperty.all(Colors.red.shade50),
-            columns: const [
-              DataColumn(label: Text('แถวที่')),
-              DataColumn(label: Text('รหัสตำแหน่ง')),
-              DataColumn(label: Text('คอลัมน์')),
-              DataColumn(label: Text('ข้อผิดพลาด')),
+            columns: [
+              DataColumn(label: Text((_isEnglish ? 'Row' : 'แถวที่'))),
+              DataColumn(label: Text((_isEnglish ? 'Location code' : 'รหัสตำแหน่ง'))),
+              DataColumn(label: Text((_isEnglish ? 'Column' : 'คอลัมน์'))),
+              DataColumn(label: Text((_isEnglish ? 'Error' : 'ข้อผิดพลาด'))),
             ],
             rows: [
               for (final e in _errors)
@@ -526,7 +537,9 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
       if (_validRows > 0) ...[
         const SizedBox(height: 16),
         Text(
-          'ตัวอย่างข้อมูลที่จะนำเข้า${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
+          _isEnglish
+              ? 'Preview of data to import${_validRows > 50 ? ' (showing 50 of $_validRows rows)' : ' ($_validRows rows)'}'
+              : 'ตัวอย่างข้อมูลที่จะนำเข้า${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         const SizedBox(height: 8),
@@ -539,16 +552,18 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
             child: DataTable(
               columnSpacing: 12,
               headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-              columns: const [
-                DataColumn(label: Text('คลังสินค้า')),
-                DataColumn(label: Text('รหัสตำแหน่ง')),
-                DataColumn(label: Text('ตำแหน่งแม่')),
-                DataColumn(label: Text('ชนิด')),
-                DataColumn(label: Text('ชื่อตำแหน่ง')),
-                DataColumn(label: Text('ชื่อตำแหน่ง (อังกฤษ)')),
-                DataColumn(label: Text('หมวดหมู่')),
-                DataColumn(label: Text('ระดับ')),
-                DataColumn(label: Text('ใช้งาน')),
+              columns: [
+                DataColumn(label: Text((_isEnglish ? 'Warehouse' : 'คลังสินค้า'))),
+                DataColumn(label: Text((_isEnglish ? 'Location code' : 'รหัสตำแหน่ง'))),
+                DataColumn(label: Text((_isEnglish ? 'Parent location' : 'ตำแหน่งแม่'))),
+                DataColumn(label: Text((_isEnglish ? 'Type' : 'ชนิด'))),
+                DataColumn(label: Text((_isEnglish ? 'Location name' : 'ชื่อตำแหน่ง'))),
+                DataColumn(label: Text((_isEnglish ? 'Location name (English)' : 'ชื่อตำแหน่ง (อังกฤษ)'))),
+                DataColumn(label: Text((_isEnglish ? 'Category' : 'หมวดหมู่'))),
+                DataColumn(label: Text((_isEnglish ? 'Level' : 'ระดับ'))),
+                DataColumn(label: Text((_isEnglish ? 'Active' : 'ใช้งาน'))),
+                DataColumn(label: Text((_isEnglish ? 'Main location' : 'ตำแหน่งหลัก'))),
+                DataColumn(label: Text((_isEnglish ? 'Sequence' : 'ลำดับ'))),
               ],
               rows: _validatedData
                   .take(50)
@@ -570,6 +585,8 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
                         DataCell(Text(_fmt(r['category_code']))),
                         DataCell(Text(_fmt(r['level']))),
                         DataCell(Text(_fmt(r['is_active']))),
+                        DataCell(Text(_fmt(r['is_default']))),
+                        DataCell(Text(_fmt(r['sort_order']))),
                       ]))
                   .toList(),
             ),
@@ -581,7 +598,7 @@ class _ImLocationImportScreenState extends State<ImLocationImportScreen> {
 
   String _fmt(dynamic val) {
     if (val == null) return '';
-    if (val is bool) return val ? 'ใช่' : 'ไม่ใช่';
+    if (val is bool) return val ? (_isEnglish ? 'Yes' : 'ใช่') : (_isEnglish ? 'No' : 'ไม่ใช่');
     if (val is num) return val == val.roundToDouble() ? val.toInt().toString() : val.toString();
     return val.toString();
   }

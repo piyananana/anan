@@ -494,7 +494,7 @@ class _ArCustomerRunningScreenState extends State<ArCustomerRunningScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.teal,
                             foregroundColor: Colors.white,
-                            textStyle: const TextStyle(
+                            textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, 
                                 fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ),

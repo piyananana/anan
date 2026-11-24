@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -24,6 +24,7 @@ class ApVendorImportScreen extends StatefulWidget {
 }
 
 class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
+  bool _isEnglish = false;
   // File state
   String? _fileName;
   Uint8List? _fileBytes;
@@ -144,10 +145,10 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
         });
       } else {
         final body = jsonDecode(response.body);
-        _showSnack(body['message'] ?? 'เกิดข้อผิดพลาด', isError: true);
+        _showSnack(body['message'] ?? (_isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -162,8 +163,8 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันการนำเข้า'),
-        content: Text('ต้องการนำเข้าข้อมูลเจ้าหนี้ $_validRows รายการใช่หรือไม่?'),
+        title: Text((_isEnglish ? 'Confirm import' : 'ยืนยันการนำเข้า')),
+        content: Text((_isEnglish ? 'Import $_validRows vendors?' : 'ต้องการนำเข้าข้อมูลเจ้าหนี้ $_validRows รายการใช่หรือไม่?')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -198,9 +199,13 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
         final errs = (data['errors'] as List?)?.length ?? 0;
         if (mounted) {
           _showSnack(
-            'นำเข้าสำเร็จ $imported รายการ'
-            '${skipped > 0 ? '  |  ข้ามรหัสซ้ำ $skipped รายการ' : ''}'
-            '${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}',
+            _isEnglish
+                ? 'Imported $imported rows'
+                  '${skipped > 0 ? '  |  skipped $skipped duplicate codes' : ''}'
+                  '${errs > 0 ? '  |  $errs errors' : ''}'
+                : 'นำเข้าสำเร็จ $imported รายการ'
+                  '${skipped > 0 ? '  |  ข้ามรหัสซ้ำ $skipped รายการ' : ''}'
+                  '${errs > 0 ? '  |  ผิดพลาด $errs รายการ' : ''}',
           );
           setState(() {
             _fileName = null;
@@ -212,7 +217,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
           widget.onFieldsChanged();
         }
       } else {
-        String errMsg = 'เกิดข้อผิดพลาด (${response.statusCode})';
+        String errMsg = (_isEnglish ? 'Error (${response.statusCode})' : 'เกิดข้อผิดพลาด (${response.statusCode})');
         try {
           final body = jsonDecode(response.body);
           errMsg = body['message'] ?? errMsg;
@@ -222,7 +227,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
         _showSnack(errMsg, isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
@@ -240,7 +245,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l = AppL10n(context.watch<LanguageProvider>().isEnglish);
+    _isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _appColor,
@@ -249,7 +254,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'เริ่มใหม่',
+            tooltip: (_isEnglish ? 'Start over' : 'เริ่มใหม่'),
             onPressed: () => setState(() {
               _fileName = null;
               _fileBytes = null;
@@ -298,13 +303,13 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check_circle_outline),
                   label: Text(_isImporting
-                      ? 'กำลังนำเข้า...'
-                      : 'ยืนยันนำเข้าข้อมูล $_validRows รายการ'),
+                      ? (_isEnglish ? 'Importing...' : 'กำลังนำเข้า...')
+                      : (_isEnglish ? 'Confirm import of $_validRows rows' : 'ยืนยันนำเข้าข้อมูล $_validRows รายการ')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green.shade700,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -320,16 +325,16 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
       final authService = context.read<AuthService>();
       final headers = await authService.getAuthHeader();
       final response = await http.get(
-        Uri.parse('${AppConfig.apiAp}/ap_vendor/import/template/download'),
+        Uri.parse('${AppConfig.apiAp}/ap_vendor/import/template/download?lang=${_isEnglish ? 'en' : 'th'}'),
         headers: headers,
       );
       if (response.statusCode == 200) {
         await downloadFile(response.bodyBytes, 'ap_vendor_template.xlsx');
       } else {
-        _showSnack('ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})', isError: true);
+        _showSnack((_isEnglish ? 'Template download failed (${response.statusCode})' : 'ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     }
   }
 
@@ -337,13 +342,13 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
     return Card(
       child: ExpansionTile(
         leading: const Icon(Icons.table_chart_outlined, color: _appColor),
-        title: const Text('เทมเพลตนำเข้าข้อมูล',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: const Text('คลิกเพื่อดูรายละเอียดคอลัมน์ในแต่ละ sheet'),
+        title: Text((_isEnglish ? 'Import template' : 'เทมเพลตนำเข้าข้อมูล'),
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text((_isEnglish ? 'Click to see the columns of each sheet' : 'คลิกเพื่อดูรายละเอียดคอลัมน์ในแต่ละ sheet')),
         trailing: OutlinedButton.icon(
           onPressed: _downloadTemplate,
           icon: const Icon(Icons.download, size: 18),
-          label: const Text('ดาวน์โหลดเทมเพลต'),
+          label: Text((_isEnglish ? 'Download template' : 'ดาวน์โหลดเทมเพลต')),
           style: OutlinedButton.styleFrom(
             foregroundColor: _appColor,
             side: const BorderSide(color: _appColor),
@@ -351,13 +356,17 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
         ),
         initiallyExpanded: false,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              'เทมเพลตประกอบด้วย 5 sheet ตามหัวข้อข้อมูลเจ้าหนี้ ทุก sheet (ยกเว้น "ข้อมูลพื้นฐาน") '
-              'ใช้คอลัมน์ "old_vendor_code" (รหัสเก่าเจ้าหนี้) เป็นตัวเชื่อมข้อมูลกับแถวใน sheet "ข้อมูลพื้นฐาน"\n'
-              '★ = จำเป็นต้องระบุ',
-              style: TextStyle(color: Colors.red, fontSize: 12),
+              _isEnglish
+                  ? 'The template has 5 sheets by vendor data topic. Every sheet (except "ข้อมูลพื้นฐาน" / General) '
+                      'uses the "old_vendor_code" column to link to its row in the "ข้อมูลพื้นฐาน" sheet\n'
+                      '★ = required'
+                  : 'เทมเพลตประกอบด้วย 5 sheet ตามหัวข้อข้อมูลเจ้าหนี้ ทุก sheet (ยกเว้น "ข้อมูลพื้นฐาน") '
+                      'ใช้คอลัมน์ "old_vendor_code" (รหัสเก่าเจ้าหนี้) เป็นตัวเชื่อมข้อมูลกับแถวใน sheet "ข้อมูลพื้นฐาน"\n'
+                      '★ = จำเป็นต้องระบุ',
+              style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),
           for (final sheet in _templateSheets) _buildTemplateSheetTile(sheet),
@@ -370,7 +379,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
   Widget _buildTemplateSheetTile(Map<String, dynamic> sheet) {
     final columns = List<Map<String, dynamic>>.from(sheet['columns'] ?? []);
     return ExpansionTile(
-      title: Text(sheet['name']?.toString() ?? '',
+      title: Text((_isEnglish ? (sheet['name_en'] ?? sheet['name']) : sheet['name'])?.toString() ?? '',
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
       children: [
         SingleChildScrollView(
@@ -379,17 +388,17 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
           child: DataTable(
             columnSpacing: 16,
             headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-            columns: const [
-              DataColumn(label: Text('ชื่อ Header', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ความหมาย',   style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('จำเป็น',      style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('ตัวอย่าง',   style: TextStyle(fontWeight: FontWeight.bold))),
+            columns: [
+              DataColumn(label: Text((_isEnglish ? 'Header name' : 'ชื่อ Header'), style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Meaning' : 'ความหมาย'),   style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Required' : 'จำเป็น'),      style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text((_isEnglish ? 'Example' : 'ตัวอย่าง'),   style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
             rows: columns
                 .map((col) => DataRow(cells: [
                       DataCell(Text(col['key']?.toString() ?? '',
                           style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
-                      DataCell(Text(col['label']?.toString() ?? '')),
+                      DataCell(Text((_isEnglish ? (col['label_en'] ?? col['label']) : col['label'])?.toString() ?? '')),
                       DataCell((col['required'] as bool? ?? false)
                           ? const Icon(Icons.star, color: Colors.red, size: 14)
                           : const Text('-', style: TextStyle(color: Colors.grey))),
@@ -410,10 +419,14 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
   Widget _buildCodeModeBanner() {
     final auto = _autoNumbering == true;
     final text = auto
-        ? 'รหัสใหม่อัตโนมัติ แต่ระบบยังเก็บรหัสเก่าไว้ให้ด้วย'
-        : 'ใช้รหัสใหม่เหมือนรหัสเก่า ถ้าไม่ระบุรหัสเก่า จะนำข้อมูลเข้าไม่ได้';
+        ? (_isEnglish ? 'New codes are auto-numbered, but the old code is kept as well' : 'รหัสใหม่อัตโนมัติ แต่ระบบยังเก็บรหัสเก่าไว้ให้ด้วย')
+        : (_isEnglish
+            ? 'New codes are the same as the old codes; rows without an old code cannot be imported'
+            : 'ใช้รหัสใหม่เหมือนรหัสเก่า ถ้าไม่ระบุรหัสเก่า จะนำข้อมูลเข้าไม่ได้');
     final groupNote = !auto && _autoGroupCodes.isNotEmpty
-        ? '\n(ยกเว้นกลุ่มเจ้าหนี้ที่ตั้งรหัสอัตโนมัติ: ${_autoGroupCodes.join(', ')})'
+        ? (_isEnglish
+            ? '\n(except auto-numbered vendor groups: ${_autoGroupCodes.join(', ')})'
+            : '\n(ยกเว้นกลุ่มเจ้าหนี้ที่ตั้งรหัสอัตโนมัติ: ${_autoGroupCodes.join(', ')})')
         : '';
     return Container(
       width: double.infinity,
@@ -440,11 +453,11 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('เลือกไฟล์นำเข้า',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text((_isEnglish ? 'Select import file' : 'เลือกไฟล์นำเข้า'),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 4),
-          const Text('รองรับไฟล์ .xlsx, .xls, .csv',
-              style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Text((_isEnglish ? 'Supports .xlsx, .xls, .csv files' : 'รองรับไฟล์ .xlsx, .xls, .csv'),
+              style: const TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
@@ -456,7 +469,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
                   color: Colors.grey.shade50,
                 ),
                 child: Text(
-                  _fileName ?? 'ยังไม่ได้เลือกไฟล์',
+                  _fileName ?? (_isEnglish ? 'No file selected' : 'ยังไม่ได้เลือกไฟล์'),
                   style: TextStyle(
                       color: _fileName != null ? Colors.black87 : Colors.grey),
                   overflow: TextOverflow.ellipsis,
@@ -467,7 +480,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
             OutlinedButton.icon(
               onPressed: _pickFile,
               icon: const Icon(Icons.folder_open),
-              label: const Text('เลือกไฟล์'),
+              label: Text((_isEnglish ? 'Select file' : 'เลือกไฟล์')),
             ),
             const SizedBox(width: 8),
             ElevatedButton.icon(
@@ -477,7 +490,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
                       width: 16, height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.fact_check_outlined),
-              label: const Text('ตรวจสอบ'),
+              label: Text((_isEnglish ? 'Validate' : 'ตรวจสอบ')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _appColor,
                 foregroundColor: Colors.white,
@@ -508,8 +521,8 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
                 allOk
-                    ? 'ข้อมูลถูกต้องทั้งหมด พร้อมนำเข้า'
-                    : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่',
+                    ? (_isEnglish ? 'All data is valid and ready to import' : 'ข้อมูลถูกต้องทั้งหมด พร้อมนำเข้า')
+                    : (_isEnglish ? 'Invalid data found. Please fix the file and validate again' : 'พบข้อมูลไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วตรวจสอบใหม่'),
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
@@ -517,9 +530,9 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'ทั้งหมด: $_totalRows รายการ'
-                '   ถูกต้อง: $_validRows รายการ'
-                '   ไม่ถูกต้อง: $_errorRows รายการ',
+                _isEnglish
+                    ? 'Total: $_totalRows rows   Valid: $_validRows rows   Invalid: $_errorRows rows'
+                    : 'ทั้งหมด: $_totalRows รายการ   ถูกต้อง: $_validRows รายการ   ไม่ถูกต้อง: $_errorRows รายการ',
                 style: const TextStyle(fontSize: 13),
               ),
             ]),
@@ -529,19 +542,19 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
 
       if (_errors.isNotEmpty) ...[
         const SizedBox(height: 16),
-        const Text('รายการที่ไม่ถูกต้อง',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
+        Text((_isEnglish ? 'Invalid rows' : 'รายการที่ไม่ถูกต้อง'),
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14)),
         const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
             columnSpacing: 16,
             headingRowColor: WidgetStateProperty.all(Colors.red.shade50),
-            columns: const [
-              DataColumn(label: Text('แถวที่')),
-              DataColumn(label: Text('รหัสเจ้าหนี้')),
-              DataColumn(label: Text('คอลัมน์')),
-              DataColumn(label: Text('ข้อผิดพลาด')),
+            columns: [
+              DataColumn(label: Text((_isEnglish ? 'Row' : 'แถวที่'))),
+              DataColumn(label: Text((_isEnglish ? 'Vendor code' : 'รหัสเจ้าหนี้'))),
+              DataColumn(label: Text((_isEnglish ? 'Column' : 'คอลัมน์'))),
+              DataColumn(label: Text((_isEnglish ? 'Error' : 'ข้อผิดพลาด'))),
             ],
             rows: [
               for (final e in _errors)
@@ -564,12 +577,14 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
       if (_validRows > 0) ...[
         const SizedBox(height: 16),
         Text(
-          'ตัวอย่างข้อมูลที่จะนำเข้า${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
+          _isEnglish
+              ? 'Preview of data to import${_validRows > 50 ? ' (showing 50 of $_validRows rows)' : ' ($_validRows rows)'}'
+              : 'ตัวอย่างข้อมูลที่จะนำเข้า${_validRows > 50 ? ' (แสดง 50 จาก $_validRows รายการ)' : ' ($_validRows รายการ)'}',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         const SizedBox(height: 4),
-        const Text('คลิกแถวเพื่อดูรายละเอียดทุกหัวข้อของเจ้าหนี้',
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
+        Text((_isEnglish ? 'Click a row to see all vendor details' : 'คลิกแถวเพื่อดูรายละเอียดทุกหัวข้อของเจ้าหนี้'),
+            style: const TextStyle(color: Colors.grey, fontSize: 12)),
         const SizedBox(height: 8),
         Scrollbar(
           controller: _previewScrollCtrl,
@@ -580,23 +595,23 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
             child: DataTable(
               columnSpacing: 12,
               headingRowColor: WidgetStateProperty.all(Colors.blueGrey.shade50),
-              columns: const [
-                DataColumn(label: Text('รหัสเจ้าหนี้')),
-                DataColumn(label: Text('กลุ่ม')),
-                DataColumn(label: Text('ชื่อ (ไทย)')),
-                DataColumn(label: Text('ชื่อ (อังกฤษ)')),
-                DataColumn(label: Text('เลขภาษี')),
-                DataColumn(label: Text('ประเภทธุรกิจ')),
-                DataColumn(label: Text('สกุลเงิน')),
-                DataColumn(label: Text('เครดิต (ด/ว)')),
-                DataColumn(label: Text('ใช้งาน')),
+              columns: [
+                DataColumn(label: Text((_isEnglish ? 'Vendor code' : 'รหัสเจ้าหนี้'))),
+                DataColumn(label: Text((_isEnglish ? 'Group' : 'กลุ่ม'))),
+                DataColumn(label: Text((_isEnglish ? 'Name (Thai)' : 'ชื่อ (ไทย)'))),
+                DataColumn(label: Text((_isEnglish ? 'Name (English)' : 'ชื่อ (อังกฤษ)'))),
+                DataColumn(label: Text((_isEnglish ? 'Tax ID' : 'เลขภาษี'))),
+                DataColumn(label: Text((_isEnglish ? 'Business type' : 'ประเภทธุรกิจ'))),
+                DataColumn(label: Text((_isEnglish ? 'Currency' : 'สกุลเงิน'))),
+                DataColumn(label: Text((_isEnglish ? 'Credit (m/d)' : 'เครดิต (ด/ว)'))),
+                DataColumn(label: Text((_isEnglish ? 'Active' : 'ใช้งาน'))),
               ],
               rows: _validatedData
                   .take(50)
                   .map((r) => DataRow(
                         onSelectChanged: (_) => _showVendorDetailDialog(r),
                         cells: [
-                          DataCell(Text(r['vendor_code']?.toString() ?? '(อัตโนมัติ)')),
+                          DataCell(Text(r['vendor_code']?.toString() ?? (_isEnglish ? '(auto)' : '(อัตโนมัติ)'))),
                           DataCell(Text(_fmt(r['vendor_group_code']))),
                           DataCell(ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 200),
@@ -625,45 +640,45 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
 
   // ─── Vendor detail dialog (tabbed, per ap_vendor_detail_widget sections) ──
 
-  static const _addressColumns = [
-    ['address_type', 'ประเภทที่อยู่'],
-    ['address_no', 'บ้านเลขที่'],
-    ['address_building_village', 'อาคาร/หมู่บ้าน'],
-    ['address_alley', 'ซอย'],
-    ['address_road', 'ถนน'],
-    ['address_sub_district', 'ตำบล/แขวง'],
-    ['address_district', 'อำเภอ/เขต'],
-    ['address_province', 'จังหวัด'],
-    ['address_zip_code', 'รหัสไปรษณีย์'],
-    ['address_country', 'ประเทศ'],
-    ['is_default', 'ที่อยู่หลัก'],
+  List<List<String>> get _addressColumns => [
+    ['address_type', (_isEnglish ? 'Address type' : 'ประเภทที่อยู่')],
+    ['address_no', (_isEnglish ? 'House no.' : 'บ้านเลขที่')],
+    ['address_building_village', (_isEnglish ? 'Building / village' : 'อาคาร/หมู่บ้าน')],
+    ['address_alley', (_isEnglish ? 'Soi / alley' : 'ซอย')],
+    ['address_road', (_isEnglish ? 'Road' : 'ถนน')],
+    ['address_sub_district', (_isEnglish ? 'Sub-district' : 'ตำบล/แขวง')],
+    ['address_district', (_isEnglish ? 'District' : 'อำเภอ/เขต')],
+    ['address_province', (_isEnglish ? 'Province' : 'จังหวัด')],
+    ['address_zip_code', (_isEnglish ? 'Postal code' : 'รหัสไปรษณีย์')],
+    ['address_country', (_isEnglish ? 'Country' : 'ประเทศ')],
+    ['is_default', (_isEnglish ? 'Main address' : 'ที่อยู่หลัก')],
   ];
 
-  static const _contactColumns = [
-    ['contact_name', 'ชื่อผู้ติดต่อ'],
-    ['position', 'ตำแหน่ง'],
-    ['phone', 'โทรศัพท์'],
-    ['mobile', 'มือถือ'],
-    ['email', 'อีเมล'],
-    ['is_default', 'ผู้ติดต่อหลัก'],
+  List<List<String>> get _contactColumns => [
+    ['contact_name', (_isEnglish ? 'Contact name' : 'ชื่อผู้ติดต่อ')],
+    ['position', (_isEnglish ? 'Position' : 'ตำแหน่ง')],
+    ['phone', (_isEnglish ? 'Phone' : 'โทรศัพท์')],
+    ['mobile', (_isEnglish ? 'Mobile' : 'มือถือ')],
+    ['email', (_isEnglish ? 'Email' : 'อีเมล')],
+    ['is_default', (_isEnglish ? 'Main contact' : 'ผู้ติดต่อหลัก')],
   ];
 
-  static const _bankColumns = [
-    ['bank_name', 'ธนาคาร'],
-    ['branch_name', 'สาขา'],
-    ['account_number', 'เลขที่บัญชี'],
-    ['account_name', 'ชื่อบัญชี'],
-    ['account_type', 'ประเภทบัญชี'],
-    ['is_default', 'บัญชีหลัก'],
+  List<List<String>> get _bankColumns => [
+    ['bank_name', (_isEnglish ? 'Bank' : 'ธนาคาร')],
+    ['branch_name', (_isEnglish ? 'Branch' : 'สาขา')],
+    ['account_number', (_isEnglish ? 'Account number' : 'เลขที่บัญชี')],
+    ['account_name', (_isEnglish ? 'Account name' : 'ชื่อบัญชี')],
+    ['account_type', (_isEnglish ? 'Account type' : 'ประเภทบัญชี')],
+    ['is_default', (_isEnglish ? 'Main account' : 'บัญชีหลัก')],
   ];
 
   void _showVendorDetailDialog(Map<String, dynamic> row) {
-    const tabLabels = [
-      'ข้อมูลพื้นฐาน',
-      'ที่อยู่',
-      'ผู้ติดต่อ',
-      'บัญชีธนาคาร',
-      'บัญชีเจ้าหนี้ (GL)',
+    final tabLabels = [
+      (_isEnglish ? 'General' : 'ข้อมูลพื้นฐาน'),
+      (_isEnglish ? 'Addresses' : 'ที่อยู่'),
+      (_isEnglish ? 'Contacts' : 'ผู้ติดต่อ'),
+      (_isEnglish ? 'Bank accounts' : 'บัญชีธนาคาร'),
+      (_isEnglish ? 'AP account (GL)' : 'บัญชีเจ้าหนี้ (GL)'),
     ];
 
     showDialog(
@@ -683,7 +698,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
                   backgroundColor: _appColor,
                   foregroundColor: Colors.white,
                   title: Text(
-                    '${row['vendor_code']?.toString() ?? '(อัตโนมัติ)'} - ${row['vendor_name_th']?.toString() ?? ''}',
+                    '${row['vendor_code']?.toString() ?? (_isEnglish ? '(auto)' : '(อัตโนมัติ)')} - ${row['vendor_name_th']?.toString() ?? ''}',
                     style: const TextStyle(fontSize: 15, color: Colors.white),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -720,30 +735,30 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
 
   Widget _buildGeneralTab(Map<String, dynamic> row) {
     final items = <List<String>>[
-      ['รหัสเจ้าหนี้', row['vendor_code']?.toString() ?? '(อัตโนมัติ)'],
-      ['กลุ่มเจ้าหนี้', _fmt(row['vendor_group_code'])],
-      ['รหัสเก่า', _fmt(row['old_vendor_code'])],
-      ['ชื่อ (ไทย)', _fmt(row['vendor_name_th'])],
-      ['ชื่อ (อังกฤษ)', _fmt(row['vendor_name_en'])],
-      ['เลขประจำตัวผู้เสียภาษี', _fmt(row['tax_id'])],
-      ['รหัสสาขา', _fmt(row['tax_branch_code'])],
-      ['ประเภทธุรกิจ', _fmt(row['business_type_code'])],
-      ['ประเภทผู้ขาย', _fmt(row['vendor_type'])],
-      ['เครดิต (เดือน)', _fmt(row['credit_term_months'])],
-      ['เครดิต (วัน)', _fmt(row['credit_term_days'])],
-      ['วงเงินเครดิต', _fmt(row['credit_limit'])],
-      ['สกุลเงิน', _fmt(row['currency_code'])],
-      ['ตารางราคาซื้อ', _fmt(row['price_list_code'])],
-      ['ใช้งาน', _fmt(row['is_active'])],
-      ['หมายเหตุ', _fmt(row['remark'])],
+      [(_isEnglish ? 'Vendor code' : 'รหัสเจ้าหนี้'), row['vendor_code']?.toString() ?? '(อัตโนมัติ)'],
+      [(_isEnglish ? 'Vendor group' : 'กลุ่มเจ้าหนี้'), _fmt(row['vendor_group_code'])],
+      [(_isEnglish ? 'Old code' : 'รหัสเก่า'), _fmt(row['old_vendor_code'])],
+      [(_isEnglish ? 'Name (Thai)' : 'ชื่อ (ไทย)'), _fmt(row['vendor_name_th'])],
+      [(_isEnglish ? 'Name (English)' : 'ชื่อ (อังกฤษ)'), _fmt(row['vendor_name_en'])],
+      [(_isEnglish ? 'Tax ID' : 'เลขประจำตัวผู้เสียภาษี'), _fmt(row['tax_id'])],
+      [(_isEnglish ? 'Tax branch code' : 'รหัสสาขา'), _fmt(row['tax_branch_code'])],
+      [(_isEnglish ? 'Business type' : 'ประเภทธุรกิจ'), _fmt(row['business_type_code'])],
+      [(_isEnglish ? 'Vendor type' : 'ประเภทผู้ขาย'), _fmt(row['vendor_type'])],
+      [(_isEnglish ? 'Credit (months)' : 'เครดิต (เดือน)'), _fmt(row['credit_term_months'])],
+      [(_isEnglish ? 'Credit (days)' : 'เครดิต (วัน)'), _fmt(row['credit_term_days'])],
+      [(_isEnglish ? 'Credit limit' : 'วงเงินเครดิต'), _fmt(row['credit_limit'])],
+      [(_isEnglish ? 'Currency' : 'สกุลเงิน'), _fmt(row['currency_code'])],
+      [(_isEnglish ? 'Purchase price list' : 'ตารางราคาซื้อ'), _fmt(row['price_list_code'])],
+      [(_isEnglish ? 'Active' : 'ใช้งาน'), _fmt(row['is_active'])],
+      [(_isEnglish ? 'Remark' : 'หมายเหตุ'), _fmt(row['remark'])],
     ];
     return _buildKeyValueTable(items);
   }
 
   Widget _buildApAccountTab(Map<String, dynamic> row) {
     final items = <List<String>>[
-      ['รหัสบัญชีเจ้าหนี้', _fmt(row['ap_account_code'])],
-      ['ประเภทการชำระหลัก', _fmt(row['payment_method_code'])],
+      [(_isEnglish ? 'AP account code' : 'รหัสบัญชีเจ้าหนี้'), _fmt(row['ap_account_code'])],
+      [(_isEnglish ? 'Main payment method' : 'ประเภทการชำระหลัก'), _fmt(row['payment_method_code'])],
     ];
     return _buildKeyValueTable(items);
   }
@@ -778,9 +793,9 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
 
   Widget _buildListTable(List<dynamic> rows, List<List<String>> columns) {
     if (rows.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('ไม่มีข้อมูล', style: TextStyle(color: Colors.grey)),
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Text((_isEnglish ? 'No data' : 'ไม่มีข้อมูล'), style: const TextStyle(color: Colors.grey)),
       );
     }
     return _DualScrollView(
@@ -813,7 +828,7 @@ class _ApVendorImportScreenState extends State<ApVendorImportScreen> {
 
   String _fmt(dynamic val) {
     if (val == null) return '';
-    if (val is bool) return val ? 'ใช่' : 'ไม่ใช่';
+    if (val is bool) return val ? (_isEnglish ? 'Yes' : 'ใช่') : (_isEnglish ? 'No' : 'ไม่ใช่');
     if (val is List) return val.map((e) => _fmtNum(e)).join(', ');
     if (val is num) return _fmtNum(val);
     return val.toString();

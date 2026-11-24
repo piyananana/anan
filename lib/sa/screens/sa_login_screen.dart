@@ -344,7 +344,7 @@ class _LoginScreenState extends State<LoginScreen> {
             backgroundColor: _LoginColors.brand,
             disabledBackgroundColor: _LoginColors.brand.withOpacity(0.6),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-            textStyle: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w600),
+            textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 15.5, fontWeight: FontWeight.w600),
           ),
           child: _isLoading
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))

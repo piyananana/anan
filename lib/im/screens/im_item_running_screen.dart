@@ -428,7 +428,7 @@ class _ImItemRunningScreenState extends State<ImItemRunningScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.teal[700],
                             foregroundColor: Colors.white,
-                            textStyle: const TextStyle(
+                            textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, 
                                 fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ),

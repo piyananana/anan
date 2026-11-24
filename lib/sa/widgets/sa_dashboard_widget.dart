@@ -177,9 +177,9 @@ class _DashboardWidgetState extends State<DashboardWidget> {
 
     return LayoutBuilder(
       builder: (_, constraints) {
-        final cardSz = math.min(constraints.maxWidth, constraints.maxHeight);
+        // การ์ดเต็มพื้นที่ (ไม่บังคับสี่เหลี่ยมจัตุรัส) — ในหน้าแรกการ์ดแคบ ถ้าบีบเป็นจัตุรัสข้อความจะเล็ก/ล้น
         Widget page(Widget card) =>
-            Center(child: SizedBox.square(dimension: cardSz, child: card));
+            SizedBox(width: constraints.maxWidth, height: constraints.maxHeight, child: card);
 
         return MouseRegion(
           onEnter: (_) => setState(() => _isHovered = true),
@@ -247,14 +247,14 @@ class _CardFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
       child: Card(
         elevation: 2,
         shadowColor: const Color(0x26607D8B),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18)),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 18, 24, 16),
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -314,7 +314,8 @@ class _UserStatsCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _summaryRow(stats.total, stats.active, stats.inactive),
+          // ย่อให้พอดีความกว้างการ์ด (ขนาดตัวอักษรที่ผู้ใช้ขยายไว้จะไม่ล้นการ์ด)
+          FittedBox(fit: BoxFit.scaleDown, child: _summaryRow(stats.total, stats.active, stats.inactive)),
           const SizedBox(height: 16),
           Expanded(
             flex: 3,
@@ -379,6 +380,7 @@ class _UserStatsCard extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(label,
+              maxLines: 1, overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 14, color: Color(0xFF455A64))),
         ),
         Text('$count',

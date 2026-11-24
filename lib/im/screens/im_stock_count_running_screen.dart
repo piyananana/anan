@@ -372,7 +372,7 @@ class _ImStockCountRunningScreenState extends State<ImStockCountRunningScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.teal,
                             foregroundColor: Colors.white,
-                            textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),

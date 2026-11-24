@@ -856,7 +856,7 @@ class _ImPriceChangeReportScreenState extends State<ImPriceChangeReportScreen> {
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.picture_as_pdf),
               label: Text(isEnglish ? 'Generate Report' : 'ประมวลผลรายงาน'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[700], foregroundColor: Colors.white, textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[700], foregroundColor: Colors.white, textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 15, fontWeight: FontWeight.bold)),
             ),
           ),
         ),

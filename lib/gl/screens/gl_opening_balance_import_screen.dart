@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../utils/file_download.dart';
 
@@ -25,6 +24,7 @@ class GlOpeningBalanceImportScreen extends StatefulWidget {
 }
 
 class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScreen> {
+  bool _isEnglish = false;
   // File state
   String? _fileName;
   Uint8List? _fileBytes;
@@ -166,10 +166,10 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
         });
       } else {
         final body = jsonDecode(response.body);
-        _showSnack(body['message'] ?? 'เกิดข้อผิดพลาด', isError: true);
+        _showSnack(body['message'] ?? (_isEnglish ? 'An error occurred' : 'เกิดข้อผิดพลาด'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -240,9 +240,13 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
         final errs = (data['errors'] as List?)?.length ?? 0;
         if (mounted) {
           _showSnack(
-            'นำเข้าสำเร็จ $imported เอกสาร'
-            '${skipped > 0 ? '  |  ข้าม $skipped เอกสาร' : ''}'
-            '${errs > 0 ? '  |  ผิดพลาด $errs เอกสาร' : ''}',
+            _isEnglish
+                ? 'Imported $imported documents'
+                    '${skipped > 0 ? '  |  skipped $skipped documents' : ''}'
+                    '${errs > 0 ? '  |  $errs errors' : ''}'
+                : 'นำเข้าสำเร็จ $imported เอกสาร'
+                    '${skipped > 0 ? '  |  ข้าม $skipped เอกสาร' : ''}'
+                    '${errs > 0 ? '  |  ผิดพลาด $errs เอกสาร' : ''}',
           );
           setState(() {
             _fileName = null;
@@ -256,7 +260,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
           widget.onFieldsChanged();
         }
       } else {
-        String errMsg = 'เกิดข้อผิดพลาด (${response.statusCode})';
+        String errMsg = (_isEnglish ? 'Error (${response.statusCode})' : 'เกิดข้อผิดพลาด (${response.statusCode})');
         try {
           final body = jsonDecode(response.body);
           errMsg = body['message'] ?? errMsg;
@@ -270,7 +274,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
         _showSnack(errMsg, isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
@@ -288,6 +292,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
 
   @override
   Widget build(BuildContext context) {
+    _isEnglish = context.watch<LanguageProvider>().isEnglish;
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
@@ -352,7 +357,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
                     backgroundColor: Colors.green.shade700,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -368,16 +373,16 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
       final authService = context.read<AuthService>();
       final headers = await authService.getAuthHeader();
       final response = await http.get(
-        Uri.parse('${AppConfig.apiGl}/gl_opening_balance/import/template/download'),
+        Uri.parse('${AppConfig.apiGl}/gl_opening_balance/import/template/download?lang=${_isEnglish ? 'en' : 'th'}'),
         headers: headers,
       );
       if (response.statusCode == 200) {
         await downloadFile(response.bodyBytes, 'gl_opening_balance_template.xlsx');
       } else {
-        _showSnack('ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})', isError: true);
+        _showSnack((_isEnglish ? 'Template download failed (${response.statusCode})' : 'ดาวน์โหลดเทมเพลตไม่สำเร็จ (${response.statusCode})'), isError: true);
       }
     } catch (e) {
-      _showSnack('เกิดข้อผิดพลาด: $e', isError: true);
+      _showSnack((_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), isError: true);
     }
   }
 
@@ -398,12 +403,15 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
         ),
         initiallyExpanded: false,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              'เทมเพลตประกอบด้วย 2 sheet คือ "header" (1 แถว = 1 เอกสาร) และ "detail" (รายการย่อยของเอกสาร)\n'
-              'เชื่อมโยงกันด้วยคอลัมน์ header_ref   ★ = จำเป็นต้องระบุ',
-              style: TextStyle(color: Colors.red, fontSize: 12),
+              _isEnglish
+                  ? 'The template has 2 sheets: "header" (1 row = 1 document) and "detail" (the document lines),\n'
+                      'linked by the header_ref column   ★ = required'
+                  : 'เทมเพลตประกอบด้วย 2 sheet คือ "header" (1 แถว = 1 เอกสาร) และ "detail" (รายการย่อยของเอกสาร)\n'
+                      'เชื่อมโยงกันด้วยคอลัมน์ header_ref   ★ = จำเป็นต้องระบุ',
+              style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),
           _buildColumnsTable('sheet "header"', _headerColumns),
@@ -414,15 +422,15 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('รหัสอ้างอิงที่ใช้ได้', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text((_isEnglish ? 'Allowed reference codes' : 'รหัสอ้างอิงที่ใช้ได้'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
-              _buildReferenceWrap('สาขา (branch_code)', _branches),
+              _buildReferenceWrap((_isEnglish ? 'Branch (branch_code)' : 'สาขา (branch_code)'), _branches),
               const SizedBox(height: 8),
-              _buildReferenceWrap('สกุลเงิน (currency_code)', _currencies),
+              _buildReferenceWrap((_isEnglish ? 'Currency (currency_code)' : 'สกุลเงิน (currency_code)'), _currencies),
               for (final dt in _dimensionTypes) ...[
                 const SizedBox(height: 8),
                 _buildReferenceWrap(
-                  '${dt['label']} (dim_${dt['type_code']})',
+                  '${_isEnglish ? (dt['label_en'] ?? dt['label']) : dt['label']} (dim_${dt['type_code']})',
                   List<Map<String, dynamic>>.from(dt['values'] ?? []),
                 ),
               ],
@@ -446,17 +454,17 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
         child: DataTable(
           columnSpacing: 16,
           headingRowColor: WidgetStateProperty.all(const Color(0xFFE8EAF6)),
-          columns: const [
-            DataColumn(label: Text('ชื่อ Header', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('ความหมาย', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('จำเป็น', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('ตัวอย่าง', style: TextStyle(fontWeight: FontWeight.bold))),
+          columns: [
+            DataColumn(label: Text((_isEnglish ? 'Header name' : 'ชื่อ Header'), style: const TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text((_isEnglish ? 'Meaning' : 'ความหมาย'), style: const TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text((_isEnglish ? 'Required' : 'จำเป็น'), style: const TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text((_isEnglish ? 'Example' : 'ตัวอย่าง'), style: const TextStyle(fontWeight: FontWeight.bold))),
           ],
           rows: columns
               .map((col) => DataRow(cells: [
                     DataCell(Text(col['key']?.toString() ?? '',
                         style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
-                    DataCell(Text(col['label']?.toString() ?? '')),
+                    DataCell(Text((_isEnglish ? (col['label_en'] ?? col['label']) : col['label'])?.toString() ?? '')),
                     DataCell((col['required'] as bool? ?? false)
                         ? const Icon(Icons.star, color: Colors.red, size: 14)
                         : const Text('-', style: TextStyle(color: Colors.grey))),
@@ -480,7 +488,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
         children: items
             .map((item) => Chip(
                   label: Text(
-                    '${item[codeKey]} - ${item[labelKey]}',
+                    '${item[codeKey]} - ${(_isEnglish ? (item['${labelKey}_en'] ?? item[labelKey]) : item[labelKey])}',
                     style: const TextStyle(fontSize: 11),
                   ),
                   backgroundColor: const Color(0xFFE8EAF6),
@@ -644,12 +652,12 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
           child: DataTable(
             columnSpacing: 16,
             headingRowColor: WidgetStateProperty.all(Colors.red.shade50),
-            columns: const [
-              DataColumn(label: Text('Sheet')),
-              DataColumn(label: Text('แถวที่')),
-              DataColumn(label: Text('เลขอ้างอิง')),
-              DataColumn(label: Text('คอลัมน์')),
-              DataColumn(label: Text('ข้อผิดพลาด')),
+            columns: [
+              const DataColumn(label: Text('Sheet')),
+              DataColumn(label: Text((_isEnglish ? 'Row' : 'แถวที่'))),
+              DataColumn(label: Text((_isEnglish ? 'Ref no.' : 'เลขอ้างอิง'))),
+              DataColumn(label: Text((_isEnglish ? 'Column' : 'คอลัมน์'))),
+              DataColumn(label: Text((_isEnglish ? 'Error' : 'ข้อผิดพลาด'))),
             ],
             rows: [
               for (final e in _errors)
@@ -747,10 +755,11 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
                 DataColumn(label: Text(isEnglish ? 'Account Code' : 'รหัสบัญชี')),
                 DataColumn(label: Text(isEnglish ? 'Account Name' : 'ชื่อบัญชี')),
                 DataColumn(label: Text(isEnglish ? 'Description' : 'คำอธิบาย')),
+                DataColumn(label: Text(isEnglish ? 'Branch' : 'สาขา')),
                 DataColumn(label: Text(isEnglish ? 'Debit' : 'เดบิต'), numeric: true),
                 DataColumn(label: Text(isEnglish ? 'Credit' : 'เครดิต'), numeric: true),
                 for (final dt in _dimensionTypes)
-                  DataColumn(label: Text(dt['label']?.toString() ?? dt['type_code'].toString())),
+                  DataColumn(label: Text((_isEnglish ? (dt['label_en'] ?? dt['label']) : dt['label'])?.toString() ?? dt['type_code'].toString())),
               ],
               rows: _validatedDetails
                   .take(50)
@@ -766,6 +775,7 @@ class _GlOpeningBalanceImportScreenState extends State<GlOpeningBalanceImportScr
                           child: Text(r['description']?.toString() ?? '',
                               overflow: TextOverflow.ellipsis),
                         )),
+                        DataCell(Text(r['branch_code']?.toString() ?? '-')),
                         DataCell(Text(_amountFormat.format((r['debit_fc'] as num?)?.toDouble() ?? 0))),
                         DataCell(Text(_amountFormat.format((r['credit_fc'] as num?)?.toDouble() ?? 0))),
                         for (final dt in _dimensionTypes)
