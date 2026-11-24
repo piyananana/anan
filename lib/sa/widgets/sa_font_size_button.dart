@@ -6,7 +6,8 @@ import '../services/sa_font_provider.dart';
 class FontSizeButton extends StatelessWidget {
   final bool isEnglish;
   final Color color;
-  const FontSizeButton({super.key, required this.isEnglish, this.color = Colors.orange});
+  final bool compact; // แถบบนของหน้าหลัก: ปุ่มเล็ก กรอบสีเส้นอ่อน
+  const FontSizeButton({super.key, required this.isEnglish, this.color = Colors.orange, this.compact = false});
 
   String _label(double s) {
     final name = s == 0.9
@@ -31,14 +32,14 @@ class FontSizeButton extends StatelessWidget {
           CheckedPopupMenuItem<double>(value: s, checked: s == font.textScale, child: Text(_label(s))),
       ],
       child: Container(
-        padding: const EdgeInsets.all(9),
+        padding: compact ? const EdgeInsets.symmetric(horizontal: 9, vertical: 5) : const EdgeInsets.all(9),
         decoration: BoxDecoration(
-          border: Border.all(color: color),
+          border: Border.all(color: compact ? const Color(0xFFE1E6E3) : color),
           borderRadius: BorderRadius.circular(6.0),
         ),
         child: Text(
           font.textScale == 1.0 ? 'Aa' : 'Aa ${(font.textScale * 100).round()}%',
-          style: TextStyle(color: color, fontSize: 16),
+          style: TextStyle(color: color, fontSize: compact ? 13 : 16, fontWeight: compact ? FontWeight.w600 : null),
         ),
       ),
     );

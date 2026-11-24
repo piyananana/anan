@@ -8,6 +8,7 @@ import '../screens/sa_group_user_management_screen.dart';
 import '../screens/sa_menu_screen.dart';
 import '../screens/sa_module_document_screen.dart';
 import '../screens/sa_password_policy_screen.dart';
+import '../screens/sa_login_branding_screen.dart';
 import '../screens/sa_doc_number_branch_setup_screen.dart';
 import '../screens/sa_doc_number_reset_screen.dart';
 import '../screens/sa_module_approver_screen.dart';
@@ -235,6 +236,7 @@ class Menu {
           onFieldsChanged: () {},
         ),
     'PasswordPolicyScreen': (context) => const PasswordPolicyScreen(),
+    'LoginBrandingScreen': (context) => const LoginBrandingScreen(),
     'DocNumberBranchSetupScreen': (context) => const DocNumberBranchSetupScreen(),
     'DocNumberResetScreen': (context) => const DocNumberResetScreen(),
     'SaModuleApproverScreen': (context) => const SaModuleApproverScreen(),

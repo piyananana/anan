@@ -10,8 +10,12 @@ import '../services/sa_language_provider.dart';
 import '../utils/sa_menu_scope.dart';
 import '../services/sa_inactivity_service.dart';
 import '../services/sa_password_policy_service.dart';
-import '../widgets/sa_dashboard_widget.dart';
-import '../widgets/sa_menu_tree_view.dart';
+import 'package:flutter/services.dart';
+import '../services/sa_favorite_menu_service.dart';
+import '../services/sa_login_branding_service.dart';
+import '../widgets/sa_home_page.dart';
+import '../widgets/sa_home_sidebar.dart';
+import '../widgets/sa_home_theme.dart';
 import '../widgets/sa_change_password_dialog.dart';
 import '../widgets/sa_confirm_logout_dialog.dart';
 import '../widgets/sa_inactivity_detector.dart';
@@ -49,8 +53,10 @@ class HomeScreenState extends State<HomeScreen> {
   final List<Menu> _openTabs = []; // รายการของ Menu ที่เปิดเป็น Tab
   final Map<int, Widget> _cachedTabWidgets = {}; // cache widget ของแต่ละ tab
   int _currentIndex = 0; // Index ของ Tab ที่กำลัง Active
+  bool _showHome = true; // แท็บ "หน้าแรก" — แท็บอื่นยังเปิดค้าง (คงสถานะ) อยู่ด้านหลัง
 
   List<Menu> _allMenus = [];
+  HomeMenuIndex? _menuIndex; // โครงสร้างเมนู (ลูก/เส้นทาง/โมดูล) สำหรับแถบซ้ายและเส้นทางบนแถบบน
   final Map<int, bool> _menuExpandedState = {};
   bool _isLoading = true;
   String _error = '';
@@ -58,7 +64,7 @@ class HomeScreenState extends State<HomeScreen> {
   User? _currentUser; // เพิ่มตัวแปรเก็บข้อมูลผู้ใช้
   String? _currentDatabase;
 
-  bool _isMenuExpanded = true;
+  bool _isMenuExpanded = true; // false = แถบซ้ายย่อเหลือป้ายรหัสโมดูล
   double _menuPanelCurrentWidth = 280.0;
   bool _isDraggingDivider = false;
   bool _menuWidthInitialized = false;
@@ -67,8 +73,15 @@ class HomeScreenState extends State<HomeScreen> {
   List<PendingApprovalItem> _pendingItems = [];
   int get _pendingCount => _pendingItems.length;
 
-  // เพิ่ม TextEditingController สำหรับ Search Bar
+  // เมนูโปรดของผู้ใช้ (เก็บใน sa_user_favorite_menu)
+  final _favoriteSvc = FavoriteMenuService();
+  List<int> _favoriteIds = [];
+  List<Menu> get _favoriteMenus =>
+      _menuIndex == null ? const [] : [for (final id in _favoriteIds) if (_menuIndex!.byId[id] != null) _menuIndex!.byId[id]!];
+
+  // ช่องค้นหาเมนูบนแถบซ้าย (Ctrl+K)
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
 
   PasswordStatus? _currentPasswordStatus;
 
@@ -82,43 +95,88 @@ class HomeScreenState extends State<HomeScreen> {
     _currentDatabase = authService.selectedDatabase;
     // ดึงข้อมูลผู้ใช้, บริษัท และเมนูจาก AuthService
     _currentUser = authService.currentUser;
-    // _company = authService.company;
-    // _allMenus = authService.userMenus;
 
     _loadUserAndMenus();
     // สกุลเงินหลักของฐานข้อมูลที่เข้าใช้งาน (CurrencyService.baseCode) — ล้างของฐานข้อมูลก่อนหน้าแล้วโหลดใหม่
     final currencyService = CurrencyService()..clearBaseCurrencyCache();
     currencyService.getBaseCurrencyCode();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  // Ctrl+K (หรือ ⌘K) = ไปที่ช่องค้นหาเมนู จากทุกหน้า
+  bool _onKey(KeyEvent e) {
+    if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.keyK) return false;
+    final kb = HardwareKeyboard.instance;
+    if (!(kb.isControlPressed || kb.isMetaPressed) || _menuIndex == null || !mounted) return false;
+    if (!_isMenuExpanded) setState(() => _isMenuExpanded = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchFocus.requestFocus();
+      _searchController.selection = TextSelection(baseOffset: 0, extentOffset: _searchController.text.length);
+    });
+    return true;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_menuWidthInitialized) {
-      _menuPanelCurrentWidth = MediaQuery.of(context).size.width * 0.25;
+      _menuPanelCurrentWidth = (MediaQuery.of(context).size.width * 0.2).clamp(240.0, 320.0);
       _menuWidthInitialized = true;
     }
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
     InactivityService().stop();
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
+  }
+
+  // --- เมนูโปรด ---
+  Future<void> _loadFavorites() async {
+    try {
+      final ids = await _favoriteSvc.fetch();
+      if (mounted) setState(() => _favoriteIds = ids);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleFavorite(Menu menu) async {
+    final before = List<int>.from(_favoriteIds);
+    setState(() {
+      if (_favoriteIds.contains(menu.id)) {
+        _favoriteIds.remove(menu.id);
+      } else {
+        _favoriteIds.add(menu.id);
+      }
+    });
+    try {
+      await _favoriteSvc.save(_favoriteIds);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _favoriteIds = before);
+      final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(isEnglish ? 'Could not save favorites: $e' : 'บันทึกเมนูโปรดไม่สำเร็จ: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
   }
 
   // --- Functions for Tab Management ---
 
   void _openTab(Menu menu) {
     final existingIndex = _openTabs.indexWhere((tab) => tab.id == menu.id);
-    if (existingIndex != -1) {
-      setState(() => _currentIndex = existingIndex);
-    } else {
-      setState(() {
+    setState(() {
+      if (existingIndex != -1) {
+        _currentIndex = existingIndex;
+      } else {
         _openTabs.add(menu);
         _currentIndex = _openTabs.length - 1;
-      });
-    }
+      }
+      _showHome = false;
+    });
   }
 
   Menu? _findMenuByTargetPath(List<Menu> menus, String targetPath) {
@@ -202,6 +260,7 @@ class HomeScreenState extends State<HomeScreen> {
         _openTabs.add(menu);
         _currentIndex = _openTabs.length - 1;
       }
+      _showHome = false;
     });
   }
 
@@ -213,6 +272,7 @@ class HomeScreenState extends State<HomeScreen> {
       _openTabs.removeAt(index);
       if (_openTabs.isEmpty) {
         _currentIndex = 0;
+        _showHome = true;
       } else {
         int newIndex = _currentIndex;
         if (index <= _currentIndex && _currentIndex > 0)
@@ -244,6 +304,16 @@ class HomeScreenState extends State<HomeScreen> {
     await _fetchMenus();
     await _startInactivityTimer();
     _loadPendingApprovals();
+    _loadFavorites();
+    // โลโก้ระบบ (ใช้แทนโลโก้บริษัทที่แถบซ้ายเมื่อบริษัทไม่มีโลโก้)
+    _loadSystemLogo();
+  }
+
+  Future<void> _loadSystemLogo() async {
+    try {
+      await LoginBrandingService().fetch();
+      if (mounted) setState(() {});
+    } catch (_) {}
   }
 
   Future<void> _loadPendingApprovals() async {
@@ -299,13 +369,9 @@ class HomeScreenState extends State<HomeScreen> {
       });
       final menus =
           await MenuService().fetchMenuByUserId(_currentUser?.id ?? 0);
-      for (var menu in menus) {
-        if (menu.menuType == 'folder' && menu.parentId == null) {
-          _menuExpandedState.putIfAbsent(menu.id, () => true);
-        }
-      }
       setState(() {
         _allMenus = menus;
+        _menuIndex = HomeMenuIndex(menus);
         _isLoading = false;
         _currentMenuContent = null;
       });
@@ -397,18 +463,10 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   void _onMenuSelected(Menu menu) async {
-    if (_currentMenuContent?.menuName == menu.menuName) {
-      // ถ้าเลือกเมนูเดิม ไม่ต้องทำอะไร
-      return;
-    }
-
-    _openTab(menu); // เปิด Tab ใหม่สำหรับเมนูที่เลือก
-
-    setState(() {
-      _searchController.text =
-          menu.targetPath ?? ''; // แสดงชื่อ widget ในช่องค้นหา
-      // leftPanelWidth = 0.06;
-    });
+    // เปิดแท็บ (หรือสลับไปแท็บเดิม) เสมอ — เมนูเดิมที่เปิดอยู่ต้องกดกลับมาได้หลังไปดูหน้าแรก
+    final alreadyOpen = _openTabs.any((t) => t.id == menu.id);
+    _openTab(menu);
+    if (alreadyOpen) return;
     try {
       final content = await Provider.of<MenuService>(context, listen: false)
           .fetchMenuContent(menu.id);
@@ -426,13 +484,6 @@ class HomeScreenState extends State<HomeScreen> {
         _performLogout(); // บังคับ logout
       }
     }
-  }
-
-  void _onSearchSubmitted(String targetPath) async {
-    setState(() {
-      _currentMenuContent = null;
-      // leftPanelWidth = 0.06; // <-- กำหนดค่าเริ่มต้นของ panel ซ้าย
-    });
   }
 
   void _toggleMenuSize() {
@@ -595,356 +646,303 @@ class HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ใช้ Consumer เพื่อ rebuild เฉพาะ AppBar เมื่อข้อมูลเปลี่ยน
     return Consumer2<AuthService, LanguageProvider>(
       builder: (context, authService, lang, child) {
-        final currentCompany = authService.company;
-        return Scaffold(
-          bottomNavigationBar:
-              _buildPasswordExpirationBanner(context, lang.isEnglish),
-          appBar: AppBar(
-            // title: const Text('ANAN System'),
-            title: Row(
-              children: [
-                const SizedBox(width: 15), // ช่องว่างด้านซ้าย
-                // แสดงโลโก้บริษัท ถ้ามี
-                if (currentCompany?.logoUrl != null &&
-                    currentCompany!.logoUrl!.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(1.0),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.yellow), // สีขอบเริ่มต้น
-                      borderRadius:
-                          BorderRadius.circular(6.0), // กำหนดความโค้งของขอบ
-                      color: Colors.white,
-                    ),
-                    child: Image.network(
-                      currentCompany.logoUrl!,
-                      fit: BoxFit.contain,
-                      width: 40,
-                      height: 40,
-                      errorBuilder: (context, error, stackTrace) {
-                        print('Error loading image: $error');
-                        return const Icon(Icons.business);
-                      },
-                    ),
-                  ),
-                const SizedBox(width: 8), // ช่องว่าง
-                // แสดงชื่อบริษัท ถ้ามี
-                Text(
-                  lang.isEnglish
-                      ? (currentCompany?.englishName?.isNotEmpty == true
-                          ? currentCompany!.englishName!
-                          : currentCompany?.thaiName ?? '** No Company **')
-                      : (currentCompany?.thaiName ?? '** ไม่มีชื่อบริษัท **'),
-                ),
-              ],
+        final isEnglish = lang.isEnglish;
+        final company = authService.company;
+        final companyName = isEnglish
+            ? (company?.englishName?.isNotEmpty == true
+                ? company!.englishName!
+                : company?.thaiName ?? '** No Company **')
+            : (company?.thaiName ?? '** ไม่มีชื่อบริษัท **');
+        final showSidebar = !_isLoading && _error.isEmpty && _allMenus.isNotEmpty && _menuIndex != null;
+
+        Widget content;
+        if (_isLoading) {
+          content = const Center(child: CircularProgressIndicator());
+        } else if (_error.isNotEmpty) {
+          content = Center(child: Text('Error: $_error'));
+        } else if (_allMenus.isEmpty && (_currentUser?.isDeveloper ?? false)) {
+          content = _buildDeveloperBootstrap(isEnglish);
+        } else if (_allMenus.isEmpty) {
+          content = const Center(child: CircularProgressIndicator());
+        } else {
+          content = Column(children: [
+            _CustomTabBar(
+              tabs: _openTabs,
+              currentIndex: _showHome ? -1 : _currentIndex,
+              isEnglish: isEnglish,
+              codeOf: (m) => _menuIndex?.moduleOf(m) == null ? '' : homeModuleCode(_menuIndex!.moduleOf(m)!),
+              onHome: () => setState(() => _showHome = true),
+              onSelect: (i) => setState(() {
+                _currentIndex = i;
+                _showHome = false;
+              }),
+              onClose: _closeTab,
+              onMove: _reorderTab,
             ),
-            backgroundColor: Colors.green.shade900,
-            foregroundColor: Colors.yellow,
-            actions: [
-              // แสดงชื่อและนามสกุลผู้ใช้
-              Container(
-                padding: const EdgeInsets.all(1.0),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.yellow), // สีขอบเริ่มต้น
-                  borderRadius:
-                      BorderRadius.circular(6.0), // กำหนดความโค้งของขอบ
-                ),
-                child: Text(
-                  ' ${_currentUser?.firstName ?? ''} ${_currentUser?.lastName ?? ''} ',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.yellow, // สีเหลือง
-                    fontSize: 18,
-                    // fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8), // ช่องว่าง
-              // แสดงชื่อฐานข้อมูลที่เลือก
-              Container(
-                padding: const EdgeInsets.all(1.0),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.yellow), // สีขอบเริ่มต้น
-                  borderRadius:
-                      BorderRadius.circular(6.0), // กำหนดความโค้งของขอบ
-                ),
-                child: Text(
-                  _currentDatabase!.isNotEmpty
-                      ? ' $_currentDatabase '
-                      : ' N/A ',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.yellow, // สีเหลือง
-                    fontSize: 18,
-                    // fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // ── Language toggle ───────────────────────────────────────
-              Tooltip(
-                message:
-                    lang.isEnglish ? 'สลับเป็นภาษาไทย' : 'Switch to English',
-                child: GestureDetector(
-                  onTap: lang.toggle,
-                  child: Container(
-                    padding: const EdgeInsets.all(1.0),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.orange),
-                      borderRadius: BorderRadius.circular(6.0),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Text(
-                        lang.isEnglish ? 'ไทย' : 'ENG',
-                        style: const TextStyle(
-                          color: Colors.orange,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // ── Font size ─────────────────────────────────────────────
-              FontSizeButton(isEnglish: lang.isEnglish),
-              const SizedBox(width: 8),
-              // ── Pending approvals bell ────────────────────────────────
-              Tooltip(
-                message: lang.isEnglish
-                    ? 'Pending Approvals${_pendingCount > 0 ? ' ($_pendingCount)' : ''}'
-                    : 'รายการรออนุมัติ${_pendingCount > 0 ? ' ($_pendingCount)' : ''}',
-                child: GestureDetector(
-                  onTap: _showPendingApprovalsDialog,
-                  child: Container(
-                    padding: const EdgeInsets.all(1.0),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                          color:
-                              _pendingCount > 0 ? Colors.red : Colors.orange),
-                      borderRadius: BorderRadius.circular(6.0),
-                    ),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Icon(Icons.notifications_outlined,
-                              color: Colors.orange),
-                        ),
-                        if (_pendingCount > 0)
-                          Positioned(
-                            right: -4,
-                            top: -4,
-                            child: Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              constraints: const BoxConstraints(
-                                  minWidth: 16, minHeight: 16),
-                              child: Text(
-                                '$_pendingCount',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
+            Expanded(
+              child: Stack(children: [
+                // แท็บที่เปิดอยู่คงสถานะไว้ตลอด แม้กำลังดูหน้าแรก
+                if (_openTabs.isNotEmpty)
+                  Offstage(
+                    offstage: _showHome,
+                    child: IndexedStack(
+                      index: _currentIndex.clamp(0, _openTabs.length - 1),
+                      children: _openTabs.map((menu) {
+                        final id = menu.id;
+                        return _cachedTabWidgets.putIfAbsent(
+                          id,
+                          () => KeyedSubtree(
+                            key: ValueKey(id),
+                            child: MenuScope(menu: menu, child: menu.builder(context)),
                           ),
-                      ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                if (_showHome || _openTabs.isEmpty)
+                  Positioned.fill(
+                    child: HomePage(
+                      isEnglish: isEnglish,
+                      firstName: _currentUser?.firstName ?? '',
+                      approvals: _pendingItems,
+                      onOpenApproval: _openPendingApprovalTarget,
+                      onShowAllApprovals: _showPendingApprovalsDialog,
+                      favorites: _favoriteMenus,
+                      moduleCodeOf: (m) => _menuIndex?.moduleOf(m) == null ? '' : homeModuleCode(_menuIndex!.moduleOf(m)!),
+                      onOpenMenu: _onMenuSelected,
+                      onRemoveFavorite: _toggleFavorite,
+                      onOpenTarget: (t) {
+                        final m = _findMenuByTargetPath(_allMenus, t);
+                        if (m != null) _onMenuSelected(m);
+                      },
+                      canOpenTarget: (t) => _findMenuByTargetPath(_allMenus, t) != null,
+                    ),
+                  ),
+              ]),
+            ),
+          ]);
+        }
+
+        return Scaffold(
+          backgroundColor: HomeColors.appBg,
+          bottomNavigationBar: _buildPasswordExpirationBanner(context, isEnglish),
+          // ไม่มีการใช้งานนาน → หมดเวลา session (เหมือนเดิม)
+          body: InactivityDetector(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (showSidebar) ...[
+              AnimatedContainer(
+                duration: _isDraggingDivider ? Duration.zero : const Duration(milliseconds: 180),
+                width: _isMenuExpanded ? _menuPanelCurrentWidth : _sidebarMiniWidth,
+                child: ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.topLeft,
+                    minWidth: _isMenuExpanded ? _menuPanelCurrentWidth : _sidebarMiniWidth,
+                    maxWidth: _isMenuExpanded ? _menuPanelCurrentWidth : _sidebarMiniWidth,
+                    child: HomeSidebar(
+                      index: _menuIndex!,
+                      mini: !_isMenuExpanded,
+                      isEnglish: isEnglish,
+                      companyName: companyName,
+                      // บริษัทไม่มีโลโก้ → ใช้โลโก้ระบบจากหน้าตั้งค่าหน้าล็อกอิน
+                      logoUrl: (company?.logoUrl ?? '').isNotEmpty ? company!.logoUrl : LoginBrandingService().cached?.logoUrl,
+                      userName: '${_currentUser?.firstName ?? ''} ${_currentUser?.lastName ?? ''}'.trim(),
+                      userRole: _roleLabel(isEnglish),
+                      favoriteIds: _favoriteIds.toSet(),
+                      favorites: _favoriteMenus,
+                      selectedMenuId: _showHome || _openTabs.isEmpty ? null : _openTabs[_currentIndex].id,
+                      expandedState: _menuExpandedState,
+                      searchController: _searchController,
+                      searchFocus: _searchFocus,
+                      onOpenMenu: (m) {
+                        _searchController.clear();
+                        _onMenuSelected(m);
+                      },
+                      onToggleFavorite: _toggleFavorite,
+                      onExpandRequest: () => setState(() => _isMenuExpanded = true),
+                      onChangePassword: _showChangePasswordDialog,
+                      onLogout: _showConfirmLogoutDialog,
                     ),
                   ),
                 ),
-              ), // end Tooltip (bell)
-              const SizedBox(width: 8),
-              // ── เปลี่ยนรหัสผ่าน ───────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(1.0),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.orange),
-                  borderRadius: BorderRadius.circular(6.0),
-                ),
-                child: IconButton(
-                  icon:
-                      const Icon(Icons.password_outlined, color: Colors.orange),
-                  onPressed: _showChangePasswordDialog,
-                  tooltip:
-                      lang.isEnglish ? 'Change Password' : 'เปลี่ยนรหัสผ่าน',
-                ),
               ),
-              const SizedBox(width: 8), // ช่องว่าง
-              // ปุ่ม Logout
-              Container(
-                padding: const EdgeInsets.all(1.0),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.orange), // สีขอบเริ่มต้น
-                  borderRadius:
-                      BorderRadius.circular(6.0), // กำหนดความโค้งของขอบ
+              // ลากปรับความกว้างแถบเมนู
+              if (_isMenuExpanded)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) => setState(() => _isDraggingDivider = true),
+                    onHorizontalDragUpdate: (d) => setState(() {
+                      _menuPanelCurrentWidth = (_menuPanelCurrentWidth + d.delta.dx).clamp(200.0, 520.0);
+                    }),
+                    onHorizontalDragEnd: (_) => setState(() => _isDraggingDivider = false),
+                    child: Container(width: 4, color: HomeColors.brand),
+                  ),
                 ),
-                child: IconButton(
-                  icon: const Icon(Icons.logout_outlined, color: Colors.orange),
-                  onPressed: _showConfirmLogoutDialog,
-                  tooltip: lang.isEnglish ? 'Logout' : 'ออกจากระบบ',
-                ),
-              ),
-              const SizedBox(width: 8), // เพื่อให้มีพื้นที่ขอบขวาเล็กน้อย
             ],
-          ),
-          body: InactivityDetector(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error.isNotEmpty
-                      ? Center(child: Text('Error: $_error'))
-                      : _allMenus.isEmpty &&
-                              (_currentUser?.isDeveloper ?? false)
-                          ? _buildDeveloperBootstrap(lang.isEnglish)
-                          : _allMenus.isEmpty
-                              ? const Center(child: CircularProgressIndicator())
-                              : Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    // Toggle button — fixed width, always same element
-                                    Container(
-                                      width: 40,
-                                      color: Colors.green.shade900,
-                                      child: IconButton(
-                                        icon: Icon(
-                                          _isMenuExpanded
-                                              ? Icons.menu_open_rounded
-                                              : Icons.menu_rounded,
-                                          color: Colors.orange,
-                                        ),
-                                        onPressed: _toggleMenuSize,
-                                        tooltip: _isMenuExpanded
-                                            ? (lang.isEnglish
-                                                ? 'Collapse Menu'
-                                                : 'ย่อช่องเมนู')
-                                            : (lang.isEnglish
-                                                ? 'Expand Menu'
-                                                : 'ขยายช่องเมนู'),
-                                      ),
-                                    ),
-                                    // Menu panel — animated width, always mounted
-                                    AnimatedContainer(
-                                      duration: _isDraggingDivider
-                                          ? Duration.zero
-                                          : const Duration(milliseconds: 200),
-                                      width: _isMenuExpanded
-                                          ? _menuPanelCurrentWidth
-                                          : 0,
-                                      child: ClipRect(
-                                        child: OverflowBox(
-                                          // Always give MenuTreeView at least 280px so nested
-                                          // items never overflow regardless of panel width
-                                          maxWidth:
-                                              _menuPanelCurrentWidth < 280.0
-                                                  ? 280.0
-                                                  : _menuPanelCurrentWidth,
-                                          minWidth:
-                                              _menuPanelCurrentWidth < 280.0
-                                                  ? 280.0
-                                                  : _menuPanelCurrentWidth,
-                                          alignment: Alignment.topLeft,
-                                          child: Container(
-                                            color: Colors.blueGrey[200],
-                                            child: MenuTreeView(
-                                              menus: _allMenus,
-                                              onMenuSelected: _onMenuSelected,
-                                              onSearchSubmitted:
-                                                  _onSearchSubmitted,
-                                              onRefreshMenus: _fetchMenus,
-                                              searchController:
-                                                  _searchController,
-                                              expandedState: _menuExpandedState,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    // Draggable divider
-                                    if (_isMenuExpanded)
-                                      MouseRegion(
-                                        cursor: SystemMouseCursors.resizeColumn,
-                                        child: GestureDetector(
-                                          onHorizontalDragStart: (_) =>
-                                              setState(() =>
-                                                  _isDraggingDivider = true),
-                                          onHorizontalDragUpdate: (details) {
-                                            setState(() {
-                                              _menuPanelCurrentWidth =
-                                                  (_menuPanelCurrentWidth +
-                                                          details.delta.dx)
-                                                      .clamp(100.0, 800.0);
-                                            });
-                                          },
-                                          onHorizontalDragEnd: (_) => setState(
-                                              () => _isDraggingDivider = false),
-                                          child: Container(
-                                            width: 5,
-                                            color: Colors.blueGrey[400],
-                                          ),
-                                        ),
-                                      ),
-                                    // Right panel — always Expanded, element is never recreated
-                                    Expanded(
-                                      child: Column(
-                                        children: [
-                                          _CustomTabBar(
-                                            tabs: _openTabs,
-                                            currentIndex: _currentIndex,
-                                            isEnglish: lang.isEnglish,
-                                            onSelect: (i) => setState(
-                                                () => _currentIndex = i),
-                                            onClose: _closeTab,
-                                            onMove: _reorderTab,
-                                          ),
-                                          Expanded(
-                                            child: _openTabs.isEmpty
-                                                ? const DashboardWidget()
-                                                : IndexedStack(
-                                                    index: _currentIndex,
-                                                    children:
-                                                        _openTabs.map((menu) {
-                                                      final id = menu.id ?? 0;
-                                                      return _cachedTabWidgets
-                                                          .putIfAbsent(
-                                                        id,
-                                                        () => KeyedSubtree(
-                                                          key: ValueKey(id),
-                                                          child: MenuScope(
-                                                            menu: menu,
-                                                            child: menu.builder(
-                                                                context),
-                                                          ),
-                                                        ),
-                                                      );
-                                                    }).toList(),
-                                                  ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                )),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                _buildTopBar(isEnglish, showSidebar),
+                Expanded(child: content),
+              ]),
+            ),
+          ])),
         );
       },
+    );
+  }
+
+  static const double _sidebarMiniWidth = 64;
+
+  String _roleLabel(bool isEnglish) {
+    switch (_currentUser?.userType) {
+      case 'developer':
+        return isEnglish ? 'Developer' : 'ผู้พัฒนาระบบ';
+      case 'administrator':
+        return isEnglish ? 'Administrator' : 'ผู้ดูแลระบบ';
+      default:
+        return isEnglish ? 'User' : 'ผู้ใช้งาน';
+    }
+  }
+
+  // ── แถบบนสีขาว: ย่อ/ขยายเมนู, เส้นทางเมนู, ฐานข้อมูล, รออนุมัติ, ภาษา, ขนาดตัวอักษร ──
+  Widget _buildTopBar(bool isEnglish, bool showSidebar) {
+    final lang = context.read<LanguageProvider>();
+    final current = !_showHome && _openTabs.isNotEmpty ? _openTabs[_currentIndex] : null;
+    final path = current == null || _menuIndex == null ? <Menu>[] : _menuIndex!.pathOf(current);
+    Widget langSeg() {
+      Widget b(String t, bool on, VoidCallback tap) => InkWell(
+            onTap: on ? null : tap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              color: on ? HomeColors.brand : Colors.transparent,
+              child: Text(t, style: TextStyle(fontSize: 12, color: on ? HomeColors.brandInk : HomeColors.ink2)),
+            ),
+          );
+      return Tooltip(
+        message: isEnglish ? 'สลับเป็นภาษาไทย' : 'Switch to English',
+        child: Container(
+          decoration: BoxDecoration(border: Border.all(color: HomeColors.line), borderRadius: BorderRadius.circular(7)),
+          clipBehavior: Clip.antiAlias,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            b('ไทย', !isEnglish, lang.toggle),
+            b('ENG', isEnglish, lang.toggle),
+          ]),
+        ),
+      );
+    }
+
+    return Container(
+      height: 54,
+      padding: const EdgeInsets.only(left: 6, right: 14),
+      decoration: const BoxDecoration(
+        color: HomeColors.card,
+        border: Border(bottom: BorderSide(color: HomeColors.line)),
+      ),
+      child: Row(children: [
+        if (showSidebar)
+          IconButton(
+            icon: Icon(_isMenuExpanded ? Icons.menu_open_rounded : Icons.menu_rounded, color: HomeColors.ink2),
+            tooltip: _isMenuExpanded
+                ? (isEnglish ? 'Collapse menu' : 'ย่อแถบเมนู')
+                : (isEnglish ? 'Expand menu' : 'ขยายแถบเมนู'),
+            onPressed: _toggleMenuSize,
+          ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text.rich(
+            TextSpan(children: [
+              if (path.isEmpty)
+                TextSpan(
+                    text: isEnglish ? 'Home' : 'หน้าแรก',
+                    style: const TextStyle(color: HomeColors.ink, fontWeight: FontWeight.w600))
+              else ...[
+                for (final m in path.take(path.length - 1))
+                  TextSpan(text: '${m.localName(isEnglish)}  ›  ', style: const TextStyle(color: HomeColors.ink3)),
+                TextSpan(
+                    text: path.last.localName(isEnglish),
+                    style: const TextStyle(color: HomeColors.ink, fontWeight: FontWeight.w600)),
+              ],
+            ]),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Tooltip(
+          message: isEnglish ? 'Database' : 'ฐานข้อมูล',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: HomeColors.goldSoft,
+              border: Border.all(color: HomeColors.goldLine),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text((_currentDatabase ?? '').isNotEmpty ? _currentDatabase! : 'N/A',
+                style: const TextStyle(fontSize: 11.5, color: HomeColors.amber, fontWeight: FontWeight.w600)),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Tooltip(
+          message: isEnglish
+              ? 'Pending approvals${_pendingCount > 0 ? ' ($_pendingCount)' : ''}'
+              : 'รายการรออนุมัติ${_pendingCount > 0 ? ' ($_pendingCount)' : ''}',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _showPendingApprovalsDialog,
+            child: SizedBox(
+              width: 38,
+              height: 38,
+              child: Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
+                Icon(_pendingCount > 0 ? Icons.notifications_active_outlined : Icons.notifications_none_outlined,
+                    color: HomeColors.ink2),
+                if (_pendingCount > 0)
+                  Positioned(
+                    top: 3,
+                    right: 2,
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 17),
+                      height: 17,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: HomeColors.red, borderRadius: BorderRadius.circular(9)),
+                      child: Text(_pendingCount > 99 ? '99+' : '$_pendingCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        langSeg(),
+        const SizedBox(width: 8),
+        FontSizeButton(isEnglish: isEnglish, color: HomeColors.ink2, compact: true),
+        // ไม่มีแถบซ้าย (กำลังโหลด / ยังไม่มีเมนู) → ปุ่มออกจากระบบอยู่ที่แถบบน
+        if (!showSidebar) ...[
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.logout_outlined, color: HomeColors.ink2),
+            tooltip: isEnglish ? 'Log out' : 'ออกจากระบบ',
+            onPressed: _showConfirmLogoutDialog,
+          ),
+        ],
+      ]),
     );
   }
 }
 
 // ── Custom Tab Bar ────────────────────────────────────────────────────────────
+// แท็บแบบเบราว์เซอร์: แท็บ "หน้าแรก" อยู่ซ้ายสุดเสมอ, แท็บเมนูมีป้ายรหัสโมดูล ปิดได้ ลากสลับลำดับได้
+// currentIndex = -1 → กำลังดูหน้าแรก
 
 class _CustomTabBar extends StatefulWidget {
   final List<Menu> tabs;
   final int currentIndex;
   final bool isEnglish;
+  final String Function(Menu) codeOf;
+  final VoidCallback onHome;
   final ValueChanged<int> onSelect;
   final ValueChanged<int> onClose;
   final void Function(int from, int to) onMove;
@@ -953,6 +951,8 @@ class _CustomTabBar extends StatefulWidget {
     required this.tabs,
     required this.currentIndex,
     required this.isEnglish,
+    required this.codeOf,
+    required this.onHome,
     required this.onSelect,
     required this.onClose,
     required this.onMove,
@@ -963,6 +963,7 @@ class _CustomTabBar extends StatefulWidget {
 }
 
 class _CustomTabBarState extends State<_CustomTabBar> {
+  static const double _barH = 40;
   final ScrollController _scroll = ScrollController();
   bool _showLeft = false;
   bool _showRight = false;
@@ -981,8 +982,7 @@ class _CustomTabBarState extends State<_CustomTabBar> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scroll.hasClients) {
           _scroll.animateTo(_scroll.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut);
+              duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
         }
         _updateArrows();
       });
@@ -1007,21 +1007,18 @@ class _CustomTabBarState extends State<_CustomTabBar> {
   }
 
   void _scrollBy(double delta) {
-    final target =
-        (_scroll.offset + delta).clamp(0.0, _scroll.position.maxScrollExtent);
-    _scroll.animateTo(target,
-        duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+    final target = (_scroll.offset + delta).clamp(0.0, _scroll.position.maxScrollExtent);
+    _scroll.animateTo(target, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
   }
 
   void _scrollToTab(int index) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
-      const tabW = 160.0;
+      const tabW = 170.0;
       final left = index * tabW;
       final right = left + tabW;
       if (left < _scroll.offset) {
-        _scroll.animateTo(left,
-            duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+        _scroll.animateTo(left, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
       } else if (right > _scroll.offset + _scroll.position.viewportDimension) {
         _scroll.animateTo(right - _scroll.position.viewportDimension,
             duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
@@ -1029,83 +1026,72 @@ class _CustomTabBarState extends State<_CustomTabBar> {
     });
   }
 
+  Widget _tab(int i, {required VoidCallback? onClose}) => _TabItemContent(
+        label: widget.tabs[i].localName(widget.isEnglish),
+        code: widget.codeOf(widget.tabs[i]),
+        isActive: i == widget.currentIndex,
+        onClose: onClose,
+      );
+
   @override
   Widget build(BuildContext context) {
-    if (widget.tabs.isEmpty) return const SizedBox.shrink();
-
+    final homeActive = widget.currentIndex < 0;
     return NotificationListener<ScrollMetricsNotification>(
       onNotification: (_) {
         _updateArrows();
         return false;
       },
       child: Container(
-        height: 46,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+        height: _barH,
+        padding: const EdgeInsets.only(left: 8, top: 6),
+        decoration: const BoxDecoration(
+          color: HomeColors.appBg,
+          border: Border(bottom: BorderSide(color: HomeColors.line)),
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _scroll,
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    // leading drop zone (index 0)
-                    _DropZone(dropIndex: 0, onMove: widget.onMove),
-                    for (int i = 0; i < widget.tabs.length; i++) ...[
-                      Draggable<int>(
-                        data: i,
-                        feedback: Material(
-                          elevation: 4,
-                          child: _TabItemContent(
-                            label: widget.tabs[i].localName(widget.isEnglish),
-                            isActive: i == widget.currentIndex,
-                            onClose: null,
-                          ),
-                        ),
-                        childWhenDragging: Opacity(
-                          opacity: 0.3,
-                          child: _TabItemContent(
-                            label: widget.tabs[i].localName(widget.isEnglish),
-                            isActive: i == widget.currentIndex,
-                            onClose: null,
-                          ),
-                        ),
-                        child: GestureDetector(
-                          onTap: () {
-                            widget.onSelect(i);
-                            _scrollToTab(i);
-                          },
-                          child: _TabItemContent(
-                            label: widget.tabs[i].localName(widget.isEnglish),
-                            isActive: i == widget.currentIndex,
-                            onClose: () => widget.onClose(i),
-                          ),
-                        ),
-                      ),
-                      // drop zone after each tab (index i+1)
-                      _DropZone(dropIndex: i + 1, onMove: widget.onMove),
-                    ],
-                  ],
-                ),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          // แท็บหน้าแรก
+          Tooltip(
+            message: widget.isEnglish ? 'Home' : 'หน้าแรก',
+            child: InkWell(
+              onTap: widget.onHome,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              child: Container(
+                height: _barH - 6,
+                padding: const EdgeInsets.symmetric(horizontal: 11),
+                decoration: _TabItemContent.deco(homeActive),
+                child: Icon(Icons.home_outlined, size: 18, color: homeActive ? HomeColors.brand : HomeColors.ink3),
               ),
             ),
-            if (_showLeft || _showRight) ...[
-              _TabArrowButton(
-                icon: Icons.arrow_left,
-                enabled: _showLeft,
-                onTap: () => _scrollBy(-160),
-              ),
-              _TabArrowButton(
-                icon: Icons.arrow_right,
-                enabled: _showRight,
-                onTap: () => _scrollBy(160),
-              ),
-            ],
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _scroll,
+              scrollDirection: Axis.horizontal,
+              child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                _DropZone(dropIndex: 0, onMove: widget.onMove),
+                for (int i = 0; i < widget.tabs.length; i++) ...[
+                  Draggable<int>(
+                    data: i,
+                    feedback: Material(elevation: 4, child: _tab(i, onClose: null)),
+                    childWhenDragging: Opacity(opacity: 0.3, child: _tab(i, onClose: null)),
+                    child: GestureDetector(
+                      onTap: () {
+                        widget.onSelect(i);
+                        _scrollToTab(i);
+                      },
+                      child: _tab(i, onClose: () => widget.onClose(i)),
+                    ),
+                  ),
+                  _DropZone(dropIndex: i + 1, onMove: widget.onMove),
+                ],
+              ]),
+            ),
+          ),
+          if (_showLeft || _showRight) ...[
+            _TabArrowButton(icon: Icons.chevron_left, enabled: _showLeft, onTap: () => _scrollBy(-170)),
+            _TabArrowButton(icon: Icons.chevron_right, enabled: _showRight, onTap: () => _scrollBy(170)),
           ],
-        ),
+        ]),
       ),
     );
   }
@@ -1139,60 +1125,88 @@ class _DropZoneState extends State<_DropZone> {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           width: _hovering ? 6 : 2,
-          height: 46,
-          color: _hovering ? Colors.deepOrange : Colors.transparent,
+          height: 34,
+          color: _hovering ? HomeColors.gold : Colors.transparent,
         );
       },
     );
   }
 }
 
-class _TabItemContent extends StatelessWidget {
+class _TabItemContent extends StatefulWidget {
   final String label;
+  final String code;
   final bool isActive;
   final VoidCallback? onClose;
 
   const _TabItemContent({
     required this.label,
+    required this.code,
     required this.isActive,
     required this.onClose,
   });
 
+  static BoxDecoration deco(bool active) => BoxDecoration(
+        color: active ? HomeColors.card : Colors.transparent,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+        border: active
+            ? const Border(
+                top: BorderSide(color: HomeColors.line),
+                left: BorderSide(color: HomeColors.line),
+                right: BorderSide(color: HomeColors.line),
+              )
+            : null,
+      );
+
+  @override
+  State<_TabItemContent> createState() => _TabItemContentState();
+}
+
+class _TabItemContentState extends State<_TabItemContent> {
+  bool _hover = false;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.white : Colors.grey.shade100,
-        border: Border(
-          bottom: BorderSide(
-            color: isActive ? Colors.deepOrange : Colors.transparent,
-            width: 2,
-          ),
-          right: BorderSide(color: Colors.grey.shade300),
+    final active = widget.isActive;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Container(
+        height: 34,
+        constraints: const BoxConstraints(maxWidth: 240),
+        padding: const EdgeInsets.only(left: 10, right: 6),
+        decoration: _TabItemContent.deco(active).copyWith(
+          color: active ? HomeColors.card : (_hover ? HomeColors.hover : Colors.transparent),
         ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: isActive ? Colors.deepOrange.shade900 : Colors.black54,
-              fontSize: 13,
-              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (widget.code.isNotEmpty) ...[
+            HomeModuleBadge(widget.code, width: 24, height: 18, fontSize: 9),
+            const SizedBox(width: 7),
+          ],
+          Flexible(
+            child: Text(
+              widget.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: active ? HomeColors.ink : HomeColors.ink2,
+                fontSize: 12.5,
+                fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+              ),
             ),
           ),
-          if (onClose != null) ...[
-            const SizedBox(width: 6),
+          if (widget.onClose != null) ...[
+            const SizedBox(width: 4),
             InkWell(
-              onTap: onClose,
-              borderRadius: BorderRadius.circular(10),
-              child: const Icon(Icons.close, size: 16, color: Colors.black45),
+              onTap: widget.onClose,
+              borderRadius: BorderRadius.circular(4),
+              child: const Padding(
+                padding: EdgeInsets.all(2),
+                child: Icon(Icons.close, size: 14, color: HomeColors.ink3),
+              ),
             ),
           ],
-        ],
+        ]),
       ),
     );
   }
@@ -1213,15 +1227,10 @@ class _TabArrowButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: enabled ? onTap : null,
-      child: Container(
+      child: SizedBox(
         width: 28,
-        height: 46,
-        color: Colors.grey.shade100,
-        child: Icon(
-          icon,
-          size: 20,
-          color: enabled ? Colors.black54 : Colors.grey.shade300,
-        ),
+        height: 34,
+        child: Icon(icon, size: 20, color: enabled ? HomeColors.ink2 : HomeColors.line),
       ),
     );
   }
