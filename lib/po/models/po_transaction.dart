@@ -48,6 +48,9 @@ class PoTransactionHeader {
   final String? currencyCode;
   final double exchangeRate;
   final DateTime? dueDate;
+  // ระยะเครดิต (เดือน/วัน) — ค่าเริ่มต้นจากผู้ขาย; ใบตั้งหนี้ที่ GRN สร้างใช้ค่านี้ (null = ใช้ของผู้ขาย)
+  final int? creditTermMonths;
+  final int? creditTermDays;
   final String status;
   final double totalQty;
   final double totalValueLc; // หลังส่วนลด ก่อน VAT (บาท)
@@ -100,6 +103,8 @@ class PoTransactionHeader {
     this.currencyCode,
     this.exchangeRate = 1,
     this.dueDate,
+    this.creditTermMonths,
+    this.creditTermDays,
     this.status = 'Draft',
     this.totalQty = 0,
     this.totalValueLc = 0,
@@ -150,6 +155,8 @@ class PoTransactionHeader {
       currencyCode: json['currency_code'],
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       dueDate: json['due_date'] != null ? parseLocalDate(json['due_date']) : null,
+      creditTermMonths: int.tryParse(json['credit_term_months']?.toString() ?? ''),
+      creditTermDays: int.tryParse(json['credit_term_days']?.toString() ?? ''),
       status: json['status'] ?? 'Draft',
       totalQty: toDouble(json['total_qty']),
       totalValueLc: toDouble(json['total_value_lc']),
@@ -194,6 +201,8 @@ class PoTransactionHeader {
         'exchange_rate': exchangeRate,
         'price_includes_vat': priceIncludesVat,
         if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
+        'credit_term_months': creditTermMonths,
+        'credit_term_days': creditTermDays,
         if (description != null) 'description': description,
         if (refPrId != null) 'ref_pr_id': refPrId,
         // ส่งทุกช่องเสมอ — backend เขียนทับมิติด้วยค่าที่ส่งมา
@@ -223,6 +232,7 @@ class PoTransactionDetail {
   final double totalValueLc; // หลังส่วนลด ก่อน VAT (บาท)
   final double qtyReceived; // computed server-side — จำนวนที่รับแล้วผ่าน GRN ที่ Posted/Received (ref_po_detail_id)
   final int? refPrDetailId; // บรรทัดใบขอซื้อ (PR) ต้นทาง ถ้าบรรทัดนี้แปลงมาจาก PR
+  final String? refPrDocNo; // เลขที่ใบขอซื้อของบรรทัดต้นทาง (join)
   final String? description;
 
   double get qtyRemaining => qtyOrdered - qtyReceived;
@@ -247,6 +257,7 @@ class PoTransactionDetail {
     this.totalValueLc = 0,
     this.qtyReceived = 0,
     this.refPrDetailId,
+    this.refPrDocNo,
     this.description,
   });
 
@@ -272,6 +283,7 @@ class PoTransactionDetail {
       totalValueLc: toDouble(json['total_value_lc']),
       qtyReceived: toDouble(json['qty_received']),
       refPrDetailId: json['ref_pr_detail_id'],
+      refPrDocNo: json['ref_pr_doc_no']?.toString(),
       description: json['description'],
     );
   }
