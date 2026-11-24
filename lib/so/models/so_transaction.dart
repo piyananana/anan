@@ -51,6 +51,9 @@ class SoTransactionHeader {
   final String? currencyCode;
   final double exchangeRate;
   final DateTime? dueDate;
+  // ระยะเครดิต (เดือน/วัน) — ค่าเริ่มต้นจากลูกค้า; ใบส่งสินค้าที่ดึงรายการใช้ค่านี้
+  final int? creditTermMonths;
+  final int? creditTermDays;
   final String? customerPoNo; // เลขที่ใบสั่งซื้อของลูกค้า
   final DateTime? customerPoDate;
   final String status;
@@ -111,6 +114,8 @@ class SoTransactionHeader {
     this.currencyCode,
     this.exchangeRate = 1,
     this.dueDate,
+    this.creditTermMonths,
+    this.creditTermDays,
     this.customerPoNo,
     this.customerPoDate,
     this.status = 'Draft',
@@ -167,6 +172,8 @@ class SoTransactionHeader {
       currencyCode: json['currency_code'],
       exchangeRate: toDouble(json['exchange_rate']) == 0 ? 1 : toDouble(json['exchange_rate']),
       dueDate: json['due_date'] != null ? parseLocalDate(json['due_date']) : null,
+      creditTermMonths: int.tryParse(json['credit_term_months']?.toString() ?? ''),
+      creditTermDays: int.tryParse(json['credit_term_days']?.toString() ?? ''),
       customerPoNo: json['customer_po_no'],
       customerPoDate: json['customer_po_date'] != null ? parseLocalDate(json['customer_po_date']) : null,
       status: json['status'] ?? 'Draft',
@@ -219,6 +226,8 @@ class SoTransactionHeader {
         'bill_discount_percent': billDiscountPercent,
         'cash_discount_amount': cashDiscountAmount,
         if (dueDate != null) 'due_date': formatLocalDate(dueDate!),
+        'credit_term_months': creditTermMonths,
+        'credit_term_days': creditTermDays,
         'customer_po_no': customerPoNo,
         'customer_po_date': customerPoDate != null ? formatLocalDate(customerPoDate!) : null,
         if (description != null) 'description': description,
@@ -255,6 +264,7 @@ class SoTransactionDetail {
   final double totalValueLc;
   final double qtyDelivered; // computed server-side — จำนวนที่ส่งแล้วผ่าน DLN ที่ Posted/Delivered (ref_so_detail_id)
   final int? refQuoteDetailId; // บรรทัดใบเสนอราคา (Quote) ต้นทาง ถ้าบรรทัดนี้แปลงมาจาก Quote
+  final String? refQuoteDocNo; // เลขที่ใบเสนอราคาของบรรทัดต้นทาง (join)
   final String? description;
 
   double get qtyRemaining => qtyOrdered - qtyDelivered;
@@ -283,6 +293,7 @@ class SoTransactionDetail {
     this.totalValueLc = 0,
     this.qtyDelivered = 0,
     this.refQuoteDetailId,
+    this.refQuoteDocNo,
     this.description,
   });
 
@@ -312,6 +323,7 @@ class SoTransactionDetail {
       totalValueLc: toDouble(json['total_value_lc']),
       qtyDelivered: toDouble(json['qty_delivered']),
       refQuoteDetailId: json['ref_quote_detail_id'],
+      refQuoteDocNo: json['ref_quote_doc_no']?.toString(),
       description: json['description'],
     );
   }
