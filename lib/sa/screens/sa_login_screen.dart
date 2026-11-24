@@ -5,6 +5,7 @@ import '../models/sa_password_status.dart';
 import '../services/sa_auth_service.dart';
 import '../services/sa_language_provider.dart';
 import '../widgets/sa_change_password_dialog.dart';
+import '../widgets/sa_font_size_button.dart';
 import '../widgets/sa_session_conflict_dialog.dart';
 import 'sa_home_screen.dart';
 
@@ -49,22 +50,27 @@ class _LoginScreenState extends State<LoginScreen> {
       final defaultDb = await authService.getDefaultDatabase();
       if (!mounted) return;
       setState(() {
-        _databases        = databases;
-        _selectedDatabase = defaultDb ?? (databases.isNotEmpty ? databases[0] : null);
-        _isLoading        = false;
+        _databases = databases;
+        _selectedDatabase =
+            defaultDb ?? (databases.isNotEmpty ? databases[0] : null);
+        _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _errorMessage = e.toString();
-        _isLoading    = false;
+        _isLoading = false;
       });
     }
   }
 
   Future<void> _login() async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    setState(() { _isLoading = true; _errorMessage = null; });
+    final isEnglish =
+        Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
@@ -78,9 +84,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (responseData['requiresConfirmation'] == true) {
         setState(() => _isLoading = false);
-        final confirmToken     = responseData['confirmToken'] as String;
+        final confirmToken = responseData['confirmToken'] as String;
         final sessionStartedAt = responseData['sessionStartedAt'] != null
-            ? DateTime.tryParse(responseData['sessionStartedAt'].toString())?.toLocal()
+            ? DateTime.tryParse(responseData['sessionStartedAt'].toString())
+                ?.toLocal()
             : null;
 
         final confirmed = await showDialog<bool>(
@@ -96,17 +103,20 @@ class _LoginScreenState extends State<LoginScreen> {
         if (confirmed != true || !mounted) return;
 
         setState(() => _isLoading = true);
-        final confirmData = await authService.confirmLogin(confirmToken, forceLogout: true);
+        final confirmData =
+            await authService.confirmLogin(confirmToken, forceLogout: true);
         if (!mounted) return;
         if (confirmData['success'] != true) return;
 
-        final passwordStatus = PasswordStatus.fromJson(confirmData['passwordStatus']
-            ?? {'isPasswordExpired': false, 'forceChangePassword': false});
+        final passwordStatus = PasswordStatus.fromJson(
+            confirmData['passwordStatus'] ??
+                {'isPasswordExpired': false, 'forceChangePassword': false});
         _navigateAfterLogin(passwordStatus, confirmData);
         return;
       }
 
-      final passwordStatus = PasswordStatus.fromJson(responseData['passwordStatus']);
+      final passwordStatus =
+          PasswordStatus.fromJson(responseData['passwordStatus']);
       _navigateAfterLogin(passwordStatus, responseData);
     } catch (e) {
       if (mounted) {
@@ -121,11 +131,13 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _navigateAfterLogin(PasswordStatus passwordStatus, Map<String, dynamic> data) {
+  void _navigateAfterLogin(
+      PasswordStatus passwordStatus, Map<String, dynamic> data) {
     if (passwordStatus.forceChangePassword) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => ChangePasswordDialog(userId: data['user']['id'], forceChange: true),
+          builder: (_) => ChangePasswordDialog(
+              userId: data['user']['id'], forceChange: true),
         ),
       );
     } else {
@@ -139,11 +151,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isEnglish   = context.watch<LanguageProvider>().isEnglish;
-    final screenWidth  = MediaQuery.of(context).size.width;
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final cardWidth    = screenWidth  * 0.5;
-    final cardHeight   = screenHeight * 0.7;
+    final cardWidth = screenWidth * 0.5;
+    final cardHeight = screenHeight * 0.7;
 
     return Scaffold(
       backgroundColor: Colors.green.shade900,
@@ -154,145 +166,162 @@ class _LoginScreenState extends State<LoginScreen> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
               child: SizedBox(
-            width:  cardWidth,
-            height: cardHeight,
-            child: Card(
-              elevation: 8.0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.0),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Image.asset(
-                      'assets/images/ANAN.png',
-                      fit: BoxFit.contain,
-                    ),
-                    const SizedBox(width: 10),
-                    const VerticalDivider(color: Colors.grey, thickness: 1),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.lock_person, size: 72, color: Colors.green.shade900),
-                          const SizedBox(height: 10),
-                          Text(
-                            isEnglish ? 'Login' : 'เข้าสู่ระบบ',
-                            style: TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green.shade900,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          DropdownButtonFormField<String>(
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: isEnglish ? 'Database' : 'ฐานข้อมูล',
-                              border: const OutlineInputBorder(),
-                            ),
-                            value: _selectedDatabase,
-                            items: _databases.map((db) => DropdownMenuItem(
-                              value: db,
-                              child: Text(db),
-                            )).toList(),
-                            onChanged: (value) => setState(() => _selectedDatabase = value),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return isEnglish
-                                    ? 'Please select a database'
-                                    : 'กรุณาเลือกฐานข้อมูล';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          TextField(
-                            controller: _usernameController,
-                            autofocus: true,
-                            textInputAction: TextInputAction.next,
-                            decoration: InputDecoration(
-                              labelText: isEnglish ? 'Username' : 'ชื่อผู้ใช้งาน',
-                              border: const OutlineInputBorder(),
-                              prefixIcon: const Icon(Icons.person),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          TextField(
-                            controller: _passwordController,
-                            obscureText: true,
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => _login(),
-                            decoration: InputDecoration(
-                              labelText: isEnglish ? 'Password' : 'รหัสผ่าน',
-                              border: const OutlineInputBorder(),
-                              prefixIcon: const Icon(Icons.lock),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _isLoading
-                              ? const CircularProgressIndicator()
-                              : SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    onPressed: _login,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.yellow[100],
-                                      padding: const EdgeInsets.symmetric(vertical: 15),
-                                      textStyle: const TextStyle(fontSize: 18),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8.0),
+                width: cardWidth,
+                height: cardHeight,
+                child: Card(
+                  elevation: 8.0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16.0),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Image.asset(
+                          'assets/images/ANAN.png',
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(width: 10),
+                        const VerticalDivider(color: Colors.grey, thickness: 1),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.lock_person,
+                                  size: 72, color: Colors.green.shade900),
+                              const SizedBox(height: 10),
+                              Text(
+                                isEnglish ? 'Login' : 'เข้าสู่ระบบ',
+                                style: TextStyle(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green.shade900,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  labelText:
+                                      isEnglish ? 'Database' : 'ฐานข้อมูล',
+                                  border: const OutlineInputBorder(),
+                                ),
+                                value: _selectedDatabase,
+                                items: _databases
+                                    .map((db) => DropdownMenuItem(
+                                          value: db,
+                                          child: Text(db),
+                                        ))
+                                    .toList(),
+                                onChanged: (value) =>
+                                    setState(() => _selectedDatabase = value),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return isEnglish
+                                        ? 'Please select a database'
+                                        : 'กรุณาเลือกฐานข้อมูล';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _usernameController,
+                                autofocus: true,
+                                textInputAction: TextInputAction.next,
+                                decoration: InputDecoration(
+                                  labelText:
+                                      isEnglish ? 'Username' : 'ชื่อผู้ใช้งาน',
+                                  border: const OutlineInputBorder(),
+                                  prefixIcon: const Icon(Icons.person),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _passwordController,
+                                obscureText: true,
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) => _login(),
+                                decoration: InputDecoration(
+                                  labelText:
+                                      isEnglish ? 'Password' : 'รหัสผ่าน',
+                                  border: const OutlineInputBorder(),
+                                  prefixIcon: const Icon(Icons.lock),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              _isLoading
+                                  ? const CircularProgressIndicator()
+                                  : SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        onPressed: _login,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.yellow[100],
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 15),
+                                          textStyle:
+                                              const TextStyle(fontSize: 18),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8.0),
+                                          ),
+                                        ),
+                                        child: Text(isEnglish
+                                            ? 'Login'
+                                            : 'เข้าสู่ระบบ'),
                                       ),
                                     ),
-                                    child: Text(isEnglish ? 'Login' : 'เข้าสู่ระบบ'),
+                              if (_errorMessage != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 20),
+                                  child: Text(
+                                    _errorMessage!,
+                                    style: const TextStyle(color: Colors.red),
+                                    textAlign: TextAlign.center,
                                   ),
                                 ),
-                          if (_errorMessage != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 20),
-                              child: Text(
-                                _errorMessage!,
-                                style: const TextStyle(color: Colors.red),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                        ],
-                      ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
-          // ── Language toggle (top-right) ──────────────────────────────────
+          // ── Font size + language toggle (top-right) ──────────────────────
           Positioned(
             top: 16,
             right: 16,
-            child: Tooltip(
-              message: isEnglish ? 'Switch to Thai' : 'สลับเป็นภาษาอังกฤษ',
-              child: GestureDetector(
-                onTap: context.read<LanguageProvider>().toggle,
-                child: Container(
-                  padding: const EdgeInsets.all(1.0),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.orange),
-                    borderRadius: BorderRadius.circular(6.0),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      isEnglish ? 'ไทย' : 'ENG',
-                      style: const TextStyle(color: Colors.orange, fontSize: 16),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              FontSizeButton(isEnglish: isEnglish),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: isEnglish ? 'สลับเป็นภาษาไทย' : 'Switch to English',
+                child: GestureDetector(
+                  onTap: context.read<LanguageProvider>().toggle,
+                  child: Container(
+                    padding: const EdgeInsets.all(1.0),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.orange),
+                      borderRadius: BorderRadius.circular(6.0),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        isEnglish ? 'ไทย' : 'ENG',
+                        style:
+                            const TextStyle(color: Colors.orange, fontSize: 16),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
+            ]),
           ),
         ],
       ),

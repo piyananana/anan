@@ -7,7 +7,6 @@ import '../models/sa_user.dart';
 import '../services/sa_menu_service.dart';
 import '../services/sa_auth_service.dart';
 import '../services/sa_language_provider.dart';
-import '../services/sa_font_provider.dart';
 import '../utils/sa_menu_scope.dart';
 import '../services/sa_inactivity_service.dart';
 import '../services/sa_password_policy_service.dart';
@@ -16,6 +15,7 @@ import '../widgets/sa_menu_tree_view.dart';
 import '../widgets/sa_change_password_dialog.dart';
 import '../widgets/sa_confirm_logout_dialog.dart';
 import '../widgets/sa_inactivity_detector.dart';
+import '../widgets/sa_font_size_button.dart';
 import 'sa_login_screen.dart';
 import 'sa_menu_screen.dart';
 import 'sa_user_screen.dart';
@@ -136,9 +136,12 @@ class HomeScreenState extends State<HomeScreen> {
   void _openPendingApprovalTarget(PendingApprovalItem item) {
     final menu = _findMenuByTargetPath(_allMenus, item.targetPath);
     if (menu == null) {
-      final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+      final isEnglish =
+          Provider.of<LanguageProvider>(context, listen: false).isEnglish;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(isEnglish ? 'You do not have access to this menu' : 'ไม่มีสิทธิ์เข้าถึงเมนูนี้'),
+        content: Text(isEnglish
+            ? 'You do not have access to this menu'
+            : 'ไม่มีสิทธิ์เข้าถึงเมนูนี้'),
         backgroundColor: Colors.red,
       ));
       return;
@@ -156,7 +159,8 @@ class HomeScreenState extends State<HomeScreen> {
         target = SoTransactionScreen(initialDetailId: item.id);
         break;
       case 'ImPriceChangeScreen':
-        target = ImPriceChangeScreen(onFieldsChanged: () {}, initialDetailId: item.id);
+        target = ImPriceChangeScreen(
+            onFieldsChanged: () {}, initialDetailId: item.id);
         break;
       case 'ImStockCountSummaryScreen':
         target = ImStockCountSummaryScreen(initialCountId: item.id);
@@ -165,7 +169,8 @@ class HomeScreenState extends State<HomeScreen> {
         target = MoHeaderScreen(initialDetailId: item.id);
         break;
       case 'PeriodScreen':
-        target = PeriodScreen(onFieldsChanged: () {}, initialFiscalYearId: item.id);
+        target =
+            PeriodScreen(onFieldsChanged: () {}, initialFiscalYearId: item.id);
         break;
       case 'QuoteTransactionScreen':
         target = QuoteTransactionScreen(initialDetailId: item.id);
@@ -210,7 +215,8 @@ class HomeScreenState extends State<HomeScreen> {
         _currentIndex = 0;
       } else {
         int newIndex = _currentIndex;
-        if (index <= _currentIndex && _currentIndex > 0) newIndex = _currentIndex - 1;
+        if (index <= _currentIndex && _currentIndex > 0)
+          newIndex = _currentIndex - 1;
         _currentIndex = newIndex.clamp(0, _openTabs.length - 1);
       }
     });
@@ -305,7 +311,8 @@ class HomeScreenState extends State<HomeScreen> {
       });
       // ไม่ใช่ developer และไม่มีเมนูเลย → แจ้งเตือนแล้วกลับ login
       if (menus.isEmpty && !(_currentUser?.isDeveloper ?? false)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _showNoMenuDialog());
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _showNoMenuDialog());
       }
     } catch (e) {
       setState(() {
@@ -320,22 +327,26 @@ class HomeScreenState extends State<HomeScreen> {
 
   Future<void> _showNoMenuDialog() async {
     if (!mounted) return;
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+    final isEnglish =
+        Provider.of<LanguageProvider>(context, listen: false).isEnglish;
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: Row(children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+          const Icon(Icons.warning_amber_rounded,
+              color: Colors.orange, size: 28),
           const SizedBox(width: 8),
-          Text(isEnglish ? 'No Menu Permissions Assigned' : 'ยังไม่ได้กำหนดสิทธิ์เมนู'),
+          Text(isEnglish
+              ? 'No Menu Permissions Assigned'
+              : 'ยังไม่ได้กำหนดสิทธิ์เมนู'),
         ]),
         content: Text(
           isEnglish
               ? 'This user account has not been assigned any menu permissions yet.\n'
-                'Please contact the system administrator to request access.'
+                  'Please contact the system administrator to request access.'
               : 'บัญชีผู้ใช้นี้ยังไม่ได้รับการกำหนดสิทธิ์เมนูใดเลย\n'
-                'กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์การใช้งาน',
+                  'กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์การใช้งาน',
         ),
         actions: [
           ElevatedButton(
@@ -359,9 +370,16 @@ class HomeScreenState extends State<HomeScreen> {
             labelColor: Colors.green.shade900,
             indicatorColor: Colors.green.shade900,
             tabs: [
-              Tab(icon: const Icon(Icons.menu_book_outlined),   text: isEnglish ? 'Menu Management'       : 'จัดการเมนู'),
-              Tab(icon: const Icon(Icons.people_outline),        text: isEnglish ? 'User Management'       : 'จัดการผู้ใช้'),
-              Tab(icon: const Icon(Icons.manage_accounts_outlined), text: isEnglish ? 'User Menu Permissions' : 'สิทธิ์เมนูผู้ใช้'),
+              Tab(
+                  icon: const Icon(Icons.menu_book_outlined),
+                  text: isEnglish ? 'Menu Management' : 'จัดการเมนู'),
+              Tab(
+                  icon: const Icon(Icons.people_outline),
+                  text: isEnglish ? 'User Management' : 'จัดการผู้ใช้'),
+              Tab(
+                  icon: const Icon(Icons.manage_accounts_outlined),
+                  text:
+                      isEnglish ? 'User Menu Permissions' : 'สิทธิ์เมนูผู้ใช้'),
             ],
           ),
           Expanded(
@@ -577,13 +595,13 @@ class HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    
     // ใช้ Consumer เพื่อ rebuild เฉพาะ AppBar เมื่อข้อมูลเปลี่ยน
     return Consumer2<AuthService, LanguageProvider>(
       builder: (context, authService, lang, child) {
         final currentCompany = authService.company;
         return Scaffold(
-          bottomNavigationBar: _buildPasswordExpirationBanner(context, lang.isEnglish),
+          bottomNavigationBar:
+              _buildPasswordExpirationBanner(context, lang.isEnglish),
           appBar: AppBar(
             // title: const Text('ANAN System'),
             title: Row(
@@ -667,7 +685,8 @@ class HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 8),
               // ── Language toggle ───────────────────────────────────────
               Tooltip(
-                message: lang.isEnglish ? 'Switch to Thai' : 'สลับเป็นภาษาอังกฤษ',
+                message:
+                    lang.isEnglish ? 'สลับเป็นภาษาไทย' : 'Switch to English',
                 child: GestureDetector(
                   onTap: lang.toggle,
                   child: Container(
@@ -680,7 +699,10 @@ class HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.all(8.0),
                       child: Text(
                         lang.isEnglish ? 'ไทย' : 'ENG',
-                        style: const TextStyle(color: Colors.orange, fontSize: 16,),
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                   ),
@@ -688,34 +710,7 @@ class HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 8),
               // ── Font size ─────────────────────────────────────────────
-              Consumer<FontProvider>(
-                builder: (context, font, _) => PopupMenuButton<double>(
-                  tooltip: lang.isEnglish ? 'Font size' : 'ขนาดตัวอักษร',
-                  initialValue: font.textScale,
-                  onSelected: font.setTextScale,
-                  itemBuilder: (_) => [
-                    for (final s in FontProvider.scales)
-                      CheckedPopupMenuItem<double>(
-                        value: s,
-                        checked: s == font.textScale,
-                        child: Text(
-                          '${s == 0.9 ? (lang.isEnglish ? 'Small' : 'เล็ก') : s == 1.0 ? (lang.isEnglish ? 'Normal' : 'ปกติ') : s == 1.1 ? (lang.isEnglish ? 'Large' : 'ใหญ่') : (lang.isEnglish ? 'Extra large' : 'ใหญ่มาก')} (${(s * 100).round()}%)',
-                        ),
-                      ),
-                  ],
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 9),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.orange),
-                      borderRadius: BorderRadius.circular(6.0),
-                    ),
-                    child: Text(
-                      font.textScale == 1.0 ? 'Aa' : 'Aa ${(font.textScale * 100).round()}%',
-                      style: const TextStyle(color: Colors.orange, fontSize: 16),
-                    ),
-                  ),
-                ),
-              ),
+              FontSizeButton(isEnglish: lang.isEnglish),
               const SizedBox(width: 8),
               // ── Pending approvals bell ────────────────────────────────
               Tooltip(
@@ -723,48 +718,49 @@ class HomeScreenState extends State<HomeScreen> {
                     ? 'Pending Approvals${_pendingCount > 0 ? ' ($_pendingCount)' : ''}'
                     : 'รายการรออนุมัติ${_pendingCount > 0 ? ' ($_pendingCount)' : ''}',
                 child: GestureDetector(
-                onTap: _showPendingApprovalsDialog,
-                child: Container(
-                  padding: const EdgeInsets.all(1.0),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                        color: _pendingCount > 0 ? Colors.red : Colors.orange),
-                    borderRadius: BorderRadius.circular(6.0),
-                  ),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Icon(Icons.notifications_outlined,
-                            color: Colors.orange),
-                      ),
-                      if (_pendingCount > 0)
-                        Positioned(
-                          right: -4,
-                          top: -4,
-                          child: Container(
-                            padding: const EdgeInsets.all(3),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            constraints: const BoxConstraints(
-                                minWidth: 16, minHeight: 16),
-                            child: Text(
-                              '$_pendingCount',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold),
-                              textAlign: TextAlign.center,
+                  onTap: _showPendingApprovalsDialog,
+                  child: Container(
+                    padding: const EdgeInsets.all(1.0),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                          color:
+                              _pendingCount > 0 ? Colors.red : Colors.orange),
+                      borderRadius: BorderRadius.circular(6.0),
+                    ),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Icon(Icons.notifications_outlined,
+                              color: Colors.orange),
+                        ),
+                        if (_pendingCount > 0)
+                          Positioned(
+                            right: -4,
+                            top: -4,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              constraints: const BoxConstraints(
+                                  minWidth: 16, minHeight: 16),
+                              child: Text(
+                                '$_pendingCount',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
               ), // end Tooltip (bell)
               const SizedBox(width: 8),
               // ── เปลี่ยนรหัสผ่าน ───────────────────────────────────────
@@ -775,9 +771,11 @@ class HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(6.0),
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.password_outlined, color: Colors.orange),
+                  icon:
+                      const Icon(Icons.password_outlined, color: Colors.orange),
                   onPressed: _showChangePasswordDialog,
-                  tooltip: lang.isEnglish ? 'Change Password' : 'เปลี่ยนรหัสผ่าน',
+                  tooltip:
+                      lang.isEnglish ? 'Change Password' : 'เปลี่ยนรหัสผ่าน',
                 ),
               ),
               const SizedBox(width: 8), // ช่องว่าง
@@ -798,132 +796,147 @@ class HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 8), // เพื่อให้มีพื้นที่ขอบขวาเล็กน้อย
             ],
           ),
-          body: InactivityDetector(child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _error.isNotEmpty
-                  ? Center(child: Text('Error: $_error'))
-                  : _allMenus.isEmpty && (_currentUser?.isDeveloper ?? false)
-                      ? _buildDeveloperBootstrap(lang.isEnglish)
-                      : _allMenus.isEmpty
-                          ? const Center(child: CircularProgressIndicator())
-                          : Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Toggle button — fixed width, always same element
-                            Container(
-                              width: 40,
-                              color: Colors.green.shade900,
-                              child: IconButton(
-                                icon: Icon(
-                                  _isMenuExpanded
-                                      ? Icons.menu_open_rounded
-                                      : Icons.menu_rounded,
-                                  color: Colors.orange,
-                                ),
-                                onPressed: _toggleMenuSize,
-                                tooltip: _isMenuExpanded
-                                    ? (lang.isEnglish ? 'Collapse Menu' : 'ย่อช่องเมนู')
-                                    : (lang.isEnglish ? 'Expand Menu' : 'ขยายช่องเมนู'),
-                              ),
-                            ),
-                            // Menu panel — animated width, always mounted
-                            AnimatedContainer(
-                              duration: _isDraggingDivider
-                                  ? Duration.zero
-                                  : const Duration(milliseconds: 200),
-                              width: _isMenuExpanded ? _menuPanelCurrentWidth : 0,
-                              child: ClipRect(
-                                child: OverflowBox(
-                                  // Always give MenuTreeView at least 280px so nested
-                                  // items never overflow regardless of panel width
-                                  maxWidth: _menuPanelCurrentWidth < 280.0
-                                      ? 280.0
-                                      : _menuPanelCurrentWidth,
-                                  minWidth: _menuPanelCurrentWidth < 280.0
-                                      ? 280.0
-                                      : _menuPanelCurrentWidth,
-                                  alignment: Alignment.topLeft,
-                                  child: Container(
-                                    color: Colors.blueGrey[200],
-                                    child: MenuTreeView(
-                                      menus: _allMenus,
-                                      onMenuSelected: _onMenuSelected,
-                                      onSearchSubmitted: _onSearchSubmitted,
-                                      onRefreshMenus: _fetchMenus,
-                                      searchController: _searchController,
-                                      expandedState: _menuExpandedState,
+          body: InactivityDetector(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error.isNotEmpty
+                      ? Center(child: Text('Error: $_error'))
+                      : _allMenus.isEmpty &&
+                              (_currentUser?.isDeveloper ?? false)
+                          ? _buildDeveloperBootstrap(lang.isEnglish)
+                          : _allMenus.isEmpty
+                              ? const Center(child: CircularProgressIndicator())
+                              : Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    // Toggle button — fixed width, always same element
+                                    Container(
+                                      width: 40,
+                                      color: Colors.green.shade900,
+                                      child: IconButton(
+                                        icon: Icon(
+                                          _isMenuExpanded
+                                              ? Icons.menu_open_rounded
+                                              : Icons.menu_rounded,
+                                          color: Colors.orange,
+                                        ),
+                                        onPressed: _toggleMenuSize,
+                                        tooltip: _isMenuExpanded
+                                            ? (lang.isEnglish
+                                                ? 'Collapse Menu'
+                                                : 'ย่อช่องเมนู')
+                                            : (lang.isEnglish
+                                                ? 'Expand Menu'
+                                                : 'ขยายช่องเมนู'),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Draggable divider
-                            if (_isMenuExpanded)
-                              MouseRegion(
-                                cursor: SystemMouseCursors.resizeColumn,
-                                child: GestureDetector(
-                                  onHorizontalDragStart: (_) =>
-                                      setState(() => _isDraggingDivider = true),
-                                  onHorizontalDragUpdate: (details) {
-                                    setState(() {
-                                      _menuPanelCurrentWidth =
-                                          (_menuPanelCurrentWidth +
-                                                  details.delta.dx)
-                                              .clamp(100.0, 800.0);
-                                    });
-                                  },
-                                  onHorizontalDragEnd: (_) =>
-                                      setState(() => _isDraggingDivider = false),
-                                  child: Container(
-                                    width: 5,
-                                    color: Colors.blueGrey[400],
-                                  ),
-                                ),
-                              ),
-                            // Right panel — always Expanded, element is never recreated
-                            Expanded(
-                              child: Column(
-                                children: [
-                                  _CustomTabBar(
-                                    tabs: _openTabs,
-                                    currentIndex: _currentIndex,
-                                    isEnglish: lang.isEnglish,
-                                    onSelect: (i) => setState(() => _currentIndex = i),
-                                    onClose: _closeTab,
-                                    onMove: _reorderTab,
-                                  ),
-                                  Expanded(
-                                    child: _openTabs.isEmpty
-                                        ? const DashboardWidget()
-                                        : IndexedStack(
-                                            index: _currentIndex,
-                                            children:
-                                                _openTabs.map((menu) {
-                                              final id = menu.id ?? 0;
-                                              return _cachedTabWidgets
-                                                  .putIfAbsent(
-                                                id,
-                                                () => KeyedSubtree(
-                                                  key: ValueKey(id),
-                                                  child: MenuScope(
-                                                    menu: menu,
-                                                    child: menu.builder(context),
-                                                  ),
-                                                ),
-                                              );
-                                            }).toList(),
+                                    // Menu panel — animated width, always mounted
+                                    AnimatedContainer(
+                                      duration: _isDraggingDivider
+                                          ? Duration.zero
+                                          : const Duration(milliseconds: 200),
+                                      width: _isMenuExpanded
+                                          ? _menuPanelCurrentWidth
+                                          : 0,
+                                      child: ClipRect(
+                                        child: OverflowBox(
+                                          // Always give MenuTreeView at least 280px so nested
+                                          // items never overflow regardless of panel width
+                                          maxWidth:
+                                              _menuPanelCurrentWidth < 280.0
+                                                  ? 280.0
+                                                  : _menuPanelCurrentWidth,
+                                          minWidth:
+                                              _menuPanelCurrentWidth < 280.0
+                                                  ? 280.0
+                                                  : _menuPanelCurrentWidth,
+                                          alignment: Alignment.topLeft,
+                                          child: Container(
+                                            color: Colors.blueGrey[200],
+                                            child: MenuTreeView(
+                                              menus: _allMenus,
+                                              onMenuSelected: _onMenuSelected,
+                                              onSearchSubmitted:
+                                                  _onSearchSubmitted,
+                                              onRefreshMenus: _fetchMenus,
+                                              searchController:
+                                                  _searchController,
+                                              expandedState: _menuExpandedState,
+                                            ),
                                           ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        )),
+                                        ),
+                                      ),
+                                    ),
+                                    // Draggable divider
+                                    if (_isMenuExpanded)
+                                      MouseRegion(
+                                        cursor: SystemMouseCursors.resizeColumn,
+                                        child: GestureDetector(
+                                          onHorizontalDragStart: (_) =>
+                                              setState(() =>
+                                                  _isDraggingDivider = true),
+                                          onHorizontalDragUpdate: (details) {
+                                            setState(() {
+                                              _menuPanelCurrentWidth =
+                                                  (_menuPanelCurrentWidth +
+                                                          details.delta.dx)
+                                                      .clamp(100.0, 800.0);
+                                            });
+                                          },
+                                          onHorizontalDragEnd: (_) => setState(
+                                              () => _isDraggingDivider = false),
+                                          child: Container(
+                                            width: 5,
+                                            color: Colors.blueGrey[400],
+                                          ),
+                                        ),
+                                      ),
+                                    // Right panel — always Expanded, element is never recreated
+                                    Expanded(
+                                      child: Column(
+                                        children: [
+                                          _CustomTabBar(
+                                            tabs: _openTabs,
+                                            currentIndex: _currentIndex,
+                                            isEnglish: lang.isEnglish,
+                                            onSelect: (i) => setState(
+                                                () => _currentIndex = i),
+                                            onClose: _closeTab,
+                                            onMove: _reorderTab,
+                                          ),
+                                          Expanded(
+                                            child: _openTabs.isEmpty
+                                                ? const DashboardWidget()
+                                                : IndexedStack(
+                                                    index: _currentIndex,
+                                                    children:
+                                                        _openTabs.map((menu) {
+                                                      final id = menu.id ?? 0;
+                                                      return _cachedTabWidgets
+                                                          .putIfAbsent(
+                                                        id,
+                                                        () => KeyedSubtree(
+                                                          key: ValueKey(id),
+                                                          child: MenuScope(
+                                                            menu: menu,
+                                                            child: menu.builder(
+                                                                context),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }).toList(),
+                                                  ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                )),
         );
       },
     );
   }
-
 }
 
 // ── Custom Tab Bar ────────────────────────────────────────────────────────────
@@ -968,7 +981,8 @@ class _CustomTabBarState extends State<_CustomTabBar> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scroll.hasClients) {
           _scroll.animateTo(_scroll.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut);
         }
         _updateArrows();
       });
@@ -993,8 +1007,10 @@ class _CustomTabBarState extends State<_CustomTabBar> {
   }
 
   void _scrollBy(double delta) {
-    final target = (_scroll.offset + delta).clamp(0.0, _scroll.position.maxScrollExtent);
-    _scroll.animateTo(target, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+    final target =
+        (_scroll.offset + delta).clamp(0.0, _scroll.position.maxScrollExtent);
+    _scroll.animateTo(target,
+        duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
   }
 
   void _scrollToTab(int index) {
@@ -1004,7 +1020,8 @@ class _CustomTabBarState extends State<_CustomTabBar> {
       final left = index * tabW;
       final right = left + tabW;
       if (left < _scroll.offset) {
-        _scroll.animateTo(left, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+        _scroll.animateTo(left,
+            duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
       } else if (right > _scroll.offset + _scroll.position.viewportDimension) {
         _scroll.animateTo(right - _scroll.position.viewportDimension,
             duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
@@ -1017,7 +1034,10 @@ class _CustomTabBarState extends State<_CustomTabBar> {
     if (widget.tabs.isEmpty) return const SizedBox.shrink();
 
     return NotificationListener<ScrollMetricsNotification>(
-      onNotification: (_) { _updateArrows(); return false; },
+      onNotification: (_) {
+        _updateArrows();
+        return false;
+      },
       child: Container(
         height: 46,
         decoration: BoxDecoration(
@@ -1218,16 +1238,26 @@ class _PendingApprovalsDialog extends StatelessWidget {
 
   IconData _moduleIcon(String module) {
     switch (module) {
-      case 'ap_payment_run': return Icons.payments_outlined;
-      case 'ap_transaction': return Icons.receipt_long_outlined;
-      case 'pr_transaction': return Icons.assignment_outlined;
-      case 'po_transaction': return Icons.shopping_cart_outlined;
-      case 'so_transaction': return Icons.point_of_sale_outlined;
-      case 'im_price_change': return Icons.price_change_outlined;
-      case 'im_stock_count': return Icons.fact_check_outlined;
-      case 'mo_header': return Icons.precision_manufacturing_outlined;
-      case 'gl_period_close_request': return Icons.event_busy_outlined;
-      default: return Icons.notifications_outlined;
+      case 'ap_payment_run':
+        return Icons.payments_outlined;
+      case 'ap_transaction':
+        return Icons.receipt_long_outlined;
+      case 'pr_transaction':
+        return Icons.assignment_outlined;
+      case 'po_transaction':
+        return Icons.shopping_cart_outlined;
+      case 'so_transaction':
+        return Icons.point_of_sale_outlined;
+      case 'im_price_change':
+        return Icons.price_change_outlined;
+      case 'im_stock_count':
+        return Icons.fact_check_outlined;
+      case 'mo_header':
+        return Icons.precision_manufacturing_outlined;
+      case 'gl_period_close_request':
+        return Icons.event_busy_outlined;
+      default:
+        return Icons.notifications_outlined;
     }
   }
 
@@ -1257,7 +1287,9 @@ class _PendingApprovalsDialog extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 32),
                 child: Center(
                   child: Text(
-                      isEnglish ? 'No pending approvals' : 'ไม่มีรายการรออนุมัติ',
+                      isEnglish
+                          ? 'No pending approvals'
+                          : 'ไม่มีรายการรออนุมัติ',
                       style: const TextStyle(color: Colors.grey)),
                 ),
               )
@@ -1285,7 +1317,8 @@ class _PendingApprovalsDialog extends StatelessWidget {
                           child: Row(children: [
                             CircleAvatar(
                               backgroundColor: Colors.orange[100],
-                              child: Icon(_moduleIcon(item.module), color: Colors.orange[800], size: 20),
+                              child: Icon(_moduleIcon(item.module),
+                                  color: Colors.orange[800], size: 20),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -1293,13 +1326,16 @@ class _PendingApprovalsDialog extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(item.title(isEnglish),
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14)),
                                   const SizedBox(height: 4),
                                   Text(
                                     isEnglish
                                         ? 'From: ${item.submittedBy ?? '-'}'
                                         : 'จาก: ${item.submittedBy ?? '-'}',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.grey[700]),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
@@ -1307,7 +1343,8 @@ class _PendingApprovalsDialog extends StatelessWidget {
                                       if (item.date != null) fmt(item.date),
                                       if (item.amount != 0) numFmt(item.amount),
                                     ].join('   •   '),
-                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.grey[600]),
                                   ),
                                 ],
                               ),
