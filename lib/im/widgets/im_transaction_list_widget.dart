@@ -355,6 +355,7 @@ class _ImTransactionListWidgetState extends State<ImTransactionListWidget> with 
         docFilterGroup(3, isEnglish ? 'Status' : 'สถานะ', [
           docStatusToggles(
             statuses: _statusOrder,
+            label: (s) => imTransactionStatusChipLabel(s, isEnglish),
             selected: _statuses,
             isEnglish: isEnglish,
             // ลบแล้วนับได้เฉพาะตอนเลือก (backend ส่งมาเฉพาะตอนนั้น)
@@ -457,7 +458,7 @@ class _ImTransactionListWidgetState extends State<ImTransactionListWidget> with 
       case 'value':
         return docNum(r.totalValueLc, _fmtValue, dashZero: true);
       case 'status':
-        return docStatusBadge(r.status);
+        return docStatusBadge(r.status, label: imTransactionStatusLabel(r.status, isEnglish));
       case 'act':
         final editable = r.status == 'Draft' && widget.enableEditButton;
         return Tooltip(

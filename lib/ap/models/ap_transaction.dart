@@ -37,16 +37,18 @@ const Map<String, String> apTransactionStatusLabels = {
   'Draft':     'ร่าง',
   'Submitted': 'รออนุมัติ',
   'Approved':  'อนุมัติแล้ว',
-  'Posted':    'Post แล้ว',
+  'Posted':    'โพสต์แล้ว',
   'Void':      'ยกเลิก',
+  'Deleted':   'ลบแล้ว',
 };
 
 const Map<String, String> apTransactionStatusLabelsEn = {
   'Draft':     'Draft',
-  'Submitted': 'On Approve',
+  'Submitted': 'Submitted',
   'Approved':  'Approved',
   'Posted':    'Posted',
   'Void':      'Void',
+  'Deleted':   'Deleted',
 };
 
 String apTransactionStatusLabel(String s, bool isEnglish) =>

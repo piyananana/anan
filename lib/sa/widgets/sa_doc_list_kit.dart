@@ -57,6 +57,7 @@ class DocListKit {
       case 'Closed':
         return (const Color(0xFF33404D), const Color(0xFFE4E8EC));
       case 'Void':
+      case 'Voided':
       case 'Cancelled':
       case 'Rejected':
       case 'Expired':
@@ -149,6 +150,31 @@ Widget docChip(String text, Color fg, Color bg) => Container(
     );
 
 /// ป้ายสถานะ — label = ชื่อที่แสดง (เช่น ชื่อไทยของสถานะใบสั่งขาย) สีตามรหัสสถานะ
+/// ชื่อสถานะกลาง (ไทย, อังกฤษ) — ใช้กับป้ายของเอกสารข้ามโมดูล (ใบมัดจำ, ใบรับ/จ่ายเงินอ้างอิง ฯลฯ)
+/// หน้าของแต่ละโมดูลใช้ฟังก์ชันชื่อสถานะของ model ตัวเอง (glEntryStatusLabel, arTransactionStatusLabel ...)
+const Map<String, (String, String)> docStatusLabels = {
+  'Draft': ('ร่าง', 'Draft'),
+  'Submitted': ('รออนุมัติ', 'Submitted'),
+  'Approved': ('อนุมัติแล้ว', 'Approved'),
+  'Rejected': ('ถูกปฏิเสธ', 'Rejected'),
+  'Posted': ('โพสต์แล้ว', 'Posted'),
+  'Received': ('รับแล้ว รอตั้งหนี้', 'Received'),
+  'Delivered': ('ส่งแล้ว รอตั้งหนี้', 'Delivered'),
+  'Pending': ('รอเคลียร์', 'Pending'),
+  'Cleared': ('เคลียร์แล้ว', 'Cleared'),
+  'Bounced': ('เช็คคืน', 'Bounced'),
+  'Closed': ('ปิดแล้ว', 'Closed'),
+  'Void': ('ยกเลิก', 'Void'),
+  'Voided': ('ยกเลิก', 'Voided'),
+  'Cancelled': ('ยกเลิก', 'Cancelled'),
+  'Deleted': ('ลบแล้ว', 'Deleted'),
+};
+
+String docStatusLabel(String status, bool isEnglish) {
+  final l = docStatusLabels[status];
+  return l == null ? status : (isEnglish ? l.$2 : l.$1);
+}
+
 Widget docStatusBadge(String status, {String? label}) {
   final (fg, bg) = DocListKit.statusColors(status);
   return docChip(label ?? status, fg, bg);

@@ -142,7 +142,7 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
 
   String _statusLabel(String status, bool isEnglish) {
     if (status == 'Delivered') return isEnglish ? 'Delivered' : 'ส่งสินค้าแล้ว';
-    if (status == 'Posted')    return isEnglish ? 'Posted'     : 'Post AR/GL แล้ว';
+    if (status == 'Posted')    return isEnglish ? 'Posted'     : 'โพสต์ AR/GL แล้ว';
     return status;
   }
 
@@ -626,7 +626,7 @@ class _ImDlnBillingReportScreenState extends State<ImDlnBillingReportScreen> {
                                 items: [
                                   DropdownMenuItem(value: 'all', child: Text(isEnglish ? '— All —' : '— ทั้งหมด —')),
                                   DropdownMenuItem(value: 'Delivered', child: Text(isEnglish ? 'Delivered only (accrual gap)' : 'ส่งสินค้าแล้วเท่านั้น (ยังไม่มี GL)')),
-                                  DropdownMenuItem(value: 'Posted', child: Text(isEnglish ? 'Posted only (billed revenue)' : 'Post AR/GL แล้วเท่านั้น (รายได้ตามใบแจ้งหนี้)')),
+                                  DropdownMenuItem(value: 'Posted', child: Text(isEnglish ? 'Posted only (billed revenue)' : 'โพสต์ AR/GL แล้วเท่านั้น (รายได้ตามใบแจ้งหนี้)')),
                                 ],
                                 onChanged: (v) {
                                   if (v != null) setState(() => _statusFilter = v);

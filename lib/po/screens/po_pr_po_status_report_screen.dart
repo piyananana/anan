@@ -32,7 +32,7 @@ class _StatusOption {
 
 const _prStatusOptions = [
   _StatusOption(0, 'Draft', 'ร่าง', 'Draft'),
-  _StatusOption(1, 'Submitted', 'รออนุมัติ', 'Pending Approval'),
+  _StatusOption(1, 'Submitted', 'รออนุมัติ', 'Submitted'),
   _StatusOption(2, 'Approved', 'อนุมัติแล้ว', 'Approved'),
   _StatusOption(3, 'Rejected', 'ถูกปฏิเสธ', 'Rejected'),
   _StatusOption(4, 'Void', 'ยกเลิก', 'Void'),
@@ -40,7 +40,7 @@ const _prStatusOptions = [
 
 const _poStatusOptions = [
   _StatusOption(0, 'Draft', 'ร่าง', 'Draft'),
-  _StatusOption(1, 'Submitted', 'รออนุมัติ', 'Pending Approval'),
+  _StatusOption(1, 'Submitted', 'รออนุมัติ', 'Submitted'),
   _StatusOption(2, 'Approved', 'อนุมัติแล้ว', 'Approved'),
   _StatusOption(3, 'Rejected', 'ถูกปฏิเสธ', 'Rejected'),
   _StatusOption(4, 'Void', 'ยกเลิก', 'Void'),

@@ -7,7 +7,7 @@ import '../../sa/models/sa_credit_approval.dart';
 // ── Status labels (Draft / Posted / Void) ────────────────────────────────────
 const Map<String, String> imTransactionStatusLabels = {
   'Draft':  'ร่าง',
-  'Posted': 'Post แล้ว',
+  'Posted': 'โพสต์แล้ว',
   'Received':  'รับแล้ว รอตั้งหนี้',
   'Delivered': 'ส่งแล้ว รอตั้งหนี้',
   'Void':   'ยกเลิก',
@@ -28,6 +28,13 @@ const List<String> imReportStatuses = ['Draft', 'Posted', 'Received', 'Delivered
 
 String imTransactionStatusLabel(String s, bool isEnglish) =>
     (isEnglish ? imTransactionStatusLabelsEn[s] : imTransactionStatusLabels[s]) ?? s;
+
+// ชื่อสั้นสำหรับชิปกรองในหน้ารายการ — ตาราง/หน้ารายละเอียดใช้ชื่อเต็ม (imTransactionStatusLabel)
+String imTransactionStatusChipLabel(String s, bool isEnglish) {
+  if (!isEnglish && s == 'Received') return 'รับแล้ว';
+  if (!isEnglish && s == 'Delivered') return 'ส่งแล้ว';
+  return imTransactionStatusLabel(s, isEnglish);
+}
 
 const List<String> imCostingMethodsRequiringUnitCostOnIncrease = ['AVG', 'FIFO', 'SPECIFIC'];
 

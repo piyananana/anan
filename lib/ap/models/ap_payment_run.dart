@@ -16,11 +16,11 @@ const Map<String, String> apPaymentRunStatusLabels = {
 
 const Map<String, String> apPaymentRunStatusLabelsEn = {
   'Draft':     'Draft',
-  'Submitted': 'On Approve',
+  'Submitted': 'Submitted',
   'Approved':  'Approved',
   'Rejected':  'Rejected',
   'Completed': 'Paid',
-  'Void':      'Cancel',
+  'Void':      'Void',
   'Deleted':   'Deleted',
 };
 

@@ -40,7 +40,10 @@ const Map<String, String> cmTransactionStatusLabels = {
   'Draft':  'ร่าง',
   'Submitted': 'รออนุมัติ',
   'Approved': 'อนุมัติแล้ว',
-  'Posted': 'Post แล้ว',
+  'Posted': 'โพสต์แล้ว',
+  'Pending': 'รอเคลียร์',
+  'Cleared': 'เคลียร์แล้ว',
+  'Bounced': 'เช็คคืน',
   'Void':   'ยกเลิก',
   'Deleted': 'ลบแล้ว',
 };
@@ -49,6 +52,9 @@ const Map<String, String> cmTransactionStatusLabelsEn = {
   'Submitted': 'Submitted',
   'Approved': 'Approved',
   'Posted': 'Posted',
+  'Pending': 'Pending',
+  'Cleared': 'Cleared',
+  'Bounced': 'Bounced',
   'Void':   'Void',
   'Deleted': 'Deleted',
 };

@@ -3,6 +3,23 @@ import '../../../utils/date_utils.dart';
 import '../../sa/models/sa_document_reverse_log.dart';
 export '../../sa/models/sa_document_reverse_log.dart';
 
+const Map<String, String> glEntryStatusLabels = {
+  'Draft': 'ร่าง',
+  'Posted': 'โพสต์แล้ว',
+  'Void': 'ยกเลิก',
+  'Deleted': 'ลบแล้ว',
+};
+
+const Map<String, String> glEntryStatusLabelsEn = {
+  'Draft': 'Draft',
+  'Posted': 'Posted',
+  'Void': 'Void',
+  'Deleted': 'Deleted',
+};
+
+String glEntryStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? glEntryStatusLabelsEn[s] : glEntryStatusLabels[s]) ?? s;
+
 class GlEntryHeader {
   final int id;
   int docId;

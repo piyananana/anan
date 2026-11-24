@@ -308,6 +308,7 @@ class _CmTransactionListWidgetState extends State<CmTransactionListWidget> with 
         docFilterGroup(3, isEnglish ? 'Status' : 'สถานะ', [
           docStatusToggles(
             statuses: _statusOrder,
+            label: (s) => cmTransactionStatusLabel(s, isEnglish),
             selected: _statuses,
             isEnglish: isEnglish,
             count: (s) => s == 'Deleted' && !_statuses.contains(s) ? null : base.where((r) => r.status == s).length,
@@ -410,7 +411,7 @@ class _CmTransactionListWidgetState extends State<CmTransactionListWidget> with 
             ? docNum(r.balanceAmountLc, _fmt, color: r.balanceAmountLc > 0 ? const Color(0xFF1E4F8F) : null)
             : const Align(alignment: Alignment.centerRight, child: docDash);
       case 'status':
-        return docStatusBadge(r.status);
+        return docStatusBadge(r.status, label: cmTransactionStatusLabel(r.status, isEnglish));
       case 'act':
         final editable = _isEditable(r);
         return Tooltip(

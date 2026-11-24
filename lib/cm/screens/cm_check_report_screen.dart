@@ -71,8 +71,8 @@ class _State extends State<CmCheckReportScreen>
   static const _checkLabelsEng = {'All': 'All Types', 'RECEIVED': 'Received', 'ISSUED': 'Issued'};
   static const _statusOptions  = ['All', 'Pending', 'Cleared', 'Bounced', 'Voided'];
   static const _statusLabels   = {
-    'All': 'ทุกสถานะ', 'Pending': 'รอเรียกเก็บ',
-    'Cleared': 'ผ่านเรียบร้อย', 'Bounced': 'เช็คคืน', 'Voided': 'ยกเลิก',
+    'All': 'ทุกสถานะ', 'Pending': 'รอเคลียร์',
+    'Cleared': 'เคลียร์แล้ว', 'Bounced': 'เช็คคืน', 'Voided': 'ยกเลิก',
   };
   static const _statusLabelsEng = {
     'All': 'All Statuses', 'Pending': 'Pending',
@@ -767,13 +767,13 @@ class _State extends State<CmCheckReportScreen>
     String label;
     switch (status) {
       case 'Cleared':
-        bg = Colors.green.shade100; fg = Colors.green.shade800; label = isEnglish ? 'Cleared' : 'ผ่านแล้ว';
+        bg = Colors.green.shade100; fg = Colors.green.shade800; label = isEnglish ? 'Cleared' : 'เคลียร์แล้ว';
       case 'Bounced':
         bg = Colors.red.shade100;   fg = Colors.red.shade800;   label = isEnglish ? 'Bounced' : 'เช็คคืน';
       case 'Voided':
         bg = Colors.grey.shade200;  fg = Colors.grey.shade700;  label = isEnglish ? 'Voided' : 'ยกเลิก';
       default:
-        bg = Colors.blue.shade50;   fg = Colors.blue.shade800;  label = isEnglish ? 'Pending' : 'รอเรียกเก็บ';
+        bg = Colors.blue.shade50;   fg = Colors.blue.shade800;  label = isEnglish ? 'Pending' : 'รอเคลียร์';
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

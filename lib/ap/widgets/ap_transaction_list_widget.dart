@@ -378,6 +378,7 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget> with 
         docFilterGroup(3, isEnglish ? 'Status' : 'สถานะ', [
           docStatusToggles(
             statuses: _statusOrder,
+            label: (s) => apTransactionStatusLabel(s, isEnglish),
             selected: _statuses,
             isEnglish: isEnglish,
             count: (s) => s == 'Deleted' && !_statuses.contains(s) ? null : base.where((r) => r.status == s).length,
@@ -498,7 +499,7 @@ class _ApTransactionListWidgetState extends State<ApTransactionListWidget> with 
       case 'balance':
         return docNum(r.balanceAmountLc, _fmt, bold: r.balanceAmountLc != 0, color: r.balanceAmountLc > 0 ? const Color(0xFF1E4F8F) : null);
       case 'status':
-        return docStatusBadge(r.status);
+        return docStatusBadge(r.status, label: apTransactionStatusLabel(r.status, isEnglish));
       case 'act':
         final editable = r.status == 'Draft' && widget.enableEditButton;
         return Tooltip(

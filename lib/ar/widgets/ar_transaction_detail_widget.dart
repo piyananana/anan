@@ -2462,7 +2462,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> i
           Text(isEnglish ? 'Document Header' : 'ข้อมูลเอกสาร', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           if (_docNo.isNotEmpty && _docNo != 'AUTO')
             Text(_docNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F5C5C))),
-          docStatusBadge(_status),
+          docStatusBadge(_status, label: arTransactionStatusLabel(_status, isEnglish)),
           if (!_isReadOnly && !inOpenPeriod)
             _chip(isEnglish ? 'Date is not in an open period' : 'วันที่ไม่อยู่ในงวดที่เปิด', const Color(0xFFB71C1C), const Color(0xFFFDECEA)),
           // วงเงินเครดิตของลูกค้า: อยู่ในวงเงิน = แถบสั้นบรรทัดเดียว, เกินวงเงิน/มีคำขอ = แผงขอ/อนุมัติเต็ม
@@ -3524,7 +3524,7 @@ class _ArTransactionDetailWidgetState extends State<ArTransactionDetailWidget> i
       isEnglish ? 'Payment Received (Cash Sale)' : 'รับชำระ (ขายเงินสด)',
       chips: [
         if (cs.receiptDocNo != null) _chip('${isEnglish ? 'Receipt' : 'ใบเสร็จ'} ${cs.receiptDocNo}', const Color(0xFF1E4F8F), _hAuto),
-        if (cs.receiptStatus != null) docStatusBadge(cs.receiptStatus!),
+        if (cs.receiptStatus != null) docStatusBadge(cs.receiptStatus!, label: docStatusLabel(cs.receiptStatus!, isEnglish)),
         if (cs.imDocNo != null) _chip('${isEnglish ? 'From' : 'จาก'} ${cs.imDocNo}', _gMore, _hRo),
       ],
       [

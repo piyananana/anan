@@ -294,7 +294,7 @@ class _ArBillingStatusReportScreenState
       final bcDocNo  = bc['bc_doc_no']           as String? ?? '';
       final bcDate   = _fmtDate(bc['bc_doc_date'] as String?);
       final custCode = bc['customer_code']       as String? ?? '';
-      final custName = bc['customer_name_th']    as String? ?? '';
+      final custName = _pickName(bc['customer_name_th'], bc['customer_name_en'], isEnglish);
       final total    = (bc['total_amount_lc']    as num?)?.toDouble() ?? 0;
       final balance  = (bc['balance_amount_lc']  as num?)?.toDouble() ?? 0;
       final status   = bc['status'] as String? ?? '';
@@ -334,7 +334,7 @@ class _ArBillingStatusReportScreenState
       final invoices = (bc['invoices'] as List? ?? [])
           .cast<Map<String, dynamic>>();
       for (final inv in invoices) {
-        final invDocName  = inv['doc_name_thai'] as String? ?? '';
+        final invDocName  = _pickName(inv['doc_name_thai'], inv['doc_name_eng'], isEnglish);
         final invDocNo    = inv['doc_no']         as String? ?? '';
         final invDate     = _fmtDate(inv['doc_date'] as String?);
         final invRef      = inv['ref_doc_no']     as String? ?? '';
@@ -803,6 +803,7 @@ class _ArBillingStatusReportScreenState
 
   Future<void> _exportExcel() async {
     final reportTitle = _reportTitle;
+    final isEnglish = _isEnglish;
     _isExporting = true;
     setState(() {});
     try {
@@ -816,12 +817,13 @@ class _ArBillingStatusReportScreenState
       final detBg = ExcelColor.fromHexString('#F2F2F2');
 
       final _tsLabel = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-      _xlCell(s, 0, 0, _company?.thaiName ?? '', bold: true);
+      _xlCell(s, 0, 0, _company?.displayName(isEnglish) ?? '', bold: true);
       _xlCell(s, 1, 0, reportTitle, bold: true);
-      _xlCell(s, 2, 0, 'วันที่วางบิล: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  พิมพ์: $_tsLabel');
+      _xlCell(s, 2, 0, '${isEnglish ? 'Billing date' : 'วันที่วางบิล'}: ${DateFormat('dd/MM/yyyy').format(_dateFrom)} – ${DateFormat('dd/MM/yyyy').format(_dateTo)}  |  ${isEnglish ? 'Printed' : 'พิมพ์'}: $_tsLabel');
 
-      final hdrs = ['ประเภทเอกสาร', 'เลขที่ใบวางบิล', 'วันที่เอกสาร',
-          'รหัส – ชื่อลูกค้า', 'วางบิล (รอชำระ)', 'ชำระแล้ว', 'สถานะ'];
+      final hdrs = isEnglish
+          ? ['Doc Type', 'Billing Doc No.', 'Doc Date', 'Code – Customer Name', 'Billed (Pending)', 'Paid', 'Status']
+          : ['ประเภทเอกสาร', 'เลขที่ใบวางบิล', 'วันที่เอกสาร', 'รหัส – ชื่อลูกค้า', 'วางบิล (รอชำระ)', 'ชำระแล้ว', 'สถานะ'];
       for (int i = 0; i < hdrs.length; i++) {
         _xlCell(s, 3, i, hdrs[i], bg: hdrBg, bold: true, align: HorizontalAlign.Center);
       }
@@ -836,14 +838,16 @@ class _ArBillingStatusReportScreenState
         final bcDocNo   = bc['bc_doc_no']          as String? ?? '';
         final bcDate    = _fmtDate(bc['bc_doc_date'] as String?);
         final custCode  = bc['customer_code']      as String? ?? '';
-        final custName  = bc['customer_name_th']   as String? ?? '';
+        final custName  = _pickName(bc['customer_name_th'], bc['customer_name_en'], isEnglish);
         final total     = (bc['total_amount_lc']   as num?)?.toDouble() ?? 0;
         final balance   = (bc['balance_amount_lc'] as num?)?.toDouble() ?? 0;
         final status    = bc['status'] as String? ?? '';
         final isVoid    = status == 'Void';
         final pending   = isVoid ? 0.0 : balance;
         final paidAmt   = isVoid ? 0.0 : (total - balance);
-        final statusLabel = isVoid ? 'ยกเลิก' : (balance > 0 ? 'รอชำระ' : 'ชำระแล้ว');
+        final statusLabel = isVoid
+            ? (isEnglish ? 'Void' : 'ยกเลิก')
+            : (balance > 0 ? (isEnglish ? 'Pending' : 'รอชำระ') : (isEnglish ? 'Paid' : 'ชำระแล้ว'));
 
         grandPending += pending;
         grandPaid    += paidAmt;
@@ -860,7 +864,7 @@ class _ArBillingStatusReportScreenState
         if (_showDetail) {
           final invoices = (bc['invoices'] as List? ?? []).cast<Map<String, dynamic>>();
           for (final inv in invoices) {
-            final invDocName = inv['doc_name_thai'] as String? ?? '';
+            final invDocName = _pickName(inv['doc_name_thai'], inv['doc_name_eng'], isEnglish);
             final invDocNo   = inv['doc_no']        as String? ?? '';
             final invDate    = _fmtDate(inv['doc_date'] as String?);
             final invRef     = inv['ref_doc_no']    as String? ?? '';
@@ -878,7 +882,7 @@ class _ArBillingStatusReportScreenState
         }
       }
 
-      _xlCell(s, row, 0, 'รวม $totalBcs รายการ', bg: totBg, bold: true);
+      _xlCell(s, row, 0, isEnglish ? 'Total $totalBcs items' : 'รวม $totalBcs รายการ', bg: totBg, bold: true);
       for (int i = 1; i <= 3; i++) _xlCell(s, row, i, '', bg: totBg);
       _xlCell(s, row, 4, grandPending, bg: totBg, bold: true, align: HorizontalAlign.Right);
       _xlCell(s, row, 5, grandPaid,    bg: totBg, bold: true, align: HorizontalAlign.Right);
@@ -886,12 +890,19 @@ class _ArBillingStatusReportScreenState
 
       final bytes = ex.encode();
       if (bytes == null) return;
-      const title = 'รายงานสถานะใบวางบิล';
+      final title = isEnglish ? 'Billing_Status_Report' : 'รายงานสถานะใบวางบิล';
       final ts    = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       await downloadFile(bytes, '${title}_$ts.xlsx');
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
+  }
+
+  // ชื่อตามภาษา — ภาษาอังกฤษว่างให้ใช้ชื่อไทยแทน
+  static String _pickName(dynamic th, dynamic en, bool isEnglish) {
+    final t = th as String? ?? '';
+    final e = en as String? ?? '';
+    return isEnglish && e.isNotEmpty ? e : t;
   }
 
   void _xlCell(Sheet s, int r, int c, dynamic v,

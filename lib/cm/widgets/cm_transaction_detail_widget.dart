@@ -1739,7 +1739,7 @@ class _CmTransactionDetailWidgetState extends State<CmTransactionDetailWidget> i
                 Text(isEnglish ? 'Document Header' : 'ข้อมูลเอกสาร', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 if ((r.sourceDocNo ?? r.docNo ?? '').isNotEmpty)
                   Text(r.sourceDocNo ?? r.docNo!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F5C5C))),
-                docStatusBadge(r.status),
+                docStatusBadge(r.status, label: docStatusLabel(r.status, isEnglish)),
               ]),
               const SizedBox(height: 10),
               _groupLayout([g1, g2, g3, g4], const [10, 12, 12, 12]),

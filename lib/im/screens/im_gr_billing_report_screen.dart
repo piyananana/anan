@@ -141,7 +141,7 @@ class _ImGrBillingReportScreenState extends State<ImGrBillingReportScreen> {
 
   String _statusLabel(String status, bool isEnglish) {
     if (status == 'Received') return isEnglish ? 'Received' : 'รับสินค้าแล้ว';
-    if (status == 'Posted')   return isEnglish ? 'Posted'    : 'Post AP/GL แล้ว';
+    if (status == 'Posted')   return isEnglish ? 'Posted'    : 'โพสต์ AP/GL แล้ว';
     return status;
   }
 
@@ -618,7 +618,7 @@ class _ImGrBillingReportScreenState extends State<ImGrBillingReportScreen> {
                                 items: [
                                   DropdownMenuItem(value: 'all', child: Text(isEnglish ? '— All —' : '— ทั้งหมด —')),
                                   DropdownMenuItem(value: 'Received', child: Text(isEnglish ? 'Received only (accrual gap)' : 'รับสินค้าแล้วเท่านั้น (ยังไม่มี GL)')),
-                                  DropdownMenuItem(value: 'Posted', child: Text(isEnglish ? 'Posted only (price variance)' : 'Post AP/GL แล้วเท่านั้น (ส่วนต่างราคา)')),
+                                  DropdownMenuItem(value: 'Posted', child: Text(isEnglish ? 'Posted only (price variance)' : 'โพสต์ AP/GL แล้วเท่านั้น (ส่วนต่างราคา)')),
                                 ],
                                 onChanged: (v) {
                                   if (v != null) setState(() => _statusFilter = v);

@@ -639,7 +639,7 @@ class _GlEntryDetailWidgetState extends State<GlEntryDetailWidget> implements Do
           Text(isEnglish ? 'Document Header' : 'ข้อมูลเอกสาร', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           if (_header.docNo.isNotEmpty && _header.docNo != 'AUTO')
             Text(_header.docNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F5C5C))),
-          docStatusBadge(_header.status),
+          docStatusBadge(_header.status, label: glEntryStatusLabel(_header.status, isEnglish)),
           // งวดบัญชีของวันที่เอกสาร — แจ้งตั้งแต่ก่อนบันทึกว่าโพสต์ได้หรือไม่
           if (!_isReadOnly)
             period != null

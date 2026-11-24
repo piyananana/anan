@@ -35,6 +35,23 @@ const Map<String, String> vatTypeLabels = {
   'NOVAT': 'ไม่มี VAT',
 };
 
+const Map<String, String> arTransactionStatusLabels = {
+  'Draft': 'ร่าง',
+  'Posted': 'โพสต์แล้ว',
+  'Void': 'ยกเลิก',
+  'Deleted': 'ลบแล้ว',
+};
+
+const Map<String, String> arTransactionStatusLabelsEn = {
+  'Draft': 'Draft',
+  'Posted': 'Posted',
+  'Void': 'Void',
+  'Deleted': 'Deleted',
+};
+
+String arTransactionStatusLabel(String s, bool isEnglish) =>
+    (isEnglish ? arTransactionStatusLabelsEn[s] : arTransactionStatusLabels[s]) ?? s;
+
 // ---- Header ----
 class ArTransactionHeader {
   final int id;

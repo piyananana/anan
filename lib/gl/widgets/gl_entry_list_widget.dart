@@ -418,6 +418,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
         docFilterGroup(3, isEnglish ? 'Status' : 'สถานะ', [
           docStatusToggles(
             statuses: _statusOrder,
+            label: (s) => glEntryStatusLabel(s, isEnglish),
             selected: _statuses,
             isEnglish: isEnglish,
             count: (s) => base.where((r) => r.status == s).length,
@@ -539,7 +540,7 @@ class _GlEntryListWidgetState extends State<GlEntryListWidget> {
       case 'credit':
         return docNum(item.totalCreditLc, _fmt);
       case 'status':
-        return docStatusBadge(item.status);
+        return docStatusBadge(item.status, label: glEntryStatusLabel(item.status, isEnglish));
       case 'act':
         final draft = item.status == 'Draft';
         final editable = draft && widget.enableEditButton;

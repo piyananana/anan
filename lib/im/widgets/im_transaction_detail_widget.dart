@@ -1192,12 +1192,19 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
     _refreshListPrices(); // ตารางราคาของลูกค้า
   }
 
-  // ใบสั่งขายที่ดึงรายการมา → ใช้พนักงานขายของใบสั่งขาย (ถ้ามี) แทนค่าเริ่มต้นของลูกค้า
+  // ใบสั่งขายที่ดึงรายการมา → ใช้พนักงานขาย และระยะเครดิตของใบสั่งขาย (ถ้ามี) แทนค่าเริ่มต้นของลูกค้า
   Future<void> _loadSoSalespersons(int soId) async {
     try {
       final so = await _soService.fetchRow(soId);
-      if (!mounted || so.salespersons.isEmpty) return;
-      setState(() => _salespersons = DocSalesperson.namesOnly(so.salespersons));
+      if (!mounted) return;
+      setState(() {
+        if (so.salespersons.isNotEmpty) _salespersons = DocSalesperson.namesOnly(so.salespersons);
+        if (so.creditTermMonths != null || so.creditTermDays != null) {
+          _creditMonthsCtrl.text = '${so.creditTermMonths ?? 0}';
+          _creditDaysCtrl.text = '${so.creditTermDays ?? 0}';
+          _recalcDueDate();
+        }
+      });
     } catch (_) {}
   }
 
@@ -3477,7 +3484,7 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
           child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: fontSize)),
         );
     return Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-      chip(_status, _statusColor(_status), fontSize: 13, bg: 0.15),
+      chip(imTransactionStatusLabel(_status, isEnglish), _statusColor(_status), fontSize: 13, bg: 0.15),
       if (_linkedApTransactionId != null)
         chip(isEnglish ? 'AP bill created (#$_linkedApTransactionId)' : 'สร้างใบตั้งหนี้ AP แล้ว (#$_linkedApTransactionId)', Colors.blue, fontSize: 12),
       if (_linkedArTransactionId != null)
@@ -4152,7 +4159,12 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
               numeric: false,
               hint: isEnglish ? 'e.g. 10+5' : 'ตย.10+5',
               err: !parseStepDiscount(line.discPctCtrl.text).valid,
-              onChanged: (_) => setState(() {}));
+              // แก้ส่วนลด % = คำนวณราคาสุทธิใหม่จากราคา × ส่วนลด % ทุกครั้ง:
+              // ล้างราคาสุทธิที่กรอกไว้ และส่วนลด (เงิน) ที่ได้จากการคำนวณย้อนจากราคาสุทธิ
+              onChanged: (_) => setState(() {
+                    line.netPriceCtrl.clear();
+                    line.lineDiscAmtCtrl.clear();
+                  }));
         }
         return _cField(line.discPctCtrl, ro: !_canEditBilling || line.isFree, onChanged: (_) => setState(() {}));
       case 'net':
@@ -4169,6 +4181,8 @@ class _ImTransactionDetailWidgetState extends State<ImTransactionDetailWidget> i
             err: _netTooHigh(line),
             hint: _fmt4.format(_netBeforeBill(line, sd?[line])),
             onChanged: (v) => setState(() {
+              // แก้ราคาสุทธิ = ล้างส่วนลด % — ส่วนลดทั้งหมดคำนวณย้อนเป็นส่วนลด (เงิน) จากราคาสุทธิที่กรอก
+              line.discPctCtrl.clear();
               // จำส่วนลด (เงิน) ล่าสุดไว้ในช่องเดิม — ล้างราคาสุทธิทีหลังจะได้ส่วนลดนี้ต่อ
               if (v.trim().isNotEmpty && !_netTooHigh(line)) line.lineDiscAmtCtrl.text = _CountLine._fmtInput(_lineDiscOf(line));
             }),
