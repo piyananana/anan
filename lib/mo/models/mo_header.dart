@@ -45,6 +45,10 @@ class MoComponentDetail {
   final String? uomNameEn;
   final int? locationId;
   final String? locationCode;
+  final String? locationName;
+  final String? remark;
+  /// สินค้านี้มีสูตรการผลิตที่ใช้งานอยู่ (สร้างใบสั่งผลิตย่อยได้) — มาจาก backend อย่างเดียว ไม่ส่งกลับตอนบันทึก
+  final bool hasBom;
 
   double get qtyRemaining => plannedQty - issuedQty;
 
@@ -63,6 +67,9 @@ class MoComponentDetail {
     this.uomNameEn,
     this.locationId,
     this.locationCode,
+    this.locationName,
+    this.remark,
+    this.hasBom = false,
   });
 
   factory MoComponentDetail.fromJson(Map<String, dynamic> json) {
@@ -82,6 +89,9 @@ class MoComponentDetail {
       uomNameEn: json['uom_name_en'],
       locationId: json['location_id'],
       locationCode: json['location_code'],
+      locationName: json['location_name'],
+      remark: json['remark'],
+      hasBom: json['has_bom'] == true,
     );
   }
 
@@ -94,6 +104,7 @@ class MoComponentDetail {
         'planned_qty': plannedQty,
         if (uomId != null) 'uom_id': uomId,
         if (locationId != null) 'location_id': locationId,
+        if ((remark ?? '').isNotEmpty) 'remark': remark,
       };
 }
 
@@ -111,6 +122,7 @@ class MoOutputDetail {
   final String? uomNameTh;
   final String? uomNameEn;
   final bool isPrimaryOutput;
+  final String? remark;
 
   double get qtyRemaining => plannedQty - receivedQty;
 
@@ -128,6 +140,7 @@ class MoOutputDetail {
     this.uomNameTh,
     this.uomNameEn,
     this.isPrimaryOutput = false,
+    this.remark,
   });
 
   factory MoOutputDetail.fromJson(Map<String, dynamic> json) {
@@ -146,6 +159,7 @@ class MoOutputDetail {
       uomNameTh: json['uom_name_th'],
       uomNameEn: json['uom_name_en'],
       isPrimaryOutput: json['is_primary_output'] ?? false,
+      remark: json['remark'],
     );
   }
 
@@ -158,6 +172,7 @@ class MoOutputDetail {
         'planned_qty': plannedQty,
         if (uomId != null) 'uom_id': uomId,
         'is_primary_output': isPrimaryOutput,
+        if ((remark ?? '').isNotEmpty) 'remark': remark,
       };
 }
 
@@ -589,6 +604,46 @@ class MoWipValuationReport {
   }
 }
 
+/// ต้นทุนสะสมของใบสั่งผลิต (เฉพาะ fetchRow) — ยอดรวม − โอนเข้าสินค้าสำเร็จรูป = WIP คงเหลือ
+class MoCostSummary {
+  final double materialCost;
+  final double laborCost;
+  /// ค่าเครื่องจักร + โสหุ้ยจากบันทึกเวลา (ตามขั้นตอนการผลิต)
+  final double machineOverheadCost;
+  /// โสหุ้ยแบบร้อยละที่ปันเข้างานตอนรับผลผลิต
+  final double percentOverheadCost;
+  final double totalCost;
+  final double transferredCost;
+  final double wipBalance;
+  final double avgUnitCost;
+
+  const MoCostSummary({
+    this.materialCost = 0,
+    this.laborCost = 0,
+    this.machineOverheadCost = 0,
+    this.percentOverheadCost = 0,
+    this.totalCost = 0,
+    this.transferredCost = 0,
+    this.wipBalance = 0,
+    this.avgUnitCost = 0,
+  });
+
+  factory MoCostSummary.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const MoCostSummary();
+    double d(String k) => double.tryParse(json[k]?.toString() ?? '0') ?? 0;
+    return MoCostSummary(
+      materialCost: d('material_cost'),
+      laborCost: d('labor_cost'),
+      machineOverheadCost: d('machine_overhead_cost'),
+      percentOverheadCost: d('percent_overhead_cost'),
+      totalCost: d('total_cost'),
+      transferredCost: d('transferred_cost'),
+      wipBalance: d('wip_balance'),
+      avgUnitCost: d('avg_unit_cost'),
+    );
+  }
+}
+
 class MoHeader {
   final int id;
   final int docId;
@@ -645,6 +700,7 @@ class MoHeader {
   final List<MoComponentDetail> components;
   final List<MoOutputDetail> outputs;
   final List<MoOperationDetail> operations;
+  final MoCostSummary costSummary;
 
   const MoHeader({
     this.id = 0,
@@ -698,6 +754,7 @@ class MoHeader {
     this.components = const [],
     this.outputs = const [],
     this.operations = const [],
+    this.costSummary = const MoCostSummary(),
   });
 
   bool get isReadOnly => !['Draft', 'Rejected'].contains(status);
@@ -758,6 +815,7 @@ class MoHeader {
       components: (json['components'] as List<dynamic>? ?? []).map((e) => MoComponentDetail.fromJson(e as Map<String, dynamic>)).toList(),
       outputs: (json['outputs'] as List<dynamic>? ?? []).map((e) => MoOutputDetail.fromJson(e as Map<String, dynamic>)).toList(),
       operations: (json['operations'] as List<dynamic>? ?? []).map((e) => MoOperationDetail.fromJson(e as Map<String, dynamic>)).toList(),
+      costSummary: MoCostSummary.fromJson(json['cost_summary'] as Map<String, dynamic>?),
     );
   }
 
