@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../../config/app_config.dart';
 import 'sa_auth_service.dart';
+import '../utils/sa_favicon.dart';
 
 class LoginBrandingHistory {
   final DateTime? at;
@@ -79,10 +80,17 @@ class LoginBrandingService {
 
   LoginBranding? cached; // ค่าล่าสุดที่โหลด (หน้าหลักใช้โลโก้ระบบแทนโลโก้บริษัทเมื่อบริษัทไม่มีโลโก้)
 
+  // เก็บค่าล่าสุด + ไอคอนแท็บเบราว์เซอร์ใช้โลโก้ระบบ (ไม่มีโลโก้ = favicon ANAN มาตรฐาน)
+  LoginBranding _apply(LoginBranding b) {
+    cached = b;
+    setFavicon(b.logoUrl);
+    return b;
+  }
+
   Future<LoginBranding> fetch() async {
     final res = await http.get(Uri.parse('${AppConfig.apiSa}/login_branding'));
     if (res.statusCode != 200) throw Exception('Failed to load login settings (${res.statusCode})');
-    return cached = LoginBranding.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+    return _apply(LoginBranding.fromJson(jsonDecode(res.body) as Map<String, dynamic>));
   }
 
   Future<LoginBranding> save({
@@ -127,6 +135,6 @@ class LoginBrandingService {
       } catch (_) {}
       throw Exception(msg);
     }
-    return cached = LoginBranding.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    return _apply(LoginBranding.fromJson(jsonDecode(body) as Map<String, dynamic>));
   }
 }

@@ -1,11 +1,11 @@
 {
-    "name": "aaa",
-    "short_name": "aaa",
+    "name": "ANAN System",
+    "short_name": "ANAN",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#307F82",
+    "theme_color": "#0B3A2A",
+    "description": "ANAN System — integrated accounting and finance",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
