@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/mo_bom.dart';
+import '../models/mo_master_summary.dart';
 
 class MoBomService {
   final String baseUrl = AppConfig.apiMo;
@@ -118,5 +119,25 @@ class MoBomService {
       throw Exception('Unauthorized.');
     }
     throw Exception('Failed to load BOM where-used report: ${response.body}');
+  }
+
+  // ── หน้าสูตรการผลิตแบบ B (user 2026-11-29) ─────────────────────────────────────
+  Future<Map<int, MoBomCost>> fetchCosts() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/mo_bom/costs'), headers: headers);
+    if (response.statusCode == 200) {
+      final list = (json.decode(response.body) as List).map((e) => MoBomCost.fromJson(Map<String, dynamic>.from(e)));
+      return {for (final c in list) c.id: c};
+    }
+    if (response.statusCode == 401) { authService.logout(); throw Exception('Unauthorized.'); }
+    throw Exception('Failed to load costs: ${response.statusCode}');
+  }
+
+  Future<MoBomSummary> fetchSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/mo_bom/$id/summary'), headers: headers);
+    if (response.statusCode == 200) return MoBomSummary.fromJson(Map<String, dynamic>.from(json.decode(response.body)));
+    if (response.statusCode == 401) { authService.logout(); throw Exception('Unauthorized.'); }
+    throw Exception('Failed to load summary: ${response.statusCode}');
   }
 }

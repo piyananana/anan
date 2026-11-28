@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/mo_work_center.dart';
+import '../models/mo_master_summary.dart';
 
 class MoWorkCenterService {
   final String baseUrl = AppConfig.apiMo;
@@ -120,5 +121,25 @@ class MoWorkCenterService {
       throw Exception('Unauthorized.');
     }
     throw Exception('Failed to load work center efficiency report: ${response.body}');
+  }
+
+  // ── หน้าศูนย์ปฏิบัติงานแบบ B (user 2026-11-29) ─────────────────────────────────
+  Future<Map<int, MoWorkCenterUsage>> fetchUsage() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/mo_work_center/usage'), headers: headers);
+    if (response.statusCode == 200) {
+      final list = (json.decode(response.body) as List).map((e) => MoWorkCenterUsage.fromJson(Map<String, dynamic>.from(e)));
+      return {for (final u in list) u.id: u};
+    }
+    if (response.statusCode == 401) { authService.logout(); throw Exception('Unauthorized.'); }
+    throw Exception('Failed to load usage: ${response.statusCode}');
+  }
+
+  Future<MoWorkCenterSummary> fetchSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/mo_work_center/$id/summary'), headers: headers);
+    if (response.statusCode == 200) return MoWorkCenterSummary.fromJson(Map<String, dynamic>.from(json.decode(response.body)));
+    if (response.statusCode == 401) { authService.logout(); throw Exception('Unauthorized.'); }
+    throw Exception('Failed to load summary: ${response.statusCode}');
   }
 }

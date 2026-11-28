@@ -1,141 +1,168 @@
-// lib/mo/screens/mo_work_center_screen.dart — มิเรอร์ im_price_group_screen.dart ทุกประการ
+// lib/mo/screens/mo_work_center_screen.dart — ศูนย์ปฏิบัติงาน แบบ B ของ IM (user 2026-11-29)
+//   ซ้าย: การ์ดศูนย์งาน (อัตรารวม จำนวนสูตรที่ใช้) + ตัวกรอง / ขวา: โหมดดู → แก้ไข / สำเนา / ลบ ที่แถบหัว
+//   ปุ่มย่อ/ขยายรายการอยู่หน้าชื่อบนแถบหัวแผงขวา (ImListToggle ผ่าน ImMasterShell)
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../im/widgets/im_master_kit.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
+import '../models/mo_master_summary.dart';
 import '../models/mo_work_center.dart';
 import '../services/mo_work_center_service.dart';
-import '../widgets/mo_work_center_list_widget.dart';
 import '../widgets/mo_work_center_detail_widget.dart';
 
 class MoWorkCenterScreen extends StatefulWidget {
-  final VoidCallback onFieldsChanged;
-  final VoidCallback? onExit;
-
-  const MoWorkCenterScreen({
-    super.key,
-    required this.onFieldsChanged,
-    this.onExit,
-  });
+  final VoidCallback? onFieldsChanged;
+  const MoWorkCenterScreen({super.key, this.onFieldsChanged});
 
   @override
   State<MoWorkCenterScreen> createState() => _MoWorkCenterScreenState();
 }
 
 class _MoWorkCenterScreenState extends State<MoWorkCenterScreen> with AutomaticKeepAliveClientMixin {
-  final GlobalKey<MoWorkCenterListWidgetState> _listKey = GlobalKey();
+  final GlobalKey<_WcListState> _listKey = GlobalKey();
   final GlobalKey<MoWorkCenterDetailWidgetState> _detailKey = GlobalKey();
-  final _svc = MoWorkCenterService();
 
   Mode _mode = Mode.none;
-  MoWorkCenter? _selectedData;
-  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ MoWorkCenterDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
-  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มศูนย์งาน" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  MoWorkCenter? _selected;
+  MoWorkCenter? _copyFrom;
   int _requestSeq = 0;
   bool _isEnglish = false;
-
-  bool _isLeftPanelExpanded = true;
-  double _leftPanelWidth = 360.0;
-  bool _isDraggingDivider = false;
+  final _svc = MoWorkCenterService();
 
   @override
   bool get wantKeepAlive => true;
 
-  void _onAdd() => setState(() {
-        _mode = Mode.add;
-        _selectedData = null;
-        _requestSeq++;
-      });
+  Future<bool> _confirmLeave() async {
+    final d = _detailKey.currentState;
+    if (d != null && d.isDirty) return confirmDiscardChanges(context, _isEnglish);
+    return true;
+  }
 
-  void _onEdit(MoWorkCenter row) => setState(() {
-        _mode = Mode.edit;
-        _selectedData = row;
-        _requestSeq++;
-      });
+  Future<void> _onAdd() async {
+    if (!await _confirmLeave()) return;
+    setState(() {
+      _mode = Mode.add;
+      _selected = null;
+      _copyFrom = null;
+      _requestSeq++;
+    });
+  }
 
-  void _onView(MoWorkCenter row) => setState(() {
+  void _onCopy() {
+    final src = _selected;
+    if (src == null) return;
+    setState(() {
+      _mode = Mode.add;
+      _selected = null;
+      _copyFrom = src;
+      _requestSeq++;
+    });
+  }
+
+  void _onEdit() {
+    if (_selected == null) return;
+    setState(() {
+      _mode = Mode.edit;
+      _copyFrom = null;
+      _requestSeq++;
+    });
+  }
+
+  Future<void> _onView(MoWorkCenter row) async {
+    if (_mode == Mode.view && _selected?.id == row.id) return;
+    if (!await _confirmLeave()) return;
+    _show(row);
+  }
+
+  void _show(MoWorkCenter row) => setState(() {
         _mode = Mode.view;
-        _selectedData = row;
+        _selected = row;
+        _copyFrom = null;
         _requestSeq++;
       });
 
-  Future<void> _onDelete(MoWorkCenter row) async {
-    final isEnglish = _isEnglish;
-    final confirm = await showDialog<bool>(
+  Future<void> _onDelete() async {
+    final row = _selected;
+    if (row == null) return;
+    final e = _isEnglish;
+    final l = AppL10n(e);
+    final name = e && (row.workCenterNameEn ?? '').isNotEmpty ? row.workCenterNameEn! : row.workCenterNameTh;
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
-        content: Text(isEnglish
-            ? 'Are you sure you want to delete work center "${row.workCenterCode} ${row.workCenterNameTh}" ?'
-            : 'คุณแน่ใจหรือไม่ที่จะลบศูนย์งาน "${row.workCenterCode} ${row.workCenterNameTh}" ?'),
+      builder: (ctx) => AlertDialog(
+        title: Text(l.confirmDelete),
+        content: Text(e ? 'Delete work center "${row.workCenterCode} $name"?' : 'ลบศูนย์งาน "${row.workCenterCode} $name" ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: Text(isEnglish ? 'Delete' : 'ลบ', style: const TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l.cancel)),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(l.delete, style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
-    if (confirm != true) return;
-
+    if (ok != true) return;
     try {
       await _svc.deleteRow(row.id);
       _listKey.currentState?.refresh();
-      _onCancel();
+      _close();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e ? 'Deleted successfully' : 'ลบสำเร็จ')));
+    } catch (ex) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error deleting: $e' : 'เกิดข้อผิดพลาดในการลบ: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ex.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red));
       }
     }
   }
 
   Future<void> _onSubmit(MoWorkCenter row) async {
-    final isEnglish = _isEnglish;
-    try {
-      if (_mode == Mode.add) {
-        await _svc.addRow(row);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
-      } else if (_mode == Mode.edit) {
-        await _svc.updateRow(row);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
-      }
-      _listKey.currentState?.refresh();
-      _onCancel();
-      widget.onFieldsChanged();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
-      }
+    final e = _isEnglish;
+    final MoWorkCenter saved = _mode == Mode.add ? await _svc.addRow(row) : await _svc.updateRow(row);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_mode == Mode.add ? (e ? 'Added ${saved.workCenterCode}' : 'เพิ่มศูนย์งาน ${saved.workCenterCode} สำเร็จ') : (e ? 'Saved successfully' : 'บันทึกสำเร็จ'))));
+    }
+    widget.onFieldsChanged?.call();
+    final rows = await _listKey.currentState?.refresh();
+    final fresh = rows?.where((r) => r.id == saved.id).firstOrNull ?? saved;
+    if (mounted) _show(fresh);
+  }
+
+  Future<void> _onCancel() async {
+    if (!await _confirmLeave()) return;
+    if (_mode == Mode.edit && _selected != null) {
+      _show(_selected!);
+    } else {
+      _close();
     }
   }
 
-  void _onCancel() => setState(() {
+  void _close() => setState(() {
         _mode = Mode.none;
-        _selectedData = null;
+        _selected = null;
+        _copyFrom = null;
         _requestSeq++;
       });
 
-  void _onCallback(MoWorkCenter row) => setState(() {
-        _mode = Mode.none;
-        _selectedData = row;
-        _requestSeq++;
-      });
-
-  Widget _buildRightPanel() {
-    switch (_mode) {
-      case Mode.none:
-        return MoWorkCenterDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, isPlaceholder: true, requestSeq: _requestSeq);
-      case Mode.add:
-        return MoWorkCenterDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
-      case Mode.edit:
-        return MoWorkCenterDetailWidget(key: _detailKey, mode: Mode.edit, selected: _selectedData, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
-      case Mode.view:
-        return MoWorkCenterDetailWidget(key: _detailKey, mode: Mode.view, selected: _selectedData, onSubmit: (_) async {}, onCancel: _onCancel, requestSeq: _requestSeq);
-      default:
-        return const SizedBox.shrink();
+  Widget _detail(bool canCreate, bool canEdit, bool canDelete) {
+    if (_mode == Mode.none) {
+      return MoWorkCenterDetailWidget(
+          key: _detailKey, mode: Mode.none, selected: null, onSubmit: (_) async {}, onCancel: _close, isPlaceholder: true, requestSeq: _requestSeq);
     }
+    final view = _mode == Mode.view;
+    return MoWorkCenterDetailWidget(
+      key: _detailKey,
+      mode: _mode,
+      selected: _mode == Mode.add ? null : _selected,
+      copyFrom: _mode == Mode.add ? _copyFrom : null,
+      onSubmit: _onSubmit,
+      onCancel: view ? _close : _onCancel,
+      onEdit: view && canEdit ? _onEdit : null,
+      onDelete: view && canDelete ? _onDelete : null,
+      onCopy: view && canCreate ? _onCopy : null,
+      requestSeq: _requestSeq,
+    );
   }
 
   @override
@@ -147,84 +174,163 @@ class _MoWorkCenterScreenState extends State<MoWorkCenterScreen> with AutomaticK
     final canCreate = perm?.canCreate ?? true;
     final canEdit = perm?.canEdit ?? true;
     final canDelete = perm?.canDelete ?? true;
+    return ImMasterShell(
+      isEnglish: isEnglish,
+      initialListWidth: 320,
+      barActions: [
+        if (canCreate) ImKit.barButton(context, isEnglish ? 'Add work center' : 'เพิ่มศูนย์งาน', Icons.add, _onAdd, primary: true),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
+          onPressed: () async {
+            if (!await _confirmLeave()) return;
+            final rows = await _listKey.currentState?.refresh();
+            final cur = _selected;
+            if (cur != null && _mode != Mode.add) {
+              final fresh = rows?.where((r) => r.id == cur.id).firstOrNull;
+              fresh == null ? _close() : _show(fresh);
+            } else {
+              _close();
+            }
+          },
+        ),
+      ],
+      list: _WcList(key: _listKey, selectedId: _mode == Mode.view || _mode == Mode.edit ? _selected?.id : null, onTap: _onView),
+      detail: _detail(canCreate, canEdit, canDelete),
+    );
+  }
+}
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const MenuTitle(),
-        backgroundColor: Colors.teal.shade700,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
-            onPressed: () {
-              _listKey.currentState?.refresh();
-              _onCancel();
-            },
-          ),
+// ---------------------------------------------------------------------------
+// รายการศูนย์งาน (แผงซ้าย)
+// ---------------------------------------------------------------------------
+class _WcList extends StatefulWidget {
+  final int? selectedId;
+  final ValueChanged<MoWorkCenter> onTap;
+  const _WcList({super.key, required this.selectedId, required this.onTap});
+
+  @override
+  State<_WcList> createState() => _WcListState();
+}
+
+enum _WFlag { noRate, unused, inactive }
+
+class _WcListState extends State<_WcList> {
+  final _search = TextEditingController();
+  List<MoWorkCenter> _rows = [];
+  Map<int, MoWorkCenterUsage> _usage = {};
+  _WFlag? _flag;
+  bool _loading = false;
+  static final _money = NumberFormat('#,##0.00');
+
+  @override
+  void initState() {
+    super.initState();
+    refresh();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<List<MoWorkCenter>?> refresh() async {
+    setState(() => _loading = true);
+    List<MoWorkCenter>? out;
+    final svc = MoWorkCenterService();
+    try {
+      final rows = await svc.fetchRows();
+      out = rows;
+      if (mounted) setState(() => _rows = rows);
+    } catch (ex) {
+      if (mounted) {
+        final en = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(en ? 'Failed to load data: $ex' : 'ไม่สามารถโหลดข้อมูลได้: $ex')));
+      }
+    }
+    try {
+      final u = await svc.fetchUsage();
+      if (mounted) setState(() => _usage = u);
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+    return out;
+  }
+
+  double _total(MoWorkCenter w) => w.laborRatePerHour + w.machineRatePerHour + w.overheadRatePerHour;
+
+  bool _ok(MoWorkCenter w, _WFlag? f) => switch (f) {
+        null => true,
+        _WFlag.noRate => _total(w) == 0,
+        _WFlag.unused => (_usage[w.id]?.bomCount ?? 0) == 0,
+        _WFlag.inactive => !w.isActive,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final e = context.watch<LanguageProvider>().isEnglish;
+    final q = _search.text.trim().toLowerCase();
+    final base = _rows
+        .where((w) =>
+            q.isEmpty ||
+            w.workCenterCode.toLowerCase().contains(q) ||
+            w.workCenterNameTh.toLowerCase().contains(q) ||
+            (w.workCenterNameEn ?? '').toLowerCase().contains(q))
+        .toList();
+    final shown = base.where((w) => _ok(w, _flag)).toList()..sort((a, b) => a.workCenterCode.compareTo(b.workCenterCode));
+    int n(_WFlag f) => base.where((w) => _ok(w, f)).length;
+    void flag(_WFlag f) => setState(() => _flag = _flag == f ? null : f);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      ImMasterListHeader(
+        searchCtrl: _search,
+        hint: e ? 'Search code / name' : 'ค้นหา รหัส / ชื่อ',
+        onSearch: (_) => setState(() {}),
+        countText: _loading
+            ? (e ? 'Loading...' : 'กำลังโหลด...')
+            : (shown.length == _rows.length
+                ? (e ? '${_rows.length} work centers' : 'ทั้งหมด ${_rows.length} ศูนย์งาน')
+                : (e ? '${shown.length} of ${_rows.length} work centers' : '${shown.length} จาก ${_rows.length} ศูนย์งาน')),
+        filters: [
+          ImMasterFilterChip(label: e ? 'All' : 'ทั้งหมด', on: _flag == null, onTap: () => setState(() => _flag = null)),
+          ImMasterFilterChip(label: '${e ? 'No rates' : 'ยังไม่ตั้งอัตรา'} ${n(_WFlag.noRate)}', on: _flag == _WFlag.noRate, onTap: () => flag(_WFlag.noRate)),
+          ImMasterFilterChip(label: '${e ? 'Not used by a BOM' : 'ไม่มีสูตรใช้'} ${n(_WFlag.unused)}', on: _flag == _WFlag.unused, onTap: () => flag(_WFlag.unused)),
+          ImMasterFilterChip(label: '${e ? 'Inactive' : 'หยุดใช้'} ${n(_WFlag.inactive)}', on: _flag == _WFlag.inactive, onTap: () => flag(_WFlag.inactive)),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final double maxLeftWidth = (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 36,
-                color: Colors.teal[700],
-                child: IconButton(
-                  icon: Icon(_isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list, color: Colors.white, size: 20),
-                  padding: EdgeInsets.zero,
-                  onPressed: () => setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse list' : 'ย่อรายการ') : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
-                ),
-              ),
-              AnimatedContainer(
-                duration: _isDraggingDivider ? Duration.zero : const Duration(milliseconds: 200),
-                width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
-                child: ClipRect(
-                  child: OverflowBox(
-                    maxWidth: _leftPanelWidth,
-                    minWidth: _leftPanelWidth,
-                    alignment: Alignment.topLeft,
-                    child: ColoredBox(
-                      color: Colors.blueGrey.shade100,
-                      child: MoWorkCenterListWidget(
-                        key: _listKey,
-                        enableAddButton: canCreate,
-                        enableEditButton: canEdit,
-                        enableViewButton: true,
-                        enableDeleteButton: canDelete,
-                        onAdd: _onAdd,
-                        onEdit: _onEdit,
-                        onView: _onView,
-                        onDelete: _onDelete,
-                        onCallback: _onCallback,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (_isLeftPanelExpanded)
-                MouseRegion(
-                  cursor: SystemMouseCursors.resizeColumn,
-                  child: GestureDetector(
-                    onHorizontalDragStart: (_) => setState(() => _isDraggingDivider = true),
-                    onHorizontalDragUpdate: (details) {
-                      setState(() {
-                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx).clamp(200.0, maxLeftWidth);
-                      });
+      Expanded(
+        child: _loading && _rows.isEmpty
+            ? const Center(child: CircularProgressIndicator())
+            : shown.isEmpty
+                ? Center(child: Text(e ? 'No work centers found' : 'ไม่พบศูนย์งาน', style: const TextStyle(color: ImKit.ink2)))
+                : ListView.builder(
+                    padding: const EdgeInsets.only(top: 2, bottom: 12),
+                    itemCount: shown.length,
+                    itemBuilder: (_, i) {
+                      final w = shown[i];
+                      final u = _usage[w.id];
+                      final boms = u?.bomCount ?? 0;
+                      final total = _total(w);
+                      return ImMasterListCard(
+                        code: w.workCenterCode,
+                        chips: [
+                          if (total == 0) ImKit.chip(e ? 'No rates' : 'ยังไม่ตั้งอัตรา', ImKit.goldSoft, ImKit.amber),
+                          if (boms == 0) ImKit.chip(e ? 'Unused' : 'ไม่มีสูตรใช้', ImKit.ro, ImKit.ink2),
+                          if (!w.isActive) ImKit.chip(e ? 'Inactive' : 'หยุดใช้', ImKit.ro, ImKit.ink2),
+                        ],
+                        name: e && (w.workCenterNameEn ?? '').isNotEmpty ? w.workCenterNameEn! : w.workCenterNameTh,
+                        meta: TextSpan(
+                            text: [
+                          e ? 'total ${_money.format(total)} / h' : 'รวม ${_money.format(total)} / ชม.',
+                          if (boms > 0) (e ? 'used in $boms BOM(s)' : 'ใช้ใน $boms สูตร'),
+                          if ((u?.openMoCount ?? 0) > 0) (e ? '${u!.openMoCount} open MO(s)' : 'ใบสั่งผลิตค้าง ${u!.openMoCount} ใบ'),
+                        ].join(' · ')),
+                        selected: widget.selectedId != null && widget.selectedId == w.id,
+                        active: w.isActive,
+                        onTap: () => widget.onTap(w),
+                      );
                     },
-                    onHorizontalDragEnd: (_) => setState(() => _isDraggingDivider = false),
-                    child: Container(width: 5, color: Colors.grey[400]),
                   ),
-                ),
-              Expanded(child: _buildRightPanel()),
-            ],
-          );
-        },
       ),
-    );
+    ]);
   }
 }
