@@ -30,6 +30,31 @@ class ImItemRunningService {
     }
   }
 
+  /// ข้อมูลประกอบหน้าตั้งค่า ตามรูปแบบที่กำลังแก้ (ยังไม่บันทึก): 3 รหัสถัดไป, รหัสชน, รหัสล่าสุดที่ออก, หมวดที่ออกรหัสเอง
+  Future<Map<String, dynamic>> fetchSummary({
+    required String prefix,
+    required String separator,
+    required String suffixDate,
+    required int length,
+    required int next,
+  }) async {
+    final headers = await _auth.getAuthHeader();
+    final uri = Uri.parse('$_baseUrl/im_item_running/summary').replace(queryParameters: {
+      'prefix': prefix,
+      'separator': separator,
+      'suffix_date': suffixDate,
+      'length': '$length',
+      'next': '$next',
+    });
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    if (response.statusCode == 401) {
+      _auth.logout();
+      throw Exception('Unauthorized');
+    }
+    throw Exception('โหลดข้อมูลประกอบล้มเหลว: ${response.statusCode}');
+  }
+
   Future<ImItemRunning> saveConfig(ImItemRunning config) async {
     final headers = await _auth.getAuthHeader();
     final response = await http.post(

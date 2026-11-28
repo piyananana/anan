@@ -227,6 +227,10 @@ class ImItem {
   final bool baseUomLocked;
   final List<String> baseUomUsedIn;
   final List<ImItemWarehouse> itemWarehouses;
+  // มาจาก GET im_item?with_stock=1 เท่านั้น (หน้าจอข้อมูลสินค้า) — null = ไม่ได้ขอยอด
+  final double? onHandQty;
+  final double? onHandValue;
+  final bool belowReorder;
 
   const ImItem({
     this.id,
@@ -272,6 +276,9 @@ class ImItem {
     this.baseUomLocked = false,
     this.baseUomUsedIn = const [],
     this.itemWarehouses = const [],
+    this.onHandQty,
+    this.onHandValue,
+    this.belowReorder = false,
   });
 
   factory ImItem.fromJson(Map<String, dynamic> json) => ImItem(
@@ -328,6 +335,9 @@ class ImItem {
         baseUomLocked: json['base_uom_locked'] ?? false,
         baseUomUsedIn: (json['base_uom_used_in'] as List<dynamic>? ?? []).map((e) => '$e').toList(),
         itemWarehouses: (json['item_warehouses'] as List<dynamic>? ?? []).map((e) => ImItemWarehouse.fromJson(e)).toList(),
+        onHandQty: json['on_hand_qty'] == null ? null : double.tryParse('${json['on_hand_qty']}'),
+        onHandValue: json['on_hand_value'] == null ? null : double.tryParse('${json['on_hand_value']}'),
+        belowReorder: json['below_reorder'] == true,
       );
 
   Map<String, dynamic> toJson() => {
@@ -429,4 +439,141 @@ class ImItemUoms {
         defaultUomId: j['default_uom_id'] as int?,
         units: (j['units'] as List<dynamic>? ?? []).map((e) => ImItemUomOption.fromJson(e as Map<String, dynamic>)).toList(),
       );
+}
+
+double _numOf(dynamic v) => double.tryParse('${v ?? ''}') ?? 0;
+double? _numOrNull(dynamic v) => v == null ? null : double.tryParse('$v');
+
+/// สรุปสต็อก/บัญชีของสินค้า — GET im_item/:id/summary (หน้าจอข้อมูลสินค้า แบบ B, 2026-11-25)
+class ImItemStockRow {
+  final int warehouseId;
+  final String warehouseCode;
+  final String? warehouseNameTh;
+  final String? warehouseNameEn;
+  final double qty;
+  final double value;
+  final bool hasSetting;
+  final double? minStockQty;
+  final double? maxStockQty;
+  final double? reorderPoint;
+  final String? defaultLocationCode;
+  final bool belowReorder;
+
+  const ImItemStockRow({
+    required this.warehouseId, required this.warehouseCode, this.warehouseNameTh, this.warehouseNameEn,
+    this.qty = 0, this.value = 0, this.hasSetting = false, this.minStockQty, this.maxStockQty, this.reorderPoint,
+    this.defaultLocationCode, this.belowReorder = false,
+  });
+
+  String displayName(bool isEnglish) =>
+      isEnglish && (warehouseNameEn ?? '').isNotEmpty ? warehouseNameEn! : (warehouseNameTh ?? '');
+
+  factory ImItemStockRow.fromJson(Map<String, dynamic> j) => ImItemStockRow(
+        warehouseId: j['warehouse_id'] as int,
+        warehouseCode: j['warehouse_code'] ?? '',
+        warehouseNameTh: j['warehouse_name_th'],
+        warehouseNameEn: j['warehouse_name_en'],
+        qty: _numOf(j['qty']),
+        value: _numOf(j['value']),
+        hasSetting: j['has_setting'] == true,
+        minStockQty: _numOrNull(j['min_stock_qty']),
+        maxStockQty: _numOrNull(j['max_stock_qty']),
+        reorderPoint: _numOrNull(j['reorder_point']),
+        defaultLocationCode: j['default_location_code'],
+        belowReorder: j['below_reorder'] == true,
+      );
+}
+
+/// บัญชี GL 1 รายการ (รหัส/ชื่อ)
+class ImGlAccountRef {
+  final int id;
+  final String code;
+  final String nameThai;
+  final String nameEng;
+  const ImGlAccountRef({required this.id, required this.code, this.nameThai = '', this.nameEng = ''});
+
+  String name(bool isEnglish) => isEnglish && nameEng.isNotEmpty ? nameEng : nameThai;
+
+  static ImGlAccountRef? fromJson(dynamic j) {
+    if (j is! Map) return null;
+    return ImGlAccountRef(
+      id: j['account_id'] as int,
+      code: j['account_code'] ?? '',
+      nameThai: j['account_name_thai'] ?? '',
+      nameEng: j['account_name_eng'] ?? '',
+    );
+  }
+}
+
+/// บัญชีแต่ละชั้นของ 1 ชนิด (inventory | cogs | revenue | purchases | expense) — หน้าจอเลือกชั้นที่ใช้จริงเอง
+/// ลำดับ: สินค้า → หมวด → ค่าตั้งต้นประเภทเอกสาร (docType) → ค่าเริ่มต้นบริษัท; คลังที่ตั้งบัญชีเองใช้ก่อน (warehouseOverride)
+class ImItemGlLayers {
+  final String key;
+  final ImGlAccountRef? item;
+  final ImGlAccountRef? category;
+  final bool docType;
+  final ImGlAccountRef? company;
+  final List<String> warehouseOverride;
+
+  const ImItemGlLayers({required this.key, this.item, this.category, this.docType = false, this.company,
+      this.warehouseOverride = const []});
+
+  factory ImItemGlLayers.fromJson(Map<String, dynamic> j) => ImItemGlLayers(
+        key: j['key'] ?? '',
+        item: ImGlAccountRef.fromJson(j['item_account']),
+        category: ImGlAccountRef.fromJson(j['category_account']),
+        docType: j['doc_type'] == true,
+        company: ImGlAccountRef.fromJson(j['company_account']),
+        warehouseOverride: (j['warehouse_override'] as List<dynamic>? ?? []).map((e) => '$e').toList(),
+      );
+}
+
+class ImItemSummary {
+  final double totalQty;
+  final double totalValue;
+  final double avgCost;
+  final int warehouseCount;
+  final List<Map<String, dynamic>> belowWarehouses; // {warehouse_code, qty, reorder_point}
+  final bool belowItemLevel;
+  final double itemReorderPoint;
+  final DateTime? lastMovementDate;
+  final String? lastMovementDocNo;
+  final String? lastMovementDocCode;
+  final double? lastMovementQty;
+  final List<ImItemStockRow> warehouses;
+  final List<ImItemGlLayers> gl;
+
+  const ImItemSummary({
+    this.totalQty = 0, this.totalValue = 0, this.avgCost = 0, this.warehouseCount = 0,
+    this.belowWarehouses = const [], this.belowItemLevel = false, this.itemReorderPoint = 0,
+    this.lastMovementDate, this.lastMovementDocNo, this.lastMovementDocCode, this.lastMovementQty,
+    this.warehouses = const [], this.gl = const [],
+  });
+
+  int get belowCount => belowWarehouses.length + (belowItemLevel ? 1 : 0);
+
+  factory ImItemSummary.fromJson(Map<String, dynamic> j) {
+    final lm = j['last_movement'] as Map<String, dynamic>?;
+    DateTime? d;
+    final ds = lm?['doc_date']?.toString();
+    if (ds != null && ds.length >= 10) {
+      final p = ds.substring(0, 10).split('-');
+      if (p.length == 3) d = DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
+    }
+    return ImItemSummary(
+      totalQty: _numOf(j['total_qty']),
+      totalValue: _numOf(j['total_value']),
+      avgCost: _numOf(j['avg_cost']),
+      warehouseCount: (j['warehouse_count'] as num?)?.toInt() ?? 0,
+      belowWarehouses: (j['below_warehouses'] as List<dynamic>? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      belowItemLevel: j['below_item_level'] == true,
+      itemReorderPoint: _numOf(j['item_reorder_point']),
+      lastMovementDate: d,
+      lastMovementDocNo: lm?['doc_no'],
+      lastMovementDocCode: lm?['doc_code'],
+      lastMovementQty: _numOrNull(lm?['qty']),
+      warehouses: (j['warehouses'] as List<dynamic>? ?? []).map((e) => ImItemStockRow.fromJson(e)).toList(),
+      gl: (j['gl'] as List<dynamic>? ?? []).map((e) => ImItemGlLayers.fromJson(e)).toList(),
+    );
+  }
 }

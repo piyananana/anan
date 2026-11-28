@@ -3,11 +3,15 @@ import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 import '../models/im_uom.dart';
 import '../services/im_uom_service.dart';
+import '../widgets/im_master_kit.dart';
 import '../widgets/im_uom_list_widget.dart';
 import '../widgets/im_uom_detail_widget.dart';
 
+// หน้าจอหน่วยนับ — แบบ B (user 2026-11-25): ซ้ายการ์ด / ขวารายละเอียด; คลิกการ์ด = ดู, ปุ่มแก้ไข/ลบที่แถบหัว,
+// บันทึกแล้วแสดงรายการนั้นต่อ, มีแก้ไขค้าง → ยืนยันก่อนเปลี่ยนรายการ
 class ImUomScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
   final VoidCallback? onExit;
@@ -28,38 +32,48 @@ class _ImUomScreenState extends State<ImUomScreen> with AutomaticKeepAliveClient
   final _svc = ImUomService();
 
   Mode _mode = Mode.none;
-  ImUom? _selectedData;
-  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ImUomDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
-  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มหน่วยนับ" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  ImUom? _selected;
+  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — บังคับให้ฟอร์มเคลียร์เสมอแม้ mode/selected ซ้ำ
   int _requestSeq = 0;
-  bool _isEnglish = false;
-
-  bool _isLeftPanelExpanded = true;
-  double _leftPanelWidth = 360.0;
-  bool _isDraggingDivider = false;
 
   @override
   bool get wantKeepAlive => true;
 
-  void _onAdd() => setState(() {
-        _mode = Mode.add;
-        _selectedData = null;
+  bool get _isEnglish => Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+
+  Future<bool> _confirmLeave() async {
+    final d = _detailKey.currentState;
+    if (d != null && d.isDirty) return confirmDiscardChanges(context, _isEnglish);
+    return true;
+  }
+
+  void _set(Mode m, ImUom? row) => setState(() {
+        _mode = m;
+        _selected = row;
         _requestSeq++;
       });
 
-  void _onEdit(ImUom row) => setState(() {
-        _mode = Mode.edit;
-        _selectedData = row;
-        _requestSeq++;
-      });
+  Future<void> _onAdd() async {
+    if (await _confirmLeave()) _set(Mode.add, null);
+  }
 
-  void _onView(ImUom row) => setState(() {
-        _mode = Mode.view;
-        _selectedData = row;
-        _requestSeq++;
-      });
+  Future<void> _onView(ImUom row) async {
+    if (_mode == Mode.view && _selected?.id == row.id) return;
+    if (await _confirmLeave()) _set(Mode.view, row);
+  }
 
-  Future<void> _onDelete(ImUom row) async {
+  Future<void> _onCancel() async {
+    if (!await _confirmLeave()) return;
+    if (_mode == Mode.edit && _selected != null) {
+      _set(Mode.view, _selected);
+    } else {
+      _set(Mode.none, null);
+    }
+  }
+
+  Future<void> _onDelete() async {
+    final row = _selected;
+    if (row == null) return;
     final isEnglish = _isEnglish;
     final confirm = await showDialog<bool>(
       context: context,
@@ -75,17 +89,15 @@ class _ImUomScreenState extends State<ImUomScreen> with AutomaticKeepAliveClient
       ),
     );
     if (confirm != true) return;
-
     try {
       await _svc.deleteRow(row.id);
       _listKey.currentState?.refresh();
-      _onCancel();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
-      }
+      _set(Mode.none, null);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error deleting: $e' : 'เกิดข้อผิดพลาดในการลบ: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error deleting: $e' : 'เกิดข้อผิดพลาดในการลบ: $e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -93,47 +105,19 @@ class _ImUomScreenState extends State<ImUomScreen> with AutomaticKeepAliveClient
   Future<void> _onSubmit(ImUom row) async {
     final isEnglish = _isEnglish;
     try {
-      if (_mode == Mode.add) {
-        await _svc.addRow(row);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
-      } else if (_mode == Mode.edit) {
-        await _svc.updateRow(row);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
+      final saved = _mode == Mode.add ? await _svc.addRow(row) : await _svc.updateRow(row);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(_mode == Mode.add ? (isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ') : (isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ'))));
       }
       _listKey.currentState?.refresh();
-      _onCancel();
       widget.onFieldsChanged();
+      if (mounted) _set(Mode.view, saved);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
       }
-    }
-  }
-
-  void _onCancel() => setState(() {
-        _mode = Mode.none;
-        _selectedData = null;
-        _requestSeq++;
-      });
-
-  void _onCallback(ImUom row) => setState(() {
-        _mode = Mode.none;
-        _selectedData = row;
-        _requestSeq++;
-      });
-
-  Widget _buildRightPanel() {
-    switch (_mode) {
-      case Mode.none:
-        return ImUomDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, isPlaceholder: true, requestSeq: _requestSeq);
-      case Mode.add:
-        return ImUomDetailWidget(key: _detailKey, mode: Mode.add, selected: null, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
-      case Mode.edit:
-        return ImUomDetailWidget(key: _detailKey, mode: Mode.edit, selected: _selectedData, onSubmit: _onSubmit, onCancel: _onCancel, requestSeq: _requestSeq);
-      case Mode.view:
-        return ImUomDetailWidget(key: _detailKey, mode: Mode.view, selected: _selectedData, onSubmit: (_) async {}, onCancel: _onCancel, requestSeq: _requestSeq);
-      default:
-        return const SizedBox.shrink();
     }
   }
 
@@ -141,88 +125,48 @@ class _ImUomScreenState extends State<ImUomScreen> with AutomaticKeepAliveClient
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    _isEnglish = isEnglish;
     final perm = MenuScope.of(context);
     final canCreate = perm?.canCreate ?? true;
     final canEdit = perm?.canEdit ?? true;
     final canDelete = perm?.canDelete ?? true;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const MenuTitle(),
-        backgroundColor: Colors.teal.shade700,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
-            onPressed: () {
-              _listKey.currentState?.refresh();
-              _onCancel();
-            },
-          ),
-        ],
+    final view = _mode == Mode.view;
+    return ImMasterShell(
+      isEnglish: isEnglish,
+      barActions: [
+        if (canCreate) ImKit.barButton(context, isEnglish ? 'Add unit' : 'เพิ่มหน่วยนับ', Icons.add, _onAdd, primary: true),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
+          onPressed: () async {
+            if (!await _confirmLeave()) return;
+            _listKey.currentState?.refresh();
+            _set(_selected != null && _mode != Mode.add ? Mode.view : Mode.none, _mode == Mode.add ? null : _selected);
+          },
+        ),
+      ],
+      list: ImUomListWidget(
+        key: _listKey,
+        enableAddButton: false,
+        enableEditButton: false,
+        enableViewButton: true,
+        enableDeleteButton: false,
+        selectedId: _mode == Mode.view || _mode == Mode.edit ? _selected?.id : null,
+        onAdd: _onAdd,
+        onEdit: _onView,
+        onView: _onView,
+        onDelete: (_) {},
+        onCallback: _onView,
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final double maxLeftWidth = (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 36,
-                color: Colors.teal[700],
-                child: IconButton(
-                  icon: Icon(_isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list, color: Colors.white, size: 20),
-                  padding: EdgeInsets.zero,
-                  onPressed: () => setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse list' : 'ย่อรายการ') : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
-                ),
-              ),
-              AnimatedContainer(
-                duration: _isDraggingDivider ? Duration.zero : const Duration(milliseconds: 200),
-                width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
-                child: ClipRect(
-                  child: OverflowBox(
-                    maxWidth: _leftPanelWidth,
-                    minWidth: _leftPanelWidth,
-                    alignment: Alignment.topLeft,
-                    child: ColoredBox(
-                      color: Colors.blueGrey.shade100,
-                      child: ImUomListWidget(
-                        key: _listKey,
-                        enableAddButton: canCreate,
-                        enableEditButton: canEdit,
-                        enableViewButton: true,
-                        enableDeleteButton: canDelete,
-                        onAdd: _onAdd,
-                        onEdit: _onEdit,
-                        onView: _onView,
-                        onDelete: _onDelete,
-                        onCallback: _onCallback,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (_isLeftPanelExpanded)
-                MouseRegion(
-                  cursor: SystemMouseCursors.resizeColumn,
-                  child: GestureDetector(
-                    onHorizontalDragStart: (_) => setState(() => _isDraggingDivider = true),
-                    onHorizontalDragUpdate: (details) {
-                      setState(() {
-                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx).clamp(200.0, maxLeftWidth);
-                      });
-                    },
-                    onHorizontalDragEnd: (_) => setState(() => _isDraggingDivider = false),
-                    child: Container(width: 5, color: Colors.grey[400]),
-                  ),
-                ),
-              Expanded(child: _buildRightPanel()),
-            ],
-          );
-        },
+      detail: ImUomDetailWidget(
+        key: _detailKey,
+        mode: _mode,
+        selected: _mode == Mode.add ? null : _selected,
+        isPlaceholder: _mode == Mode.none,
+        onSubmit: _onSubmit,
+        onCancel: view ? () => _set(Mode.none, null) : _onCancel,
+        onEdit: view && canEdit ? () => _set(Mode.edit, _selected) : null,
+        onDelete: view && canDelete ? _onDelete : null,
+        requestSeq: _requestSeq,
       ),
     );
   }

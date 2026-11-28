@@ -1,18 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 import '../models/im_location.dart';
 import '../models/im_item_category.dart';
+import '../services/im_location_service.dart';
 import '../widgets/im_item_category_list_tree_widget.dart';
+import 'im_master_kit.dart';
+import '../../sa/utils/sa_menu_theme.dart';
 
+// หน้ารายละเอียดตำแหน่งจัดเก็บ (user 2026-11-25): ตัวเลขสรุป (สินค้าที่มียอด, มูลค่า, เป็นตำแหน่งเริ่มต้นของ, ลำดับเดิน/ช่องเก็บ),
+// 2 กลุ่ม (ข้อมูลหลัก / การจัดเก็บ), การ์ดตำแหน่งย่อย (เมื่อเป็นกลุ่ม), การ์ดสินค้าในตำแหน่ง (ยอดแยกล็อต + ตำแหน่งเริ่มต้น)
+// GROUP = จัดผังเท่านั้น (โซน/แถว), BIN = ช่องเก็บจริง กำหนดหมวดหมู่/เป็นตำแหน่งหลักของคลังได้
+// mode addChild: selected = กลุ่มแม่ (ฟอร์มว่าง)
 class ImLocationDetailWidget extends StatefulWidget {
   final Mode mode;
   final ImLocation? selected;
   final int warehouseId;
-  final Function(ImLocation) onSubmit;
+  final Future<void> Function(ImLocation) onSubmit;
   final VoidCallback onCancel;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final VoidCallback? onAddChild;
+  final ValueChanged<int>? onOpenChild;
+  /// เส้นทาง เช่น "W01 › A โซนสินค้าทั่วไป › A-01 แถว 1"
+  final String parentPath;
   final bool isPlaceholder;
   final int requestSeq;
 
@@ -23,6 +37,11 @@ class ImLocationDetailWidget extends StatefulWidget {
     required this.warehouseId,
     required this.onSubmit,
     required this.onCancel,
+    this.onEdit,
+    this.onDelete,
+    this.onAddChild,
+    this.onOpenChild,
+    this.parentPath = '',
     this.isPlaceholder = false,
     this.requestSeq = 0,
   });
@@ -31,38 +50,47 @@ class ImLocationDetailWidget extends StatefulWidget {
   State<ImLocationDetailWidget> createState() => ImLocationDetailWidgetState();
 }
 
-class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _codeCtrl;
-  late TextEditingController _nameCtrl;
-  late TextEditingController _nameEnCtrl;
-  late TextEditingController _sortOrderCtrl;
+class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> with ImMasterKit {
+  final _svc = ImLocationService();
+  final _codeCtrl = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  final _nameEnCtrl = TextEditingController();
+  final _sortOrderCtrl = TextEditingController();
   bool _isActive = true;
   bool _isDefault = false;
   bool _isSaving = false;
   bool _isEnglish = false;
   String _locationType = 'BIN';
-
   int? _categoryId; String? _categoryCode; String? _categoryNameTh; String? _categoryNameEn;
 
-  bool get _isReadOnly => widget.mode == Mode.view;
+  ImLocationSummary? _summary;
+  bool _loadingSummary = false;
+  int _summarySeq = 0;
+  String _snapshot = '';
+
+  static final _qtyFmt = NumberFormat('#,##0.##');
+  static final _amtFmt = NumberFormat('#,##0.00');
+
+  bool get _isNew => widget.mode == Mode.addRoot || widget.mode == Mode.addChild;
+  bool get _isReadOnly => widget.mode == Mode.view || widget.mode == Mode.none;
+  @override
+  bool get kitEnglish => _isEnglish;
+  @override
+  bool get kitReadOnly => _isReadOnly;
+
+  /// มีการแก้ไขที่ยังไม่บันทึก
+  bool get isDirty => !_isReadOnly && !widget.isPlaceholder && _fingerprint() != _snapshot;
 
   @override
   void initState() {
     super.initState();
-    _codeCtrl = TextEditingController();
-    _nameCtrl = TextEditingController();
-    _nameEnCtrl = TextEditingController();
-    _sortOrderCtrl = TextEditingController();
-    _populate(widget.selected, widget.mode);
+    _apply();
   }
 
   @override
   void didUpdateWidget(covariant ImLocationDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode || widget.requestSeq != oldWidget.requestSeq) {
-      _populate(widget.selected, widget.mode);
-    }
+    if (widget.selected != oldWidget.selected || widget.mode != oldWidget.mode || widget.requestSeq != oldWidget.requestSeq) _apply();
   }
 
   @override
@@ -74,35 +102,46 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
     super.dispose();
   }
 
-  void _populate(ImLocation? l, Mode mode) {
-    // addChild passes the PARENT location as `selected`; the form itself starts blank.
-    final isNewNode = mode == Mode.addRoot || mode == Mode.addChild;
-    _codeCtrl.text = isNewNode ? '' : (l?.locationCode ?? '');
-    _nameCtrl.text = isNewNode ? '' : (l?.locationName ?? '');
-    _nameEnCtrl.text = isNewNode ? '' : (l?.locationNameEn ?? '');
-    _sortOrderCtrl.text = isNewNode ? '' : (l?.sortOrder?.toString() ?? '');
-    _isActive = isNewNode ? true : (l?.isActive ?? true);
-    _isDefault = isNewNode ? false : (l?.isDefault ?? false);
-    _locationType = isNewNode ? 'BIN' : (l?.locationType ?? 'BIN');
-    final src = isNewNode ? null : l;
-    _categoryId = src?.categoryId;
-    _categoryCode = src?.categoryCode;
-    _categoryNameTh = src?.categoryNameTh;
-    _categoryNameEn = src?.categoryNameEn;
+  void _apply() {
+    final l = _isNew ? null : widget.selected;
+    _codeCtrl.text = l?.locationCode ?? '';
+    _nameCtrl.text = l?.locationName ?? '';
+    _nameEnCtrl.text = l?.locationNameEn ?? '';
+    _sortOrderCtrl.text = l?.sortOrder?.toString() ?? '';
+    _isActive = l?.isActive ?? true;
+    _isDefault = l?.isDefault ?? false;
+    _locationType = l?.locationType ?? 'BIN';
+    _categoryId = l?.categoryId;
+    _categoryCode = l?.categoryCode;
+    _categoryNameTh = l?.categoryNameTh;
+    _categoryNameEn = l?.categoryNameEn;
+    _summary = null;
+    _summarySeq++;
+    if (l != null && l.id != 0) _loadSummary(l.id);
+    kScrollTop();
+    _snapshot = _fingerprint();
   }
 
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isSaving = true);
+  Future<void> _loadSummary(int id) async {
+    final seq = ++_summarySeq;
+    _loadingSummary = true;
     try {
-      final row = ImLocation(
+      final r = await _svc.fetchSummary(id);
+      if (mounted && seq == _summarySeq) setState(() => _summary = r);
+    } catch (_) {
+    } finally {
+      if (mounted && seq == _summarySeq) setState(() => _loadingSummary = false);
+    }
+  }
+
+  ImLocation _build() => ImLocation(
         id: widget.mode == Mode.edit ? widget.selected!.id : 0,
         warehouseId: widget.warehouseId,
         parentId: widget.mode == Mode.addRoot
             ? null
             : widget.mode == Mode.addChild
-                ? widget.selected!.id
-                : widget.selected!.parentId,
+                ? widget.selected?.id
+                : widget.selected?.parentId,
         locationCode: _codeCtrl.text.trim().toUpperCase(),
         locationName: _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
         locationNameEn: _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
@@ -112,12 +151,19 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
         sortOrder: _sortOrderCtrl.text.trim().isEmpty ? null : int.tryParse(_sortOrderCtrl.text.trim()),
         isDefault: _isDefault && _isActive && _locationType == 'BIN',
       );
-      await widget.onSubmit(row);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
-      }
+
+  String _fingerprint() => docFingerprint(_build().toJson());
+
+  Future<void> _save() async {
+    final e = _isEnglish;
+    if (_codeCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e ? 'Please enter the location code' : 'กรุณาป้อนรหัสตำแหน่ง'), backgroundColor: Colors.red));
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      await widget.onSubmit(_build());
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -141,216 +187,205 @@ class ImLocationDetailWidgetState extends State<ImLocationDetailWidget> {
     });
   }
 
-  Widget _buildFkField({
-    required String label,
-    required String? displayText,
-    required bool hasValue,
-    required VoidCallback onSearch,
-    VoidCallback? onClear,
-  }) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: InputDecorator(
-          decoration: InputDecoration(
-            labelText: label,
-            border: const OutlineInputBorder(),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          child: Row(children: [
-            Expanded(
-              child: hasValue
-                  ? Row(children: [
-                      const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                      const SizedBox(width: 6),
-                      Expanded(child: Text(displayText ?? '', style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                    ])
-                  : Text(_isEnglish ? '— Not specified —' : '— ไม่ระบุ —', style: TextStyle(color: Colors.grey.shade600)),
-            ),
-            if (!_isReadOnly) ...[
-              IconButton(
-                icon: const Icon(Icons.search, color: Colors.teal),
-                tooltip: _isEnglish ? 'Search' : 'ค้นหา',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: onSearch,
-              ),
-              if (hasValue && onClear != null)
-                IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                  tooltip: _isEnglish ? 'Clear' : 'ล้าง',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: onClear,
-                ),
-            ],
+  String get _categoryName => _isEnglish && (_categoryNameEn ?? '').isNotEmpty ? _categoryNameEn! : (_categoryNameTh ?? '');
+
+  // ── การ์ด ──
+  Widget _mainCard() {
+    final e = _isEnglish;
+    final ed = !_isReadOnly;
+    final bin = _locationType == 'BIN';
+    final parentText = widget.mode == Mode.addChild
+        ? '${widget.parentPath.isEmpty ? '' : '${widget.parentPath} › '}${widget.selected?.locationCode ?? ''} ${widget.selected?.displayName(e) ?? ''}'
+        : (widget.parentPath.isEmpty ? (e ? '— Top level —' : '— ระดับบนสุด —') : widget.parentPath);
+    return kCard(
+      title: e ? 'Location Information' : 'ข้อมูลตำแหน่ง',
+      trailing: _isReadOnly ? null : kLegend(),
+      child: kGroups([
+        kGroup(1, e ? 'Main Information' : 'ข้อมูลหลัก', ImKit.gDoc, [
+          kRow([
+            kTxt(_isNew ? (e ? 'Location Code *' : 'รหัสตำแหน่ง *') : (e ? 'Location Code' : 'รหัสตำแหน่ง'), _codeCtrl,
+                editable: _isNew, cap: TextCapitalization.characters),
+            kDd<String>(e ? 'Type' : 'ประเภท', _locationType, [
+              DropdownMenuItem(value: 'GROUP', child: Text(e ? 'Group (GROUP)' : 'กลุ่ม (GROUP)')),
+              DropdownMenuItem(value: 'BIN', child: Text(e ? 'Bin (BIN)' : 'ช่องเก็บ (BIN)')),
+            ], ed ? (v) => setState(() => _locationType = v ?? 'BIN') : null),
           ]),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    _isEnglish = isEnglish;
-    final l = AppL10n(isEnglish);
-    final categoryName = isEnglish && (_categoryNameEn ?? '').isNotEmpty ? _categoryNameEn : _categoryNameTh;
-
-    if (widget.isPlaceholder) {
-      return Center(
-        child: Text(
-          isEnglish
-              ? 'Select a location to view its data, or press + to add a new one'
-              : 'เลือกตำแหน่งเพื่อดูข้อมูล หรือกดปุ่ม + เพื่อเพิ่มตำแหน่งใหม่',
-          style: const TextStyle(color: Colors.grey),
-        ),
-      );
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.mode == Mode.view
-                  ? (isEnglish ? 'View Data' : 'ดูข้อมูล')
-                  : widget.mode == Mode.edit
-                      ? (isEnglish ? 'Edit Location' : 'แก้ไขตำแหน่ง')
-                      : widget.mode == Mode.addChild
-                          ? '${isEnglish ? 'Add sub-location under' : 'เพิ่มตำแหน่งย่อยของ'}: ${widget.selected?.locationCode}'
-                          : (isEnglish ? 'Add Location' : 'เพิ่มตำแหน่ง'),
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 20),
-            TextFormField(
-              readOnly: _isReadOnly || widget.mode == Mode.edit,
-              controller: _codeCtrl,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
-              textAlign: TextAlign.center,
-              textCapitalization: TextCapitalization.characters,
-              decoration: InputDecoration(
-                labelText: isEnglish ? 'Location Code' : 'รหัสตำแหน่ง',
-                border: const OutlineInputBorder(),
-              ),
-              validator: (v) => (v == null || v.trim().isEmpty) ? (isEnglish ? 'Please enter the location code' : 'กรุณาป้อนรหัสตำแหน่ง') : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              readOnly: _isReadOnly,
-              controller: _nameCtrl,
-              decoration: InputDecoration(labelText: isEnglish ? 'Location Name (Thai)' : 'ชื่อตำแหน่ง (ไทย)', border: const OutlineInputBorder()),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              readOnly: _isReadOnly,
-              controller: _nameEnCtrl,
-              decoration: InputDecoration(labelText: isEnglish ? 'Location Name (English)' : 'ชื่อตำแหน่ง (อังกฤษ)', border: const OutlineInputBorder()),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              readOnly: _isReadOnly,
-              controller: _sortOrderCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: isEnglish ? 'Walk Sequence (for count sheets)' : 'ลำดับการเดินตรวจนับ',
-                border: const OutlineInputBorder(),
-                helperText: isEnglish
-                    ? 'Optional — controls print order on stock count sheets. Falls back to location code if blank.'
-                    : 'ไม่บังคับ — กำหนดลำดับการพิมพ์ในใบตรวจนับสต็อก ถ้าไม่ระบุจะเรียงตามรหัสตำแหน่งแทน',
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(children: [
-              Expanded(child: Text(isEnglish ? 'Status: ${_isActive ? 'Active' : 'Inactive'}' : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
-              Switch(
-                value: _isActive,
-                activeColor: Colors.teal,
-                onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v),
-              ),
-            ]),
-            // ตำแหน่งหลักของคลัง — ใช้เป็นตำแหน่งเริ่มต้นของรายการในเอกสารสินค้า เมื่อสินค้าไม่ได้กำหนดตำแหน่งเริ่มต้นของคลังไว้
-            Row(children: [
-              Expanded(
-                child: Text(isEnglish
-                    ? 'Main location of this warehouse (default on inventory document lines; storage bins only)'
-                    : 'ตำแหน่งจัดเก็บหลักของคลัง (ใช้เป็นตำแหน่งเริ่มต้นของรายการในเอกสารสินค้า เฉพาะช่องเก็บ BIN)'),
-              ),
-              Switch(
-                value: _isDefault && _isActive && _locationType == 'BIN',
-                activeColor: Colors.teal,
-                onChanged: _isReadOnly || !_isActive || _locationType != 'BIN' ? null : (v) => setState(() => _isDefault = v),
-              ),
-            ]),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              value: _locationType,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: isEnglish ? 'Type' : 'ประเภท',
-                border: const OutlineInputBorder(),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-              items: imLocationTypes
-                  .map((t) => DropdownMenuItem(value: t, child: Text(imLocationTypeLabel(t, isEnglish))))
-                  .toList(),
-              onChanged: _isReadOnly ? null : (v) => setState(() => _locationType = v ?? 'BIN'),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 4),
-              child: Text(
-                _locationType == 'GROUP'
-                    ? (isEnglish ? 'Organizational only (zone/aisle) — cannot hold stock or a category' : 'ใช้จัดกลุ่มในผังเท่านั้น (โซน/แถว) — เก็บสินค้าหรือกำหนดหมวดหมู่ไม่ได้')
-                    : (isEnglish ? 'A real storage slot — can be assigned a category and hold stock' : 'ช่องเก็บจริง — กำหนดหมวดหมู่และเก็บสินค้าได้'),
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-            ),
-            if (_locationType == 'BIN') ...[
-              const SizedBox(height: 10),
-              _buildFkField(
-                label: isEnglish ? 'Assigned Category' : 'หมวดหมู่ที่กำหนดให้เก็บ',
-                hasValue: _categoryId != null,
-                displayText: '$_categoryCode — $categoryName',
+          kRow([
+            kTxt(e ? 'Location Name (Thai)' : 'ชื่อตำแหน่ง (ไทย)', _nameCtrl),
+            kTxt(e ? 'Location Name (English)' : 'ชื่อตำแหน่ง (อังกฤษ)', _nameEnCtrl),
+          ]),
+          InputDecorator(
+            decoration: kDec(e ? 'Parent' : 'อยู่ภายใต้', editable: false),
+            child: Text(parentText, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: ImKit.font)),
+          ),
+          kNote(bin
+              ? (e ? 'A real storage slot — can be assigned a category and hold stock' : 'ช่องเก็บจริง — กำหนดหมวดหมู่และเก็บสินค้าได้')
+              : (e ? 'Organizational only (zone/aisle) — cannot hold stock or a category' : 'ใช้จัดกลุ่มในผังเท่านั้น (โซน/แถว) — เก็บสินค้าหรือกำหนดหมวดหมู่ไม่ได้')),
+        ]),
+        kGroup(2, e ? 'Storage' : 'การจัดเก็บ', ImKit.gParty, [
+          Opacity(
+            opacity: bin ? 1 : 0.45,
+            child: IgnorePointer(
+              ignoring: !bin,
+              child: kFk(
+                label: e ? 'Assigned Category' : 'หมวดหมู่ที่กำหนดให้เก็บ',
+                hasValue: bin && _categoryId != null,
+                text: '$_categoryCode  $_categoryName',
                 onSearch: _pickCategory,
                 onClear: () => setState(() { _categoryId = null; _categoryCode = null; _categoryNameTh = null; _categoryNameEn = null; }),
               ),
-              Text(
-                isEnglish
-                    ? 'Used to flag mismatches when the actual item stored here belongs to a different category.'
-                    : 'ใช้ตรวจสอบว่าสินค้าที่วางอยู่จริงในช่องนี้ตรงกับหมวดหมู่ที่กำหนดไว้หรือไม่',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-            ],
-            const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                widget.mode == Mode.view
-                    ? Container()
-                    : Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _isSaving ? null : _save,
-                          icon: _isSaving
-                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Icon(Icons.save),
-                          label: Text(_isSaving ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...') : widget.mode == Mode.edit ? l.save : l.add),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade700, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
-                        ),
-                      ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: widget.onCancel,
-                    icon: const Icon(Icons.cancel),
-                    label: Text(l.cancel),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade600, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
-                  ),
-                ),
-              ],
             ),
+          ),
+          kRow([
+            kTxt(e ? 'Walk Sequence (for count sheets)' : 'ลำดับการเดินตรวจนับ', _sortOrderCtrl, numeric: true, digitsOnly: true),
+            const SizedBox.shrink(),
+          ]),
+          kChecks([
+            // ตำแหน่งหลักของคลัง — 1 ตำแหน่งต่อคลัง เฉพาะ BIN ที่ใช้งาน ใช้เป็นตำแหน่งเริ่มต้นของรายการในเอกสาร IM ใหม่
+            kCk(e ? 'Main location of the warehouse' : 'ตำแหน่งหลักของคลัง', _isDefault && _isActive && bin,
+                ed && _isActive && bin ? (v) => setState(() => _isDefault = v) : null,
+                tooltip: e ? 'Default location on new inventory document lines; one per warehouse' : 'ตำแหน่งเริ่มต้นของรายการในเอกสารสินค้าใหม่ มีได้ 1 ตำแหน่งต่อคลัง'),
+            kCk(e ? 'Active' : 'ใช้งาน', _isActive, ed ? (v) => setState(() => _isActive = v) : null),
+          ]),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _childrenCard() {
+    final e = _isEnglish;
+    final s = _summary;
+    final kids = s?.children ?? const <ImLocationChildRow>[];
+    return kCard(
+      title: e ? 'Sub-locations' : 'ตำแหน่งย่อย',
+      count: s == null ? null : (e ? '${kids.length} location(s)' : '${kids.length} ตำแหน่ง'),
+      trailing: widget.onAddChild != null ? kGhost(e ? 'Add sub-location' : 'เพิ่มตำแหน่งย่อย', Icons.add, widget.onAddChild) : null,
+      padding: EdgeInsets.zero,
+      child: s == null
+          ? const SizedBox(height: 40)
+          : kTable([
+              KCol(e ? 'Code' : 'รหัส', 3),
+              KCol(e ? 'Name' : 'ชื่อ', 4),
+              KCol(e ? 'Type' : 'ประเภท', 2),
+              KCol(e ? 'Category' : 'หมวด', 2),
+              KCol(e ? 'Items' : 'สินค้า', 2, num: true),
+              KCol(e ? 'Walk seq.' : 'ลำดับเดิน', 2, num: true),
+            ], [
+              for (final k in kids)
+                [
+                  kCell(k.code, bold: true, color: k.isActive ? ScreenTheme.of(context).ink : ImKit.ink3),
+                  kCell(k.displayName(e)),
+                  k.type == 'GROUP' ? ImKit.chip(e ? 'Group' : 'กลุ่ม', ImKit.ro, ImKit.gMore) : ImKit.chip(e ? 'Bin' : 'ช่องเก็บ', ImKit.goldSoft, ImKit.amber),
+                  kCell(k.categoryCode ?? ''),
+                  kCell(k.type == 'BIN' ? '${k.itemCount}' : '', mono: true),
+                  kCell(k.sortOrder?.toString() ?? '', mono: true),
+                ],
+            ],
+              onTap: widget.onOpenChild == null ? null : [for (final k in kids) () => widget.onOpenChild!(k.id)],
+              minWidth: 640,
+              empty: e ? 'No sub-location yet' : 'ยังไม่มีตำแหน่งย่อย'),
+    );
+  }
+
+  Widget _itemsCard() {
+    final e = _isEnglish;
+    final s = _summary;
+    final group = widget.selected?.locationType == 'GROUP';
+    final items = s?.items ?? const <ImLocationItemRow>[];
+    return kCard(
+      title: e ? 'Items in Location' : 'สินค้าในตำแหน่ง',
+      count: e
+          ? 'Read-only · stock by lot + items with this as default location${group ? ' (all bins in this group)' : ''}'
+          : 'อ่านอย่างเดียว · ยอดคงเหลือแยกล็อต + สินค้าที่ตั้งเป็นตำแหน่งเริ่มต้น${group ? ' (ทุกช่องใต้กลุ่ม)' : ''}',
+      padding: EdgeInsets.zero,
+      child: s == null
+          ? Padding(
+              padding: const EdgeInsets.all(14),
+              child: Center(child: _loadingSummary ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const SizedBox.shrink()),
+            )
+          : kTable([
+              KCol(e ? 'Item' : 'สินค้า', 6),
+              if (group) KCol(e ? 'Location' : 'ตำแหน่ง', 2),
+              KCol(e ? 'Lot' : 'ล็อต', 2),
+              KCol(e ? 'On hand' : 'คงเหลือ', 3, num: true),
+              KCol(e ? 'Value' : 'มูลค่า', 3, num: true),
+              KCol(e ? 'Default location' : 'ตำแหน่งเริ่มต้น', 2),
+            ], [
+              for (final it in items)
+                [
+                  kCell('${it.itemCode}  ${it.displayName(e)}'),
+                  if (group) kCell(it.locationCode ?? ''),
+                  kCell(it.lotNo ?? ''),
+                  kCell('${_qtyFmt.format(it.qty)} ${it.uomName(e)}', mono: true),
+                  kCell(_amtFmt.format(it.value), mono: true),
+                  it.isDefault ? ImKit.chip(e ? 'Yes' : 'ใช่', ImKit.okSoft, ImKit.ok) : kCell(''),
+                ],
+            ], minWidth: group ? 780 : 680, empty: e ? 'No stock in this location yet' : 'ยังไม่มีสินค้าในตำแหน่งนี้'),
+    );
+  }
+
+  List<ImKpi> _kpis() {
+    final e = _isEnglish;
+    final s = _summary;
+    if (s == null) return const [];
+    final group = widget.selected?.locationType == 'GROUP';
+    return [
+      ImKpi(e ? 'Items with stock' : 'สินค้าที่มียอด', '${s.itemCount}', group ? (e ? 'in all bins of this group' : 'ในทุกช่องใต้กลุ่ม') : (e ? 'in this bin' : 'ในช่องเก็บนี้')),
+      ImKpi(e ? 'Stock value' : 'มูลค่าคงเหลือ', _amtFmt.format(s.stockValue), e ? 'At average cost' : 'ตามต้นทุนเฉลี่ย'),
+      ImKpi(e ? 'Default location of' : 'เป็นตำแหน่งเริ่มต้นของ', '${s.defaultCount}', e ? 'item(s) (warehouse settings)' : 'สินค้า (ตั้งค่าต่อคลัง)'),
+      group
+          ? ImKpi(e ? 'Bins in this group' : 'ช่องเก็บใต้กลุ่ม', '${s.binCount}', e ? 'all levels' : 'ทุกระดับ')
+          : ImKpi(e ? 'Walk sequence' : 'ลำดับเดินตรวจนับ', widget.selected?.sortOrder?.toString() ?? '—', e ? 'on count sheets' : 'ในใบตรวจนับ'),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final e = _isEnglish;
+    if (widget.isPlaceholder) {
+      return kPlaceholder(Icons.grid_view, e ? 'Select a location on the left to view its data' : 'เลือกตำแหน่งทางซ้ายเพื่อดูข้อมูล');
+    }
+    final saved = !_isNew && widget.selected != null;
+    final l = widget.selected;
+    final title = saved
+        ? l!.displayName(e)
+        : widget.mode == Mode.addChild
+            ? (e ? 'Add sub-location under ${l?.locationCode ?? ''}' : 'เพิ่มตำแหน่งย่อยของ ${l?.locationCode ?? ''} ${l?.displayName(e) ?? ''}')
+            : (e ? 'Add Zone' : 'เพิ่มโซน');
+    return kPage(
+      header: kHeaderBar(
+        code: saved ? l!.locationCode : null,
+        title: title,
+        badges: [
+          if (widget.mode == Mode.edit) kEditingBadge(),
+          if (saved)
+            l!.locationType == 'GROUP'
+                ? ImKit.chip(e ? 'Group' : 'กลุ่ม', ImKit.ro, ImKit.gMore)
+                : ImKit.chip(e ? 'Bin' : 'ช่องเก็บ', ImKit.goldSoft, ImKit.amber),
+          if (saved && l!.isDefault) ImKit.chip(e ? 'Main location' : 'ตำแหน่งหลัก', ImKit.blueSoft, ImKit.blue),
+          if (saved) ImKit.activeChip(_isActive, e),
+          if (saved && widget.parentPath.isNotEmpty) Text(widget.parentPath, style: const TextStyle(color: Colors.white, fontSize: 12)),
+        ],
+        acts: kStdActs(
+          saving: _isSaving,
+          onEdit: widget.onEdit,
+          onDelete: widget.onDelete,
+          onClose: widget.onCancel,
+          onCancel: widget.onCancel,
+          onSave: _save,
+          extra: [
+            if (widget.onAddChild != null) DocBarAction(e ? '+ Sub-location' : '+ ตำแหน่งย่อย', widget.onAddChild, fg: ScreenTheme.of(context).ink),
           ],
         ),
+        busy: _isSaving,
       ),
+      top: saved ? kKpis(_kpis(), loading: _loadingSummary) : null,
+      sections: [
+        (0, e ? 'Main' : 'ข้อมูลหลัก', _mainCard()),
+        if (saved && l!.locationType == 'GROUP') (1, e ? 'Sub-locations' : 'ตำแหน่งย่อย', _childrenCard()),
+        if (saved) (2, e ? 'Items in location' : 'สินค้าในตำแหน่ง', _itemsCard()),
+      ],
     );
   }
 }

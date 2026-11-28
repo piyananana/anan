@@ -17,6 +17,14 @@ class MenuScope extends InheritedWidget {
   bool updateShouldNotify(MenuScope oldWidget) => oldWidget.menu != menu;
 }
 
+/// เปิดเมนูอื่นเป็นแท็บจากในหน้าจอ (ลิงก์ข้ามหน้าจอ) — HomeScreen ตั้งค่าไว้ตอนเปิด
+/// คืน false = ผู้ใช้ไม่มีเมนูนี้ (ไม่มีสิทธิ์) หรือไม่ได้อยู่ในหน้าหลัก
+class MenuOpener {
+  static bool Function(String targetPath)? openByTarget;
+
+  static bool open(String targetPath) => openByTarget?.call(targetPath) ?? false;
+}
+
 /// Displays the current menu name in the active language.
 /// Place this as the [AppBar.title] in any screen that is opened from the menu tree.
 /// Falls back to [fallback] when no [MenuScope] ancestor is found.

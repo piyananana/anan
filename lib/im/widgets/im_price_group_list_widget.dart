@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../models/im_price_group.dart';
 import '../services/im_price_group_service.dart';
+import 'im_master_kit.dart';
 
 class ImPriceGroupListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -11,6 +12,8 @@ class ImPriceGroupListWidget extends StatefulWidget {
   final bool enableViewButton;
   final bool enableDeleteButton;
   final bool enableCardSelect;
+  /// กลุ่มที่เปิดอยู่ทางขวา (หน้าจอกลุ่มราคา) — ไฮไลต์การ์ด
+  final int? selectedId;
   final void Function() onAdd;
   final Function(ImPriceGroup) onEdit;
   final Function(ImPriceGroup) onView;
@@ -24,6 +27,7 @@ class ImPriceGroupListWidget extends StatefulWidget {
     required this.enableViewButton,
     required this.enableDeleteButton,
     this.enableCardSelect = false,
+    this.selectedId,
     required this.onAdd,
     required this.onEdit,
     required this.onView,
@@ -74,6 +78,7 @@ class ImPriceGroupListWidgetState extends State<ImPriceGroupListWidget> with Aut
   String _searchQuery = '';
   List<ImPriceGroup> _list = [];
   bool _isLoading = false;
+  String? _statusFilter; // unused | inactive
   final _svc = ImPriceGroupService();
 
   @override
@@ -94,7 +99,8 @@ class ImPriceGroupListWidgetState extends State<ImPriceGroupListWidget> with Aut
   Future<void> _fetchList() async {
     setState(() => _isLoading = true);
     try {
-      final rows = await _svc.fetchRows();
+      // หน้าจอกลุ่มราคาขอจำนวนตารางราคาด้วย
+      final rows = await _svc.fetchRows(withUsage: !widget.enableCardSelect);
       if (mounted) setState(() { _list = rows; _isLoading = false; });
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -110,6 +116,7 @@ class ImPriceGroupListWidgetState extends State<ImPriceGroupListWidget> with Aut
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    if (!widget.enableCardSelect) return _buildScreenList(isEnglish);
     final q = _searchQuery.trim().toUpperCase();
     final display = q.isEmpty
         ? _list
@@ -184,6 +191,69 @@ class ImPriceGroupListWidgetState extends State<ImPriceGroupListWidget> with Aut
                           ),
                           onTap: widget.enableCardSelect ? null : () => widget.onCallback(item),
                         ),
+                      );
+                    },
+                  ),
+      ),
+    ]);
+  }
+
+  // ── หน้าจอกลุ่มราคา (แบบ B, user 2026-11-25): การ์ดพร้อมจำนวนตารางราคา + กรองยังไม่ใช้/หยุดใช้ ──
+  Widget _buildScreenList(bool isEnglish) {
+    final q = _searchQuery.trim().toUpperCase();
+    final searched = q.isEmpty
+        ? _list
+        : _list.where((g) => g.priceGroupCode.toUpperCase().contains(q) || g.priceGroupNameTh.toUpperCase().contains(q) || (g.priceGroupNameEn ?? '').toUpperCase().contains(q)).toList();
+    final unused = searched.where((g) => g.priceListCount == 0).length;
+    final inactive = searched.where((g) => !g.isActive).length;
+    final display = searched.where((g) {
+      switch (_statusFilter) {
+        case 'unused': return g.priceListCount == 0;
+        case 'inactive': return !g.isActive;
+        default: return true;
+      }
+    }).toList()
+      ..sort((a, b) => a.priceGroupCode.compareTo(b.priceGroupCode));
+    void toggle(String f) => setState(() => _statusFilter = _statusFilter == f ? null : f);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      ImMasterListHeader(
+        searchCtrl: _searchCtrl,
+        hint: isEnglish ? 'Search code / group name' : 'ค้นหา รหัส / ชื่อกลุ่ม',
+        onSearch: (v) => setState(() => _searchQuery = v),
+        filters: [
+          ImMasterFilterChip(label: isEnglish ? 'All' : 'ทั้งหมด', on: _statusFilter == null, onTap: () => setState(() => _statusFilter = null)),
+          ImMasterFilterChip(label: isEnglish ? 'Not used $unused' : 'ยังไม่ใช้ $unused', on: _statusFilter == 'unused', onTap: () => toggle('unused')),
+          ImMasterFilterChip(label: isEnglish ? 'Inactive $inactive' : 'หยุดใช้ $inactive', on: _statusFilter == 'inactive', onTap: () => toggle('inactive')),
+        ],
+        countText: isEnglish ? 'Showing ${display.length} of ${_list.length} group(s)' : 'แสดง ${display.length} จาก ${_list.length} รายการ',
+      ),
+      Expanded(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : display.isEmpty
+                ? Center(child: Text(isEnglish ? 'No price group found' : 'ไม่พบกลุ่มราคา', style: const TextStyle(color: ImKit.ink2)))
+                : ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    itemCount: display.length,
+                    itemBuilder: (context, i) {
+                      final g = display[i];
+                      return ImMasterListCard(
+                        code: g.priceGroupCode,
+                        active: g.isActive,
+                        chips: [
+                          if (!g.isActive) ImKit.chip(isEnglish ? 'Inactive' : 'หยุดใช้', ImKit.redSoft, ImKit.red),
+                          if (g.priceListCount == 0) ImKit.chip(isEnglish ? 'Not used' : 'ยังไม่ใช้', ImKit.ro, ImKit.gMore),
+                        ],
+                        name: _groupName(g, isEnglish),
+                        meta: g.priceListCount == 0
+                            ? TextSpan(text: isEnglish ? 'No price list yet' : 'ยังไม่มีตารางราคา')
+                            : TextSpan(children: [
+                                TextSpan(text: isEnglish ? 'Used in ' : 'ใช้ใน '),
+                                TextSpan(text: '${g.priceListCount}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                                TextSpan(text: isEnglish ? ' price list(s)' : ' ตารางราคา'),
+                              ]),
+                        selected: widget.selectedId == g.id,
+                        onTap: () => widget.onView(g),
                       );
                     },
                   ),

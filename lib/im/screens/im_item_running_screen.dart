@@ -1,10 +1,17 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 import '../models/im_item_running.dart';
 import '../services/im_item_running_service.dart';
+import '../widgets/im_master_kit.dart';
+import '../../sa/utils/sa_menu_theme.dart';
 
+// การตั้งค่ารหัสสินค้าอัตโนมัติ (ส่วนกลาง) — หมวดที่ตั้ง is_auto_number ออกรหัสตามรูปแบบของหมวดแทน
+// หน้าตาแบบ B ของ IM (user 2026-11-26): ตัวอย่างรหัสแยกสีตามส่วน + 3 รหัสถัดไป + เตือนเลขรันชนรหัสที่มีอยู่
+// + รหัสล่าสุดที่ออก + ตารางหมวดที่ออกรหัสเอง, เปิดมาในโหมดดู (ตัวเลือกเริ่มเลขรันใหม่รายปี/เดือน — user ยังไม่ทำ)
 class ImItemRunningScreen extends StatefulWidget {
   const ImItemRunningScreen({super.key});
 
@@ -12,33 +19,32 @@ class ImItemRunningScreen extends StatefulWidget {
   State<ImItemRunningScreen> createState() => _ImItemRunningScreenState();
 }
 
-class _ImItemRunningScreenState extends State<ImItemRunningScreen> {
+class _ImItemRunningScreenState extends State<ImItemRunningScreen> with ImMasterKit {
   final _service = ImItemRunningService();
 
   bool _isEnglish = false;
+  bool _isLoading = true;
+  bool _isSaving = false;
+  bool _editing = false;
 
   ImItemRunning? _config;
-  bool _isLoading = false;
-  bool _isSaving = false;
-  String? _errorMsg;
-  String? _successMsg;
+  Map<String, dynamic>? _summary;
+  Timer? _debounce;
+  int _summarySeq = 0;
 
   final _prefixCtrl = TextEditingController();
   final _separatorCtrl = TextEditingController();
   final _nextNumberCtrl = TextEditingController();
-
   bool _isAutoNumbering = false;
   String _formatSuffixDate = '';
   int _runningLength = 4;
 
-  List<MapEntry<String, String>> _suffixOptions(bool isEnglish) => [
-    MapEntry('', isEnglish ? 'No date' : 'ไม่ใช้วันที่'),
-    MapEntry('YY', isEnglish ? 'YY — 2-digit year (e.g. 68)' : 'YY — ปี 2 หลัก (เช่น 68)'),
-    MapEntry('YYYY', isEnglish ? 'YYYY — 4-digit year (e.g. 2568)' : 'YYYY — ปี 4 หลัก (เช่น 2568)'),
-    MapEntry('YYMM', isEnglish ? 'YYMM — 2-digit year-month (e.g. 6803)' : 'YYMM — ปี-เดือน 2 หลัก (เช่น 6803)'),
-    MapEntry('YYYYMM', isEnglish ? 'YYYYMM — 4-digit year-month (e.g. 256803)' : 'YYYYMM — ปี-เดือน 4 หลัก (เช่น 256803)'),
-    MapEntry('YYMMDD', isEnglish ? 'YYMMDD — year-month-day (e.g. 680317)' : 'YYMMDD — ปี-เดือน-วัน (เช่น 680317)'),
-  ];
+  static const _cPrefix = ImKit.gDoc, _cDate = ImKit.gParty, _cSep = ImKit.gMore, _cNum = ImKit.gFin;
+
+  @override
+  bool get kitEnglish => _isEnglish;
+  @override
+  bool get kitReadOnly => !_editing;
 
   @override
   void initState() {
@@ -48,6 +54,7 @@ class _ImItemRunningScreenState extends State<ImItemRunningScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _prefixCtrl.dispose();
     _separatorCtrl.dispose();
     _nextNumberCtrl.dispose();
@@ -55,19 +62,24 @@ class _ImItemRunningScreenState extends State<ImItemRunningScreen> {
   }
 
   Future<void> _loadConfig() async {
+    final e = _isEnglish;
     setState(() => _isLoading = true);
     try {
       final config = await _service.fetchConfig();
-      _applyConfig(config);
-      setState(() => _config = config);
-    } catch (e) {
-      setState(() => _errorMsg = e.toString());
+      _config = config;
+      _apply(config);
+      _editing = false;
+      await _loadSummary();
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e ? 'Error: $err' : 'เกิดข้อผิดพลาด: $err'), backgroundColor: Colors.red));
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _applyConfig(ImItemRunning config) {
+  void _apply(ImItemRunning config) {
     _isAutoNumbering = config.isAutoNumbering;
     _prefixCtrl.text = config.formatPrefix;
     _separatorCtrl.text = config.formatSeparator;
@@ -76,51 +88,77 @@ class _ImItemRunningScreenState extends State<ImItemRunningScreen> {
     _nextNumberCtrl.text = config.nextRunningNumber.toString();
   }
 
-  String get _sampleCode {
-    String code = _prefixCtrl.text;
-    if (_formatSuffixDate.isNotEmpty) {
-      final now = DateTime.now();
-      final year = now.year.toString();
-      final month = now.month.toString().padLeft(2, '0');
-      final day = now.day.toString().padLeft(2, '0');
-      switch (_formatSuffixDate) {
-        case 'YY':
-          code += year.substring(2);
-          break;
-        case 'YYYY':
-          code += year;
-          break;
-        case 'YYMM':
-          code += year.substring(2) + month;
-          break;
-        case 'YYYYMM':
-          code += year + month;
-          break;
-        case 'YYMMDD':
-          code += year.substring(2) + month + day;
-          break;
-      }
+  int get _nextNumber => int.tryParse(_nextNumberCtrl.text.trim()) ?? 1;
+
+  // โหลดข้อมูลประกอบตามรูปแบบที่กำลังแก้ — คำขอเก่าที่ตอบช้ากว่าไม่ทับผลล่าสุด
+  Future<void> _loadSummary() async {
+    final seq = ++_summarySeq;
+    try {
+      final s = await _service.fetchSummary(
+        prefix: _prefixCtrl.text.trim().toUpperCase(),
+        separator: _separatorCtrl.text,
+        suffixDate: _formatSuffixDate,
+        length: _runningLength,
+        next: _nextNumber < 1 ? 1 : _nextNumber,
+      );
+      if (mounted && seq == _summarySeq) setState(() => _summary = s);
+    } catch (_) {
+      if (mounted && seq == _summarySeq) setState(() => _summary = null);
     }
-    code += _separatorCtrl.text;
-    final num = int.tryParse(_nextNumberCtrl.text) ?? 1;
-    code += num.toString().padLeft(_runningLength, '0');
-    return code;
   }
 
+  void _formatChanged() {
+    setState(() {});
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), _loadSummary);
+  }
+
+  // ── ส่วนของรหัส (ตรงกับ formatItemCode ฝั่ง backend: ปี ค.ศ. ตามวันที่วันนี้) ──
+  String _datePart(String fmt, DateTime now) {
+    final y = now.year.toString(), m = now.month.toString().padLeft(2, '0'), d = now.day.toString().padLeft(2, '0');
+    return switch (fmt) {
+      'YY' => y.substring(2),
+      'YYYY' => y,
+      'YYMM' => y.substring(2) + m,
+      'YYYYMM' => y + m,
+      'YYMMDD' => y.substring(2) + m + d,
+      _ => '',
+    };
+  }
+
+  List<MapEntry<String, String>> _suffixOptions(bool e) {
+    final now = DateTime.now();
+    String ex(String f) => e ? ' (e.g. ${_datePart(f, now)})' : ' (เช่น ${_datePart(f, now)})';
+    return [
+      MapEntry('', e ? 'No date' : 'ไม่ใช้วันที่'),
+      MapEntry('YY', '${e ? 'YY — 2-digit year' : 'YY — ปี 2 หลัก'}${ex('YY')}'),
+      MapEntry('YYYY', '${e ? 'YYYY — 4-digit year' : 'YYYY — ปี 4 หลัก'}${ex('YYYY')}'),
+      MapEntry('YYMM', '${e ? 'YYMM — year-month' : 'YYMM — ปี-เดือน'}${ex('YYMM')}'),
+      MapEntry('YYYYMM', '${e ? 'YYYYMM — 4-digit year-month' : 'YYYYMM — ปี 4 หลัก-เดือน'}${ex('YYYYMM')}'),
+      MapEntry('YYMMDD', '${e ? 'YYMMDD — year-month-day' : 'YYMMDD — ปี-เดือน-วัน'}${ex('YYMMDD')}'),
+    ];
+  }
+
+  String _dateLabel(bool e) => switch (_formatSuffixDate) {
+        'YY' => e ? 'Year (YY)' : 'ปี (YY)',
+        'YYYY' => e ? 'Year (YYYY)' : 'ปี (YYYY)',
+        'YYMM' => e ? 'Year-month (YYMM)' : 'ปี-เดือน (YYMM)',
+        'YYYYMM' => e ? 'Year-month (YYYYMM)' : 'ปี-เดือน (YYYYMM)',
+        'YYMMDD' => e ? 'Year-month-day (YYMMDD)' : 'ปี-เดือน-วัน (YYMMDD)',
+        _ => '',
+      };
+
   Future<void> _save() async {
-    final isEnglish = _isEnglish;
-    setState(() {
-      _isSaving = true;
-      _errorMsg = null;
-      _successMsg = null;
-    });
+    final e = _isEnglish;
+    final nextNum = int.tryParse(_nextNumberCtrl.text.trim());
+    if (_isAutoNumbering && (nextNum == null || nextNum < 1)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e ? 'Please enter a valid next running number' : 'กรุณาระบุเลขรันถัดไปให้ถูกต้อง'), backgroundColor: Colors.red));
+      return;
+    }
+    setState(() => _isSaving = true);
     try {
-      final nextNum = int.tryParse(_nextNumberCtrl.text);
-      if (_isAutoNumbering && nextNum == null) {
-        setState(() => _errorMsg = isEnglish ? 'Please enter a valid next running number' : 'กรุณาระบุเลขรันถัดไปให้ถูกต้อง');
-        return;
-      }
-      final toSave = ImItemRunning(
+      final saved = await _service.saveConfig(ImItemRunning(
         id: _config?.id,
         isAutoNumbering: _isAutoNumbering,
         formatPrefix: _prefixCtrl.text.trim().toUpperCase(),
@@ -128,373 +166,330 @@ class _ImItemRunningScreenState extends State<ImItemRunningScreen> {
         formatSuffixDate: _formatSuffixDate,
         runningLength: _runningLength,
         nextRunningNumber: nextNum ?? 1,
-      );
-      final saved = await _service.saveConfig(toSave);
-      setState(() {
-        _config = saved;
-        _successMsg = isEnglish ? 'Settings saved successfully' : 'บันทึกการตั้งค่าเรียบร้อยแล้ว';
-      });
-    } catch (e) {
-      setState(() => _errorMsg = e.toString());
+      ));
+      _config = saved;
+      _apply(saved);
+      _editing = false;
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e ? 'Saved successfully' : 'บันทึกสำเร็จ')));
+      await _loadSummary();
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e ? 'Save failed: $err' : 'บันทึกล้มเหลว: $err'), backgroundColor: Colors.red));
+      }
     } finally {
-      setState(() => _isSaving = false);
+      if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  void _cancel() {
+    final c = _config;
+    setState(() {
+      if (c != null) _apply(c);
+      _editing = false;
+    });
+    _loadSummary();
+  }
+
+  // ── ส่วนต่างๆ ──
+  Widget _seg(String text, Color c) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 1.5),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border(bottom: BorderSide(color: c, width: 3)),
+        ),
+        child: Text(text,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 1, fontFeatures: [FontFeature.tabularFigures()])),
+      );
+
+  Widget _segLabel(String text, Color c) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 4),
+        Text(text, style: const TextStyle(fontSize: 11.5, color: ImKit.ink2)),
+      ]);
+
+  Widget _buildPreviewCard(bool e) {
+    final prefix = _prefixCtrl.text.trim().toUpperCase();
+    final date = _datePart(_formatSuffixDate, DateTime.now());
+    final sep = _separatorCtrl.text;
+    final num = (_nextNumber < 1 ? 1 : _nextNumber).toString().padLeft(_runningLength, '0');
+    final nextCodes = ((_summary?['next_codes'] as List?) ?? const []).map((x) => '$x').toList();
+    final collision = _summary?['collision'] as Map<String, dynamic>?;
+    // next_codes = 4 รหัสที่จะออกจริง (ข้ามรหัสที่มีอยู่) — ไม่ชน: รหัสแรกคือรหัสที่แสดงอยู่แล้ว จึงแสดง 3 ตัวถัดไป
+    // ชน: รหัสที่แสดงจะไม่ถูกออก จึงแสดง 3 ตัวแรกที่ว่าง
+    final following = (collision == null ? nextCodes.skip(1) : nextCodes).take(3).toList();
+
+    return kCard(
+      title: e ? 'Sample generated code' : 'ตัวอย่างรหัสที่จะออก',
+      count: e ? 'Updates as you edit' : 'อัปเดตทันทีขณะแก้',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 10),
+          decoration: BoxDecoration(color: ScreenTheme.of(context).soft, borderRadius: BorderRadius.circular(8)),
+          child: Column(children: [
+            if (!_isAutoNumbering) ...[
+              Text(e ? 'Auto numbering is off — item codes are entered manually' : 'ปิดใช้งานอยู่ — ต้องระบุรหัสสินค้าเอง',
+                  style: const TextStyle(color: ImKit.amber, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 10),
+            ],
+            Opacity(
+              opacity: _isAutoNumbering ? 1 : 0.45,
+              child: Wrap(alignment: WrapAlignment.center, runSpacing: 4, children: [
+                if (prefix.isNotEmpty) _seg(prefix, _cPrefix),
+                if (date.isNotEmpty) _seg(date, _cDate),
+                if (sep.isNotEmpty) _seg(sep, _cSep),
+                _seg(num, _cNum),
+              ]),
+            ),
+            const SizedBox(height: 10),
+            Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 4, children: [
+              if (prefix.isNotEmpty) _segLabel(e ? 'Prefix' : 'คำนำหน้า', _cPrefix),
+              if (date.isNotEmpty) _segLabel(_dateLabel(e), _cDate),
+              if (sep.isNotEmpty) _segLabel(e ? 'Separator' : 'ตัวคั่น', _cSep),
+              _segLabel(e ? 'Running number, $_runningLength digits' : 'เลขรัน $_runningLength หลัก', _cNum),
+            ]),
+            if (_isAutoNumbering && following.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, runSpacing: 4, children: [
+                Text(e ? 'Next' : 'ถัดไป', style: const TextStyle(fontSize: 12, color: ImKit.ink2)),
+                for (final c in following)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.white, border: Border.all(color: ImKit.line), borderRadius: BorderRadius.circular(5)),
+                    child: Text(c, style: const TextStyle(fontSize: 12, fontFeatures: [FontFeature.tabularFigures()])),
+                  ),
+              ]),
+            ],
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget? _buildCollisionBanner(bool e) {
+    final c = _summary?['collision'] as Map<String, dynamic>?;
+    if (c == null || !_isAutoNumbering) return null;
+    final name = e && '${c['item_name_en'] ?? ''}'.isNotEmpty ? c['item_name_en'] : (c['item_name_th'] ?? '');
+    final free = c['next_free'] as int? ?? _nextNumber;
+    final freeText = free.toString().padLeft(_runningLength, '0');
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8F7),
+        border: Border.all(color: const Color(0xFFF3C0BB)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(children: [
+        const Icon(Icons.warning_amber_rounded, color: ImKit.red, size: 20),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            e
+                ? 'Code ${c['code']} already exists (item "$name"). New items skip to the next free number $freeText.'
+                : 'รหัส ${c['code']} มีอยู่แล้วในระบบ (สินค้า "$name") ระบบจะข้ามไปเลขว่างถัดไป $freeText เมื่อออกรหัส',
+            style: const TextStyle(fontSize: 12.5, color: ImKit.red),
+          ),
+        ),
+        if (_editing) ...[
+          const SizedBox(width: 8),
+          kGhost(e ? 'Use $freeText' : 'ใช้เลข $freeText', Icons.auto_fix_high, () {
+            _nextNumberCtrl.text = '$free';
+            _formatChanged();
+          }),
+        ],
+      ]),
+    );
+  }
+
+  Widget _buildFormatCard(bool e) {
+    final last = _summary?['last_issued'] as Map<String, dynamic>?;
+    String lastText = '';
+    if (last != null) {
+      final d = DateTime.tryParse('${last['created_at'] ?? ''}')?.toLocal();
+      final ds = d == null ? '' : ' · ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+      lastText = '${last['item_code']}$ds';
+    }
+    final ro = kitReadOnly;
+    return kCard(
+      title: e ? 'Code format' : 'รูปแบบรหัส',
+      trailing: kLegend(),
+      child: kGroups([
+        kGroup(1, e ? 'Usage' : 'การใช้งาน', ImKit.gDoc, [
+          kChecks([
+            kCk(e ? 'Use auto item numbering' : 'ใช้รหัสสินค้าอัตโนมัติ', _isAutoNumbering,
+                ro ? null : (v) => setState(() => _isAutoNumbering = v)),
+          ]),
+          kNote(
+              e
+                  ? 'The system assigns a code when a new item is added; users can still edit it on the item screen. Categories with their own numbering use the category format instead.'
+                  : 'ระบบออกรหัสให้เมื่อเพิ่มสินค้าใหม่ ผู้ใช้ยังแก้รหัสเองได้ในหน้าสินค้า หมวดที่ตั้งรหัสอัตโนมัติของตัวเองจะใช้รูปแบบของหมวดแทน',
+              color: ImKit.ink2),
+        ]),
+        kGroup(2, e ? 'Leading part' : 'ส่วนหน้า', _cDate, [
+          kRow([
+            TextField(
+              controller: _prefixCtrl,
+              readOnly: ro,
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 20,
+              style: const TextStyle(fontSize: ImKit.font),
+              decoration: kDec(e ? 'Prefix' : 'คำนำหน้า (Prefix)', editable: !ro).copyWith(counterText: ''),
+              onChanged: (_) => _formatChanged(),
+            ),
+            kDd<String>(
+              e ? 'Date part' : 'ส่วนวันที่',
+              _formatSuffixDate,
+              [for (final o in _suffixOptions(e)) DropdownMenuItem(value: o.key, child: Text(o.value, overflow: TextOverflow.ellipsis))],
+              ro
+                  ? null
+                  : (v) {
+                      _formatSuffixDate = v ?? '';
+                      _formatChanged();
+                    },
+            ),
+          ]),
+        ]),
+        kGroup(3, e ? 'Running number' : 'เลขรัน', _cNum, [
+          kRow([
+            TextField(
+              controller: _separatorCtrl,
+              readOnly: ro,
+              maxLength: 5,
+              style: const TextStyle(fontSize: ImKit.font),
+              decoration: kDec(e ? 'Separator' : 'ตัวคั่น', editable: !ro).copyWith(counterText: ''),
+              onChanged: (_) => _formatChanged(),
+            ),
+            kDd<int>(
+              e ? 'Running number length' : 'ความยาวเลขรัน',
+              _runningLength,
+              [for (final n in [3, 4, 5, 6]) DropdownMenuItem(value: n, child: Text(e ? '$n digits' : '$n หลัก'))],
+              ro
+                  ? null
+                  : (v) {
+                      _runningLength = v ?? 4;
+                      _formatChanged();
+                    },
+            ),
+          ]),
+          kRow([
+            TextField(
+              controller: _nextNumberCtrl,
+              readOnly: ro,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: ImKit.font, fontFeatures: [FontFeature.tabularFigures()]),
+              decoration: kDec(e ? 'Next running number *' : 'เลขรันถัดไป *', editable: !ro),
+              onChanged: (_) => _formatChanged(),
+            ),
+            InputDecorator(
+              decoration: kDec(e ? 'Last code issued' : 'รหัสล่าสุดที่ออก', editable: false),
+              child: Text(lastText.isEmpty ? (e ? 'None yet' : 'ยังไม่มี') : lastText,
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: ImKit.font)),
+            ),
+          ]),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _buildCategoriesCard(bool e) {
+    final cats = ((_summary?['categories'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    void openCategories() => ImKit.openMenu(context, 'ImItemCategoryScreen', 'หมวดหมู่สินค้า', 'Item Category', e);
+    return kCard(
+      title: e ? 'Categories with their own numbering' : 'หมวดที่ออกรหัสเอง',
+      count: e
+          ? 'Read-only · ${cats.length} categories · items in these categories use the category format'
+          : 'อ่านอย่างเดียว · ${cats.length} หมวด · สินค้าในหมวดเหล่านี้ใช้รูปแบบของหมวดแทนหน้านี้',
+      trailing: kGhost(e ? 'Item categories' : 'ไปหน้าหมวดหมู่สินค้า', Icons.open_in_new, openCategories),
+      padding: EdgeInsets.zero,
+      child: kTable(
+        [KCol(e ? 'Category' : 'หมวด', 6), KCol(e ? 'Next code' : 'รหัสถัดไป', 3), KCol(e ? 'Next number' : 'เลขรันถัดไป', 2, num: true),
+          KCol(e ? 'Items' : 'สินค้าในหมวด', 2, num: true)],
+        [
+          for (final c in cats)
+            [
+              kCell('${c['category_code']}  ${e && '${c['category_name_en'] ?? ''}'.isNotEmpty ? c['category_name_en'] : (c['category_name_th'] ?? '')}'),
+              kCell('${c['sample_code'] ?? ''}', mono: true),
+              kCell('${c['running_next_number'] ?? ''}', mono: true),
+              kCell('${c['item_count'] ?? 0}', mono: true),
+            ],
+        ],
+        onTap: [for (final _ in cats) openCategories],
+        minWidth: 560,
+        empty: e ? 'No category numbers its own items — every item uses the format above.' : 'ไม่มีหมวดที่ออกรหัสเอง สินค้าทุกรายการใช้รูปแบบด้านบน',
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    _isEnglish = isEnglish;
+    final e = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = e;
+    final canEdit = MenuScope.of(context)?.canEdit ?? true;
+
+    Widget body;
+    if (_isLoading && _config == null) {
+      body = const Center(child: CircularProgressIndicator());
+    } else {
+      final acts = _editing
+          ? [
+              DocBarAction(e ? 'Cancel' : 'ยกเลิก', _isSaving ? null : _cancel, fg: ScreenTheme.of(context).ink),
+              DocBarAction(_isSaving ? (e ? 'Saving...' : 'กำลังบันทึก...') : (e ? 'Save' : 'บันทึก'), _isSaving ? null : _save,
+                  fg: const Color(0xFF0B3A2A), bg: ImKit.gold, primary: true),
+            ]
+          : [
+              if (canEdit)
+                DocBarAction(e ? 'Edit' : 'แก้ไข', () => setState(() => _editing = true), fg: Colors.white, bg: ScreenTheme.of(context).ink, primary: true),
+            ];
+      final banner = _buildCollisionBanner(e);
+      body = kPage(
+        header: kHeaderBar(
+          title: e ? 'Item auto-numbering' : 'การออกรหัสสินค้าอัตโนมัติ',
+          badges: [
+            if (_editing) kEditingBadge(),
+            _isAutoNumbering
+                ? ImKit.chip(e ? 'Enabled' : 'เปิดใช้งาน', ImKit.okSoft, ImKit.ok)
+                : ImKit.chip(e ? 'Disabled' : 'ปิดใช้งาน', ImKit.redSoft, ImKit.red),
+          ],
+          acts: acts,
+          busy: _isSaving,
+        ),
+        sections: [
+          (
+            0,
+            e ? 'Sample code' : 'ตัวอย่างรหัส',
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              _buildPreviewCard(e),
+              if (banner != null) ...[const SizedBox(height: 12), banner],
+            ]),
+          ),
+          (1, e ? 'Format' : 'รูปแบบ', _buildFormatCard(e)),
+          (2, e ? 'Categories with own numbering' : 'หมวดที่ออกรหัสเอง', _buildCategoriesCard(e)),
+        ],
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
-        backgroundColor: Colors.teal.shade700,
+        backgroundColor: ScreenTheme.of(context).bar,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
-            onPressed: _loadConfig,
+            tooltip: e ? 'Refresh' : 'รีเฟรช',
+            onPressed: _isSaving
+                ? null
+                : () async {
+                    if (_editing && !await confirmDiscardChanges(context, e)) return;
+                    _loadConfig();
+                  },
           ),
+          const SizedBox(width: 4),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 680),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ── Banner ────────────────────────────────────────────
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.teal.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.teal.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(children: [
-                              const Icon(Icons.info_outline, color: Colors.teal),
-                              const SizedBox(width: 8),
-                              Text(
-                                isEnglish ? 'Item Auto-Numbering Settings' : 'การตั้งค่ารหัสสินค้าอัตโนมัติ',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Colors.teal),
-                              ),
-                            ]),
-                            const SizedBox(height: 8),
-                            Text(
-                              isEnglish
-                                  ? 'When enabled, the system will automatically assign an item code based on the format below.'
-                                    ' Users can still edit the code manually on the item entry screen.'
-                                  : 'เมื่อเปิดใช้งาน ระบบจะออกรหัสสินค้าให้อัตโนมัติตามรูปแบบที่กำหนด'
-                                    ' ผู้ใช้ยังสามารถแก้ไขรหัสเองได้ในหน้าเพิ่มข้อมูลสินค้า',
-                              style: const TextStyle(color: Colors.teal),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // ── Alerts ────────────────────────────────────────────
-                      if (_errorMsg != null)
-                        _Alert(
-                          message: _errorMsg!,
-                          color: Colors.red,
-                          icon: Icons.error,
-                          onClose: () => setState(() => _errorMsg = null),
-                        ),
-                      if (_successMsg != null)
-                        _Alert(
-                          message: _successMsg!,
-                          color: Colors.green,
-                          icon: Icons.check_circle,
-                          onClose: () => setState(() => _successMsg = null),
-                        ),
-
-                      // ── Card: การตั้งค่า ─────────────────────────────────
-                      Card(
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(isEnglish ? 'Settings' : 'การตั้งค่า',
-                                  style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold)),
-                              const Divider(height: 24),
-
-                              SwitchListTile(
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(isEnglish ? 'Use auto item numbering' : 'ใช้รหัสสินค้าอัตโนมัติ',
-                                    style:
-                                        const TextStyle(fontWeight: FontWeight.w600)),
-                                subtitle: Text(_isAutoNumbering
-                                    ? (isEnglish ? 'Enabled — the system will assign a code when a new item is added' : 'เปิดใช้งาน — ระบบจะออกรหัสให้เมื่อเพิ่มสินค้าใหม่')
-                                    : (isEnglish ? 'Disabled — the item code must be entered manually' : 'ปิดใช้งาน — ต้องระบุรหัสสินค้าเอง')),
-                                value: _isAutoNumbering,
-                                activeColor: Colors.teal[700],
-                                onChanged: (v) =>
-                                    setState(() => _isAutoNumbering = v),
-                              ),
-
-                              if (_isAutoNumbering) ...[
-                                const SizedBox(height: 20),
-                                const Divider(),
-                                const SizedBox(height: 16),
-
-                                Row(children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: _LabeledField(
-                                      label: isEnglish ? 'Prefix' : 'คำนำหน้า (Prefix)',
-                                      child: TextFormField(
-                                        controller: _prefixCtrl,
-                                        decoration: InputDecoration(
-                                          hintText: isEnglish ? 'e.g. ITEM, SKU' : 'เช่น ITEM, SKU',
-                                          border: const OutlineInputBorder(),
-                                          counterText: '',
-                                        ),
-                                        textCapitalization:
-                                            TextCapitalization.characters,
-                                        onChanged: (_) => setState(() {}),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    flex: 2,
-                                    child: _LabeledField(
-                                      label: isEnglish ? 'Separator' : 'ตัวคั่น (Separator)',
-                                      child: TextFormField(
-                                        controller: _separatorCtrl,
-                                        decoration: InputDecoration(
-                                          hintText: isEnglish ? 'e.g. - / or blank' : 'เช่น - / หรือว่าง',
-                                          border: const OutlineInputBorder(),
-                                          counterText: '',
-                                        ),
-                                        onChanged: (_) => setState(() {}),
-                                      ),
-                                    ),
-                                  ),
-                                ]),
-                                const SizedBox(height: 16),
-
-                                _LabeledField(
-                                  label: isEnglish ? 'Date Suffix' : 'ส่วนท้ายวันที่ (Date Suffix)',
-                                  child: DropdownButtonFormField<String>(
-                                    isExpanded: true,
-                                    value: _formatSuffixDate,
-                                    decoration: const InputDecoration(
-                                        border: OutlineInputBorder()),
-                                    items: _suffixOptions(isEnglish)
-                                        .map((e) => DropdownMenuItem(
-                                            value: e.key,
-                                            child: Text(e.value)))
-                                        .toList(),
-                                    onChanged: (v) => setState(
-                                        () => _formatSuffixDate = v ?? ''),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-
-                                Row(children: [
-                                  Expanded(
-                                    flex: 2,
-                                    child: _LabeledField(
-                                      label: isEnglish ? 'Running Number Length' : 'ความยาวเลขรัน',
-                                      child: DropdownButtonFormField<int>(
-                                        isExpanded: true,
-                                        value: _runningLength,
-                                        decoration: const InputDecoration(
-                                            border: OutlineInputBorder()),
-                                        items: [3, 4, 5, 6]
-                                            .map((n) => DropdownMenuItem(
-                                                value: n,
-                                                child: Text(isEnglish ? '$n digits' : '$n หลัก')))
-                                            .toList(),
-                                        onChanged: (v) => setState(
-                                            () => _runningLength = v ?? 4),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    flex: 3,
-                                    child: _LabeledField(
-                                      label: isEnglish ? 'Next Running Number' : 'เลขรันถัดไป',
-                                      child: TextFormField(
-                                        controller: _nextNumberCtrl,
-                                        keyboardType: TextInputType.number,
-                                        decoration: const InputDecoration(
-                                          hintText: '1',
-                                          border: OutlineInputBorder(),
-                                        ),
-                                        onChanged: (_) => setState(() {}),
-                                      ),
-                                    ),
-                                  ),
-                                ]),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // ── Card: ตัวอย่างรหัส ──────────────────────────────
-                      if (_isAutoNumbering) ...[
-                        const SizedBox(height: 16),
-                        Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(isEnglish ? 'Sample generated code' : 'ตัวอย่างรหัสที่จะออก',
-                                    style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold)),
-                                const Divider(height: 24),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 20),
-                                  decoration: BoxDecoration(
-                                    color: Colors.teal.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                        color: Colors.teal.shade200),
-                                  ),
-                                  child: Text(
-                                    _sampleCode,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.teal[700],
-                                        letterSpacing: 2),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  isEnglish
-                                      ? 'Format: ${_prefixCtrl.text}${_formatSuffixDate.isNotEmpty ? '<$_formatSuffixDate>' : ''}${_separatorCtrl.text}<running number, $_runningLength digits>'
-                                      : 'รูปแบบ: ${_prefixCtrl.text}${_formatSuffixDate.isNotEmpty ? '<$_formatSuffixDate>' : ''}${_separatorCtrl.text}<เลขรัน $_runningLength หลัก>',
-                                  style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 24),
-
-                      // ── Save Button ───────────────────────────────────────
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton.icon(
-                          onPressed: (_isSaving || !(MenuScope.of(context)?.canEdit ?? true))
-                              ? null
-                              : _save,
-                          icon: _isSaving
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.save),
-                          label: Text(
-                              _isSaving ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...') : (isEnglish ? 'Save Settings' : 'บันทึกการตั้งค่า')),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal[700],
-                            foregroundColor: Colors.white,
-                            textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, 
-                                fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-    );
-  }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-class _LabeledField extends StatelessWidget {
-  final String label;
-  final Widget child;
-  const _LabeledField({required this.label, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-        const SizedBox(height: 6),
-        child,
-      ],
-    );
-  }
-}
-
-class _Alert extends StatelessWidget {
-  final String message;
-  final Color color;
-  final IconData icon;
-  final VoidCallback onClose;
-
-  const _Alert(
-      {required this.message,
-      required this.color,
-      required this.icon,
-      required this.onClose});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        border: Border.all(color: color),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color),
-          const SizedBox(width: 8),
-          Expanded(child: Text(message, style: TextStyle(color: color))),
-          IconButton(
-              icon: Icon(Icons.close, size: 16, color: color),
-              onPressed: onClose),
-        ],
-      ),
+      body: body,
     );
   }
 }

@@ -217,6 +217,7 @@ class Menu {
   // ไม่มีผู้อนุมัติในคิว: 'ALLOW' = ให้ผ่าน (อนุมัติอัตโนมัติ), 'BLOCK' = ไม่ให้ผ่าน (ใช้กับทุกการอนุมัติที่อิงคิวผู้อนุมัติของเมนู)
   final String noApproverAction;
   final String? docTypeModule; // sys_module ของประเภทเอกสารที่ใช้ (เช่น '11'=AR, '21'=AP, '01'=GL)
+  final String? themeColor; // สีธีม (รหัสใน MenuTheme.themes) — null = ตามเมนูแม่
 
   List<Menu> children = [];
   static final Map<String, Widget Function(BuildContext context)>
@@ -447,6 +448,10 @@ class Menu {
     // 'YourCustomWidget2': (context) => const YourCustomWidget2(),
   };
 
+  /// ชื่อหน้าจอที่ลงทะเบียนไว้ทั้งหมด — หน้าจอจัดการเมนูใช้ตรวจ/เลือกชื่อ Widget
+  static List<String> get registeredScreens => _staticWidgetBuilders.keys.toList()..sort();
+  static bool isRegisteredScreen(String? name) => name != null && _staticWidgetBuilders.containsKey(name);
+
   String localName(bool isEnglish) =>
       isEnglish && menuNameEn.isNotEmpty ? menuNameEn : menuName;
 
@@ -481,6 +486,7 @@ class Menu {
     this.usesDocType = false,
     this.noApproverAction = 'ALLOW',
     this.docTypeModule,
+    this.themeColor,
   });
 
   factory Menu.fromJson(Map<String, dynamic> json) {
@@ -514,7 +520,8 @@ class Menu {
         approvalMode: json['approval_mode'] as String? ?? 'ALL',
         usesDocType: json['uses_doc_type'] ?? false,
         noApproverAction: json['no_approver_action'] == 'BLOCK' ? 'BLOCK' : 'ALLOW',
-        docTypeModule: json['doc_type_module'] as String?);
+        docTypeModule: json['doc_type_module'] as String?,
+        themeColor: json['theme_color'] as String?);
   }
 }
 

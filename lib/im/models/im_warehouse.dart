@@ -27,6 +27,10 @@ class ImWarehouse {
   final int? purchasesAccountId;
   final String? purchasesAccountCode;
   final String? purchasesAccountName;
+  // จาก GET im_warehouse?with_stock=1 เท่านั้น (หน้าจอคลังสินค้า)
+  final int itemCount;
+  final double totalValue;
+  final int belowCount;
 
   const ImWarehouse({
     required this.id,
@@ -44,7 +48,13 @@ class ImWarehouse {
     this.inventoryAccountId, this.inventoryAccountCode, this.inventoryAccountName,
     this.accountingMode,
     this.purchasesAccountId, this.purchasesAccountCode, this.purchasesAccountName,
+    this.itemCount = 0,
+    this.totalValue = 0,
+    this.belowCount = 0,
   });
+
+  String branchName(bool isEnglish) =>
+      isEnglish && (branchNameEn ?? '').isNotEmpty ? branchNameEn! : (branchNameTh ?? '');
 
   // ชื่อคลังตามภาษาที่เลือก — ไม่มีชื่ออังกฤษใช้ชื่อไทย
   String warehouseName(bool isEnglish) =>
@@ -70,6 +80,9 @@ class ImWarehouse {
         purchasesAccountId: json['purchases_account_id'],
         purchasesAccountCode: json['purchases_account_code'],
         purchasesAccountName: json['purchases_account_name'],
+        itemCount: (json['item_count'] as num?)?.toInt() ?? 0,
+        totalValue: double.tryParse('${json['total_value'] ?? 0}') ?? 0,
+        belowCount: (json['below_count'] as num?)?.toInt() ?? 0,
       );
 
   Map<String, dynamic> toJson() => {
@@ -86,4 +99,110 @@ class ImWarehouse {
         'accounting_mode': accountingMode,
         'purchases_account_id': purchasesAccountId,
       };
+}
+
+DateTime? _ymdOf(dynamic v) {
+  final s = v?.toString();
+  if (s == null || s.length < 10) return null;
+  final p = s.substring(0, 10).split('-');
+  return DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
+}
+
+/// โซน (ตำแหน่งระดับบนสุด) ของคลัง
+class ImWarehouseZone {
+  final int id;
+  final String code;
+  final String? nameTh;
+  final String? nameEn;
+  final String? categoryCode;
+  final int binCount;
+  final int defaultItemCount;
+  final bool isActive;
+  const ImWarehouseZone({required this.id, required this.code, this.nameTh, this.nameEn, this.categoryCode,
+      this.binCount = 0, this.defaultItemCount = 0, this.isActive = true});
+
+  String displayName(bool isEnglish) => isEnglish && (nameEn ?? '').isNotEmpty ? nameEn! : (nameTh ?? '');
+
+  factory ImWarehouseZone.fromJson(Map<String, dynamic> j) => ImWarehouseZone(
+        id: j['id'] as int,
+        code: j['location_code'] ?? '',
+        nameTh: j['location_name'],
+        nameEn: j['location_name_en'],
+        categoryCode: j['category_code'],
+        binCount: (j['bin_count'] as num?)?.toInt() ?? 0,
+        defaultItemCount: (j['default_item_count'] as num?)?.toInt() ?? 0,
+        isActive: j['is_active'] ?? true,
+      );
+}
+
+/// สินค้า 1 รายการในคลัง (ยอด + จุดสั่งซื้อของคลัง)
+class ImWarehouseItemStock {
+  final int itemId;
+  final String itemCode;
+  final String itemNameTh;
+  final String? itemNameEn;
+  final String? uomCode;
+  final String? uomNameTh;
+  final String? uomNameEn;
+  final double qty;
+  final double value;
+  final double? reorderPoint;
+  final double? maxStockQty;
+  final bool belowReorder;
+  const ImWarehouseItemStock({required this.itemId, required this.itemCode, required this.itemNameTh, this.itemNameEn,
+      this.uomCode, this.uomNameTh, this.uomNameEn, this.qty = 0, this.value = 0, this.reorderPoint, this.maxStockQty,
+      this.belowReorder = false});
+
+  String displayName(bool isEnglish) => isEnglish && (itemNameEn ?? '').isNotEmpty ? itemNameEn! : itemNameTh;
+  String uomName(bool isEnglish) => isEnglish && (uomNameEn ?? '').isNotEmpty ? uomNameEn! : (uomNameTh ?? uomCode ?? '');
+
+  factory ImWarehouseItemStock.fromJson(Map<String, dynamic> j) => ImWarehouseItemStock(
+        itemId: j['item_id'] as int,
+        itemCode: j['item_code'] ?? '',
+        itemNameTh: j['item_name_th'] ?? '',
+        itemNameEn: j['item_name_en'],
+        uomCode: j['uom_code'],
+        uomNameTh: j['uom_name_th'],
+        uomNameEn: j['uom_name_en'],
+        qty: double.tryParse('${j['qty'] ?? 0}') ?? 0,
+        value: double.tryParse('${j['value'] ?? 0}') ?? 0,
+        reorderPoint: j['reorder_point'] == null ? null : double.tryParse('${j['reorder_point']}'),
+        maxStockQty: j['max_stock_qty'] == null ? null : double.tryParse('${j['max_stock_qty']}'),
+        belowReorder: j['below_reorder'] == true,
+      );
+}
+
+/// สรุปคลัง — GET im_warehouse/:id/summary
+class ImWarehouseSummary {
+  final int itemCount;
+  final int settingCount;
+  final double totalValue;
+  final int belowCount;
+  final DateTime? lastMovementDate;
+  final String? lastMovementDocNo;
+  final String? lastMovementDocCode;
+  final int zoneCount;
+  final int binCount;
+  final List<ImWarehouseZone> zones;
+  final List<ImWarehouseItemStock> items;
+  const ImWarehouseSummary({this.itemCount = 0, this.settingCount = 0, this.totalValue = 0, this.belowCount = 0,
+      this.lastMovementDate, this.lastMovementDocNo, this.lastMovementDocCode, this.zoneCount = 0, this.binCount = 0,
+      this.zones = const [], this.items = const []});
+
+  factory ImWarehouseSummary.fromJson(Map<String, dynamic> j) {
+    final lm = j['last_movement'] as Map<String, dynamic>?;
+    return ImWarehouseSummary(
+      itemCount: (j['item_count'] as num?)?.toInt() ?? 0,
+      settingCount: (j['setting_count'] as num?)?.toInt() ?? 0,
+      totalValue: double.tryParse('${j['total_value'] ?? 0}') ?? 0,
+      belowCount: (j['below_count'] as num?)?.toInt() ?? 0,
+      lastMovementDate: _ymdOf(lm?['doc_date']),
+      lastMovementDocNo: lm?['doc_no'],
+      lastMovementDocCode: lm?['doc_code'],
+      zoneCount: (j['zone_count'] as num?)?.toInt() ?? 0,
+      binCount: (j['bin_count'] as num?)?.toInt() ?? 0,
+      zones: (j['zones'] as List<dynamic>? ?? []).map((e) => ImWarehouseZone.fromJson(e)).toList(),
+      items: (j['items'] as List<dynamic>? ?? []).map((e) => ImWarehouseItemStock.fromJson(e)).toList(),
+    );
+  }
 }

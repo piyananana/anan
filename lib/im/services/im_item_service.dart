@@ -8,11 +8,12 @@ class ImItemService {
   final String baseUrl = AppConfig.apiIm;
   final AuthService authService = AuthService();
 
-  Future<List<ImItem>> fetchRows({String? keyword}) async {
+  Future<List<ImItem>> fetchRows({String? keyword, bool withStock = false}) async {
     final headers = await authService.getAuthHeader();
     final uri = Uri.parse('$baseUrl/im_item').replace(
       queryParameters: {
         if (keyword != null && keyword.isNotEmpty) 'keyword': keyword,
+        if (withStock) 'with_stock': '1',
       },
     );
     final response = await http.get(uri, headers: headers);
@@ -37,6 +38,18 @@ class ImItemService {
     } else {
       throw Exception('โหลดข้อมูลสินค้าล้มเหลว: ${response.statusCode}');
     }
+  }
+
+  // สรุปสต็อก/บัญชีของสินค้า (หน้าจอข้อมูลสินค้า)
+  Future<ImItemSummary> fetchSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/im_item/$id/summary'), headers: headers);
+    if (response.statusCode == 200) return ImItemSummary.fromJson(json.decode(response.body));
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    }
+    throw Exception('โหลดสรุปสินค้าล้มเหลว: ${response.statusCode}');
   }
 
   // หน่วยที่เลือกได้ในบรรทัดเอกสาร — purpose: PURCHASE | SALES | PRODUCTION | COUNT | REPORT (null = ทุกหน่วยที่เปิดใช้งาน)

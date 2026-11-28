@@ -36,6 +36,7 @@ import '../../so/screens/so_transaction_screen.dart';
 import '../../im/screens/im_price_change_screen.dart';
 import '../../im/screens/im_stock_count_summary_screen.dart';
 import '../../mo/screens/mo_header_screen.dart';
+import '../utils/sa_menu_theme.dart';
 import '../../gl/screens/gl_period_screen.dart';
 import '../../so/screens/so_quote_transaction_screen.dart';
 
@@ -85,9 +86,21 @@ class HomeScreenState extends State<HomeScreen> {
 
   PasswordStatus? _currentPasswordStatus;
 
+  // ตั้งทั้งใน initState และ build — hot reload ไม่เรียก initState ซ้ำ
+  void _registerMenuOpener() {
+    MenuOpener.openByTarget = (t) {
+      final m = _findMenuByTargetPath(_allMenus, t);
+      if (m == null) return false;
+      _onMenuSelected(m);
+      return true;
+    };
+  }
+
   @override
   void initState() {
     super.initState();
+    // ลิงก์ข้ามหน้าจอ (เช่น หน้าสินค้า → ตารางราคา) เปิดเป็นแท็บด้วยสิทธิ์เมนูจริงของผู้ใช้
+    _registerMenuOpener();
 
     _currentPasswordStatus = widget.passwordStatus;
 
@@ -127,6 +140,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    MenuOpener.openByTarget = null;
     HardwareKeyboard.instance.removeHandler(_onKey);
     InactivityService().stop();
     _searchController.dispose();
@@ -369,6 +383,7 @@ class HomeScreenState extends State<HomeScreen> {
       });
       final menus =
           await MenuService().fetchMenuByUserId(_currentUser?.id ?? 0);
+      ScreenTheme.register(menus); // สีธีมของแต่ละหน้าจอไล่หาจากเมนูแม่
       setState(() {
         _allMenus = menus;
         _menuIndex = HomeMenuIndex(menus);
@@ -646,6 +661,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _registerMenuOpener();
     return Consumer2<AuthService, LanguageProvider>(
       builder: (context, authService, lang, child) {
         final isEnglish = lang.isEnglish;
@@ -1030,6 +1046,7 @@ class _CustomTabBarState extends State<_CustomTabBar> {
   Widget _tab(int i, {required VoidCallback? onClose}) => _TabItemContent(
         label: widget.tabs[i].localName(widget.isEnglish),
         code: widget.codeOf(widget.tabs[i]),
+        accent: ScreenTheme.effectiveFor(widget.tabs[i]).bar, // ขอบบนสีธีมของเมนู
         isActive: i == widget.currentIndex,
         onClose: onClose,
       );
@@ -1139,10 +1156,12 @@ class _TabItemContent extends StatefulWidget {
   final String code;
   final bool isActive;
   final VoidCallback? onClose;
+  final Color? accent; // แถบสีธีมด้านบนของแท็บ
 
   const _TabItemContent({
     required this.label,
     required this.code,
+    this.accent,
     required this.isActive,
     required this.onClose,
   });
@@ -1175,11 +1194,19 @@ class _TabItemContentState extends State<_TabItemContent> {
       child: Container(
         height: 34,
         constraints: const BoxConstraints(maxWidth: 240),
-        padding: const EdgeInsets.only(left: 10, right: 6),
+        clipBehavior: Clip.antiAlias,
         decoration: _TabItemContent.deco(active).copyWith(
           color: active ? HomeColors.card : (_hover ? HomeColors.hover : Colors.transparent),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
+        // ขอบบนสีธีม (แบบหน้าจำลอง 2026-11-26) — วาดทับเป็นแถบด้านบน (Positioned) เพราะ Border ที่สีไม่เท่ากันใส่มุมโค้งไม่ได้
+        // ใช้ Stack ไม่ใช่ Column.stretch — stretch ทำให้ทุกแท็บกว้างเต็ม maxWidth เท่ากันหมด; แท็บต้องกว้างตามชื่อ + ปุ่ม x
+        child: Stack(children: [
+          Positioned(top: 0, left: 0, right: 0, height: 3, child: ColoredBox(color: widget.accent ?? Colors.transparent)),
+          Align(
+            widthFactor: 1,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 10, right: 6, top: 3),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
           if (widget.code.isNotEmpty) ...[
             HomeModuleBadge(widget.code, width: 24, height: 18, fontSize: 9),
             const SizedBox(width: 7),
@@ -1207,6 +1234,9 @@ class _TabItemContentState extends State<_TabItemContent> {
               ),
             ),
           ],
+              ]),
+            ),
+          ),
         ]),
       ),
     );

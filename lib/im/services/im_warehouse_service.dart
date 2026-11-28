@@ -8,9 +8,9 @@ class ImWarehouseService {
   final String baseUrl = AppConfig.apiIm;
   final AuthService authService = AuthService();
 
-  Future<List<ImWarehouse>> fetchRows() async {
+  Future<List<ImWarehouse>> fetchRows({bool withStock = false}) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.get(Uri.parse('$baseUrl/im_warehouse'), headers: headers);
+    final response = await http.get(Uri.parse('$baseUrl/im_warehouse${withStock ? '?with_stock=1' : ''}'), headers: headers);
     if (response.statusCode == 200) {
       return (json.decode(response.body) as List).map((e) => ImWarehouse.fromJson(e)).toList();
     } else if (response.statusCode == 401) {
@@ -19,6 +19,18 @@ class ImWarehouseService {
     } else {
       throw Exception('โหลดข้อมูลคลังสินค้าล้มเหลว: ${response.statusCode}');
     }
+  }
+
+  // สรุปคลัง (หน้าจอคลังสินค้า) — belowOnly = รายการสินค้าเฉพาะที่ต่ำกว่าจุดสั่งซื้อ
+  Future<ImWarehouseSummary> fetchSummary(int id, {bool belowOnly = false}) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/im_warehouse/$id/summary${belowOnly ? '?below=1' : ''}'), headers: headers);
+    if (response.statusCode == 200) return ImWarehouseSummary.fromJson(json.decode(response.body));
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    }
+    throw Exception('โหลดสรุปคลังสินค้าล้มเหลว: ${response.statusCode}');
   }
 
   Future<List<ImWarehouse>> fetchActiveRows() async {

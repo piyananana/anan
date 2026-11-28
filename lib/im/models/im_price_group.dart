@@ -9,6 +9,8 @@ class ImPriceGroup {
   final String? priceGroupNameEn;
   final String? description;
   final bool isActive;
+  // จาก GET im_price_group?with_usage=1 เท่านั้น (หน้าจอกลุ่มราคา)
+  final int priceListCount;
 
   const ImPriceGroup({
     required this.id,
@@ -17,7 +19,10 @@ class ImPriceGroup {
     this.priceGroupNameEn,
     this.description,
     this.isActive = true,
+    this.priceListCount = 0,
   });
+
+  String displayName(bool isEnglish) => isEnglish && (priceGroupNameEn ?? '').isNotEmpty ? priceGroupNameEn! : priceGroupNameTh;
 
   factory ImPriceGroup.fromJson(Map<String, dynamic> json) => ImPriceGroup(
         id: json['id'] as int,
@@ -26,6 +31,7 @@ class ImPriceGroup {
         priceGroupNameEn: json['price_group_name_en'],
         description: json['description'],
         isActive: json['is_active'] ?? true,
+        priceListCount: (json['price_list_count'] as num?)?.toInt() ?? 0,
       );
 
   Map<String, dynamic> toJson() => {

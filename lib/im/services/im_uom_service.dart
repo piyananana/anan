@@ -9,9 +9,9 @@ class ImUomService {
   final String baseUrl = AppConfig.apiIm;
   final AuthService authService = AuthService();
 
-  Future<List<ImUom>> fetchRows() async {
+  Future<List<ImUom>> fetchRows({bool withUsage = false}) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.get(Uri.parse('$baseUrl/im_uom'), headers: headers);
+    final response = await http.get(Uri.parse('$baseUrl/im_uom${withUsage ? '?with_usage=1' : ''}'), headers: headers);
     if (response.statusCode == 200) {
       return (json.decode(response.body) as List).map((e) => ImUom.fromJson(e)).toList();
     } else if (response.statusCode == 401) {
@@ -20,6 +20,18 @@ class ImUomService {
     } else {
       throw Exception('โหลดข้อมูลหน่วยนับล้มเหลว: ${response.statusCode}');
     }
+  }
+
+  // สรุปการใช้หน่วยนับ (หน้าจอหน่วยนับ)
+  Future<ImUomSummary> fetchSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/im_uom/$id/summary'), headers: headers);
+    if (response.statusCode == 200) return ImUomSummary.fromJson(json.decode(response.body));
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    }
+    throw Exception('โหลดสรุปหน่วยนับล้มเหลว: ${response.statusCode}');
   }
 
   Future<List<ImUom>> fetchActiveRows() async {

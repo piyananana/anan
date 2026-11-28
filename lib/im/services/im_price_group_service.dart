@@ -9,9 +9,9 @@ class ImPriceGroupService {
   final String baseUrl = AppConfig.apiIm;
   final AuthService authService = AuthService();
 
-  Future<List<ImPriceGroup>> fetchRows() async {
+  Future<List<ImPriceGroup>> fetchRows({bool withUsage = false}) async {
     final headers = await authService.getAuthHeader();
-    final response = await http.get(Uri.parse('$baseUrl/im_price_group'), headers: headers);
+    final response = await http.get(Uri.parse('$baseUrl/im_price_group${withUsage ? '?with_usage=1' : ''}'), headers: headers);
     if (response.statusCode == 200) {
       return (json.decode(response.body) as List).map((e) => ImPriceGroup.fromJson(e)).toList();
     } else if (response.statusCode == 401) {

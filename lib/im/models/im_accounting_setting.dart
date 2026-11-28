@@ -8,12 +8,15 @@ class ImAccountingSetting {
   final int? inventoryAccountId;
   final String? inventoryAccountCode;
   final String? inventoryAccountName;
+  final String? inventoryAccountNameEng;
   final int? cogsAccountId;
   final String? cogsAccountCode;
   final String? cogsAccountName;
+  final String? cogsAccountNameEng;
   final int? purchasesAccountId;
   final String? purchasesAccountCode;
   final String? purchasesAccountName;
+  final String? purchasesAccountNameEng;
   final int? closingGlDocId;
   final String? closingDocCode;
   final String? closingDocNameThai;
@@ -24,9 +27,9 @@ class ImAccountingSetting {
     this.inventoryAccountingMode = 'PERPETUAL',
     this.modeEffectivePeriodId,
     this.modeEffectivePeriodName,
-    this.inventoryAccountId, this.inventoryAccountCode, this.inventoryAccountName,
-    this.cogsAccountId, this.cogsAccountCode, this.cogsAccountName,
-    this.purchasesAccountId, this.purchasesAccountCode, this.purchasesAccountName,
+    this.inventoryAccountId, this.inventoryAccountCode, this.inventoryAccountName, this.inventoryAccountNameEng,
+    this.cogsAccountId, this.cogsAccountCode, this.cogsAccountName, this.cogsAccountNameEng,
+    this.purchasesAccountId, this.purchasesAccountCode, this.purchasesAccountName, this.purchasesAccountNameEng,
     this.closingGlDocId, this.closingDocCode, this.closingDocNameThai, this.closingDocNameEng,
   });
 
@@ -40,12 +43,15 @@ class ImAccountingSetting {
         inventoryAccountId: json['inventory_account_id'],
         inventoryAccountCode: json['inventory_account_code'],
         inventoryAccountName: json['inventory_account_name'],
+        inventoryAccountNameEng: json['inventory_account_name_eng'],
         cogsAccountId: json['cogs_account_id'],
         cogsAccountCode: json['cogs_account_code'],
         cogsAccountName: json['cogs_account_name'],
+        cogsAccountNameEng: json['cogs_account_name_eng'],
         purchasesAccountId: json['purchases_account_id'],
         purchasesAccountCode: json['purchases_account_code'],
         purchasesAccountName: json['purchases_account_name'],
+        purchasesAccountNameEng: json['purchases_account_name_eng'],
         closingGlDocId: json['closing_gl_doc_id'],
         closingDocCode: json['closing_doc_code'],
         closingDocNameThai: json['closing_doc_name_thai'],

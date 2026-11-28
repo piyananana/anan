@@ -1,933 +1,146 @@
 ﻿// lib/ar/screens/ar_gl_account_setup_screen.dart
+// ประเภทเอกสาร AR เชื่อมต่อ GL — หน้าตาแบบเดียวกับ IM (sa_gl_setup_kit.dart, user 2026-11-26)
+// ช่องบัญชีต่อ sys_doc_type ตรงกับที่ arTransactionController.postGlEntry ใช้จริง (pattern_gl_setup_fields_match_posting)
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../sa/utils/sa_menu_scope.dart';
-import '../../sa/widgets/sa_sys_doc_type_guide.dart';
-import '../../sa/services/sa_language_provider.dart';
-import '../../gl/models/gl_account.dart';
-import '../../gl/services/gl_account_service.dart';
-import '../../sa/models/sa_module_document.dart';
-import '../../sa/services/sa_module_document_service.dart';
-import '../models/ar_gl_account_setup.dart';
-import '../services/ar_gl_account_setup_service.dart';
+import '../../config/app_config.dart';
+import '../../sa/widgets/sa_gl_setup_kit.dart';
 
-class ArGlAccountSetupScreen extends StatefulWidget {
+bool _rev(String s) => ['10', '30', '35', '50', '55'].contains(s); // ตั้งหนี้/เพิ่มหนี้/ลดหนี้ (ลดหนี้กลับทิศ)
+bool _cash(String s) => ['60', '65', '80'].contains(s); // มัดจำ / คืนมัดจำ / รับชำระ
+bool _payMethod(String s) => ['60', '80'].contains(s); // คืนมัดจำใช้บัญชี Cash/Bank บัญชีเดียว
+
+const _payFbTh = 'บัญชีเงินสด / ธนาคารด้านบน';
+const _payFbEn = 'The Cash / Bank account above';
+const _payLvTh = 'วิธีชำระ · บัญชีธนาคาร (CM)';
+const _payLvEn = 'Payment method · bank account (CM)';
+
+GlAcct _pay(String key, String th, String en) =>
+    GlAcct(key, th, en, show: _payMethod, fbTh: _payFbTh, fbEn: _payFbEn, levelsTh: _payLvTh, levelsEn: _payLvEn);
+
+final arGlSetupSpec = GlSetupSpec(
+  module: 'AR',
+  guideModule: 'AR',
+  baseUrl: '${AppConfig.apiAr}/ar_gl_account_setup',
+  placeholderTh: 'เลือกประเภทเอกสาร AR ด้านซ้าย',
+  placeholderEn: 'Select an AR document type on the left',
+  noGl: (s) => s == '70', // วางบิล ไม่ลงบัญชี
+  groupOf: (s) => _cash(s) ? 'CASH' : 'BILL',
+  groups: const [('BILL', 'ตั้งหนี้ / เพิ่มหนี้ / ลดหนี้', 'Invoices / notes'), ('CASH', 'มัดจำ / รับชำระ', 'Deposits / receipts')],
+  banner: (s, e) => _payMethod(s)
+      ? (e
+          ? 'Receipt account per payment line: payment method GL account → bank account GL account (CM) → the per-method account below → Cash / Bank.'
+          : 'บัญชีรับเงินแต่ละบรรทัด: บัญชี GL ของวิธีชำระ → บัญชี GL ของบัญชีธนาคาร (CM) → บัญชีตามวิธีชำระด้านล่าง → เงินสด / ธนาคาร')
+      : null,
+  accounts: [
+    GlAcct('ar_account_id', 'ลูกหนี้การค้า', 'Accounts receivable',
+        show: (s) => _rev(s) || s == '80',
+        fbTh: 'บัญชีของลูกค้า / กลุ่มลูกค้า (ใช้ก่อนบัญชีนี้เสมอ)',
+        fbEn: 'The customer / customer group account (always checked before this one)',
+        levelsTh: 'ลูกค้า · กลุ่มลูกค้า',
+        levelsEn: 'Customer · customer group'),
+    GlAcct('revenue_account_id', 'รายได้ขาย', 'Sales revenue',
+        show: _rev,
+        fbTh: 'บัญชีที่เลือกในแต่ละบรรทัดเอกสาร (ค่านี้เป็นค่าเริ่มต้นของบรรทัด)',
+        fbEn: 'The account chosen on each document line (this is the line default)',
+        levelsTh: 'บรรทัดเอกสาร',
+        levelsEn: 'Document line'),
+    GlAcct('vat_output_account_id', 'ภาษีขาย', 'Output VAT',
+        show: (s) => _rev(s) || _cash(s),
+        fbTh: 'บัญชีของรหัสอัตราภาษีที่เลือกในเอกสาร',
+        fbEn: 'The account of the VAT rate chosen on the document',
+        levelsTh: 'อัตราภาษี',
+        levelsEn: 'VAT rate'),
+    GlAcct('vat_pending_output_account_id', 'ภาษีขายรอตัดบัญชี', 'Deferred output VAT',
+        show: (s) => _rev(s) || ['60', '80'].contains(s),
+        optTh: 'ต้องตั้งเมื่อมีรายการ VAT รอตัด (ค่าบริการ / มัดจำ)',
+        optEn: 'Needed only for deferred-VAT lines (services / deposits)'),
+    GlAcct('discount_account_id', 'ส่วนลดจ่าย', 'Discount given',
+        show: _rev, fbTh: 'ลงรายได้สุทธิหลังหักส่วนลด', fbEn: 'Revenue is posted net of discount'),
+    GlAcct('advance_account_id', 'เงินมัดจำรับ', 'Advance received',
+        show: _cash,
+        requiredFor: (s) => ['60', '65'].contains(s),
+        optTh: 'ใช้บัญชีที่ใบมัดจำลงไว้ — ต้องตั้งเมื่อใบมัดจำไม่ได้เก็บบัญชีไว้',
+        optEn: 'Uses the account the deposit was posted to — needed only when the deposit has none'),
+    GlAcct('cash_account_id', 'เงินสด / ธนาคาร', 'Cash / bank',
+        show: _cash,
+        requiredFor: (s) => s == '65',
+        fbTh: 'บัญชี GL ของวิธีชำระ / บัญชีธนาคาร (ใช้ก่อนบัญชีนี้)',
+        fbEn: 'Payment method / bank account GL account (checked first)',
+        levelsTh: _payLvTh,
+        levelsEn: _payLvEn),
+    _pay('check_account_id', 'เช็ค', 'Cheque'),
+    _pay('transfer_account_id', 'โอนเงิน', 'Transfer'),
+    _pay('credit_card_account_id', 'บัตรเครดิต', 'Credit card'),
+    _pay('debit_card_account_id', 'บัตรเดบิต', 'Debit card'),
+    _pay('qr_code_account_id', 'QR Code / พร้อมเพย์', 'QR code / PromptPay'),
+    _pay('mobile_banking_account_id', 'Mobile / Internet Banking', 'Mobile / internet banking'),
+    _pay('bill_of_exchange_account_id', 'ตั๋วแลกเงิน', 'Bill of exchange'),
+    GlAcct('wht_account_id', 'ภาษีถูกหัก ณ ที่จ่าย', 'Withholding tax deducted',
+        show: (s) => s == '80', optTh: 'ต้องตั้งเมื่อลูกค้าหักภาษี ณ ที่จ่าย', optEn: 'Needed only when the customer withholds tax'),
+    GlAcct('fx_gain_account_id', 'กำไรจากอัตราแลกเปลี่ยน', 'FX gain',
+        show: (s) => ['10', '80'].contains(s), optTh: 'ต้องตั้งเมื่ออัตราแลกเปลี่ยนต่างกัน', optEn: 'Needed only when exchange rates differ'),
+    GlAcct('fx_loss_account_id', 'ขาดทุนจากอัตราแลกเปลี่ยน', 'FX loss',
+        show: (s) => ['10', '80'].contains(s), optTh: 'ต้องตั้งเมื่ออัตราแลกเปลี่ยนต่างกัน', optEn: 'Needed only when exchange rates differ'),
+  ],
+  journal: (s) => switch (s) {
+    '10' || '30' || '35' => [
+        const GlJSection([
+          GlJ('Dr', 'ar_account_id'),
+          GlJ('Dr', 'discount_account_id', 'ถ้ามีส่วนลด', 'if a discount applies'),
+          GlJ('  Cr', 'revenue_account_id', 'ต่อบรรทัด', 'per line'),
+          GlJ('  Cr', 'vat_output_account_id'),
+          GlJ('  Cr', 'vat_pending_output_account_id', 'บรรทัด VAT รอตัด', 'deferred-VAT lines'),
+        ]),
+        if (s == '10')
+          const GlJSection([
+            GlJ('Dr', 'fx_loss_account_id', 'ขาดทุน', 'loss'),
+            GlJ('  Cr', 'fx_gain_account_id', 'กำไร', 'gain'),
+          ], th: 'หักมัดจำที่อัตราแลกเปลี่ยนต่างกัน', en: 'Deposit deducted at a different exchange rate'),
+      ],
+    '50' || '55' => const [
+        GlJSection([
+          GlJ('Dr', 'revenue_account_id', 'ต่อบรรทัด', 'per line'),
+          GlJ('Dr', 'vat_output_account_id'),
+          GlJ('Dr', 'vat_pending_output_account_id', 'บรรทัด VAT รอตัด', 'deferred-VAT lines'),
+          GlJ('  Cr', 'discount_account_id', 'ถ้ามีส่วนลด', 'if a discount applies'),
+          GlJ('  Cr', 'ar_account_id'),
+        ]),
+      ],
+    '60' => const [
+        GlJSection([
+          GlJ('Dr', 'cash_account_id', 'หรือบัญชีตามวิธีชำระ', 'or the per-method account'),
+          GlJ('  Cr', 'advance_account_id'),
+          GlJ('  Cr', 'vat_output_account_id', 'ถ้ามี VAT', 'if VAT applies'),
+        ]),
+      ],
+    '65' => const [
+        GlJSection([
+          GlJ('Dr', 'advance_account_id'),
+          GlJ('Dr', 'vat_output_account_id', 'กลับรายการ VAT มัดจำ', 'reverse the deposit VAT'),
+          GlJ('  Cr', 'cash_account_id'),
+        ]),
+      ],
+    '80' => const [
+        GlJSection([
+          GlJ('Dr', 'cash_account_id', 'หรือบัญชีตามวิธีชำระ', 'or the per-method account'),
+          GlJ('Dr', 'advance_account_id', 'ตัดมัดจำ', 'deposit applied'),
+          GlJ('Dr', 'wht_account_id', 'ถ้าลูกค้าหักภาษี', 'if tax is withheld'),
+          GlJ('Dr', 'fx_loss_account_id', 'ขาดทุน FX', 'FX loss'),
+          GlJ('  Cr', 'ar_account_id', 'บัญชีที่ใบแจ้งหนี้ลงไว้', 'the account each invoice was posted to'),
+          GlJ('  Cr', 'fx_gain_account_id', 'กำไร FX', 'FX gain'),
+        ]),
+        GlJSection([
+          GlJ('Dr', 'vat_pending_output_account_id'),
+          GlJ('  Cr', 'vat_output_account_id'),
+        ], th: 'รับรู้ภาษีขายรอตัด (รายการ VAT รอตัด)', en: 'Recognise deferred output VAT (deferred-VAT lines)'),
+      ],
+    _ => const <GlJSection>[],
+  },
+);
+
+class ArGlAccountSetupScreen extends StatelessWidget {
   const ArGlAccountSetupScreen({super.key});
 
   @override
-  State<ArGlAccountSetupScreen> createState() => _ArGlAccountSetupScreenState();
-}
-
-class _ArGlAccountSetupScreenState extends State<ArGlAccountSetupScreen>
-    with AutomaticKeepAliveClientMixin {
-  final ArGlAccountSetupService _svc      = ArGlAccountSetupService();
-  final ModuleDocumentService   _docSvc   = ModuleDocumentService();
-  final AccountService          _acctSvc  = AccountService();
-
-  List<ArGlAccountSetup> _rows    = [];
-  List<Account>          _accounts = [];
-  List<ModuleDocument>   _glDocs  = [];   // GL doc types สำหรับ picker
-  List<ModuleDocument>   _allDocs = [];   // ทุก doc type (ทุกโมดูล) — ใช้หาชื่ออังกฤษของ AR doc
-
-  bool   _isLoading          = true;
-  String _selectedDocCode    = '';
-  bool   _isDraggingDivider  = false;
-  bool   _isLeftPanelExpanded = true;
-  double _leftPanelWidth     = 320.0;
-  bool   _isEnglish          = false;
-
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAll();
-  }
-
-  Future<void> _loadAll() async {
-    final isEnglish = _isEnglish;
-    setState(() => _isLoading = true);
-    try {
-      final results = await Future.wait([
-        _svc.fetchRows(),
-        _acctSvc.fetchRows(),
-        _docSvc.fetchRows(),
-      ]);
-      setState(() {
-        _rows     = results[0] as List<ArGlAccountSetup>;
-        _accounts = (results[1] as List<Account>)
-            .where((a) => a.isActive && a.isNormalAccount).toList()
-          ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
-        _allDocs  = results[2] as List<ModuleDocument>;
-        _glDocs   = _allDocs
-            .where((d) => d.isDocType && d.sysModule == '01' && d.isActive).toList()
-          ..sort((a, b) => a.docCode.compareTo(b.docCode));
-        _isLoading = false;
-        // เลือก row แรกอัตโนมัติ
-        if (_rows.isNotEmpty && _selectedDocCode.isEmpty) {
-          _selectedDocCode = _rows.first.docCode;
-        }
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEnglish ? 'Failed to load data: $e' : 'โหลดข้อมูลล้มเหลว: $e')));
-    }
-  }
-
-  ArGlAccountSetup? get _selected =>
-      _rows.where((r) => r.docCode == _selectedDocCode).firstOrNull;
-
-  String _resolveDocName(String docCode, String? fallback) {
-    if (_isEnglish) {
-      final match = _allDocs.where((d) => d.docCode == docCode);
-      if (match.isNotEmpty && match.first.docNameEng.isNotEmpty) {
-        return match.first.docNameEng;
-      }
-    }
-    return fallback ?? '';
-  }
-
-  // ── Account picker dialog ─────────────────────────────────────────────────
-  Future<Account?> _pickAccount({String title = ''}) async {
-    final isEnglish =
-        Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    final dialogTitle = title.isNotEmpty
-        ? title
-        : (isEnglish ? 'Select GL Account' : 'เลือกบัญชี GL');
-    final searchCtrl = TextEditingController();
-    List<Account> filtered = List.from(_accounts);
-    Account? picked;
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
-        void doFilter(String q) {
-          setDlg(() {
-            final lq = q.toLowerCase();
-            filtered = q.isEmpty
-                ? List.from(_accounts)
-                : _accounts.where((a) =>
-                    a.accountCode.toLowerCase().contains(lq) ||
-                    a.accountNameThai.toLowerCase().contains(lq) ||
-                    a.accountNameEng.toLowerCase().contains(lq)).toList();
-          });
-        }
-
-        return AlertDialog(
-          title: Text(dialogTitle),
-          content: SizedBox(
-            width: 520, height: 420,
-            child: Column(children: [
-              TextField(
-                controller: searchCtrl,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: isEnglish ? 'Search code / account name' : 'ค้นหา รหัส / ชื่อบัญชี',
-                  prefixIcon: const Icon(Icons.search),
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                  isDense: true,
-                ),
-                onChanged: doFilter,
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.separated(
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final a = filtered[i];
-                    final name = isEnglish && a.accountNameEng.isNotEmpty
-                        ? a.accountNameEng
-                        : a.accountNameThai;
-                    return ListTile(
-                      dense: true,
-                      title: Text('${a.accountCode}  $name',
-                          style: const TextStyle(fontSize: 13)),
-                      onTap: () { picked = a; Navigator.of(ctx).pop(); },
-                    );
-                  },
-                ),
-              ),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          ],
-        );
-      }),
-    );
-    searchCtrl.dispose();
-    return picked;
-  }
-
-  // ── GL Doc picker ─────────────────────────────────────────────────────────
-  Future<ModuleDocument?> _pickGlDoc() async {
-    final isEnglish =
-        Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    final searchCtrl = TextEditingController();
-    List<ModuleDocument> filtered = List.from(_glDocs);
-    ModuleDocument? picked;
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
-        return AlertDialog(
-          title: Text(isEnglish ? 'Select GL Document Type' : 'เลือกประเภทเอกสาร GL'),
-          content: SizedBox(
-            width: 480, height: 380,
-            child: Column(children: [
-              TextField(
-                controller: searchCtrl,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: isEnglish ? 'Search' : 'ค้นหา',
-                  prefixIcon: const Icon(Icons.search),
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                  isDense: true,
-                ),
-                onChanged: (q) {
-                  setDlg(() {
-                    final lq = q.toLowerCase();
-                    filtered = q.isEmpty
-                        ? List.from(_glDocs)
-                        : _glDocs.where((d) =>
-                            d.docCode.toLowerCase().contains(lq) ||
-                            d.docNameThai.toLowerCase().contains(lq) ||
-                            d.docNameEng.toLowerCase().contains(lq)).toList();
-                  });
-                },
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.separated(
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final d = filtered[i];
-                    final name = isEnglish && d.docNameEng.isNotEmpty
-                        ? d.docNameEng
-                        : d.docNameThai;
-                    return ListTile(
-                      dense: true,
-                      title: Text('${d.docCode}  $name',
-                          style: const TextStyle(fontSize: 13)),
-                      onTap: () { picked = d; Navigator.of(ctx).pop(); },
-                    );
-                  },
-                ),
-              ),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(isEnglish ? 'Cancel' : 'ยกเลิก')),
-          ],
-        );
-      }),
-    );
-    searchCtrl.dispose();
-    return picked;
-  }
-
-  // ── Save ──────────────────────────────────────────────────────────────────
-  Future<void> _onSave(ArGlAccountSetup updated) async {
-    final isEnglish = _isEnglish;
-    try {
-      final saved = await _svc.upsertRow(updated);
-      // อัปเดต row ใน list
-      setState(() {
-        final idx = _rows.indexWhere((r) => r.docCode == saved.docCode);
-        if (idx >= 0) _rows[idx] = saved; else _rows.add(saved);
-      });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEnglish ? 'Save failed: $e' : 'บันทึกล้มเหลว: $e')));
-    }
-  }
-
-  // ── Build ─────────────────────────────────────────────────────────────────
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    _isEnglish = isEnglish;
-    return Scaffold(
-      appBar: AppBar(
-        title: const MenuTitle(),
-        backgroundColor: Colors.teal[700],
-        foregroundColor: Colors.white,
-        actions: [
-          SysDocTypeGuideButton(
-            module: 'AR',
-            isEnglish: isEnglish,
-            docCodesBySdt: SysDocTypeGuideButton.groupDocCodes(_rows, (r) => r.sysDocType, (r) => r.docCode),
-            currentSdt: _selected?.sysDocType,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            tooltip: isEnglish ? 'Reload' : 'โหลดใหม่',
-            onPressed: _loadAll,
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(builder: (ctx, constraints) {
-              final maxLeft =
-                  (constraints.maxWidth - 36 - 5 - 400).clamp(100.0, double.infinity);
-              return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                // Collapse toggle
-                Container(
-                  width: 36,
-                  color: Colors.teal[700],
-                  child: IconButton(
-                    icon: Icon(
-                      _isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list,
-                      color: Colors.white, size: 20,
-                    ),
-                    padding: EdgeInsets.zero,
-                    onPressed: () =>
-                        setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                    tooltip: _isLeftPanelExpanded
-                        ? (isEnglish ? 'Collapse list' : 'ย่อรายการ')
-                        : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
-                  ),
-                ),
-                // Left: doc_code list
-                AnimatedContainer(
-                  duration: _isDraggingDivider
-                      ? Duration.zero
-                      : const Duration(milliseconds: 200),
-                  width: _isLeftPanelExpanded ? _leftPanelWidth : 0,
-                  child: ClipRect(
-                    child: OverflowBox(
-                      maxWidth: _leftPanelWidth, minWidth: _leftPanelWidth,
-                      alignment: Alignment.topLeft,
-                      child: _buildLeftPanel(),
-                    ),
-                  ),
-                ),
-                // Drag divider
-                if (_isLeftPanelExpanded)
-                  MouseRegion(
-                    cursor: SystemMouseCursors.resizeColumn,
-                    child: GestureDetector(
-                      onHorizontalDragStart: (_) =>
-                          setState(() => _isDraggingDivider = true),
-                      onHorizontalDragUpdate: (d) => setState(() {
-                        _leftPanelWidth =
-                            (_leftPanelWidth + d.delta.dx).clamp(200.0, maxLeft);
-                      }),
-                      onHorizontalDragEnd: (_) =>
-                          setState(() => _isDraggingDivider = false),
-                      child: Container(width: 5, color: Colors.grey[400]),
-                    ),
-                  ),
-                // Right: setup form
-                Expanded(
-                  child: _selected == null
-                      ? Center(child: Text(isEnglish
-                          ? 'Select an AR document type on the left'
-                          : 'เลือกประเภทเอกสาร AR ด้านซ้าย'))
-                      : _ArGlSetupForm(
-                          key: ValueKey(_selected!.docCode),
-                          setup: _selected!,
-                          accounts: _accounts,
-                          glDocs: _glDocs,
-                          docNameResolver: _resolveDocName,
-                          onPickAccount: _pickAccount,
-                          onPickGlDoc: _pickGlDoc,
-                          onSave: _onSave,
-                        ),
-                ),
-              ]);
-            }),
-    );
-  }
-
-  Widget _buildLeftPanel() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      itemCount: _rows.length,
-      itemBuilder: (ctx, i) {
-        final row = _rows[i];
-        final isSelected = row.docCode == _selectedDocCode;
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          color: isSelected ? Colors.teal.shade50 : null,
-          shape: isSelected
-              ? RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: Colors.teal.shade400, width: 1.5),
-                )
-              : null,
-          child: ListTile(
-            dense: true,
-            onTap: () => setState(() => _selectedDocCode = row.docCode),
-            leading: Icon(
-              row.isConfigured ? Icons.check_circle : Icons.radio_button_unchecked,
-              size: 18,
-              color: row.isConfigured ? Colors.green : Colors.grey,
-            ),
-            title: Text(
-              row.docCode,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: isSelected ? Colors.teal[800] : null,
-              ),
-            ),
-            subtitle: Text(
-              row.docNameThai != null ? _resolveDocName(row.docCode, row.docNameThai) : '—',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: isSelected
-                ? Icon(Icons.chevron_right, size: 18, color: Colors.teal[700])
-                : null,
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Form widget (Stateful, แยกออกมาเพื่อให้ key ทำงานได้เมื่อ doc_code เปลี่ยน)
-// ═══════════════════════════════════════════════════════════════════════════
-class _ArGlSetupForm extends StatefulWidget {
-  final ArGlAccountSetup setup;
-  final List<Account> accounts;
-  final List<ModuleDocument> glDocs;
-  final String Function(String docCode, String? fallback) docNameResolver;
-  final Future<Account?> Function({String title}) onPickAccount;
-  final Future<ModuleDocument?> Function() onPickGlDoc;
-  final Future<void> Function(ArGlAccountSetup) onSave;
-
-  const _ArGlSetupForm({
-    super.key,
-    required this.setup,
-    required this.accounts,
-    required this.glDocs,
-    required this.docNameResolver,
-    required this.onPickAccount,
-    required this.onPickGlDoc,
-    required this.onSave,
-  });
-
-  @override
-  State<_ArGlSetupForm> createState() => _ArGlSetupFormState();
-}
-
-class _ArGlSetupFormState extends State<_ArGlSetupForm> {
-  // ── ค่าปัจจุบันในฟอร์ม ─────────────────────────────────────────────────
-  int?    _arAccountId;        String? _arAccountCode;        String? _arAccountName;
-  int?    _revenueAccountId;   String? _revenueAccountCode;   String? _revenueAccountName;
-  int?    _vatOutputAccountId; String? _vatOutputAccountCode; String? _vatOutputAccountName;
-  int?    _discountAccountId;  String? _discountAccountCode;  String? _discountAccountName;
-  int?    _advanceAccountId;   String? _advanceAccountCode;   String? _advanceAccountName;
-  int?    _cashAccountId;      String? _cashAccountCode;      String? _cashAccountName;
-  int?    _checkAccountId;           String? _checkAccountCode;           String? _checkAccountName;
-  int?    _transferAccountId;        String? _transferAccountCode;        String? _transferAccountName;
-  int?    _creditCardAccountId;      String? _creditCardAccountCode;      String? _creditCardAccountName;
-  int?    _debitCardAccountId;       String? _debitCardAccountCode;       String? _debitCardAccountName;
-  int?    _qrCodeAccountId;          String? _qrCodeAccountCode;          String? _qrCodeAccountName;
-  int?    _mobileBankingAccountId;   String? _mobileBankingAccountCode;   String? _mobileBankingAccountName;
-  int?    _billOfExchangeAccountId;  String? _billOfExchangeAccountCode;  String? _billOfExchangeAccountName;
-  int?    _whtAccountId;       String? _whtAccountCode;       String? _whtAccountName;
-  int?    _fxGainAccountId;            String? _fxGainAccountCode;            String? _fxGainAccountName;
-  int?    _fxLossAccountId;            String? _fxLossAccountCode;            String? _fxLossAccountName;
-  int?    _vatPendingOutputAccountId;  String? _vatPendingOutputAccountCode;  String? _vatPendingOutputAccountName;
-  int?    _glDocId;                    String? _glDocCode;                    String? _glDocName;
-  bool    _isSaving = false;
-  bool    _isEnglish = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadFromSetup(widget.setup);
-  }
-
-  void _loadFromSetup(ArGlAccountSetup s) {
-    _arAccountId        = s.arAccountId;        _arAccountCode        = s.arAccountCode;        _arAccountName        = s.arAccountName;
-    _revenueAccountId   = s.revenueAccountId;   _revenueAccountCode   = s.revenueAccountCode;   _revenueAccountName   = s.revenueAccountName;
-    _vatOutputAccountId = s.vatOutputAccountId; _vatOutputAccountCode = s.vatOutputAccountCode; _vatOutputAccountName = s.vatOutputAccountName;
-    _discountAccountId  = s.discountAccountId;  _discountAccountCode  = s.discountAccountCode;  _discountAccountName  = s.discountAccountName;
-    _advanceAccountId   = s.advanceAccountId;   _advanceAccountCode   = s.advanceAccountCode;   _advanceAccountName   = s.advanceAccountName;
-    _cashAccountId      = s.cashAccountId;      _cashAccountCode      = s.cashAccountCode;      _cashAccountName      = s.cashAccountName;
-    _checkAccountId          = s.checkAccountId;          _checkAccountCode          = s.checkAccountCode;          _checkAccountName          = s.checkAccountName;
-    _transferAccountId       = s.transferAccountId;       _transferAccountCode       = s.transferAccountCode;       _transferAccountName       = s.transferAccountName;
-    _creditCardAccountId     = s.creditCardAccountId;     _creditCardAccountCode     = s.creditCardAccountCode;     _creditCardAccountName     = s.creditCardAccountName;
-    _debitCardAccountId      = s.debitCardAccountId;      _debitCardAccountCode      = s.debitCardAccountCode;      _debitCardAccountName      = s.debitCardAccountName;
-    _qrCodeAccountId         = s.qrCodeAccountId;         _qrCodeAccountCode         = s.qrCodeAccountCode;         _qrCodeAccountName         = s.qrCodeAccountName;
-    _mobileBankingAccountId  = s.mobileBankingAccountId;  _mobileBankingAccountCode  = s.mobileBankingAccountCode;  _mobileBankingAccountName  = s.mobileBankingAccountName;
-    _billOfExchangeAccountId = s.billOfExchangeAccountId; _billOfExchangeAccountCode = s.billOfExchangeAccountCode; _billOfExchangeAccountName = s.billOfExchangeAccountName;
-    _whtAccountId       = s.whtAccountId;       _whtAccountCode       = s.whtAccountCode;       _whtAccountName       = s.whtAccountName;
-    _fxGainAccountId              = s.fxGainAccountId;              _fxGainAccountCode              = s.fxGainAccountCode;              _fxGainAccountName              = s.fxGainAccountName;
-    _fxLossAccountId              = s.fxLossAccountId;              _fxLossAccountCode              = s.fxLossAccountCode;              _fxLossAccountName              = s.fxLossAccountName;
-    _vatPendingOutputAccountId    = s.vatPendingOutputAccountId;    _vatPendingOutputAccountCode    = s.vatPendingOutputAccountCode;    _vatPendingOutputAccountName    = s.vatPendingOutputAccountName;
-    _glDocId                      = s.glDocId;                      _glDocCode                      = s.glDocCode;                      _glDocName                      = s.glDocName;
-  }
-
-  // helper: ตรวจว่า field ควรแสดงตาม sys_doc_type — ตรงกับบัญชีที่ postGlEntry (arTransactionController) ใช้จริง
-  String get _sdt => widget.setup.sysDocType ?? '';
-  bool get _isRevenue      => ['10','30','35','50','55'].contains(_sdt);     // ตั้งหนี้/เพิ่มหนี้/ลดหนี้: Dr ลูกหนี้ Cr รายได้+VAT (ลดหนี้กลับทิศ)
-  bool get _posts          => _sdt != '70';                                  // วางบิล (70) ไม่ลงบัญชี
-  bool get _showAr         => _isRevenue || _sdt == '80';
-  bool get _showRevenue    => _isRevenue;
-  bool get _showVat        => _isRevenue || ['60','65','80'].contains(_sdt); // มัดจำ/คืนมัดจำ: VAT ของมัดจำ, รับชำระ: รับรู้ VAT รอตัด
-  bool get _showVatPending => _isRevenue || ['60','80'].contains(_sdt);     // รายการ VAT รอตัด (บริการ / มัดจำ) และรับรู้ตอนรับชำระ
-  bool get _showDiscount   => _isRevenue;                                    // ลดหนี้ใช้ส่วนลดด้วย (กลับทิศ)
-  bool get _showAdvance    => ['60','65','80'].contains(_sdt);               // Advance, Refund, Receipt (ตัดมัดจำ)
-  bool get _showCash       => ['60','65','80'].contains(_sdt);               // Advance, Refund, Receipt
-  bool get _showPayMethod  => ['60','80'].contains(_sdt);                    // คืนมัดจำใช้บัญชี Cash/Bank บัญชีเดียว
-  bool get _showFx         => ['10','80'].contains(_sdt);                    // Receipt + ใบแจ้งหนี้ที่หักมัดจำต่างอัตราแลกเปลี่ยน (buildInvAdvanceGl รวมใบแจ้งหนี้จาก IM)
-  bool get _showWht        => _sdt == '80';                                  // ภาษีถูกหัก ณ ที่จ่าย (รับชำระ)
-
-  // ── Account picker helper ─────────────────────────────────────────────────
-  Future<void> _pick(String title, void Function(Account) onPicked) async {
-    final a = await widget.onPickAccount(title: title);
-    if (a != null) setState(() => onPicked(a));
-  }
-
-  void _clearAccount(void Function() clear) => setState(clear);
-
-  // ── Resolve display name (Thai/Eng) by looking up the current master lists ──
-  String? _resolveAccountName(int? accountId, String? fallback) {
-    if (accountId == null) return fallback;
-    if (_isEnglish) {
-      final match = widget.accounts.where((a) => a.id == accountId);
-      if (match.isNotEmpty && match.first.accountNameEng.isNotEmpty) {
-        return match.first.accountNameEng;
-      }
-    }
-    return fallback;
-  }
-
-  String? _resolveGlDocName(int? docId, String? fallback) {
-    if (docId == null) return fallback;
-    if (_isEnglish) {
-      final match = widget.glDocs.where((d) => d.id == docId);
-      if (match.isNotEmpty && match.first.docNameEng.isNotEmpty) {
-        return match.first.docNameEng;
-      }
-    }
-    return fallback;
-  }
-
-  // ── Build account field ───────────────────────────────────────────────────
-  Widget _accountField({
-    required String label,
-    required int? accountId,
-    required String? accountCode,
-    required String? accountName,
-    required void Function(Account) onPick,
-    required VoidCallback onClear,
-    bool required = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () => _pick(label, onPick),
-        child: InputDecorator(
-          decoration: InputDecoration(
-            labelText: required ? '$label *' : label,
-            border: const OutlineInputBorder(),
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
-              if (accountId != null)
-                IconButton(
-                  icon: const Icon(Icons.clear, size: 16),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: onClear,
-                ),
-              const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: Icon(Icons.account_tree_outlined, size: 18),
-              ),
-            ]),
-          ),
-          child: Text(
-            accountId != null
-                ? '$accountCode  ${_resolveAccountName(accountId, accountName)}'
-                : (_isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
-            style: TextStyle(
-              fontSize: 13,
-              color: accountId != null ? null : Colors.grey.shade500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Journal preview ───────────────────────────────────────────────────────
-  Widget _buildJournalPreview() {
-    final isEnglish = _isEnglish;
-    String nm(int? id, String? fallback) => _resolveAccountName(id, fallback) ?? '';
-    final lines = <_JournalLine>[];
-    switch (_sdt) {
-      case '10':
-      case '30':
-      case '35':
-        if (_arAccountId != null)       lines.add(_JournalLine('Dr', _arAccountCode!, nm(_arAccountId, _arAccountName)));
-        if (_revenueAccountId != null)  lines.add(_JournalLine('  Cr', _revenueAccountCode!, '${nm(_revenueAccountId, _revenueAccountName)} ${isEnglish ? '(per line)' : '(ต่อ line)'}'));
-        if (_vatOutputAccountId != null)lines.add(_JournalLine('  Cr', _vatOutputAccountCode!, nm(_vatOutputAccountId, _vatOutputAccountName)));
-        if (_vatPendingOutputAccountId != null) lines.add(_JournalLine('  Cr', _vatPendingOutputAccountCode!, '${nm(_vatPendingOutputAccountId, _vatPendingOutputAccountName)} ${isEnglish ? '(deferred VAT lines)' : '(รายการ VAT รอตัด)'}'));
-        if (_discountAccountId != null) lines.add(_JournalLine('Dr', _discountAccountCode!, '${nm(_discountAccountId, _discountAccountName)} ${isEnglish ? '(if discount applies)' : '(ถ้ามีส่วนลด)'}'));
-        break;
-      case '50':
-      case '55':
-        if (_revenueAccountId != null)  lines.add(_JournalLine('Dr', _revenueAccountCode!, nm(_revenueAccountId, _revenueAccountName)));
-        if (_vatOutputAccountId != null)lines.add(_JournalLine('Dr', _vatOutputAccountCode!, nm(_vatOutputAccountId, _vatOutputAccountName)));
-        if (_vatPendingOutputAccountId != null) lines.add(_JournalLine('Dr', _vatPendingOutputAccountCode!, '${nm(_vatPendingOutputAccountId, _vatPendingOutputAccountName)} ${isEnglish ? '(deferred VAT lines)' : '(รายการ VAT รอตัด)'}'));
-        if (_discountAccountId != null) lines.add(_JournalLine('  Cr', _discountAccountCode!, '${nm(_discountAccountId, _discountAccountName)} ${isEnglish ? '(if discount applies)' : '(ถ้ามีส่วนลด)'}'));
-        if (_arAccountId != null)       lines.add(_JournalLine('  Cr', _arAccountCode!, nm(_arAccountId, _arAccountName)));
-        break;
-      case '60':
-        if (_cashAccountId != null)     lines.add(_JournalLine('Dr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
-        if (_advanceAccountId != null)  lines.add(_JournalLine('  Cr', _advanceAccountCode!, nm(_advanceAccountId, _advanceAccountName)));
-        if (_vatOutputAccountId != null)lines.add(_JournalLine('  Cr', _vatOutputAccountCode!, '${nm(_vatOutputAccountId, _vatOutputAccountName)} ${isEnglish ? '(if VAT applies)' : '(ถ้ามี VAT)'}'));
-        break;
-      case '65':
-        if (_advanceAccountId != null)  lines.add(_JournalLine('Dr', _advanceAccountCode!, nm(_advanceAccountId, _advanceAccountName)));
-        if (_vatOutputAccountId != null)lines.add(_JournalLine('Dr', _vatOutputAccountCode!, '${nm(_vatOutputAccountId, _vatOutputAccountName)} ${isEnglish ? '(reverse advance VAT)' : '(กลับรายการ VAT มัดจำ)'}'));
-        if (_cashAccountId != null)     lines.add(_JournalLine('  Cr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
-        break;
-      case '80':
-        if (_cashAccountId != null)              lines.add(_JournalLine('Dr', _cashAccountCode!, nm(_cashAccountId, _cashAccountName)));
-        if (_advanceAccountId != null)           lines.add(_JournalLine('Dr', _advanceAccountCode!, '${nm(_advanceAccountId, _advanceAccountName)} ${isEnglish ? '(offset advance)' : '(ตัดมัดจำ)'}'));
-        if (_fxLossAccountId != null)            lines.add(_JournalLine('Dr', _fxLossAccountCode!, '${nm(_fxLossAccountId, _fxLossAccountName)} ${isEnglish ? '(FX loss)' : '(ขาดทุน FX)'}'));
-        if (_vatPendingOutputAccountId != null)  lines.add(_JournalLine('Dr', _vatPendingOutputAccountCode!, '${nm(_vatPendingOutputAccountId, _vatPendingOutputAccountName)} ${isEnglish ? '(recognize deferred VAT)' : '(รับรู้ VAT รอตัด)'}'));
-        if (_arAccountId != null)                lines.add(_JournalLine('  Cr', _arAccountCode!, nm(_arAccountId, _arAccountName)));
-        if (_vatOutputAccountId != null)         lines.add(_JournalLine('  Cr', _vatOutputAccountCode!, '${nm(_vatOutputAccountId, _vatOutputAccountName)} ${isEnglish ? '(deferred VAT recognized)' : '(VAT รอตัด ที่รับรู้)'}'));
-        if (_fxGainAccountId != null)            lines.add(_JournalLine('  Cr', _fxGainAccountCode!, '${nm(_fxGainAccountId, _fxGainAccountName)} ${isEnglish ? '(FX gain)' : '(กำไร FX)'}'));
-        break;
-    }
-    if (lines.isEmpty) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.blueGrey.shade50,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.blueGrey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(isEnglish ? 'Journal Entry Preview' : 'ตัวอย่าง Journal Entry',
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: Colors.blueGrey.shade700)),
-          const SizedBox(height: 6),
-          ...lines.map((l) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 1),
-            child: Row(children: [
-              SizedBox(
-                width: 36,
-                child: Text(l.drCr,
-                    style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: l.drCr.trim() == 'Dr' ? Colors.blue.shade700 : Colors.green.shade700,
-                        fontWeight: FontWeight.bold)),
-              ),
-              SizedBox(width: 72, child: Text(l.code, style: const TextStyle(fontSize: 12, fontFamily: 'monospace'))),
-              Expanded(child: Text(l.name, style: const TextStyle(fontSize: 12))),
-            ]),
-          )),
-        ],
-      ),
-    );
-  }
-
-  // ── Submit ────────────────────────────────────────────────────────────────
-  Future<void> _submit() async {
-    setState(() => _isSaving = true);
-    try {
-      final updated = ArGlAccountSetup(
-        docCode:             widget.setup.docCode,
-        sysDocType:          widget.setup.sysDocType,
-        docNameThai:         widget.setup.docNameThai,
-        arAccountId:         _arAccountId,        arAccountCode:        _arAccountCode,        arAccountName:        _arAccountName,
-        revenueAccountId:    _revenueAccountId,   revenueAccountCode:   _revenueAccountCode,   revenueAccountName:   _revenueAccountName,
-        vatOutputAccountId:  _vatOutputAccountId, vatOutputAccountCode: _vatOutputAccountCode, vatOutputAccountName: _vatOutputAccountName,
-        discountAccountId:   _discountAccountId,  discountAccountCode:  _discountAccountCode,  discountAccountName:  _discountAccountName,
-        advanceAccountId:    _advanceAccountId,   advanceAccountCode:   _advanceAccountCode,   advanceAccountName:   _advanceAccountName,
-        cashAccountId:       _cashAccountId,      cashAccountCode:      _cashAccountCode,      cashAccountName:      _cashAccountName,
-        checkAccountId:          _checkAccountId,          checkAccountCode:          _checkAccountCode,          checkAccountName:          _checkAccountName,
-        transferAccountId:       _transferAccountId,       transferAccountCode:       _transferAccountCode,       transferAccountName:       _transferAccountName,
-        creditCardAccountId:     _creditCardAccountId,     creditCardAccountCode:     _creditCardAccountCode,     creditCardAccountName:     _creditCardAccountName,
-        debitCardAccountId:      _debitCardAccountId,      debitCardAccountCode:      _debitCardAccountCode,      debitCardAccountName:      _debitCardAccountName,
-        qrCodeAccountId:         _qrCodeAccountId,         qrCodeAccountCode:         _qrCodeAccountCode,         qrCodeAccountName:         _qrCodeAccountName,
-        mobileBankingAccountId:  _mobileBankingAccountId,  mobileBankingAccountCode:  _mobileBankingAccountCode,  mobileBankingAccountName:  _mobileBankingAccountName,
-        billOfExchangeAccountId: _billOfExchangeAccountId, billOfExchangeAccountCode: _billOfExchangeAccountCode, billOfExchangeAccountName: _billOfExchangeAccountName,
-        whtAccountId:        _whtAccountId,       whtAccountCode:       _whtAccountCode,       whtAccountName:       _whtAccountName,
-        fxGainAccountId:              _fxGainAccountId,             fxGainAccountCode:             _fxGainAccountCode,            fxGainAccountName:             _fxGainAccountName,
-        fxLossAccountId:              _fxLossAccountId,             fxLossAccountCode:             _fxLossAccountCode,            fxLossAccountName:             _fxLossAccountName,
-        vatPendingOutputAccountId:    _vatPendingOutputAccountId,   vatPendingOutputAccountCode:   _vatPendingOutputAccountCode,  vatPendingOutputAccountName:   _vatPendingOutputAccountName,
-        glDocId:                      _glDocId,                     glDocCode:                     _glDocCode,                    glDocName:                     _glDocName,
-      );
-      await widget.onSave(updated);
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-
-  // ── Build ─────────────────────────────────────────────────────────────────
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    _isEnglish = isEnglish;
-    final s = widget.setup;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Title
-        Row(children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(s.docCode,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              Text(widget.docNameResolver(s.docCode, s.docNameThai), overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-            ]),
-          ),
-          if (s.isConfigured)
-            Chip(
-              label: Text(isEnglish ? 'Configured' : 'มีการตั้งค่า', style: const TextStyle(fontSize: 11)),
-              backgroundColor: Colors.green.shade100,
-              side: const BorderSide(color: Colors.transparent),
-              visualDensity: VisualDensity.compact,
-            ),
-        ]),
-        const SizedBox(height: 16),
-
-        if (!_posts)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blueGrey.shade50,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.blueGrey.shade200),
-            ),
-            child: Text(isEnglish
-                ? 'This document type does not post to the GL — no accounts to set up.'
-                : 'เอกสารประเภทนี้ไม่ลงบัญชี GL — ไม่ต้องตั้งค่ารหัสบัญชี'),
-          ),
-
-        // ── ประเภทเอกสาร GL ──────────────────────────────────────────────
-        if (_posts) ...[
-        _SectionHeader(title: isEnglish ? 'GL Document Type (for Posting)' : 'ประเภทเอกสาร GL (สำหรับ Post)'),
-        InkWell(
-          onTap: () async {
-            final d = await widget.onPickGlDoc();
-            if (d != null) setState(() {
-              _glDocId   = d.id;
-              _glDocCode = d.docCode;
-              _glDocName = d.docNameThai;
-            });
-          },
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: isEnglish ? 'GL Document Type' : 'ประเภทเอกสาร GL',
-              border: const OutlineInputBorder(),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (_glDocId != null)
-                  IconButton(
-                    icon: const Icon(Icons.clear, size: 16),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => setState(() { _glDocId = null; _glDocCode = null; _glDocName = null; }),
-                  ),
-                const Padding(
-                    padding: EdgeInsets.only(right: 8),
-                    child: Icon(Icons.description_outlined, size: 18)),
-              ]),
-            ),
-            child: Text(
-              _glDocId != null
-                  ? '$_glDocCode  ${_resolveGlDocName(_glDocId, _glDocName)}'
-                  : (isEnglish ? '— Not specified —' : '— ไม่ระบุ —'),
-              style: TextStyle(fontSize: 13, color: _glDocId != null ? null : Colors.grey.shade500),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // ── รหัสบัญชี (แสดงตาม sys_doc_type) ────────────────────────────
-        _SectionHeader(title: isEnglish ? 'Account Codes' : 'รหัสบัญชี'),
-        ],
-
-        if (_showAr)
-          _accountField(
-            label: isEnglish
-                ? 'Accounts Receivable (AR Account) *If not specified, the account code from the customer group or customer will be used instead'
-                : 'ลูกหนี้การค้า (AR Account) *ถ้าไม่ระบุ จะใช้รหัสบัญชีจากกลุ่มลูกหนี้หรือลูกหนี้โดยตรงแทน',
-            accountId: _arAccountId, accountCode: _arAccountCode, accountName: _arAccountName,
-            onPick: (a) { _arAccountId = a.id; _arAccountCode = a.accountCode; _arAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _arAccountId = null; _arAccountCode = null; _arAccountName = null; }),
-          ),
-
-        if (_showRevenue)
-          _accountField(
-            label: isEnglish ? 'Sales Revenue (Revenue — default)' : 'รายได้ขาย (Revenue — default)',
-            accountId: _revenueAccountId, accountCode: _revenueAccountCode, accountName: _revenueAccountName,
-            onPick: (a) { _revenueAccountId = a.id; _revenueAccountCode = a.accountCode; _revenueAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _revenueAccountId = null; _revenueAccountCode = null; _revenueAccountName = null; }),
-          ),
-
-        if (_showVat)
-          _accountField(
-            label: isEnglish ? 'Output VAT (VAT Output)' : 'ภาษีขาย (VAT Output)',
-            accountId: _vatOutputAccountId, accountCode: _vatOutputAccountCode, accountName: _vatOutputAccountName,
-            onPick: (a) { _vatOutputAccountId = a.id; _vatOutputAccountCode = a.accountCode; _vatOutputAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _vatOutputAccountId = null; _vatOutputAccountCode = null; _vatOutputAccountName = null; }),
-          ),
-        if (_showVatPending)
-          _accountField(
-            label: isEnglish ? 'Deferred Output VAT (Deferred VAT Output)' : 'ภาษีขายรอตัดบัญชี (Deferred VAT Output)',
-            accountId: _vatPendingOutputAccountId, accountCode: _vatPendingOutputAccountCode, accountName: _vatPendingOutputAccountName,
-            onPick: (a) { _vatPendingOutputAccountId = a.id; _vatPendingOutputAccountCode = a.accountCode; _vatPendingOutputAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _vatPendingOutputAccountId = null; _vatPendingOutputAccountCode = null; _vatPendingOutputAccountName = null; }),
-          ),
-
-        if (_showDiscount)
-          _accountField(
-            label: isEnglish ? 'Discount Given (Discount)' : 'ส่วนลดจ่าย (Discount)',
-            accountId: _discountAccountId, accountCode: _discountAccountCode, accountName: _discountAccountName,
-            onPick: (a) { _discountAccountId = a.id; _discountAccountCode = a.accountCode; _discountAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _discountAccountId = null; _discountAccountCode = null; _discountAccountName = null; }),
-          ),
-
-        if (_showAdvance)
-          _accountField(
-            label: isEnglish ? 'Advance Received (Advance)' : 'เงินมัดจำรับ (Advance)',
-            accountId: _advanceAccountId, accountCode: _advanceAccountCode, accountName: _advanceAccountName,
-            onPick: (a) { _advanceAccountId = a.id; _advanceAccountCode = a.accountCode; _advanceAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _advanceAccountId = null; _advanceAccountCode = null; _advanceAccountName = null; }),
-          ),
-
-        if (_showCash)
-          _accountField(
-            label: isEnglish ? 'Cash / Bank (Cash/Bank — default)' : 'เงินสด / ธนาคาร (Cash/Bank — default)',
-            accountId: _cashAccountId, accountCode: _cashAccountCode, accountName: _cashAccountName,
-            onPick: (a) { _cashAccountId = a.id; _cashAccountCode = a.accountCode; _cashAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _cashAccountId = null; _cashAccountCode = null; _cashAccountName = null; }),
-          ),
-
-        if (_showPayMethod) ...[
-          _SectionHeader(title: isEnglish
-              ? 'Receipt accounts by payment method (If not specified, the account from the CM module or the Cash/Bank account above will be used)'
-              : 'บัญชีรับชำระตามวิธีชำระ (ถ้าไม่ระบุ จะใช้บัญชีจากโมดูล CM หรือบัญชี Cash/Bank ด้านบน)'),
-          _accountField(label: isEnglish ? 'Check (CHECK)' : 'เช็ค (CHECK)', accountId: _checkAccountId, accountCode: _checkAccountCode, accountName: _checkAccountName,
-            onPick: (a) { _checkAccountId = a.id; _checkAccountCode = a.accountCode; _checkAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _checkAccountId = null; _checkAccountCode = null; _checkAccountName = null; })),
-          _accountField(label: isEnglish ? 'Transfer (TRANSFER)' : 'โอนเงิน (TRANSFER)', accountId: _transferAccountId, accountCode: _transferAccountCode, accountName: _transferAccountName,
-            onPick: (a) { _transferAccountId = a.id; _transferAccountCode = a.accountCode; _transferAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _transferAccountId = null; _transferAccountCode = null; _transferAccountName = null; })),
-          _accountField(label: isEnglish ? 'Credit Card (CREDIT CARD)' : 'บัตรเครดิต (CREDIT CARD)', accountId: _creditCardAccountId, accountCode: _creditCardAccountCode, accountName: _creditCardAccountName,
-            onPick: (a) { _creditCardAccountId = a.id; _creditCardAccountCode = a.accountCode; _creditCardAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _creditCardAccountId = null; _creditCardAccountCode = null; _creditCardAccountName = null; })),
-          _accountField(label: isEnglish ? 'Debit Card (DEBIT CARD)' : 'บัตรเดบิต (DEBIT CARD)', accountId: _debitCardAccountId, accountCode: _debitCardAccountCode, accountName: _debitCardAccountName,
-            onPick: (a) { _debitCardAccountId = a.id; _debitCardAccountCode = a.accountCode; _debitCardAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _debitCardAccountId = null; _debitCardAccountCode = null; _debitCardAccountName = null; })),
-          _accountField(label: isEnglish ? 'QR Code / PromptPay (QR_CODE)' : 'QR Code / พร้อมเพย์ (QR_CODE)', accountId: _qrCodeAccountId, accountCode: _qrCodeAccountCode, accountName: _qrCodeAccountName,
-            onPick: (a) { _qrCodeAccountId = a.id; _qrCodeAccountCode = a.accountCode; _qrCodeAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _qrCodeAccountId = null; _qrCodeAccountCode = null; _qrCodeAccountName = null; })),
-          _accountField(label: 'Mobile Banking / Internet Banking (MOBILE_BANKING)', accountId: _mobileBankingAccountId, accountCode: _mobileBankingAccountCode, accountName: _mobileBankingAccountName,
-            onPick: (a) { _mobileBankingAccountId = a.id; _mobileBankingAccountCode = a.accountCode; _mobileBankingAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _mobileBankingAccountId = null; _mobileBankingAccountCode = null; _mobileBankingAccountName = null; })),
-          _accountField(label: isEnglish ? 'Bill of Exchange (BILL OF EXCHANGE)' : 'ตั๋วแลกเงิน (BILL OF EXCHANGE)', accountId: _billOfExchangeAccountId, accountCode: _billOfExchangeAccountCode, accountName: _billOfExchangeAccountName,
-            onPick: (a) { _billOfExchangeAccountId = a.id; _billOfExchangeAccountCode = a.accountCode; _billOfExchangeAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _billOfExchangeAccountId = null; _billOfExchangeAccountCode = null; _billOfExchangeAccountName = null; })),
-        ],
-
-        if (_showWht)
-          _accountField(
-            label: isEnglish ? 'Withholding Tax Deducted (prepaid tax)' : 'ภาษีถูกหัก ณ ที่จ่าย',
-            accountId: _whtAccountId, accountCode: _whtAccountCode, accountName: _whtAccountName,
-            onPick: (a) { _whtAccountId = a.id; _whtAccountCode = a.accountCode; _whtAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _whtAccountId = null; _whtAccountCode = null; _whtAccountName = null; }),
-          ),
-        if (_showFx) ...[
-          _accountField(
-            label: isEnglish ? 'Exchange Rate Gain (FX Gain)' : 'กำไรจากอัตราแลกเปลี่ยน (FX Gain)',
-            accountId: _fxGainAccountId, accountCode: _fxGainAccountCode, accountName: _fxGainAccountName,
-            onPick: (a) { _fxGainAccountId = a.id; _fxGainAccountCode = a.accountCode; _fxGainAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _fxGainAccountId = null; _fxGainAccountCode = null; _fxGainAccountName = null; }),
-          ),
-          _accountField(
-            label: isEnglish ? 'Exchange Rate Loss (FX Loss)' : 'ขาดทุนจากอัตราแลกเปลี่ยน (FX Loss)',
-            accountId: _fxLossAccountId, accountCode: _fxLossAccountCode, accountName: _fxLossAccountName,
-            onPick: (a) { _fxLossAccountId = a.id; _fxLossAccountCode = a.accountCode; _fxLossAccountName = a.accountNameThai; },
-            onClear: () => _clearAccount(() { _fxLossAccountId = null; _fxLossAccountCode = null; _fxLossAccountName = null; }),
-          ),
-        ],
-
-        // ── Journal preview ───────────────────────────────────────────────
-        const SizedBox(height: 4),
-        _buildJournalPreview(),
-
-        // ── Buttons ───────────────────────────────────────────────────────
-        Row(children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: (_isSaving || !(MenuScope.of(context)?.canEdit ?? true)) ? null : _submit,
-              icon: _isSaving
-                  ? const SizedBox(height: 20, width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.save),
-              label: Text(_isSaving
-                  ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
-                  : (isEnglish ? 'Save' : 'บันทึก')),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-        ]),
-      ]),
-    );
-  }
-}
-
-// ── Small helpers ─────────────────────────────────────────────────────────────
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(title,
-          style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              color: Colors.blueGrey.shade700)),
-    );
-  }
-}
-
-class _JournalLine {
-  final String drCr, code, name;
-  _JournalLine(this.drCr, this.code, this.name);
+  Widget build(BuildContext context) => GlSetupScreen(spec: arGlSetupSpec);
 }

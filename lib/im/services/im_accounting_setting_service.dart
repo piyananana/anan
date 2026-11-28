@@ -22,6 +22,18 @@ class ImAccountingSettingService {
     }
   }
 
+  /// ตัวเลขสรุป + รายการที่ตั้งโหมดแยก (คลัง/หมวด/สินค้า) + งวดที่ยังไม่ปิด/ปิดงวดล่าสุด
+  Future<Map<String, dynamic>> fetchSummary() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/im_accounting_setting/summary'), headers: headers);
+    if (response.statusCode == 200) return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    }
+    throw Exception('โหลดสรุปโหมดบัญชีสินค้าล้มเหลว: ${response.statusCode}');
+  }
+
   Future<ImAccountingSetting> upsertSetting(ImAccountingSetting setting) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(

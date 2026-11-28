@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import '../models/sa_menu.dart';
 import 'sa_home_theme.dart';
+import '../utils/sa_menu_theme.dart';
 
 class HomeSidebar extends StatefulWidget {
   final HomeMenuIndex index;
@@ -356,15 +357,28 @@ class _HomeSidebarState extends State<HomeSidebar> {
           padding: EdgeInsets.fromLTRB(indent, 6, 6, 6),
           onTap: () => widget.onOpenMenu(m),
           trailing: _star(m),
-          child: Text(_name(m),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12.5, color: sel ? HomeColors.selText : HomeColors.brandDim)),
+          child: Row(children: [
+            _bullet(m),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(_name(m),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: sel ? HomeColors.selText : HomeColors.brandDim)),
+            ),
+          ]),
         ));
       }
     }
     return out;
   }
+
+  // จุดสีหน้าเมนูที่เปิดหน้าจอได้ = สีธีมของเมนู (ตั้งที่หน้าจัดการเมนู / ตามเมนูแม่) ใช้สีแถบหัว (อ่อนกว่า) ให้เห็นบนพื้นเขียวเข้ม
+  Widget _bullet(Menu m) => Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(color: ScreenTheme.effectiveFor(m).strip, borderRadius: BorderRadius.circular(2)),
+      );
 
   // ดาวเมนูโปรด — แสดงตลอดถ้าเป็นเมนูโปรด ไม่งั้นแสดงตอนชี้
   Widget _star(Menu m) {

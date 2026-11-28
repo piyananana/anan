@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
-import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 import '../models/im_item_category.dart';
 import '../services/im_item_category_service.dart';
-import '../widgets/im_item_category_list_tree_widget.dart';
 import '../widgets/im_item_category_detail_widget.dart';
+import '../widgets/im_master_kit.dart';
+import '../widgets/im_master_tree.dart';
 
+// หน้าจอหมวดหมู่สินค้า (user 2026-11-25): ซ้ายต้นไม้ (ค้นหา/กรอง, จำนวนสินค้ารวมหมวดย่อย, ＋ เพิ่มหมวดย่อย, ลากเพื่อย้าย)
+// ขวารายละเอียด; คลิกแถว = ดู, บันทึกแล้วแสดงหมวดนั้นต่อ, มีแก้ไขค้าง → ยืนยันก่อนเปลี่ยน
+// (dialog ค้นหาหมวดหมู่ในหน้าจออื่นยังใช้ ImItemCategoryListTreeWidget เดิม)
 class ImItemCategoryScreen extends StatefulWidget {
   final VoidCallback onFieldsChanged;
   final VoidCallback? onExit;
@@ -23,265 +27,303 @@ class ImItemCategoryScreen extends StatefulWidget {
   State<ImItemCategoryScreen> createState() => _ImItemCategoryScreenState();
 }
 
-class _ImItemCategoryScreenState extends State<ImItemCategoryScreen>
-    with AutomaticKeepAliveClientMixin {
-  final GlobalKey<ImItemCategoryListTreeWidgetState> _listKey = GlobalKey();
+class _ImItemCategoryScreenState extends State<ImItemCategoryScreen> with AutomaticKeepAliveClientMixin {
   final GlobalKey<ImItemCategoryDetailWidgetState> _detailKey = GlobalKey();
   final _svc = ImItemCategoryService();
+  final _searchCtrl = TextEditingController();
+
+  List<ImItemCategory> _cats = [];
+  bool _loading = false;
+  String _query = '';
+  String? _filter; // auto | empty | inactive
 
   Mode _mode = Mode.none;
-  ImItemCategory? _selectedData;
-  // เพิ่มขึ้นทุกครั้งที่เปลี่ยน mode ของแผงขวา — ส่งให้ ImItemCategoryDetailWidget เพื่อบังคับเคลียร์ฟอร์มเสมอ
-  // แม้ mode/selected จะซ้ำกับครั้งก่อน (เช่น กด "เพิ่มหมวดหมู่หลัก" ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  ImItemCategory? _selected; // addChild = หมวดแม่
   int _requestSeq = 0;
-
-  bool _isLeftPanelExpanded = true;
-  double _leftPanelWidth = 360.0;
-  bool _isDraggingDivider = false;
-  bool _isEnglish = false;
 
   @override
   bool get wantKeepAlive => true;
 
-  void _onAddRoot() => setState(() {
-        _mode = Mode.addRoot;
-        _selectedData = null;
+  bool get _isEnglish => Provider.of<LanguageProvider>(context, listen: false).isEnglish;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final rows = await _svc.fetchRows(withUsage: true);
+      if (mounted) setState(() => _cats = rows);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(_isEnglish ? 'Failed to load data: $e' : 'ไม่สามารถโหลดข้อมูลได้: $e'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // จำนวนสินค้ารวมหมวดย่อยทุกระดับ
+  Map<int, int> _subtreeCounts() {
+    final kids = <int?, List<ImItemCategory>>{};
+    for (final c in _cats) {
+      kids.putIfAbsent(c.parentId, () => []).add(c);
+    }
+    final memo = <int, int>{};
+    int total(ImItemCategory c) => memo[c.id] ??= c.itemCount + (kids[c.id] ?? const []).fold(0, (s, k) => s + total(k));
+    for (final c in _cats) {
+      total(c);
+    }
+    return memo;
+  }
+
+  String _pathOf(ImItemCategory? c) {
+    if (c == null) return '';
+    final byId = {for (final x in _cats) x.id: x};
+    final parts = <String>[];
+    var p = c.parentId;
+    while (p != null && byId.containsKey(p)) {
+      final x = byId[p]!;
+      parts.insert(0, '${x.categoryCode} ${x.displayName(_isEnglish)}');
+      p = x.parentId;
+    }
+    return parts.join(' › ');
+  }
+
+  Future<bool> _confirmLeave() async {
+    final d = _detailKey.currentState;
+    if (d != null && d.isDirty) return confirmDiscardChanges(context, _isEnglish);
+    return true;
+  }
+
+  void _set(Mode m, ImItemCategory? row) => setState(() {
+        _mode = m;
+        _selected = row;
         _requestSeq++;
       });
 
-  void _onAddChild(ImItemCategory parent) => setState(() {
-        _mode = Mode.addChild;
-        _selectedData = parent;
-        _requestSeq++;
-      });
+  Future<void> _onView(ImItemCategory row) async {
+    if (_mode == Mode.view && _selected?.id == row.id) return;
+    if (await _confirmLeave()) _set(Mode.view, row);
+  }
 
-  void _onEdit(ImItemCategory row) => setState(() {
-        _mode = Mode.edit;
-        _selectedData = row;
-        _requestSeq++;
-      });
+  Future<void> _onAddRoot() async {
+    if (await _confirmLeave()) _set(Mode.addRoot, null);
+  }
 
-  void _onView(ImItemCategory row) => setState(() {
-        _mode = Mode.view;
-        _selectedData = row;
-        _requestSeq++;
-      });
+  Future<void> _onAddChild(ImItemCategory parent) async {
+    if (await _confirmLeave()) _set(Mode.addChild, parent);
+  }
 
-  Future<void> _onDelete(ImItemCategory row) async {
-    final isEnglish = _isEnglish;
-    final l = AppL10n(isEnglish);
-    final name = isEnglish && (row.categoryNameEn ?? '').isNotEmpty ? row.categoryNameEn! : row.categoryNameTh;
+  Future<void> _onCancel() async {
+    if (!await _confirmLeave()) return;
+    if (_mode == Mode.edit && _selected != null) {
+      _set(Mode.view, _selected);
+    } else if (_mode == Mode.addChild && _selected != null) {
+      _set(Mode.view, _selected);
+    } else {
+      _set(Mode.none, null);
+    }
+  }
+
+  Future<void> _onDelete() async {
+    final row = _selected;
+    if (row == null) return;
+    final e = _isEnglish;
+    if (_cats.any((c) => c.parentId == row.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e ? 'Cannot delete a category with sub-categories. Remove or move them first.' : 'ไม่สามารถลบหมวดหมู่ที่มีหมวดย่อยได้ กรุณาลบหรือย้ายหมวดย่อยออกก่อน'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(isEnglish ? 'Confirm Delete' : 'ยืนยันการลบ'),
-        content: Text(isEnglish
-            ? 'Are you sure you want to delete category "${row.categoryCode} $name" ?'
-            : 'คุณแน่ใจหรือไม่ที่จะลบหมวดหมู่ "${row.categoryCode} $name" ?'),
+        title: Text(e ? 'Confirm Delete' : 'ยืนยันการลบ'),
+        content: Text(e
+            ? 'Are you sure you want to delete category "${row.categoryCode} ${row.displayName(e)}" ?'
+            : 'คุณแน่ใจหรือไม่ที่จะลบหมวดหมู่ "${row.categoryCode} ${row.displayName(e)}" ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(l.cancel)),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: Text(l.delete)),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(e ? 'Cancel' : 'ยกเลิก')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: Text(e ? 'Delete' : 'ลบ', style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
     if (confirm != true) return;
-
     try {
       await _svc.deleteRow(row.id);
-      _listKey.currentState?.refresh();
-      _onCancel();
+      await _load();
+      _set(Mode.none, null);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e ? 'Deleted successfully' : 'ลบสำเร็จ')));
+    } catch (ex) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Deleted successfully' : 'ลบสำเร็จ')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEnglish ? 'Error deleting: $e' : 'เกิดข้อผิดพลาดในการลบ: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e ? 'Error deleting: $ex' : 'เกิดข้อผิดพลาดในการลบ: $ex'), backgroundColor: Colors.red));
       }
     }
   }
 
   Future<void> _onSubmit(ImItemCategory row) async {
-    final isEnglish = _isEnglish;
+    final e = _isEnglish;
+    final adding = _mode == Mode.addRoot || _mode == Mode.addChild;
     try {
-      if (_mode == Mode.addRoot || _mode == Mode.addChild) {
-        await _svc.addRow(row);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Added successfully' : 'เพิ่มสำเร็จ')));
-        }
-      } else if (_mode == Mode.edit) {
-        await _svc.updateRow(row);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? 'Saved successfully' : 'บันทึกสำเร็จ')));
-        }
-      }
-      _listKey.currentState?.refresh();
-      _onCancel();
-      widget.onFieldsChanged();
-    } catch (e) {
+      final saved = adding ? await _svc.addRow(row) : await _svc.updateRow(row);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(adding ? (e ? 'Added successfully' : 'เพิ่มสำเร็จ') : (e ? 'Saved successfully' : 'บันทึกสำเร็จ'))));
+      }
+      widget.onFieldsChanged();
+      await _load();
+      final fresh = _cats.where((c) => c.id == saved.id).firstOrNull ?? saved;
+      if (mounted) _set(Mode.view, fresh);
+    } catch (ex) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e ? 'Error: $ex' : 'เกิดข้อผิดพลาด: $ex'), backgroundColor: Colors.red));
       }
     }
   }
 
-  void _onCancel() => setState(() {
-        _mode = Mode.none;
-        _selectedData = null;
-        _requestSeq++;
-      });
-
-  void _onCallback(ImItemCategory row) => setState(() {
-        _mode = Mode.none;
-        _selectedData = row;
-        _requestSeq++;
-      });
-
-  Widget _buildRightPanel() {
-    switch (_mode) {
-      case Mode.none:
-        return ImItemCategoryDetailWidget(
-          key: _detailKey,
-          mode: Mode.addRoot,
-          selected: null,
-          onSubmit: _onSubmit,
-          onCancel: _onCancel,
-          isPlaceholder: true,
-          requestSeq: _requestSeq,
-        );
-      case Mode.addRoot:
-        return ImItemCategoryDetailWidget(
-          key: _detailKey,
-          mode: Mode.addRoot,
-          selected: null,
-          onSubmit: _onSubmit,
-          onCancel: _onCancel,
-          requestSeq: _requestSeq,
-        );
-      case Mode.addChild:
-        return ImItemCategoryDetailWidget(
-          key: _detailKey,
-          mode: Mode.addChild,
-          selected: _selectedData,
-          onSubmit: _onSubmit,
-          onCancel: _onCancel,
-          requestSeq: _requestSeq,
-        );
-      case Mode.edit:
-        return ImItemCategoryDetailWidget(
-          key: _detailKey,
-          mode: Mode.edit,
-          selected: _selectedData,
-          onSubmit: _onSubmit,
-          onCancel: _onCancel,
-          requestSeq: _requestSeq,
-        );
-      case Mode.view:
-        return ImItemCategoryDetailWidget(
-          key: _detailKey,
-          mode: Mode.view,
-          selected: _selectedData,
-          onSubmit: (_) async {},
-          onCancel: _onCancel,
-          requestSeq: _requestSeq,
-        );
-      default:
-        return const SizedBox.shrink();
+  Future<void> _onMove(ImTreeNode node, ImTreeNode? parent) async {
+    final e = _isEnglish;
+    if (!await _confirmLeave()) return;
+    try {
+      await _svc.moveNode(node.id, parent?.id);
+      await _load();
+      final fresh = _cats.where((c) => c.id == node.id).firstOrNull;
+      if (fresh != null) _set(Mode.view, fresh);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e ? 'Moved' : 'ย้ายแล้ว')));
+    } catch (ex) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ex.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red));
+      }
     }
+  }
+
+  Widget _buildList(bool e, bool canCreate, bool canEdit) {
+    final counts = _subtreeCounts();
+    final auto = _cats.where((c) => c.isAutoNumber).length;
+    final empty = _cats.where((c) => c.categoryType == 'CATEGORY' && (counts[c.id] ?? 0) == 0).length;
+    final inactive = _cats.where((c) => !c.isActive).length;
+    final byId = {for (final c in _cats) c.id: c};
+    final nodes = [
+      for (final c in _cats)
+        ImTreeNode(
+          id: c.id,
+          parentId: c.parentId,
+          code: c.categoryCode,
+          name: c.displayName(e),
+          kind: c.categoryType == 'HEADER' ? 'H' : 'C',
+          kindBg: c.categoryType == 'HEADER' ? ImKit.blueSoft : ImKit.okSoft,
+          kindFg: c.categoryType == 'HEADER' ? ImKit.blue : ImKit.ok,
+          count: '${counts[c.id] ?? 0}',
+          active: c.isActive,
+        ),
+    ];
+    void toggle(String f) => setState(() => _filter = _filter == f ? null : f);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      ImMasterListHeader(
+        searchCtrl: _searchCtrl,
+        hint: e ? 'Search code / category name' : 'ค้นหา รหัส / ชื่อหมวด',
+        onSearch: (v) => setState(() => _query = v),
+        filters: [
+          ImMasterFilterChip(label: e ? 'All' : 'ทั้งหมด', on: _filter == null, onTap: () => setState(() => _filter = null)),
+          ImMasterFilterChip(label: e ? 'Auto numbering $auto' : 'รหัสอัตโนมัติ $auto', on: _filter == 'auto', onTap: () => toggle('auto')),
+          ImMasterFilterChip(label: e ? 'No items $empty' : 'ไม่มีสินค้า $empty', on: _filter == 'empty', onTap: () => toggle('empty')),
+          ImMasterFilterChip(label: e ? 'Inactive $inactive' : 'หยุดใช้ $inactive', on: _filter == 'inactive', onTap: () => toggle('inactive')),
+        ],
+        countText: e ? '${_cats.length} categories' : 'ทั้งหมด ${_cats.length} หมวด',
+      ),
+      Expanded(
+        child: _loading && _cats.isEmpty
+            ? const Center(child: CircularProgressIndicator())
+            : ImMasterTree(
+                nodes: nodes,
+                selectedId: _mode == Mode.view || _mode == Mode.edit || _mode == Mode.addChild ? _selected?.id : null,
+                query: _query,
+                filter: _filter == null
+                    ? null
+                    : (n) {
+                        final c = byId[n.id];
+                        if (c == null) return false;
+                        switch (_filter) {
+                          case 'auto': return c.isAutoNumber;
+                          case 'empty': return c.categoryType == 'CATEGORY' && (counts[c.id] ?? 0) == 0;
+                          default: return !c.isActive;
+                        }
+                      },
+                onTap: (n) {
+                  final c = byId[n.id];
+                  if (c != null) _onView(c);
+                },
+                onAddChild: canCreate
+                    ? (n) {
+                        final c = byId[n.id];
+                        if (c != null) _onAddChild(c);
+                      }
+                    : null,
+                onMove: canEdit ? _onMove : null,
+                isEnglish: e,
+                emptyText: e ? 'No category found' : 'ไม่พบหมวดหมู่สินค้า',
+                legend: [
+                  ('H', e ? 'Header' : 'หัวข้อ', ImKit.blueSoft, ImKit.blue),
+                  ('C', e ? 'Category' : 'หมวด', ImKit.okSoft, ImKit.ok),
+                ],
+              ),
+      ),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    _isEnglish = isEnglish;
+    final e = context.watch<LanguageProvider>().isEnglish;
     final perm = MenuScope.of(context);
     final canCreate = perm?.canCreate ?? true;
     final canEdit = perm?.canEdit ?? true;
     final canDelete = perm?.canDelete ?? true;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const MenuTitle(),
-        backgroundColor: Colors.teal.shade700,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
-            onPressed: () {
-              _listKey.currentState?.refresh();
-              _onCancel();
-            },
-          ),
-        ],
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final double maxLeftWidth = (constraints.maxWidth - 36 - 5 - 300).clamp(100.0, double.infinity);
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 36,
-                color: Colors.teal[700],
-                child: IconButton(
-                  icon: Icon(_isLeftPanelExpanded ? Icons.filter_list_off : Icons.filter_list, color: Colors.white, size: 20),
-                  padding: EdgeInsets.zero,
-                  onPressed: () => setState(() => _isLeftPanelExpanded = !_isLeftPanelExpanded),
-                  tooltip: _isLeftPanelExpanded ? (isEnglish ? 'Collapse list' : 'ย่อรายการ') : (isEnglish ? 'Expand list' : 'ขยายรายการ'),
-                ),
-              ),
-              AnimatedContainer(
-                duration: _isDraggingDivider ? Duration.zero : const Duration(milliseconds: 200),
-                width: _isLeftPanelExpanded ? _leftPanelWidth : 0.0,
-                child: ClipRect(
-                  child: OverflowBox(
-                    maxWidth: _leftPanelWidth,
-                    minWidth: _leftPanelWidth,
-                    alignment: Alignment.topLeft,
-                    child: ColoredBox(
-                      color: Colors.blueGrey.shade100,
-                      child: ImItemCategoryListTreeWidget(
-                        key: _listKey,
-                        enableAddRootButton: canCreate,
-                        enableAddChildButton: canCreate,
-                        enableEditButton: canEdit,
-                        enableViewButton: true,
-                        enableDeleteButton: canDelete,
-                        enableCardSelect: false,
-                        onAddRoot: _onAddRoot,
-                        onAddChild: _onAddChild,
-                        onEdit: _onEdit,
-                        onView: _onView,
-                        onDelete: _onDelete,
-                        onCallback: _onCallback,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (_isLeftPanelExpanded)
-                MouseRegion(
-                  cursor: SystemMouseCursors.resizeColumn,
-                  child: GestureDetector(
-                    onHorizontalDragStart: (_) => setState(() => _isDraggingDivider = true),
-                    onHorizontalDragUpdate: (details) {
-                      setState(() {
-                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx).clamp(200.0, maxLeftWidth);
-                      });
-                    },
-                    onHorizontalDragEnd: (_) => setState(() => _isDraggingDivider = false),
-                    child: Container(width: 5, color: Colors.grey[400]),
-                  ),
-                ),
-              Expanded(child: _buildRightPanel()),
-            ],
-          );
-        },
+    final view = _mode == Mode.view;
+    return ImMasterShell(
+      isEnglish: e,
+      initialListWidth: 320,
+      barActions: [
+        if (canCreate) ImKit.barButton(context, e ? 'Add root category' : 'เพิ่มหมวดหมู่หลัก', Icons.add, _onAddRoot, primary: true),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: e ? 'Refresh' : 'รีเฟรชรายการ',
+          onPressed: () async {
+            if (!await _confirmLeave()) return;
+            await _load();
+            final fresh = _selected == null ? null : _cats.where((c) => c.id == _selected!.id).firstOrNull;
+            _set(fresh != null && _mode != Mode.addRoot ? Mode.view : Mode.none, fresh);
+          },
+        ),
+      ],
+      list: _buildList(e, canCreate, canEdit),
+      detail: ImItemCategoryDetailWidget(
+        key: _detailKey,
+        mode: _mode,
+        selected: _selected,
+        isPlaceholder: _mode == Mode.none,
+        parentPath: _pathOf(_mode == Mode.addChild ? null : _selected),
+        onSubmit: _onSubmit,
+        onCancel: view ? () => _set(Mode.none, null) : _onCancel,
+        onEdit: view && canEdit ? () => _set(Mode.edit, _selected) : null,
+        onDelete: view && canDelete ? _onDelete : null,
+        onAddChild: view && canCreate && _selected != null ? () => _onAddChild(_selected!) : null,
+        requestSeq: _requestSeq,
       ),
     );
   }

@@ -21,6 +21,20 @@ class ImGlAccountSetupService {
     }
   }
 
+  /// ข้อมูลประกอบ: จำนวนเอกสารที่ใช้ + เอกสารล่าสุด + ค่าที่ใช้เมื่อช่องว่าง (ค่าเริ่มต้นบริษัท / VAT ของ AP-AR ปลายทาง)
+  Future<Map<String, dynamic>> fetchSummary(String docCode, {int? targetDocId}) async {
+    final headers = await authService.getAuthHeader();
+    final uri = Uri.parse('$baseUrl/im_gl_account_setup/${Uri.encodeComponent(docCode)}/summary')
+        .replace(queryParameters: targetDocId == null ? null : {'target_doc_id': '$targetDocId'});
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    }
+    throw Exception('โหลดข้อมูลประกอบล้มเหลว: ${response.statusCode}');
+  }
+
   Future<ImGlAccountSetup> upsertRow(String docCode, ImGlAccountSetup row) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(

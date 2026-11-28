@@ -181,6 +181,7 @@ class ImPriceListHeader {
   final int? id;
   final String priceListCode;
   final String priceListName;
+  final String? priceListNameEn; // ชื่ออังกฤษ (user 2026-11-25)
   final String listType;
   final int? currencyId;
   final String? currencyCode;
@@ -201,11 +202,14 @@ class ImPriceListHeader {
   final bool isActive;
   final int lineCount;
   final List<ImPriceListDetail> details;
+  final String? updatedBy;
+  final DateTime? updatedAt;
 
   const ImPriceListHeader({
     this.id,
     required this.priceListCode,
     required this.priceListName,
+    this.priceListNameEn,
     this.listType = 'SALES',
     this.currencyId,
     this.currencyCode,
@@ -220,12 +224,17 @@ class ImPriceListHeader {
     this.isActive = true,
     this.lineCount = 0,
     this.details = const [],
+    this.updatedBy,
+    this.updatedAt,
   });
+
+  String displayName(bool isEnglish) => isEnglish && (priceListNameEn ?? '').isNotEmpty ? priceListNameEn! : priceListName;
 
   factory ImPriceListHeader.fromJson(Map<String, dynamic> json) => ImPriceListHeader(
         id: json['id'],
         priceListCode: json['price_list_code'] ?? '',
         priceListName: json['price_list_name'] ?? '',
+        priceListNameEn: json['price_list_name_en'],
         listType: json['list_type'] ?? 'SALES',
         currencyId: json['currency_id'],
         currencyCode: json['currency_code'],
@@ -240,12 +249,15 @@ class ImPriceListHeader {
         isActive: json['is_active'] ?? true,
         lineCount: int.tryParse(json['line_count']?.toString() ?? '') ?? 0,
         details: (json['details'] as List<dynamic>? ?? []).map((e) => ImPriceListDetail.fromJson(e)).toList(),
+        updatedBy: json['updated_by'],
+        updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString())?.toLocal() : null,
       );
 
   Map<String, dynamic> toJson() => {
         if (id != null) 'id': id,
         'price_list_code': priceListCode,
         'price_list_name': priceListName,
+        'price_list_name_en': priceListNameEn,
         'list_type': listType,
         'currency_id': currencyId,
         'price_group_id': priceGroupId,
@@ -254,4 +266,52 @@ class ImPriceListHeader {
         'is_active': isActive,
         'details': details.map((e) => e.toJson()).toList(),
       };
+}
+
+/// สินค้าขาย/ซื้อที่ยังไม่มีราคาในตาราง — GET im_price_list/:id/missing_items
+class ImPriceMissingItem {
+  final int id;
+  final String itemCode;
+  final String itemNameTh;
+  final String? itemNameEn;
+  final int? baseUomId;
+  final String? baseUomCode;
+  final String? baseUomNameTh;
+  final String? baseUomNameEn;
+  final String? categoryCode;
+  final String? categoryName;
+  const ImPriceMissingItem({required this.id, required this.itemCode, required this.itemNameTh, this.itemNameEn,
+      this.baseUomId, this.baseUomCode, this.baseUomNameTh, this.baseUomNameEn, this.categoryCode, this.categoryName});
+
+  String displayName(bool isEnglish) => isEnglish && (itemNameEn ?? '').isNotEmpty ? itemNameEn! : itemNameTh;
+
+  factory ImPriceMissingItem.fromJson(Map<String, dynamic> j) => ImPriceMissingItem(
+        id: j['id'] as int,
+        itemCode: j['item_code'] ?? '',
+        itemNameTh: j['item_name_th'] ?? '',
+        itemNameEn: j['item_name_en'],
+        baseUomId: j['base_uom_id'],
+        baseUomCode: j['base_uom_code'],
+        baseUomNameTh: j['base_uom_name_th'],
+        baseUomNameEn: j['base_uom_name_en'],
+        categoryCode: j['category_code'],
+        categoryName: j['category_name_th'],
+      );
+}
+
+/// ผลการอ่านไฟล์นำเข้าราคา — POST im_price_list/import/parse (ยังไม่บันทึก)
+class ImPriceImportResult {
+  final int totalRows;
+  final List<ImPriceListDetail> lines;
+  final List<({int row, String column, String message})> errors;
+  const ImPriceImportResult({this.totalRows = 0, this.lines = const [], this.errors = const []});
+
+  factory ImPriceImportResult.fromJson(Map<String, dynamic> j) => ImPriceImportResult(
+        totalRows: (j['total_rows'] as num?)?.toInt() ?? 0,
+        lines: (j['lines'] as List<dynamic>? ?? []).map((e) => ImPriceListDetail.fromJson(e)).toList(),
+        errors: [
+          for (final e in (j['errors'] as List<dynamic>? ?? []))
+            (row: (e['row'] as num?)?.toInt() ?? 0, column: '${e['column'] ?? ''}', message: '${e['message'] ?? ''}'),
+        ],
+      );
 }

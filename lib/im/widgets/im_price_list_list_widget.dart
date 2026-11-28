@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../models/im_price_list.dart';
 import '../services/im_price_list_service.dart';
+import 'im_master_kit.dart';
 
 class ImPriceListListWidget extends StatefulWidget {
   final bool enableAddButton;
@@ -10,6 +11,8 @@ class ImPriceListListWidget extends StatefulWidget {
   final bool enableViewButton;
   final bool enableDeleteButton;
   final bool enableCardSelect;
+  /// ตารางที่เปิดอยู่ทางขวา (หน้าจอตารางราคา) — ไฮไลต์การ์ด
+  final int? selectedId;
   final void Function() onAdd;
   final Function(ImPriceListHeader) onEdit;
   final Function(ImPriceListHeader) onView;
@@ -26,6 +29,7 @@ class ImPriceListListWidget extends StatefulWidget {
     required this.enableViewButton,
     required this.enableDeleteButton,
     this.enableCardSelect = false,
+    this.selectedId,
     required this.onAdd,
     required this.onEdit,
     required this.onView,
@@ -78,6 +82,8 @@ class ImPriceListListWidgetState extends State<ImPriceListListWidget> with Autom
   String _searchQuery = '';
   List<ImPriceListHeader> _list = [];
   bool _isLoading = false;
+  String? _typeFilter; // SALES | PURCHASE | _inactive
+  String? _groupFilter;
   final _svc = ImPriceListService();
 
   @override
@@ -111,6 +117,7 @@ class ImPriceListListWidgetState extends State<ImPriceListListWidget> with Autom
   Widget build(BuildContext context) {
     super.build(context);
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    if (!widget.enableCardSelect) return _buildScreenList(isEnglish);
     final q = _searchQuery.trim().toUpperCase();
     final typeFiltered = widget.listTypeFilter == null ? _list : _list.where((h) => h.listType == widget.listTypeFilter).toList();
     final display = q.isEmpty
@@ -195,6 +202,88 @@ class ImPriceListListWidgetState extends State<ImPriceListListWidget> with Autom
                           ),
                           onTap: widget.enableCardSelect ? null : () => widget.onCallback(item),
                         ),
+                      );
+                    },
+                  ),
+      ),
+    ]);
+  }
+
+  // ── หน้าจอตารางราคา (แบบ B, user 2026-11-25): การ์ดพร้อมประเภท/ค่าเริ่มต้น/กลุ่ม/สกุลเงิน/จำนวนรายการ ──
+  Widget _buildScreenList(bool isEnglish) {
+    final q = _searchQuery.trim().toUpperCase();
+    final searched = q.isEmpty
+        ? _list
+        : _list.where((h) => h.priceListCode.toUpperCase().contains(q) || h.priceListName.toUpperCase().contains(q) || (h.priceListNameEn ?? '').toUpperCase().contains(q)).toList();
+    final groups = <String, String>{};
+    for (final h in _list) {
+      if ((h.priceGroupCode ?? '').isNotEmpty) {
+        groups[h.priceGroupCode!] = '${h.priceGroupCode}  ${isEnglish && (h.priceGroupNameEn ?? '').isNotEmpty ? h.priceGroupNameEn : (h.priceGroupNameTh ?? '')}';
+      }
+    }
+    final groupKeys = groups.keys.toList()..sort();
+    final sales = searched.where((h) => h.listType == 'SALES').length;
+    final purchase = searched.where((h) => h.listType == 'PURCHASE').length;
+    final inactive = searched.where((h) => !h.isActive).length;
+    final display = searched.where((h) {
+      if (_groupFilter != null && h.priceGroupCode != _groupFilter) return false;
+      if (_typeFilter == '_inactive') return !h.isActive;
+      if (_typeFilter != null) return h.listType == _typeFilter;
+      return true;
+    }).toList()
+      ..sort((a, b) => a.priceListCode.compareTo(b.priceListCode));
+    void toggle(String f) => setState(() => _typeFilter = _typeFilter == f ? null : f);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      ImMasterListHeader(
+        searchCtrl: _searchCtrl,
+        hint: isEnglish ? 'Search code / price list name' : 'ค้นหา รหัส / ชื่อตารางราคา',
+        onSearch: (v) => setState(() => _searchQuery = v),
+        filters: [
+          ImMasterFilterChip(label: isEnglish ? 'All' : 'ทั้งหมด', on: _typeFilter == null && _groupFilter == null,
+              onTap: () => setState(() { _typeFilter = null; _groupFilter = null; })),
+          ImMasterFilterChip(label: isEnglish ? 'Sales $sales' : 'ราคาขาย $sales', on: _typeFilter == 'SALES', onTap: () => toggle('SALES')),
+          ImMasterFilterChip(label: isEnglish ? 'Purchase $purchase' : 'ราคาซื้อ $purchase', on: _typeFilter == 'PURCHASE', onTap: () => toggle('PURCHASE')),
+          if (groupKeys.isNotEmpty)
+            ImMasterPopupFilter(
+              label: isEnglish ? 'Group' : 'กลุ่ม',
+              value: _groupFilter,
+              options: [for (final k in groupKeys) (k, groups[k]!)],
+              allLabel: isEnglish ? 'All groups' : 'ทุกกลุ่ม',
+              onChanged: (v) => setState(() => _groupFilter = v),
+            ),
+          ImMasterFilterChip(label: isEnglish ? 'Inactive $inactive' : 'หยุดใช้ $inactive', on: _typeFilter == '_inactive', onTap: () => toggle('_inactive')),
+        ],
+        countText: isEnglish ? 'Showing ${display.length} of ${_list.length} list(s)' : 'แสดง ${display.length} จาก ${_list.length} รายการ',
+      ),
+      Expanded(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : display.isEmpty
+                ? Center(child: Text(isEnglish ? 'No price list found' : 'ไม่พบตารางราคา', style: const TextStyle(color: ImKit.ink2)))
+                : ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    itemCount: display.length,
+                    itemBuilder: (context, i) {
+                      final h = display[i];
+                      return ImMasterListCard(
+                        code: h.priceListCode,
+                        active: h.isActive,
+                        chips: [
+                          if (!h.isActive) ImKit.chip(isEnglish ? 'Inactive' : 'หยุดใช้', ImKit.redSoft, ImKit.red),
+                          if (h.isDefault) ImKit.chip(isEnglish ? 'Default' : 'ค่าเริ่มต้น', ImKit.goldSoft, ImKit.amber),
+                          h.listType == 'PURCHASE'
+                              ? ImKit.chip(isEnglish ? 'Purchase' : 'ซื้อ', ImKit.purSoft, ImKit.pur)
+                              : ImKit.chip(isEnglish ? 'Sales' : 'ขาย', ImKit.blueSoft, ImKit.blue),
+                        ],
+                        name: h.displayName(isEnglish),
+                        meta: TextSpan(children: [
+                          if ((h.priceGroupCode ?? '').isNotEmpty) TextSpan(text: '${h.priceGroupCode} · '),
+                          TextSpan(text: '${h.currencyCode ?? ''} ${h.priceIncludesVat ? (isEnglish ? 'incl. VAT' : 'รวม VAT') : (isEnglish ? 'excl. VAT' : 'ไม่รวม VAT')} · '),
+                          TextSpan(text: '${h.lineCount}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                          TextSpan(text: isEnglish ? ' line(s)' : ' รายการ'),
+                        ]),
+                        selected: widget.selectedId == h.id,
+                        onTap: () => widget.onView(h),
                       );
                     },
                   ),

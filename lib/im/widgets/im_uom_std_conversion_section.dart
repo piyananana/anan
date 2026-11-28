@@ -10,6 +10,7 @@ import '../../sa/utils/sa_app_l10n.dart';
 import '../models/im_uom.dart';
 import '../models/im_uom_standard_conversion.dart';
 import '../services/im_uom_service.dart';
+import 'im_master_kit.dart';
 
 class ImUomStdConversionSection extends StatefulWidget {
   final ImUom uom; // หน่วยที่บันทึกแล้ว (ใช้ประเภทหน่วยที่บันทึกไว้)
@@ -21,7 +22,13 @@ class ImUomStdConversionSection extends StatefulWidget {
   State<ImUomStdConversionSection> createState() => _ImUomStdConversionSectionState();
 }
 
-class _ImUomStdConversionSectionState extends State<ImUomStdConversionSection> {
+class _ImUomStdConversionSectionState extends State<ImUomStdConversionSection> with ImMasterKit {
+  bool _isEnglish = false;
+  @override
+  bool get kitEnglish => _isEnglish;
+  @override
+  bool get kitReadOnly => widget.readOnly;
+
   final _service = ImUomService();
   static final _fmt = NumberFormat('#,##0.######');
   List<ImUomStandardConversion> _rows = [];
@@ -202,59 +209,51 @@ class _ImUomStdConversionSectionState extends State<ImUomStdConversionSection> {
     }
   }
 
+  // การ์ดแบบหน้าจอข้อมูลหลัก IM (user 2026-11-25) — บันทึกทันทีผ่าน API แยก (ไม่รอปุ่มบันทึกของหน่วยนับ)
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    return Container(
-      decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(6)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
-          decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: const BorderRadius.vertical(top: Radius.circular(6))),
-          child: Row(children: [
-            Expanded(
-              child: Text(isEnglish ? 'Standard Conversions (all items)' : 'อัตราแปลงมาตรฐาน (ใช้กับทุกสินค้า)',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-            if (!widget.readOnly)
-              IconButton(
-                icon: const Icon(Icons.add, size: 20),
-                tooltip: isEnglish ? 'Add conversion' : 'เพิ่มอัตราแปลง',
-                onPressed: _loading ? null : () => _edit(null),
-              ),
-          ]),
-        ),
-        if (_loading)
-          const Padding(padding: EdgeInsets.all(12), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
-        else if (_error != null)
-          Padding(padding: const EdgeInsets.all(12), child: Text(_error!, style: const TextStyle(color: Colors.red)))
-        else if (_rows.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(
-              isEnglish
-                  ? 'None. Example: 1 kilogram = 1,000 grams, 1 dozen = 12 pieces. Units of the same type only.'
-                  : 'ยังไม่มี ตัวอย่าง: 1 กิโลกรัม = 1,000 กรัม, 1 โหล = 12 ชิ้น (แปลงได้เฉพาะหน่วยประเภทเดียวกัน)',
-              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
-            ),
-          )
-        else
-          ..._rows.map((r) {
+    _isEnglish = isEnglish;
+    final name = widget.uom.displayName(isEnglish);
+    Widget body;
+    if (_loading) {
+      body = const Padding(padding: EdgeInsets.all(14), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))));
+    } else if (_error != null) {
+      body = Padding(padding: const EdgeInsets.all(14), child: Text(_error!, style: const TextStyle(color: Colors.red)));
+    } else {
+      body = kTable([
+        KCol(isEnglish ? 'Unit' : 'หน่วย', 4),
+        KCol(isEnglish ? 'Factor' : 'อัตรา', 2, num: true),
+        KCol(isEnglish ? 'Meaning' : 'ความหมาย', 5),
+        if (!widget.readOnly) const KCol('', 2, num: true),
+      ], [
+        for (final r in _rows)
+          () {
             final v = _view(r, isEnglish);
-            return ListTile(
-              dense: true,
-              title: Text('1 ${widget.uom.displayName(isEnglish)} = ${_fmt.format(v.factor)} ${v.other}'),
-              onTap: widget.readOnly ? null : () => _edit(r),
-              trailing: widget.readOnly
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                      tooltip: isEnglish ? 'Delete' : 'ลบ',
-                      onPressed: () => _delete(r),
-                    ),
-            );
-          }),
-      ]),
+            return <Widget>[
+              kCell(v.other),
+              kCell(_fmt.format(v.factor), mono: true),
+              kCell('1 $name = ${_fmt.format(v.factor)} ${v.other}'),
+              if (!widget.readOnly)
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  kIconBtn(Icons.edit, isEnglish ? 'Edit' : 'แก้ไข', () => _edit(r)),
+                  kIconBtn(Icons.delete, isEnglish ? 'Delete' : 'ลบ', () => _delete(r), color: Colors.red),
+                ]),
+            ];
+          }(),
+      ],
+          onTap: widget.readOnly ? null : [for (final r in _rows) () => _edit(r)],
+          minWidth: 560,
+          empty: isEnglish
+              ? 'None. Example: 1 kilogram = 1,000 grams, 1 dozen = 12 pieces. Units of the same type only.'
+              : 'ยังไม่มี ตัวอย่าง: 1 กิโลกรัม = 1,000 กรัม, 1 โหล = 12 ชิ้น (แปลงได้เฉพาะหน่วยประเภทเดียวกัน)');
+    }
+    return kCard(
+      title: isEnglish ? 'Standard Conversions' : 'อัตราแปลงมาตรฐาน',
+      count: isEnglish ? 'All items · ${_rows.length} row(s)' : 'ใช้กับทุกสินค้า · ${_rows.length} รายการ',
+      trailing: widget.readOnly ? null : kGhost(isEnglish ? 'Add conversion' : 'เพิ่มอัตราแปลง', Icons.add, _loading ? null : () => _edit(null)),
+      padding: EdgeInsets.zero,
+      child: body,
     );
   }
 }

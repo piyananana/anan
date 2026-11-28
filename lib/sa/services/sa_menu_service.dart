@@ -111,6 +111,7 @@ class MenuService {
     String? contentType,
     String? contentData,
     bool requiresApproval = false,
+    String? themeColor,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.post(
@@ -127,6 +128,7 @@ class MenuService {
         'content_type': contentType,
         'content_data': contentData,
         'requires_approval': requiresApproval,
+        'theme_color': themeColor,
       }),
     );
 
@@ -153,6 +155,7 @@ class MenuService {
     String? contentType,
     String? contentData,
     bool requiresApproval = false,
+    String? themeColor,
   }) async {
     final headers = await authService.getAuthHeader();
     final response = await http.put(
@@ -169,6 +172,7 @@ class MenuService {
         'content_type': contentType,
         'content_data': contentData,
         'requires_approval': requiresApproval,
+        'theme_color': themeColor,
       }),
     );
 
@@ -183,6 +187,35 @@ class MenuService {
   }
 
   // *** NEW: Delete Menu ***
+  /// ตัวเลขสรุปของเมนู/โฟลเดอร์: groups[], user_count, favorite_count
+  Future<Map<String, dynamic>> fetchMenuSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/sa_menu/$id/summary'), headers: headers);
+    if (response.statusCode == 200) return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    }
+    throw Exception('Failed to load menu summary: ${response.statusCode}');
+  }
+
+  /// ลากย้าย/เรียงลำดับ: parentId = โฟลเดอร์ใหม่ (null = บนสุด), beforeId = วางก่อนเมนูนี้ (null = ท้ายสุด)
+  Future<void> moveMenu(int id, {int? parentId, int? beforeId}) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(Uri.parse('$baseUrl/sa_menu/$id/move'),
+        headers: headers, body: jsonEncode({'parent_id': parentId, 'before_id': beforeId}));
+    if (response.statusCode == 200) return;
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    }
+    String msg = response.body;
+    try {
+      msg = (json.decode(response.body) as Map)['message']?.toString() ?? msg;
+    } catch (_) {}
+    throw Exception(msg);
+  }
+
   Future<void> deleteMenu(int id) async {
     final headers = await authService.getAuthHeader();
     final response = await http.delete(

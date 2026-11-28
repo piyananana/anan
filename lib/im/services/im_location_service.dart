@@ -8,10 +8,11 @@ class ImLocationService {
   final String baseUrl = AppConfig.apiIm;
   final AuthService authService = AuthService();
 
-  Future<List<ImLocation>> fetchRows({int? warehouseId, bool? active}) async {
+  Future<List<ImLocation>> fetchRows({int? warehouseId, bool? active, bool withUsage = false}) async {
     final headers = await authService.getAuthHeader();
     final params = <String, String>{};
     if (warehouseId != null) params['warehouse_id'] = '$warehouseId';
+    if (withUsage) params['with_usage'] = '1';
     if (active != null) params['active'] = '$active';
     final uri = Uri.parse('$baseUrl/im_location').replace(queryParameters: params.isEmpty ? null : params);
     final response = await http.get(uri, headers: headers);
@@ -101,5 +102,27 @@ class ImLocationService {
       final err = json.decode(response.body);
       throw Exception(err['message'] ?? 'ลบข้อมูลล้มเหลว');
     }
+  }
+
+  // ── หน้าจอตำแหน่งจัดเก็บ (user 2026-11-25) ──
+  Future<ImLocationSummary> fetchSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/im_location/$id/summary'), headers: headers);
+    if (response.statusCode == 200) return ImLocationSummary.fromJson(json.decode(response.body));
+    if (response.statusCode == 401) {
+      authService.logout();
+      throw Exception('Unauthorized. Please login again.');
+    }
+    throw Exception('โหลดสรุปตำแหน่งจัดเก็บล้มเหลว: ${response.statusCode}');
+  }
+
+  /// ย้ายไปอยู่ใต้กลุ่ม parentId (null = ระดับบนสุด) ในคลังเดียวกัน
+  Future<void> moveNode(int id, int? parentId) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.put(Uri.parse('$baseUrl/im_location/$id/move'), headers: headers, body: jsonEncode({'parent_id': parentId}));
+    if (response.statusCode == 200) return;
+    String msg = 'ย้ายตำแหน่งไม่สำเร็จ (${response.statusCode})';
+    try { msg = (json.decode(response.body) as Map<String, dynamic>)['message'] ?? msg; } catch (_) {}
+    throw Exception(msg);
   }
 }
