@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/cm_payment_method.dart';
+import '../models/cm_master_summary.dart';
 
 class CmPaymentMethodService {
   final String baseUrl = AppConfig.apiCm;
@@ -57,6 +58,25 @@ class CmPaymentMethodService {
     if (response.statusCode == 401) { authService.logout(); throw Exception('Unauthorized'); }
     final msg = _errorMessage(response.body);
     throw Exception(msg);
+  }
+
+  /// จำนวนผู้ขายที่ตั้งเป็นช่องทางตั้งต้น ต่อประเภท (id → จำนวน)
+  Future<Map<int, int>> fetchUsage() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/cm_payment_method/usage'), headers: headers);
+    if (response.statusCode == 200) {
+      return {for (final e in json.decode(response.body) as List) (e['id'] as num).toInt(): (e['vendor_count'] as num).toInt()};
+    }
+    if (response.statusCode == 401) { authService.logout(); throw Exception('Unauthorized'); }
+    throw Exception(_errorMessage(response.body));
+  }
+
+  Future<CmMethodSummary> fetchSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/cm_payment_method/$id/summary'), headers: headers);
+    if (response.statusCode == 200) return CmMethodSummary.fromJson(Map<String, dynamic>.from(json.decode(response.body)));
+    if (response.statusCode == 401) { authService.logout(); throw Exception('Unauthorized'); }
+    throw Exception(_errorMessage(response.body));
   }
 
   String _errorMessage(String body) {

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/cm_checkbook.dart';
+import '../models/cm_master_summary.dart';
 
 class CmCheckbookService {
   final String baseUrl = AppConfig.apiCm;
@@ -82,4 +83,22 @@ class CmCheckbookService {
     if (res.statusCode == 401) { _auth.logout(); throw Exception('Unauthorized'); }
     throw Exception(_err(res.body));
   }
+
+  // ── หน้าสมุดเช็คแบบ B (user 2026-11-28) ─────────────────────────────────────
+  Future<CmCheckbookAccountSummary> fetchAccountSummary(int bankAccountId) async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.get(Uri.parse('$baseUrl/cm_checkbook/account/$bankAccountId/summary'), headers: headers);
+    if (res.statusCode == 200) return CmCheckbookAccountSummary.fromJson(Map<String, dynamic>.from(jsonDecode(res.body)));
+    if (res.statusCode == 401) { _auth.logout(); throw Exception('Unauthorized'); }
+    throw Exception(_err(res.body));
+  }
+
+  Future<List<CmBookCheck>> fetchBookChecks(int checkbookId) async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.get(Uri.parse('$baseUrl/cm_checkbook/$checkbookId/checks'), headers: headers);
+    if (res.statusCode == 200) return [for (final e in jsonDecode(res.body) as List) CmBookCheck.fromJson(Map<String, dynamic>.from(e))];
+    if (res.statusCode == 401) { _auth.logout(); throw Exception('Unauthorized'); }
+    throw Exception(_err(res.body));
+  }
+
 }

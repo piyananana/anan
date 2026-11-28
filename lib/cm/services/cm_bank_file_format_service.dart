@@ -57,6 +57,17 @@ class CmBankFileFormatService {
     throw Exception(_extractMessage(resp.body));
   }
 
+  /// ตัวอย่างไฟล์จากรูปแบบที่กำลังแก้ (backend สร้างด้วยตัวเดียวกับไฟล์จริง) + ผู้ขายที่ยังไม่มีบัญชีรับโอน
+  Future<({List<String> lines, int vendorsWithoutBank})> preview(CmBankFileFormat row) async {
+    final headers = await _auth.getAuthHeader();
+    final resp = await http.post(Uri.parse('$_base/cm_bank_file_format/preview'), headers: headers, body: jsonEncode(row.toJson()));
+    if (resp.statusCode == 200) {
+      final j = jsonDecode(resp.body) as Map<String, dynamic>;
+      return (lines: [for (final l in (j['lines'] as List? ?? const [])) l.toString()], vendorsWithoutBank: (j['vendors_without_bank'] as num?)?.toInt() ?? 0);
+    }
+    throw Exception(_extractMessage(resp.body));
+  }
+
   Future<void> deleteRow(int id) async {
     final headers = await _auth.getAuthHeader();
     final resp = await http.delete(

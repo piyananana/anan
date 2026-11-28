@@ -25,6 +25,8 @@ class CmBankAccount {
   final int? glAccountId;
   final String? glAccountCode;
   final String? glAccountName;
+  final String? glAccountNameEn;
+  final String? bankNameEn;
   final bool isActive;
   final String? remark;
   final DateTime? createdAt;
@@ -55,6 +57,8 @@ class CmBankAccount {
     this.glAccountId,
     this.glAccountCode,
     this.glAccountName,
+    this.glAccountNameEn,
+    this.bankNameEn,
     required this.isActive,
     this.remark,
     this.createdAt,
@@ -86,6 +90,8 @@ class CmBankAccount {
         glAccountId: json['gl_account_id'],
         glAccountCode: json['gl_account_code'],
         glAccountName: json['gl_account_name'],
+        glAccountNameEn: json['gl_account_name_en'],
+        bankNameEn: json['bank_name_en'],
         isActive: json['is_active'] ?? true,
         remark: json['remark'],
         createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
@@ -112,6 +118,11 @@ class CmBankAccount {
         'is_active': isActive,
         'remark': remark,
       };
+
+  /// ชื่อบัญชีตามภาษา (ว่างอังกฤษ = ใช้ไทย)
+  String name(bool isEnglish) => isEnglish && (accountNameEn ?? '').isNotEmpty ? accountNameEn! : accountNameTh;
+  String glName(bool isEnglish) => isEnglish && (glAccountNameEn ?? '').isNotEmpty ? glAccountNameEn! : (glAccountName ?? '');
+  String bankName(bool isEnglish) => isEnglish && (bankNameEn ?? '').isNotEmpty ? bankNameEn! : (bankNameTh ?? '');
 
   String get bankDisplay {
     if (bankShortName != null && bankShortName!.isNotEmpty) return bankShortName!;

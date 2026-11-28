@@ -4,23 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/utils/sa_menu_scope.dart';
 import '../../cm/models/cm_bank_account.dart';
-import '../../utils/thai_amount_words.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/dot_matrix_pdf.dart';
+import '../utils/cm_check_pdf.dart';
 
 const _kTheme = Color(0xFF1565C0);
 final _fmt      = NumberFormat('#,##0.00', 'en_US');
 final _dateFmt  = DateFormat('dd/MM/yyyy');
 
-double _mmToPt(double mm) => mm * 72 / 25.4;
 
 class CmCheckPrintScreen extends StatefulWidget {
   const CmCheckPrintScreen({super.key});
@@ -511,72 +508,6 @@ class _State extends State<CmCheckPrintScreen> with AutomaticKeepAliveClientMixi
     }
   }
 
-  Future<Uint8List> _buildPdf(List<Map<String, dynamic>> checks, Map<String, dynamic> cfg) async {
-    final fontData     = await rootBundle.load('assets/fonts/THSarabun.ttf');
-    final fontBoldData = await rootBundle.load('assets/fonts/THSarabun Bold.ttf');
-    final font     = pw.Font.ttf(fontData);
-    final fontBold = pw.Font.ttf(fontBoldData);
-
-    final pw.ThemeData theme = pw.ThemeData.withFont(base: font, bold: fontBold);
-
-    final double paperW = _mmToPt(double.tryParse(cfg['paper_width_mm']?.toString()  ?? '210') ?? 210);
-    final double paperH = _mmToPt(double.tryParse(cfg['paper_height_mm']?.toString() ?? '99')  ?? 99);
-    final pageFormat = PdfPageFormat(paperW, paperH, marginAll: 0);
-
-    final double dateX     = _mmToPt(double.tryParse(cfg['date_x']?.toString()       ?? '150') ?? 150);
-    final double dateY     = _mmToPt(double.tryParse(cfg['date_y']?.toString()       ?? '18')  ?? 18);
-    final double payeeX    = _mmToPt(double.tryParse(cfg['payee_x']?.toString()      ?? '35')  ?? 35);
-    final double payeeY    = _mmToPt(double.tryParse(cfg['payee_y']?.toString()      ?? '38')  ?? 38);
-    final double amtNumX   = _mmToPt(double.tryParse(cfg['amount_num_x']?.toString() ?? '155') ?? 155);
-    final double amtNumY   = _mmToPt(double.tryParse(cfg['amount_num_y']?.toString() ?? '38')  ?? 38);
-    final double amtTxtX   = _mmToPt(double.tryParse(cfg['amount_text_x']?.toString()?? '20')  ?? 20);
-    final double amtTxtY   = _mmToPt(double.tryParse(cfg['amount_text_y']?.toString()?? '55')  ?? 55);
-    final String dateFmtStr = cfg['date_format'] as String? ?? 'dd/MM/yyyy';
-
-    final doc = pw.Document(theme: theme);
-
-    for (final c in checks) {
-      final payee  = c['payee_name_th'] as String? ?? '';
-      final amount = double.tryParse(c['amount_lc']?.toString() ?? '0') ?? 0;
-      final amtTxt = thaiAmountToWords(amount);
-      String dateStr = '';
-      try {
-        final checkDate = c['check_date'] != null
-            ? parseLocalDate(c['check_date'])
-            : (c['payment_date'] != null ? parseLocalDate(c['payment_date']) : DateTime.now());
-        dateStr = DateFormat(dateFmtStr).format(checkDate);
-      } catch (_) {
-        dateStr = c['check_date']?.toString() ?? '';
-      }
-
-      doc.addPage(pw.Page(
-        pageFormat: pageFormat,
-        margin: pw.EdgeInsets.zero,
-        build: (ctx) => pw.Stack(children: [
-          // Date
-          pw.Positioned(
-            left: dateX, top: dateY,
-            child: pw.Text(dateStr, style: pw.TextStyle(font: fontBold, fontSize: 11)),
-          ),
-          // Payee
-          pw.Positioned(
-            left: payeeX, top: payeeY,
-            child: pw.Text(payee, style: pw.TextStyle(font: fontBold, fontSize: 12)),
-          ),
-          // Amount numeric
-          pw.Positioned(
-            left: amtNumX, top: amtNumY,
-            child: pw.Text(_fmt.format(amount), style: pw.TextStyle(font: fontBold, fontSize: 12)),
-          ),
-          // Amount in words
-          pw.Positioned(
-            left: amtTxtX, top: amtTxtY,
-            child: pw.Text(amtTxt, style: pw.TextStyle(font: font, fontSize: 11)),
-          ),
-        ]),
-      ));
-    }
-
-    return doc.save();
-  }
+  // ใช้ตัวสร้าง PDF ร่วมกับปุ่มพิมพ์ทดสอบของหน้าสร้างแบบพิมพ์เช็ค
+  Future<Uint8List> _buildPdf(List<Map<String, dynamic>> checks, Map<String, dynamic> cfg) => buildCheckPdf(checks, cfg);
 }

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/cm_bank_account.dart';
+import '../models/cm_master_summary.dart';
 
 class CmBankAccountService {
   final String baseUrl = AppConfig.apiCm;
@@ -57,6 +58,26 @@ class CmBankAccountService {
     if (response.statusCode == 401) { authService.logout(); throw Exception('Unauthorized'); }
     final msg = _errorMessage(response.body);
     throw Exception(msg);
+  }
+
+  /// ยอดคงเหลือ / ยังไม่กระทบยอด / เช็คคงเหลือ ของทุกบัญชี (การ์ดแผงซ้าย)
+  Future<Map<int, CmBankBalance>> fetchBalances() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/cm_bank_account/balances'), headers: headers);
+    if (response.statusCode == 200) {
+      final list = (json.decode(response.body) as List).map((e) => CmBankBalance.fromJson(Map<String, dynamic>.from(e)));
+      return {for (final b in list) b.id: b};
+    }
+    if (response.statusCode == 401) { authService.logout(); throw Exception('Unauthorized'); }
+    throw Exception(_errorMessage(response.body));
+  }
+
+  Future<CmBankSummary> fetchSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/cm_bank_account/$id/summary'), headers: headers);
+    if (response.statusCode == 200) return CmBankSummary.fromJson(Map<String, dynamic>.from(json.decode(response.body)));
+    if (response.statusCode == 401) { authService.logout(); throw Exception('Unauthorized'); }
+    throw Exception(_errorMessage(response.body));
   }
 
   String _errorMessage(String body) {

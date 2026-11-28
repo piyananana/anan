@@ -75,6 +75,7 @@ import '../../ar/screens/ar_allowance_run_screen.dart';
 import '../../cm/screens/cm_bank_account_screen.dart';
 import '../../cm/screens/cm_payment_method_screen.dart';
 import '../../cm/screens/cm_checkbook_screen.dart';
+import '../../cm/screens/cm_check_print_config_screen.dart';
 import '../../cm/screens/cm_receipt_screen.dart';
 import '../../cm/screens/cm_payment_screen.dart';
 import '../../cm/screens/cm_bank_statement_screen.dart';
@@ -330,6 +331,7 @@ class Menu {
     'CmBankAccountScreen': (context) => CmBankAccountScreen(onFieldsChanged: () {}),
     'CmPaymentMethodScreen': (context) => CmPaymentMethodScreen(onFieldsChanged: () {}),
     'CmCheckbookScreen': (context) => const CmCheckbookScreen(),
+    'CmCheckPrintConfigScreen': (context) => const CmCheckPrintConfigScreen(),
     'CmReceiptScreen':    (context) => const CmReceiptScreen(),
     'CmPaymentScreen':    (context) => const CmPaymentScreen(),
     'CmBankStatementScreen':         (context) => const CmBankStatementScreen(),

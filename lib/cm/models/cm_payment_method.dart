@@ -8,6 +8,8 @@ class CmPaymentMethod {
   final int? glAccountId;
   final String? glAccountCode;
   final String? glAccountName;
+  final String? glAccountNameEn;
+  final String? bankAccountNameEn;
   final int? cmBankAccountId;
   final String? bankAccountCode;
   final String? bankAccountNameTh;
@@ -30,6 +32,8 @@ class CmPaymentMethod {
     this.glAccountId,
     this.glAccountCode,
     this.glAccountName,
+    this.glAccountNameEn,
+    this.bankAccountNameEn,
     this.cmBankAccountId,
     this.bankAccountCode,
     this.bankAccountNameTh,
@@ -53,6 +57,8 @@ class CmPaymentMethod {
         glAccountId: json['gl_account_id'],
         glAccountCode: json['gl_account_code'],
         glAccountName: json['gl_account_name'],
+        glAccountNameEn: json['gl_account_name_en'],
+        bankAccountNameEn: json['bank_account_name_en'],
         cmBankAccountId: json['cm_bank_account_id'],
         bankAccountCode: json['bank_account_code'],
         bankAccountNameTh: json['bank_account_name_th'],
@@ -80,6 +86,8 @@ class CmPaymentMethod {
       };
 
   String get displayName => '$methodCode — $methodNameTh';
+  String name(bool isEnglish) => isEnglish && (methodNameEn ?? '').isNotEmpty ? methodNameEn! : methodNameTh;
+  String glName(bool isEnglish) => isEnglish && (glAccountNameEn ?? '').isNotEmpty ? glAccountNameEn! : (glAccountName ?? '');
 }
 
 const Map<String, String> cmMethodTypeOptions = {
