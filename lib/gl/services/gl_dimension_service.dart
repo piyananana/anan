@@ -95,4 +95,53 @@ class GlDimensionService {
     final err = jsonDecode(res.body);
     throw Exception(err['error'] ?? 'Failed to delete dimension value');
   }
+
+  // ── สรุปของหน้าจอประเภทมิติ / ค่ามิติ (2026-11-28) ──
+  String _msg(http.Response r) {
+    try {
+      final j = jsonDecode(r.body);
+      if (j is Map && (j['error'] ?? j['message']) != null) return (j['error'] ?? j['message']).toString();
+    } catch (_) {}
+    return 'HTTP ${r.statusCode}';
+  }
+
+  Future<Map<int, GlDimTypeUsage>> fetchTypeUsage() async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.get(Uri.parse('$_base/gl_dimension_type/usage'), headers: headers);
+    if (res.statusCode != 200) throw Exception(_msg(res));
+    final List rows = jsonDecode(res.body);
+    return {for (final r in rows) (r['slot_no'] as num).toInt(): GlDimTypeUsage.fromJson(r as Map<String, dynamic>)};
+  }
+
+  Future<GlDimTypeSummary> fetchTypeSummary(int slotNo) async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.get(Uri.parse('$_base/gl_dimension_type/$slotNo/summary'), headers: headers);
+    if (res.statusCode != 200) throw Exception(_msg(res));
+    return GlDimTypeSummary.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<Map<int, GlDimValueLineCount>> fetchValueUsage(String typeCode) async {
+    final headers = await _auth.getAuthHeader();
+    final uri = Uri.parse('$_base/gl_dimension_value/usage').replace(queryParameters: {'type_code': typeCode});
+    final res = await http.get(uri, headers: headers);
+    if (res.statusCode != 200) throw Exception(_msg(res));
+    final List rows = jsonDecode(res.body);
+    return {
+      for (final r in rows) (r['id'] as num).toInt(): GlDimValueLineCount((r['lines_year'] as num?)?.toInt() ?? 0, (r['lines_all'] as num?)?.toInt() ?? 0),
+    };
+  }
+
+  Future<GlDimValueSummary> fetchValueSummary(int id) async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.get(Uri.parse('$_base/gl_dimension_value/$id/summary'), headers: headers);
+    if (res.statusCode != 200) throw Exception(_msg(res));
+    return GlDimValueSummary.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  /// ย้ายไปอยู่ใต้ค่าอื่นในประเภทเดียวกัน (null = ระดับบนสุด)
+  Future<void> moveValue(int id, int? parentId) async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.put(Uri.parse('$_base/gl_dimension_value/$id/move'), headers: headers, body: jsonEncode({'parent_id': parentId}));
+    if (res.statusCode != 200) throw Exception(_msg(res));
+  }
 }

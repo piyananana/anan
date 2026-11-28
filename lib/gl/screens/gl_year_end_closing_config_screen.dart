@@ -1,782 +1,462 @@
 ﻿// lib/gl/screens/gl_year_end_closing_config_screen.dart
+// หน้าจอตั้งค่าปิดบัญชีสิ้นปี แบบ IM design B (user 2026-11-28) — หน้าตั้งค่าไม่มีรายการซ้าย:
+//   เปิดมาเป็นโหมดดู กด "แก้ไข" ที่แถบหัว; ตัวเลขสรุป (ปีล่าสุดที่ปิด, ปีถัดไปที่ต้องปิด, กำไรปีนี้, กำไรสะสม);
+//   กลุ่มบัญชี (ตรวจให้อัตโนมัติ: ส่วนของเจ้าของ, ลงรายการได้, ไม่ใช่ Control, สองบัญชีไม่ซ้ำ) + กลุ่มประเภทเอกสาร;
+//   การ์ดขั้นตอนปิดบัญชี (ค่าไหนใช้ในขั้นใด + ความคืบหน้าของปีถัดไป) + ประวัติการปิดบัญชี
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../im/widgets/im_master_kit.dart';
+import '../../sa/models/sa_module_document.dart';
 import '../../sa/services/sa_language_provider.dart';
+import '../../sa/services/sa_module_document_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/utils/sa_menu_theme.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 import '../models/gl_account.dart';
 import '../models/gl_year_end_closing.dart';
 import '../services/gl_account_service.dart';
 import '../services/gl_year_end_closing_service.dart';
-import '../../sa/models/sa_module_document.dart';
-import '../../sa/services/sa_module_document_service.dart';
 
 class YearEndClosingConfigScreen extends StatefulWidget {
   const YearEndClosingConfigScreen({super.key});
 
   @override
-  State<YearEndClosingConfigScreen> createState() =>
-      _YearEndClosingConfigScreenState();
+  State<YearEndClosingConfigScreen> createState() => _YearEndClosingConfigScreenState();
 }
 
-class _YearEndClosingConfigScreenState
-    extends State<YearEndClosingConfigScreen> {
-  final YearEndClosingService _service = YearEndClosingService();
-  final AccountService _accountService = AccountService();
-  final ModuleDocumentService _docService = ModuleDocumentService();
+class _YearEndClosingConfigScreenState extends State<YearEndClosingConfigScreen> with ImMasterKit {
+  final _service = YearEndClosingService();
+  final _accountService = AccountService();
+  final _docService = ModuleDocumentService();
 
-  List<Account> _allAccounts = [];
+  List<Account> _accounts = [];
   List<ModuleDocument> _docTypes = [];
-  ClosingConfig? _existingConfig;
+  ClosingConfig? _config;
+  ClosingConfigSummary? _summary;
 
-  Account? _selectedIncomeSummary;
-  Account? _selectedRetainedEarnings;
-  ModuleDocument? _selectedClosingDoc;
-  ModuleDocument? _selectedCarryForwardDoc;
+  Account? _incomeSummary;
+  Account? _retained;
+  ModuleDocument? _closingDoc;
+  ModuleDocument? _carryDoc;
 
-  bool _isLoading = false;
-  bool _isSaving = false;
-  String? _errorMsg;
-  String? _successMsg;
+  bool _loading = false;
+  bool _saving = false;
+  bool _editing = false;
+  bool _isEnglish = false;
+
+  static final _amt = NumberFormat('#,##0.00');
+
+  @override
+  bool get kitEnglish => _isEnglish;
+  @override
+  bool get kitReadOnly => !_editing;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _load();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _load() async {
+    setState(() => _loading = true);
     try {
       final accounts = await _accountService.fetchRowsControlAccount();
       final docs = await _docService.fetchRows();
-      // เฉพาะ isDocType=true, isActive=true และ sysModule=01 (GL บัญชีแยกประเภท)
-      final activeDocTypes = docs
-          .where((d) => d.isDocType && d.isActive && d.sysModule == '01')
-          .toList()
-        ..sort((a, b) => a.docCode.compareTo(b.docCode));
-
+      final gl = docs.where((d) => d.isDocType && d.isActive && d.sysModule == '01').toList()..sort((a, b) => a.docCode.compareTo(b.docCode));
       ClosingConfig? cfg;
       try {
         cfg = await _service.fetchConfig();
       } catch (_) {}
-
+      ClosingConfigSummary? sum;
+      try {
+        sum = await _service.fetchConfigSummary();
+      } catch (_) {}
+      if (!mounted) return;
       setState(() {
-        _allAccounts = accounts;
-        _docTypes = activeDocTypes;
-        _existingConfig = cfg;
-        if (cfg != null) {
-          _selectedIncomeSummary = accounts.cast<Account?>().firstWhere(
-                (a) => a?.id == cfg!.incomeSummaryAccountId,
-                orElse: () => null,
-              );
-          _selectedRetainedEarnings = accounts.cast<Account?>().firstWhere(
-                (a) => a?.id == cfg!.retainedEarningsAccountId,
-                orElse: () => null,
-              );
-          if (cfg.closingDocId != null) {
-            _selectedClosingDoc =
-                activeDocTypes.cast<ModuleDocument?>().firstWhere(
-                      (d) => d?.id == cfg!.closingDocId,
-                      orElse: () => null,
-                    );
-          }
-          if (cfg.carryForwardDocId != null) {
-            _selectedCarryForwardDoc =
-                activeDocTypes.cast<ModuleDocument?>().firstWhere(
-                      (d) => d?.id == cfg!.carryForwardDocId,
-                      orElse: () => null,
-                    );
-          }
-        }
+        _accounts = accounts;
+        _docTypes = gl;
+        _config = cfg;
+        _summary = sum;
+        _editing = false;
+        _reset();
       });
     } catch (e) {
-      final isEnglish = mounted ? Provider.of<LanguageProvider>(context, listen: false).isEnglish : false;
-      setState(() => _errorMsg = (isEnglish ? 'Error loading data: ' : 'เกิดข้อผิดพลาดในการโหลดข้อมูล: ') + e.toString());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text((_isEnglish ? 'Error loading data: ' : 'เกิดข้อผิดพลาดในการโหลดข้อมูล: ') + e.toString()), backgroundColor: Colors.red));
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
+  void _reset() {
+    final c = _config;
+    _incomeSummary = c == null ? null : _accounts.where((a) => a.id == c.incomeSummaryAccountId).firstOrNull;
+    _retained = c == null ? null : _accounts.where((a) => a.id == c.retainedEarningsAccountId).firstOrNull;
+    _closingDoc = c?.closingDocId == null ? null : _docTypes.where((d) => d.id == c!.closingDocId).firstOrNull;
+    _carryDoc = c?.carryForwardDocId == null ? null : _docTypes.where((d) => d.id == c!.carryForwardDocId).firstOrNull;
+  }
+
+  String _fp() => docFingerprint([_incomeSummary?.id, _retained?.id, _closingDoc?.id, _carryDoc?.id]);
+  String _snapshot = '';
+
+  bool get _dirty => _editing && _fp() != _snapshot;
+
+  /// ข้อผิดพลาดของบัญชี (null = ผ่าน)
+  String? _accountProblem(Account? a, Account? other) {
+    final e = _isEnglish;
+    if (a == null) return e ? 'Not set' : 'ยังไม่ได้เลือก';
+    final p = <String>[
+      if (a.accountType != 'EQUITY') e ? 'must be an equity account' : 'ต้องเป็นบัญชีส่วนของเจ้าของ',
+      if (!a.isNormalAccount) e ? 'must be postable' : 'ต้องเป็นบัญชีที่ลงรายการได้',
+      if (a.isControlAccount) e ? 'must not be a control account' : 'ต้องไม่ใช่ Control account',
+      if (!a.isActive) e ? 'is inactive' : 'บัญชีหยุดใช้',
+      if (other != null && other.id == a.id) e ? 'must differ from the other account' : 'ต้องไม่ซ้ำกับอีกบัญชี',
+    ];
+    return p.isEmpty ? null : p.join(' · ');
+  }
+
+  List<String> get _missing {
+    final e = _isEnglish;
+    return [
+      if (_accountProblem(_incomeSummary, _retained) != null) e ? 'Income summary account' : 'บัญชีสรุปกำไรขาดทุน',
+      if (_accountProblem(_retained, _incomeSummary) != null) e ? 'Retained earnings account' : 'บัญชีกำไรสะสม',
+      if (_closingDoc == null) e ? 'Closing document type' : 'เอกสารปิดบัญชี',
+      if (_carryDoc == null) e ? 'Carry-forward document type' : 'เอกสารยกยอด',
+    ];
+  }
+
   Future<void> _save() async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    if (_selectedIncomeSummary == null) {
-      setState(() => _errorMsg = isEnglish ? 'Please select Income Summary account' : 'กรุณาเลือกบัญชีสรุปกำไรขาดทุน');
+    final e = _isEnglish;
+    final miss = _missing;
+    if (miss.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e ? 'Please fix: ${miss.join(', ')}' : 'กรุณาแก้ไข: ${miss.join(', ')}'), backgroundColor: Colors.red));
       return;
     }
-    if (_selectedRetainedEarnings == null) {
-      setState(() => _errorMsg = isEnglish ? 'Please select Retained Earnings account' : 'กรุณาเลือกบัญชีกำไรสะสม');
-      return;
+    setState(() => _saving = true);
+    try {
+      await _service.saveConfig(ClosingConfig(
+        id: _config?.id,
+        incomeSummaryAccountId: _incomeSummary!.id,
+        retainedEarningsAccountId: _retained!.id,
+        // คงประเภทบัญชีรายได้/ค่าใช้จ่ายเดิมไว้ (หน้าจอเดิมเขียนทับเป็นค่าตั้งต้นทุกครั้ง)
+        revenueAccountTypes: _config?.revenueAccountTypes ?? const ['REVENUE'],
+        expenseAccountTypes: _config?.expenseAccountTypes ?? const ['EXPENSE'],
+        closingDocId: _closingDoc!.id,
+        carryForwardDocId: _carryDoc!.id,
+      ));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e ? 'Settings saved' : 'บันทึกการตั้งค่าเรียบร้อยแล้ว')));
+      await _load();
+    } catch (ex) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text((e ? 'Error saving: ' : 'เกิดข้อผิดพลาดในการบันทึก: ') + ex.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    if (_selectedClosingDoc == null) {
-      setState(() => _errorMsg = isEnglish ? 'Please select closing document type' : 'กรุณาเลือกประเภทเอกสารปิดบัญชี');
-      return;
-    }
-    if (_selectedCarryForwardDoc == null) {
-      setState(() => _errorMsg = isEnglish ? 'Please select carry-forward document type' : 'กรุณาเลือกประเภทเอกสารยกยอด');
-      return;
+  }
+
+  String _acct(Account a) => '${a.accountCode}  ${_isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai}';
+  String _doc(ModuleDocument d) => '${d.docCode}  ${_isEnglish && d.docNameEng.isNotEmpty ? d.docNameEng : d.docNameThai}';
+
+  /// dialog ค้นหา (บัญชีลงรายการได้ / ประเภทเอกสาร GL ที่ใช้งาน)
+  Future<T?> _pick<T>(String title, List<T> items, String Function(T) label, {List<T> Function(List<T>)? sort}) async {
+    final ctrl = TextEditingController();
+    var shown = items;
+    final r = await showDialog<T>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 520,
+            height: 420,
+            child: Column(children: [
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                    hintText: _isEnglish ? 'Search code / name' : 'ค้นหา รหัส / ชื่อ', prefixIcon: const Icon(Icons.search), border: const OutlineInputBorder(), isDense: true),
+                onChanged: (q) => setD(() => shown = items.where((x) => label(x).toUpperCase().contains(q.trim().toUpperCase())).toList()),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: shown.isEmpty
+                    ? Center(child: Text(_isEnglish ? 'No results' : 'ไม่พบข้อมูล'))
+                    : ListView.builder(
+                        itemCount: shown.length,
+                        itemBuilder: (_, i) => ListTile(dense: true, title: Text(label(shown[i])), onTap: () => Navigator.of(ctx).pop(shown[i])),
+                      ),
+              ),
+            ]),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(_isEnglish ? 'Close' : 'ปิด'))],
+        ),
+      ),
+    );
+    ctrl.dispose();
+    return r;
+  }
+
+  Widget _check(String? problem) => Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child: Row(children: [
+          Icon(problem == null ? Icons.check_circle : Icons.error_outline, size: 14, color: problem == null ? ImKit.ok : ImKit.red),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(problem ?? (_isEnglish ? 'Equity · postable' : 'ส่วนของเจ้าของ · ลงรายการได้'),
+                style: TextStyle(fontSize: 11.5, color: problem == null ? ImKit.ok : ImKit.red)),
+          ),
+        ]),
+      );
+
+  Widget _settingsCard() {
+    final e = _isEnglish;
+    final equity = _accounts.where((a) => a.accountType == 'EQUITY').toList()..sort((a, b) => a.accountCode.compareTo(b.accountCode));
+    final others = _accounts.where((a) => a.accountType != 'EQUITY').toList()..sort((a, b) => a.accountCode.compareTo(b.accountCode));
+    final pickList = [...equity, ...others];
+    return kCard(
+      title: e ? 'Settings' : 'การตั้งค่า',
+      count: e ? 'Used to create the closing entries automatically' : 'ระบบใช้ค่าเหล่านี้สร้างรายการโอนปิดบัญชีอัตโนมัติ',
+      trailing: _editing ? kLegend(withAuto: false) : null,
+      child: kGroups([
+        kGroup(1, e ? 'Closing Accounts' : 'บัญชีที่ใช้ปิดบัญชี', ImKit.gFin, [
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            kFk(
+              label: e ? 'Income Summary account *' : 'บัญชีสรุปกำไรขาดทุน (Income Summary) *',
+              text: _incomeSummary == null ? null : _acct(_incomeSummary!),
+              hasValue: _incomeSummary != null,
+              onSearch: () async {
+                final a = await _pick<Account>(e ? 'Select Income Summary account' : 'เลือกบัญชีสรุปกำไรขาดทุน', pickList, _acct);
+                if (a != null) setState(() => _incomeSummary = a);
+              },
+            ),
+            _check(_accountProblem(_incomeSummary, _retained)),
+          ]),
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            kFk(
+              label: e ? 'Retained Earnings account *' : 'บัญชีกำไรสะสม (Retained Earnings) *',
+              text: _retained == null ? null : _acct(_retained!),
+              hasValue: _retained != null,
+              onSearch: () async {
+                final a = await _pick<Account>(e ? 'Select Retained Earnings account' : 'เลือกบัญชีกำไรสะสม', pickList, _acct);
+                if (a != null) setState(() => _retained = a);
+              },
+            ),
+            _check(_accountProblem(_retained, _incomeSummary)),
+          ]),
+          kNote(e
+              ? 'Checked automatically: equity, postable, not a control account, and the two accounts must differ.'
+              : 'ตรวจให้อัตโนมัติ: ต้องเป็นบัญชีส่วนของเจ้าของ ลงรายการได้ ไม่ใช่ Control และสองบัญชีต้องไม่ซ้ำกัน'),
+        ]),
+        kGroup(2, e ? 'Auto-generated Document Types' : 'ประเภทเอกสารที่สร้างอัตโนมัติ', ImKit.gDoc, [
+          kFk(
+            label: e ? 'Revenue/expense closing document (steps 3 and 4) *' : 'เอกสารปิดบัญชีรายได้/ค่าใช้จ่าย (ขั้นตอน 3 และ 4) *',
+            text: _closingDoc == null ? null : _doc(_closingDoc!),
+            hasValue: _closingDoc != null,
+            onSearch: () async {
+              final d = await _pick<ModuleDocument>(e ? 'Select closing document type' : 'เลือกเอกสารปิดบัญชี', _docTypes, _doc);
+              if (d != null) setState(() => _closingDoc = d);
+            },
+          ),
+          kFk(
+            label: e ? 'Balance sheet carry-forward document (step 5) *' : 'เอกสารยกยอดงบดุล (ขั้นตอน 5) *',
+            text: _carryDoc == null ? null : _doc(_carryDoc!),
+            hasValue: _carryDoc != null,
+            onSearch: () async {
+              final d = await _pick<ModuleDocument>(e ? 'Select carry-forward document type' : 'เลือกเอกสารยกยอด', _docTypes, _doc);
+              if (d != null) setState(() => _carryDoc = d);
+            },
+          ),
+          kNote(e ? 'Only active GL document types can be selected.' : 'เลือกได้เฉพาะประเภทเอกสาร GL ที่ใช้งานอยู่'),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _stepsCard() {
+    final e = _isEnglish;
+    final s = _summary;
+    final steps = s?.nextSteps ?? const <int, bool>{};
+    final isAcc = _incomeSummary?.accountCode ?? '-';
+    final re = _retained?.accountCode ?? '-';
+    final cd = _closingDoc?.docCode ?? '-';
+    final cf = _carryDoc?.docCode ?? '-';
+    final items = <(String, String, String)>[
+      (e ? 'Check periods' : 'ตรวจงวด', e ? 'All periods of the year closed in AR/AP/IM/CM' : 'ทุกงวดของปีต้องปิดโมดูลย่อยแล้ว',
+          s == null ? '' : (e ? 'GL closed ${s.nextClosedPeriods}/${s.nextTotalPeriods}' : 'ปิด GL แล้ว ${s.nextClosedPeriods}/${s.nextTotalPeriods} งวด')),
+      (e ? 'Adjusting entries' : 'รายการปรับปรุง', e ? 'Post adjusting templates, no drafts left' : 'บันทึกรายการปรับปรุง ไม่มี Draft ค้าง',
+          s == null ? '' : (e ? 'Draft entries ${s.nextDraftEntries}' : 'Draft ค้าง ${s.nextDraftEntries}')),
+      (e ? 'Close revenue/expense' : 'โอนรายได้/ค่าใช้จ่าย', e ? 'Close revenue and expense accounts into income summary' : 'ปิดบัญชีรายได้-ค่าใช้จ่ายเข้าบัญชีสรุปกำไรขาดทุน', '$cd → $isAcc'),
+      (e ? 'Transfer net income' : 'โอนกำไรสุทธิ', e ? 'Income summary into retained earnings' : 'บัญชีสรุปกำไรขาดทุนเข้ากำไรสะสม', '$cd  $isAcc → $re'),
+      (e ? 'Carry forward' : 'ยกยอดงบดุล', e ? 'Assets/liabilities/equity to next year' : 'สินทรัพย์/หนี้สิน/ทุน ไปปีถัดไป', e ? '$cf → next year' : '$cf → ปีถัดไป'),
+      (e ? 'Lock periods' : 'ล็อกงวด', e ? 'Close GL of every period of the year' : 'ปิด GL ทุกงวดของปี', ''),
+    ];
+    Widget box(int i) {
+      final done = steps[i + 1] == true;
+      return Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        decoration: BoxDecoration(
+          color: done ? ImKit.okSoft : Colors.white,
+          border: Border.all(color: done ? const Color(0xFFB9DCC4) : ImKit.line),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              width: 20, height: 20, alignment: Alignment.center,
+              decoration: BoxDecoration(color: done ? ImKit.ok : kInk, borderRadius: BorderRadius.circular(10)),
+              child: done ? const Icon(Icons.check, size: 13, color: Colors.white) : Text('${i + 1}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(width: 6),
+            Expanded(child: Text(items[i].$1, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+          ]),
+          const SizedBox(height: 4),
+          Text(items[i].$2, style: const TextStyle(fontSize: 11.5, color: ImKit.ink2)),
+          if (items[i].$3.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(items[i].$3, style: TextStyle(fontSize: 11.5, color: kInk, fontWeight: FontWeight.w600)),
+          ],
+        ]),
+      );
     }
 
-    setState(() {
-      _isSaving = true;
-      _errorMsg = null;
-      _successMsg = null;
-    });
-    try {
-      final config = ClosingConfig(
-        id: _existingConfig?.id,
-        incomeSummaryAccountId: _selectedIncomeSummary!.id,
-        retainedEarningsAccountId: _selectedRetainedEarnings!.id,
-        closingDocId: _selectedClosingDoc!.id,
-        carryForwardDocId: _selectedCarryForwardDoc!.id,
-      );
-      await _service.saveConfig(config);
-      setState(() {
-        _existingConfig = config;
-        _successMsg = isEnglish ? 'Settings saved successfully' : 'บันทึกการตั้งค่าเรียบร้อยแล้ว';
-      });
-    } catch (e) {
-      setState(() => _errorMsg = (isEnglish ? 'Error saving data: ' : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล: ') + e.toString());
-    } finally {
-      setState(() => _isSaving = false);
-    }
+    return kCard(
+      title: e ? 'Closing Steps' : 'ขั้นตอนปิดบัญชี',
+      count: s?.nextFyCode == null
+          ? (e ? 'Read-only' : 'อ่านอย่างเดียว')
+          : (e ? 'Read-only · progress of fiscal year ${s!.nextFyCode}' : 'อ่านอย่างเดียว · ความคืบหน้าของปีบัญชี ${s!.nextFyCode}'),
+      trailing: kGhost(e ? 'Open Year-End Closing' : 'ไปหน้าปิดบัญชีสิ้นปี', Icons.open_in_new,
+          () => ImKit.openMenu(context, 'YearEndClosingScreen', 'ปิดบัญชีสิ้นปี', 'Year-End Closing', e)),
+      child: LayoutBuilder(builder: (c, cons) {
+        final cols = cons.maxWidth >= 900 ? 6 : (cons.maxWidth >= 520 ? 3 : 1);
+        final w = (cons.maxWidth - 8 * (cols - 1)) / cols;
+        return Wrap(spacing: 8, runSpacing: 8, children: [for (var i = 0; i < items.length; i++) SizedBox(width: w, child: box(i))]);
+      }),
+    );
+  }
+
+  Widget _historyCard() {
+    final e = _isEnglish;
+    final h = _summary?.history ?? const <ClosingHistoryRow>[];
+    String net(double v) => v < 0 ? '(${_amt.format(-v)})' : _amt.format(v);
+    return kCard(
+      title: e ? 'Closing History' : 'ประวัติการปิดบัญชี',
+      count: e ? 'Read-only' : 'อ่านอย่างเดียว',
+      padding: EdgeInsets.zero,
+      child: kTable([
+        KCol(e ? 'Fiscal year' : 'ปีบัญชี', 2),
+        KCol(e ? 'Status' : 'สถานะ', 3),
+        KCol(e ? 'Last updated' : 'อัปเดตล่าสุด', 3),
+        KCol(e ? 'Closing doc' : 'เอกสารปิด', 3),
+        KCol(e ? 'Carry-forward doc' : 'เอกสารยกยอด', 3),
+        KCol(e ? 'Net income (loss)' : 'กำไร(ขาดทุน)สุทธิ', 3, num: true),
+      ], [
+        for (final r in h)
+          [
+            kCell(r.fyCode, bold: true),
+            r.status == 'COMPLETED'
+                ? ImKit.chip(e ? 'Completed' : 'ปิดเสร็จแล้ว', ImKit.okSoft, ImKit.ok)
+                : ImKit.chip(e ? 'In progress' : 'กำลังดำเนินการ', ImKit.goldSoft, ImKit.amber),
+            kCell(r.updatedAt == null ? '' : DateFormat('dd/MM/yyyy HH:mm').format(r.updatedAt!), color: ImKit.ink2),
+            kCell(r.closingDocNo ?? ''),
+            kCell(r.carryDocNo ?? ''),
+            kCell(r.closingDocNo == null ? '' : net(r.netIncome), mono: true, color: r.netIncome < 0 ? ImKit.red : null),
+          ],
+      ], minWidth: 760, empty: e ? 'No year has been closed yet' : 'ยังไม่เคยปิดบัญชีสิ้นปี'),
+    );
+  }
+
+  List<ImKpi> _kpis() {
+    final e = _isEnglish;
+    final s = _summary;
+    if (s == null) return const [];
+    final last = s.lastClosed;
+    return [
+      ImKpi(e ? 'Last closed year' : 'ปีล่าสุดที่ปิดบัญชี', last?.fyCode ?? '-',
+          last?.updatedAt == null ? (e ? 'Not closed yet' : 'ยังไม่เคยปิด') : (e ? 'closed ${DateFormat('dd/MM/yyyy').format(last!.updatedAt!)}' : 'ปิดเมื่อ ${DateFormat('dd/MM/yyyy').format(last!.updatedAt!)}')),
+      ImKpi(e ? 'Next year to close' : 'ปีถัดไปที่ต้องปิด', s.nextFyCode ?? '-',
+          s.nextFyCode == null ? '-' : (e ? 'GL closed ${s.nextClosedPeriods}/${s.nextTotalPeriods} periods' : 'ปิด GL แล้ว ${s.nextClosedPeriods}/${s.nextTotalPeriods} งวด')),
+      ImKpi(e ? 'Net income (loss) this year' : 'กำไร(ขาดทุน) ปีนี้ถึงวันนี้', _amt.format(s.netIncomeYtd),
+          e ? 'revenue − expenses · FY ${s.currentFyCode ?? '-'}' : 'รายได้ − ค่าใช้จ่าย · ปี ${s.currentFyCode ?? '-'}', warn: s.netIncomeYtd < 0),
+      ImKpi(e ? 'Retained earnings' : 'กำไรสะสม', _amt.format(s.retainedEarnings),
+          _retained == null ? '-' : (e ? 'account ${_retained!.accountCode} this year' : 'ยอดบัญชี ${_retained!.accountCode} ปีนี้')),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final e = _isEnglish;
+    final canEdit = MenuScope.of(context)?.canEdit ?? true;
+    final miss = _missing;
+    final acts = _editing
+        ? [
+            DocBarAction(e ? 'Cancel' : 'ยกเลิก', _saving
+                ? null
+                : () async {
+                    if (_dirty && !await confirmDiscardChanges(context, e)) return;
+                    setState(() {
+                      _editing = false;
+                      _reset();
+                    });
+                  }, fg: kInk),
+            DocBarAction(_saving ? (e ? 'Saving...' : 'กำลังบันทึก...') : (e ? 'Save' : 'บันทึก'), _saving ? null : _save,
+                fg: const Color(0xFF0B3A2A), bg: ImKit.gold, primary: true),
+          ]
+        : [
+            DocBarAction(e ? 'Open Year-End Closing' : 'ไปหน้าปิดบัญชีสิ้นปี',
+                () => ImKit.openMenu(context, 'YearEndClosingScreen', 'ปิดบัญชีสิ้นปี', 'Year-End Closing', e), fg: kInk),
+            if (canEdit)
+              DocBarAction(e ? 'Edit' : 'แก้ไข', () => setState(() {
+                    _editing = true;
+                    _snapshot = _fp();
+                  }), fg: Colors.white, bg: kInk, primary: true),
+          ];
     return Scaffold(
       appBar: AppBar(
         title: const MenuTitle(),
-        backgroundColor: Colors.indigo,
+        backgroundColor: ScreenTheme.of(context).bar,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: isEnglish ? 'Refresh' : 'รีเฟรชรายการ',
-            onPressed: _loadData,
+            tooltip: e ? 'Refresh' : 'รีเฟรช',
+            onPressed: _saving
+                ? null
+                : () async {
+                    if (_dirty && !await confirmDiscardChanges(context, e)) return;
+                    _load();
+                  },
           ),
+          const SizedBox(width: 4),
         ],
       ),
-      body: _isLoading
+      body: _loading && _accounts.isEmpty
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 700),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ── Banner ────────────────────────────────────────────
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.indigo.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.indigo.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(children: [
-                              const Icon(Icons.info_outline, color: Colors.indigo),
-                              const SizedBox(width: 8),
-                              Text(
-                                isEnglish ? 'Year-End Closing Configuration' : 'การตั้งค่าการปิดบัญชีสิ้นปี',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Colors.indigo),
-                              ),
-                            ]),
-                            const SizedBox(height: 8),
-                            Text(
-                              isEnglish
-                                  ? 'Set up the accounts and document types used in the year-end closing process. The system will use these to create transfer entries automatically.'
-                                  : 'กำหนดบัญชีและประเภทเอกสารที่ใช้ในกระบวนการปิดบัญชีสิ้นปี ระบบจะใช้ข้อมูลเหล่านี้ในการสร้างรายการโอนโดยอัตโนมัติ',
-                              style: const TextStyle(color: Colors.indigo),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // ── Alerts ────────────────────────────────────────────
-                      if (_errorMsg != null)
-                        _Alert(
-                          message: _errorMsg!,
-                          color: Colors.red,
-                          icon: Icons.error,
-                          onClose: () => setState(() => _errorMsg = null),
-                        ),
-                      if (_successMsg != null)
-                        _Alert(
-                          message: _successMsg!,
-                          color: Colors.green,
-                          icon: Icons.check_circle,
-                          onClose: () => setState(() => _successMsg = null),
-                        ),
-
-                      // ── Section: บัญชี ────────────────────────────────────
-                      _SectionCard(
-                        title: isEnglish ? 'Accounts Used for Year-End Closing' : 'บัญชีที่ใช้ในการปิดบัญชี',
-                        children: [
-                          _AccountSearchField(
-                            label: isEnglish ? 'Income Summary Account' : 'บัญชีสรุปกำไรขาดทุน (Income Summary)',
-                            helperText: isEnglish
-                                ? 'The central account that receives all revenue and expense transfers (e.g. 3-1000)'
-                                : 'บัญชีกลางที่รับโอนยอดรายได้และค่าใช้จ่ายทั้งหมด (เช่น 3-1000)',
-                            accounts: _allAccounts,
-                            selected: _selectedIncomeSummary,
-                            onSelected: (acc) =>
-                                setState(() => _selectedIncomeSummary = acc),
-                          ),
-                          const SizedBox(height: 24),
-                          _AccountSearchField(
-                            label: isEnglish ? 'Retained Earnings Account' : 'บัญชีกำไรสะสม (Retained Earnings)',
-                            helperText: isEnglish
-                                ? 'The account that receives net income/loss transferred to equity (e.g. 3-2000)'
-                                : 'บัญชีที่รับโอนกำไร/ขาดทุนสุทธิเข้าส่วนของผู้ถือหุ้น (เช่น 3-2000)',
-                            accounts: _allAccounts,
-                            selected: _selectedRetainedEarnings,
-                            onSelected: (acc) => setState(
-                                () => _selectedRetainedEarnings = acc),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // ── Section: ประเภทเอกสาร ─────────────────────────────
-                      _SectionCard(
-                        title: isEnglish ? 'Document Types for Auto-Generated Entries' : 'ประเภทเอกสารสำหรับรายการที่สร้างอัตโนมัติ',
-                        children: [
-                          _DocTypePickerField(
-                            label: isEnglish ? 'Revenue/Expense Closing Document (Steps 3 & 4)' : 'เอกสารปิดบัญชีรายได้/ค่าใช้จ่าย (ขั้นตอน 3 & 4)',
-                            helperText: isEnglish
-                                ? 'Used to create revenue/expense transfer entries and net income transfer'
-                                : 'ใช้สร้างรายการโอนบัญชีรายได้/ค่าใช้จ่าย และโอนกำไรสุทธิ',
-                            docTypes: _docTypes,
-                            selected: _selectedClosingDoc,
-                            onChanged: (d) =>
-                                setState(() => _selectedClosingDoc = d),
-                          ),
-                          const SizedBox(height: 20),
-                          _DocTypePickerField(
-                            label: isEnglish ? 'Balance Sheet Carry-Forward Document (Step 5)' : 'เอกสารยกยอดงบดุล (ขั้นตอน 5)',
-                            helperText: isEnglish
-                                ? 'Used to create asset/liability/equity carry-forward entries to the next year'
-                                : 'ใช้สร้างรายการยกยอดสินทรัพย์/หนี้สิน/ทุนไปปีถัดไป',
-                            docTypes: _docTypes,
-                            selected: _selectedCarryForwardDoc,
-                            onChanged: (d) =>
-                                setState(() => _selectedCarryForwardDoc = d),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-
-                      // ── Save Button ───────────────────────────────────────
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton.icon(
-                          onPressed: (_isSaving || !(MenuScope.of(context)?.canEdit ?? true))
-                              ? null
-                              : _save,
-                          icon: _isSaving
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white),
-                                )
-                              : const Icon(Icons.save),
-                          label: Text(_isSaving
-                              ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
-                              : (isEnglish ? 'Save Settings' : 'บันทึกการตั้งค่า')),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo,
-                            foregroundColor: Colors.white,
-                            textStyle: TextStyle(fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily, 
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+          : kPage(
+              header: kHeaderBar(
+                title: e ? 'Year-End Closing Settings' : 'การตั้งค่าปิดบัญชีสิ้นปี',
+                badges: [
+                  if (_editing) kEditingBadge(),
+                  miss.isEmpty
+                      ? ImKit.chip(e ? 'Complete' : 'ครบถ้วน', ImKit.okSoft, ImKit.ok)
+                      : Tooltip(message: miss.join(', '), child: ImKit.chip(e ? '${miss.length} to fix' : 'ต้องแก้ ${miss.length}', ImKit.redSoft, ImKit.red)),
+                ],
+                acts: acts,
+                busy: _saving,
               ),
-            ),
-    );
-  }
-}
-
-// ─── Section Card ──────────────────────────────────────────────────────────────
-
-class _SectionCard extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-  const _SectionCard({required this.title, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.bold)),
-            const Divider(height: 24),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Doc Type Picker Field ─────────────────────────────────────────────────────
-
-class _DocTypePickerField extends StatelessWidget {
-  final String label;
-  final String helperText;
-  final List<ModuleDocument> docTypes;
-  final ModuleDocument? selected;
-  final ValueChanged<ModuleDocument?> onChanged;
-
-  const _DocTypePickerField({
-    required this.label,
-    required this.helperText,
-    required this.docTypes,
-    required this.selected,
-    required this.onChanged,
-  });
-
-  Future<void> _openDialog(BuildContext context) async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    final searchCtrl = TextEditingController();
-    List<ModuleDocument> filtered = List.from(docTypes);
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
-        void doFilter(String q) {
-          setDlgState(() {
-            if (q.isEmpty) {
-              filtered = List.from(docTypes);
-            } else {
-              final lq = q.toLowerCase();
-              filtered = docTypes
-                  .where((d) =>
-                      d.docCode.toLowerCase().contains(lq) ||
-                      d.docNameThai.toLowerCase().contains(lq) ||
-                      d.docNameEng.toLowerCase().contains(lq))
-                  .toList();
-            }
-          });
-        }
-
-        return AlertDialog(
-          title: Text('${isEnglish ? 'Select' : 'เลือก'} $label'),
-          content: SizedBox(
-            width: 520,
-            height: 420,
-            child: Column(
-              children: [
-                TextField(
-                  controller: searchCtrl,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: isEnglish ? 'Search code / document type name' : 'ค้นหา รหัส / ชื่อประเภทเอกสาร',
-                    prefixIcon: const Icon(Icons.search),
-                    border: const OutlineInputBorder(),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                  onChanged: doFilter,
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: docTypes.isEmpty
-                      ? Center(child: Text(isEnglish ? 'No GL document types found' : 'ไม่พบประเภทเอกสาร GL'))
-                      : filtered.isEmpty
-                          ? Center(child: Text(isEnglish ? 'No results' : 'ไม่พบข้อมูล'))
-                          : ListView.builder(
-                              itemCount: filtered.length,
-                              itemBuilder: (_, i) {
-                                final d = filtered[i];
-                                final isSelected = selected?.id == d.id;
-                                return ListTile(
-                                  dense: true,
-                                  selected: isSelected,
-                                  selectedTileColor: Colors.indigo.shade50,
-                                  leading: isSelected
-                                      ? const Icon(Icons.check_circle,
-                                          color: Colors.indigo, size: 18)
-                                      : const SizedBox(width: 18),
-                                  title: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 90,
-                                        child: Text(
-                                          d.docCode,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.indigo),
-                                        ),
-                                      ),
-                                      Expanded(
-                                          child: Text(isEnglish && d.docNameEng.isNotEmpty
-                                              ? d.docNameEng
-                                              : d.docNameThai)),
-                                    ],
-                                  ),
-                                  onTap: () {
-                                    onChanged(d);
-                                    Navigator.of(ctx).pop();
-                                  },
-                                );
-                              },
-                            ),
-                ),
+              top: kKpis(_kpis(), loading: _loading),
+              sections: [
+                (0, e ? 'Settings' : 'การตั้งค่า', _settingsCard()),
+                (1, e ? 'Closing steps' : 'ขั้นตอนปิดบัญชี', _stepsCard()),
+                (2, e ? 'History' : 'ประวัติการปิดบัญชี', _historyCard()),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(isEnglish ? 'Close' : 'ปิด'),
-            ),
-          ],
-        );
-      }),
-    );
-    searchCtrl.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 13)),
-        const SizedBox(height: 6),
-        InputDecorator(
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            helperText: helperText,
-            helperMaxLines: 2,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: selected != null
-                    ? Row(
-                        children: [
-                          const Icon(Icons.check_circle,
-                              color: Colors.green, size: 16),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '${selected!.docCode} — ${isEnglish && selected!.docNameEng.isNotEmpty ? selected!.docNameEng : selected!.docNameThai}',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                        style: const TextStyle(color: Colors.grey)),
-              ),
-              IconButton(
-                icon: const Icon(Icons.search, color: Colors.blue),
-                tooltip: isEnglish ? 'Search document type' : 'ค้นหาประเภทเอกสาร',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () => _openDialog(context),
-              ),
-              if (selected != null)
-                IconButton(
-                  icon:
-                      const Icon(Icons.clear, color: Colors.red, size: 18),
-                  tooltip: isEnglish ? 'Clear selection' : 'ล้างการเลือก',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () => onChanged(null),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Account Search Field ──────────────────────────────────────────────────────
-
-class _AccountSearchField extends StatelessWidget {
-  final String label;
-  final String helperText;
-  final List<Account> accounts;
-  final Account? selected;
-  final ValueChanged<Account?> onSelected;
-
-  const _AccountSearchField({
-    required this.label,
-    required this.helperText,
-    required this.accounts,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  Future<void> _openDialog(BuildContext context) async {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    final searchCtrl = TextEditingController();
-    final sorted = List<Account>.from(accounts)
-      ..sort((a, b) => a.accountCode.compareTo(b.accountCode));
-    List<Account> filtered = List.from(sorted);
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
-        void doFilter(String q) {
-          setDlgState(() {
-            if (q.isEmpty) {
-              filtered = List.from(sorted);
-            } else {
-              final lq = q.toLowerCase();
-              filtered = sorted
-                  .where((a) =>
-                      a.accountCode.toLowerCase().contains(lq) ||
-                      a.accountNameThai.toLowerCase().contains(lq) ||
-                      a.accountNameEng.toLowerCase().contains(lq))
-                  .toList();
-            }
-          });
-        }
-
-        return AlertDialog(
-          title: Text('${isEnglish ? 'Select' : 'เลือก'} $label'),
-          content: SizedBox(
-            width: 520,
-            height: 420,
-            child: Column(
-              children: [
-                TextField(
-                  controller: searchCtrl,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: isEnglish ? 'Search code / account name' : 'ค้นหา รหัส / ชื่อบัญชี',
-                    prefixIcon: const Icon(Icons.search),
-                    border: const OutlineInputBorder(),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                  onChanged: doFilter,
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: accounts.isEmpty
-                      ? const Center(child: CircularProgressIndicator())
-                      : filtered.isEmpty
-                          ? Center(child: Text(isEnglish ? 'No accounts found' : 'ไม่พบบัญชี'))
-                          : ListView.builder(
-                              itemCount: filtered.length,
-                              itemBuilder: (_, i) {
-                                final a = filtered[i];
-                                final isSelected = selected?.id == a.id;
-                                return ListTile(
-                                  dense: true,
-                                  selected: isSelected,
-                                  selectedTileColor:
-                                      Colors.indigo.shade50,
-                                  leading: isSelected
-                                      ? const Icon(Icons.check_circle,
-                                          color: Colors.indigo, size: 18)
-                                      : const SizedBox(width: 18),
-                                  title: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 90,
-                                        child: Text(
-                                          a.accountCode,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.indigo),
-                                        ),
-                                      ),
-                                      Expanded(
-                                          child: Text(isEnglish && a.accountNameEng.isNotEmpty
-                                              ? a.accountNameEng
-                                              : a.accountNameThai)),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade200,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          accountTypeLabel(a.accountType, isEnglish),
-                                          style: const TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.grey),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  onTap: () {
-                                    onSelected(a);
-                                    Navigator.of(ctx).pop();
-                                  },
-                                );
-                              },
-                            ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(isEnglish ? 'Close' : 'ปิด'),
-            ),
-          ],
-        );
-      }),
-    );
-    searchCtrl.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 13)),
-        const SizedBox(height: 6),
-        InputDecorator(
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            helperText: helperText,
-            helperMaxLines: 2,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: selected != null
-                    ? Row(
-                        children: [
-                          const Icon(Icons.check_circle,
-                              color: Colors.green, size: 16),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '${selected!.accountCode} — ${isEnglish && selected!.accountNameEng.isNotEmpty ? selected!.accountNameEng : selected!.accountNameThai}',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              accountTypeLabel(selected!.accountType, isEnglish),
-                              style: const TextStyle(
-                                  fontSize: 11, color: Colors.grey),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                        style: const TextStyle(color: Colors.grey)),
-              ),
-              IconButton(
-                icon: const Icon(Icons.search, color: Colors.blue),
-                tooltip: isEnglish ? 'Search account' : 'ค้นหาบัญชี',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () => _openDialog(context),
-              ),
-              if (selected != null)
-                IconButton(
-                  icon:
-                      const Icon(Icons.clear, color: Colors.red, size: 18),
-                  tooltip: isEnglish ? 'Clear selection' : 'ล้างการเลือก',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () => onSelected(null),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Alert Banner ──────────────────────────────────────────────────────────────
-
-class _Alert extends StatelessWidget {
-  final String message;
-  final Color color;
-  final IconData icon;
-  final VoidCallback onClose;
-
-  const _Alert({
-    required this.message,
-    required this.color,
-    required this.icon,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        border: Border.all(color: color),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-              child: Text(message, style: TextStyle(color: color))),
-          IconButton(
-            icon: Icon(Icons.close, size: 16, color: color),
-            onPressed: onClose,
-          ),
-        ],
-      ),
     );
   }
 }

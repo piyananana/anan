@@ -1,11 +1,24 @@
-﻿// lib/ar/widgets/ar_collector_detail_widget.dart
+// lib/ar/widgets/ar_collector_detail_widget.dart — ผู้วางบิล/ผู้เก็บเงิน แบบ B ของ IM (user 2026-11-28)
+//   แถบหัว (รหัส ชื่อ ป้ายชนิด/วันที่มีผล / ปุ่ม) + ตัวเลขสรุป + ข้อมูล 3 กลุ่มสี + ลูกค้าที่รับผิดชอบ
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../im/widgets/im_master_kit.dart';
 import '../../sa/models/sa_anan_module.dart';
-import '../models/ar_collector.dart';
+import '../../sa/services/sa_language_provider.dart';
 import '../../cd/models/cd_branch.dart';
 import '../../cd/services/cd_branch_service.dart';
-import '../../sa/services/sa_language_provider.dart';
+import '../models/ar_collector.dart';
+import '../models/ar_customer_summary.dart';
+import '../services/ar_collector_service.dart';
+
+/// ป้ายวันที่มีผลของผู้วางบิล/ผู้เก็บเงิน (ใช้ทั้งการ์ดรายการและแถบหัว)
+Widget arCollectorEffectiveChip(ArCollector c, bool isEnglish) => switch (c.effectiveState()) {
+      'expired' => ImKit.chip(isEnglish ? 'Expired' : 'หมดอายุ', ImKit.redSoft, ImKit.red),
+      'future' => ImKit.chip(isEnglish ? 'Not started' : 'ยังไม่เริ่ม', ImKit.goldSoft, ImKit.amber),
+      _ => ImKit.chip(isEnglish ? 'In effect' : 'มีผล', ImKit.okSoft, ImKit.ok),
+    };
 
 class ArCollectorDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -13,9 +26,10 @@ class ArCollectorDetailWidget extends StatefulWidget {
   final Function(ArCollector) onSubmit;
   final VoidCallback onCancel;
   final bool isPlaceholder;
-  // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
-  // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน (เช่น กดเพิ่มผู้วางบิล/รับชำระซ้ำหลังพิมพ์ข้อมูลค้างไว้)
+  // เพิ่มขึ้นทุกครั้งที่หน้าจอหลักเปลี่ยน mode — บังคับเคลียร์ฟอร์มแม้ mode/selected ซ้ำเดิม
   final int requestSeq;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   const ArCollectorDetailWidget({
     super.key,
@@ -25,152 +39,199 @@ class ArCollectorDetailWidget extends StatefulWidget {
     required this.onCancel,
     this.isPlaceholder = false,
     this.requestSeq = 0,
+    this.onEdit,
+    this.onDelete,
   });
 
   @override
-  State<ArCollectorDetailWidget> createState() =>
-      ArCollectorDetailWidgetState();
+  State<ArCollectorDetailWidget> createState() => ArCollectorDetailWidgetState();
 }
 
-class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _codeCtrl;
-  late TextEditingController _nameThaCtrl;
-  late TextEditingController _nameEngCtrl;
-  late TextEditingController _taxIdCtrl;
-  late TextEditingController _phoneCtrl;
-  late TextEditingController _emailCtrl;
-  late TextEditingController _addressCtrl;
+class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> with ImMasterKit {
+  bool _isEnglish = false;
 
-  String _collectorType = 'EMPLOYEE';
+  @override
+  bool get kitEnglish => _isEnglish;
+  @override
+  bool get kitReadOnly => widget.mode == Mode.view;
+
+  final _codeCtrl = TextEditingController();
+  final _nameThCtrl = TextEditingController();
+  final _nameEnCtrl = TextEditingController();
+  final _taxIdCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
+  String _type = 'EMPLOYEE';
   int? _branchId;
   String? _branchNameThai;
-  DateTime? _effectiveDateFrom;
-  DateTime? _effectiveDateTo;
+  String? _branchLabel;
+  DateTime? _from;
+  DateTime? _to;
   bool _isActive = true;
+
   bool _isSaving = false;
+  String _snapshot = '';
+  ArCollectorSummary? _summary;
+  bool _summaryLoading = false;
+  int? _summaryFor;
+
+  static final _money = NumberFormat('#,##0.00');
+
+  bool get isDirty => !kitReadOnly && !widget.isPlaceholder && _fingerprint() != _snapshot;
 
   @override
   void initState() {
     super.initState();
-    _init(widget.selected);
-  }
-
-  void _init(ArCollector? d) {
-    _codeCtrl = TextEditingController(text: d?.collectorCode ?? '');
-    _nameThaCtrl = TextEditingController(text: d?.collectorNameThai ?? '');
-    _nameEngCtrl = TextEditingController(text: d?.collectorNameEng ?? '');
-    _taxIdCtrl = TextEditingController(text: d?.taxId ?? '');
-    _phoneCtrl = TextEditingController(text: d?.phone ?? '');
-    _emailCtrl = TextEditingController(text: d?.email ?? '');
-    _addressCtrl = TextEditingController(text: d?.address ?? '');
-    _collectorType = d?.collectorType ?? 'EMPLOYEE';
-    _branchId = d?.branchId;
-    _branchNameThai = d?.branchNameThai;
-    _effectiveDateFrom = d?.effectiveDateFrom;
-    _effectiveDateTo = d?.effectiveDateTo;
-    _isActive = d?.isActive ?? true;
+    _apply(widget.mode == Mode.add ? null : widget.selected);
+    _loadSummary();
   }
 
   @override
   void didUpdateWidget(covariant ArCollectorDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected ||
-        (widget.mode == Mode.add && oldWidget.mode != Mode.add) ||
-        widget.requestSeq != oldWidget.requestSeq) {
-      _codeCtrl.text = widget.selected?.collectorCode ?? '';
-      _nameThaCtrl.text = widget.selected?.collectorNameThai ?? '';
-      _nameEngCtrl.text = widget.selected?.collectorNameEng ?? '';
-      _taxIdCtrl.text = widget.selected?.taxId ?? '';
-      _phoneCtrl.text = widget.selected?.phone ?? '';
-      _emailCtrl.text = widget.selected?.email ?? '';
-      _addressCtrl.text = widget.selected?.address ?? '';
-      _collectorType = widget.selected?.collectorType ?? 'EMPLOYEE';
-      _branchId = widget.selected?.branchId;
-      _branchNameThai = widget.selected?.branchNameThai;
-      _effectiveDateFrom = widget.selected?.effectiveDateFrom;
-      _effectiveDateTo = widget.selected?.effectiveDateTo;
-      _isActive = widget.selected?.isActive ?? true;
-      if (mounted) setState(() {});
-    }
+    if (widget.selected == oldWidget.selected && widget.mode == oldWidget.mode && widget.requestSeq == oldWidget.requestSeq) return;
+    final sameRecord = widget.selected?.id != null && widget.selected?.id == oldWidget.selected?.id;
+    _apply(widget.mode == Mode.add ? null : widget.selected);
+    if (!sameRecord) _summaryFor = null;
+    _loadSummary(force: sameRecord && widget.mode == Mode.view && widget.requestSeq != oldWidget.requestSeq);
+    if (!sameRecord || widget.mode != oldWidget.mode) kScrollTop();
   }
 
   @override
   void dispose() {
-    _codeCtrl.dispose();
-    _nameThaCtrl.dispose();
-    _nameEngCtrl.dispose();
-    _taxIdCtrl.dispose();
-    _phoneCtrl.dispose();
-    _emailCtrl.dispose();
-    _addressCtrl.dispose();
+    for (final c in [_codeCtrl, _nameThCtrl, _nameEnCtrl, _taxIdCtrl, _phoneCtrl, _emailCtrl, _addressCtrl]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  Future<void> _pickDate(bool isFrom) async {
-    final initial = isFrom
-        ? (_effectiveDateFrom ?? DateTime.now())
-        : (_effectiveDateTo ?? DateTime.now());
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2099),
-    );
-    if (picked != null) {
-      setState(() {
-        if (isFrom) {
-          _effectiveDateFrom = picked;
-        } else {
-          _effectiveDateTo = picked;
-        }
-      });
+  void _apply(ArCollector? d) {
+    _codeCtrl.text = d?.collectorCode ?? '';
+    _nameThCtrl.text = d?.collectorNameThai ?? '';
+    _nameEnCtrl.text = d?.collectorNameEng ?? '';
+    _taxIdCtrl.text = d?.taxId ?? '';
+    _phoneCtrl.text = d?.phone ?? '';
+    _emailCtrl.text = d?.email ?? '';
+    _addressCtrl.text = d?.address ?? '';
+    _type = d?.collectorType ?? 'EMPLOYEE';
+    _branchId = d?.branchId;
+    _branchNameThai = d?.branchNameThai;
+    _branchLabel = null;
+    _from = d?.effectiveDateFrom;
+    _to = d?.effectiveDateTo;
+    _isActive = d?.isActive ?? true;
+    _snapshot = _fingerprint();
+  }
+
+  Future<void> _loadSummary({bool force = false}) async {
+    final id = widget.mode == Mode.add ? null : widget.selected?.id;
+    if (id == null) {
+      _summary = null;
+      _summaryFor = null;
+      return;
+    }
+    if (!force && _summaryFor == id && _summary != null) return;
+    _summaryFor = id;
+    _summaryLoading = true;
+    try {
+      final s = await Provider.of<ArCollectorService>(context, listen: false).fetchSummary(id);
+      if (mounted && _summaryFor == id) setState(() => _summary = s);
+    } catch (_) {
+      if (mounted && _summaryFor == id) setState(() => _summary = null);
+    } finally {
+      if (mounted && _summaryFor == id) setState(() => _summaryLoading = false);
     }
   }
 
-  Future<void> _pickBranch(bool isEnglish) async {
+  String? _t(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
+
+  ArCollector _build() => ArCollector(
+        id: widget.mode == Mode.add ? null : widget.selected?.id,
+        collectorCode: _codeCtrl.text.trim().toUpperCase(),
+        collectorNameThai: _nameThCtrl.text.trim(),
+        collectorNameEng: _t(_nameEnCtrl),
+        collectorType: _type,
+        taxId: _t(_taxIdCtrl),
+        branchId: _branchId,
+        phone: _t(_phoneCtrl),
+        email: _t(_emailCtrl),
+        address: _t(_addressCtrl),
+        effectiveDateFrom: _from,
+        effectiveDateTo: _to,
+        isActive: _isActive,
+      );
+
+  String _fingerprint() {
+    try {
+      return jsonEncode(_build().toJson());
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _submit() async {
+    final e = _isEnglish;
+    String? err;
+    if (_codeCtrl.text.trim().isEmpty) {
+      err = e ? 'Please enter the code' : 'กรุณาระบุรหัส';
+    } else if (_nameThCtrl.text.trim().isEmpty) {
+      err = e ? 'Please enter the Thai name' : 'กรุณาระบุชื่อภาษาไทย';
+    } else if (_from != null && _to != null && _to!.isBefore(_from!)) {
+      err = e ? 'Effective "to" date is before the "from" date' : 'วันที่สิ้นสุดก่อนวันที่เริ่มมีผล';
+    }
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err), backgroundColor: Colors.red));
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      await widget.onSubmit(_build());
+    } catch (ex) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e ? 'An error occurred: $ex' : 'เกิดข้อผิดพลาด: $ex'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _pickBranch() async {
+    final e = _isEnglish;
     final List<Branch> all;
     try {
       all = await Provider.of<BranchService>(context, listen: false).fetchRows();
-    } catch (e) {
+    } catch (ex) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(isEnglish
-                ? 'Failed to load branches: $e'
-                : 'โหลดข้อมูลสาขาล้มเหลว: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e ? 'Failed to load branches: $ex' : 'โหลดข้อมูลสาขาล้มเหลว: $ex')));
       }
       return;
     }
-    final choices = all
-        .where((b) => b.isActive)
-        .toList()
-      ..sort((a, b) => a.branchCode.compareTo(b.branchCode));
-
+    final choices = all.where((b) => b.isActive).toList()..sort((a, b) => a.branchCode.compareTo(b.branchCode));
     if (!mounted) return;
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         contentPadding: EdgeInsets.zero,
-        title: Text(isEnglish ? 'Select Branch' : 'เลือกสาขา',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(e ? 'Select branch' : 'เลือกสาขา', style: const TextStyle(fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: 500,
           height: 500,
           child: choices.isEmpty
-              ? Center(child: Text(isEnglish ? 'No branches found' : 'ไม่พบข้อมูลสาขา'))
+              ? Center(child: Text(e ? 'No branches found' : 'ไม่พบข้อมูลสาขา'))
               : ListView.builder(
                   itemCount: choices.length,
                   itemBuilder: (_, i) {
                     final b = choices[i];
-                    final displayName = isEnglish && b.branchNameEng.isNotEmpty
-                        ? b.branchNameEng
-                        : b.branchNameThai;
+                    final name = e && b.branchNameEng.isNotEmpty ? b.branchNameEng : b.branchNameThai;
                     return ListTile(
-                      title: Text('${b.branchCode} — $displayName'),
+                      title: Text('${b.branchCode} — $name'),
                       onTap: () {
                         setState(() {
                           _branchId = b.id;
                           _branchNameThai = b.branchNameThai;
+                          _branchLabel = '${b.branchCode} $name';
                         });
                         Navigator.of(ctx).pop();
                       },
@@ -178,349 +239,159 @@ class ArCollectorDetailWidgetState extends State<ArCollectorDetailWidget> {
                   },
                 ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(isEnglish ? 'Cancel' : 'ยกเลิก',
-                  style: const TextStyle(color: Colors.red))),
-        ],
+        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(e ? 'Cancel' : 'ยกเลิก'))],
       ),
     );
   }
 
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isSaving = true);
-    try {
-      final row = ArCollector(
-        id: widget.selected?.id,
-        collectorCode: _codeCtrl.text.trim().toUpperCase(),
-        collectorNameThai: _nameThaCtrl.text.trim(),
-        collectorNameEng: _nameEngCtrl.text.trim().isEmpty
-            ? null
-            : _nameEngCtrl.text.trim(),
-        collectorType: _collectorType,
-        taxId: _taxIdCtrl.text.trim().isEmpty ? null : _taxIdCtrl.text.trim(),
-        branchId: _branchId,
-        phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
-        email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
-        address: _addressCtrl.text.trim().isEmpty
-            ? null
-            : _addressCtrl.text.trim(),
-        effectiveDateFrom: _effectiveDateFrom,
-        effectiveDateTo: _effectiveDateTo,
-        isActive: _isActive,
-      );
-      await widget.onSubmit(row);
-    } catch (e) {
-      if (mounted) {
-        final isEnglish = Provider.of<LanguageProvider>(context, listen: false).isEnglish;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e'),
-              backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
+  Widget _mainCard() {
+    final e = _isEnglish;
+    final ro = kitReadOnly;
+    final types = e ? arCollectorTypeOptionsEng : arCollectorTypeOptions;
+    return kCard(
+      title: e ? 'Biller / collector details' : 'ข้อมูลผู้วางบิล / ผู้เก็บเงิน',
+      trailing: kLegend(withAuto: false),
+      child: kGroups([
+        kGroup(1, e ? 'Main' : 'ข้อมูลหลัก', ImKit.gDoc, [
+          kRow([
+            kTxt(e ? 'Code *' : 'รหัส *', _codeCtrl, editable: widget.mode == Mode.add, cap: TextCapitalization.characters),
+            kDd<String>(e ? 'Type' : 'ชนิด', _type, [for (final t in types.entries) DropdownMenuItem(value: t.key, child: Text(t.value))],
+                ro ? null : (v) => setState(() => _type = v ?? 'EMPLOYEE'), auto: false),
+          ]),
+          kTxt(e ? 'Name (TH) *' : 'ชื่อ (ไทย) *', _nameThCtrl),
+          kTxt(e ? 'Name (EN)' : 'ชื่อ (อังกฤษ)', _nameEnCtrl),
+        ]),
+        kGroup(2, e ? 'Contact' : 'ติดต่อ', ImKit.gParty, [
+          kRow([kTxt(e ? 'Phone' : 'โทรศัพท์', _phoneCtrl), kTxt(e ? 'Email' : 'อีเมล', _emailCtrl)]),
+          kTxt(e ? 'Address' : 'ที่อยู่', _addressCtrl),
+          if (_type != 'EMPLOYEE') kTxt(e ? 'Tax ID' : 'เลขผู้เสียภาษี', _taxIdCtrl, digitsOnly: true),
+        ]),
+        kGroup(3, e ? 'Effective period and branch' : 'ช่วงเวลามีผลและสาขา', ImKit.gFin, [
+          kRow([
+            kDate(e ? 'Effective from' : 'มีผลตั้งแต่', _from, ro ? null : (d) => setState(() => _from = d)),
+            kDate(e ? 'Effective to' : 'ถึงวันที่', _to, ro ? null : (d) => setState(() => _to = d)),
+          ]),
+          kNote(e ? 'Leave blank = no limit' : 'เว้นว่าง = ไม่จำกัด'),
+          kFk(
+            label: e ? 'Branch' : 'สาขา',
+            text: _branchLabel ?? _branchNameThai ?? '',
+            hasValue: _branchId != null,
+            onSearch: _pickBranch,
+            onClear: () => setState(() {
+              _branchId = null;
+              _branchNameThai = null;
+              _branchLabel = null;
+            }),
+          ),
+          kChecks([kCk(e ? 'Active' : 'ใช้งาน', _isActive, ro ? null : (v) => setState(() => _isActive = v))]),
+        ]),
+      ]),
+    );
   }
 
-  String _formatDate(DateTime? d) => d == null
-      ? '—'
-      : '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  Widget _customersCard() {
+    final e = _isEnglish;
+    final s = _summary;
+    if (s == null) {
+      return kCard(
+        title: e ? 'Customers handled' : 'ลูกค้าที่รับผิดชอบ',
+        child: _summaryLoading
+            ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+            : kNote(e ? 'Could not load customers' : 'โหลดรายชื่อลูกค้าไม่ได้'),
+      );
+    }
+    return kCard(
+      title: e ? 'Customers handled' : 'ลูกค้าที่รับผิดชอบ',
+      count: e
+          ? 'billing ${s.billingCount} · collecting ${s.collectionCount} — set on the customer screen'
+          : 'วางบิล ${s.billingCount} ราย · เก็บเงิน ${s.collectionCount} ราย — กำหนดที่หน้าจอลูกค้า',
+      trailing: kGhost(e ? 'Customers' : 'ข้อมูลลูกค้า', Icons.open_in_new,
+          () => ImKit.openMenu(context, 'ArCustomerScreen', 'ข้อมูลลูกค้า', 'Customers', e)),
+      padding: EdgeInsets.zero,
+      child: kTable(
+        [
+          KCol(e ? 'Code' : 'รหัส', 3),
+          KCol(e ? 'Customer' : 'ลูกค้า', 7),
+          KCol(e ? 'Duty' : 'หน้าที่', 4),
+          KCol(e ? 'Open docs' : 'เอกสารค้าง', 2, num: true),
+          KCol(e ? 'Outstanding' : 'ยอดค้าง', 3, num: true),
+          KCol(e ? 'Overdue' : 'เกินกำหนด', 3, num: true),
+        ],
+        [
+          for (final c in s.customers)
+            [
+              kCell(c.code, mono: true, color: c.isActive ? null : ImKit.ink3),
+              kCell(c.name(e), color: c.isActive ? null : ImKit.ink3),
+              Wrap(spacing: 4, children: [
+                if (c.isBiller) ImKit.chip(e ? 'Billing' : 'วางบิล', ImKit.blueSoft, ImKit.blue),
+                if (c.isCollector) ImKit.chip(e ? 'Collecting' : 'เก็บเงิน', ImKit.okSoft, ImKit.ok),
+              ]),
+              kCell(c.openCount == 0 ? '' : '${c.openCount}', mono: true),
+              kCell(c.outstanding.abs() < 0.005 ? '' : _money.format(c.outstanding), mono: true),
+              kCell(c.overdue < 0.005 ? '' : _money.format(c.overdue), mono: true, color: ImKit.red),
+            ],
+        ],
+        minWidth: 760,
+        empty: e ? 'No customers assigned yet' : 'ยังไม่มีลูกค้าที่กำหนดให้คนนี้',
+      ),
+    );
+  }
+
+  Widget _kpis() {
+    final e = _isEnglish;
+    final s = _summary;
+    if (s == null) return kKpis(const [], loading: _summaryLoading);
+    return kKpis([
+      ImKpi(e ? 'Customers collecting' : 'ลูกค้าที่เก็บเงิน', '${s.collectionCount}', e ? 'as collector' : 'เป็นผู้เก็บเงิน'),
+      ImKpi(e ? 'Customers billing' : 'ลูกค้าที่วางบิล', '${s.billingCount}', e ? 'as biller' : 'เป็นผู้วางบิล'),
+      ImKpi(e ? 'To collect' : 'ยอดที่ต้องตามเก็บ', _money.format(s.outstanding),
+          e ? '${s.openDocs} open doc(s)' : 'เอกสารค้าง ${s.openDocs} ใบ'),
+      ImKpi(e ? 'Overdue' : 'เกินกำหนด', _money.format(s.overdue),
+          s.overdueCustomers == 0 ? (e ? 'none' : 'ไม่มี') : (e ? '${s.overdueCustomers} customer(s)' : '${s.overdueCustomers} ราย'),
+          warn: s.overdue > 0.005,
+          onTap: () => ImKit.openMenu(context, 'ArAgingReportScreen', 'รายงานอายุลูกหนี้', 'AR Aging Report', e)),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
     final isEnglish = context.watch<LanguageProvider>().isEnglish;
-
+    _isEnglish = isEnglish;
+    final e = isEnglish;
     if (widget.isPlaceholder) {
-      return Center(
-          child: Text(isEnglish
-              ? 'Select a collector to edit or press + to add new'
-              : 'เลือกผู้วางบิล/รับชำระเพื่อแก้ไข หรือ กดปุ่ม + เพื่อเพิ่มใหม่'));
+      return kPlaceholder(Icons.badge_outlined,
+          e ? 'Select a biller / collector on the left, or press "Add"' : 'เลือกผู้วางบิล/ผู้เก็บเงินจากรายการด้านซ้าย หรือกด "เพิ่ม"');
     }
-
-    final bool ro = widget.mode == Mode.view;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.mode == Mode.view
-                  ? (isEnglish ? 'View Collector' : 'ดูข้อมูลผู้วางบิล/รับชำระ')
-                  : widget.mode == Mode.edit
-                      ? (isEnglish ? 'Edit Collector' : 'แก้ไขผู้วางบิล/รับชำระ')
-                      : (isEnglish ? 'Add Collector' : 'เพิ่มผู้วางบิล/รับชำระ'),
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 20),
-
-            TextFormField(
-              controller: _codeCtrl,
-              readOnly: widget.mode != Mode.add,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                labelText: isEnglish ? 'Code *' : 'รหัส *',
-                border: const OutlineInputBorder(),
-              ),
-              validator: (v) => (v == null || v.trim().isEmpty)
-                  ? (isEnglish ? 'Please enter code' : 'โปรดระบุรหัส')
-                  : null,
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _nameThaCtrl,
-                    readOnly: ro,
-                    decoration: InputDecoration(
-                      labelText: isEnglish ? 'Name (TH) *' : 'ชื่อ (ไทย) *',
-                      border: const OutlineInputBorder(),
-                    ),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? (isEnglish ? 'Please enter Thai name' : 'โปรดระบุชื่อภาษาไทย')
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: _nameEngCtrl,
-                    readOnly: ro,
-                    decoration: const InputDecoration(
-                      labelText: 'Name (EN)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    value: _collectorType,
-                    decoration: InputDecoration(
-                      labelText: isEnglish ? 'Type *' : 'ประเภท *',
-                      border: const OutlineInputBorder(),
-                    ),
-                    items: arCollectorTypeOptions.keys
-                        .map((k) => DropdownMenuItem(
-                            value: k, child: Text(arCollectorTypeLabel(k, isEnglish))))
-                        .toList(),
-                    onChanged: ro
-                        ? null
-                        : (v) => setState(() => _collectorType = v!),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: _taxIdCtrl,
-                    readOnly: ro,
-                    decoration: InputDecoration(
-                      labelText: isEnglish ? 'Tax ID / National ID' : 'เลขภาษี/เลขบัตรประชาชน',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: ro ? null : () => _pickBranch(isEnglish),
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: isEnglish ? 'Branch' : 'สาขา',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_branchId != null && !ro)
-                              IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () => setState(() {
-                                  _branchId = null;
-                                  _branchNameThai = null;
-                                }),
-                              ),
-                            const Icon(Icons.search),
-                          ],
-                        ),
-                      ),
-                      child: Text(_branchId == null
-                          ? (isEnglish ? '— Not specified —' : '— ไม่ระบุ —')
-                          : _branchNameThai ?? ''),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: _phoneCtrl,
-                    readOnly: ro,
-                    decoration: InputDecoration(
-                      labelText: isEnglish ? 'Phone' : 'โทรศัพท์',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: _emailCtrl,
-                    readOnly: ro,
-                    decoration: InputDecoration(
-                      labelText: isEnglish ? 'Email' : 'อีเมล',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            TextFormField(
-              controller: _addressCtrl,
-              readOnly: ro,
-              maxLines: 2,
-              decoration: InputDecoration(
-                labelText: isEnglish ? 'Address' : 'ที่อยู่',
-                border: const OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: ro ? null : () => _pickDate(true),
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: isEnglish ? 'Start Date' : 'วันที่เริ่มงาน',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_effectiveDateFrom != null && !ro)
-                              IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () =>
-                                    setState(() => _effectiveDateFrom = null),
-                              ),
-                            const Icon(Icons.calendar_today, size: 18),
-                          ],
-                        ),
-                      ),
-                      child: Text(_formatDate(_effectiveDateFrom)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: InkWell(
-                    onTap: ro ? null : () => _pickDate(false),
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: isEnglish ? 'End Date' : 'วันที่สิ้นสุด',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_effectiveDateTo != null && !ro)
-                              IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () =>
-                                    setState(() => _effectiveDateTo = null),
-                              ),
-                            const Icon(Icons.calendar_today, size: 18),
-                          ],
-                        ),
-                      ),
-                      child: Text(_formatDate(_effectiveDateTo)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                    child: Text(isEnglish
-                        ? 'Status: ${_isActive ? 'Active' : 'Inactive'}'
-                        : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}')),
-                Switch(
-                  value: _isActive,
-                  onChanged:
-                      ro ? null : (v) => setState(() => _isActive = v),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            Row(
-              children: [
-                if (widget.mode != Mode.view)
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _submit,
-                      icon: _isSaving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.save),
-                      label: Text(_isSaving
-                          ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
-                          : widget.mode == Mode.edit
-                              ? (isEnglish ? 'Save' : 'บันทึก')
-                              : (isEnglish ? 'Add' : 'เพิ่ม')),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade700,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                if (widget.mode != Mode.view) const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: widget.onCancel,
-                    icon: const Icon(Icons.cancel),
-                    label: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey.shade600,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+    final ro = kitReadOnly;
+    final isAdd = widget.mode == Mode.add;
+    final saved = !isAdd && widget.selected?.id != null;
+    final name = e && _nameEnCtrl.text.trim().isNotEmpty ? _nameEnCtrl.text.trim() : _nameThCtrl.text.trim();
+    final cur = _build();
+    return kPage(
+      header: kHeaderBar(
+        code: isAdd ? null : widget.selected?.collectorCode,
+        title: isAdd ? (e ? 'New biller / collector' : 'ผู้วางบิล/ผู้เก็บเงินใหม่') : name,
+        badges: [
+          if (!isAdd) ImKit.activeChip(_isActive, e),
+          ImKit.chip(arCollectorTypeLabel(_type, e), ImKit.blueSoft, ImKit.blue),
+          if (_from != null || _to != null) arCollectorEffectiveChip(cur, e),
+          if (!ro) kEditingBadge(),
+        ],
+        busy: _isSaving,
+        acts: kStdActs(
+          saving: _isSaving,
+          onEdit: widget.onEdit,
+          onDelete: widget.onDelete,
+          onClose: widget.onCancel,
+          onCancel: widget.onCancel,
+          onSave: _submit,
         ),
       ),
+      top: saved ? _kpis() : null,
+      sections: [
+        (0, e ? 'Details' : 'ข้อมูล', _mainCard()),
+        if (saved) (1, e ? 'Customers' : 'ลูกค้าที่รับผิดชอบ', _customersCard()),
+      ],
     );
   }
 }

@@ -227,4 +227,12 @@ class ArYearEndService {
     final res = await http.delete(Uri.parse('$baseUrl/ar_allowance_run/$id'), headers: headers, body: jsonEncode({'reason': reason}));
     if (res.statusCode != 200) throw Exception(jsonDecode(res.body)['error'] ?? 'Failed');
   }
+
+  /// ค่าเผื่อที่คำนวณได้ต่อช่วง ณ วันนี้ + ยอดสะสมใน GL + ลูกหนี้สกุลต่างประเทศ (หน้าตั้งค่าสิ้นปีแบบ B, 2026-11-28)
+  Future<Map<String, dynamic>> fetchSummary() async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.get(Uri.parse('$baseUrl/ar_year_end_setup/summary'), headers: headers);
+    if (res.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+    throw Exception('Failed to load summary: ${res.statusCode}');
+  }
 }

@@ -32,6 +32,14 @@ class YearEndClosingService {
     }
   }
 
+  /// สรุปของหน้าจอตั้งค่าปิดบัญชีสิ้นปี (2026-11-28)
+  Future<ClosingConfigSummary> fetchConfigSummary() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/gl_closing_config/summary'), headers: headers);
+    if (response.statusCode == 200) return ClosingConfigSummary.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    throw Exception(jsonDecode(response.body)['message'] ?? 'Failed to load summary');
+  }
+
   // ─── Adjusting Templates ───────────────────────────────────────────────────
 
   Future<List<AdjustingTemplate>> fetchTemplates() async {

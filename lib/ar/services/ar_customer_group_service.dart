@@ -1,9 +1,10 @@
-﻿// services/ar_customer_group_service.dart
+// services/ar_customer_group_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/ar_customer_group.dart';
+import '../models/ar_customer_summary.dart';
 
 class ArCustomerGroupService {
   final String baseUrl = AppConfig.apiAr;
@@ -161,5 +162,21 @@ class ArCustomerGroupService {
     } else {
       throw Exception('Failed to delete all data: ${response.body}');
     }
+  }
+
+  /// ตัวเลขสรุป + ลูกค้าในกลุ่ม (2026-11-28)
+  Future<ArCustomerGroupSummary> fetchSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/ar_customer_group/$id/summary'), headers: headers);
+    if (response.statusCode == 200) return ArCustomerGroupSummary.fromJson(json.decode(response.body) as Map<String, dynamic>);
+    throw Exception('Failed to load group summary: ${response.statusCode}');
+  }
+
+  /// 3 รหัสถัดไปที่จะออกจริง + รหัสล่าสุดที่กลุ่มนี้ออก (ตามค่าที่บันทึกแล้ว)
+  Future<ArCodePreview?> fetchCodePreview(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/ar_customer_group/$id/preview_code'), headers: headers);
+    if (response.statusCode == 200) return ArCodePreview.fromJson(json.decode(response.body) as Map<String, dynamic>);
+    return null;
   }
 }

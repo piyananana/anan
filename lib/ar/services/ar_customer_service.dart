@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/ar_customer.dart';
+import '../models/ar_customer_summary.dart';
 
 class ArCustomerService {
   final String baseUrl = AppConfig.apiAr;
@@ -95,5 +96,30 @@ class ArCustomerService {
     } else {
       throw Exception('ลบข้อมูลล้มเหลว: ${response.body}');
     }
+  }
+
+  /// ยอดค้าง/เกินกำหนดต่อลูกค้า — การ์ดรายการ (2026-11-28)
+  Future<Map<int, ArCustomerBalance>> fetchBalances() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/ar_customer/balances'), headers: headers);
+    if (response.statusCode != 200) throw Exception(_err(response, 'Failed to load balances'));
+    final list = (json.decode(response.body) as List).map((j) => ArCustomerBalance.fromJson(j as Map<String, dynamic>));
+    return {for (final b in list) b.customerId: b};
+  }
+
+  /// ตัวเลขสรุป/อายุหนี้/ที่มาบัญชีลูกหนี้ของลูกค้า 1 ราย (2026-11-28)
+  Future<ArCustomerSummary> fetchSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/ar_customer/$id/summary'), headers: headers);
+    if (response.statusCode != 200) throw Exception(_err(response, 'Failed to load summary'));
+    return ArCustomerSummary.fromJson(json.decode(response.body) as Map<String, dynamic>);
+  }
+
+  String _err(http.Response r, String fallback) {
+    try {
+      final b = json.decode(r.body);
+      if (b is Map && b['message'] != null) return b['message'].toString();
+    } catch (_) {}
+    return fallback;
   }
 }

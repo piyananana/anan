@@ -29,6 +29,8 @@ class ArCustomerGroup {
   final DateTime? updatedAt;
   final String? createdBy;
   final String? updatedBy;
+  // จำนวนลูกค้าในกลุ่ม (มาจากรายการกลุ่ม — การ์ดแผงซ้าย, 2026-11-28)
+  final int customerCount;
 
   ArCustomerGroup({
     this.id,
@@ -57,6 +59,7 @@ class ArCustomerGroup {
     this.updatedAt,
     this.createdBy,
     this.updatedBy,
+    this.customerCount = 0,
   });
 
   factory ArCustomerGroup.fromJson(Map<String, dynamic> json) {
@@ -97,6 +100,7 @@ class ArCustomerGroup {
           : null,
       createdBy: json['created_by']?.toString(),
       updatedBy: json['updated_by']?.toString(),
+      customerCount: int.tryParse(json['customer_count']?.toString() ?? '') ?? 0,
     );
   }
 

@@ -1,4 +1,4 @@
-﻿// lib/ar/services/ar_customer_running_service.dart
+// lib/ar/services/ar_customer_running_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
@@ -67,5 +67,30 @@ class ArCustomerRunningService {
     } else {
       throw Exception('ไม่สามารถดึงรหัสอัตโนมัติได้: ${response.statusCode}');
     }
+  }
+
+  /// ข้อมูลประกอบหน้าจอตามรูปแบบที่กำลังแก้ (2026-11-28): รหัสถัดไปที่จะออกจริง, รหัสชน, รหัสล่าสุด, กลุ่มที่ออกรหัสเอง
+  Future<Map<String, dynamic>> fetchSummary({
+    required String prefix,
+    required String separator,
+    required String suffixDate,
+    required int length,
+    required int next,
+  }) async {
+    final headers = await _auth.getAuthHeader();
+    final uri = Uri.parse('$_baseUrl/ar_customer_running/summary').replace(queryParameters: {
+      'prefix': prefix,
+      'separator': separator,
+      'suffix_date': suffixDate,
+      'length': '$length',
+      'next': '$next',
+    });
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    if (response.statusCode == 401) {
+      _auth.logout();
+      throw Exception('Unauthorized');
+    }
+    throw Exception('Failed to load summary: ${response.statusCode}');
   }
 }

@@ -1,9 +1,10 @@
-﻿// lib/ar/services/ar_collector_service.dart
+// lib/ar/services/ar_collector_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/ar_collector.dart';
+import '../models/ar_customer_summary.dart';
 
 class ArCollectorService {
   final String _base = AppConfig.apiAr;
@@ -89,5 +90,13 @@ class ArCollectorService {
       throw Exception('Unauthorized');
     }
     throw Exception('ลบข้อมูลล้มเหลว: ${response.body}');
+  }
+
+  /// ลูกค้าที่รับผิดชอบ + ยอดค้าง (2026-11-28)
+  Future<ArCollectorSummary> fetchSummary(int id) async {
+    final headers = await _auth.getAuthHeader();
+    final response = await http.get(Uri.parse('$_base/ar_collector/$id/summary'), headers: headers);
+    if (response.statusCode == 200) return ArCollectorSummary.fromJson(json.decode(response.body) as Map<String, dynamic>);
+    throw Exception('Failed to load collector summary: ${response.statusCode}');
   }
 }

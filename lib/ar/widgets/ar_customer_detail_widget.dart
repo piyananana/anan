@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
@@ -26,80 +26,11 @@ import '../../cd/services/cd_sales_territory_service.dart';
 import '../widgets/ar_collector_list_widget.dart';
 import '../../im/widgets/im_price_list_list_widget.dart';
 import '../../sa/services/sa_language_provider.dart';
-
-// ---------------------------------------------------------------------------
-// Collapsible section widget
-// ---------------------------------------------------------------------------
-class _Section extends StatefulWidget {
-  final String title;
-  final bool initiallyExpanded;
-  final List<Widget> children;
-  final Widget? trailing;
-
-  const _Section({
-    required this.title,
-    this.initiallyExpanded = true,
-    required this.children,
-    this.trailing,
-  });
-
-  @override
-  State<_Section> createState() => _SectionState();
-}
-
-class _SectionState extends State<_Section> {
-  late bool _expanded;
-
-  @override
-  void initState() {
-    super.initState();
-    _expanded = widget.initiallyExpanded;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        InkWell(
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Container(
-            color: Colors.blueGrey.shade50,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                Icon(
-                  _expanded ? Icons.expand_less : Icons.expand_more,
-                  color: Colors.blueGrey.shade600,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    widget.title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blueGrey.shade800,
-                    ),
-                  ),
-                ),
-                if (widget.trailing != null) widget.trailing!,
-              ],
-            ),
-          ),
-        ),
-        if (_expanded)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: widget.children,
-            ),
-          ),
-        const Divider(height: 1),
-      ],
-    );
-  }
-}
+import 'dart:convert';
+import '../../im/widgets/im_master_kit.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
+import '../models/ar_customer_summary.dart';
+import '../services/ar_customer_service.dart';
 
 // ---------------------------------------------------------------------------
 // Address Dialog
@@ -1253,6 +1184,11 @@ class ArCustomerDetailWidget extends StatefulWidget {
   // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
   // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน (เช่น กดเพิ่มลูกค้าซ้ำหลังพิมพ์ข้อมูลค้างไว้)
   final int requestSeq;
+  // แบบ B (2026-11-28): สำเนาเป็นลูกค้าใหม่ + ปุ่มของแถบหัว (null = ไม่มีสิทธิ์/ยังโหลดไม่ครบ)
+  final ArCustomer? copyFrom;
+  final VoidCallback? onEdit;
+  final VoidCallback? onCopy;
+  final VoidCallback? onDelete;
 
   const ArCustomerDetailWidget({
     super.key,
@@ -1262,14 +1198,33 @@ class ArCustomerDetailWidget extends StatefulWidget {
     required this.onCancel,
     this.isPlaceholder = false,
     this.requestSeq = 0,
+    this.copyFrom,
+    this.onEdit,
+    this.onCopy,
+    this.onDelete,
   });
 
   @override
   State<ArCustomerDetailWidget> createState() => ArCustomerDetailWidgetState();
 }
 
-class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
+class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> with ImMasterKit {
   final _formKey = GlobalKey<FormState>();
+
+  @override
+  bool get kitEnglish => _isEnglish;
+  @override
+  bool get kitReadOnly => widget.mode == Mode.view;
+
+  // ตัวเลขสรุป/อายุหนี้/ที่มาบัญชีลูกหนี้ (เฉพาะลูกค้าที่บันทึกแล้ว)
+  ArCustomerSummary? _summary;
+  bool _summaryLoading = false;
+  int? _summaryFor;
+
+  // แก้ไขค้าง → หน้าจอหลักถามก่อนเปลี่ยนลูกค้า
+  String _snapshot = '';
+  bool get isDirty => !kitReadOnly && !widget.isPlaceholder && _fingerprint() != _snapshot;
+  bool get _isCopy => widget.mode == Mode.add && widget.copyFrom != null;
 
   late TextEditingController _codeCtrl;
   late TextEditingController _nameThCtrl;
@@ -1370,23 +1325,54 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   @override
   void initState() {
     super.initState();
-    _initFromSelected(widget.selected);
+    _initFromSelected(_source);
+    _loadSummary();
     _loadBusinessTypes();
     _loadCustomerGroups();
     _loadCurrencies();
     _loadAutoNumberingConfig();
     _loadControlAccounts();
-    if (widget.selected?.salesTerritoryId != null) {
-      _loadTerritoryMembers(widget.selected!.salesTerritoryId!);
+    if (_salesTerritoryId != null) {
+      _loadTerritoryMembers(_salesTerritoryId!);
     }
     // สำหรับ record ใหม่ ให้ default สกุลเงินหลักจาก cd_currency
-    if (widget.selected == null) _loadDefaultCurrency();
+    if (widget.selected == null && widget.copyFrom == null) _loadDefaultCurrency();
+  }
+
+  // ข้อมูลตั้งต้นของฟอร์ม: เพิ่มแบบสำเนา = ลูกค้าต้นฉบับ (ล้างรหัส/เลขผู้เสียภาษี/รหัสเดิม), เพิ่มใหม่ = ว่าง
+  ArCustomer? get _source => widget.mode == Mode.add ? widget.copyFrom : widget.selected;
+
+  // ค่าที่โหลดตามหลังมาเปลี่ยนฟอร์ม — ถ้ายังไม่ได้แก้อะไรให้ถือว่ายังไม่แก้
+  void _keepClean(VoidCallback fn) {
+    final wasClean = _fingerprint() == _snapshot;
+    setState(fn);
+    if (wasClean) _snapshot = _fingerprint();
+  }
+
+  Future<void> _loadSummary() async {
+    final id = widget.mode == Mode.add ? null : widget.selected?.id;
+    if (id == null) {
+      _summary = null;
+      _summaryFor = null;
+      return;
+    }
+    if (_summaryFor == id && _summary != null) return;
+    _summaryFor = id;
+    _summaryLoading = true;
+    try {
+      final s = await Provider.of<ArCustomerService>(context, listen: false).fetchSummary(id);
+      if (mounted && _summaryFor == id) setState(() => _summary = s);
+    } catch (_) {
+      if (mounted && _summaryFor == id) setState(() => _summary = null);
+    } finally {
+      if (mounted && _summaryFor == id) setState(() => _summaryLoading = false);
+    }
   }
 
   Future<void> _loadDefaultCurrency() async {
     final code = await Provider.of<CurrencyService>(context, listen: false)
         .getBaseCurrencyCode();
-    if (mounted) setState(() => _selectedCurrencyCode = code);
+    if (mounted) _keepClean(() => _selectedCurrencyCode = code);
   }
 
   Future<void> _loadBusinessTypes() async {
@@ -1402,7 +1388,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       final list = await Provider.of<ArCustomerGroupService>(context, listen: false)
           .fetchRows();
       if (mounted) {
-        setState(() {
+        _keepClean(() {
           _customerGroups = list;
           // ถ้ามีกลุ่มเลือกอยู่แล้ว → resolve _customerGroupIsAutoNumber
           if (_customerGroupId != null) {
@@ -1422,7 +1408,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       final svc = Provider.of<ArCustomerRunningService>(context, listen: false);
       final config = await svc.fetchConfig();
       if (mounted) {
-        setState(() => _autoNumberingEnabled = config.isAutoNumbering);
+        _keepClean(() => _autoNumberingEnabled = config.isAutoNumbering);
       }
     } catch (_) {}
   }
@@ -1432,7 +1418,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       final list = await Provider.of<CurrencyService>(context, listen: false)
           .fetchActiveRows();
       if (mounted) {
-        setState(() {
+        _keepClean(() {
           _currencies = list;
           if (_selectedCurrencyCode != null) {
             final match = _currencies.cast<Currency?>().firstWhere(
@@ -1450,7 +1436,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     try {
       final list = await AccountService().fetchRows();
       if (mounted) {
-        setState(() {
+        _keepClean(() {
           _controlAccounts = list.where((a) => a.isControlAccount && a.isNormalAccount && a.isActive).toList();
           // resolve name from full list (not just filtered) in case the stored account
           // doesn't have isControlAccount=true or isActive=true
@@ -1467,12 +1453,15 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   }
 
   void _initFromSelected(ArCustomer? c) {
-    _codeCtrl        = TextEditingController(text: c?.customerCode ?? '');
+    // สำเนาเป็นลูกค้าใหม่: ไม่เอารหัส / เลขผู้เสียภาษี / รหัสเดิม (ต้องไม่ซ้ำต่อราย)
+    final copy = widget.mode == Mode.add && c != null;
+    _autoCodeOverridden = false;
+    _codeCtrl        = TextEditingController(text: copy ? '' : c?.customerCode ?? '');
     _nameThCtrl      = TextEditingController(text: c?.customerNameTh ?? '');
     _nameEnCtrl      = TextEditingController(text: c?.customerNameEn ?? '');
-    _taxIdCtrl           = TextEditingController(text: c?.taxId ?? '');
+    _taxIdCtrl           = TextEditingController(text: copy ? '' : c?.taxId ?? '');
     _taxBranchCtrl       = TextEditingController(text: c?.taxBranchCode ?? '');
-    _oldCustomerCodeCtrl = TextEditingController(text: c?.oldCustomerCode ?? '');
+    _oldCustomerCodeCtrl = TextEditingController(text: copy ? '' : c?.oldCustomerCode ?? '');
     _creditTermMonthsCtrl = TextEditingController(text: (c?.creditTermMonths ?? 0).toString());
     _creditTermDaysCtrl   = TextEditingController(text: (c?.creditTermDays ?? 30).toString());
     _creditLimitCtrl = TextEditingController(text: (c?.creditLimit ?? 0).toStringAsFixed(2));
@@ -1487,7 +1476,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     _customerGroupCode = c?.customerGroupCode;
     _customerGroupName = c?.customerGroupName;
     _customerGroupIsAutoNumber = null; // will be resolved after _loadCustomerGroups
-    _isCodeAutoGenerated = c?.isCodeAutoGenerated ?? false;
+    _isCodeAutoGenerated = copy ? false : c?.isCodeAutoGenerated ?? false;
+    if (_customerGroupId != null) {
+      final g = _customerGroups.where((g) => g.id == _customerGroupId).firstOrNull;
+      if (g != null) _customerGroupIsAutoNumber = g.isAutoNumber;
+    }
     _isActive        = c?.isActive ?? true;
     _addresses       = List.from(c?.addresses ?? []);
     _contacts        = List.from(c?.contacts ?? []);
@@ -1512,24 +1505,34 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     _requiresBilling    = c?.requiresBilling ?? false;
     _billingConditions  = List.from(c?.billingConditions ?? []);
     _paymentConditions  = List.from(c?.paymentConditions ?? []);
+    _snapshot = _fingerprint();
   }
 
   @override
   void didUpdateWidget(covariant ArCustomerDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected) {
-      _disposeControllers();
-      _initFromSelected(widget.selected);
-      setState(() {});
-    } else if (widget.mode == Mode.add && oldWidget.mode != Mode.add) {
-      _disposeControllers();
-      _initFromSelected(null);
-      setState(() {});
-    } else if (widget.requestSeq != oldWidget.requestSeq) {
-      _disposeControllers();
-      _initFromSelected(widget.mode == Mode.add ? null : widget.selected);
-      setState(() {});
+    final changed = widget.selected != oldWidget.selected ||
+        widget.mode != oldWidget.mode ||
+        widget.requestSeq != oldWidget.requestSeq ||
+        widget.copyFrom != oldWidget.copyFrom;
+    if (!changed) return;
+    final sameRecord = widget.selected?.id != null && widget.selected?.id == oldWidget.selected?.id;
+    // ข้อมูลเต็มโหลดตามมาทีหลัง (mode/seq เดิม) — ไม่ล้างตำแหน่งเลื่อน
+    final onlyFullLoad = sameRecord && widget.mode == oldWidget.mode && widget.requestSeq == oldWidget.requestSeq;
+    _disposeControllers();
+    _initFromSelected(_source);
+    if (widget.mode == Mode.add && oldWidget.mode != Mode.add) _loadAutoNumberingConfig();
+    if (widget.mode == Mode.add && widget.copyFrom == null) _loadDefaultCurrency();
+    if (!sameRecord) _summaryFor = null;
+    _loadSummary();
+    final tid = _salesTerritoryId;
+    if (tid != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _salesTerritoryId == tid) _loadTerritoryMembers(tid);
+      });
     }
+    if (!onlyFullLoad) kScrollTop();
+    setState(() {});
   }
 
   void _disposeControllers() {
@@ -2246,20 +2249,15 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
     });
   }
 
-  Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate()) return;
-    final isEnglish = _isEnglish;
-    setState(() => _isSaving = true);
-    try {
-      final customer = ArCustomer(
-        id: widget.selected?.id,
+  // ข้อมูลในฟอร์มเป็น ArCustomer (ใช้ทั้งตอนบันทึกและตรวจว่ามีแก้ไขค้าง)
+  ArCustomer _buildCustomer() => ArCustomer(
+        id: widget.mode == Mode.add ? null : widget.selected?.id,
         // ถ้า auto-numbering เปิดและไม่ได้แก้ไขเอง → ส่งค่าว่าง ให้ backend generate
-        customerCode: (_effectiveAutoNumbering && !_autoCodeOverridden)
+        customerCode: (widget.mode == Mode.add && _effectiveAutoNumbering && !_autoCodeOverridden)
             ? ''
             : _codeCtrl.text.trim(),
         customerNameTh: _nameThCtrl.text.trim(),
-        customerNameEn:
-            _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
+        customerNameEn: _nameEnCtrl.text.trim().isEmpty ? null : _nameEnCtrl.text.trim(),
         taxId: _taxIdCtrl.text.trim().isEmpty ? null : _taxIdCtrl.text.trim(),
         taxBranchCode: normalizeTaxBranch(_taxBranchCtrl.text),
         oldCustomerCode: _oldCustomerCodeCtrl.text.trim().isEmpty ? null : _oldCustomerCodeCtrl.text.trim(),
@@ -2282,645 +2280,753 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         billingCollectorId: _billingCollectorId,
         collectionCollectorId: _collectionCollectorId,
         priceListId: _priceListId,
-        addresses:    _addresses,
-        contacts:     _contacts,
-        bankAccounts: _bankAccounts,
+        addresses: List.from(_addresses),
+        contacts: List.from(_contacts),
+        bankAccounts: List.from(_bankAccounts),
       );
-      await widget.onSubmit(customer);
+
+  String _fingerprint() {
+    try {
+      return jsonEncode(_buildCustomer().toJson());
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _submitForm() async {
+    final isEnglish = _isEnglish;
+    String? err;
+    if (_nameThCtrl.text.trim().isEmpty) {
+      err = isEnglish ? 'Please enter the customer name (TH)' : 'กรุณาป้อนชื่อลูกค้า (ไทย)';
+    } else if (widget.mode == Mode.add && (!_effectiveAutoNumbering || _autoCodeOverridden) && _codeCtrl.text.trim().isEmpty) {
+      err = isEnglish ? 'Please enter the customer code' : 'กรุณาป้อนรหัสลูกค้า';
+    }
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err), backgroundColor: Colors.red));
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      await widget.onSubmit(_buildCustomer());
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(isEnglish
-                ? 'An error occurred: $e'
-                : 'เกิดข้อผิดพลาด: $e'),
-            backgroundColor: Colors.red));
+            content: Text(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  Widget _buildField(
-    String label,
-    TextEditingController ctrl, {
-    bool readOnly = false,
-    bool required = false,
-    TextInputType? keyboard,
-  }) {
-    final isEnglish = _isEnglish;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: TextFormField(
-        readOnly: readOnly,
-        controller: ctrl,
-        keyboardType: keyboard,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
+  // ─── ตัวช่วยแสดงผล ─────────────────────────────────────────────────────────
+  static final _money = NumberFormat('#,##0.00');
+  String _m(double v) => _money.format(v);
+  String _dt(DateTime? d) => d == null ? '' : _previewDateFmt.format(d);
+
+  ArCustomerGroup? get _groupObj =>
+      _customerGroupId == null ? null : _customerGroups.where((g) => g.id == _customerGroupId).firstOrNull;
+  bool _sameInt(TextEditingController c, int v) => int.tryParse(c.text.trim()) == v;
+  bool _sameNum(TextEditingController c, double v) => ((double.tryParse(c.text.trim()) ?? double.nan) - v).abs() < 0.005;
+
+  String _groupLabel(bool e) =>
+      _customerGroupId == null ? '' : '${_customerGroupCode ?? ''} ${_customerGroupDisplayName(e)}'.trim();
+  String _bizTypeLabel(bool e) {
+    if (_businessTypeId == null) return '';
+    final bt = _businessTypes.where((b) => b.id == _businessTypeId).firstOrNull;
+    final name = e && (bt?.businessTypeNameEng.isNotEmpty ?? false) ? bt!.businessTypeNameEng : (_businessTypeNameThai ?? '');
+    return '${_businessTypeCode ?? ''} $name'.trim();
+  }
+
+  String _currencyLabel(bool e) {
+    if (_selectedCurrencyCode == null) return '';
+    final c = _currencies.where((c) => c.currencyCode == _selectedCurrencyCode).firstOrNull;
+    final name = c == null ? (_selectedCurrencyNameThai ?? '') : (e && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai);
+    return name.isEmpty ? _selectedCurrencyCode! : '$_selectedCurrencyCode $name';
+  }
+
+  // ─── ช่องรหัสลูกค้า (ออกอัตโนมัติ / กรอกเอง) ───────────────────────────────────
+  Widget _codeField() {
+    final e = _isEnglish;
+    final isAdd = widget.mode == Mode.add;
+    if (isAdd && _effectiveAutoNumbering && !_autoCodeOverridden) {
+      return InputDecorator(
+        decoration: kDec(e ? 'Customer code' : 'รหัสลูกค้า', auto: true),
+        child: Row(children: [
+          Icon(Icons.auto_awesome, color: kInk, size: 15),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(e ? 'Auto-generated on save' : 'ออกรหัสอัตโนมัติเมื่อบันทึก',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: ImKit.font, color: kInk, fontStyle: FontStyle.italic)),
+          ),
+          InkWell(
+            onTap: () => setState(() => _autoCodeOverridden = true),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(e ? 'Enter manually' : 'กรอกเอง', style: const TextStyle(fontSize: 12, color: ImKit.ink2, decoration: TextDecoration.underline)),
+            ),
+          ),
+        ]),
+      );
+    }
+    if (isAdd && _effectiveAutoNumbering && _autoCodeOverridden) {
+      return Row(children: [
+        Expanded(child: kTxt(e ? 'Customer code *' : 'รหัสลูกค้า *', _codeCtrl, cap: TextCapitalization.characters)),
+        IconButton(
+          icon: Icon(Icons.auto_awesome, color: kInk, size: 18),
+          tooltip: e ? 'Use auto-generated code' : 'กลับไปใช้รหัสอัตโนมัติ',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => setState(() {
+            _autoCodeOverridden = false;
+            _codeCtrl.clear();
+          }),
         ),
-        validator: required
-            ? (v) => (v == null || v.trim().isEmpty)
-                ? (isEnglish ? 'Please enter $label' : 'กรุณาป้อน $label')
-                : null
-            : null,
+      ]);
+    }
+    return kTxt(e ? 'Customer code *' : 'รหัสลูกค้า *', _codeCtrl, editable: isAdd, cap: TextCapitalization.characters);
+  }
+
+  // ─── ส่วนที่ 1: ข้อมูลลูกค้า (4 กลุ่มสี) ────────────────────────────────────────
+  Widget _mainCard() {
+    final e = _isEnglish;
+    final g = _groupObj;
+    final termFromGroup = g != null && _sameInt(_creditTermMonthsCtrl, g.creditTermMonths) && _sameInt(_creditTermDaysCtrl, g.creditTermDays);
+    final limitFromGroup = g != null && _sameNum(_creditLimitCtrl, g.creditLimit);
+    final discFromGroup = g != null && _sameNum(_discountPercentCtrl, g.discountPercent);
+    final branchText = taxBranchLabel(normalizeTaxBranch(_taxBranchCtrl.text), e);
+    return kCard(
+      title: e ? 'Customer details' : 'ข้อมูลลูกค้า',
+      trailing: kLegend(),
+      child: kGroups([
+        kGroup(1, e ? 'Main' : 'ข้อมูลหลัก', ImKit.gDoc, [
+          kRow([_codeField(), kTxt(e ? 'Old customer code' : 'รหัสเดิม', _oldCustomerCodeCtrl)]),
+          kTxt(e ? 'Customer name (TH) *' : 'ชื่อลูกค้า (ไทย) *', _nameThCtrl),
+          kTxt(e ? 'Customer name (EN)' : 'ชื่อลูกค้า (อังกฤษ)', _nameEnCtrl),
+          kRow([
+            kTxt(e ? 'Tax ID' : 'เลขผู้เสียภาษี', _taxIdCtrl, digitsOnly: true),
+            kTxt(e ? 'Tax branch (5 digits)' : 'สาขา (5 หลัก)', _taxBranchCtrl, digitsOnly: true),
+          ]),
+          if (branchText.isNotEmpty) kNote(branchText),
+          kRow([
+            kFk(
+              label: e ? 'Customer group' : 'กลุ่มลูกค้า',
+              text: _groupLabel(e),
+              hasValue: _customerGroupId != null,
+              onSearch: () => _pickCustomerGroup(restrictToNonAuto: widget.mode == Mode.edit && !_isCodeAutoGenerated),
+              onClear: _clearGroup,
+              locked: _groupLocked,
+              lockedTip: e ? 'Locked — code was auto-generated by this group' : 'ล็อก — รหัสออกอัตโนมัติจากกลุ่มนี้',
+            ),
+            kFk(
+              label: e ? 'Business type' : 'ประเภทธุรกิจ',
+              text: _bizTypeLabel(e),
+              hasValue: _businessTypeId != null,
+              onSearch: _pickBusinessType,
+              onClear: _clearBusinessType,
+            ),
+          ]),
+        ]),
+        kGroup(2, e ? 'Credit and price' : 'เครดิตและราคา', ImKit.gFin, [
+          kRow([
+            kTxt(e ? 'Credit term (months)' : 'เครดิต (เดือน)', _creditTermMonthsCtrl, digitsOnly: true, numeric: true, auto: termFromGroup),
+            kTxt(e ? 'Credit term (days)' : 'เครดิต (วัน)', _creditTermDaysCtrl, digitsOnly: true, numeric: true, auto: termFromGroup),
+          ]),
+          kRow([
+            kTxt(e ? 'Credit limit' : 'วงเงินเครดิต', _creditLimitCtrl, numeric: true, auto: limitFromGroup),
+            kTxt(e ? 'Discount %' : 'ส่วนลด %', _discountPercentCtrl, numeric: true, auto: discFromGroup),
+          ]),
+          kRow([
+            kFk(
+              label: e ? 'Currency' : 'สกุลเงิน',
+              text: _currencyLabel(e),
+              hasValue: _selectedCurrencyCode != null,
+              onSearch: _pickCurrency,
+              onClear: _clearCurrency,
+            ),
+            kFk(
+              label: e ? 'Price list' : 'ตารางราคา',
+              text: '${_priceListCode ?? ''} ${_priceListName ?? ''}'.trim(),
+              hasValue: _priceListId != null,
+              onSearch: _pickPriceList,
+              onClear: _clearPriceList,
+            ),
+          ]),
+          if (g != null && (termFromGroup || limitFromGroup || discFromGroup))
+            kNote(e
+                ? 'Blue = same as group ${g.groupCode} (filled from the group when it was chosen)'
+                : 'ช่องสีฟ้า = ค่าเดียวกับกลุ่ม ${g.groupCode} (ตั้งต้นจากกลุ่มตอนเลือกกลุ่ม)',
+                color: ImKit.blue),
+        ]),
+        kGroup(3, e ? 'Sales' : 'การขาย', ImKit.gParty, [
+          kFk(
+            label: e ? 'Sales territory' : 'เขตการขาย',
+            text: '${_salesTerritoryCode ?? ''} ${_salesTerritoryNameThai ?? ''}'.trim(),
+            hasValue: _salesTerritoryId != null,
+            onSearch: _pickSalesTerritory,
+            onClear: _clearSalesTerritory,
+          ),
+          SalespersonSplitEditor(
+            items: _salespersons,
+            isEnglish: e,
+            readOnly: kitReadOnly,
+            showPrimary: true,
+            showShares: true,
+            preferredIds: _territoryMembers.map((m) => m.id).whereType<int>().toSet(),
+            onChanged: (list) => setState(() => _salespersons = list),
+          ),
+          kRow([
+            kFk(
+              label: e ? 'Biller' : 'ผู้วางบิล',
+              text: '${_billingCollectorCode ?? ''} ${_billingCollectorNameThai ?? ''}'.trim(),
+              hasValue: _billingCollectorId != null,
+              onSearch: _pickBillingCollector,
+              onClear: _clearBillingCollector,
+            ),
+            kFk(
+              label: e ? 'Collector' : 'ผู้เก็บเงิน',
+              text: '${_collectionCollectorCode ?? ''} ${_collectionCollectorNameThai ?? ''}'.trim(),
+              hasValue: _collectionCollectorId != null,
+              onSearch: _pickCollectionCollector,
+              onClear: _clearCollectionCollector,
+            ),
+          ]),
+        ]),
+        kGroup(4, e ? 'More' : 'เพิ่มเติม', ImKit.gMore, [
+          kChecks([
+            kCk(e ? 'Active' : 'ใช้งาน', _isActive, kitReadOnly ? null : (v) => setState(() => _isActive = v)),
+            kCk(e ? 'Requires billing before payment' : 'ต้องวางบิลก่อนรับชำระ', _requiresBilling,
+                kitReadOnly ? null : (v) => setState(() => _requiresBilling = v)),
+          ]),
+          kTxt(e ? 'Remark' : 'หมายเหตุ', _remarkCtrl),
+        ]),
+      ]),
+    );
+  }
+
+  // ─── ส่วนที่ 2: ที่อยู่ ผู้ติดต่อ บัญชีธนาคาร ────────────────────────────────────
+  String _addrTypeLabel(String t, bool e) => (e
+          ? const {'billing': 'Billing', 'shipping': 'Shipping', 'billing note': 'Billing note'}
+          : const {'billing': 'ออกใบกำกับ', 'shipping': 'ส่งของ', 'billing note': 'วางบิล'})[t] ??
+      t;
+
+  String _addrText(ArCustomerAddress a) => [
+        a.addressNo,
+        a.addressBuildingVillage,
+        if (a.addressAlley?.isNotEmpty ?? false) (_isEnglish ? 'Soi ${a.addressAlley}' : 'ซ.${a.addressAlley}'),
+        if (a.addressRoad?.isNotEmpty ?? false) (_isEnglish ? '${a.addressRoad} Rd.' : 'ถ.${a.addressRoad}'),
+        a.addressSubDistrict,
+        a.addressDistrict,
+        a.addressProvince,
+        a.addressZipCode,
+      ].where((s) => s != null && s.isNotEmpty).join(' ');
+
+  Widget _delBtn(VoidCallback onTap) => kIconBtn(Icons.delete_outline, _isEnglish ? 'Remove' : 'ลบ', onTap, color: ImKit.red);
+
+  Future<void> _addAddress() async {
+    final primary = _addresses.where((a) => a.isDefault).firstOrNull;
+    final r = await showAddressDialog(context, null, false, primaryAddress: primary);
+    if (r != null) setState(() => _addresses.add(r));
+  }
+
+  Future<void> _openAddress(int i) async {
+    final primary = _addresses.where((a) => a.isDefault).firstOrNull;
+    final r = await showAddressDialog(context, _addresses[i], kitReadOnly, primaryAddress: primary);
+    if (r != null && !kitReadOnly) setState(() => _addresses[i] = r);
+  }
+
+  Future<void> _addContact() async {
+    final r = await showContactDialog(context, null, false);
+    if (r != null) setState(() => _contacts.add(r));
+  }
+
+  Future<void> _openContact(int i) async {
+    final r = await showContactDialog(context, _contacts[i], kitReadOnly);
+    if (r != null && !kitReadOnly) setState(() => _contacts[i] = r);
+  }
+
+  Future<void> _addBank() async {
+    final r = await showBankDialog(context, null, false);
+    if (r != null) setState(() => _bankAccounts.add(r));
+  }
+
+  Future<void> _openBank(int i) async {
+    final r = await showBankDialog(context, _bankAccounts[i], kitReadOnly);
+    if (r != null && !kitReadOnly) setState(() => _bankAccounts[i] = r);
+  }
+
+  Widget _defaultMark(bool v) => v ? ImKit.chip(_isEnglish ? 'Default' : 'หลัก', ImKit.okSoft, ImKit.ok) : kCell('');
+
+  Widget _addressCard() {
+    final e = _isEnglish;
+    final ro = kitReadOnly;
+    final rows = <List<Widget>>[];
+    final taps = <VoidCallback?>[];
+    for (var i = 0; i < _addresses.length; i++) {
+      final a = _addresses[i];
+      rows.add([
+        kCell(_addrTypeLabel(a.addressType, e), color: ImKit.ink2),
+        kCell(_addrText(a)),
+        kCell(''),
+        _defaultMark(a.isDefault),
+        ro ? const SizedBox.shrink() : _delBtn(() => setState(() => _addresses.removeAt(i))),
+      ]);
+      taps.add(() => _openAddress(i));
+    }
+    for (var i = 0; i < _contacts.length; i++) {
+      final c = _contacts[i];
+      rows.add([
+        kCell(e ? 'Contact' : 'ผู้ติดต่อ', color: ImKit.ink2),
+        kCell([c.contactName, if (c.position?.isNotEmpty ?? false) '(${c.position})'].join(' ')),
+        kCell([c.phone, c.mobile, c.email].where((s) => s != null && s.isNotEmpty).join(' · ')),
+        _defaultMark(c.isDefault),
+        ro ? const SizedBox.shrink() : _delBtn(() => setState(() => _contacts.removeAt(i))),
+      ]);
+      taps.add(() => _openContact(i));
+    }
+    return kCard(
+      title: e ? 'Addresses (${_addresses.length}) and contacts (${_contacts.length})' : 'ที่อยู่ (${_addresses.length}) และผู้ติดต่อ (${_contacts.length})',
+      count: e ? 'Click a row to open' : 'กดแถวเพื่อเปิดดู/แก้ไข',
+      trailing: ro
+          ? null
+          : Wrap(spacing: 6, children: [
+              kGhost(e ? 'Address' : 'ที่อยู่', Icons.add, _addAddress),
+              kGhost(e ? 'Contact' : 'ผู้ติดต่อ', Icons.add, _addContact),
+            ]),
+      padding: EdgeInsets.zero,
+      child: kTable(
+        [
+          KCol(e ? 'Type' : 'ประเภท', 2),
+          KCol(e ? 'Address / name' : 'ที่อยู่ / ชื่อ', 7),
+          KCol(e ? 'Contact' : 'ติดต่อ', 4),
+          KCol(e ? 'Default' : 'ค่าหลัก', 2),
+          const KCol('', 1),
+        ],
+        rows,
+        onTap: taps,
+        minWidth: 720,
+        empty: e ? 'No addresses or contacts yet' : 'ยังไม่มีที่อยู่และผู้ติดต่อ',
       ),
     );
   }
 
-  // ---- Code Field: รหัสลูกหนี้ (รองรับทั้งแบบ auto และ manual) ----
-  Widget _buildCodeField(bool readOnly) {
-    final isEnglish = _isEnglish;
-    final isAdd = widget.mode == Mode.add;
-    final isLocked = readOnly || widget.mode == Mode.edit;
-
-    // โหมด add + effective auto-numbering เปิด + ยังไม่ได้กด "แก้ไขเอง"
-    if (isAdd && _effectiveAutoNumbering && !_autoCodeOverridden) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: InputDecorator(
-          decoration: InputDecoration(
-            labelText: isEnglish ? 'Customer Code' : 'รหัสลูกหนี้',
-            border: const OutlineInputBorder(),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.auto_awesome, color: Colors.teal, size: 16),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  isEnglish
-                      ? 'Auto-generated on save'
-                      : 'ออกรหัสอัตโนมัติเมื่อบันทึก',
-                  style: const TextStyle(color: Colors.teal, fontStyle: FontStyle.italic),
-                ),
-              ),
-              TextButton.icon(
-                icon: const Icon(Icons.edit, size: 14),
-                label: Text(isEnglish ? 'Edit manually' : 'แก้ไขเอง',
-                    style: const TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.grey.shade700,
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: () => setState(() => _autoCodeOverridden = true),
-              ),
+  Widget _bankCard() {
+    final e = _isEnglish;
+    final ro = kitReadOnly;
+    return kCard(
+      title: e ? 'Bank accounts' : 'บัญชีธนาคาร',
+      count: '${_bankAccounts.length}',
+      trailing: ro ? null : kGhost(e ? 'Bank account' : 'บัญชีธนาคาร', Icons.add, _addBank),
+      padding: EdgeInsets.zero,
+      child: kTable(
+        [
+          KCol(e ? 'Bank' : 'ธนาคาร', 4),
+          KCol(e ? 'Branch' : 'สาขา', 3),
+          KCol(e ? 'Account no.' : 'เลขที่บัญชี', 3),
+          KCol(e ? 'Account name' : 'ชื่อบัญชี', 4),
+          KCol(e ? 'Default' : 'ค่าหลัก', 2),
+          const KCol('', 1),
+        ],
+        [
+          for (var i = 0; i < _bankAccounts.length; i++)
+            [
+              kCell(_bankAccounts[i].bankName ?? ''),
+              kCell(_bankAccounts[i].branchName ?? ''),
+              kCell(_bankAccounts[i].accountNumber ?? '', mono: true),
+              kCell(_bankAccounts[i].accountName ?? ''),
+              _defaultMark(_bankAccounts[i].isDefault),
+              ro ? const SizedBox.shrink() : _delBtn(() => setState(() => _bankAccounts.removeAt(i))),
             ],
-          ),
-        ),
-      );
-    }
-
-    // โหมด add + effective auto-numbering เปิด + ผู้ใช้กด "แก้ไขเอง"
-    if (isAdd && _effectiveAutoNumbering && _autoCodeOverridden) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: _codeCtrl,
-                decoration: InputDecoration(
-                  labelText: isEnglish ? 'Customer Code *' : 'รหัสลูกหนี้ *',
-                  border: const OutlineInputBorder(),
-                ),
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? (isEnglish
-                        ? 'Please enter customer code'
-                        : 'กรุณาป้อน รหัสลูกหนี้')
-                    : null,
-                textCapitalization: TextCapitalization.characters,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Tooltip(
-              message: isEnglish
-                  ? 'Revert to auto-generated code'
-                  : 'กลับไปใช้รหัสอัตโนมัติ',
-              child: IconButton(
-                icon: const Icon(Icons.auto_awesome, color: Colors.teal),
-                onPressed: () => setState(() {
-                  _autoCodeOverridden = false;
-                  _codeCtrl.clear();
-                }),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // โหมด edit / view / effective auto-numbering ปิด → ปกติ
-    return _buildField(isEnglish ? 'Customer Code *' : 'รหัสลูกหนี้ *', _codeCtrl,
-        readOnly: isLocked, required: !isLocked);
+        ],
+        onTap: [for (var i = 0; i < _bankAccounts.length; i++) () => _openBank(i)],
+        minWidth: 720,
+        empty: e ? 'No bank accounts yet' : 'ยังไม่มีบัญชีธนาคาร',
+      ),
+    );
   }
 
-  // ---- Section: ข้อมูลทั่วไป ----
-  Widget _buildGeneralSection(bool readOnly) {
-    final isEnglish = _isEnglish;
-    return _Section(
-      title: isEnglish ? 'General Information' : 'ข้อมูลทั่วไป',
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildCodeField(readOnly),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildField(
-                  isEnglish ? 'Tax ID' : 'เลขประจำตัวผู้เสียภาษี', _taxIdCtrl,
-                  readOnly: readOnly),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TaxBranchField(
-                  controller: _taxBranchCtrl, isEnglish: isEnglish, readOnly: readOnly),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildField(
-                  isEnglish ? 'Old Customer Code' : 'รหัสลูกหนี้เก่า',
-                  _oldCustomerCodeCtrl,
-                  readOnly: readOnly),
-            ),
+  // ─── ส่วนที่ 3: วางบิลและรับชำระ ─────────────────────────────────────────────
+  bool _previewOpen = false;
+
+  Future<void> _addBilling() async {
+    final r = await showBillingConditionDialog(context, null, false);
+    if (r != null) setState(() => _billingConditions.add(r.copyWith(sortOrder: _billingConditions.length + 1)));
+  }
+
+  Future<void> _addPayment() async {
+    final r = await showPaymentConditionDialog(context, null, false);
+    if (r != null) setState(() => _paymentConditions.add(r.copyWith(sortOrder: _paymentConditions.length + 1)));
+  }
+
+  Widget _conditionsCard() {
+    final e = _isEnglish;
+    final ro = kitReadOnly;
+    final rows = <List<Widget>>[];
+    final taps = <VoidCallback?>[];
+    for (var i = 0; i < _billingConditions.length; i++) {
+      final b = _billingConditions[i];
+      rows.add([
+        ImKit.chip(e ? 'Billing' : 'วางบิล', ImKit.blueSoft, ImKit.blue),
+        kCell('${i + 1}', mono: true),
+        Text(_billingConditionSummary(b), style: const TextStyle(fontSize: 12.5)),
+        ro
+            ? const SizedBox.shrink()
+            : _delBtn(() => setState(() {
+                  _billingConditions.removeAt(i);
+                  for (var j = 0; j < _billingConditions.length; j++) {
+                    _billingConditions[j] = _billingConditions[j].copyWith(sortOrder: j + 1);
+                  }
+                })),
+      ]);
+      taps.add(() async {
+        final r = await showBillingConditionDialog(context, b, ro);
+        if (r != null && !ro) setState(() => _billingConditions[i] = r);
+      });
+    }
+    for (var i = 0; i < _paymentConditions.length; i++) {
+      final p = _paymentConditions[i];
+      rows.add([
+        ImKit.chip(e ? 'Payment' : 'รับชำระ', ImKit.okSoft, ImKit.ok),
+        kCell('${i + 1}', mono: true),
+        Text(_paymentConditionSummary(p), style: const TextStyle(fontSize: 12.5)),
+        ro
+            ? const SizedBox.shrink()
+            : _delBtn(() => setState(() {
+                  _paymentConditions.removeAt(i);
+                  for (var j = 0; j < _paymentConditions.length; j++) {
+                    _paymentConditions[j] = _paymentConditions[j].copyWith(sortOrder: j + 1);
+                  }
+                })),
+      ]);
+      taps.add(() async {
+        final r = await showPaymentConditionDialog(context, p, ro);
+        if (r != null && !ro) setState(() => _paymentConditions[i] = r);
+      });
+    }
+    final g = _groupObj;
+    return kCard(
+      title: e ? 'Billing and payment' : 'วางบิลและรับชำระ',
+      count: g != null
+          ? (e ? 'Choosing a group copies its conditions here' : 'เลือกกลุ่มแล้วคัดลอกเงื่อนไขของกลุ่ม ${g.groupCode} มาให้')
+          : null,
+      trailing: ro
+          ? null
+          : Wrap(spacing: 6, children: [
+              kGhost(e ? 'Billing' : 'วางบิล', Icons.add, _addBilling),
+              kGhost(e ? 'Payment' : 'รับชำระ', Icons.add, _addPayment),
+            ]),
+      padding: EdgeInsets.zero,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        kTable(
+          [
+            KCol(e ? 'Condition' : 'เงื่อนไข', 2),
+            KCol(e ? 'No.' : 'ลำดับ', 1),
+            KCol(e ? 'Details' : 'รายละเอียด', 10),
+            const KCol('', 1),
           ],
+          rows,
+          onTap: taps,
+          minWidth: 640,
+          rowMinHeight: 40,
+          empty: e ? 'No conditions — payment date follows the due date' : 'ยังไม่มีเงื่อนไข — วันรับชำระเท่ากับวันครบกำหนด',
         ),
-        Row(
-          children: [
-            Expanded(
-              child: _buildField(
-                  isEnglish ? 'Customer Name (TH) *' : 'ชื่อลูกหนี้ (ไทย) *',
-                  _nameThCtrl,
-                  readOnly: readOnly, required: true),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+          child: kNote(_requiresBilling
+              ? (e ? 'Billing required: due date may be counted from the billing date (per condition)' : 'ต้องวางบิล: วันครบกำหนดนับจากวันวางบิลได้ตามเงื่อนไข')
+              : (e ? 'Billing not required: due date is counted from the invoice date' : 'ไม่ต้องวางบิล: วันครบกำหนดนับจากวันที่เอกสาร')),
+        ),
+      ]),
+    );
+  }
+
+  // ─── ส่วนที่ 4: บัญชีลูกหนี้ (ลูกค้า > กลุ่ม > ประเภทเอกสาร) ──────────────────────
+  Widget _accountCard() {
+    final e = _isEnglish;
+    final s = _summary;
+    final g = _groupObj;
+    // บัญชีของกลุ่ม: จากสรุป (บันทึกแล้ว) หรือจากรายการกลุ่ม (ฟอร์มปัจจุบัน)
+    final groupCode = g?.groupCode ?? s?.groupCode;
+    String? groupAcc;
+    if (g != null && g.glAccountId != null) {
+      final acc = _controlAccounts.where((a) => a.id == g.glAccountId).firstOrNull;
+      final nm = acc == null ? (g.glAccountNameThai ?? '') : (e && acc.accountNameEng.isNotEmpty ? acc.accountNameEng : acc.accountNameThai);
+      groupAcc = '${g.glAccountCode ?? acc?.accountCode ?? ''} $nm'.trim();
+    } else if (g == null && s?.groupAccount != null && _customerGroupId != null) {
+      groupAcc = '${s!.groupAccount!.code} ${s.groupAccount!.name(e)}';
+    }
+    final hasCustomer = _arAccountId != null;
+    final hasGroup = _customerGroupId != null && groupAcc != null;
+    Widget status(bool used, bool skipped, String? usedText) => used
+        ? ImKit.chip(usedText ?? (e ? 'Used' : 'ใช้บัญชีนี้'), ImKit.okSoft, ImKit.ok)
+        : skipped
+            ? ImKit.chip(e ? 'Not used' : 'ไม่ใช้', ImKit.ro, ImKit.ink2)
+            : ImKit.chip(e ? 'Empty, skip' : 'ว่าง ข้าม', ImKit.ro, ImKit.ink3);
+    final docTypes = s?.docTypeAccounts ?? const <ArDocTypeAccount>[];
+    final docText = docTypes.isEmpty
+        ? (e ? 'As set per AR document type (AR GL setup)' : 'ตามที่ตั้งไว้แต่ละประเภทเอกสาร (ตั้งค่าบัญชี GL ของ AR)')
+        : docTypes.map((d) => '${d.docCode} ${d.account?.code ?? '—'}').join(' · ');
+    return kCard(
+      title: e ? 'Receivable account' : 'รหัสบัญชีลูกหนี้',
+      count: e ? 'Order used: customer › group › document type' : 'ลำดับที่ใช้: ลูกค้า › กลุ่มลูกค้า › ประเภทเอกสาร',
+      trailing: kGhost(e ? 'AR GL setup' : 'ตั้งค่าบัญชี GL', Icons.open_in_new,
+          () => ImKit.openMenu(context, 'ArGlAccountSetupScreen', 'ตั้งค่าบัญชี GL ของ AR', 'AR GL Account Setup', e)),
+      padding: EdgeInsets.zero,
+      child: kTable(
+        [KCol(e ? 'Level' : 'ระดับ', 3), KCol(e ? 'Account' : 'บัญชี', 8), KCol(e ? 'Status' : 'สถานะ', 3)],
+        [
+          [
+            kCell(e ? 'This customer' : 'ลูกค้านี้', bold: true),
+            SizedBox(
+              width: double.infinity,
+              child: kFk(
+                label: '',
+                text: '${_arAccountCode ?? ''} ${_arAccountDisplayName(e)}'.trim(),
+                hasValue: hasCustomer,
+                onSearch: _pickArAccount,
+                onClear: _clearArAccount,
+              ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildField(
-                  isEnglish ? 'Customer Name (EN)' : 'ชื่อลูกหนี้ (อังกฤษ)',
-                  _nameEnCtrl,
-                  readOnly: readOnly),
-            ),
+            status(hasCustomer, false, null),
           ],
-        ),
-        // ---- ประเภทธุรกิจ (search dialog) ----
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: isEnglish ? 'Business Type' : 'ประเภทธุรกิจ',
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _businessTypeId == null
-                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                          style: const TextStyle(color: Colors.grey))
-                      : Row(
-                          children: [
-                            const Icon(Icons.check_circle,
-                                color: Colors.green, size: 16),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                '$_businessTypeCode — $_businessTypeNameThai',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-                if (!readOnly) ...[
-                  IconButton(
-                    icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: isEnglish
-                        ? 'Search business type'
-                        : 'ค้นหาประเภทธุรกิจ',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: _pickBusinessType,
-                  ),
-                  if (_businessTypeId != null)
-                    IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: Colors.red, size: 18),
-                      tooltip: isEnglish
-                          ? 'Clear business type'
-                          : 'ล้างประเภทธุรกิจ',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: _clearBusinessType,
-                    ),
-                ],
-              ],
-            ),
-          ),
-        ),
+          [
+            kCell(groupCode == null ? (e ? 'Group' : 'กลุ่ม') : '${e ? 'Group' : 'กลุ่ม'} $groupCode', bold: true),
+            kCell(_customerGroupId == null ? (e ? '— No group —' : '— ไม่มีกลุ่ม —') : (groupAcc ?? (e ? '— Not set —' : '— ไม่ได้ตั้ง —'))),
+            status(!hasCustomer && hasGroup, hasCustomer && hasGroup, null),
+          ],
+          [
+            kCell(e ? 'Document type' : 'ประเภทเอกสาร', bold: true),
+            Text(docText, style: const TextStyle(fontSize: 12.5), maxLines: 2, overflow: TextOverflow.ellipsis),
+            status(!hasCustomer && !hasGroup, hasCustomer || hasGroup, e ? 'Used' : 'ใช้ระดับนี้'),
+          ],
+        ],
+        minWidth: 640,
+        rowMinHeight: 48,
+      ),
+    );
+  }
 
-        // ---- กลุ่มลูกค้า (search popup + auto-fill) ----
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: isEnglish ? 'Customer Group' : 'กลุ่มลูกค้า',
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _customerGroupId == null
-                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                          style: const TextStyle(color: Colors.grey))
-                      : Row(
-                          children: [
-                            const Icon(Icons.check_circle,
-                                color: Colors.green, size: 16),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                '$_customerGroupCode — ${_customerGroupDisplayName(isEnglish)}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-                if (_groupLocked)
-                  Tooltip(
-                    message: isEnglish
-                        ? 'Locked — code was auto-generated at creation'
-                        : 'ล็อก — รหัสถูกออกอัตโนมัติตอนสร้างข้อมูล',
-                    child: Icon(Icons.lock, color: Colors.grey.shade500, size: 16),
-                  )
-                else if (!readOnly) ...[
-                  IconButton(
-                    icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip:
-                        isEnglish ? 'Search customer group' : 'ค้นหากลุ่มลูกค้า',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _pickCustomerGroup(
-                        restrictToNonAuto: widget.mode == Mode.edit && !_isCodeAutoGenerated),
-                  ),
-                  if (_customerGroupId != null)
-                    IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                      tooltip:
-                          isEnglish ? 'Clear customer group' : 'ล้างกลุ่มลูกค้า',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: _clearGroup,
-                    ),
-                ],
-              ],
-            ),
-          ),
-        ),
+  // ─── ส่วนที่ 5: ยอดค้างตามอายุหนี้ + เอกสารค้างเก่าสุด (อ่านอย่างเดียว) ──────────────────
+  void _openAging() => ImKit.openMenu(context, 'ArAgingReportScreen', 'รายงานอายุลูกหนี้', 'AR Aging Report', _isEnglish);
 
-        // ---- ตารางราคา (im_price_list — ลูกค้ารายนี้ใช้ได้รหัสเดียวเท่านั้น เพื่อเชื่อมไปหาราคาสินค้า) ----
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: isEnglish ? 'Price List' : 'ตารางราคา',
-              border: const OutlineInputBorder(),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _priceListId == null
-                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                          style: const TextStyle(color: Colors.grey))
-                      : Row(
-                          children: [
-                            const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                '$_priceListCode — $_priceListName',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-                if (!readOnly) ...[
-                  IconButton(
-                    icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: isEnglish ? 'Search price list' : 'ค้นหาตารางราคา',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: _pickPriceList,
-                  ),
-                  if (_priceListId != null)
-                    IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                      tooltip: isEnglish ? 'Clear price list' : 'ล้างตารางราคา',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: _clearPriceList,
-                    ),
+  Widget _agingCard() {
+    final e = _isEnglish;
+    final s = _summary;
+    Widget amt(double v, {bool warn = false}) =>
+        kCell(_m(v), mono: true, color: warn && v > 0.005 ? ImKit.red : null, bold: warn && v > 0.005);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      kCard(
+        title: e ? 'Outstanding by age' : 'ยอดค้างตามอายุหนี้',
+        count: e ? 'Read-only · as of today · invoices and debit notes' : 'อ่านอย่างเดียว · ณ วันนี้ · ใบแจ้งหนี้และใบเพิ่มหนี้',
+        trailing: kGhost(e ? 'AR aging report' : 'รายงานอายุลูกหนี้', Icons.open_in_new, _openAging),
+        padding: EdgeInsets.zero,
+        child: s == null
+            ? Padding(
+                padding: const EdgeInsets.all(14),
+                child: _summaryLoading
+                    ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                    : kNote(e ? 'Could not load outstanding balances' : 'โหลดยอดค้างไม่ได้'),
+              )
+            : kTable(
+                [
+                  KCol(e ? 'Not due' : 'ยังไม่ครบกำหนด', 3, num: true),
+                  KCol(e ? '1–30 days' : '1–30 วัน', 3, num: true),
+                  KCol(e ? '31–60 days' : '31–60 วัน', 3, num: true),
+                  KCol(e ? '61–90 days' : '61–90 วัน', 3, num: true),
+                  KCol(e ? 'Over 90 days' : 'เกิน 90 วัน', 3, num: true),
+                  KCol(e ? 'Total' : 'รวม', 3, num: true),
                 ],
-              ],
-            ),
-          ),
-        ),
-
-        // ---- เงื่อนไขเครดิต ----
-        Row(
-          children: [
-            Expanded(
-              child: _buildField(
-                  isEnglish ? 'Credit Term (months)' : 'ระยะเครดิต (เดือน)',
-                  _creditTermMonthsCtrl,
-                  readOnly: readOnly, keyboard: TextInputType.number),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildField(
-                  isEnglish ? 'Credit Term (days)' : 'ระยะเครดิต (วัน)',
-                  _creditTermDaysCtrl,
-                  readOnly: readOnly, keyboard: TextInputType.number),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildField(
-                  isEnglish ? 'Credit Limit' : 'วงเงินเครดิต',
-                  _creditLimitCtrl,
-                  readOnly: readOnly,
-                  keyboard: const TextInputType.numberWithOptions(decimal: true)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildField(
-                  isEnglish ? 'Discount (%)' : 'ส่วนลด (%)',
-                  _discountPercentCtrl,
-                  readOnly: readOnly,
-                  keyboard: const TextInputType.numberWithOptions(decimal: true)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: isEnglish ? 'Currency' : 'สกุลเงิน',
-                  border: const OutlineInputBorder(),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _selectedCurrencyCode == null
-                          ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                              style: const TextStyle(color: Colors.grey))
-                          : Row(
-                              children: [
-                                const Icon(Icons.check_circle,
-                                    color: Colors.green, size: 16),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    _selectedCurrencyNameThai != null
-                                        ? '$_selectedCurrencyCode — $_selectedCurrencyNameThai'
-                                        : _selectedCurrencyCode!,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                    if (!readOnly) ...[
-                      IconButton(
-                        icon: const Icon(Icons.search, color: Colors.blue),
-                        tooltip: isEnglish ? 'Search currency' : 'ค้นหาสกุลเงิน',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: _pickCurrency,
-                      ),
-                      if (_selectedCurrencyCode != null)
-                        IconButton(
-                          icon: const Icon(Icons.clear,
-                              color: Colors.red, size: 18),
-                          tooltip: isEnglish ? 'Clear currency' : 'ล้างสกุลเงิน',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: _clearCurrency,
-                        ),
-                    ],
+                [
+                  [
+                    amt(s.notDue),
+                    amt(s.d1_30, warn: true),
+                    amt(s.d31_60, warn: true),
+                    amt(s.d61_90, warn: true),
+                    amt(s.over90, warn: true),
+                    kCell(_m(s.agingTotal), mono: true, bold: true),
                   ],
-                ),
+                ],
+                minWidth: 640,
               ),
-            ),
+      ),
+      if (s != null) ...[
+        const SizedBox(height: 12),
+        kCard(
+          title: e ? 'Oldest open documents' : 'เอกสารค้างเก่าสุด',
+          count: e ? '${s.oldestDocs.length} of ${s.openCount}' : '${s.oldestDocs.length} จาก ${s.openCount} ใบ',
+          padding: EdgeInsets.zero,
+          child: kTable(
+            [
+              KCol(e ? 'Document no.' : 'เลขที่เอกสาร', 4),
+              KCol(e ? 'Date' : 'วันที่', 3),
+              KCol(e ? 'Due date' : 'ครบกำหนด', 3),
+              KCol(e ? 'Days overdue' : 'เกินกำหนด (วัน)', 2, num: true),
+              KCol(e ? 'Outstanding' : 'คงค้าง', 3, num: true),
+            ],
+            [
+              for (final d in s.oldestDocs)
+                [
+                  kCell(d.docNo, mono: true),
+                  kCell(_dt(d.docDate), mono: true),
+                  kCell(_dt(d.dueDate), mono: true, color: d.daysOverdue > 0 ? ImKit.red : null),
+                  kCell(d.daysOverdue > 0 ? '${d.daysOverdue}' : '—', mono: true, color: d.daysOverdue > 0 ? ImKit.red : null),
+                  kCell(_m(d.balance), mono: true),
+                ],
+            ],
+            minWidth: 640,
+            empty: e ? 'No open documents' : 'ไม่มีเอกสารค้าง',
           ),
-          ],
-        ),
-        _buildField(isEnglish ? 'Remark' : 'หมายเหตุ', _remarkCtrl,
-            readOnly: readOnly),
-        SwitchListTile(
-          title: Text(isEnglish
-              ? 'Status: ${_isActive ? 'Active' : 'Inactive'}'
-              : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
-          value: _isActive,
-          onChanged: readOnly ? null : (v) => setState(() => _isActive = v),
         ),
       ],
+    ]);
+  }
+
+  // ─── ตัวเลขสรุป ──────────────────────────────────────────────────────────────
+  Widget _kpis() {
+    final e = _isEnglish;
+    final s = _summary;
+    if (s == null) return kKpis(const [], loading: _summaryLoading);
+    final lim = s.creditLimit;
+    final pct = lim > 0 ? (s.creditUsed / lim * 100) : 0.0;
+    final remaining = lim - s.creditUsed;
+    final last = s.lastSale;
+    final rcpt = s.lastReceipt;
+    return kKpis([
+      ImKpi(
+        e ? 'Outstanding' : 'ยอดค้างชำระ',
+        _m(s.outstanding),
+        [
+          e ? '${s.openCount} doc(s) · base currency' : '${s.openCount} ใบ · สกุลหลัก',
+          if (s.openCredits > 0.005) (e ? 'less credits ${_m(s.openCredits)}' : 'หักลดหนี้/มัดจำ ${_m(s.openCredits)}'),
+        ].join(' · '),
+      ),
+      ImKpi(
+        e ? 'Overdue' : 'เกินกำหนด',
+        _m(s.overdue),
+        s.overdueCount == 0
+            ? (e ? 'none' : 'ไม่มี')
+            : (e ? '${s.overdueCount} doc(s) · oldest ${s.maxDaysOverdue} days' : '${s.overdueCount} ใบ · นานสุด ${s.maxDaysOverdue} วัน'),
+        warn: s.overdue > 0.005,
+        onTap: _openAging,
+      ),
+      ImKpi(
+        e ? 'Credit used' : 'วงเงินที่ใช้ไป',
+        lim > 0 ? '${pct.toStringAsFixed(0)}%' : (e ? 'No limit' : 'ไม่กำหนดวงเงิน'),
+        lim > 0
+            ? (e ? 'left ${_m(remaining)} of ${_m(lim)}' : 'คงเหลือ ${_m(remaining)} จาก ${_m(lim)}')
+            : (s.unbilledDelivery > 0.005 ? (e ? 'incl. unbilled delivery ${_m(s.unbilledDelivery)}' : 'รวมส่งของรอตั้งหนี้ ${_m(s.unbilledDelivery)}') : '—'),
+        warn: lim > 0 && s.creditUsed > lim + 0.005,
+      ),
+      ImKpi(
+        e ? 'Last sale / receipt' : 'ขาย/รับชำระล่าสุด',
+        last == null ? '—' : _dt(last.docDate),
+        [
+          if (last != null) last.docNo,
+          rcpt == null ? (e ? 'no receipt yet' : 'ยังไม่มีรับชำระ') : '${e ? 'receipt' : 'รับชำระ'} ${_dt(rcpt.docDate)}',
+        ].join(' · '),
+      ),
+    ]);
+  }
+
+  // ─── หน้า ────────────────────────────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
+    _isEnglish = isEnglish;
+    final e = isEnglish;
+
+    if (widget.isPlaceholder) {
+      return kPlaceholder(Icons.person_outline,
+          e ? 'Select a customer on the left, or press "Add customer"' : 'เลือกลูกค้าจากรายการด้านซ้าย หรือกด "เพิ่มลูกค้า"');
+    }
+
+    final ro = kitReadOnly;
+    final isAdd = widget.mode == Mode.add;
+    final saved = !isAdd && widget.selected?.id != null;
+    final name = _nameThCtrl.text.trim().isEmpty
+        ? ''
+        : (e && _nameEnCtrl.text.trim().isNotEmpty ? _nameEnCtrl.text.trim() : _nameThCtrl.text.trim());
+    final title = isAdd
+        ? (_isCopy
+            ? (e ? 'New customer (copy of ${widget.copyFrom!.customerCode})' : 'ลูกค้าใหม่ (สำเนาจาก ${widget.copyFrom!.customerCode})')
+            : (e ? 'New customer' : 'ลูกค้าใหม่'))
+        : name;
+    final branch = taxBranchLabel(normalizeTaxBranch(_taxBranchCtrl.text), e);
+
+    final header = kHeaderBar(
+      code: isAdd ? null : widget.selected?.customerCode,
+      title: title,
+      badges: [
+        if (!isAdd) ImKit.activeChip(_isActive, e),
+        if (_customerGroupCode != null) ImKit.chip(_customerGroupCode!, ImKit.blueSoft, ImKit.blue),
+        if (_requiresBilling) ImKit.chip(e ? 'Billing required' : 'ต้องวางบิล', ImKit.goldSoft, ImKit.amber),
+        if (branch.isNotEmpty || _selectedCurrencyCode != null)
+          Text([if (branch.isNotEmpty) branch, if (_selectedCurrencyCode != null) _selectedCurrencyCode!].join(' · '),
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        if (!ro) kEditingBadge(),
+      ],
+      busy: _isSaving,
+      acts: kStdActs(
+        saving: _isSaving,
+        onEdit: widget.onEdit,
+        onDelete: widget.onDelete,
+        onClose: widget.onCancel,
+        onCancel: widget.onCancel,
+        onSave: _submitForm,
+        extra: [
+          if (widget.onCopy != null) DocBarAction(e ? 'Copy as new' : 'สำเนาเป็นลูกค้าใหม่', widget.onCopy, fg: kInk),
+        ],
+      ),
+    );
+
+    return Form(
+      key: _formKey,
+      child: kPage(
+        header: header,
+        top: saved ? _kpis() : null,
+        sections: [
+          (0, e ? 'Main' : 'ข้อมูลหลัก', _mainCard()),
+          (1, e ? 'Addresses and contacts' : 'ที่อยู่และผู้ติดต่อ',
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [_addressCard(), const SizedBox(height: 12), _bankCard()])),
+          (2, e ? 'Billing and payment' : 'วางบิลและรับชำระ',
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [_conditionsCard(), const SizedBox(height: 12), _buildDatePreviewSection()])),
+          (3, e ? 'Receivable account' : 'บัญชีลูกหนี้', _accountCard()),
+          if (saved) (4, e ? 'Outstanding' : 'ยอดค้าง', _agingCard()),
+        ],
+      ),
     );
   }
 
-  // ---- Section: ที่อยู่ ----
-  Widget _buildAddressSection(bool readOnly) {
-    final isEnglish = _isEnglish;
-    return _Section(
-      title: isEnglish
-          ? 'Addresses (${_addresses.length})'
-          : 'ที่อยู่ (${_addresses.length})',
-      initiallyExpanded: false,
-      trailing: readOnly
-          ? null
-          : IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: isEnglish ? 'Add Address' : 'เพิ่มที่อยู่',
-              onPressed: () async {
-                final primary = _addresses.cast<ArCustomerAddress?>()
-                    .firstWhere((a) => a!.isDefault, orElse: () => null);
-                final result = await showAddressDialog(context, null, false,
-                    primaryAddress: primary);
-                if (result != null) setState(() => _addresses.add(result));
-              },
-            ),
-      children: [
-        if (_addresses.isEmpty)
-          Text(isEnglish ? 'No addresses yet' : 'ยังไม่มีที่อยู่',
-              style: const TextStyle(color: Colors.grey)),
-        ..._addresses.asMap().entries.map((entry) {
-          final i = entry.key;
-          final addr = entry.value;
-          final label = [
-            addr.addressNo,
-            addr.addressBuildingVillage,
-            addr.addressAlley != null ? 'ซ.${addr.addressAlley}' : null,
-            addr.addressRoad != null ? 'ถ.${addr.addressRoad}' : null,
-          ].where((s) => s != null && s.isNotEmpty).join(' ').trim();
-          final displayLabel = label.isNotEmpty
-              ? label
-              : [addr.addressSubDistrict, addr.addressProvince]
-                    .where((s) => s != null && s.isNotEmpty)
-                    .join(', ')
-                    .trim().isEmpty
-                  ? (isEnglish ? 'Address ${i + 1}' : 'ที่อยู่ ${i + 1}')
-                  : [addr.addressSubDistrict, addr.addressProvince]
-                      .where((s) => s != null && s.isNotEmpty)
-                      .join(', ');
-          final addrTypeLabel = isEnglish
-              ? const {
-                  'billing': 'Billing Address',
-                  'shipping': 'Shipping Address',
-                  'billing note': 'Billing Note Address',
-                }
-              : const {
-                  'billing':      'ที่อยู่ใบแจ้งหนี้',
-                  'shipping':     'ที่อยู่จัดส่ง',
-                  'billing note': 'ที่อยู่วางบิล',
-                };
-          final typeLabel = addrTypeLabel[addr.addressType] ?? addr.addressType;
-          final subText = [
-            if (addr.addressSubDistrict != null) addr.addressSubDistrict!,
-            if (addr.addressDistrict != null) addr.addressDistrict!,
-            if (addr.addressProvince != null) addr.addressProvince!,
-            if (addr.addressZipCode != null) addr.addressZipCode!,
-          ].join('  ');
-          return ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.location_on_outlined, size: 18),
-            title: Text(displayLabel),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (subText.isNotEmpty) Text(subText),
-                Text(typeLabel,
-                    style: const TextStyle(
-                        fontSize: 11, color: Colors.blueGrey)),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(
-                      readOnly ? Icons.visibility : Icons.edit,
-                      size: 18,
-                      color: readOnly ? Colors.green : Colors.blue),
-                  onPressed: () async {
-                    final primary = _addresses.cast<ArCustomerAddress?>()
-                        .firstWhere((a) => a!.isDefault, orElse: () => null);
-                    final result = await showAddressDialog(
-                        context, addr, readOnly,
-                        primaryAddress: primary);
-                    if (result != null) {
-                      setState(() => _addresses[i] = result);
-                    }
-                  },
-                ),
-                if (!readOnly)
-                  IconButton(
-                    icon:
-                        const Icon(Icons.delete, size: 18, color: Colors.red),
-                    onPressed: () =>
-                        setState(() => _addresses.removeAt(i)),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
-  // ---- Section: ผู้ติดต่อ ----
-  Widget _buildContactSection(bool readOnly) {
-    final isEnglish = _isEnglish;
-    return _Section(
-      title: isEnglish
-          ? 'Contacts (${_contacts.length})'
-          : 'ผู้ติดต่อ (${_contacts.length})',
-      initiallyExpanded: false,
-      trailing: readOnly
-          ? null
-          : IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: isEnglish ? 'Add Contact' : 'เพิ่มผู้ติดต่อ',
-              onPressed: () async {
-                final result = await showContactDialog(context, null, false);
-                if (result != null) setState(() => _contacts.add(result));
-              },
-            ),
-      children: [
-        if (_contacts.isEmpty)
-          Text(isEnglish ? 'No contacts yet' : 'ยังไม่มีผู้ติดต่อ',
-              style: const TextStyle(color: Colors.grey)),
-        ..._contacts.asMap().entries.map((entry) {
-          final i = entry.key;
-          final c = entry.value;
-          return ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.person_outline, size: 18),
-            title: Text(c.contactName),
-            subtitle: Text([
-              if (c.position != null) c.position!,
-              if (c.phone != null) c.phone!,
-              if (c.mobile != null) c.mobile!,
-            ].join('  ')),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(
-                      readOnly ? Icons.visibility : Icons.edit,
-                      size: 18,
-                      color: readOnly ? Colors.green : Colors.blue),
-                  onPressed: () async {
-                    final result =
-                        await showContactDialog(context, c, readOnly);
-                    if (result != null) {
-                      setState(() => _contacts[i] = result);
-                    }
-                  },
-                ),
-                if (!readOnly)
-                  IconButton(
-                    icon:
-                        const Icon(Icons.delete, size: 18, color: Colors.red),
-                    onPressed: () =>
-                        setState(() => _contacts.removeAt(i)),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
+  String _paymentConditionSummary(ArCustomerPaymentCondition p) {
+    final e = _isEnglish;
+    final dayNames = e
+        ? const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        : const ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+    final weekNames = e
+        ? const {1: '1st', 2: '2nd', 3: '3rd', 4: '4th', -1: 'Last'}
+        : const {1: 'แรก', 2: 'ที่2', 3: 'ที่3', 4: 'ที่4', -1: 'สุดท้าย'};
+    final parts = <String>[];
+    if (p.paymentDayOfMonth.isNotEmpty) {
+      parts.add(p.paymentDayOfMonth
+          .map((d) => d == 31 ? (e ? 'End of month' : 'สิ้นเดือน') : (e ? 'Day $d' : 'วันที่ $d'))
+          .join(', '));
+    }
+    if (p.paymentDayOfWeek.isNotEmpty) {
+      parts.add((e ? '' : 'วัน') + p.paymentDayOfWeek.map((d) => dayNames[d]).join('-'));
+    }
+    if (p.paymentWeekOfMonth.isNotEmpty) {
+      parts.add((e ? 'Week ' : 'สัปดาห์') + p.paymentWeekOfMonth.map((w) => weekNames[w] ?? '$w').join('/'));
+    }
+    if (p.withinMonthsFromBilling > 0) {
+      parts.add(e ? 'Within ${p.withinMonthsFromBilling} month(s) of billing' : 'ภายใน ${p.withinMonthsFromBilling} เดือนจากวางบิล');
+    }
+    if (p.additionalDays != 0) parts.add(e ? '+${p.additionalDays} day(s)' : '+${p.additionalDays} วัน');
+    if (p.paymentTimeFrom != null || p.paymentTimeTo != null) {
+      parts.add('${p.paymentTimeFrom ?? ''}–${p.paymentTimeTo ?? ''}');
+    }
+    return parts.isEmpty ? (e ? '(No condition specified)' : '(ไม่ระบุเงื่อนไข)') : parts.join('  ·  ');
   }
 
   // ─── Date Preview Helpers ──────────────────────────────────────────────────
-
-  static const _thWeekdaysFull = [
-    'อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'
-  ];
 
   // หาวันที่ weekday ลำดับที่ weekOfMonth ของเดือน (weekOfMonth=-1 = สุดท้าย)
   DateTime? _nthWeekdayOfMonth(int year, int month, int weekday, int weekOfMonth) {
@@ -2995,9 +3101,8 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
   DateTime _previewCalcDueDate(DateTime invoiceDate, DateTime? billingDate) {
     final months = int.tryParse(_creditTermMonthsCtrl.text) ?? 0;
     final days   = int.tryParse(_creditTermDaysCtrl.text) ?? 0;
-    final useFromBilling = billingDate != null &&
-        _billingConditions.any((c) => c.dueFromBillingDate);
-    var base = useFromBilling ? billingDate! : invoiceDate;
+    final useFromBilling = _billingConditions.any((c) => c.dueFromBillingDate);
+    var base = useFromBilling ? (billingDate ?? invoiceDate) : invoiceDate;
     if (months > 0) base = DateTime(base.year, base.month + months, base.day);
     if (days > 0)   base = base.add(Duration(days: days));
     return base;
@@ -3262,10 +3367,11 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
       );
     }
 
-    return _Section(
-      title: isEnglish ? 'Date Calculation Preview' : 'ตัวอย่างการคำนวณวันที่',
-      initiallyExpanded: false,
-      children: [
+    return kCard(
+      title: isEnglish ? 'Date calculation preview' : 'ตัวอย่างการคำนวณวันที่',
+      collapsed: !_previewOpen,
+      onToggle: () => setState(() => _previewOpen = !_previewOpen),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // Input: วันที่ Invoice
         Row(children: [
           Text(isEnglish ? 'Invoice Date' : 'วันที่ Invoice',
@@ -3432,128 +3538,7 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
             ],
           );
         }),
-      ],
-    );
-  }
-
-  // ---- Section: เงื่อนไขการวางบิล ----
-  Widget _buildBillingConditionsSection(bool readOnly) {
-    final isEnglish = _isEnglish;
-    return _Section(
-      title: isEnglish
-          ? 'Billing Conditions (${_billingConditions.length})'
-          : 'เงื่อนไขการวางบิล (${_billingConditions.length})',
-      initiallyExpanded: false,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // toggle: ต้องวางบิลหรือไม่
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(isEnglish ? 'Requires Billing' : 'ต้องวางบิล',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: _requiresBilling
-                          ? Colors.indigo.shade700
-                          : Colors.grey)),
-              Switch(
-                value: _requiresBilling,
-                onChanged: readOnly
-                    ? null
-                    : (v) => setState(() => _requiresBilling = v),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ],
-          ),
-          if (!readOnly)
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: isEnglish
-                  ? 'Add Billing Condition'
-                  : 'เพิ่มเงื่อนไขวางบิล',
-              onPressed: () async {
-                final result =
-                    await showBillingConditionDialog(context, null, false);
-                if (result != null) {
-                  setState(() => _billingConditions.add(result.copyWith(
-                      sortOrder: _billingConditions.length + 1)));
-                }
-              },
-            ),
-        ],
-      ),
-      children: [
-        if (!_requiresBilling)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              isEnglish
-                  ? 'Billing not required: due date is counted from delivery date'
-                  : 'ไม่ต้องวางบิล: วันครบกำหนดชำระนับจากวันส่งของ',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-          ),
-        if (_billingConditions.isEmpty)
-          Text(
-              isEnglish
-                  ? 'No billing conditions yet'
-                  : 'ยังไม่มีเงื่อนไขการวางบิล',
-              style: const TextStyle(color: Colors.grey)),
-        ..._billingConditions.asMap().entries.map((entry) {
-          final i = entry.key;
-          final b = entry.value;
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 12,
-                  backgroundColor: Colors.indigo.shade100,
-                  child: Text('${i + 1}',
-                      style: const TextStyle(fontSize: 11, color: Colors.indigo)),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(_billingConditionSummary(b),
-                        style: const TextStyle(fontSize: 13)),
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(readOnly ? Icons.visibility : Icons.edit,
-                      size: 18,
-                      color: readOnly ? Colors.green : Colors.blue),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  onPressed: () async {
-                    final result = await showBillingConditionDialog(
-                        context, b, readOnly);
-                    if (result != null) {
-                      setState(() => _billingConditions[i] = result);
-                    }
-                  },
-                ),
-                if (!readOnly)
-                  IconButton(
-                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    onPressed: () => setState(() {
-                      _billingConditions.removeAt(i);
-                      for (var j = 0; j < _billingConditions.length; j++) {
-                        _billingConditions[j] =
-                            _billingConditions[j].copyWith(sortOrder: j + 1);
-                      }
-                    }),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ],
+      ]),
     );
   }
 
@@ -3596,544 +3581,4 @@ class ArCustomerDetailWidgetState extends State<ArCustomerDetailWidget> {
         : parts.join('  ·  ');
   }
 
-  // ---- Section: เงื่อนไขการรับชำระเงิน ----
-  Widget _buildPaymentConditionsSection(bool readOnly) {
-    final isEnglish = _isEnglish;
-    return _Section(
-      title: isEnglish
-          ? 'Payment Conditions (${_paymentConditions.length})'
-          : 'เงื่อนไขการรับชำระเงิน (${_paymentConditions.length})',
-      initiallyExpanded: false,
-      trailing: readOnly
-          ? null
-          : IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: isEnglish
-                  ? 'Add Payment Condition'
-                  : 'เพิ่มเงื่อนไขรับชำระ',
-              onPressed: () async {
-                final result =
-                    await showPaymentConditionDialog(context, null, false);
-                if (result != null) {
-                  setState(() => _paymentConditions.add(result.copyWith(
-                      sortOrder: _paymentConditions.length + 1)));
-                }
-              },
-            ),
-      children: [
-        if (_paymentConditions.isEmpty)
-          Text(
-              isEnglish
-                  ? 'No payment conditions yet — payment date will equal due date'
-                  : 'ยังไม่มีเงื่อนไขรับชำระ — วันชำระเงินจะเท่ากับวันครบกำหนด',
-              style: const TextStyle(color: Colors.grey)),
-        ..._paymentConditions.asMap().entries.map((entry) {
-          final i = entry.key;
-          final p = entry.value;
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 12,
-                  backgroundColor: Colors.teal.shade100,
-                  child: Text('${i + 1}',
-                      style: const TextStyle(fontSize: 11, color: Colors.teal)),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(_paymentConditionSummary(p),
-                        style: const TextStyle(fontSize: 13)),
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(readOnly ? Icons.visibility : Icons.edit,
-                      size: 18,
-                      color: readOnly ? Colors.green : Colors.blue),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  onPressed: () async {
-                    final result = await showPaymentConditionDialog(
-                        context, p, readOnly);
-                    if (result != null) {
-                      setState(() => _paymentConditions[i] = result);
-                    }
-                  },
-                ),
-                if (!readOnly)
-                  IconButton(
-                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    onPressed: () => setState(() {
-                      _paymentConditions.removeAt(i);
-                      for (var j = 0; j < _paymentConditions.length; j++) {
-                        _paymentConditions[j] =
-                            _paymentConditions[j].copyWith(sortOrder: j + 1);
-                      }
-                    }),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
-  String _paymentConditionSummary(ArCustomerPaymentCondition p) {
-    const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
-    const weekNames = {1: 'แรก', 2: 'ที่2', 3: 'ที่3', 4: 'ที่4', -1: 'สุดท้าย'};
-    final parts = <String>[];
-    if (p.paymentDayOfMonth.isNotEmpty) {
-      final days = p.paymentDayOfMonth
-          .map((d) => d == 31 ? 'สิ้นเดือน' : 'วันที่ $d')
-          .join(', ');
-      parts.add(days);
-    }
-    if (p.paymentDayOfWeek.isNotEmpty) {
-      parts.add('วัน${p.paymentDayOfWeek.map((d) => dayNames[d]).join('-')}');
-    }
-    if (p.paymentWeekOfMonth.isNotEmpty) {
-      parts.add(
-          'สัปดาห์${p.paymentWeekOfMonth.map((w) => weekNames[w] ?? '$w').join('/')}');
-    }
-    if (p.withinMonthsFromBilling > 0) {
-      parts.add('ภายใน ${p.withinMonthsFromBilling} เดือนจากวางบิล');
-    }
-    if (p.additionalDays != 0) parts.add('+${p.additionalDays} วัน');
-    if (p.paymentTimeFrom != null || p.paymentTimeTo != null) {
-      parts.add('${p.paymentTimeFrom ?? ''}–${p.paymentTimeTo ?? ''}');
-    }
-    return parts.isEmpty ? '(ไม่ระบุเงื่อนไข)' : parts.join('  ·  ');
-  }
-
-  // ---- Section: บัญชีธนาคาร ----
-  Widget _buildBankSection(bool readOnly) {
-    final isEnglish = _isEnglish;
-    return _Section(
-      title: isEnglish ? 'Bank Accounts (${_bankAccounts.length})' : 'บัญชีธนาคาร (${_bankAccounts.length})',
-      initiallyExpanded: false,
-      trailing: readOnly
-          ? null
-          : IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: isEnglish ? 'Add Bank Account' : 'เพิ่มบัญชีธนาคาร',
-              onPressed: () async {
-                final result = await showBankDialog(context, null, false);
-                if (result != null) {
-                  setState(() => _bankAccounts.add(result));
-                }
-              },
-            ),
-      children: [
-        if (_bankAccounts.isEmpty)
-          Text(isEnglish ? 'No bank accounts yet' : 'ยังไม่มีบัญชีธนาคาร',
-              style: const TextStyle(color: Colors.grey)),
-        ..._bankAccounts.asMap().entries.map((entry) {
-          final i = entry.key;
-          final b = entry.value;
-          return ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.account_balance_outlined, size: 18),
-            title: Text([b.bankName, b.accountNumber]
-                .where((s) => s != null && s.isNotEmpty)
-                .join('  ')),
-            subtitle: Text(b.accountName ?? ''),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(
-                      readOnly ? Icons.visibility : Icons.edit,
-                      size: 18,
-                      color: readOnly ? Colors.green : Colors.blue),
-                  onPressed: () async {
-                    final result =
-                        await showBankDialog(context, b, readOnly);
-                    if (result != null) {
-                      setState(() => _bankAccounts[i] = result);
-                    }
-                  },
-                ),
-                if (!readOnly)
-                  IconButton(
-                    icon:
-                        const Icon(Icons.delete, size: 18, color: Colors.red),
-                    onPressed: () =>
-                        setState(() => _bankAccounts.removeAt(i)),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
-  // ---- Section: เขตการขาย & พนักงานขาย ----
-  Widget _buildSalesTerritorySection(bool readOnly) {
-    final isEnglish = _isEnglish;
-    return _Section(
-      title: isEnglish ? 'Sales Territory and Salesperson' : 'เขตการขายและพนักงานขาย',
-      initiallyExpanded: false,
-      children: [
-        // ── เขตการขาย ──────────────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: isEnglish ? 'Sales Territory' : 'เขตการขาย',
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _salesTerritoryId == null
-                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                          style: const TextStyle(color: Colors.grey))
-                      : Row(children: [
-                          const Icon(Icons.map_outlined,
-                              color: Colors.teal, size: 16),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '${_salesTerritoryCode ?? ''} — ${_salesTerritoryNameThai ?? ''}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ]),
-                ),
-                if (!readOnly) ...[
-                  IconButton(
-                    icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: isEnglish ? 'Search sales territory' : 'ค้นหาเขตการขาย',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: _pickSalesTerritory,
-                  ),
-                  if (_salesTerritoryId != null)
-                    IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: Colors.red, size: 18),
-                      tooltip: isEnglish ? 'Clear sales territory' : 'ล้างเขตการขาย',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: _clearSalesTerritory,
-                    ),
-                ],
-              ],
-            ),
-          ),
-        ),
-
-        // ── พนักงานขาย (หลายคน) — คนในเขตการขายแสดงก่อนในหน้าต่างเลือก ──────
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: SalespersonSplitEditor(
-            items: _salespersons,
-            isEnglish: isEnglish,
-            readOnly: readOnly,
-            showPrimary: true,
-            showShares: true,
-            preferredIds: _territoryMembers.map((m) => m.id).whereType<int>().toSet(),
-            onChanged: (list) => setState(() => _salespersons = list),
-          ),
-        ),
-
-        // ── ผู้วางบิล ──────────────────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: isEnglish ? 'Biller' : 'ผู้วางบิล',
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _billingCollectorId == null
-                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                          style: const TextStyle(color: Colors.grey))
-                      : Row(children: [
-                          const Icon(Icons.receipt_long_outlined,
-                              color: Colors.indigo, size: 16),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '${_billingCollectorCode ?? ''} — ${_billingCollectorNameThai ?? ''}',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ]),
-                ),
-                if (!readOnly) ...[
-                  IconButton(
-                    icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: isEnglish ? 'Search biller' : 'ค้นหาผู้วางบิล',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: _pickBillingCollector,
-                  ),
-                  if (_billingCollectorId != null)
-                    IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: Colors.red, size: 18),
-                      tooltip: isEnglish ? 'Clear biller' : 'ล้างผู้วางบิล',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: _clearBillingCollector,
-                    ),
-                ],
-              ],
-            ),
-          ),
-        ),
-
-        // ── ผู้รับชำระ ─────────────────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: isEnglish ? 'Collector' : 'ผู้รับชำระ',
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _collectionCollectorId == null
-                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                          style: const TextStyle(color: Colors.grey))
-                      : Row(children: [
-                          const Icon(Icons.payments_outlined,
-                              color: Colors.green, size: 16),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '${_collectionCollectorCode ?? ''} — ${_collectionCollectorNameThai ?? ''}',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ]),
-                ),
-                if (!readOnly) ...[
-                  IconButton(
-                    icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: isEnglish ? 'Search collector' : 'ค้นหาผู้รับชำระ',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: _pickCollectionCollector,
-                  ),
-                  if (_collectionCollectorId != null)
-                    IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: Colors.red, size: 18),
-                      tooltip: isEnglish ? 'Clear collector' : 'ล้างผู้รับชำระ',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: _clearCollectionCollector,
-                    ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ---- Section: บัญชีลูกหนี้ GL ----
-  Widget _buildArAccountSection(bool readOnly) {
-    final isEnglish = _isEnglish;
-    return _Section(
-      title: isEnglish ? 'Receivable Account Code' : 'รหัสบัญชีลูกหนี้',
-      initiallyExpanded: false,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: isEnglish ? 'Receivable Account Code (GL)' : 'รหัสบัญชีลูกหนี้ (GL)',
-              border: const OutlineInputBorder(),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _arAccountId == null
-                      ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                          style: const TextStyle(color: Colors.grey))
-                      : Row(
-                          children: [
-                            const Icon(Icons.account_balance,
-                                color: Colors.green, size: 16),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                '${_arAccountCode ?? ''} — ${_arAccountDisplayName(isEnglish)}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-                if (!readOnly) ...[
-                  IconButton(
-                    icon: const Icon(Icons.search, color: Colors.blue),
-                    tooltip: isEnglish ? 'Search receivable account' : 'ค้นหาบัญชีลูกหนี้',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: _pickArAccount,
-                  ),
-                  if (_arAccountId != null)
-                    IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: Colors.red, size: 18),
-                      tooltip: isEnglish ? 'Clear receivable account' : 'ล้างบัญชีลูกหนี้',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: _clearArAccount,
-                    ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        if (_arAccountId == null)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 6),
-            child: Text(
-              'หากไม่ระบุ ระบบจะค้นหาบัญชีลูกหนี้จาก กลุ่มลูกค้า และ ประเภทเอกสาร ตามลำดับ พบที่ใดก่อนจะใช้บัญชีนั้นลงรายการบัญชี',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
-            ),
-          ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    _isEnglish = isEnglish;
-
-    if (widget.isPlaceholder) {
-      return Center(
-        child: Text(isEnglish
-            ? 'Select a customer to edit or delete, or press + to add a new customer'
-            : 'เลือกลูกหนี้เพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มลูกหนี้ใหม่'),
-      );
-    }
-
-    final bool readOnly = widget.mode == Mode.view;
-    final String title = readOnly
-        ? (isEnglish ? 'View Customer' : 'ดูข้อมูลลูกหนี้')
-        : widget.mode == Mode.edit
-            ? (isEnglish ? 'Edit Customer' : 'แก้ไขลูกหนี้')
-            : (isEnglish ? 'Add New Customer' : 'เพิ่มลูกหนี้ใหม่');
-
-    return Form(
-      key: _formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header bar
-          Container(
-            color: Colors.blueGrey[700],
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                const Icon(Icons.person, color: Colors.white),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  // style: Theme.of(context).textTheme.headlineSmall,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      // fontWeight: FontWeight.bold
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Scrollable sections
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildGeneralSection(readOnly),
-                  _buildSalesTerritorySection(readOnly),
-                  _buildBillingConditionsSection(readOnly),
-                  _buildPaymentConditionsSection(readOnly),
-                  _buildDatePreviewSection(),
-                  _buildAddressSection(readOnly),
-                  _buildContactSection(readOnly),
-                  _buildBankSection(readOnly),
-                  _buildArAccountSection(readOnly),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            ),
-          ),
-          // Action buttons
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (!readOnly)
-                  ElevatedButton.icon(
-                    onPressed: _isSaving ? null : _submitForm,
-                    icon: _isSaving
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.save),
-                    label: Text(_isSaving
-                        ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
-                        : widget.mode == Mode.edit
-                            ? (isEnglish ? 'Save' : 'บันทึก')
-                            : (isEnglish ? 'Add' : 'เพิ่ม')),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                    ),
-                  ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: widget.onCancel,
-                  icon: const Icon(Icons.cancel),
-                  label: Text(isEnglish ? 'Cancel' : 'ยกเลิก'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade600,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

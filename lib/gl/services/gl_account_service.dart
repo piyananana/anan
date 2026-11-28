@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart'; // Import FilePicker for Platform
 import 'dart:html' as html;
 
 import '../models/gl_account.dart';
+import '../models/gl_account_summary.dart';
 import '../../sa/services/sa_auth_service.dart';
 
 class AccountService {
@@ -144,7 +145,7 @@ class AccountService {
       authService.logout();
       throw Exception('Unauthorized to add row. Please login again.');
     } else {
-      throw Exception('Failed to add row: ${response.body}');
+      throw Exception(_err(response));
     }
   }
 
@@ -176,7 +177,7 @@ class AccountService {
       authService.logout();
       throw Exception('Unauthorized to update row. Please login again.');
     } else {
-      throw Exception('Failed to update row: ${response.body}');
+      throw Exception(_err(response));
     }
   }
 
@@ -314,6 +315,47 @@ class AccountService {
       throw Exception(
           'Failed to export data: ${errorBody['message'] ?? 'Unknown error'}');
     }
+  }
+
+  String _err(http.Response r) {
+    try {
+      final j = json.decode(r.body);
+      if (j is Map && (j['message'] ?? j['error']) != null) return (j['message'] ?? j['error']).toString();
+    } catch (_) {}
+    return 'HTTP ${r.statusCode}';
+  }
+
+  /// ยอดสุทธิทั้งปีบัญชีต่อบัญชี (account_id → เดบิต - เครดิต) — null = ปีที่ครอบวันนี้
+  Future<({GlFiscalYearRef? fiscalYear, Map<int, double> net})> fetchBalances({int? fiscalYearId}) async {
+    final headers = await authService.getAuthHeader();
+    final q = fiscalYearId == null ? '' : '?fiscal_year_id=$fiscalYearId';
+    final r = await http.get(Uri.parse('$baseUrl/gl_account/balances$q'), headers: headers);
+    if (r.statusCode != 200) throw Exception(_err(r));
+    final j = json.decode(r.body) as Map<String, dynamic>;
+    final fy = j['fiscal_year'] as Map<String, dynamic>?;
+    return (
+      fiscalYear: fy == null ? null : GlFiscalYearRef.fromJson(fy),
+      net: {
+        for (final x in (j['rows'] as List? ?? const []))
+          (x['account_id'] as num).toInt(): ((x['debit'] as num?) ?? 0).toDouble() - ((x['credit'] as num?) ?? 0).toDouble(),
+      },
+    );
+  }
+
+  /// ยอดรายงวด / จำนวนบรรทัด / เคลื่อนไหวล่าสุด / ที่ตั้งค่าใช้บัญชี (หัวบัญชีรวมทั้งกิ่ง)
+  Future<GlAccountSummary> fetchSummary(int id, {int? fiscalYearId}) async {
+    final headers = await authService.getAuthHeader();
+    final q = fiscalYearId == null ? '' : '?fiscal_year_id=$fiscalYearId';
+    final r = await http.get(Uri.parse('$baseUrl/gl_account/$id/summary$q'), headers: headers);
+    if (r.statusCode != 200) throw Exception(_err(r));
+    return GlAccountSummary.fromJson(json.decode(r.body) as Map<String, dynamic>);
+  }
+
+  /// ย้ายไปอยู่ใต้หัวบัญชีอื่น (null = ระดับบนสุด) — ต้องเป็นหัวบัญชีประเภทเดียวกัน
+  Future<void> moveNode(int id, int? parentId) async {
+    final headers = await authService.getAuthHeader();
+    final r = await http.put(Uri.parse('$baseUrl/gl_account/$id/move'), headers: headers, body: jsonEncode({'parent_id': parentId}));
+    if (r.statusCode != 200) throw Exception(_err(r));
   }
 
   // *** NEW: Get Account Details (for Edit Form) ***

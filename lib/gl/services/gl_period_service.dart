@@ -281,6 +281,24 @@ class PeriodService {
     }
   }
 
+  // ── หน้าจอปีบัญชีแบบใหม่ (2026-11-28) ──
+  Future<FiscalYearSummary> fetchYearSummary(int fyId) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/gl_fiscal_year/$fyId/summary'), headers: headers);
+    final body = json.decode(response.body);
+    if (response.statusCode == 200) return FiscalYearSummary.fromJson(body as Map<String, dynamic>);
+    throw Exception(body is Map ? (body['message'] ?? 'HTTP ${response.statusCode}') : 'HTTP ${response.statusCode}');
+  }
+
+  /// สร้างปีบัญชีถัดจากปีล่าสุด (โครงงวดเดิม) — คืน id ของปีใหม่
+  Future<int> createNextYear() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.post(Uri.parse('$baseUrl/gl_fiscal_year/next'), headers: headers);
+    final body = json.decode(response.body);
+    if (response.statusCode == 201) return (body['id'] as num).toInt();
+    throw Exception(body is Map ? (body['message'] ?? 'HTTP ${response.statusCode}') : 'HTTP ${response.statusCode}');
+  }
+
   Future<PostingPeriod> updateStatusDetailRow(int rowId, String module, String newStatus) async {
     final body = {
       // ใช้ dynamic key เพื่อส่งสถานะที่ต้องการเปลี่ยนเท่านั้น

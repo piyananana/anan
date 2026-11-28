@@ -1,25 +1,46 @@
-﻿// widgets/zipcode_detail_form.dart
+// lib/gl/widgets/gl_period_detail_widget.dart
+// รายละเอียดปีบัญชี แบบ IM design B (user 2026-11-28):
+//   แถบหัว (ปี, ป้ายใช้งาน/ปีปัจจุบัน/ปิดบัญชีสิ้นปีแล้ว, ช่วงวันที่) + ตัวเลขสรุป (งวดปัจจุบัน, ปิด GL แล้ว, รออนุมัติปิด,
+//   เอกสาร Draft ในงวดเปิด) + กลุ่มข้อมูลปี + ตารางงวดแบบเมทริกซ์ GL/AR/AP/IM/CM (คลิกป้ายสถานะ = เมนูเปลี่ยนสถานะ,
+//   พับงวดที่ปิดครบแล้ว, คอลัมน์ Draft ค้าง) + การ์ดเอกสารค้างในงวดเปิด
+// ขั้นตอนเปลี่ยนสถานะ/ขอปิด/อนุมัติ/ปฏิเสธ/ยกเลิกคำขอ และ dialog งวดพิเศษ คัดลอกจากหน้าจอเดิมทั้งหมด (ไม่เปลี่ยนพฤติกรรม)
+// เปลี่ยนสถานะงวดได้เมื่อมีสิทธิ์แก้ไข (ไม่ต้องกดแก้ไขปีก่อน), อนุมัติ/ปฏิเสธ = สิทธิ์อนุมัติ + อยู่ในคิวผู้อนุมัติ
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../im/widgets/im_master_kit.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/utils/sa_app_l10n.dart';
 import '../../sa/services/sa_language_provider.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../../sa/utils/sa_menu_scope.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
 import '../models/gl_period.dart';
 import '../../sa/models/sa_doc_approval.dart';
 import '../services/gl_period_service.dart';
 
+const _modules = ['GL', 'AR', 'AP', 'IM', 'CM'];
+const _moduleScreens = {
+  'GL': ('GlEntryScreen', 'บันทึกรายการบัญชี', 'Journal entries'),
+  'AR': ('ArTransactionScreen', 'เอกสารลูกหนี้', 'AR documents'),
+  'AP': ('ApTransactionScreen', 'เอกสารเจ้าหนี้', 'AP documents'),
+  'IM': ('ImTransactionScreen', 'เอกสารสินค้า', 'Inventory documents'),
+  'CM': ('CmTransactionScreen', 'เอกสารการเงิน', 'Cash documents'),
+};
+
 class PeriodDetailWidget extends StatefulWidget {
-  final Mode mode;
+  final Mode mode; // none / add / view / edit (edit = แก้ข้อมูลปี)
   final FiscalYear? selectedHead;
   final List<PostingPeriod>? selectedDetail;
   final Function(FiscalYear) onSubmitHead;
   final VoidCallback onCancel;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
   final bool isPlaceholder;
-  final Function() onDetailChange; // Callback เมื่อมีการสร้าง/ลบ period
+  final Function() onDetailChange; // โหลดงวดใหม่หลังเพิ่ม/แก้/ลบงวด หรือเปลี่ยนสถานะ
+  final bool canEdit; // สิทธิ์แก้ไข — เพิ่ม/แก้/ลบงวด และเปลี่ยนสถานะงวด
   final bool canApprove; // สิทธิ์ "อนุมัติ" — คุมปุ่มอนุมัติ/ปฏิเสธคำขอปิดงวด GL
+  final int requestSeq;
 
   const PeriodDetailWidget({
     super.key,
@@ -28,92 +49,62 @@ class PeriodDetailWidget extends StatefulWidget {
     this.selectedDetail,
     required this.onSubmitHead,
     required this.onCancel,
+    this.onEdit,
+    this.onDelete,
     this.isPlaceholder = false,
     required this.onDetailChange,
+    this.canEdit = true,
     this.canApprove = true,
+    this.requestSeq = 0,
   });
 
   @override
   State<PeriodDetailWidget> createState() => PeriodDetailWidgetState();
 }
 
-class PeriodDetailWidgetState extends State<PeriodDetailWidget>
-    with SingleTickerProviderStateMixin {
-  FiscalYear? _selectedHead;
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _fiscalYearCodeController;
-  late TextEditingController _descriptionController;
-  late TextEditingController _numOfPeriodsController;
+class PeriodDetailWidgetState extends State<PeriodDetailWidget> with ImMasterKit {
+  final _fiscalYearCodeController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _numOfPeriodsController = TextEditingController();
   late DateTime _yearStartDate;
   late DateTime _yearEndDate;
-  late bool _isActive;
+  bool _isActive = true;
   List<PostingPeriod> _selectedDetail = [];
-  late TabController _tabController;
   final PeriodService _detailService = PeriodService();
-
   final DateFormat _dateFormat = DateFormat('dd-MM-yyyy');
+  final DateFormat _d2 = DateFormat('dd/MM');
 
   bool _isSaving = false;
   bool _isEnglish = false;
+  bool _showClosed = false;
+  FiscalYearSummary? _summary;
+  bool _loadingSummary = false;
+  int _seq = 0;
+  String _snapshot = '';
+
+  bool get _isNew => widget.mode == Mode.add;
+  bool get _readOnly => widget.mode == Mode.view || widget.mode == Mode.none;
+  @override
+  bool get kitEnglish => _isEnglish;
+  @override
+  bool get kitReadOnly => _readOnly;
+
+  bool get isDirty => !_readOnly && !widget.isPlaceholder && _fp() != _snapshot;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 1, vsync: this);
-    _selectedHead = widget.selectedHead;
-
-    _fiscalYearCodeController =
-        TextEditingController(text: _selectedHead?.fyCode ?? '');
-    _descriptionController =
-        TextEditingController(text: _selectedHead?.description ?? '');
-    // _yearStartDate = _selectedHead?.yearStartDate.toLocal() ?? DateTime.now().toLocal();
-    // _yearEndDate = _selectedHead?.yearEndDate.toLocal() ??
-    //     DateTime.now().add(const Duration(days: 365)).toLocal();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    _yearStartDate = _selectedHead?.yearStartDate ?? today;
-    _yearEndDate = _selectedHead?.yearEndDate ??
-        DateTime(today.year + 1, today.month, today.day)
-            .subtract(const Duration(days: 1));
-    _numOfPeriodsController = TextEditingController(
-        text: _selectedHead?.numOfPeriods.toString() ?? '12');
-    _isActive = _selectedHead?.isActive ?? true;
+    _apply();
   }
 
   @override
   void didUpdateWidget(covariant PeriodDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selectedHead != oldWidget.selectedHead) {
-      _selectedHead = widget.selectedHead;
-
-      _fiscalYearCodeController.text = _selectedHead?.fyCode ?? '';
-      _descriptionController.text = _selectedHead?.description ?? '';
-      // _yearStartDate = _selectedHead?.yearStartDate.toLocal() ?? DateTime.now().toLocal();
-      // _yearEndDate = _selectedHead?.yearEndDate.toLocal() ??
-      //     DateTime.now().add(const Duration(days: 365)).toLocal();
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      _yearStartDate = _selectedHead?.yearStartDate ?? today;
-      _yearEndDate = _selectedHead?.yearEndDate ??
-          DateTime(today.year + 1, today.month, today.day)
-              .subtract(const Duration(days: 1));
-      _numOfPeriodsController = TextEditingController(
-          text: _selectedHead?.numOfPeriods.toString() ?? '12');
-      _isActive = _selectedHead?.isActive ?? true;
-
-      // *ไม่ต้องเรียก setState() เพราะการเปลี่ยนแปลงสถานะใน didUpdateWidget จะถูกนำไปใช้ในการ build ถัดไป*
-    } else if (widget.mode == Mode.add && oldWidget.mode != Mode.add) {
-      // กรณีเพิ่มข้อมูลใหม่ ให้ล้างฟิลด์
-      _selectedHead = null;
-      _selectedDetail = [];
-      _fiscalYearCodeController.clear();
-      _descriptionController.clear();
-      // _yearStartDate = DateTime.now().toLocal();
-      // _yearEndDate = DateTime.now().add(const Duration(days: 365)).toLocal();
-      _yearStartDate = DateTime.now();
-      _yearEndDate = DateTime.now().add(const Duration(days: 365));
-      _numOfPeriodsController.clear();
-      _isActive = true;
+    if (widget.selectedHead != oldWidget.selectedHead || widget.mode != oldWidget.mode || widget.requestSeq != oldWidget.requestSeq) {
+      _apply();
+    } else if (widget.selectedDetail != oldWidget.selectedDetail && widget.selectedHead != null) {
+      // งวดโหลดใหม่ (เปลี่ยนสถานะ/เพิ่มงวด) → นับเอกสาร Draft ใหม่
+      _loadSummary(widget.selectedHead!.id);
     }
   }
 
@@ -122,492 +113,362 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
     _fiscalYearCodeController.dispose();
     _descriptionController.dispose();
     _numOfPeriodsController.dispose();
-    _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _submitForm() async {
-    final isEnglish = _isEnglish;
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isSaving = true;
-      });
-      try {
-        final newHeader = FiscalYear(
-          id: widget.selectedHead?.id ?? 0,
-          fyCode: _fiscalYearCodeController.text,
-          description: _descriptionController.text,
-          yearStartDate: _yearStartDate,
-          yearEndDate: _yearEndDate,
-          numOfPeriods: int.parse(_numOfPeriodsController.text),
-          isActive: _isActive,
-        );
-        await widget.onSubmitHead(newHeader);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(isEnglish ? 'An error occurred: $e' : 'เกิดข้อผิดพลาด: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isSaving = false;
-          });
-        }
-      }
+  void _apply() {
+    final h = _isNew ? null : widget.selectedHead;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    _fiscalYearCodeController.text = h?.fyCode ?? '';
+    _descriptionController.text = h?.description ?? '';
+    _yearStartDate = h?.yearStartDate ?? DateTime(today.year, 1, 1);
+    _yearEndDate = h?.yearEndDate ?? DateTime(today.year, 12, 31);
+    _numOfPeriodsController.text = '${h?.numOfPeriods ?? 12}';
+    _isActive = h?.isActive ?? true;
+    _summary = null;
+    if (h != null) _loadSummary(h.id);
+    kScrollTop();
+    _snapshot = _fp();
+  }
+
+  Future<void> _loadSummary(int fyId) async {
+    final seq = ++_seq;
+    _loadingSummary = true;
+    try {
+      final s = await _detailService.fetchYearSummary(fyId);
+      if (mounted && seq == _seq) setState(() => _summary = s);
+    } catch (_) {
+    } finally {
+      if (mounted && seq == _seq) setState(() => _loadingSummary = false);
     }
+  }
+
+  FiscalYear _build() => FiscalYear(
+        id: widget.selectedHead?.id ?? 0,
+        fyCode: _fiscalYearCodeController.text.trim(),
+        description: _descriptionController.text.trim(),
+        yearStartDate: _yearStartDate,
+        yearEndDate: _yearEndDate,
+        numOfPeriods: int.tryParse(_numOfPeriodsController.text) ?? 12,
+        isActive: _isActive,
+      );
+
+  String _fp() => docFingerprint(_build().toJson());
+
+  Future<void> _submitForm() async {
+    final e = _isEnglish;
+    String? err;
+    if (_fiscalYearCodeController.text.trim().isEmpty) {
+      err = e ? 'Please enter the fiscal year' : 'กรุณาป้อนปีบัญชี';
+    } else if ((int.tryParse(_numOfPeriodsController.text) ?? 0) <= 0) {
+      err = e ? 'Number of periods must be greater than 0' : 'จำนวนงวดต้องมากกว่า 0';
+    } else if (_yearStartDate.isAfter(_yearEndDate)) {
+      err = e ? 'Start date must not be after end date' : 'วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด';
+    }
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err), backgroundColor: Colors.red));
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      await widget.onSubmitHead(_build());
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  // ── สถานะ ──
+  static String _statusOf(PostingPeriod p, String m) => switch (m) {
+        'GL' => p.glStatus,
+        'AR' => p.arStatus,
+        'AP' => p.apStatus,
+        'IM' => p.imStatus,
+        _ => p.cmStatus,
+      };
+
+  bool _isCurrent(PostingPeriod p) {
+    final now = DateTime.now();
+    final t = DateTime(now.year, now.month, now.day);
+    return !p.periodStartDate.isAfter(t) && !p.periodEndDate.isBefore(t);
+  }
+
+  bool _allClosed(PostingPeriod p) => _modules.every((m) => _statusOf(p, m) == 'CLOSED');
+
+  Widget _statusChip(String status, bool e) => switch (status) {
+        'OPEN' => ImKit.chip(e ? 'Open' : 'เปิด', ImKit.okSoft, ImKit.ok),
+        'LOCKED' => ImKit.chip(e ? 'Locked' : 'ล็อก', const Color(0xFFFFF3C4), ImKit.amber),
+        'PENDING_CLOSE' => ImKit.chip(e ? 'Pending' : 'รออนุมัติ', ImKit.goldSoft, ImKit.amber),
+        'CLOSED' => ImKit.chip(e ? 'Closed' : 'ปิด', ImKit.redSoft, ImKit.red),
+        _ => ImKit.chip(status, ImKit.ro, ImKit.gMore),
+      };
+
+  /// การทำงานที่ทำได้ของป้ายสถานะ (เงื่อนไขเดียวกับไอคอนใต้ป้ายของหน้าจอเดิม)
+  List<(String, IconData, Color, VoidCallback)> _statusActions(PostingPeriod period, String module, String status, bool e) {
+    final out = <(String, IconData, Color, VoidCallback)>[];
+    final currentUserId = AuthService().currentUser?.id;
+    if (module == 'GL' && status == 'PENDING_CLOSE') {
+      final myPending = period.closeApprovals.where((a) => a.approverUserId == currentUserId && a.status == 'Pending').toList();
+      final canReject = widget.canApprove && myPending.isNotEmpty;
+      final canAcceptNow = canReject && isMyApprovalTurn(period.closeApprovals, currentUserId, period.closeApprovalMode);
+      final isRequester = period.closeRequestedBy != null && currentUserId == period.closeRequestedBy;
+      if (canAcceptNow) out.add((e ? 'Approve close' : 'อนุมัติปิดงวด', Icons.check_circle_outline, Colors.green, () => _approveGlClose(period)));
+      if (canReject) out.add((e ? 'Reject' : 'ปฏิเสธ', Icons.cancel_outlined, Colors.red, () => _rejectGlClose(period)));
+      if (!canReject && isRequester) out.add((e ? 'Cancel request' : 'ยกเลิกคำขอ', Icons.undo, Colors.blueGrey, () => _cancelGlCloseRequest(period)));
+      return out;
+    }
+    if (!widget.canEdit) return out;
+    if (status == 'OPEN') {
+      out.add((e ? 'Lock (LOCKED)' : 'ล็อก (LOCKED)', Icons.lock_outline, Colors.orange, () => _confirmSoftClose(period, module)));
+      out.add(module == 'GL'
+          ? (e ? 'Request close' : 'ขอปิดงวด', Icons.cancel_outlined, Colors.red, () => _confirmRequestGlClose(period))
+          : (e ? 'Close period (CLOSED)' : 'ปิดงวด (CLOSED)', Icons.cancel_outlined, Colors.red, () => _confirmClose(period, module, 'OPEN')));
+    } else if (status == 'LOCKED') {
+      out.add((e ? 'Unlock (OPEN)' : 'ปลดล็อก (OPEN)', Icons.lock_open_outlined, Colors.green, () => _updateStatus(period, module, 'OPEN')));
+      out.add(module == 'GL'
+          ? (e ? 'Request close' : 'ขอปิดงวด', Icons.cancel_outlined, Colors.red, () => _confirmRequestGlClose(period))
+          : (e ? 'Close period (CLOSED)' : 'ปิดงวด (CLOSED)', Icons.cancel_outlined, Colors.red, () => _confirmClose(period, module, 'LOCKED')));
+    }
+    return out;
+  }
+
+  Widget _statusCell(PostingPeriod p, String module, bool e) {
+    final status = _statusOf(p, module);
+    final acts = _statusActions(p, module, status, e);
+    final pendingNames = module == 'GL' && status == 'PENDING_CLOSE'
+        ? p.closeApprovals.where((a) => a.status == 'Pending').map((a) => '${a.approverUserName} (${a.sequenceNo})').join(' → ')
+        : '';
+    Widget chip = Row(mainAxisSize: MainAxisSize.min, children: [
+      _statusChip(status, e),
+      if (acts.isNotEmpty) const Icon(Icons.arrow_drop_down, size: 16, color: ImKit.ink2),
+    ]);
+    if (acts.isNotEmpty) {
+      chip = PopupMenuButton<int>(
+        tooltip: e ? 'Change status' : 'เปลี่ยนสถานะ',
+        onSelected: (i) => acts[i].$4(),
+        itemBuilder: (_) => [
+          for (var i = 0; i < acts.length; i++)
+            PopupMenuItem(
+              value: i,
+              child: Row(children: [Icon(acts[i].$2, size: 18, color: acts[i].$3), const SizedBox(width: 8), Text(acts[i].$1)]),
+            ),
+        ],
+        child: chip,
+      );
+    }
+    final w = pendingNames.isEmpty
+        ? chip
+        : Column(mainAxisSize: MainAxisSize.min, children: [
+            chip,
+            Text(pendingNames, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: ImKit.ink3)),
+          ]);
+    return Center(child: w);
+  }
+
+  // ── การ์ด ──
+  Widget _mainCard() {
+    final e = _isEnglish;
+    final ed = !_readOnly;
+    final datesEditable = ed && (_isNew || !(_summary?.hasPostings ?? true));
+    final special = _selectedDetail.length - (widget.selectedHead?.numOfPeriods ?? _selectedDetail.length);
+    return kCard(
+      title: e ? 'Fiscal Year' : 'ข้อมูลปีบัญชี',
+      trailing: ed ? kLegend(withAuto: false) : null,
+      child: kGroups([
+        kGroup(1, e ? 'Main Information' : 'ข้อมูลหลัก', ImKit.gDoc, [
+          kRow([
+            kTxt(e ? 'Fiscal Year (B.E. or A.D.) *' : 'ปีบัญชี (พ.ศ. หรือ ค.ศ.) *', _fiscalYearCodeController, editable: _isNew),
+            Align(alignment: Alignment.centerLeft, child: kChecks([kCk(e ? 'Active' : 'ใช้งาน', _isActive, ed ? (v) => setState(() => _isActive = v) : null)])),
+          ]),
+          kTxt(e ? 'Description' : 'คำอธิบาย', _descriptionController),
+        ]),
+        kGroup(2, e ? 'Period' : 'ช่วงเวลา', ImKit.gParty, [
+          kRow([
+            kDate(e ? 'Start date *' : 'วันที่เริ่มต้น *', _yearStartDate, datesEditable ? (d) => setState(() => _yearStartDate = d ?? _yearStartDate) : null),
+            kDate(e ? 'End date *' : 'วันที่สิ้นสุด *', _yearEndDate, datesEditable ? (d) => setState(() => _yearEndDate = d ?? _yearEndDate) : null),
+          ]),
+          kRow([
+            kTxt(e ? 'Number of periods *' : 'จำนวนงวด *', _numOfPeriodsController, numeric: true, digitsOnly: true, editable: _isNew),
+            InputDecorator(
+              decoration: kDec(e ? 'Special periods' : 'งวดพิเศษ', editable: false),
+              child: Text(_isNew ? '—' : '${special < 0 ? 0 : special}', style: const TextStyle(fontSize: ImKit.font)),
+            ),
+          ]),
+          if (ed && !_isNew && !datesEditable)
+            kNote(e ? 'Dates cannot be changed because the year already has journal entries.' : 'แก้วันที่ไม่ได้ เพราะมีรายการบัญชีในปีนี้แล้ว'),
+          if (_isNew) kNote(e ? 'Monthly periods are created automatically when saved.' : 'ระบบสร้างงวดรายเดือนให้อัตโนมัติเมื่อบันทึก'),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _periodsCard() {
+    final e = _isEnglish;
+    final s = _summary;
+    final all = _selectedDetail;
+    // พับงวดที่ปิดครบทุกโมดูลไว้ ยกเว้นงวดปัจจุบัน/งวดหลังสุดที่ปิด
+    final hidden = _showClosed ? <PostingPeriod>[] : all.where((p) => _allClosed(p) && !_isCurrent(p)).toList();
+    final rows = all.where((p) => !hidden.contains(p)).toList();
+    final canEditPeriod = widget.canEdit && widget.selectedHead != null;
+    return kCard(
+      title: e ? 'Posting Periods' : 'งวดบัญชี',
+      count: e ? '${all.length} period(s) · click a status to change it' : '${all.length} งวด · คลิกป้ายสถานะเพื่อเปลี่ยนสถานะ',
+      trailing: Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        if (all.any(_allClosed))
+          ImMasterFilterChip(label: e ? 'Show fully closed' : 'แสดงงวดที่ปิดครบ', on: _showClosed, onTap: () => setState(() => _showClosed = !_showClosed)),
+        if (canEditPeriod) kGhost(e ? 'Add special period' : 'เพิ่มงวดพิเศษ', Icons.add, () => _showDetailDialog()),
+      ]),
+      padding: EdgeInsets.zero,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        kTable([
+          KCol(e ? 'Period' : 'งวด', 5),
+          KCol(e ? 'Dates' : 'ช่วงวันที่', 4),
+          for (final m in _modules) KCol(m, 3),
+          KCol(e ? 'Draft' : 'Draft ค้าง', 2, num: true),
+          const KCol('', 3),
+        ], [
+          for (final p in rows)
+            [
+              Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Text(p.periodName, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                if (_isCurrent(p)) ImKit.chip(e ? 'Current' : 'ปัจจุบัน', ImKit.blueSoft, ImKit.blue),
+              ]),
+              kCell('${_d2.format(p.periodStartDate)} – ${_d2.format(p.periodEndDate)}', color: ImKit.ink2),
+              for (final m in _modules) _statusCell(p, m, e),
+              () {
+                final n = s?.draftOf(p.id) ?? 0;
+                final by = (s?.draft[p.id] ?? const <String, int>{}).entries.map((x) => '${x.key} ${x.value}').join(' · ');
+                final t = kCell(s == null ? '' : '$n', mono: true, bold: n > 0, color: n > 0 && !_allClosed(p) ? ImKit.red : null);
+                return by.isEmpty ? t : Tooltip(message: by, child: t);
+              }(),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                if (canEditPeriod && p.glStatus != 'CLOSED') ...[
+                  kIconBtn(Icons.edit, e ? 'Edit period date/name' : 'แก้ไขวันที่/ชื่องวด', () => _showDetailDialog(period: p), color: kInk),
+                  kIconBtn(Icons.delete_outline, e ? 'Delete period' : 'ลบงวด', () => _deletePeriod(p.id), color: ImKit.red),
+                ],
+              ]),
+            ],
+        ], rowColors: [for (final p in rows) _isCurrent(p) ? const Color(0xFFFFFCF2) : null], minWidth: 980, rowMinHeight: 44,
+            empty: e ? 'No period' : 'ยังไม่มีงวดบัญชี'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+          child: kNote([
+            if (hidden.isNotEmpty) e ? '${hidden.length} fully closed period(s) are hidden.' : 'พับงวดที่ปิดครบทุกโมดูลไว้ ${hidden.length} งวด',
+            e
+                ? 'GL can be closed only after AR/AP/IM/CM of the period are closed and approved (same rules as before). Name/dates can be changed only for periods not yet closed in GL.'
+                : 'ปิด GL ได้เมื่อ AR/AP/IM/CM ของงวดนั้นปิดแล้ว และผ่านการอนุมัติ (ตามกฎเดิม) · แก้ชื่อ/วันที่ได้เฉพาะงวดที่ GL ยังไม่ปิด',
+          ].join('\n')),
+        ),
+      ]),
+    );
+  }
+
+  Widget _pendingCard() {
+    final e = _isEnglish;
+    final s = _summary;
+    final rows = s?.pending ?? const <FyPendingDoc>[];
+    return kCard(
+      title: e ? 'Pending Documents in Open Periods' : 'เอกสารค้างในงวดเปิด',
+      count: e ? 'Read-only · draft documents dated in periods not yet closed' : 'อ่านอย่างเดียว · เอกสาร Draft ที่วันที่ตกอยู่ในงวดที่ยังไม่ปิด',
+      padding: EdgeInsets.zero,
+      child: s == null
+          ? Padding(
+              padding: const EdgeInsets.all(14),
+              child: Center(child: _loadingSummary ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const SizedBox.shrink()),
+            )
+          : kTable([
+              KCol(e ? 'Module' : 'โมดูล', 2),
+              KCol(e ? 'Period' : 'งวด', 3),
+              KCol(e ? 'Document type' : 'ประเภทเอกสาร', 6),
+              KCol(e ? 'Count' : 'จำนวน', 2, num: true),
+              const KCol('', 2),
+            ], [
+              for (final p in rows)
+                [
+                  ImKit.chip(p.module, ImKit.blueSoft, ImKit.blue),
+                  kCell(p.periodName),
+                  kCell([p.docCode ?? '', p.docName(e)].where((x) => x.isNotEmpty).join('  ')),
+                  kCell('${p.count}', mono: true, bold: true),
+                  InkWell(
+                    onTap: () {
+                      final t = _moduleScreens[p.module];
+                      if (t != null) ImKit.openMenu(context, t.$1, t.$2, t.$3, e);
+                    },
+                    child: Text(e ? 'Open ›' : 'เปิด ›', style: TextStyle(fontSize: 12.5, color: kInk, decoration: TextDecoration.underline)),
+                  ),
+                ],
+            ], minWidth: 640, empty: e ? 'No pending document' : 'ไม่มีเอกสารค้าง'),
+    );
+  }
+
+  List<ImKpi> _kpis() {
+    final e = _isEnglish;
+    final s = _summary;
+    final ps = _selectedDetail;
+    final cur = ps.where(_isCurrent).firstOrNull;
+    final closed = ps.where((p) => p.glStatus == 'CLOSED').toList();
+    final pend = ps.where((p) => p.glStatus == 'PENDING_CLOSE').toList();
+    final byMod = s?.pendingByModule ?? const <String, int>{};
+    final draftTotal = byMod.values.fold(0, (a, b) => a + b);
+    return [
+      ImKpi(e ? 'Current period' : 'งวดปัจจุบัน', cur?.periodName ?? '-', e ? 'by today\'s date' : 'ตามวันที่วันนี้'),
+      ImKpi(e ? 'GL closed' : 'ปิด GL แล้ว', '${closed.length} / ${ps.length}',
+          closed.isEmpty ? (e ? 'none yet' : 'ยังไม่มี') : (e ? 'last: ${closed.last.periodName}' : 'งวดล่าสุดที่ปิด: ${closed.last.periodName}')),
+      ImKpi(e ? 'Pending close approval' : 'รออนุมัติปิดงวด', '${pend.length}',
+          pend.isEmpty ? '-' : '${pend.first.periodName}${pend.first.closeRequestedByName == null ? '' : (e ? ' · by ${pend.first.closeRequestedByName}' : ' · ขอโดย ${pend.first.closeRequestedByName}')}'),
+      ImKpi(e ? 'Drafts in open periods' : 'เอกสาร Draft ในงวดเปิด', s == null ? '-' : '$draftTotal',
+          byMod.isEmpty ? '-' : byMod.entries.map((x) => '${x.key} ${x.value}').join(' · '), warn: draftTotal > 0),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    final isEnglish = context.watch<LanguageProvider>().isEnglish;
-    _isEnglish = isEnglish;
-    final l = AppL10n(isEnglish);
+    _isEnglish = context.watch<LanguageProvider>().isEnglish;
+    final e = _isEnglish;
+    _selectedDetail = widget.selectedDetail ?? const [];
     if (widget.isPlaceholder) {
-      return Center(
-        child: Text(
-            isEnglish
-                ? 'Select a fiscal year to edit or delete, or press + to add a new fiscal year'
-                : 'เลือกปีบัญชีเพื่อแก้ไข หรือ ลบ หรือ กดปุ่ม + เพื่อเพิ่มปีบัญชีใหม่'),
-      );
+      return kPlaceholder(Icons.calendar_month_outlined, e ? 'Select a fiscal year on the left to view its periods' : 'เลือกปีบัญชีทางซ้ายเพื่อดูงวดบัญชี');
     }
-
-    return Column(
-      children: [
-        // ส่วน Form (scroll ได้)
-        SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.mode == Mode.view
-                      ? (isEnglish ? 'View' : 'ดูข้อมูล')
-                      : widget.mode == Mode.edit
-                          ? (isEnglish ? 'Edit' : 'แก้ไข')
-                          : (isEnglish ? 'Add New' : 'เพิ่มข้อมูลใหม่'),
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _fiscalYearCodeController,
-                        readOnly: widget.mode != Mode.add,
-                        decoration: InputDecoration(
-                          labelText: isEnglish ? 'Fiscal Year (B.E. or A.D.)' : 'ปีพ.ศ. หรือ ค.ศ.',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        // maxLength: 10,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          // fontSize: 12,
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return isEnglish ? 'Please enter the fiscal year code' : 'กรุณาป้อนรหัสปีบัญชี';
-                          }
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextFormField(
-                        readOnly: widget.mode == Mode.view,
-                        controller: _descriptionController,
-                        decoration: InputDecoration(
-                          labelText: l.description,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        // maxLength: 255,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return isEnglish ? 'Please enter a description' : 'กรุณาป้อนคำอธิบาย';
-                          }
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ListTile(
-                        dense: true,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4.0),
-                          side: BorderSide(color: Colors.grey.shade700),
-                        ),
-                        title: Text('${l.status}: ${_isActive ? l.open : l.closed}'),
-                        trailing: Switch(
-                          value: _isActive,
-                          onChanged: widget.mode == Mode.view ? null : (bool value) {
-                            setState(() {
-                              _isActive = value;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (widget.mode == Mode.add || widget.selectedHead == null)
-                const SizedBox(height: 8),
-                if (widget.mode == Mode.add || widget.selectedHead == null)
-                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(
-                    child: ListTile(
-                      dense: true,
-                      enabled: widget.mode == Mode.add || widget.selectedHead == null,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4.0),
-                        side: BorderSide(
-                          color: widget.mode == Mode.view
-                              ? Colors.grey.shade500
-                              : Colors.grey.shade700,
-                        ),
-                      ),
-                      title: Text('${isEnglish ? 'Start Date' : 'วันที่เริ่มต้น'}: ${_dateFormat.format(_yearStartDate)}'),
-                      trailing: const Icon(Icons.calendar_today),
-                      onTap: widget.selectedHead == null
-                          ? () async {
-                              final picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: _yearStartDate,
-                                  firstDate: DateTime(2000),
-                                  lastDate: DateTime(2100));
-                              if (picked != null) {
-                                setState(() {
-                                  _yearStartDate = picked;
-                                  if (widget.mode == Mode.add) {
-                                    _yearEndDate = DateTime(picked.year + 1,
-                                            picked.month, picked.day)
-                                        .subtract(const Duration(days: 1));
-                                    _numOfPeriodsController.text = '12';
-                                  }
-                                });
-                              }
-                            }
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ListTile(
-                      dense: true,
-                      enabled: widget.mode == Mode.add || widget.selectedHead == null,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4.0),
-                        side: BorderSide(
-                          color: widget.mode == Mode.view
-                              ? Colors.grey.shade500
-                              : Colors.grey.shade700,
-                        ),
-                      ),
-                      title: Text('${isEnglish ? 'End Date' : 'วันที่สิ้นสุด'}: ${_dateFormat.format(_yearEndDate)}'),
-                      trailing: const Icon(Icons.calendar_today),
-                      onTap: widget.selectedHead == null
-                          ? () async {
-                              final picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: _yearEndDate,
-                                  firstDate: DateTime(2000),
-                                  lastDate: DateTime(2100));
-                              if (picked != null) {
-                                setState(() => _yearEndDate = picked);
-                              }
-                            }
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _numOfPeriodsController,
-                      enabled: widget.selectedHead == null,
-                      textAlign: TextAlign.right,
-                      decoration: InputDecoration(
-                        labelText: isEnglish ? 'Number of Periods (12, 13, ...)' : 'จำนวนงวดเดือนบัญชี (12, 13, ...)',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(),
-                      validator: (value) {
-                        if (value == null ||
-                            int.tryParse(value) == null ||
-                            int.tryParse(value)! <= 0) {
-                          return isEnglish ? 'Please specify a valid number of periods' : 'โปรดระบุจำนวนงวดเดือนที่ถูกต้อง';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                ]),
-                if (widget.mode == Mode.add || widget.selectedHead == null)
-                const SizedBox(height: 8),
-                if (widget.mode == Mode.add || widget.selectedHead == null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(
-                      isEnglish
-                          ? 'Note: Start/end date and number of periods are used only for the first period generation. Please verify before saving'
-                          : 'หมายเหตุ: วันที่เริ่มต้น/สิ้นสุด และจำนวนงวดเดือนใช้สร้างงวดครั้งแรกเท่านั้น โปรดตรวจสอบให้แน่ใจก่อนบันทึก',
-                      style: const TextStyle(fontSize: 12, color: Colors.red)),
-                ),
-                const SizedBox(height: 16),
-                // --- Buttons ---
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    widget.mode == Mode.view
-                        ? Container()
-                        : Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _isSaving ? null : _submitForm,
-                              icon: _isSaving
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2, color: Colors.white))
-                                  : const Icon(Icons.save),
-                              label: Text(_isSaving
-                                  ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...')
-                                  : widget.mode == Mode.edit
-                                      ? l.save
-                                      : l.add),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue.shade700,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                            ),
-                          ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: widget.onCancel,
-                        icon: const Icon(Icons.cancel),
-                        label: Text(l.cancel),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade600,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        // ส่วน Tab (Expanded ได้เพราะอยู่ใน Column โดยตรง)
-        const Divider(height: 1),
-        TabBar(
-          controller: _tabController,
-          tabs: [
-            Tab(text: isEnglish ? 'Period Details' : 'รายละเอียดงวดเดือนบัญชี'),
+    final h = widget.selectedHead;
+    final saved = !_isNew && h != null;
+    final now = DateTime.now();
+    final isCurrentYear = saved && !h.yearStartDate.isAfter(now) && !h.yearEndDate.isBefore(DateTime(now.year, now.month, now.day));
+    final yearEndDone = _summary?.yearEndStatus != null && _summary!.yearEndStatus!.toUpperCase().contains('COMPLET');
+    return kPage(
+      header: kHeaderBar(
+        code: saved ? h.fyCode : null,
+        title: saved ? ((h.description ?? '').isEmpty ? (e ? 'Fiscal year ${h.fyCode}' : 'ปีบัญชี ${h.fyCode}') : h.description!) : (e ? 'Add Fiscal Year' : 'เพิ่มปีบัญชี'),
+        badges: [
+          if (widget.mode == Mode.edit) kEditingBadge(),
+          if (saved) ImKit.activeChip(h.isActive, e),
+          if (isCurrentYear) ImKit.chip(e ? 'Current year' : 'ปีปัจจุบัน', ImKit.goldSoft, ImKit.amber),
+          if (yearEndDone) ImKit.chip(e ? 'Year-end closed' : 'ปิดบัญชีสิ้นปีแล้ว', ImKit.blueSoft, ImKit.blue),
+          if (saved) Text('${DateFormat('dd/MM/yyyy').format(h.yearStartDate)} – ${DateFormat('dd/MM/yyyy').format(h.yearEndDate)}',
+              style: const TextStyle(color: Colors.white, fontSize: 12)),
+        ],
+        acts: kStdActs(
+          saving: _isSaving,
+          onEdit: widget.onEdit,
+          onDelete: widget.onDelete == null || (_summary?.hasPostings ?? true) ? null : widget.onDelete,
+          onClose: widget.onCancel,
+          onCancel: widget.onCancel,
+          onSave: _submitForm,
+          extra: [
+            if (saved && widget.canEdit) DocBarAction(e ? '+ Special period' : '+ งวดพิเศษ', () => _showDetailDialog(), fg: kInk),
           ],
         ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildDetailList(isEnglish),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDetailList(bool isEnglish) {
-    _selectedDetail = widget.selectedDetail != null ? widget.selectedDetail! : [];
-
-    const Map<int, TableColumnWidth> colWidths = {
-      0: FixedColumnWidth(44),
-      1: FlexColumnWidth(2),
-      2: FixedColumnWidth(90),
-      3: FixedColumnWidth(90),
-      4: FixedColumnWidth(90),
-      5: FixedColumnWidth(90),
-      6: FixedColumnWidth(90),
-      7: FixedColumnWidth(80),
-    };
-    final borderSide = BorderSide(width: 1, color: Colors.grey.shade500);
-
-    return Column(
-      children: [
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  isEnglish
-                      ? 'Number of Periods = ${_selectedDetail.length}'
-                      : 'จำนวนงวดเดือนบัญชี = ${_selectedDetail.length} งวด',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              if (widget.mode != Mode.view)
-                ElevatedButton.icon(
-                  onPressed: () => _showDetailDialog(),
-                  icon: const Icon(Icons.add),
-                  label: Text(isEnglish ? 'Add Special Period' : 'เพิ่มงวดเดือนพิเศษ'),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        // ── Frozen header ─────────────────────────────────────────────────
-        Table(
-          columnWidths: colWidths,
-          border: TableBorder.all(width: 1, color: Colors.grey.shade500),
-          children: [
-            TableRow(
-              decoration: BoxDecoration(color: Colors.grey.shade200),
-              children: [
-                _tableHeaderCell('#'),
-                _tableHeaderCell(isEnglish ? 'Name/Date' : 'ชื่อ/วันที่'),
-                _tableHeaderCell(isEnglish ? 'GL Status' : 'สถานะ GL'),
-                _tableHeaderCell(isEnglish ? 'AR Status' : 'สถานะ AR'),
-                _tableHeaderCell(isEnglish ? 'AP Status' : 'สถานะ AP'),
-                _tableHeaderCell(isEnglish ? 'CM Status' : 'สถานะ CM'),
-                _tableHeaderCell(isEnglish ? 'IM Status' : 'สถานะ IM'),
-                _tableHeaderCell('Actions'),
-              ],
-            ),
-          ],
-        ),
-        // ── Scrollable rows ───────────────────────────────────────────────
-        Expanded(
-          child: SingleChildScrollView(
-            child: Table(
-              columnWidths: colWidths,
-              border: TableBorder(
-                left: borderSide,
-                right: borderSide,
-                bottom: borderSide,
-                horizontalInside: borderSide,
-                verticalInside: borderSide,
-              ),
-              children: _selectedDetail.map((period) {
-                final bool isClosed = period.glStatus == 'CLOSED';
-                return TableRow(children: [
-                  TableCell(
-                    verticalAlignment: TableCellVerticalAlignment.middle,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Text(period.periodNumber.toString(),
-                            textAlign: TextAlign.center),
-                      ),
-                    ),
-                  ),
-                  TableCell(
-                    verticalAlignment: TableCellVerticalAlignment.middle,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(period.periodName,
-                              style: const TextStyle(fontWeight: FontWeight.w600)),
-                          Text(
-                            '${_dateFormat.format(period.periodStartDate)} - ${_dateFormat.format(period.periodEndDate)}',
-                            style: const TextStyle(fontSize: 10),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  TableCell(child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Center(child: _buildStatusChip(period.glStatus, 'GL', period, isEnglish)),
-                  )),
-                  TableCell(child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Center(child: _buildStatusChip(period.arStatus, 'AR', period, isEnglish)),
-                  )),
-                  TableCell(child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Center(child: _buildStatusChip(period.apStatus, 'AP', period, isEnglish)),
-                  )),
-                  TableCell(child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Center(child: _buildStatusChip(period.cmStatus, 'CM', period, isEnglish)),
-                  )),
-                  TableCell(child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Center(child: _buildStatusChip(period.imStatus, 'IM', period, isEnglish)),
-                  )),
-                  TableCell(
-                    verticalAlignment: TableCellVerticalAlignment.middle,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        IconButton(
-                          key: Key('edit_${period.id}'),
-                          icon: Icon(Icons.edit,
-                              size: 18,
-                              color: widget.mode == Mode.view
-                                  ? Colors.grey
-                                  : Colors.blue),
-                          onPressed: isClosed || widget.mode == Mode.view
-                              ? null
-                              : () => _showDetailDialog(period: period),
-                          tooltip: isEnglish
-                              ? 'Edit period date/name'
-                              : 'แก้ไขวันที่/ชื่องวดเดือนบัญชี',
-                        ),
-                        IconButton(
-                          key: Key('delete_${period.id}'),
-                          icon: Icon(Icons.delete,
-                              size: 18,
-                              color: widget.mode == Mode.view
-                                  ? Colors.grey
-                                  : Colors.red),
-                          onPressed: isClosed || widget.mode == Mode.view
-                              ? null
-                              : () => _deletePeriod(period.id),
-                          tooltip: isEnglish ? 'Delete period' : 'ลบงวดเดือนบัญชี',
-                        ),
-                      ],
-                    ),
-                  ),
-                ]);
-              }).toList(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _tableHeaderCell(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      child: Text(
-        text,
-        style: const TextStyle(fontWeight: FontWeight.bold),
-        textAlign: TextAlign.center,
+        busy: _isSaving,
       ),
+      top: saved ? kKpis(_kpis(), loading: _loadingSummary) : null,
+      sections: [
+        (0, e ? 'Main' : 'ข้อมูลหลัก', _mainCard()),
+        if (saved) (1, e ? 'Periods' : 'งวดบัญชี', _periodsCard()),
+        if (saved) (2, e ? 'Pending documents' : 'เอกสารค้างในงวด', _pendingCard()),
+      ],
     );
   }
+
+  // ───────────── ด้านล่าง: คัดลอกจากหน้าจอเดิม (dialog งวด + ขั้นตอนสถานะ/อนุมัติ) ─────────────
 
   Future<void> _showDetailDialog({PostingPeriod? period}) async {
     // กำหนดค่าเริ่มต้น
@@ -810,158 +671,6 @@ class PeriodDetailWidgetState extends State<PeriodDetailWidget>
             }
         );
       },
-    );
-  }
-
-  Widget _buildStatusChip(String status, String module, PostingPeriod period, bool isEnglish) {
-    Color chipColor;
-    switch (status) {
-      case 'OPEN':
-        chipColor = Colors.green;
-        break;
-      case 'LOCKED':
-        chipColor = Colors.orange;
-        break;
-      case 'PENDING_CLOSE':
-        chipColor = Colors.purple;
-        break;
-      case 'CLOSED':
-        chipColor = Colors.red;
-        break;
-      default:
-        chipColor = Colors.grey;
-    }
-    if (widget.mode == Mode.view) chipColor = Colors.grey;
-
-    final currentUserId = AuthService().currentUser?.id;
-
-    // Icons ใต้ chip (เฉพาะ edit mode)
-    List<Widget> actionIcons = [];
-    if (widget.mode != Mode.view) {
-      if (module == 'GL' && status == 'PENDING_CLOSE') {
-        // งวด GL ที่รออนุมัติ — คิวผู้อนุมัติของเมนู (ตามลำดับ / คนใดคนหนึ่ง) ที่ตารางกลาง doc_approval
-        final myPending = period.closeApprovals
-            .where((a) => a.approverUserId == currentUserId && a.status == 'Pending')
-            .toList();
-        final canReject = widget.canApprove && myPending.isNotEmpty;
-        final canAcceptNow = canReject && isMyApprovalTurn(period.closeApprovals, currentUserId, period.closeApprovalMode);
-        final isRequester = period.closeRequestedBy != null &&
-            currentUserId == period.closeRequestedBy;
-        if (canAcceptNow) {
-          actionIcons.add(Tooltip(
-            message: isEnglish ? 'Approve Close' : 'อนุมัติปิดงวด',
-            child: InkWell(
-              onTap: () => _approveGlClose(period),
-              child: const Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
-            ),
-          ));
-        }
-        if (canReject) {
-          actionIcons.add(Tooltip(
-            message: isEnglish ? 'Reject' : 'ปฏิเสธ',
-            child: InkWell(
-              onTap: () => _rejectGlClose(period),
-              child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
-            ),
-          ));
-        }
-        if (!canReject && isRequester) {
-          actionIcons.add(Tooltip(
-            message: isEnglish ? 'Cancel Request' : 'ยกเลิกคำขอ',
-            child: InkWell(
-              onTap: () => _cancelGlCloseRequest(period),
-              child: const Icon(Icons.undo, color: Colors.blueGrey, size: 20),
-            ),
-          ));
-        }
-      } else if (status == 'OPEN') {
-        // icon ล็อคสีส้ม → LOCKED
-        actionIcons.add(Tooltip(
-          message: isEnglish ? 'Lock (LOCKED)' : 'ล็อค (LOCKED)',
-          child: InkWell(
-            onTap: () => _confirmSoftClose(period, module),
-            child: const Icon(Icons.lock_outline, color: Colors.orange, size: 20),
-          ),
-        ));
-        // icon ปิดสีแดง → CLOSED (GL ต้องขออนุมัติก่อน, โมดูลอื่น 2-step credential)
-        actionIcons.add(Tooltip(
-          message: module == 'GL'
-              ? (isEnglish ? 'Request Close Period' : 'ขอปิดงวด')
-              : (isEnglish ? 'Close Period (CLOSED)' : 'ปิดงวด (CLOSED)'),
-          child: InkWell(
-            onTap: () => module == 'GL'
-                ? _confirmRequestGlClose(period)
-                : _confirmClose(period, module, 'OPEN'),
-            child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
-          ),
-        ));
-      } else if (status == 'LOCKED') {
-        // icon ปลดล็อคสีเขียว → OPEN
-        actionIcons.add(Tooltip(
-          message: isEnglish ? 'Unlock (OPEN)' : 'ปลดล็อค (OPEN)',
-          child: InkWell(
-            onTap: () => _updateStatus(period, module, 'OPEN'),
-            child: const Icon(Icons.lock_open_outlined, color: Colors.green, size: 20),
-          ),
-        ));
-        // icon ปิดสีแดง → CLOSED (GL ต้องขออนุมัติก่อน, โมดูลอื่น 2-step credential)
-        actionIcons.add(Tooltip(
-          message: module == 'GL'
-              ? (isEnglish ? 'Request Close Period' : 'ขอปิดงวด')
-              : (isEnglish ? 'Close Period (CLOSED)' : 'ปิดงวด (CLOSED)'),
-          child: InkWell(
-            onTap: () => module == 'GL'
-                ? _confirmRequestGlClose(period)
-                : _confirmClose(period, module, 'LOCKED'),
-            child: const Icon(Icons.cancel_outlined, color: Colors.red, size: 20),
-          ),
-        ));
-      }
-      // CLOSED → ไม่มี icon
-    }
-
-    String chipLabel = status.replaceAll('_', ' ');
-    if (status == 'PENDING_CLOSE') {
-      chipLabel = isEnglish ? 'PENDING' : 'รออนุมัติ';
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Chip(
-          label: Text(
-            chipLabel,
-            style: const TextStyle(color: Colors.white, fontSize: 10),
-          ),
-          backgroundColor: chipColor,
-          padding: const EdgeInsets.all(2),
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        if (module == 'GL' && status == 'PENDING_CLOSE' && period.closeApprovals.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              (isEnglish ? 'Pending: ' : 'รออนุมัติ: ') +
-                  period.closeApprovals
-                      .where((a) => a.status == 'Pending')
-                      .map((a) => '${a.approverUserName} (${a.sequenceNo})')
-                      .join(' → '),
-              style: const TextStyle(fontSize: 9, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        if (actionIcons.isNotEmpty)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              actionIcons[0],
-              if (actionIcons.length > 1) ...[
-                const SizedBox(width: 4),
-                actionIcons[1],
-              ],
-            ],
-          ),
-      ],
     );
   }
 

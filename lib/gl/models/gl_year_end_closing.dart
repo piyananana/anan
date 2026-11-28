@@ -208,3 +208,58 @@ class ClosingPreviewLine {
   double get debit => netBalance > 0 ? netBalance : 0;
   double get credit => netBalance < 0 ? -netBalance : 0;
 }
+
+// ── สรุปของหน้าจอตั้งค่าปิดบัญชีสิ้นปี (GET /gl_closing_config/summary, user 2026-11-28) ──
+double _ycD(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse(v.toString()) ?? 0);
+int _ycI(dynamic v) => v == null ? 0 : (v is num ? v.toInt() : int.tryParse(v.toString()) ?? 0);
+
+class ClosingHistoryRow {
+  final String fyCode;
+  final String status;
+  final DateTime? updatedAt;
+  final String? closingDocNo;
+  final String? carryDocNo;
+  final double netIncome;
+  const ClosingHistoryRow({required this.fyCode, required this.status, this.updatedAt, this.closingDocNo, this.carryDocNo, required this.netIncome});
+  factory ClosingHistoryRow.fromJson(Map<String, dynamic> j) => ClosingHistoryRow(
+        fyCode: j['fy_code']?.toString() ?? '',
+        status: j['status']?.toString() ?? '',
+        updatedAt: j['updated_at'] == null ? null : DateTime.tryParse(j['updated_at'].toString())?.toLocal(),
+        closingDocNo: j['closing_doc_no']?.toString(),
+        carryDocNo: j['carry_doc_no']?.toString(),
+        netIncome: _ycD(j['net_income']),
+      );
+}
+
+class ClosingConfigSummary {
+  final String? currentFyCode;
+  final ClosingHistoryRow? lastClosed;
+  final String? nextFyCode;
+  final int nextTotalPeriods;
+  final int nextClosedPeriods;
+  final int nextDraftEntries;
+  /// ขั้นตอนที่ทำแล้วของปีถัดไป: step1..step6 (ไม่มีแถวปิดบัญชี = ว่าง)
+  final Map<int, bool> nextSteps;
+  final double netIncomeYtd;
+  final double retainedEarnings;
+  final List<ClosingHistoryRow> history;
+  const ClosingConfigSummary({this.currentFyCode, this.lastClosed, this.nextFyCode, required this.nextTotalPeriods, required this.nextClosedPeriods,
+      required this.nextDraftEntries, required this.nextSteps, required this.netIncomeYtd, required this.retainedEarnings, required this.history});
+  factory ClosingConfigSummary.fromJson(Map<String, dynamic> j) {
+    final next = j['next_year'] as Map<String, dynamic>?;
+    final st = next?['steps'] as Map<String, dynamic>?;
+    const keys = ['step1_checklist_ok', 'step2_adjusting_ok', 'step3_closing_ok', 'step4_transfer_ok', 'step5_carry_forward_ok', 'step6_lock_ok'];
+    return ClosingConfigSummary(
+      currentFyCode: (j['current_fiscal_year'] as Map<String, dynamic>?)?['fy_code']?.toString(),
+      lastClosed: j['last_closed'] == null ? null : ClosingHistoryRow.fromJson(j['last_closed'] as Map<String, dynamic>),
+      nextFyCode: next?['fy_code']?.toString(),
+      nextTotalPeriods: _ycI(next?['total_periods']),
+      nextClosedPeriods: _ycI(next?['closed_periods']),
+      nextDraftEntries: _ycI(next?['draft_entries']),
+      nextSteps: st == null ? const {} : {for (var i = 0; i < keys.length; i++) i + 1: st[keys[i]] == true},
+      netIncomeYtd: _ycD(j['net_income_ytd']),
+      retainedEarnings: _ycD(j['retained_earnings']),
+      history: [for (final x in (j['history'] as List? ?? const [])) ClosingHistoryRow.fromJson(x as Map<String, dynamic>)],
+    );
+  }
+}

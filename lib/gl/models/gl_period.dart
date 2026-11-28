@@ -152,3 +152,58 @@ class PostingPeriod {
     };
   }
 }
+// ── สรุปของหน้าจอปีบัญชี (GET /gl_fiscal_year/:id/summary, user 2026-11-28) ──
+int _fyInt(dynamic v) => v == null ? 0 : (v is num ? v.toInt() : int.tryParse(v.toString()) ?? 0);
+
+/// เอกสาร Draft ของประเภทเอกสารหนึ่งในงวดที่ยังไม่ปิด
+class FyPendingDoc {
+  final String module;
+  final int periodId;
+  final String periodName;
+  final String? docCode;
+  final String? docNameThai;
+  final String? docNameEng;
+  final int count;
+  const FyPendingDoc({required this.module, required this.periodId, required this.periodName, this.docCode, this.docNameThai,
+      this.docNameEng, required this.count});
+  factory FyPendingDoc.fromJson(Map<String, dynamic> j) => FyPendingDoc(
+        module: j['module']?.toString() ?? '',
+        periodId: _fyInt(j['period_id']),
+        periodName: j['period_name']?.toString() ?? '',
+        docCode: j['doc_code']?.toString(),
+        docNameThai: j['doc_name_thai']?.toString(),
+        docNameEng: j['doc_name_eng']?.toString(),
+        count: _fyInt(j['count']),
+      );
+  String docName(bool e) => e && (docNameEng ?? '').isNotEmpty ? docNameEng! : (docNameThai ?? '');
+}
+
+class FiscalYearSummary {
+  /// period_id → { 'GL': n, 'AR': n, ... } จำนวนเอกสาร Draft
+  final Map<int, Map<String, int>> draft;
+  final List<FyPendingDoc> pending;
+  final bool hasPostings;
+  final String? yearEndStatus;
+  const FiscalYearSummary({required this.draft, required this.pending, required this.hasPostings, this.yearEndStatus});
+  factory FiscalYearSummary.fromJson(Map<String, dynamic> j) {
+    final draft = <int, Map<String, int>>{};
+    for (final x in (j['draft'] as List? ?? const [])) {
+      final m = x as Map<String, dynamic>;
+      draft[_fyInt(m['period_id'])] = {for (final k in ['GL', 'AR', 'AP', 'IM', 'CM']) if (m[k] != null) k: _fyInt(m[k])};
+    }
+    return FiscalYearSummary(
+      draft: draft,
+      pending: [for (final x in (j['pending'] as List? ?? const [])) FyPendingDoc.fromJson(x as Map<String, dynamic>)],
+      hasPostings: j['has_postings'] == true,
+      yearEndStatus: (j['year_end'] as Map<String, dynamic>?)?['status']?.toString(),
+    );
+  }
+  int draftOf(int periodId) => (draft[periodId] ?? const {}).values.fold(0, (s, n) => s + n);
+  Map<String, int> get pendingByModule {
+    final out = <String, int>{};
+    for (final p in pending) {
+      out[p.module] = (out[p.module] ?? 0) + p.count;
+    }
+    return out;
+  }
+}

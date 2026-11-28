@@ -36,6 +36,9 @@ class ArCollector {
   final DateTime? updatedAt;
   final String? createdBy;
   final String? updatedBy;
+  // จำนวนลูกค้าที่รับผิดชอบ (มาจากรายการ — การ์ดแผงซ้าย, 2026-11-28)
+  final int billingCustomerCount;
+  final int collectionCustomerCount;
 
   ArCollector({
     this.id,
@@ -56,7 +59,18 @@ class ArCollector {
     this.updatedAt,
     this.createdBy,
     this.updatedBy,
+    this.billingCustomerCount = 0,
+    this.collectionCustomerCount = 0,
   });
+
+  /// สถานะวันที่มีผล ณ วันนี้: 'active' มีผล / 'expired' หมดอายุ / 'future' ยังไม่เริ่ม
+  String effectiveState([DateTime? today]) {
+    final t = today ?? DateTime.now();
+    final d = DateTime(t.year, t.month, t.day);
+    if (effectiveDateFrom != null && d.isBefore(effectiveDateFrom!)) return 'future';
+    if (effectiveDateTo != null && d.isAfter(effectiveDateTo!)) return 'expired';
+    return 'active';
+  }
 
   factory ArCollector.fromJson(Map<String, dynamic> json) => ArCollector(
         id: json['id'] as int?,
@@ -81,6 +95,8 @@ class ArCollector {
             : null,
         createdBy: json['created_by'] as String?,
         updatedBy: json['updated_by'] as String?,
+        billingCustomerCount: int.tryParse(json['billing_customer_count']?.toString() ?? '') ?? 0,
+        collectionCustomerCount: int.tryParse(json['collection_customer_count']?.toString() ?? '') ?? 0,
       );
 
   Map<String, dynamic> toJson() => {
