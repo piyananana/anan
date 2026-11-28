@@ -4,10 +4,27 @@ import 'package:http/http.dart' as http;
 import '../../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/ap_vendor_group.dart';
+import '../models/ap_vendor_summary.dart';
 
 class ApVendorGroupService {
   final String baseUrl = AppConfig.apiAp;
   final AuthService _auth = AuthService();
+
+  /// ตัวเลขสรุป + ผู้ขายในกลุ่ม (2026-11-28)
+  Future<ApVendorGroupSummary> fetchSummary(int id) async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.get(Uri.parse('$baseUrl/ap_vendor_group/$id/summary'), headers: headers);
+    if (res.statusCode == 200) return ApVendorGroupSummary.fromJson(json.decode(res.body) as Map<String, dynamic>);
+    throw Exception('โหลดสรุปกลุ่มผู้ขายล้มเหลว: ${res.statusCode}');
+  }
+
+  /// 3 รหัสถัดไปที่จะออกจริง (ข้ามรหัสที่มีผู้ขายใช้แล้ว) + รหัสล่าสุดที่กลุ่มนี้ออก
+  Future<ApCodePreview> fetchCodePreview(int id) async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.get(Uri.parse('$baseUrl/ap_vendor_group/$id/preview_code'), headers: headers);
+    if (res.statusCode == 200) return ApCodePreview.fromJson(json.decode(res.body) as Map<String, dynamic>);
+    throw Exception('โหลดตัวอย่างรหัสล้มเหลว: ${res.statusCode}');
+  }
 
   Future<List<ApVendorGroup>> fetchRows() async {
     final headers = await _auth.getAuthHeader();

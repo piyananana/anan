@@ -65,4 +65,29 @@ class ApVendorRunningService {
       throw Exception('ไม่สามารถดึงรหัสอัตโนมัติได้: ${response.statusCode}');
     }
   }
+
+  /// ตัวอย่าง/ตรวจเลขชนตามรูปแบบที่กำลังแก้ (หน้าจอแบบ B, 2026-11-28)
+  Future<Map<String, dynamic>> fetchSummary({
+    required String prefix,
+    required String separator,
+    required String suffixDate,
+    required int length,
+    required int next,
+  }) async {
+    final headers = await _auth.getAuthHeader();
+    final uri = Uri.parse('$_baseUrl/ap_vendor_running/summary').replace(queryParameters: {
+      'prefix': prefix,
+      'separator': separator,
+      'suffix_date': suffixDate,
+      'length': '$length',
+      'next': '$next',
+    });
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) return Map<String, dynamic>.from(json.decode(response.body) as Map);
+    if (response.statusCode == 401) {
+      _auth.logout();
+      throw Exception('Unauthorized');
+    }
+    throw Exception('Failed to load summary: ${response.statusCode}');
+  }
 }

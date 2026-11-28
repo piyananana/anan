@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/ap_vendor.dart';
+import '../models/ap_vendor_summary.dart';
 
 class ApVendorService {
   final String baseUrl = AppConfig.apiAp;
@@ -138,5 +139,30 @@ class ApVendorService {
       final err = json.decode(response.body);
       throw Exception(err['message'] ?? 'ลบข้อมูลล้มเหลว');
     }
+  }
+
+  /// ยอดค้างจ่าย/เกินกำหนด/มัดจำ/จำนวนบัญชีธนาคารต่อผู้ขาย — การ์ดรายการแบบใหม่ (2026-11-28)
+  Future<Map<int, ApVendorBalance>> fetchBalances() async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/ap_vendor/balances'), headers: headers);
+    if (response.statusCode != 200) throw Exception(_err(response, 'Failed to load balances'));
+    final list = (json.decode(response.body) as List).map((j) => ApVendorBalance.fromJson(j as Map<String, dynamic>));
+    return {for (final b in list) b.vendorId: b};
+  }
+
+  /// ตัวเลขสรุป/อายุหนี้/ที่มาบัญชีเจ้าหนี้ของผู้ขาย 1 ราย
+  Future<ApVendorSummary> fetchSummary(int id) async {
+    final headers = await authService.getAuthHeader();
+    final response = await http.get(Uri.parse('$baseUrl/ap_vendor/$id/summary'), headers: headers);
+    if (response.statusCode != 200) throw Exception(_err(response, 'Failed to load summary'));
+    return ApVendorSummary.fromJson(json.decode(response.body) as Map<String, dynamic>);
+  }
+
+  String _err(http.Response r, String fallback) {
+    try {
+      final b = json.decode(r.body);
+      if (b is Map && b['message'] != null) return b['message'].toString();
+    } catch (_) {}
+    return fallback;
   }
 }

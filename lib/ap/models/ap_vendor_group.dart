@@ -13,6 +13,9 @@ class ApVendorGroup {
   final int? apAccountId;
   final String? apAccountCode;
   final String? apAccountNameThai;
+  final String? apAccountNameEng;
+  // จำนวนผู้ขายในกลุ่ม (การ์ดรายการ, 2026-11-28)
+  final int vendorCount;
   final bool isAutoNumber;
   final String runningPrefix;
   final String runningSeparator;
@@ -34,6 +37,8 @@ class ApVendorGroup {
     this.creditTermMonths = 0,
     this.creditTermDays = 30,
     this.currencyCode = 'THB',
+    this.apAccountNameEng,
+    this.vendorCount = 0,
     this.apAccountId,
     this.apAccountCode,
     this.apAccountNameThai,
@@ -62,6 +67,8 @@ class ApVendorGroup {
         apAccountId: json['ap_account_id'],
         apAccountCode: json['ap_account_code']?.toString(),
         apAccountNameThai: json['ap_account_name_thai']?.toString(),
+        apAccountNameEng: json['ap_account_name_eng']?.toString(),
+        vendorCount: json['vendor_count'] is num ? (json['vendor_count'] as num).toInt() : int.tryParse('${json['vendor_count'] ?? ''}') ?? 0,
         isAutoNumber: json['is_auto_number'] ?? false,
         runningPrefix: json['running_prefix'] ?? 'VEND',
         runningSeparator: json['running_separator'] ?? '-',

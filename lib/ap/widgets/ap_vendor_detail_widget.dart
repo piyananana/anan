@@ -1,5 +1,4 @@
-﻿import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../sa/models/sa_anan_module.dart';
 import '../../sa/services/sa_language_provider.dart';
@@ -23,80 +22,14 @@ import '../services/ap_vendor_running_service.dart';
 import '../services/ap_vendor_group_service.dart';
 import '../widgets/ap_vendor_group_list_widget.dart';
 import '../../im/widgets/im_price_list_list_widget.dart';
+import 'dart:convert';
+import 'package:intl/intl.dart';
+import '../../im/widgets/im_master_kit.dart';
+import '../../sa/widgets/sa_doc_appbar_actions.dart';
+import '../models/ap_vendor_group.dart';
+import '../models/ap_vendor_summary.dart';
+import '../services/ap_vendor_service.dart';
 
-// ---------------------------------------------------------------------------
-// Collapsible section
-// ---------------------------------------------------------------------------
-class _Section extends StatefulWidget {
-  final String title;
-  final bool initiallyExpanded;
-  final List<Widget> children;
-  final Widget? trailing;
-
-  const _Section({
-    required this.title,
-    this.initiallyExpanded = true,
-    required this.children,
-    this.trailing,
-  });
-
-  @override
-  State<_Section> createState() => _SectionState();
-}
-
-class _SectionState extends State<_Section> {
-  late bool _expanded;
-
-  @override
-  void initState() {
-    super.initState();
-    _expanded = widget.initiallyExpanded;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        InkWell(
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Container(
-            color: Colors.blueGrey.shade50,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                Icon(
-                  _expanded ? Icons.expand_less : Icons.expand_more,
-                  color: Colors.blueGrey.shade600,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    widget.title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blueGrey.shade800,
-                    ),
-                  ),
-                ),
-                if (widget.trailing != null) widget.trailing!,
-              ],
-            ),
-          ),
-        ),
-        if (_expanded)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: widget.children,
-            ),
-          ),
-        const Divider(height: 1),
-      ],
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Address Dialog
@@ -708,8 +641,12 @@ class _BankAccountDialogState extends State<_BankAccountDialog> {
   }
 }
 
+
 // ---------------------------------------------------------------------------
-// Main Detail Widget
+// Main Detail Widget — แบบ B ของ IM (user 2026-11-28, เหมือนหน้าลูกค้า AR)
+//   เปิดมาเป็นโหมดดู → แก้ไข / สำเนาเป็นผู้ขายใหม่ / ลบ ที่แถบหัว
+//   ตัวเลขสรุป + 4 กลุ่มสี + ตารางที่อยู่/ผู้ติดต่อ/บัญชีธนาคาร (กดแถวเปิดหน้าต่างเดิม)
+//   + ที่มาบัญชีเจ้าหนี้ (ผู้ขาย > กลุ่ม > ประเภทเอกสาร) + ยอดค้างจ่ายตามอายุหนี้
 // ---------------------------------------------------------------------------
 class ApVendorDetailWidget extends StatefulWidget {
   final Mode mode;
@@ -720,6 +657,11 @@ class ApVendorDetailWidget extends StatefulWidget {
   // เพิ่มขึ้นทุกครั้งที่ผู้ใช้กดปุ่มเพิ่ม/แก้ไข/ดู/ยกเลิกจากหน้าจอหลัก — ใช้บังคับให้ didUpdateWidget เคลียร์ฟอร์ม
   // เสมอ แม้ mode/selected จะ "เหมือนเดิม" กับครั้งก่อน (เช่น กดเพิ่มเจ้าหนี้ซ้ำหลังพิมพ์ข้อมูลค้างไว้)
   final int requestSeq;
+  // สำเนาเป็นผู้ขายใหม่ + ปุ่มของแถบหัว (null = ไม่มีสิทธิ์/ยังโหลดไม่ครบ)
+  final ApVendor? copyFrom;
+  final VoidCallback? onEdit;
+  final VoidCallback? onCopy;
+  final VoidCallback? onDelete;
 
   const ApVendorDetailWidget({
     super.key,
@@ -729,17 +671,35 @@ class ApVendorDetailWidget extends StatefulWidget {
     required this.onCancel,
     this.isPlaceholder = false,
     this.requestSeq = 0,
+    this.copyFrom,
+    this.onEdit,
+    this.onCopy,
+    this.onDelete,
   });
 
   @override
   State<ApVendorDetailWidget> createState() => ApVendorDetailWidgetState();
 }
 
-class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
-  final _formKey = GlobalKey<FormState>();
+class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> with ImMasterKit {
   bool _isLoading = false;
   bool _isSaving = false;
   bool _isEnglish = false;
+
+  @override
+  bool get kitEnglish => _isEnglish;
+  @override
+  bool get kitReadOnly => widget.mode == Mode.view || widget.mode == Mode.none;
+
+  // ตัวเลขสรุป/อายุหนี้/ที่มาบัญชีเจ้าหนี้ (เฉพาะผู้ขายที่บันทึกแล้ว)
+  ApVendorSummary? _summary;
+  bool _summaryLoading = false;
+  int? _summaryFor;
+
+  // แก้ไขค้าง → หน้าจอหลักถามก่อนเปลี่ยนผู้ขาย
+  String _snapshot = '';
+  bool get isDirty => !kitReadOnly && !widget.isPlaceholder && _fingerprint() != _snapshot;
+  bool get _isCopy => widget.mode == Mode.add && widget.copyFrom != null;
 
   late TextEditingController _codeCtrl;
   late TextEditingController _oldCodeCtrl;
@@ -776,6 +736,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   String? _vendorGroupCode;
   String? _vendorGroupName;
   String? _vendorGroupNameEng;
+  List<ApVendorGroup> _groups = [];
   // ตารางราคา (im_price_list) — ผู้ขายรายนี้ใช้ได้รหัสเดียวเท่านั้น แยกจาก vendorGroupId โดยสิ้นเชิง
   int? _priceListId;
   String? _priceListCode;
@@ -801,7 +762,8 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   List<BusinessType> _businessTypes = [];
   List<Account> _controlAccounts = [];
 
-  bool get _isReadOnly => widget.mode == Mode.view || widget.mode == Mode.none;
+  // ข้อมูลตั้งต้นของฟอร์ม: เพิ่มแบบสำเนา = ผู้ขายต้นฉบับ, เพิ่มใหม่ = ว่าง
+  ApVendor? get _source => widget.mode == Mode.add ? widget.copyFrom : widget.selected;
 
   @override
   void initState() {
@@ -809,24 +771,18 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     _initControllers();
     _loadDropdowns();
     _loadCurrencies();
+    _loadGroups();
     _loadAutoNumberingConfig();
-    if (widget.selected != null) {
-      _populate(widget.selected!);
-      _fetchVendorGroupNameEng(widget.selected!.vendorGroupId);
-    }
-    if (widget.selected == null) _loadDefaultCurrency();
+    _apply(_source);
+    if (_source == null) _loadDefaultCurrency();
+    _loadSummary();
   }
 
-  // The persisted vendor record only stores the Thai vendor group name —
-  // fetch the group record to get the English name for bilingual display.
-  Future<void> _fetchVendorGroupNameEng(int? groupId) async {
-    if (groupId == null) return;
-    try {
-      final group = await ApVendorGroupService().fetchRow(groupId);
-      if (mounted && _vendorGroupId == groupId) {
-        setState(() => _vendorGroupNameEng = group.groupNameEng);
-      }
-    } catch (_) {}
+  // ค่าที่โหลดตามหลังมาเปลี่ยนฟอร์ม — ถ้ายังไม่ได้แก้อะไรให้ถือว่ายังไม่แก้
+  void _keepClean(VoidCallback fn) {
+    final wasClean = _fingerprint() == _snapshot;
+    setState(fn);
+    if (wasClean) _snapshot = _fingerprint();
   }
 
   void _initControllers() {
@@ -845,18 +801,21 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   @override
   void didUpdateWidget(covariant ApVendorDetailWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected ||
+    final changed = widget.selected != oldWidget.selected ||
         widget.mode != oldWidget.mode ||
-        widget.requestSeq != oldWidget.requestSeq) {
-      if (widget.selected != null) {
-        _populate(widget.selected!);
-        _fetchVendorGroupNameEng(widget.selected!.vendorGroupId);
-      } else {
-        _clear();
-        _loadDefaultCurrency();
-      }
-      if (widget.mode == Mode.add) _loadAutoNumberingConfig();
-    }
+        widget.requestSeq != oldWidget.requestSeq ||
+        widget.copyFrom != oldWidget.copyFrom;
+    if (!changed) return;
+    final sameRecord = widget.selected?.id != null && widget.selected?.id == oldWidget.selected?.id;
+    // ข้อมูลเต็มโหลดตามมาทีหลัง (mode/seq เดิม) — ไม่ล้างตำแหน่งเลื่อน
+    final onlyFullLoad = sameRecord && widget.mode == oldWidget.mode && widget.requestSeq == oldWidget.requestSeq;
+    _apply(_source);
+    if (_source == null) _loadDefaultCurrency();
+    if (widget.mode == Mode.add && oldWidget.mode != Mode.add) _loadAutoNumberingConfig();
+    if (!sameRecord) _summaryFor = null;
+    _loadSummary();
+    if (!onlyFullLoad) kScrollTop();
+    setState(() {});
   }
 
   @override
@@ -867,6 +826,26 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     super.dispose();
   }
 
+  Future<void> _loadSummary() async {
+    final id = widget.mode == Mode.add ? null : widget.selected?.id;
+    if (id == null) {
+      _summary = null;
+      _summaryFor = null;
+      return;
+    }
+    if (_summaryFor == id && _summary != null) return;
+    _summaryFor = id;
+    _summaryLoading = true;
+    try {
+      final s = await ApVendorService().fetchSummary(id);
+      if (mounted && _summaryFor == id) setState(() => _summary = s);
+    } catch (_) {
+      if (mounted && _summaryFor == id) setState(() => _summary = null);
+    } finally {
+      if (mounted && _summaryFor == id) setState(() => _summaryLoading = false);
+    }
+  }
+
   Future<void> _loadDropdowns() async {
     setState(() => _isLoading = true);
     try {
@@ -875,7 +854,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
         AccountService().fetchRows(),
       ]);
       if (mounted) {
-        setState(() {
+        _keepClean(() {
           _businessTypes   = results[0] as List<BusinessType>;
           final allAccounts = results[1] as List<Account>;
           _controlAccounts = allAccounts
@@ -889,11 +868,27 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     }
   }
 
+  Future<void> _loadGroups() async {
+    try {
+      final list = await ApVendorGroupService().fetchRows();
+      if (mounted) {
+        _keepClean(() {
+          _groups = list;
+          final g = _groupObj;
+          if (g != null) {
+            _vendorGroupIsAutoNumber = g.isAutoNumber;
+            _vendorGroupNameEng = g.groupNameEng;
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadCurrencies() async {
     try {
       final list = await CurrencyService().fetchActiveRows();
       if (mounted) {
-        setState(() {
+        _keepClean(() {
           _currencies = list;
           if (_selectedCurrencyCode != null) {
             final match = _currencies.cast<Currency?>().firstWhere(
@@ -907,90 +902,72 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   }
 
   Future<void> _loadDefaultCurrency() async {
+    String code;
     try {
-      final code = await CurrencyService().getBaseCurrencyCode();
-      if (mounted && _selectedCurrencyCode == null) {
-        setState(() => _selectedCurrencyCode = code);
-      }
+      code = await CurrencyService().getBaseCurrencyCode();
     } catch (_) {
-      if (mounted && _selectedCurrencyCode == null) {
-        setState(() => _selectedCurrencyCode = CurrencyService.baseCode);
-      }
+      code = CurrencyService.baseCode;
     }
+    if (mounted && _selectedCurrencyCode == null) _keepClean(() => _selectedCurrencyCode = code);
   }
 
   Future<void> _loadAutoNumberingConfig() async {
     if (widget.mode != Mode.add) return;
     try {
       final config = await ApVendorRunningService().fetchConfig();
-      if (mounted) setState(() => _autoNumberingEnabled = config.isAutoNumbering);
+      if (mounted) _keepClean(() => _autoNumberingEnabled = config.isAutoNumbering);
     } catch (_) {}
   }
 
-  void _populate(ApVendor v) {
-    _codeCtrl.text         = v.vendorCode;
-    _oldCodeCtrl.text      = v.oldVendorCode ?? '';
-    _nameTHCtrl.text       = v.vendorNameTh;
-    _nameENCtrl.text       = v.vendorNameEn ?? '';
-    _taxIdCtrl.text        = v.taxId ?? '';
-    _taxBranchCtrl.text    = v.taxBranchCode ?? '';
-    _remarkCtrl.text       = v.remark ?? '';
-    _creditMonthsCtrl.text = '${v.creditTermMonths}';
-    _creditDaysCtrl.text   = '${v.creditTermDays}';
-    _creditLimitCtrl.text  = '${v.creditLimit}';
-    _isActive              = v.isActive;
-    _selectedCurrencyCode  = v.currencyCode;
-    _selectedCurrencyNameThai = null;
-    _vendorGroupId         = v.vendorGroupId;
-    _vendorGroupCode       = v.vendorGroupCode;
-    _vendorGroupName       = v.vendorGroupName;
-    _vendorGroupNameEng    = null;
-    _vendorGroupIsAutoNumber = null;
-    _priceListId          = v.priceListId;
-    _priceListCode        = v.priceListCode;
-    _priceListName        = v.priceListName;
-    _isCodeAutoGenerated   = v.isCodeAutoGenerated;
-    _businessTypeId        = v.businessTypeId;
-    _businessTypeCode      = v.businessTypeCode;
-    _businessTypeNameThai  = v.businessTypeNameThai;
+  // เติมฟอร์มจากผู้ขาย (null = ว่าง) — สำเนาเป็นผู้ขายใหม่: ไม่เอารหัส / เลขผู้เสียภาษี / รหัสเดิม / บัญชีธนาคาร
+  void _apply(ApVendor? v) {
+    final copy = widget.mode == Mode.add && v != null;
+    _autoCodeOverridden = false;
+    _codeCtrl.text         = copy ? '' : v?.vendorCode ?? '';
+    _oldCodeCtrl.text      = copy ? '' : v?.oldVendorCode ?? '';
+    _nameTHCtrl.text       = v?.vendorNameTh ?? '';
+    _nameENCtrl.text       = v?.vendorNameEn ?? '';
+    _taxIdCtrl.text        = copy ? '' : v?.taxId ?? '';
+    _taxBranchCtrl.text    = v?.taxBranchCode ?? '';
+    _remarkCtrl.text       = v?.remark ?? '';
+    _creditMonthsCtrl.text = '${v?.creditTermMonths ?? 0}';
+    _creditDaysCtrl.text   = '${v?.creditTermDays ?? 30}';
+    _creditLimitCtrl.text  = (v?.creditLimit ?? 0).toStringAsFixed(2);
+    _isActive              = v?.isActive ?? true;
+    _selectedCurrencyCode  = v?.currencyCode;
+    _selectedCurrencyNameThai = _currencies.where((c) => c.currencyCode == v?.currencyCode).firstOrNull?.currencyNameThai;
+    _vendorGroupId         = v?.vendorGroupId;
+    _vendorGroupCode       = v?.vendorGroupCode;
+    _vendorGroupName       = v?.vendorGroupName;
+    final g = _groupObj;
+    _vendorGroupNameEng    = g?.groupNameEng;
+    _vendorGroupIsAutoNumber = g?.isAutoNumber;
+    _priceListId          = v?.priceListId;
+    _priceListCode        = v?.priceListCode;
+    _priceListName        = v?.priceListName;
+    _isCodeAutoGenerated   = copy ? false : v?.isCodeAutoGenerated ?? false;
+    _businessTypeId        = v?.businessTypeId;
+    _businessTypeCode      = v?.businessTypeCode;
+    _businessTypeNameThai  = v?.businessTypeNameThai;
     _businessTypeNameEng   = null;
-    _vendorType            = v.vendorType;
-    _apAccountId           = v.apAccountId;
-    _apAccountCode         = v.apAccountCode;
-    _apAccountNameThai     = v.apAccountNameThai;
+    _vendorType            = v?.vendorType;
+    _apAccountId           = v?.apAccountId;
+    _apAccountCode         = v?.apAccountCode;
+    _apAccountNameThai     = v?.apAccountNameThai;
     _apAccountNameEng      = null;
-    _paymentMethodId       = v.paymentMethodId;
-    _paymentMethodCode     = v.paymentMethodCode;
-    _paymentMethodNameThai = v.paymentMethodNameThai;
-    _paymentMethodNameEng  = v.paymentMethodNameEng;
-    _addresses   = List.from(v.addresses);
-    _contacts    = List.from(v.contacts);
-    _bankAccounts = List.from(v.bankAccounts);
+    _paymentMethodId       = v?.paymentMethodId;
+    _paymentMethodCode     = v?.paymentMethodCode;
+    _paymentMethodNameThai = v?.paymentMethodNameThai;
+    _paymentMethodNameEng  = v?.paymentMethodNameEng;
+    _addresses   = [for (final a in v?.addresses ?? const <ApVendorAddress>[]) a];
+    _contacts    = [for (final c in v?.contacts ?? const <ApVendorContact>[]) c];
+    _bankAccounts = copy ? [] : [for (final b in v?.bankAccounts ?? const <ApVendorBankAccount>[]) b];
+    _snapshot = _fingerprint();
   }
 
-  void _clear() {
-    _codeCtrl.clear(); _oldCodeCtrl.clear(); _nameTHCtrl.clear();
-    _nameENCtrl.clear(); _taxIdCtrl.clear(); _taxBranchCtrl.clear(); _remarkCtrl.clear();
-    _creditMonthsCtrl.text = '0'; _creditDaysCtrl.text = '30'; _creditLimitCtrl.text = '0';
-    _isActive = true;
-    _selectedCurrencyCode = null; _selectedCurrencyNameThai = null;
-    _vendorGroupId = null; _vendorGroupCode = null; _vendorGroupName = null; _vendorGroupNameEng = null;
-    _vendorGroupIsAutoNumber = null; _autoCodeOverridden = false; _isCodeAutoGenerated = false;
-    _priceListId = null; _priceListCode = null; _priceListName = null;
-    _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null; _businessTypeNameEng = null;
-    _vendorType = null;
-    _apAccountId = null; _apAccountCode = null; _apAccountNameThai = null; _apAccountNameEng = null;
-    _paymentMethodId = null; _paymentMethodCode = null; _paymentMethodNameThai = null; _paymentMethodNameEng = null;
-    _addresses = []; _contacts = []; _bankAccounts = [];
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isSaving = true);
-    try {
-      final vendor = ApVendor(
-        id: widget.selected?.id,
-        vendorCode: (_effectiveAutoNumbering && !_autoCodeOverridden)
+  ApVendor _buildVendor() => ApVendor(
+        id: widget.mode == Mode.add ? null : widget.selected?.id,
+        vendorCode: (widget.mode == Mode.add && _effectiveAutoNumbering && !_autoCodeOverridden)
             ? ''
             : _codeCtrl.text.trim().toUpperCase(),
         oldVendorCode: _oldCodeCtrl.text.trim().isEmpty ? null : _oldCodeCtrl.text.trim(),
@@ -1019,15 +996,38 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
         paymentMethodCode: _paymentMethodCode,
         paymentMethodNameThai: _paymentMethodNameThai,
         paymentMethodNameEng: _paymentMethodNameEng,
-        addresses: _addresses,
-        contacts: _contacts,
-        bankAccounts: _bankAccounts,
+        addresses: List.from(_addresses),
+        contacts: List.from(_contacts),
+        bankAccounts: List.from(_bankAccounts),
       );
-      await widget.onSubmit(vendor);
-    } catch (e) {
+
+  String _fingerprint() {
+    try {
+      return jsonEncode(_buildVendor().toJson());
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _save() async {
+    final e = _isEnglish;
+    String? err;
+    if (_nameTHCtrl.text.trim().isEmpty) {
+      err = e ? 'Please enter the vendor name (TH)' : 'กรุณาป้อนชื่อผู้ขาย (ไทย)';
+    } else if (widget.mode == Mode.add && (!_effectiveAutoNumbering || _autoCodeOverridden) && _codeCtrl.text.trim().isEmpty) {
+      err = e ? 'Please enter the vendor code' : 'กรุณาป้อนรหัสผู้ขาย';
+    }
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err), backgroundColor: Colors.red));
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      await widget.onSubmit(_buildVendor());
+    } catch (ex) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(_isEnglish ? 'Error: $e' : 'เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text(e ? 'Error: $ex' : 'เกิดข้อผิดพลาด: $ex'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -1035,6 +1035,8 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
   }
 
   // ── Group ──────────────────────────────────────────────────────────────────
+  ApVendorGroup? get _groupObj => _vendorGroupId == null ? null : _groups.where((g) => g.id == _vendorGroupId).firstOrNull;
+
   Future<void> _pickVendorGroup() async {
     await ApVendorGroupListWidget.search(context, onSelected: (group) {
       // แก้ไขข้อมูลเดิม + รหัสป้อนเอง (ไม่ auto) → เปลี่ยนกลุ่มได้เฉพาะกลุ่มที่ไม่ auto ด้วยกัน
@@ -1043,7 +1045,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(_isEnglish
               ? 'This vendor\'s code was entered manually — it can only be moved to another non-auto-numbering group.'
-              : 'เจ้าหนี้รายนี้ป้อนรหัสเอง สามารถเปลี่ยนไปยังกลุ่มที่ไม่ตั้งค่ารหัสอัตโนมัติเท่านั้น'),
+              : 'ผู้ขายรายนี้ป้อนรหัสเอง เปลี่ยนไปได้เฉพาะกลุ่มที่ไม่ได้ตั้งค่ารหัสอัตโนมัติ'),
           backgroundColor: Colors.red,
         ));
         return;
@@ -1055,10 +1057,11 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
         _vendorGroupNameEng      = group.groupNameEng;
         _vendorGroupIsAutoNumber = group.isAutoNumber;
         _autoCodeOverridden      = false;
-        _codeCtrl.clear();
+        if (widget.mode == Mode.add) _codeCtrl.clear();
         _creditMonthsCtrl.text = '${group.creditTermMonths}';
         _creditDaysCtrl.text   = '${group.creditTermDays}';
         _selectedCurrencyCode  = group.currencyCode;
+        _selectedCurrencyNameThai = _currencies.where((c) => c.currencyCode == group.currencyCode).firstOrNull?.currencyNameThai;
       });
     });
   }
@@ -1067,7 +1070,7 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     setState(() {
       _vendorGroupId = null; _vendorGroupCode = null; _vendorGroupName = null; _vendorGroupNameEng = null;
       _vendorGroupIsAutoNumber = null; _autoCodeOverridden = false;
-      _codeCtrl.clear();
+      if (widget.mode == Mode.add) _codeCtrl.clear();
     });
   }
 
@@ -1373,657 +1376,590 @@ class ApVendorDetailWidgetState extends State<ApVendorDetailWidget> {
     }
   }
 
-  // ── Field helper ───────────────────────────────────────────────────────────
-  Widget _buildField(
-    String label,
-    TextEditingController ctrl, {
-    bool required = false,
-    TextInputType? keyboard,
-    List<TextInputFormatter>? formatters,
-  }) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: TextFormField(
-          controller: ctrl,
-          readOnly: _isReadOnly,
-          keyboardType: keyboard,
-          inputFormatters: formatters,
-          decoration: InputDecoration(
-            labelText: label,
-            border: const OutlineInputBorder(),
-          ),
-          validator: required
-              ? (v) => (v == null || v.trim().isEmpty) ? (_isEnglish ? 'Please enter $label' : 'กรุณาป้อน $label') : null
-              : null,
-        ),
-      );
+  // ─── ตัวช่วยแสดงผล ─────────────────────────────────────────────────────────
+  static final _money = NumberFormat('#,##0.00');
+  static final _dateFmt = DateFormat('dd/MM/yyyy');
+  String _m(double v) => _money.format(v);
+  String _dt(DateTime? d) => d == null ? '' : _dateFmt.format(d);
+  bool _sameInt(TextEditingController c, int v) => int.tryParse(c.text.trim()) == v;
 
-  // ── รหัสเจ้าหนี้ (รองรับ auto-numbering) ──────────────────────────────────
-  Widget _buildCodeField() {
-    final isEnglish = _isEnglish;
-    final isAdd = widget.mode == Mode.add;
-    final isLocked = _isReadOnly || widget.mode == Mode.edit;
-
-    if (isAdd && _effectiveAutoNumbering && !_autoCodeOverridden) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: InputDecorator(
-          decoration: InputDecoration(
-            labelText: isEnglish ? 'Vendor Code' : 'รหัสเจ้าหนี้',
-            border: const OutlineInputBorder(),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.auto_awesome, color: Colors.teal, size: 16),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  isEnglish ? 'Auto-generated on save' : 'ออกรหัสอัตโนมัติเมื่อบันทึก',
-                  style: const TextStyle(color: Colors.teal, fontStyle: FontStyle.italic),
-                ),
-              ),
-              TextButton.icon(
-                icon: const Icon(Icons.edit, size: 14),
-                label: Text(isEnglish ? 'Edit manually' : 'แก้ไขเอง', style: const TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.grey.shade700,
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: () => setState(() => _autoCodeOverridden = true),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (isAdd && _effectiveAutoNumbering && _autoCodeOverridden) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: _codeCtrl,
-                decoration: InputDecoration(
-                  labelText: isEnglish ? 'Vendor Code *' : 'รหัสเจ้าหนี้ *',
-                  border: const OutlineInputBorder(),
-                ),
-                textCapitalization: TextCapitalization.characters,
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? (isEnglish ? 'Please enter the vendor code' : 'กรุณาป้อนรหัสเจ้าหนี้') : null,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Tooltip(
-              message: isEnglish ? 'Revert to auto-numbering' : 'กลับไปใช้รหัสอัตโนมัติ',
-              child: IconButton(
-                icon: const Icon(Icons.auto_awesome, color: Colors.teal),
-                onPressed: () => setState(() {
-                  _autoCodeOverridden = false;
-                  _codeCtrl.clear();
-                }),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return _buildField('${isEnglish ? 'Vendor Code' : 'รหัสเจ้าหนี้'}${!isLocked ? ' *' : ''}', _codeCtrl,
-        required: !isLocked);
+  String _groupLabel(bool e) {
+    if (_vendorGroupId == null) return '';
+    final name = e && (_vendorGroupNameEng ?? '').isNotEmpty ? _vendorGroupNameEng! : (_vendorGroupName ?? '');
+    return '${_vendorGroupCode ?? ''} $name'.trim();
   }
 
-  // ── FK-field builder (InputDecorator + search/clear) ──────────────────────
-  Widget _buildFkField({
-    required String label,
-    required String? displayText,
-    required bool hasValue,
-    required VoidCallback onSearch,
-    VoidCallback? onClear,
-    bool locked = false,
-  }) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: InputDecorator(
-          decoration: InputDecoration(
-            labelText: label,
-            border: const OutlineInputBorder(),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: hasValue
-                    ? Row(children: [
-                        const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(displayText ?? '',
-                              style: const TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ])
-                    : Text(_isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                        style: TextStyle(color: Colors.grey.shade600)),
-              ),
-              if (locked)
-                Tooltip(
-                  message: _isEnglish
-                      ? 'Locked — code was auto-generated at creation'
-                      : 'ล็อก — รหัสถูกออกอัตโนมัติตอนสร้างข้อมูล',
-                  child: Icon(Icons.lock, color: Colors.grey.shade500, size: 16),
-                )
-              else if (!_isReadOnly) ...[
-                IconButton(
-                  icon: const Icon(Icons.search, color: Colors.blue),
-                  tooltip: _isEnglish ? 'Search $label' : 'ค้นหา$label',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: onSearch,
-                ),
-                if (hasValue && onClear != null)
-                  IconButton(
-                    icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                    tooltip: _isEnglish ? 'Clear' : 'ล้าง',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: onClear,
-                  ),
-              ],
-            ],
-          ),
-        ),
-      );
-
-  // ── Sections ───────────────────────────────────────────────────────────────
-
-  Widget _buildBasicSection() {
-    final isEnglish = _isEnglish;
-    final businessTypeName = isEnglish && (_businessTypeNameEng ?? '').isNotEmpty ? _businessTypeNameEng : _businessTypeNameThai;
-    final vendorGroupName = isEnglish && (_vendorGroupNameEng ?? '').isNotEmpty ? _vendorGroupNameEng : _vendorGroupName;
-    return _Section(
-        title: isEnglish ? 'Basic Information' : 'ข้อมูลพื้นฐาน',
-        children: [
-          Row(children: [
-            Expanded(child: _buildCodeField()),
-            const SizedBox(width: 10),
-            Expanded(child: _buildField(isEnglish ? 'Tax ID' : 'เลขผู้เสียภาษี', _taxIdCtrl)),
-            const SizedBox(width: 10),
-            Expanded(child: TaxBranchField(controller: _taxBranchCtrl, isEnglish: isEnglish)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildField(isEnglish ? 'Old Code' : 'รหัสเก่า', _oldCodeCtrl)),
-          ]),
-          Row(children: [
-            Expanded(child: _buildField(isEnglish ? 'Vendor Name (Thai) *' : 'ชื่อเจ้าหนี้ (ไทย) *', _nameTHCtrl, required: true)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildField(isEnglish ? 'Vendor Name (English)' : 'ชื่อเจ้าหนี้ (อังกฤษ)', _nameENCtrl)),
-          ]),
-          Row(children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: DropdownButtonFormField<String?>(
-                  value: _vendorType,
-                  decoration: InputDecoration(
-                    labelText: isEnglish ? 'Vendor Type' : 'ประเภทผู้ขาย',
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                  items: [
-                    DropdownMenuItem(value: null,           child: Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —')),
-                    DropdownMenuItem(value: 'individual',   child: Text(isEnglish ? 'Individual' : 'บุคคลธรรมดา')),
-                    DropdownMenuItem(value: 'juristic',     child: Text(isEnglish ? 'Juristic Person' : 'นิติบุคคล')),
-                  ],
-                  onChanged: _isReadOnly ? null : (v) => setState(() => _vendorType = v),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: _buildFkField(
-              label: isEnglish ? 'Business Type' : 'ประเภทธุรกิจ',
-              hasValue: _businessTypeId != null,
-              displayText: '$_businessTypeCode — $businessTypeName',
-              onSearch: _pickBusinessType,
-              onClear: () => setState(() {
-                _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null; _businessTypeNameEng = null;
-              }),
-            )),
-            const SizedBox(width: 10),
-            Expanded(child: _buildFkField(
-              label: isEnglish ? 'Vendor Group' : 'กลุ่มผู้ขาย',
-              hasValue: _vendorGroupId != null,
-              displayText: '$_vendorGroupCode — $vendorGroupName',
-              onSearch: _pickVendorGroup,
-              onClear: _clearGroup,
-              locked: widget.mode == Mode.edit && _isCodeAutoGenerated,
-            )),
-          ]),
-          Row(children: [
-            Expanded(child: _buildFkField(
-              label: isEnglish ? 'Price List' : 'ตารางราคา',
-              hasValue: _priceListId != null,
-              displayText: '$_priceListCode — $_priceListName',
-              onSearch: _pickPriceList,
-              onClear: _clearPriceList,
-            )),
-            const SizedBox(width: 10),
-            const Expanded(child: SizedBox()),
-          ]),
-          Row(children: [
-            Expanded(child: _buildField(isEnglish ? 'Credit (months)' : 'เครดิต (เดือน)', _creditMonthsCtrl,
-                keyboard: TextInputType.number,
-                formatters: [FilteringTextInputFormatter.digitsOnly])),
-            const SizedBox(width: 10),
-            Expanded(child: _buildField(isEnglish ? 'Credit (days)' : 'เครดิต (วัน)', _creditDaysCtrl,
-                keyboard: TextInputType.number,
-                formatters: [FilteringTextInputFormatter.digitsOnly])),
-            const SizedBox(width: 10),
-            Expanded(child: _buildField(isEnglish ? 'Credit Limit' : 'วงเงินเครดิต', _creditLimitCtrl,
-                keyboard: const TextInputType.numberWithOptions(decimal: true),
-                formatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))])),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: InputDecorator(
-                  decoration: InputDecoration(
-                    labelText: isEnglish ? 'Currency' : 'สกุลเงิน',
-                    border: const OutlineInputBorder(),
-                  ),
-                  child: Row(children: [
-                    Expanded(
-                      child: _selectedCurrencyCode == null
-                          ? Text(isEnglish ? '— Not specified —' : '— ไม่ระบุ —',
-                              style: TextStyle(color: Colors.grey.shade600))
-                          : Row(children: [
-                              const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  _selectedCurrencyNameThai != null
-                                      ? '$_selectedCurrencyCode — $_selectedCurrencyNameThai'
-                                      : _selectedCurrencyCode!,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ]),
-                    ),
-                    if (!_isReadOnly) ...[
-                      IconButton(
-                        icon: const Icon(Icons.search, color: Colors.blue),
-                        tooltip: isEnglish ? 'Search currency' : 'ค้นหาสกุลเงิน',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: _pickCurrency,
-                      ),
-                      if (_selectedCurrencyCode != null)
-                        IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                          tooltip: isEnglish ? 'Clear currency' : 'ล้างสกุลเงิน',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: () => setState(() {
-                            _selectedCurrencyCode = null;
-                            _selectedCurrencyNameThai = null;
-                          }),
-                        ),
-                    ],
-                  ]),
-                ),
-              ),
-            ),
-          ]),
-          _buildFkField(
-            label: isEnglish ? 'Main Payment Method' : 'ประเภทการชำระหลัก',
-            hasValue: _paymentMethodId != null,
-            displayText: '$_paymentMethodCode — ${isEnglish && (_paymentMethodNameEng ?? '').isNotEmpty ? _paymentMethodNameEng : _paymentMethodNameThai}',
-            onSearch: _pickPaymentMethod,
-            onClear: () => setState(() {
-              _paymentMethodId = null; _paymentMethodCode = null; _paymentMethodNameThai = null; _paymentMethodNameEng = null;
-            }),
-          ),
-          _buildField(isEnglish ? 'Remark' : 'หมายเหตุ', _remarkCtrl),
-          SwitchListTile(
-            title: Text(isEnglish ? 'Status: ${_isActive ? 'Active' : 'Inactive'}' : 'สถานะ: ${_isActive ? 'ใช้งาน' : 'หยุดใช้'}'),
-            value: _isActive,
-            onChanged: _isReadOnly ? null : (v) => setState(() => _isActive = v),
-          ),
-        ],
-      );
+  String _bizTypeLabel(bool e) {
+    if (_businessTypeId == null) return '';
+    final bt = _businessTypes.where((b) => b.id == _businessTypeId).firstOrNull;
+    final name = e && (bt?.businessTypeNameEng.isNotEmpty ?? false)
+        ? bt!.businessTypeNameEng
+        : (e && (_businessTypeNameEng ?? '').isNotEmpty ? _businessTypeNameEng! : (_businessTypeNameThai ?? ''));
+    return '${_businessTypeCode ?? ''} $name'.trim();
   }
 
-  Widget _buildAddressSection() {
-    final isEnglish = _isEnglish;
-    final readOnly = _isReadOnly;
-    return _Section(
-      title: isEnglish ? 'Address (${_addresses.length})' : 'ที่อยู่ (${_addresses.length})',
-      initiallyExpanded: false,
-      trailing: readOnly
-          ? null
-          : IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: isEnglish ? 'Add address' : 'เพิ่มที่อยู่',
-              onPressed: () async {
-                final primary = _addresses.cast<ApVendorAddress?>()
-                    .firstWhere((a) => a!.isDefault, orElse: () => null);
-                final result = await showAddressDialog(context, null, false,
-                    primaryAddress: primary);
-                if (result != null) setState(() => _addresses.add(result));
-              },
-            ),
-      children: [
-        if (_addresses.isEmpty)
-          Text(isEnglish ? 'No addresses yet' : 'ยังไม่มีที่อยู่', style: const TextStyle(color: Colors.grey)),
-        ..._addresses.asMap().entries.map((entry) {
-          final i = entry.key;
-          final addr = entry.value;
-          final line1 = [
-            addr.addressNo,
-            addr.addressBuildingVillage,
-            addr.addressAlley != null ? '${isEnglish ? 'Alley ' : 'ซ.'}${addr.addressAlley}' : null,
-            addr.addressRoad != null ? '${isEnglish ? 'Road ' : 'ถ.'}${addr.addressRoad}' : null,
-          ].where((s) => s != null && s.isNotEmpty).join(' ').trim();
-          final displayLabel = line1.isNotEmpty
-              ? line1
-              : [addr.addressSubDistrict, addr.addressProvince]
-                      .where((s) => s != null && s.isNotEmpty)
-                      .join(', ')
-                      .isEmpty
-                  ? (isEnglish ? 'Address ${i + 1}' : 'ที่อยู่ ${i + 1}')
-                  : [addr.addressSubDistrict, addr.addressProvince]
-                      .where((s) => s != null && s.isNotEmpty)
-                      .join(', ');
-          final addrTypeLabel = {
-            'billing': isEnglish ? 'Billing Address' : 'ที่อยู่ใบแจ้งหนี้',
-            'shipping': isEnglish ? 'Shipping Address' : 'ที่อยู่จัดส่ง',
-            'billing note': isEnglish ? 'Billing Note Address' : 'ที่อยู่วางบิล',
-            'payment': isEnglish ? 'Payment Address' : 'ที่อยู่ชำระเงิน',
-          };
-          final typeLabel = addrTypeLabel[addr.addressType] ?? addr.addressType;
-          final subText = [
-            if (addr.addressSubDistrict != null) addr.addressSubDistrict!,
-            if (addr.addressDistrict != null) addr.addressDistrict!,
-            if (addr.addressProvince != null) addr.addressProvince!,
-            if (addr.addressZipCode != null) addr.addressZipCode!,
-          ].join('  ');
-          return ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.location_on_outlined, size: 18),
-            title: Text(displayLabel),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (subText.isNotEmpty) Text(subText),
-                Text(typeLabel,
-                    style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(
-                      readOnly ? Icons.visibility : Icons.edit,
-                      size: 18,
-                      color: readOnly ? Colors.green : Colors.blue),
-                  onPressed: () async {
-                    final primary = _addresses.cast<ApVendorAddress?>()
-                        .firstWhere((a) => a!.isDefault, orElse: () => null);
-                    final result = await showAddressDialog(context, addr, readOnly,
-                        primaryAddress: primary);
-                    if (result != null) setState(() => _addresses[i] = result);
-                  },
-                ),
-                if (!readOnly)
-                  IconButton(
-                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                    onPressed: () => setState(() => _addresses.removeAt(i)),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
+  String _currencyLabel(bool e) {
+    if (_selectedCurrencyCode == null) return '';
+    final c = _currencies.where((c) => c.currencyCode == _selectedCurrencyCode).firstOrNull;
+    final name = c == null ? (_selectedCurrencyNameThai ?? '') : (e && c.currencyNameEng.isNotEmpty ? c.currencyNameEng : c.currencyNameThai);
+    return name.isEmpty ? _selectedCurrencyCode! : '$_selectedCurrencyCode $name';
   }
 
-  Widget _buildContactSection() {
-    final isEnglish = _isEnglish;
-    final readOnly = _isReadOnly;
-    return _Section(
-      title: isEnglish ? 'Contacts (${_contacts.length})' : 'ผู้ติดต่อ (${_contacts.length})',
-      initiallyExpanded: false,
-      trailing: readOnly
-          ? null
-          : IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: isEnglish ? 'Add contact' : 'เพิ่มผู้ติดต่อ',
-              onPressed: () async {
-                final result = await showContactDialog(context, null, false);
-                if (result != null) setState(() => _contacts.add(result));
-              },
-            ),
-      children: [
-        if (_contacts.isEmpty)
-          Text(isEnglish ? 'No contacts yet' : 'ยังไม่มีผู้ติดต่อ', style: const TextStyle(color: Colors.grey)),
-        ..._contacts.asMap().entries.map((entry) {
-          final i = entry.key;
-          final c = entry.value;
-          return ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.person_outline, size: 18),
-            title: Text(c.contactName),
-            subtitle: Text([
-              if (c.position != null) c.position!,
-              if (c.phone != null) c.phone!,
-              if (c.mobile != null) c.mobile!,
-            ].join('  ')),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(
-                      readOnly ? Icons.visibility : Icons.edit,
-                      size: 18,
-                      color: readOnly ? Colors.green : Colors.blue),
-                  onPressed: () async {
-                    final result = await showContactDialog(context, c, readOnly);
-                    if (result != null) setState(() => _contacts[i] = result);
-                  },
-                ),
-                if (!readOnly)
-                  IconButton(
-                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                    onPressed: () => setState(() => _contacts.removeAt(i)),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
-  Widget _buildBankSection() {
-    final isEnglish = _isEnglish;
-    final readOnly = _isReadOnly;
-    return _Section(
-      title: isEnglish ? 'Bank Accounts (${_bankAccounts.length})' : 'บัญชีธนาคาร (${_bankAccounts.length})',
-      initiallyExpanded: false,
-      trailing: readOnly
-          ? null
-          : IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20),
-              tooltip: isEnglish ? 'Add bank account' : 'เพิ่มบัญชีธนาคาร',
-              onPressed: () async {
-                final result = await showBankDialog(context, null, false);
-                if (result != null) setState(() => _bankAccounts.add(result));
-              },
-            ),
-      children: [
-        if (_bankAccounts.isEmpty)
-          Text(isEnglish ? 'No bank accounts yet' : 'ยังไม่มีบัญชีธนาคาร', style: const TextStyle(color: Colors.grey)),
-        ..._bankAccounts.asMap().entries.map((entry) {
-          final i = entry.key;
-          final b = entry.value;
-          return ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.account_balance_outlined, size: 18),
-            title: Text([b.bankName, b.branchName]
-                .where((s) => s != null && s.isNotEmpty)
-                .join(' — ')),
-            subtitle: Text([
-              if (b.accountNumber != null) b.accountNumber!,
-              if (b.accountName != null) b.accountName!,
-            ].join('  ')),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(
-                      readOnly ? Icons.visibility : Icons.edit,
-                      size: 18,
-                      color: readOnly ? Colors.green : Colors.blue),
-                  onPressed: () async {
-                    final result = await showBankDialog(context, b, readOnly);
-                    if (result != null) setState(() => _bankAccounts[i] = result);
-                  },
-                ),
-                if (!readOnly)
-                  IconButton(
-                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                    onPressed: () => setState(() => _bankAccounts.removeAt(i)),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
-  }
+  String _payMethodLabel(bool e) => _paymentMethodId == null
+      ? ''
+      : '${_paymentMethodCode ?? ''} ${e && (_paymentMethodNameEng ?? '').isNotEmpty ? _paymentMethodNameEng : (_paymentMethodNameThai ?? '')}'.trim();
 
   // The persisted vendor record only stores the Thai AP account name — resolve
   // the bilingual name live against the loaded control account list when possible.
   String _resolveApAccountName(bool isEnglish) {
     if (_apAccountId != null) {
-      final match = _controlAccounts.where((a) => a.id == _apAccountId);
-      if (match.isNotEmpty) {
-        final a = match.first;
-        return isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
-      }
+      final a = _controlAccounts.where((a) => a.id == _apAccountId).firstOrNull;
+      if (a != null) return isEnglish && a.accountNameEng.isNotEmpty ? a.accountNameEng : a.accountNameThai;
     }
     return isEnglish && (_apAccountNameEng ?? '').isNotEmpty ? _apAccountNameEng! : (_apAccountNameThai ?? '');
   }
 
-  Widget _buildGlAccountSection() {
-    final isEnglish = _isEnglish;
-    final apAccountName = _resolveApAccountName(isEnglish);
-    return _Section(
-        title: isEnglish ? 'AP Account (GL)' : 'บัญชีเจ้าหนี้ (GL)',
-        initiallyExpanded: false,
-        children: [
-          _buildFkField(
-            label: isEnglish ? 'AP Account' : 'บัญชีเจ้าหนี้',
-            hasValue: _apAccountId != null,
-            displayText: '$_apAccountCode — $apAccountName',
-            onSearch: _pickApAccount,
-            onClear: () => setState(() {
-              _apAccountId = null; _apAccountCode = null; _apAccountNameThai = null; _apAccountNameEng = null;
-            }),
+  // ─── ช่องรหัสผู้ขาย (ออกอัตโนมัติ / กรอกเอง) ───────────────────────────────────
+  Widget _codeField() {
+    final e = _isEnglish;
+    final isAdd = widget.mode == Mode.add;
+    if (isAdd && _effectiveAutoNumbering && !_autoCodeOverridden) {
+      return InputDecorator(
+        decoration: kDec(e ? 'Vendor code' : 'รหัสผู้ขาย', auto: true),
+        child: Row(children: [
+          Icon(Icons.auto_awesome, color: kInk, size: 15),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(e ? 'Auto-generated on save' : 'ออกรหัสอัตโนมัติเมื่อบันทึก',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: ImKit.font, color: kInk, fontStyle: FontStyle.italic)),
           ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6, left: 4),
-            child: Text(
-              isEnglish
-                  ? 'If not specified, the system will use the account from the Vendor Group, then the Document Type, in that order'
-                  : 'หากไม่ระบุ ระบบจะใช้บัญชีจาก กลุ่มผู้ขาย และ ประเภทเอกสาร ตามลำดับ',
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.blueGrey.shade400,
-                  fontStyle: FontStyle.italic),
+          InkWell(
+            onTap: () => setState(() => _autoCodeOverridden = true),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(e ? 'Enter manually' : 'กรอกเอง', style: const TextStyle(fontSize: 12, color: ImKit.ink2, decoration: TextDecoration.underline)),
             ),
           ),
-        ],
+        ]),
       );
+    }
+    if (isAdd && _effectiveAutoNumbering && _autoCodeOverridden) {
+      return Row(children: [
+        Expanded(child: kTxt(e ? 'Vendor code *' : 'รหัสผู้ขาย *', _codeCtrl, cap: TextCapitalization.characters)),
+        IconButton(
+          icon: Icon(Icons.auto_awesome, color: kInk, size: 18),
+          tooltip: e ? 'Use auto-generated code' : 'กลับไปใช้รหัสอัตโนมัติ',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => setState(() {
+            _autoCodeOverridden = false;
+            _codeCtrl.clear();
+          }),
+        ),
+      ]);
+    }
+    return kTxt(e ? 'Vendor code *' : 'รหัสผู้ขาย *', _codeCtrl, editable: isAdd, cap: TextCapitalization.characters);
   }
 
+  // ─── ส่วนที่ 1: ข้อมูลผู้ขาย (4 กลุ่มสี) ────────────────────────────────────────
+  Widget _mainCard() {
+    final e = _isEnglish;
+    final g = _groupObj;
+    final termFromGroup = g != null && _sameInt(_creditMonthsCtrl, g.creditTermMonths) && _sameInt(_creditDaysCtrl, g.creditTermDays);
+    final curFromGroup = g != null && g.currencyCode.isNotEmpty && g.currencyCode == _selectedCurrencyCode;
+    final branchText = taxBranchLabel(normalizeTaxBranch(_taxBranchCtrl.text), e);
+    return kCard(
+      title: e ? 'Vendor details' : 'ข้อมูลผู้ขาย',
+      trailing: kLegend(),
+      child: kGroups([
+        kGroup(1, e ? 'Main' : 'ข้อมูลหลัก', ImKit.gDoc, [
+          kRow([_codeField(), kTxt(e ? 'Old vendor code' : 'รหัสเดิม', _oldCodeCtrl)]),
+          kTxt(e ? 'Vendor name (TH) *' : 'ชื่อผู้ขาย (ไทย) *', _nameTHCtrl),
+          kTxt(e ? 'Vendor name (EN)' : 'ชื่อผู้ขาย (อังกฤษ)', _nameENCtrl),
+          kRow([
+            kTxt(e ? 'Tax ID' : 'เลขผู้เสียภาษี', _taxIdCtrl, digitsOnly: true),
+            kTxt(e ? 'Tax branch (5 digits)' : 'สาขา (5 หลัก)', _taxBranchCtrl, digitsOnly: true),
+          ]),
+          if (branchText.isNotEmpty) kNote(branchText),
+          kRow([
+            kDd<String?>(
+              e ? 'Vendor type' : 'ประเภทผู้ขาย',
+              _vendorType,
+              [
+                DropdownMenuItem(value: null, child: Text(e ? '— Not specified —' : '— ไม่ระบุ —')),
+                DropdownMenuItem(value: 'individual', child: Text(e ? 'Individual' : 'บุคคลธรรมดา')),
+                DropdownMenuItem(value: 'juristic', child: Text(e ? 'Juristic person' : 'นิติบุคคล')),
+              ],
+              kitReadOnly ? null : (v) => setState(() => _vendorType = v),
+              auto: false,
+            ),
+            kFk(
+              label: e ? 'Business type' : 'ประเภทธุรกิจ',
+              text: _bizTypeLabel(e),
+              hasValue: _businessTypeId != null,
+              onSearch: _pickBusinessType,
+              onClear: () => setState(() {
+                _businessTypeId = null; _businessTypeCode = null; _businessTypeNameThai = null; _businessTypeNameEng = null;
+              }),
+            ),
+          ]),
+        ]),
+        kGroup(2, e ? 'Credit and currency' : 'เครดิตและสกุลเงิน', ImKit.gFin, [
+          kFk(
+            label: e ? 'Vendor group' : 'กลุ่มผู้ขาย',
+            text: _groupLabel(e),
+            hasValue: _vendorGroupId != null,
+            onSearch: _pickVendorGroup,
+            onClear: _clearGroup,
+            locked: widget.mode == Mode.edit && _isCodeAutoGenerated,
+            lockedTip: e ? 'Locked — code was auto-generated at creation' : 'ล็อก — รหัสถูกออกอัตโนมัติตอนสร้างข้อมูล',
+          ),
+          kRow([
+            kTxt(e ? 'Credit term (months)' : 'เครดิต (เดือน)', _creditMonthsCtrl, digitsOnly: true, numeric: true, auto: termFromGroup),
+            kTxt(e ? 'Credit term (days)' : 'เครดิต (วัน)', _creditDaysCtrl, digitsOnly: true, numeric: true, auto: termFromGroup),
+          ]),
+          kRow([
+            kTxt(e ? 'Credit limit granted' : 'วงเงินเครดิตที่ได้รับ', _creditLimitCtrl, numeric: true),
+            kFk(
+              label: e ? 'Currency' : 'สกุลเงิน',
+              text: _currencyLabel(e),
+              hasValue: _selectedCurrencyCode != null,
+              onSearch: _pickCurrency,
+              onClear: () => setState(() {
+                _selectedCurrencyCode = null;
+                _selectedCurrencyNameThai = null;
+              }),
+              auto: curFromGroup,
+            ),
+          ]),
+          if (g != null && (termFromGroup || curFromGroup))
+            kNote(e
+                ? 'Blue = same as group ${g.groupCode} (filled from the group when it was chosen)'
+                : 'ช่องสีฟ้า = ค่าเดียวกับกลุ่ม ${g.groupCode} (ตั้งต้นจากกลุ่มตอนเลือกกลุ่ม)',
+                color: ImKit.blue),
+        ]),
+        kGroup(3, e ? 'Purchasing and payment' : 'การซื้อและการจ่าย', ImKit.gParty, [
+          kFk(
+            label: e ? 'Purchase price list' : 'ตารางราคาซื้อ',
+            text: '${_priceListCode ?? ''} ${_priceListName ?? ''}'.trim(),
+            hasValue: _priceListId != null,
+            onSearch: _pickPriceList,
+            onClear: _clearPriceList,
+          ),
+          kFk(
+            label: e ? 'Main payment method' : 'ประเภทการชำระหลัก',
+            text: _payMethodLabel(e),
+            hasValue: _paymentMethodId != null,
+            onSearch: _pickPaymentMethod,
+            onClear: () => setState(() {
+              _paymentMethodId = null; _paymentMethodCode = null; _paymentMethodNameThai = null; _paymentMethodNameEng = null;
+            }),
+          ),
+        ]),
+        kGroup(4, e ? 'More' : 'เพิ่มเติม', ImKit.gMore, [
+          kChecks([
+            kCk(e ? 'Active' : 'ใช้งาน', _isActive, kitReadOnly ? null : (v) => setState(() => _isActive = v)),
+          ]),
+          kTxt(e ? 'Remark' : 'หมายเหตุ', _remarkCtrl),
+        ]),
+      ]),
+    );
+  }
+
+  // ─── ส่วนที่ 2: ที่อยู่ ผู้ติดต่อ บัญชีธนาคาร ────────────────────────────────────
+  String _addrTypeLabel(String t, bool e) => (e
+          ? const {'billing': 'Billing', 'shipping': 'Shipping', 'billing note': 'Billing note', 'payment': 'Payment'}
+          : const {'billing': 'ใบแจ้งหนี้', 'shipping': 'จัดส่ง', 'billing note': 'วางบิล', 'payment': 'ชำระเงิน'})[t] ??
+      t;
+
+  String _addrText(ApVendorAddress a) => [
+        a.addressNo,
+        a.addressBuildingVillage,
+        if (a.addressAlley?.isNotEmpty ?? false) (_isEnglish ? 'Soi ${a.addressAlley}' : 'ซ.${a.addressAlley}'),
+        if (a.addressRoad?.isNotEmpty ?? false) (_isEnglish ? '${a.addressRoad} Rd.' : 'ถ.${a.addressRoad}'),
+        a.addressSubDistrict,
+        a.addressDistrict,
+        a.addressProvince,
+        a.addressZipCode,
+      ].where((s) => s != null && s.isNotEmpty).join(' ');
+
+  Widget _delBtn(VoidCallback onTap) => kIconBtn(Icons.delete_outline, _isEnglish ? 'Remove' : 'ลบ', onTap, color: ImKit.red);
+  Widget _defaultMark(bool v) => v ? ImKit.chip(_isEnglish ? 'Default' : 'หลัก', ImKit.okSoft, ImKit.ok) : kCell('');
+
+  Future<void> _addAddress() async {
+    final primary = _addresses.where((a) => a.isDefault).firstOrNull;
+    final r = await showAddressDialog(context, null, false, primaryAddress: primary);
+    if (r != null) setState(() => _addresses.add(r));
+  }
+
+  Future<void> _openAddress(int i) async {
+    final primary = _addresses.where((a) => a.isDefault).firstOrNull;
+    final r = await showAddressDialog(context, _addresses[i], kitReadOnly, primaryAddress: primary);
+    if (r != null && !kitReadOnly) setState(() => _addresses[i] = r);
+  }
+
+  Future<void> _addContact() async {
+    final r = await showContactDialog(context, null, false);
+    if (r != null) setState(() => _contacts.add(r));
+  }
+
+  Future<void> _openContact(int i) async {
+    final r = await showContactDialog(context, _contacts[i], kitReadOnly);
+    if (r != null && !kitReadOnly) setState(() => _contacts[i] = r);
+  }
+
+  Future<void> _addBank() async {
+    final r = await showBankDialog(context, null, false);
+    if (r != null) setState(() => _bankAccounts.add(r));
+  }
+
+  Future<void> _openBank(int i) async {
+    final r = await showBankDialog(context, _bankAccounts[i], kitReadOnly);
+    if (r != null && !kitReadOnly) setState(() => _bankAccounts[i] = r);
+  }
+
+  Widget _addressCard() {
+    final e = _isEnglish;
+    final ro = kitReadOnly;
+    final rows = <List<Widget>>[];
+    final taps = <VoidCallback?>[];
+    for (var i = 0; i < _addresses.length; i++) {
+      final a = _addresses[i];
+      rows.add([
+        kCell(_addrTypeLabel(a.addressType, e), color: ImKit.ink2),
+        kCell(_addrText(a)),
+        kCell(''),
+        _defaultMark(a.isDefault),
+        ro ? const SizedBox.shrink() : _delBtn(() => setState(() => _addresses.removeAt(i))),
+      ]);
+      taps.add(() => _openAddress(i));
+    }
+    for (var i = 0; i < _contacts.length; i++) {
+      final c = _contacts[i];
+      rows.add([
+        kCell(e ? 'Contact' : 'ผู้ติดต่อ', color: ImKit.ink2),
+        kCell([c.contactName, if (c.position?.isNotEmpty ?? false) '(${c.position})'].join(' ')),
+        kCell([c.phone, c.mobile, c.email].where((s) => s != null && s.isNotEmpty).join(' · ')),
+        _defaultMark(c.isDefault),
+        ro ? const SizedBox.shrink() : _delBtn(() => setState(() => _contacts.removeAt(i))),
+      ]);
+      taps.add(() => _openContact(i));
+    }
+    return kCard(
+      title: e ? 'Addresses (${_addresses.length}) and contacts (${_contacts.length})' : 'ที่อยู่ (${_addresses.length}) และผู้ติดต่อ (${_contacts.length})',
+      count: e ? 'Click a row to open' : 'กดแถวเพื่อเปิดดู/แก้ไข',
+      trailing: ro
+          ? null
+          : Wrap(spacing: 6, children: [
+              kGhost(e ? 'Address' : 'ที่อยู่', Icons.add, _addAddress),
+              kGhost(e ? 'Contact' : 'ผู้ติดต่อ', Icons.add, _addContact),
+            ]),
+      padding: EdgeInsets.zero,
+      child: kTable(
+        [
+          KCol(e ? 'Type' : 'ประเภท', 2),
+          KCol(e ? 'Address / name' : 'ที่อยู่ / ชื่อ', 7),
+          KCol(e ? 'Contact' : 'ติดต่อ', 4),
+          KCol(e ? 'Default' : 'ค่าหลัก', 2),
+          const KCol('', 1),
+        ],
+        rows,
+        onTap: taps,
+        minWidth: 720,
+        empty: e ? 'No addresses or contacts yet' : 'ยังไม่มีที่อยู่และผู้ติดต่อ',
+      ),
+    );
+  }
+
+  Widget _bankCard() {
+    final e = _isEnglish;
+    final ro = kitReadOnly;
+    return kCard(
+      title: e ? 'Bank accounts' : 'บัญชีธนาคาร',
+      count: e
+          ? '${_bankAccounts.length} · the default account receives transfers in payment runs'
+          : '${_bankAccounts.length} บัญชี · บัญชีหลักใช้เป็นบัญชีรับโอนในใบสั่งจ่าย',
+      trailing: ro ? null : kGhost(e ? 'Bank account' : 'บัญชีธนาคาร', Icons.add, _addBank),
+      padding: EdgeInsets.zero,
+      child: kTable(
+        [
+          KCol(e ? 'Bank' : 'ธนาคาร', 4),
+          KCol(e ? 'Branch' : 'สาขา', 3),
+          KCol(e ? 'Account no.' : 'เลขที่บัญชี', 3),
+          KCol(e ? 'Account name' : 'ชื่อบัญชี', 4),
+          KCol(e ? 'Default' : 'ค่าหลัก', 2),
+          const KCol('', 1),
+        ],
+        [
+          for (var i = 0; i < _bankAccounts.length; i++)
+            [
+              kCell(_bankAccounts[i].bankName ?? ''),
+              kCell(_bankAccounts[i].branchName ?? ''),
+              kCell(_bankAccounts[i].accountNumber ?? '', mono: true),
+              kCell(_bankAccounts[i].accountName ?? ''),
+              _defaultMark(_bankAccounts[i].isDefault),
+              ro ? const SizedBox.shrink() : _delBtn(() => setState(() => _bankAccounts.removeAt(i))),
+            ],
+        ],
+        onTap: [for (var i = 0; i < _bankAccounts.length; i++) () => _openBank(i)],
+        minWidth: 720,
+        empty: e ? 'No bank accounts yet' : 'ยังไม่มีบัญชีธนาคาร',
+      ),
+    );
+  }
+
+  // ─── ส่วนที่ 3: บัญชีเจ้าหนี้ (ผู้ขาย > กลุ่ม > ประเภทเอกสาร) ──────────────────────
+  Widget _accountCard() {
+    final e = _isEnglish;
+    final s = _summary;
+    final g = _groupObj;
+    final groupCode = g?.groupCode ?? s?.groupCode;
+    String? groupAcc;
+    if (g != null && g.apAccountId != null) {
+      final acc = _controlAccounts.where((a) => a.id == g.apAccountId).firstOrNull;
+      final nm = acc == null ? (g.apAccountNameThai ?? '') : (e && acc.accountNameEng.isNotEmpty ? acc.accountNameEng : acc.accountNameThai);
+      groupAcc = '${g.apAccountCode ?? acc?.accountCode ?? ''} $nm'.trim();
+    } else if (g == null && s?.groupAccount != null && _vendorGroupId != null) {
+      groupAcc = '${s!.groupAccount!.code} ${s.groupAccount!.name(e)}';
+    }
+    final hasVendor = _apAccountId != null;
+    final hasGroup = _vendorGroupId != null && groupAcc != null;
+    Widget status(bool used, bool skipped, String? usedText) => used
+        ? ImKit.chip(usedText ?? (e ? 'Used' : 'ใช้บัญชีนี้'), ImKit.okSoft, ImKit.ok)
+        : skipped
+            ? ImKit.chip(e ? 'Not used' : 'ไม่ใช้', ImKit.ro, ImKit.ink2)
+            : ImKit.chip(e ? 'Empty, skip' : 'ว่าง ข้าม', ImKit.ro, ImKit.ink3);
+    final docTypes = s?.docTypeAccounts ?? const <ApDocTypeAccount>[];
+    final docText = docTypes.isEmpty
+        ? (e ? 'As set per AP document type (AP GL setup)' : 'ตามที่ตั้งไว้แต่ละประเภทเอกสาร (ตั้งค่าบัญชี GL ของ AP)')
+        : docTypes.map((d) => '${d.docCode} ${d.account?.code ?? '—'}').join(' · ');
+    return kCard(
+      title: e ? 'Payable account' : 'รหัสบัญชีเจ้าหนี้',
+      count: e ? 'Order used: vendor › group › document type' : 'ลำดับที่ใช้: ผู้ขาย › กลุ่มผู้ขาย › ประเภทเอกสาร',
+      trailing: kGhost(e ? 'AP GL setup' : 'ตั้งค่าบัญชี GL', Icons.open_in_new,
+          () => ImKit.openMenu(context, 'ApGlAccountSetupScreen', 'ตั้งค่าบัญชี GL ของ AP', 'AP GL Account Setup', e)),
+      padding: EdgeInsets.zero,
+      child: kTable(
+        [KCol(e ? 'Level' : 'ระดับ', 3), KCol(e ? 'Account' : 'บัญชี', 8), KCol(e ? 'Status' : 'สถานะ', 3)],
+        [
+          [
+            kCell(e ? 'This vendor' : 'ผู้ขายนี้', bold: true),
+            SizedBox(
+              width: double.infinity,
+              child: kFk(
+                label: '',
+                text: '${_apAccountCode ?? ''} ${_resolveApAccountName(e)}'.trim(),
+                hasValue: hasVendor,
+                onSearch: _pickApAccount,
+                onClear: () => setState(() {
+                  _apAccountId = null; _apAccountCode = null; _apAccountNameThai = null; _apAccountNameEng = null;
+                }),
+              ),
+            ),
+            status(hasVendor, false, null),
+          ],
+          [
+            kCell(groupCode == null ? (e ? 'Group' : 'กลุ่ม') : '${e ? 'Group' : 'กลุ่ม'} $groupCode', bold: true),
+            kCell(_vendorGroupId == null ? (e ? '— No group —' : '— ไม่มีกลุ่ม —') : (groupAcc ?? (e ? '— Not set —' : '— ไม่ได้ตั้ง —'))),
+            status(!hasVendor && hasGroup, hasVendor && hasGroup, null),
+          ],
+          [
+            kCell(e ? 'Document type' : 'ประเภทเอกสาร', bold: true),
+            Text(docText, style: const TextStyle(fontSize: 12.5), maxLines: 2, overflow: TextOverflow.ellipsis),
+            status(!hasVendor && !hasGroup, hasVendor || hasGroup, e ? 'Used' : 'ใช้ระดับนี้'),
+          ],
+        ],
+        minWidth: 640,
+        rowMinHeight: 48,
+      ),
+    );
+  }
+
+  // ─── ส่วนที่ 4: ยอดค้างจ่ายตามอายุหนี้ + เอกสารค้างเก่าสุด (อ่านอย่างเดียว) ──────────────
+  void _openAging() => ImKit.openMenu(context, 'ApAgingReportScreen', 'รายงานอายุเจ้าหนี้', 'AP Aging Report', _isEnglish);
+
+  Widget _agingCard() {
+    final e = _isEnglish;
+    final s = _summary;
+    Widget amt(double v, {bool warn = false}) =>
+        kCell(_m(v), mono: true, color: warn && v > 0.005 ? ImKit.red : null, bold: warn && v > 0.005);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      kCard(
+        title: e ? 'Payables by age' : 'ยอดค้างจ่ายตามอายุหนี้',
+        count: e ? 'Read-only · as of today · bills and debit notes' : 'อ่านอย่างเดียว · ณ วันนี้ · ใบตั้งหนี้และใบเพิ่มหนี้',
+        trailing: kGhost(e ? 'AP aging report' : 'รายงานอายุเจ้าหนี้', Icons.open_in_new, _openAging),
+        padding: EdgeInsets.zero,
+        child: s == null
+            ? Padding(
+                padding: const EdgeInsets.all(14),
+                child: _summaryLoading
+                    ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                    : kNote(e ? 'Could not load outstanding balances' : 'โหลดยอดค้างไม่ได้'),
+              )
+            : kTable(
+                [
+                  KCol(e ? 'Not due' : 'ยังไม่ครบกำหนด', 3, num: true),
+                  KCol(e ? '1–30 days' : '1–30 วัน', 3, num: true),
+                  KCol(e ? '31–60 days' : '31–60 วัน', 3, num: true),
+                  KCol(e ? '61–90 days' : '61–90 วัน', 3, num: true),
+                  KCol(e ? 'Over 90 days' : 'เกิน 90 วัน', 3, num: true),
+                  KCol(e ? 'Total' : 'รวม', 3, num: true),
+                ],
+                [
+                  [
+                    amt(s.notDue),
+                    amt(s.d1_30, warn: true),
+                    amt(s.d31_60, warn: true),
+                    amt(s.d61_90, warn: true),
+                    amt(s.over90, warn: true),
+                    kCell(_m(s.agingTotal), mono: true, bold: true),
+                  ],
+                ],
+                minWidth: 640,
+              ),
+      ),
+      if (s != null) ...[
+        const SizedBox(height: 12),
+        kCard(
+          title: e ? 'Oldest open documents' : 'เอกสารค้างจ่ายเก่าสุด',
+          count: e ? '${s.oldestDocs.length} of ${s.openCount}' : '${s.oldestDocs.length} จาก ${s.openCount} ใบ',
+          padding: EdgeInsets.zero,
+          child: kTable(
+            [
+              KCol(e ? 'Document no.' : 'เลขที่เอกสาร', 4),
+              KCol(e ? 'Date' : 'วันที่', 3),
+              KCol(e ? 'Due date' : 'ครบกำหนด', 3),
+              KCol(e ? 'Days overdue' : 'เกินกำหนด (วัน)', 2, num: true),
+              KCol(e ? 'Outstanding' : 'คงค้าง', 3, num: true),
+            ],
+            [
+              for (final d in s.oldestDocs)
+                [
+                  kCell(d.docNo, mono: true),
+                  kCell(_dt(d.docDate), mono: true),
+                  kCell(_dt(d.dueDate), mono: true, color: d.daysOverdue > 0 ? ImKit.red : null),
+                  kCell(d.daysOverdue > 0 ? '${d.daysOverdue}' : '—', mono: true, color: d.daysOverdue > 0 ? ImKit.red : null),
+                  kCell(_m(d.balance), mono: true),
+                ],
+            ],
+            minWidth: 640,
+            empty: e ? 'No open documents' : 'ไม่มีเอกสารค้างจ่าย',
+          ),
+        ),
+      ],
+    ]);
+  }
+
+  // ─── ตัวเลขสรุป ──────────────────────────────────────────────────────────────
+  Widget _kpis() {
+    final e = _isEnglish;
+    final s = _summary;
+    if (s == null) return kKpis(const [], loading: _summaryLoading);
+    final last = s.lastBill;
+    final pay = s.lastPayment;
+    return kKpis([
+      ImKpi(
+        e ? 'Payable' : 'ยอดค้างจ่าย',
+        _m(s.outstanding),
+        [
+          e ? '${s.openCount} doc(s) · base currency' : '${s.openCount} ใบ · สกุลหลัก',
+          if (s.creditLimit > 0) (e ? 'limit ${_m(s.creditLimit)}' : 'วงเงิน ${_m(s.creditLimit)}'),
+        ].join(' · '),
+      ),
+      ImKpi(
+        e ? 'Overdue' : 'เกินกำหนด',
+        _m(s.overdue),
+        s.overdueCount == 0
+            ? (e ? 'none' : 'ไม่มี')
+            : (e ? '${s.overdueCount} doc(s) · oldest ${s.maxDaysOverdue} days' : '${s.overdueCount} ใบ · นานสุด ${s.maxDaysOverdue} วัน'),
+        warn: s.overdue > 0.005,
+        onTap: _openAging,
+      ),
+      ImKpi(
+        e ? 'Deposit balance' : 'เงินมัดจำคงเหลือ',
+        _m(s.deposit),
+        s.depositCount == 0
+            ? (e ? 'no open deposit' : 'ไม่มีมัดจำค้าง')
+            : (e ? '${s.depositCount} deposit(s) paid, not yet deducted' : 'จ่ายมัดจำแล้ว ${s.depositCount} ใบ ยังไม่ได้หัก'),
+      ),
+      ImKpi(
+        e ? 'Last bill / payment' : 'ตั้งหนี้/จ่ายชำระล่าสุด',
+        last == null ? '—' : _dt(last.docDate),
+        [
+          if (last != null) last.docNo,
+          pay == null ? (e ? 'no payment yet' : 'ยังไม่มีจ่ายชำระ') : '${e ? 'paid' : 'จ่ายชำระ'} ${_dt(pay.docDate)}',
+        ].join(' · '),
+      ),
+    ]);
+  }
+
+  // ─── หน้า ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final isEnglish = Provider.of<LanguageProvider>(context).isEnglish;
+    final isEnglish = context.watch<LanguageProvider>().isEnglish;
     _isEnglish = isEnglish;
-    if (widget.isPlaceholder) {
-      return Center(
-          child: Text(isEnglish ? 'Select an item to view its data' : 'เลือกรายการเพื่อดูข้อมูล', style: const TextStyle(color: Colors.grey)));
-    }
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    final e = isEnglish;
 
-    return Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          Container(
-            color: Colors.blue[300],
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                Icon(Icons.business, color: Colors.blue[900], size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.mode == Mode.add
-                        ? (isEnglish ? 'Add New Vendor' : 'เพิ่มเจ้าหนี้ใหม่')
-                        : widget.mode == Mode.edit
-                            ? (isEnglish ? 'Edit Vendor' : 'แก้ไขเจ้าหนี้')
-                            : (isEnglish ? 'Vendor Information' : 'ข้อมูลเจ้าหนี้'),
-                    style: TextStyle(
-                        color: Colors.blue[900],
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-                if (!_isReadOnly) ...[
-                  ElevatedButton.icon(
-                    onPressed: _isSaving ? null : _save,
-                    icon: _isSaving
-                        ? const SizedBox(
-                            width: 16, height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.save, size: 16),
-                    label: Text(_isSaving ? (isEnglish ? 'Saving...' : 'กำลังบันทึก...') : (isEnglish ? 'Save' : 'บันทึก')),
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[800],
-                        foregroundColor: Colors.white),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                TextButton(
-                  onPressed: widget.onCancel,
-                  child: Text(isEnglish ? 'Close' : 'ปิด', style: TextStyle(color: Colors.blue[900])),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              children: [
-                _buildBasicSection(),
-                _buildAddressSection(),
-                _buildContactSection(),
-                _buildBankSection(),
-                _buildGlAccountSection(),
-              ],
-            ),
-          ),
+    if (widget.isPlaceholder || widget.mode == Mode.none) {
+      return kPlaceholder(Icons.storefront_outlined,
+          e ? 'Select a vendor on the left, or press "Add vendor"' : 'เลือกผู้ขายจากรายการด้านซ้าย หรือกด "เพิ่มผู้ขาย"');
+    }
+    if (_isLoading && _controlAccounts.isEmpty) return const Center(child: CircularProgressIndicator());
+
+    final ro = kitReadOnly;
+    final isAdd = widget.mode == Mode.add;
+    final saved = !isAdd && widget.selected?.id != null;
+    final name = _nameTHCtrl.text.trim().isEmpty
+        ? ''
+        : (e && _nameENCtrl.text.trim().isNotEmpty ? _nameENCtrl.text.trim() : _nameTHCtrl.text.trim());
+    final title = isAdd
+        ? (_isCopy
+            ? (e ? 'New vendor (copy of ${widget.copyFrom!.vendorCode})' : 'ผู้ขายใหม่ (สำเนาจาก ${widget.copyFrom!.vendorCode})')
+            : (e ? 'New vendor' : 'ผู้ขายใหม่'))
+        : name;
+    final branch = taxBranchLabel(normalizeTaxBranch(_taxBranchCtrl.text), e);
+    final typeLabel = switch (_vendorType) {
+      'individual' => e ? 'Individual' : 'บุคคลธรรมดา',
+      'juristic' => e ? 'Juristic person' : 'นิติบุคคล',
+      _ => null,
+    };
+
+    final header = kHeaderBar(
+      code: isAdd ? null : widget.selected?.vendorCode,
+      title: title,
+      badges: [
+        if (!isAdd) ImKit.activeChip(_isActive, e),
+        if (_vendorGroupCode != null) ImKit.chip(_groupLabel(e), ImKit.blueSoft, ImKit.blue),
+        if (typeLabel != null) ImKit.chip(typeLabel, ImKit.ro, ImKit.ink2),
+        if (branch.isNotEmpty || _selectedCurrencyCode != null)
+          Text([if (branch.isNotEmpty) branch, if (_selectedCurrencyCode != null) _selectedCurrencyCode!].join(' · '),
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        if (!ro) kEditingBadge(),
+      ],
+      busy: _isSaving,
+      acts: kStdActs(
+        saving: _isSaving,
+        onEdit: widget.onEdit,
+        onDelete: widget.onDelete,
+        onClose: widget.onCancel,
+        onCancel: widget.onCancel,
+        onSave: _save,
+        extra: [
+          if (widget.onCopy != null) DocBarAction(e ? 'Copy as new' : 'สำเนาเป็นผู้ขายใหม่', widget.onCopy, fg: kInk),
         ],
       ),
+    );
+
+    return kPage(
+      header: header,
+      top: saved ? _kpis() : null,
+      sections: [
+        (0, e ? 'Main' : 'ข้อมูลหลัก', _mainCard()),
+        (1, e ? 'Addresses and contacts' : 'ที่อยู่และผู้ติดต่อ', _addressCard()),
+        (2, e ? 'Bank accounts' : 'บัญชีธนาคาร', _bankCard()),
+        (3, e ? 'Payable account' : 'บัญชีเจ้าหนี้', _accountCard()),
+        if (saved) (4, e ? 'Outstanding' : 'ยอดค้าง', _agingCard()),
+      ],
     );
   }
 }

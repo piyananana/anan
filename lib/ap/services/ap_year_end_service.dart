@@ -3,10 +3,19 @@ import 'package:http/http.dart' as http;
 import '../../../config/app_config.dart';
 import '../../sa/services/sa_auth_service.dart';
 import '../models/ap_year_end.dart';
+import '../models/ap_vendor_summary.dart';
 
 class ApYearEndService {
   final String baseUrl = AppConfig.apiAp;
   final AuthService _auth = AuthService();
+
+  /// เจ้าหนี้สกุลต่างประเทศที่ค้าง ณ วันนี้ (หน้าตั้งค่าสิ้นปีแบบ B, 2026-11-28)
+  Future<ApYearEndSummary> fetchSummary() async {
+    final headers = await _auth.getAuthHeader();
+    final res = await http.get(Uri.parse('$baseUrl/ap_year_end_setup/summary'), headers: headers);
+    if (res.statusCode == 200) return ApYearEndSummary.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+    throw Exception('Failed to load summary: ${res.statusCode}');
+  }
 
   // ── Setup ──────────────────────────────────────────────────────────────────
   Future<ApYearEndSetup?> fetchSetup() async {
